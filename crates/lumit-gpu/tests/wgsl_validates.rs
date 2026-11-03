@@ -61,6 +61,12 @@ fn every_wgsl_kernel_parses_and_validates() {
         {
             continue;
         }
+        // Appended to Particulate's kernel, as the engine compiles it.
+        let source = if name == "fx_particulate_scene.wgsl" {
+            format!("{}{source}", include_str!("../src/fx_particulate.wgsl"))
+        } else {
+            source
+        };
         // Any `nc_` name means this kernel is one of the core's consumers —
         // Card wipe (docs/08 §3.72) takes only `nc_hash01` and no fractal at
         // all, so the older "does it call nc_fractal" test would have compiled

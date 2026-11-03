@@ -23,6 +23,7 @@ mod order;
 mod picture;
 
 pub(crate) mod dof;
+pub(crate) mod scene;
 
 /// One `node_graph` op's own walk, as [`crate::fxops::run_ops`] calls it: the
 /// picture in, its raster, and the picture out. Borrowed for as long as the
@@ -2152,18 +2153,35 @@ impl Realiser<'_> {
         let mut waiting = Vec::new();
         // Each model's depth, by its place in the list.
         let mut model_depths = Vec::new();
-        for l in layers {
+        // Particles in the scene: each one's depth by layer, and where its
+        // emitter is, by its place in the list.
+        let (seen, mut made) = self.scene_frame(camera, (width, height), layers);
+        let mut scene_depths = Vec::with_capacity(layers.len());
+        let mut emitters = Vec::new();
+        for (i, l) in layers.iter().enumerate() {
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite
             // that follows is one pass over the whole segment rather than a
             // per-layer act, so it lands in the frame total instead
             // (crate::profile).
             let (started, mut fx_ms) = self.layer_clock();
-            let (mut tex, mut grow, model_depth) =
-                self.layer_picture(l, camera, (width, height), &mut fx_ms);
+            let entered = seen
+                .as_ref()
+                .filter(|_| scene::draws_in_scene(l))
+                .map(scene::Seen::enter);
+            let (mut tex, mut grow, model_depth) = match made.get_mut(i).and_then(Option::take) {
+                Some(made) => made,
+                None => self.layer_picture(l, camera, (width, height), &mut fx_ms),
+            };
+            drop(entered);
             if let Some(depth) = model_depth {
                 model_depths.push((linear_textures.len(), depth));
             }
+            let claimed = scene::claim(l).map(|(depth, emitter)| {
+                emitters.push((linear_textures.len(), emitter));
+                model_depths.push((linear_textures.len(), depth.clone()));
+                depth
+            });
             if shadowed {
                 // Timed now and finished once it is lit, below, so its row
                 // still shows the whole of its cost.
@@ -2175,8 +2193,17 @@ impl Realiser<'_> {
                 waiting.push((so_far, fx_ms));
             } else {
                 let blurred;
-                (tex, grow, blurred) =
-                    self.lit(l, tex, eye, camera, None, None, grow, (width, height));
+                (tex, grow, blurred) = self.lit(
+                    l,
+                    tex,
+                    eye,
+                    camera,
+                    None,
+                    None,
+                    grow,
+                    (width, height),
+                    claimed.as_ref(),
+                );
                 if scene_depth.is_some() || below.is_some() {
                     sharp.resize(linear_textures.len() + 1, None);
                     sharp[linear_textures.len()] = blurred;
@@ -2185,6 +2212,7 @@ impl Realiser<'_> {
             }
             grown.push(grow);
             linear_textures.push(tex);
+            scene_depths.push(claimed);
         }
         if shadowed {
             let (sets, each) =
@@ -2195,14 +2223,27 @@ impl Realiser<'_> {
                 .zip(each)
                 .zip(waiting)
                 .zip(&grown)
-                .map(|((((tex, l), (set, own)), (so_far, fx_ms)), grow)| {
-                    let started = so_far.and_then(|d| web_time::Instant::now().checked_sub(d));
-                    let casters = set.and_then(|k| sets.get(k));
-                    let size = (width, height);
-                    let lit = self.lit(l, tex, eye, camera, casters, own, *grow, size);
-                    self.layer_done(l, started, fx_ms);
-                    lit
-                })
+                .zip(&scene_depths)
+                .map(
+                    |(((((tex, l), (set, own)), (so_far, fx_ms)), grow), depth)| {
+                        let started = so_far.and_then(|d| web_time::Instant::now().checked_sub(d));
+                        let casters = set.and_then(|k| sets.get(k));
+                        let size = (width, height);
+                        let lit = self.lit(
+                            l,
+                            tex,
+                            eye,
+                            camera,
+                            casters,
+                            own,
+                            *grow,
+                            size,
+                            depth.as_ref(),
+                        );
+                        self.layer_done(l, started, fx_ms);
+                        lit
+                    },
+                )
                 .collect();
             let keep_sharp = scene_depth.is_some() || below.is_some();
             linear_textures = Vec::with_capacity(lit.len());
@@ -2227,7 +2268,7 @@ impl Realiser<'_> {
             .zip(layers)
             .zip(&grown)
             .map(|((tex, l), g)| {
-                (!l.mb.is_empty()).then(|| {
+                (!l.mb.is_empty() && !scene::draws_in_scene(l)).then(|| {
                     // A grown picture is placed by the grown transform at every
                     // sub-frame too, or the smear would be of a layer
                     // in a different place from the one the composite draws.
@@ -2371,10 +2412,15 @@ impl Realiser<'_> {
                 pose.position.2 as f32,
             ]
         });
-        let (order, cuts): (Vec<usize>, Vec<Option<lumit_gpu::composite::Cut>>) =
-            draw_order(layers, &linear_textures, &grown, cam_mat.zip(eye))
-                .into_iter()
-                .unzip();
+        let (order, cuts): (Vec<usize>, Vec<Option<lumit_gpu::composite::Cut>>) = draw_order(
+            layers,
+            &linear_textures,
+            &grown,
+            cam_mat.zip(eye),
+            &emitters,
+        )
+        .into_iter()
+        .unzip();
         let comp_layers: Vec<lumit_gpu::composite::CompositeLayer> =
             order.iter().map(|&i| comp_layers[i].clone()).collect();
         // The depth pass reads each layer's coverage before the camera blurred
@@ -2452,7 +2498,7 @@ impl Realiser<'_> {
                 let mut planes = Vec::new();
                 let mut textures = Vec::new();
                 for ((texture, l), g) in linear_textures.iter().zip(layers).zip(&grown) {
-                    if !l.three_d || shadow_only(l) || matches!(l.source, DrawSource::Model(_)) {
+                    if !l.three_d || shadow_only(l) || models.iter().any(|m| &m.colour == texture) {
                         continue;
                     }
                     let m = frame * placed_in_3d(texture, l, *g).world();
@@ -2566,7 +2612,7 @@ impl Realiser<'_> {
     /// among them; `grow` is how much its effects grew it and `size` the
     /// comp's, which the depth of field reads. Hands back the picture, how much
     /// it has grown now, and the lit picture before the blur with its own grow
-    /// when it was blurred.
+    /// when it was blurred. Particles in the scene come with their `depth`.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn lit(
         &self,
@@ -2578,6 +2624,7 @@ impl Realiser<'_> {
         own: Option<usize>,
         grow: (f32, f32),
         size: (u32, u32),
+        depth: Option<&wgpu::Texture>,
     ) -> (
         wgpu::Texture,
         (f32, f32),
@@ -2586,6 +2633,10 @@ impl Realiser<'_> {
         // The mesh pass lit a model already, and its depth of field comes from
         // the comp's depth.
         if matches!(l.source, DrawSource::Model(_)) {
+            return (tex, grow, None);
+        }
+        // Particles in the scene were drawn through the camera already.
+        if depth.is_some() {
             return (tex, grow, None);
         }
         // After its effects and before it is placed. `l.lights` is empty
@@ -3006,7 +3057,7 @@ fn run_plan(
         .collect();
     let mut kept: Vec<(f32, usize, CasterPlane)> = Vec::new();
     for (i, ((l, tex), g)) in layers.iter().zip(textures).zip(grown).enumerate() {
-        let model = matches!(l.source, DrawSource::Model(_));
+        let model = matches!(l.source, DrawSource::Model(_)) || scene::draws_in_scene(l);
         if l.material.casts_shadows == LightingShadows::Off || l.opacity <= 0.0 || model {
             continue;
         }

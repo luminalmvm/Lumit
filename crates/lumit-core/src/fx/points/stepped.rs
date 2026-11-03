@@ -616,7 +616,7 @@ const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
 /// wired row counts as above nought, as it may be at some time.
 #[must_use]
 pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
-    inst.effect.match_name == "particulate"
+    crate::fx::effects::particulate::rows::on_its_layer(inst)
         && (target(comp, inst).is_some() || WALK_ROWS.iter().any(|id| above(comp, inst, id)))
 }
 
@@ -624,7 +624,7 @@ pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
 /// above nought, at some time. It does not make the particles walk.
 #[must_use]
 pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
-    inst.effect.match_name == "particulate" && above(comp, inst, "persistence")
+    crate::fx::effects::particulate::rows::on_its_layer(inst) && above(comp, inst, "persistence")
 }
 
 /// Whether row `id` is above nought, or keyed, an expression or wired, as it

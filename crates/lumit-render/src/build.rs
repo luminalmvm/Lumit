@@ -3281,6 +3281,10 @@ fn comp_walk(
                     }
                     Some(moved(projection.unwrap_or_default()))
                 };
+                let size = |l: &lumit_core::model::Layer| pixels_for(l).map(|p| p.3);
+                let projection =
+                    crate::realise::scene::placement(expr_doc, comp, owner, e, t_comp, &size)
+                        .or(projection);
                 // The Text layer that Text to points and Label points read.
                 let (text, label) = owner.map_or_else(Default::default, |layer| {
                     text_carriage(comp, layer, e, t_comp, expr_doc)

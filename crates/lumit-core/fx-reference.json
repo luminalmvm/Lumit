@@ -12051,6 +12051,13 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "in_scene",
+          "label": "In the scene",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
           "id": "shape",
           "label": "Shape",
           "kind": "choice",
@@ -12921,6 +12928,7 @@
         {
           "label": "Emitter",
           "params": [
+            "in_scene",
             "shape",
             "position_x",
             "position_y",
@@ -13087,6 +13095,42 @@
           "on": "shape",
           "cond": "choice_is_not",
           "value": 9
+        },
+        {
+          "param": "collide_with",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "separation",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "alignment",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "cohesion",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "sparks",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "persistence",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
         },
         {
           "param": "burst_count",

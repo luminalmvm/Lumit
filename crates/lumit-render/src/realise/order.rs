@@ -16,6 +16,7 @@ pub(super) fn draw_order(
     textures: &[wgpu::Texture],
     grown: &[(f32, f32)],
     camera: Option<(glam::Mat4, [f32; 3])>,
+    emitters: &[(usize, glam::Vec3)],
 ) -> Vec<(usize, Option<lumit_gpu::composite::Cut>)> {
     // A layer there only for its shadows draws nothing, so it neither takes
     // a place nor cuts anything.
@@ -37,9 +38,16 @@ pub(super) fn draw_order(
         // A motion-blurred layer draws as a flat smear, which can't be cut
         // itself, so whatever it crosses is cut along its plane instead.
         let flat: Vec<bool> = run.iter().map(|&i| !layers[i].mb.is_empty()).collect();
-        // A run holding a model is cut by depth throughout, the model placed
-        // by the middle of its box.
-        let middles: Vec<_> = run.iter().map(|&i| middle(&layers[i])).collect();
+        // A run holding a model or particles in the scene is cut by depth
+        // throughout, the model placed by the middle of its box and the
+        // particles by their emitter.
+        let middles: Vec<_> = run
+            .iter()
+            .map(|&i| {
+                let emitter = emitters.iter().find(|(k, _)| *k == i).map(|(_, at)| *at);
+                middle(&layers[i]).or(emitter)
+            })
+            .collect();
         let sorted = if middles.iter().any(Option::is_some) {
             model_run_order(&worlds, &middles, &flat, view_proj)
         } else {

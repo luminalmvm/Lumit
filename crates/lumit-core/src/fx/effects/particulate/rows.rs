@@ -19,6 +19,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
     group(
         "Emitter",
         &[
+            "in_scene",
             "shape",
             "position_x",
             "position_y",
@@ -145,6 +146,38 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "density_layer",
         on: "shape",
         cond: EnabledCond::ChoiceIsNot(9),
+    },
+    // The step and the kept picture draw on the layer, so they stand aside
+    // while the particles are in the scene.
+    EnabledWhen {
+        param: "collide_with",
+        on: "in_scene",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "separation",
+        on: "in_scene",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "alignment",
+        on: "in_scene",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "cohesion",
+        on: "in_scene",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "sparks",
+        on: "in_scene",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "persistence",
+        on: "in_scene",
+        cond: EnabledCond::BoolIs(false),
     },
     // Each burst row means something only in the bursts that read it.
     EnabledWhen {
@@ -299,3 +332,14 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         cond: EnabledCond::ChoiceIsNot(3),
     },
 ];
+
+/// Whether `inst` is a Particulate drawn on its layer rather than in the
+/// scene: the only place Collide with, a Flock, Sparks and Persistence apply.
+#[must_use]
+pub fn on_its_layer(inst: &crate::model::EffectInstance) -> bool {
+    inst.effect.match_name == "particulate"
+        && !matches!(
+            inst.param("in_scene"),
+            Some(crate::model::EffectValue::Bool(true))
+        )
+}

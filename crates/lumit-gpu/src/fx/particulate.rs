@@ -22,7 +22,7 @@ use super::{work_texture, FxEngine};
 
 /// The evaluate passes' workgroup width: one thread per candidate, and the
 /// same 64 the kernel declares.
-const EVAL_WORKGROUP: u32 = 64;
+pub(super) const EVAL_WORKGROUP: u32 = 64;
 
 /// `max_compute_workgroups_per_dimension` as **every** device guarantees it.
 ///
@@ -304,7 +304,7 @@ fn pair_max(cap: u32) -> u32 {
 }
 
 /// The words at the head of the tiles' `scan` buffer, before its numbers.
-const SCAN_HEAD: u32 = 16;
+pub(super) const SCAN_HEAD: u32 = 16;
 
 /// How many 16 px steps a tile's side is, so a frame has fewer tiles than
 /// the sort's sixteen bits can name.
@@ -318,14 +318,14 @@ fn tile_scale(w: u32, h: u32) -> u32 {
 
 /// How many numbers the tiles' `scan` holds: a particle's count each, the
 /// sort's digit counts, or two words a tile, whichever is most.
-fn scan_len(cap: u32, w: u32, h: u32) -> u32 {
+pub(super) fn scan_len(cap: u32, w: u32, h: u32) -> u32 {
     let side = TILE * tile_scale(w, h);
     let tiles = w.div_ceil(side) * h.div_ceil(side);
     cap.max(pair_max(cap)).max(tiles * 2)
 }
 
 /// The scan's block width — the same 256 the kernel declares.
-const SCAN_BLOCK: u32 = 256;
+pub(super) const SCAN_BLOCK: u32 = 256;
 
 /// Words of stream per particle: position 3, speed 3, age, life, size,
 /// rotation, colour 2 (half pairs), id 2, and the draw's own tail 3.
@@ -605,7 +605,7 @@ impl FxEngine {
     /// Everything one Particulate pass needs bound, or `None` when there is
     /// nothing to draw — no candidates, no capacity, or a Mix of nothing, each
     /// of which leaves the input picture exactly as it was.
-    fn particulate_prepare(
+    pub(super) fn particulate_prepare(
         &self,
         ctx: &GpuContext,
         src: &wgpu::Texture,
@@ -864,12 +864,12 @@ impl FxEngine {
 }
 
 /// One pass's bound resources, alive until the encoder is done with them.
-struct ParticulatePass {
+pub(super) struct ParticulatePass {
     bind: wgpu::BindGroup,
-    draw_bind: wgpu::BindGroup,
-    empty: wgpu::BindGroup,
+    pub(super) draw_bind: wgpu::BindGroup,
+    pub(super) empty: wgpu::BindGroup,
     stream: wgpu::Buffer,
-    args: wgpu::Buffer,
+    pub(super) args: wgpu::Buffer,
     candidates: u32,
     blocks: u32,
     _keep: [wgpu::Buffer; 6],
@@ -879,7 +879,7 @@ impl ParticulatePass {
     /// Count, scan, place — the three kernels, in the one order that makes a
     /// compacted slot a function of the birth index rather than of which
     /// workgroup arrived first.
-    fn evaluate(&self, fx: &FxEngine, enc: &mut wgpu::CommandEncoder) {
+    pub(super) fn evaluate(&self, fx: &FxEngine, enc: &mut wgpu::CommandEncoder) {
         let mut cp = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("fx-particulate-evaluate"),
             timestamp_writes: None,

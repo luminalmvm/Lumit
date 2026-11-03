@@ -1,0 +1,277 @@
+//! Particulate's particles in the comp's 3D scene. The builder hands the
+//! effect its layer's place in the comp, the realiser tells it how the frame
+//! is seen and what 3D layers are in the way, and the picture it draws comes
+//! back with one over clip w at each pixel, so the compositor can join it with
+//! the 3D layers by depth as it joins a model.
+
+use super::Realiser;
+use crate::draw::CompLayerDraw;
+use lumit_core::fx::effects::particulate::{is_scene, Particulate};
+use lumit_core::fx::params::Params;
+use lumit_core::fx::registry::EffectMetadata;
+use lumit_core::model::{CameraPose, Composition, Document, EffectInstance, EffectValue, Layer};
+use lumit_gpu::mesh::ModelPicture;
+use std::cell::RefCell;
+use std::sync::Arc;
+
+/// How the frame a Particulate in the scene draws into is seen.
+#[derive(Clone)]
+pub(super) struct Frame {
+    comp: (u32, u32),
+    render_scale: f32,
+    camera: CameraPose,
+    /// Clip w of the nearest of the other 3D layers in its run, less `near`,
+    /// which keeps the half floats it is laid in fine where the particles are.
+    occluder: Option<wgpu::Texture>,
+    near: f32,
+}
+
+/// What a Particulate in the scene drew beside its picture.
+struct Joined {
+    /// One over clip w at each pixel.
+    depth: wgpu::Texture,
+    /// The emitter in comp pixels, where the run is sorted by.
+    middle: glam::Vec3,
+}
+
+/// The picture a layer's source and effects came to, how much they grew it,
+/// and a model's depth ([`Realiser::layer_picture`]).
+type Made = (wgpu::Texture, (f32, f32), Option<wgpu::Texture>);
+
+thread_local! {
+    // The frame being realised, innermost last.
+    static FRAMES: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
+    // What the last Particulate in the scene drew, until its layer claims it.
+    static PENDING: RefCell<Option<Joined>> = const { RefCell::new(None) };
+}
+
+/// The layer a Layer emitter names, if `e` is one.
+fn emitter_layer<'a>(comp: &'a Composition, e: &EffectInstance) -> Option<&'a Layer> {
+    matches!(e.param("shape"), Some(EffectValue::Choice(9)))
+        .then(|| e.layer_ref("emitter_layer"))
+        .flatten()
+        .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+}
+
+/// Whether a resolved op is one.
+pub(crate) fn is_scene_op(op: &lumit_core::fx::params::ResolvedFx<'_>) -> bool {
+    op.def.schema().match_name == <Particulate as EffectMetadata>::SCHEMA.match_name
+        && Particulate::read(op.params).in_scene
+}
+
+pub(super) fn draws_in_scene(l: &CompLayerDraw) -> bool {
+    l.three_d && l.fx.iter().any(|op| is_scene_op(&op))
+}
+
+/// What a Particulate in the scene is handed in place of the camera's
+/// projection onto its plane: its layer's own pixels to comp pixels, the
+/// placement's top three rows. `None` for any other effect, or on a 2D layer,
+/// where the particles draw on the layer as before. A Layer emitter's particles
+/// sit on the emitter layer's plane, stretched from this layer's frame to that
+/// one's, so `size` gives each layer's own size.
+pub(crate) fn placement(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    owner: Option<&Layer>,
+    e: &EffectInstance,
+    t_comp: f64,
+    size: &dyn Fn(&Layer) -> Option<(f32, f32)>,
+) -> Option<lumit_core::fx::points::Projection> {
+    let owner = owner.filter(|o| o.switches.three_d && is_scene(e))?;
+    let world = |l: &Layer| {
+        let context = Arc::new(lumit_core::expression::ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(l.id),
+            comp_time: t_comp,
+            current_depth: 0,
+            inputs: None,
+        });
+        glam::Mat4::from_cols_array_2d(&crate::placement::world_placement(comp, l, t_comp, context))
+    };
+    let emitter = emitter_layer(comp, e);
+    let place = match emitter.zip(size(owner)).zip(emitter.and_then(size)) {
+        Some(((src, (ow, oh)), (sw, sh))) if ow > 0.0 && oh > 0.0 => {
+            world(src) * glam::Mat4::from_scale(glam::vec3(sw / ow, sh / oh, 1.0))
+        }
+        _ => world(owner),
+    };
+    let r = place.transpose().to_cols_array_2d();
+    Some(lumit_core::fx::points::Projection {
+        m: [r[0], r[1], r[2]],
+    })
+}
+
+/// A Particulate in the scene, drawn through the frame's camera onto the whole
+/// frame, with its distances left for its layer to claim. `None` when the
+/// particles are not in the scene, or nothing is realising a frame to see them
+/// in, and the effect draws on its layer as before. `op` is the effect's own,
+/// its projection the layer's placement as [`placement`] made it, taken into
+/// `raster` by `p`'s raster factor.
+pub(crate) fn draw(
+    fx: &lumit_gpu::fx::FxEngine,
+    ctx: &lumit_gpu::GpuContext,
+    src: &wgpu::Texture,
+    raster: (u32, u32),
+    sprite: Option<&wgpu::Texture>,
+    op: &lumit_gpu::fx::particulate::ParticulateOp<'_>,
+    p: Params<'_>,
+) -> Option<wgpu::Texture> {
+    let [x, y, z] = op.projection.filter(|_| Particulate::read(p).in_scene)?;
+    let frame = FRAMES.with(|f| f.borrow().last().cloned())?;
+    let (cw, ch) = frame.comp;
+    let r = frame.render_scale.max(1e-6);
+    // The placement as the builder made it, before the effect took it into
+    // its raster as it would a projection onto its plane.
+    let s = Particulate::px_scale_of(p).max(1e-6);
+    let x = [x[0], x[1], x[2], x[3] / s];
+    let y = [y[0], y[1], y[2], y[3] / s];
+    let z = [z[0] * s, z[1] * s, z[2] * s, z[3]];
+    let cam = crate::export::camera_mat(cw, ch, frame.camera);
+    let place = glam::Mat4::from_cols_array_2d(&[x, y, z, [0.0, 0.0, 0.0, 1.0]]).transpose();
+    let raster_to_clip = cam * place * glam::Mat4::from_scale(glam::Vec3::splat(1.0 / s));
+    let m = raster_to_clip.transpose().to_cols_array_2d();
+    // Into the frame at the render scale, foreshortened so a particle's size
+    // in the raster comes out at its size on screen.
+    let k = s / r;
+    let projection = [
+        m[0].map(|v| v * s),
+        m[1].map(|v| v * s),
+        m[3].map(|v| v * k),
+    ];
+    let at = op.emitter_pos;
+    let w_middle = m[3][0] * at[0] + m[3][1] * at[1] + m[3][2] * at[2] + m[3][3];
+    // A particle is as big as the layer's scale makes it.
+    let scale = place
+        .x_axis
+        .truncate()
+        .cross(place.y_axis.truncate())
+        .length()
+        .sqrt();
+    let target = lumit_gpu::composite::scaled_size(cw, ch, r);
+    let op = lumit_gpu::fx::particulate::ParticulateOp {
+        projection: Some(projection),
+        ..*op
+    };
+    let middle = place.transform_point3(glam::Vec3::from(at) / s);
+    let joined = |depth| PENDING.with(|p| *p.borrow_mut() = Some(Joined { depth, middle }));
+    let (colour, depth) = fx.particulate_scene(
+        ctx,
+        src,
+        raster,
+        sprite,
+        &op,
+        &lumit_gpu::fx::particulate_scene::SceneView {
+            target,
+            k,
+            soft: 1.0 / (frame.camera.zoom.max(1.0) as f32 * r),
+            occluder: frame.occluder.as_ref(),
+            near: frame.near,
+            fallback: if w_middle > 0.0 { 1.0 / w_middle } else { 0.0 },
+            scale,
+        },
+    );
+    joined(depth);
+    Some(colour)
+}
+
+/// What `l`'s Particulate in the scene drew beside its picture: its depth,
+/// and its emitter in comp pixels. Anything left over from a stack that is
+/// not `l`'s goes.
+pub(super) fn claim(l: &CompLayerDraw) -> Option<(wgpu::Texture, glam::Vec3)> {
+    let joined = PENDING.with(|p| p.borrow_mut().take())?;
+    draws_in_scene(l).then_some((joined.depth, joined.middle))
+}
+
+/// While it is held, a Particulate in the scene draws into its frame.
+pub(super) struct Seen;
+
+impl Seen {
+    pub(super) fn enter(frame: &Frame) -> Self {
+        FRAMES.with(|f| f.borrow_mut().push(frame.clone()));
+        Seen
+    }
+}
+
+impl Drop for Seen {
+    fn drop(&mut self) {
+        FRAMES.with(|f| f.borrow_mut().pop());
+    }
+}
+
+impl Realiser<'_> {
+    /// How a Particulate in the scene among `layers` sees the frame, and the
+    /// other 3D layers in its run made first, so the depth they lay is what
+    /// the particles meet. The segment takes those pictures rather than
+    /// making them again. Nothing for a segment without one.
+    pub(super) fn scene_frame(
+        &self,
+        camera: Option<CameraPose>,
+        (width, height): (u32, u32),
+        layers: &[CompLayerDraw],
+    ) -> (Option<Frame>, Vec<Option<Made>>) {
+        let Some(first) = layers.iter().position(draws_in_scene) else {
+            return (None, Vec::new());
+        };
+        // The 3D layers either side of it, up to a 2D layer, are its run.
+        let in_run = |l: &CompLayerDraw| l.three_d && !l.ends_run;
+        let start = layers[..first]
+            .iter()
+            .rposition(|l| !in_run(l))
+            .map_or(0, |i| i + 1);
+        let end = layers[first..]
+            .iter()
+            .position(|l| !in_run(l))
+            .map_or(layers.len(), |i| first + i);
+        let pose = camera.unwrap_or_else(|| {
+            lumit_core::camera::default_pose(f64::from(width), f64::from(height))
+        });
+        let cam = crate::export::camera_mat(width, height, pose);
+        // Distances are counted from the particles' own layer.
+        let own = &layers[first];
+        let near = (cam * glam::vec4(own.position.0, own.position.1, own.z, 1.0)).w;
+        let mut made: Vec<Option<Made>> = layers.iter().map(|_| None).collect();
+        for (slot, l) in made.iter_mut().zip(layers).take(end).skip(start) {
+            if !draws_in_scene(l) && !super::shadow_only(l) {
+                *slot = Some(self.layer_picture(l, camera, (width, height), &mut None));
+            }
+        }
+        let occluder = camera.map(|_| {
+            let placed: Vec<_> = made
+                .iter()
+                .zip(layers)
+                .filter_map(|(m, l)| m.as_ref().map(|(t, g, _)| super::placed_in_3d(t, l, *g)))
+                .collect();
+            let models: Vec<ModelPicture> = made
+                .iter()
+                .flatten()
+                .filter_map(|(colour, _, depth)| {
+                    Some(ModelPicture {
+                        colour: colour.clone(),
+                        depth: depth.clone()?,
+                    })
+                })
+                .collect();
+            self.compositor.composite_depth_joined(
+                &self.ctx,
+                width,
+                height,
+                &[&placed],
+                cam,
+                1.0,
+                near,
+                self.render_scale,
+                None,
+                &models,
+            )
+        });
+        let frame = Frame {
+            comp: (width, height),
+            render_scale: self.render_scale,
+            camera: pose,
+            occluder,
+            near,
+        };
+        (Some(frame), made)
+    }
+}

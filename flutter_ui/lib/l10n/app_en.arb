@@ -4357,6 +4357,10 @@
   "@fxInitialSpeed": {
     "description": "Effect controls — a control on Particulate: how fast a particle is travelling the moment it is born."
   },
+  "fxInTheScene": "In the scene",
+  "@fxInTheScene": {
+    "description": "Effect controls — a switch on Particulate: the particles live in the composition's 3D space, so 3D layers pass in front of and behind them."
+  },
   "fxInput": "Input",
   "@fxInput": {
     "description": "Graph panel — the name of the socket a box takes its picture in by. Also the trim in dB on the way into Limiter."

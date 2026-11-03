@@ -37,7 +37,7 @@ use crate::fx::{
 };
 use lumit_fx_macros::Effect;
 
-mod rows;
+pub mod rows;
 
 /// Particulate's declared **data** output: the same particles it
 /// draws, offered as a stream. Teal, like every geometry socket, and drawn from
@@ -64,6 +64,12 @@ const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
     enabled_when = rows::PARTICULATE_ENABLED_WHEN,
 )]
 pub struct Particulate {
+    /// The particles live in the comp's 3D space, carried by the layer's
+    /// placement and drawn through the camera, so 3D layers pass in front of
+    /// and behind them.
+    #[toggle(label = "In the scene", default = false)]
+    pub in_scene: bool,
+
     /// Where particles are born. Area shapes emit uniformly over their
     /// interior, Line along its segment, Mask path along the arc-length
     /// polyline.
@@ -837,5 +843,92 @@ impl EffectDef for ParticulateDef {
     /// pixels this frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Particulate::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
+    }
+}
+
+/// Whether `e` is a Particulate with its particles in the scene.
+#[must_use]
+pub fn is_scene(e: &crate::model::EffectInstance) -> bool {
+    e.enabled
+        && e.effect.match_name == "particulate"
+        && matches!(
+            e.param("in_scene"),
+            Some(crate::model::EffectValue::Bool(true))
+        )
+}
+
+/// The op that gives `layer` in `comp` the effect stack `effects`. A
+/// Particulate arriving with In the scene on, by any route, puts a 2D layer in
+/// 3D in the same step, so its switch, gizmo and views agree with where the
+/// particles are.
+#[must_use]
+pub fn set_effects(
+    comp: uuid::Uuid,
+    layer: &crate::model::Layer,
+    effects: Vec<crate::model::EffectInstance>,
+) -> crate::ops::Op {
+    use crate::ops::Op;
+    let before: Vec<_> = layer
+        .effects
+        .iter()
+        .filter(|e| is_scene(e))
+        .map(|e| e.id)
+        .collect();
+    let into_3d = !layer.switches.three_d
+        && effects
+            .iter()
+            .any(|e| is_scene(e) && !before.contains(&e.id));
+    let set = Op::SetLayerEffects {
+        comp,
+        layer: layer.id,
+        effects,
+    };
+    if !into_3d {
+        return set;
+    }
+    let three_d = Op::SetLayerThreeD {
+        comp,
+        layer: layer.id,
+        three_d: true,
+    };
+    Op::Batch {
+        ops: vec![set, three_d],
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use crate::model::{EffectValue, LayerKind};
+    use crate::ops::Op;
+
+    /// In the scene arriving by any route turns a 2D layer's 3D switch on, once.
+    #[test]
+    fn in_the_scene_puts_a_2d_layer_in_3d() {
+        let layer = crate::edits::base_layer(
+            "Particles".into(),
+            LayerKind::Null,
+            crate::time::Rational::new(1, 1).unwrap(),
+            Default::default(),
+        );
+        let mut fx = crate::fx::builtins::instantiate("particulate").unwrap();
+        let comp = uuid::Uuid::now_v7();
+        assert!(matches!(
+            super::set_effects(comp, &layer, vec![fx.clone()]),
+            Op::SetLayerEffects { .. }
+        ));
+        let on = fx.params.iter_mut().find(|p| p.id == "in_scene").unwrap();
+        on.value = EffectValue::Bool(true);
+        let Op::Batch { ops } = super::set_effects(comp, &layer, vec![fx.clone()]) else {
+            panic!("a 2D layer was left flat");
+        };
+        assert!(matches!(ops[1], Op::SetLayerThreeD { three_d: true, .. }));
+        // Already on the layer, it doesn't turn 3D back on.
+        let mut had = layer.clone();
+        had.effects = vec![fx.clone()];
+        assert!(matches!(
+            super::set_effects(comp, &had, vec![fx]),
+            Op::SetLayerEffects { .. }
+        ));
     }
 }

@@ -4846,9 +4846,8 @@ impl Particulate {
         let mut curves = Vec::with_capacity(packed.particle.size_curve.len() * 2);
         curves.extend_from_slice(&packed.particle.size_curve);
         curves.extend_from_slice(&packed.particle.opacity_curve);
-        // The camera, in the raster this frame is drawn at: the
-        // projection was built in px@comp, like the mask path beside it, and
-        // takes the same factor for the same reason.
+        // The camera, in the raster this frame is drawn at: the projection
+        // was built in px@comp, like the mask path beside it.
         let projection = sched
             .projection
             .map(|proj| proj.rescaled(P::px_scale_of(p)).m);
@@ -4951,7 +4950,8 @@ impl GpuEffect for Particulate {
             return Particulate::stepped(fx, ctx, tex, w, h, p, aux, stream);
         }
         Particulate::with_op(p, aux, |op, sprite| {
-            fx.particulate(ctx, tex, w, h, sprite, op)
+            crate::realise::scene::draw(fx, ctx, tex, (w, h), sprite, op, p)
+                .unwrap_or_else(|| fx.particulate(ctx, tex, w, h, sprite, op))
         })
     }
 
@@ -6449,6 +6449,7 @@ mod tests {
             turbulence_amount: 18.0,
             turbulence_scale: 70.0,
             turbulence_speed: 0.4,
+            in_scene: false,
             mode,
             feather: 60.0,
             sprite_layer: false,

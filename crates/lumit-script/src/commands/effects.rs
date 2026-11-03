@@ -10,7 +10,6 @@ use lumit_core::fx::{self, schema::FxCategory, schema::ParamSchema};
 use lumit_core::model::{
     Composition, EffectInstance, EffectNamespace, EffectParam, EffectValue, Layer,
 };
-use lumit_core::ops::Op;
 use lumit_core::store::DocumentStore;
 use lumit_core::time::Rational;
 use serde::Deserialize;
@@ -219,11 +218,9 @@ pub(super) fn add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     effects.push(instance);
     commit(
         store,
-        vec![Op::SetLayerEffects {
-            comp: comp.id,
-            layer: layer.id,
-            effects,
-        }],
+        vec![fx::effects::particulate::set_effects(
+            comp.id, layer, effects,
+        )],
     )?;
     let mut answer = now(store, comp.id, layer.id, id)?;
     if let Some(ae) = ae {
@@ -321,11 +318,9 @@ pub(super) fn set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
     let id = e.id;
     commit(
         store,
-        vec![Op::SetLayerEffects {
-            comp: comp.id,
-            layer: layer.id,
-            effects,
-        }],
+        vec![fx::effects::particulate::set_effects(
+            comp.id, layer, effects,
+        )],
     )?;
     now(store, comp.id, layer.id, id)
 }

@@ -421,6 +421,7 @@ Map<String, String> get _built => {
       "In high": l10n.fxInHigh,
       "In low": l10n.fxInLow,
       "Initial speed": l10n.fxInitialSpeed,
+      "In the scene": l10n.fxInTheScene,
       "Inner bevel": l10n.fxInnerBevel,
       "Inner glow": l10n.fxInnerGlow,
       "Inner shadow": l10n.fxInnerShadow,
