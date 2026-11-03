@@ -153,12 +153,12 @@ impl Realiser<'_> {
             .iter()
             .zip(textures)
             .zip(grown)
-            .filter(|((l, _), _)| {
-                // ponytail: a model casts no shafts until models take
-                // shadows.
+            .filter(|((l, t), _)| {
+                // ponytail: a model or particles in the scene cast no shafts
+                // until models take shadows.
                 shadowed
                     && l.three_d
-                    && !matches!(l.source, DrawSource::Model(_))
+                    && !models.iter().any(|m| &m.colour == *t)
                     && l.material.casts_shadows != LightingShadows::Off
                     && l.opacity > 0.0
             })
