@@ -8,21 +8,28 @@ use crate::model::ModelDraw;
 use crate::realise::Realiser;
 use glam::{Mat4, Vec3};
 use lumit_gpu::composite::{order::cut_by_depth, Cut};
+use lumit_gpu::fx::lighting::{LightingShadows, ShadowCasters};
+use lumit_gpu::mesh::shadow::{MapCaster, ShadowMaps};
 use lumit_gpu::mesh::{ModelPicture, ModelView};
 
 impl Realiser<'_> {
     /// Model draw `m` seen through the comp's camera, or the default one when
     /// it has none, and lit by `l`'s lights as `l`'s Material options take
-    /// them, at this render's scale and anti-aliasing. `None` when the card
-    /// can't hold the model, which leaves it out of the frame rather than
-    /// failing it.
+    /// them, with the 3D layers' and models' shadows, at this render's scale
+    /// and anti-aliasing. `None` when the card can't hold the model, which
+    /// leaves it out of the frame rather than failing it, or when it is only
+    /// there to cast.
     pub fn model_picture(
         &self,
         l: &CompLayerDraw,
         m: &ModelDraw,
         camera: Option<lumit_core::model::CameraPose>,
         (width, height): (u32, u32),
+        (casters, maps): (Option<&ShadowCasters>, Option<&ShadowMaps>),
     ) -> Option<ModelPicture> {
+        if l.material.casts_shadows == LightingShadows::Only {
+            return None;
+        }
         let pose = camera.unwrap_or_else(|| {
             lumit_core::camera::default_pose(f64::from(width), f64::from(height))
         });
@@ -42,8 +49,45 @@ impl Realiser<'_> {
             lights: &l.lights,
             material: lumit_gpu::fx::lighting::LightingMaterial { eye, ..l.material },
             instances: &[],
+            casters,
+            maps,
         };
         self.fx.model(&self.ctx, &m.scene, &view).ok()
+    }
+
+    /// The shadow maps of the models in `layers` that cast, for the lights
+    /// that cast on what takes shadows. `None`, and nothing made, when no
+    /// model casts.
+    ///
+    /// ponytail: made again every frame. Keep them while the models and
+    /// lights hold still if they show in a profile.
+    pub(crate) fn shadow_maps(&self, layers: &[CompLayerDraw]) -> Option<ShadowMaps> {
+        // ponytail: a faded model casts its whole shadow, as a depth can't
+        // carry how see-through it is. Fade it into the maps if it's missed.
+        let casters: Vec<MapCaster> = layers
+            .iter()
+            .filter(|l| l.material.casts_shadows != LightingShadows::Off && l.opacity > 0.0)
+            .filter_map(|l| match &l.source {
+                DrawSource::Model(m) => Some(MapCaster {
+                    scene: &m.scene,
+                    model_to_comp: to_comp(m),
+                }),
+                _ => None,
+            })
+            .collect();
+        if casters.is_empty() {
+            return None;
+        }
+        let lights: Vec<_> = layers
+            .iter()
+            .filter(|l| l.material.accepts_shadows != LightingShadows::Off)
+            .flat_map(|l| l.lights.iter().copied())
+            .collect();
+        // About a texel a pixel at 1080p, fewer at a smaller preview.
+        let side = ((2048.0 * self.render_scale) as u32)
+            .next_power_of_two()
+            .clamp(512, 2048);
+        self.fx.shadow_maps(&self.ctx, &casters, &lights, side)
     }
 }
 

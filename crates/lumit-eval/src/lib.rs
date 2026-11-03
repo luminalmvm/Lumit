@@ -89,7 +89,8 @@ pub mod schedule;
 ///   inner layers of a collapsed Precomp blur.
 /// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
 ///   they are handed.
-pub const ALGO_VERSION: u32 = 24;
+/// * 25: Model layers cast and take shadows.
+pub const ALGO_VERSION: u32 = 25;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4853,12 +4854,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 24, which renamed every frame.
+        // Pinned under ALGO_VERSION 25, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                270_542_465_235_573_792_129_354_421_493_715_365_663,
-                245_443_632_604_847_733_809_670_259_225_426_457_713
+                7_699_045_846_567_640_697_737_022_643_143_253_696,
+                117_983_961_780_902_144_977_624_882_292_873_552_404
             )
         );
 

@@ -80,6 +80,8 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
             ..LightingMaterial::default()
         },
         instances: &[],
+        casters: None,
+        maps: None,
     };
     let run = || fx.model(&ctx, &scene, &view).map_err(|e| e.to_string());
     for _ in 0..WARMUP {

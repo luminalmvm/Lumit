@@ -13,6 +13,7 @@
 //! through, so the same squares serve every light and every layer.
 
 use super::{work_texture, FxEngine};
+use crate::mesh::shadow::ShadowMaps;
 use crate::GpuContext;
 
 /// How many lights shade one layer in a single pass — the same budget the
@@ -163,7 +164,7 @@ pub struct CasterPlane {
 
 /// The frame's casters, made once and read by every layer's lighting.
 pub struct ShadowCasters {
-    pub(super) texture: wgpu::Texture,
+    pub(crate) texture: wgpu::Texture,
     planes: Vec<CasterPlane>,
     /// Where each picture sits in its square, as shares of the side.
     places: Vec<[f32; 4]>,
@@ -315,6 +316,7 @@ pub fn may_shade(receiver: &[[f32; 3]; 4], light: &LightingLight, caster: &Caste
 pub(crate) struct GpuLight {
     /// w = 1 for a light from before it had rows.
     c0: [f32; 4],
+    /// w = which shadow map it has, counted from one, nought for none.
     c1: [f32; 4],
     c2: [f32; 4],
     c3: [f32; 4],
@@ -381,11 +383,11 @@ fn v4(v: [f32; 3], w: f32) -> [f32; 4] {
 }
 
 /// One light as the kernel reads it, with `mask` saying which casters can
-/// shade it.
-pub(crate) fn gpu_light(l: &LightingLight, mask: u32) -> GpuLight {
+/// shade it and `maps` the models' shadows.
+pub(crate) fn gpu_light(l: &LightingLight, mask: u32, maps: Option<&ShadowMaps>) -> GpuLight {
     GpuLight {
         c0: v4(l.corners[0], f32::from(u8::from(l.legacy))),
-        c1: v4(l.corners[1], 0.0),
+        c1: v4(l.corners[1], maps.map_or(0, |m| m.slot(l)) as f32),
         c2: v4(l.corners[2], 0.0),
         c3: v4(l.corners[3], 0.0),
         colour: v4(l.colour, l.falloff_px),
@@ -403,6 +405,25 @@ pub(crate) fn gpu_light(l: &LightingLight, mask: u32) -> GpuLight {
             MAX_STRETCH,
         ],
     }
+}
+
+/// The frame's casters on their own, as the mesh pass reads them.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct CasterSet {
+    /// x = how many, y = the side of their squares.
+    head: [f32; 4],
+    casters: [GpuCaster; MAX_SHADOW_CASTERS],
+}
+
+/// The casters' uniform for the mesh pass.
+pub(crate) fn caster_set(casters: Option<&ShadowCasters>) -> Vec<u8> {
+    let (casters, count, size) = gpu_casters(casters);
+    bytemuck::bytes_of(&CasterSet {
+        head: [count as f32, size as f32, 0.0, 0.0],
+        casters,
+    })
+    .to_vec()
 }
 
 /// The frame's casters as the kernel reads them, how many and their side.
@@ -428,7 +449,7 @@ pub(super) fn air_params(lights: &[LightingLight], casters: Option<&ShadowCaster
     let mask = (1u32 << count) - 1;
     let mut slots = [GpuLight::default(); MAX_LIT_LIGHTS];
     for (slot, l) in slots.iter_mut().zip(lights) {
-        *slot = gpu_light(l, mask);
+        *slot = gpu_light(l, mask, None);
     }
     let live = lights.len().min(MAX_LIT_LIGHTS) as f32;
     bytemuck::bytes_of(&LightingParams {
@@ -449,15 +470,91 @@ pub(super) fn air_params(lights: &[LightingLight], casters: Option<&ShadowCaster
 /// The pass's own layouts and pipelines: the lighting kernel, which reads the
 /// casters' array through a sampler, and the two that make a caster's square
 /// and its smaller levels.
-pub(super) struct LightingFx {
+pub(crate) struct LightingFx {
     layout: wgpu::BindGroupLayout,
     pipeline: wgpu::ComputePipeline,
     square_layout: wgpu::BindGroupLayout,
     square: wgpu::ComputePipeline,
     halve: wgpu::ComputePipeline,
-    pub(super) sampler: wgpu::Sampler,
+    pub(crate) sampler: wgpu::Sampler,
     /// Bound when the frame has no casters, and never read.
-    pub(super) empty: wgpu::Texture,
+    pub(crate) empty: wgpu::Texture,
+    /// The shadow maps' sampler, which compares, and what is bound when the
+    /// frame has no maps: one empty map and a uniform saying so.
+    map_sampler: wgpu::Sampler,
+    no_maps: (wgpu::Texture, wgpu::Buffer),
+}
+
+/// The three entries the models' shadow maps take in a layout, from
+/// `first`: the maps, their sampler and their uniform.
+pub(crate) fn map_layout(
+    first: u32,
+    stages: wgpu::ShaderStages,
+) -> [wgpu::BindGroupLayoutEntry; 3] {
+    let entry = |binding, ty| wgpu::BindGroupLayoutEntry {
+        binding: first + binding,
+        visibility: stages,
+        ty,
+        count: None,
+    };
+    [
+        entry(
+            0,
+            wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Depth,
+                view_dimension: wgpu::TextureViewDimension::D2Array,
+                multisampled: false,
+            },
+        ),
+        entry(
+            1,
+            wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+        ),
+        entry(
+            2,
+            wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+        ),
+    ]
+}
+
+impl LightingFx {
+    /// The maps as [`map_layout`] binds them, or the empty ones.
+    pub(crate) fn map_view(&self, maps: Option<&ShadowMaps>) -> wgpu::TextureView {
+        maps.map_or(&self.no_maps.0, |m| &m.texture)
+            .create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                ..Default::default()
+            })
+    }
+
+    /// [`map_layout`]'s entries, `view` from [`Self::map_view`].
+    pub(crate) fn map_entries<'a>(
+        &'a self,
+        first: u32,
+        view: &'a wgpu::TextureView,
+        maps: Option<&'a ShadowMaps>,
+    ) -> [wgpu::BindGroupEntry<'a>; 3] {
+        [
+            wgpu::BindGroupEntry {
+                binding: first,
+                resource: wgpu::BindingResource::TextureView(view),
+            },
+            wgpu::BindGroupEntry {
+                binding: first + 1,
+                resource: wgpu::BindingResource::Sampler(&self.map_sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: first + 2,
+                resource: maps
+                    .map_or(&self.no_maps.1, |m| &m.uniform)
+                    .as_entire_binding(),
+            },
+        ]
+    }
 }
 
 /// The format a caster's square is kept in. Eight bits is plenty for how much
@@ -508,19 +605,21 @@ impl LightingFx {
             },
         );
         use wgpu::TextureViewDimension as D;
+        let mut entries = vec![
+            tex(0, false, D::D2),
+            store(2, working),
+            uniform,
+            tex(4, true, D::D2Array),
+            entry(
+                5,
+                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            ),
+            tex(6, false, D::D2),
+        ];
+        entries.extend(map_layout(8, wgpu::ShaderStages::COMPUTE));
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-lighting-layout"),
-            entries: &[
-                tex(0, false, D::D2),
-                store(2, working),
-                uniform,
-                tex(4, true, D::D2Array),
-                entry(
-                    5,
-                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                ),
-                tex(6, false, D::D2),
-            ],
+            entries: &entries,
         });
         let square_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-shadow-square-layout"),
@@ -580,6 +679,14 @@ impl LightingFx {
                 usage: wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             }),
+            map_sampler: device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("fx-shadow-maps"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                compare: Some(wgpu::CompareFunction::LessEqual),
+                ..Default::default()
+            }),
+            no_maps: crate::mesh::shadow::no_maps(device),
             layout,
             square_layout,
         }
@@ -712,7 +819,8 @@ impl FxEngine {
     /// returning a new texture of the same size. Multiplies the picture by
     /// `1 + light`, so an unlit pixel is untouched; `op.lights` empty
     /// short-circuits inside the kernel to a straight copy. `casters` are the
-    /// frame's shadows, for a layer that takes them.
+    /// frame's shadows, for a layer that takes them, and `maps` the models'.
+    #[allow(clippy::too_many_arguments)]
     pub fn lighting(
         &self,
         ctx: &GpuContext,
@@ -721,8 +829,9 @@ impl FxEngine {
         h: u32,
         op: &LightingOp,
         casters: Option<&ShadowCasters>,
+        maps: Option<&ShadowMaps>,
     ) -> wgpu::Texture {
-        self.lighting_at(ctx, src, (w, h), op, casters, None)
+        self.lighting_at(ctx, src, (w, h), op, (casters, maps), None)
     }
 
     /// [`Self::lighting`] for particles in the scene, each pixel where `depth`
@@ -738,7 +847,8 @@ impl FxEngine {
         casters: Option<&ShadowCasters>,
     ) -> wgpu::Texture {
         let size = (src.width(), src.height());
-        self.lighting_at(ctx, src, size, op, casters, Some(depth))
+        // ponytail: particles take no model's shadow yet.
+        self.lighting_at(ctx, src, size, op, (casters, None), Some(depth))
     }
 
     fn lighting_at(
@@ -747,7 +857,7 @@ impl FxEngine {
         src: &wgpu::Texture,
         (w, h): (u32, u32),
         op: &LightingOp,
-        casters: Option<&ShadowCasters>,
+        (casters, maps): (Option<&ShadowCasters>, Option<&ShadowMaps>),
         depth: Option<&wgpu::Texture>,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
@@ -767,7 +877,7 @@ impl FxEngine {
                     })
                     .fold(0, |m, (i, _)| m | (1 << i))
             });
-            *slot = gpu_light(l, mask);
+            *slot = gpu_light(l, mask, maps);
         }
         let (planes, count, size) = gpu_casters(casters);
         let m = &op.material;
@@ -808,37 +918,39 @@ impl FxEngine {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..Default::default()
         });
+        let v_maps = fx.map_view(maps);
+        let v_depth = depth.unwrap_or(&fx.empty).create_view(&Default::default());
+        let mut entries = vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&v_src),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&v_out),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: ubuf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(&v_array),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::Sampler(&fx.sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(&v_depth),
+            },
+        ];
+        entries.extend(fx.map_entries(8, &v_maps, maps));
         let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-lighting"),
             layout: &fx.layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&v_src),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&v_out),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: ubuf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&v_array),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&fx.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::TextureView(
-                        &depth.unwrap_or(&fx.empty).create_view(&Default::default()),
-                    ),
-                },
-            ],
+            entries: &entries,
         });
         let mut enc = ctx.encoder("fx-lighting");
         {

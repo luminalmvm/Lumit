@@ -11,8 +11,8 @@
 //
 // A light that casts shadows is dimmed by every caster between it and the
 // texel: the ray back towards the light meets each caster's plane, and the
-// caster's square is read there, softer from a smaller level for diffusion
-// (shadow_core.wgsl, prepended).
+// caster's square is read there, softer from a smaller level for diffusion,
+// and each model's shadow map (shadow_core.wgsl, prepended).
 
 const MAX_LIT_LIGHTS: u32 = 8u;
 
@@ -69,6 +69,9 @@ fn lit_by(pos: vec3<f32>, l: Light) -> f32 {
     }
     return irradiance(pos, p.normal.xyz, l);
 }
+@group(0) @binding(8) var maps: texture_depth_2d_array;
+@group(0) @binding(9) var map_sampler: sampler_comparison;
+@group(0) @binding(10) var<uniform> shadow_maps: ShadowMaps;
 
 // Blinn-Phong, as lumit_core::lighting::highlight.
 fn highlight(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
@@ -117,7 +120,7 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let encoded = p.base.y > 0.5;
     let accepts = u32(p.base.z + 0.5);
-    let takes = accepts != 0u && p.casters_head.x > 0.5;
+    let takes = accepts != 0u && (p.casters_head.x > 0.5 || shadow_maps.head.x > 0.5);
     if (p.casters_head.z > 0.5 || accepts == 2u) {
         // Unlit, or showing only its shadows, so only the shadows touch it:
         // each light that falls here dims it by what its casters stopped.
@@ -130,7 +133,8 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (!takes || l.shadow.x <= 0.0 || lit_by(pos, l) <= 0.0) {
                 continue;
             }
-            dim = dim * (1.0 - l.shadow.x * (1.0 - transmitted(pos, l)));
+            let through = transmitted(pos, l) * mapped(pos, p.normal.xyz, l);
+            dim = dim * (1.0 - l.shadow.x * (1.0 - through));
         }
         if (accepts == 2u) {
             // Just the shadow, in the colour a caster lets through.
@@ -165,7 +169,7 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         let e = diffuse * lit;
         var left = vec3<f32>(1.0);
         if (takes && l.shadow.x > 0.0 && lit > 0.0) {
-            left = 1.0 - l.shadow.x * (1.0 - transmitted(pos, l));
+            left = 1.0 - l.shadow.x * (1.0 - transmitted(pos, l) * mapped(pos, p.normal.xyz, l));
         }
         gain = gain + e * colour * left;
         if (p.material.z > 0.0) {

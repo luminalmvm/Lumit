@@ -8,7 +8,10 @@
 //! it.
 
 use crate::composite::scaled_size;
-use crate::fx::lighting::{gpu_light, GpuLight, LightingLight, LightingMaterial, MAX_LIT_LIGHTS};
+use crate::fx::lighting::{
+    gpu_light, GpuLight, LightingFx, LightingLight, LightingMaterial, LightingShadows,
+    ShadowCasters, MAX_LIT_LIGHTS,
+};
 use crate::fx::FxEngine;
 use crate::GpuContext;
 use glam::{Mat3, Mat4, Vec3};
@@ -18,6 +21,7 @@ use std::sync::{Arc, Mutex, Weak};
 use wgpu::util::DeviceExt;
 
 mod blur;
+pub mod shadow;
 mod upload;
 
 /// What the picture is made in: linear, premultiplied, the compositor's own
@@ -60,6 +64,10 @@ pub struct ModelView<'a> {
     pub material: LightingMaterial,
     /// Each copy of the model. Empty draws it once where it is.
     pub instances: &'a [ModelCopy],
+    /// The shadows it takes, as `material.accepts_shadows` says: the 3D
+    /// layers' casters and the models' maps.
+    pub casters: Option<&'a ShadowCasters>,
+    pub maps: Option<&'a shadow::ShadowMaps>,
 }
 
 /// One copy of a model: where it goes after `model_to_comp`, in comp pixels,
@@ -144,7 +152,10 @@ pub(crate) struct MeshFx {
     shader: wgpu::ShaderModule,
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
+    shadows_layout: wgpu::BindGroupLayout,
     layout: wgpu::PipelineLayout,
+    /// Draws a shadow map's view ([`shadow`]), made when first asked for.
+    shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
     depth_one: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     depth_many: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     /// A picture's next level down from the one above, plain and sRGB.
@@ -211,9 +222,9 @@ impl MeshFx {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("mesh"),
             source: wgpu::ShaderSource::Wgsl(
-                format!(
-                    "{}{}",
+                concat!(
                     include_str!("light_core.wgsl"),
+                    include_str!("shadow_core.wgsl"),
                     include_str!("mesh.wgsl")
                 )
                 .into(),
@@ -253,6 +264,7 @@ impl MeshFx {
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
         entries.extend((6..=10).map(sampler));
         let material_layout = layout("mesh-material", &entries);
+        let shadows_layout = layout("mesh-shadows", &shadow::layout());
         let pipeline_layout = |label, layouts: &[&wgpu::BindGroupLayout]| {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(label),
@@ -352,10 +364,12 @@ impl MeshFx {
             &[255; 4],
         );
         Self {
-            layout: pipeline_layout("mesh", &[&frame_layout, &material_layout]),
+            layout: pipeline_layout("mesh", &[&frame_layout, &material_layout, &shadows_layout]),
             shader,
             frame_layout,
             material_layout,
+            shadows_layout,
+            shadow: std::sync::OnceLock::new(),
             depth_one,
             depth_many,
             down,
@@ -533,7 +547,13 @@ impl MeshFx {
         Ok(model)
     }
 
-    fn draw(&self, ctx: &GpuContext, model: &GpuModel, view: &ModelView<'_>) -> ModelPicture {
+    fn draw(
+        &self,
+        ctx: &GpuContext,
+        lighting: &LightingFx,
+        model: &GpuModel,
+        view: &ModelView<'_>,
+    ) -> ModelPicture {
         let (w, h) = view.comp;
         let (tw, th) = scaled_size(w, h, view.render_scale);
         let samples = ctx.cut_sample_count(view.samples).max(1);
@@ -601,9 +621,11 @@ impl MeshFx {
             ))
             * view.camera;
         let m = &view.material;
+        let takes = m.accepts_shadows != LightingShadows::Off;
+        let (casters, maps) = (view.casters.filter(|_| takes), view.maps.filter(|_| takes));
         let mut lights = [GpuLight::default(); MAX_LIT_LIGHTS];
         for (slot, l) in lights.iter_mut().zip(view.lights) {
-            *slot = gpu_light(l, 0);
+            *slot = gpu_light(l, 0xffff, maps);
         }
         let live = view.lights.len().min(MAX_LIT_LIGHTS);
         let frame = ctx
@@ -613,7 +635,12 @@ impl MeshFx {
                 contents: bytemuck::bytes_of(&FrameUniform {
                     clip: clip.to_cols_array_2d(),
                     eye: [m.eye[0], m.eye[1], m.eye[2], live as f32],
-                    flags: [f32::from(u8::from(m.unlit)), 0.0, 0.0, 0.0],
+                    flags: [
+                        f32::from(u8::from(m.unlit)),
+                        f32::from(m.accepts_shadows as u8),
+                        0.0,
+                        0.0,
+                    ],
                     lights,
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
@@ -729,6 +756,7 @@ impl MeshFx {
                 },
             ],
         });
+        let shadows_group = self.shadows_group(ctx, lighting, casters, maps);
         let view_of = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (colour_view, z_view, depth_view) = (view_of(&colour), view_of(z), view_of(&depth));
         let msaa_view = msaa.as_ref().map(view_of);
@@ -785,6 +813,7 @@ impl MeshFx {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
+                pass.set_bind_group(2, &shadows_group, &[]);
                 pass.draw_indexed(
                     p.first..p.first + p.count,
                     p.base_vertex,
@@ -878,6 +907,6 @@ impl FxEngine {
     ) -> Result<ModelPicture, MeshError> {
         let fx = self.mesh.get_or_init(|| MeshFx::new(ctx));
         let model = fx.model_for(ctx, scene)?;
-        Ok(fx.draw(ctx, &model, view))
+        Ok(fx.draw(ctx, &self.lighting, &model, view))
     }
 }

@@ -5,13 +5,18 @@ use crate::draw::{CompLayerDraw, DrawSource};
 
 impl Realiser<'_> {
     /// `l`'s picture before it is lit or placed, how much its effects grew
-    /// it, and the depth the mesh pass drew beside it when it is a model.
-    /// `fx_ms` gathers each effect's own time when the frame is profiled.
+    /// it, and the depth the mesh pass drew beside it when it is a model,
+    /// which takes `shadows`. `fx_ms` gathers each effect's own time when the
+    /// frame is profiled.
     pub(super) fn layer_picture(
         &self,
         l: &CompLayerDraw,
         camera: Option<lumit_core::model::CameraPose>,
         (width, height): (u32, u32),
+        shadows: (
+            Option<&lumit_gpu::fx::lighting::ShadowCasters>,
+            Option<&lumit_gpu::mesh::shadow::ShadowMaps>,
+        ),
         fx_ms: &mut Option<Vec<f32>>,
     ) -> (wgpu::Texture, (f32, f32), Option<wgpu::Texture>) {
         let mut model_depth = None;
@@ -71,13 +76,15 @@ impl Realiser<'_> {
                     lumit_gpu::composite::scaled_size(plan.width, plan.height, self.render_scale);
                 self.realise_graph(plan, None, gw, gh, self.render_scale)
             }
-            DrawSource::Model(m) => match self.model_picture(l, m, camera, (width, height)) {
-                Some(p) => {
-                    model_depth = Some(p.depth);
-                    p.colour
+            DrawSource::Model(m) => {
+                match self.model_picture(l, m, camera, (width, height), shadows) {
+                    Some(p) => {
+                        model_depth = Some(p.depth);
+                        p.colour
+                    }
+                    None => self.transparent(1, 1),
                 }
-                None => self.transparent(1, 1),
-            },
+            }
             DrawSource::Adjust | DrawSource::Haze(_) => {
                 // realise splits segments at every Adjust draw, so none
                 // reaches here; a transparent texel keeps the no-panic

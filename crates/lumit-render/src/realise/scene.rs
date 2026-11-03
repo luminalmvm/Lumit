@@ -404,6 +404,8 @@ fn shapes(
             ..frame.material
         },
         instances: &copies,
+        casters: None,
+        maps: None,
     };
     fx.model(ctx, model, &view).ok()
 }
@@ -472,7 +474,8 @@ impl Realiser<'_> {
         let mut made: Vec<Option<Made>> = layers.iter().map(|_| None).collect();
         for (slot, l) in made.iter_mut().zip(layers).take(end).skip(start) {
             if !draws_in_scene(l) && !super::shadow_only(l) {
-                *slot = Some(self.layer_picture(l, camera, (width, height), &mut None));
+                *slot =
+                    Some(self.layer_picture(l, camera, (width, height), (None, None), &mut None));
             }
         }
         let occluder = camera.map(|_| {

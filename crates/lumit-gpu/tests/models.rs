@@ -75,6 +75,8 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                         ..LightingMaterial::default()
                     },
                     instances: &[],
+                    casters: None,
+                    maps: None,
                 },
             )
             .expect("the model draws")
@@ -162,4 +164,129 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
         ..key
     };
     assert!(at(&frame(&[behind]), 175, 90)[0] < 0.01);
+}
+
+#[test]
+fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
+    let Some(lease) = lumit_gpu::test_support::lease() else {
+        return lumit_gpu::no_adapter();
+    };
+    let scene = Arc::new(fixtures::scene(
+        vec![(fixtures::cube(1.0, Some(0)), [0.0; 3])],
+        vec![Material::default()],
+        Vec::new(),
+    ));
+    let pose = lumit_core::camera::default_pose(f64::from(W), f64::from(H));
+    let eye = [pose.position.0, pose.position.1, pose.position.2].map(|v| v as f32);
+    let camera = camera_matrix(
+        W as f32,
+        H as f32,
+        pose.zoom as f32,
+        (eye[0], eye[1], eye[2]),
+        (0.0, 0.0, 0.0),
+    );
+    // Turned a quarter about the light, so the map's square is wider than
+    // the diamond its shadow is.
+    let model_to_comp = Mat4::from_translation(Vec3::new(160.0, 90.0, 0.0))
+        * Mat4::from_rotation_z(std::f32::consts::FRAC_PI_4)
+        * Mat4::from_scale(Vec3::splat(60.0))
+        * Mat4::from_rotation_x(std::f32::consts::PI);
+    // From in front, straight along the camera, casting a full shadow.
+    let key = LightingLight {
+        corners: [[160.0, 90.0, -600.0]; 4],
+        colour: [1.0; 3],
+        kind: LightingKind::Parallel,
+        falloff: 0,
+        radius_px: 0.0,
+        falloff_px: 0.0,
+        legacy: false,
+        cone_cos: -2.0,
+        cone_inner: -2.0,
+        axis: [0.0, 0.0, 1.0],
+        shadow_darkness: 1.0,
+        shadow_diffusion: 0.0,
+    };
+    let fx = lease.fx();
+    let caster = lumit_gpu::mesh::shadow::MapCaster {
+        scene: &scene,
+        model_to_comp,
+    };
+    let maps = fx.shadow_maps(&lease, &[caster], &[key], 512);
+    assert!(maps.is_some(), "a model and a light that casts make maps");
+    // The face looking at the light is as lit with its own shadow as without.
+    let front = |maps| {
+        let material = LightingMaterial {
+            eye,
+            accepts_shadows: lumit_gpu::fx::lighting::LightingShadows::On,
+            ..LightingMaterial::default()
+        };
+        let view = ModelView {
+            comp: (W, H),
+            render_scale: 1.0,
+            samples: 1,
+            camera,
+            model_to_comp,
+            shutter: &[],
+            lights: &[key],
+            material,
+            instances: &[],
+            casters: None,
+            maps,
+        };
+        let picture = fx.model(&lease, &scene, &view).expect("the model draws");
+        let px = lease
+            .colour()
+            .readback_linear_f32(&lease, &picture.colour)
+            .unwrap();
+        let i = ((90 * W + 160) * 4) as usize;
+        px[i]
+    };
+    let (alone, shaded) = (front(None), front(maps.as_ref()));
+    assert!(
+        alone > 0.1 && (alone - shaded).abs() < 1e-3,
+        "{alone} {shaded}"
+    );
+    // A white card behind it and past the map's far depth, facing the light:
+    // dark behind the cube only, lit in the square past the diamond, hard and
+    // soft, out to a texel or two past its edge.
+    let n = 32;
+    let white = lumit_gpu::fx::common::upload_linear_f32(&lease, &[1.0; 4].repeat(n * n), 32, 32);
+    for diffusion in [0.0, 40.0] {
+        let key = LightingLight {
+            shadow_diffusion: diffusion,
+            ..key
+        };
+        let caster = lumit_gpu::mesh::shadow::MapCaster {
+            scene: &scene,
+            model_to_comp,
+        };
+        let maps = fx.shadow_maps(&lease, &[caster], &[key], 512);
+        let op = lumit_gpu::fx::lighting::LightingOp {
+            origin: [0.0, 0.0, 200.0],
+            du: [W as f32 / 32.0, 0.0, 0.0],
+            dv: [0.0, H as f32 / 32.0, 0.0],
+            normal: [0.0, 0.0, -1.0],
+            material: LightingMaterial {
+                accepts_shadows: lumit_gpu::fx::lighting::LightingShadows::On,
+                ..LightingMaterial::default()
+            },
+            lights: vec![key],
+            own_caster: None,
+        };
+        let lit = fx.lighting(&lease, &white, 32, 32, &op, None, maps.as_ref());
+        let px = lumit_gpu::fx::common::readback_linear_f32(&lease, &lit, 32, 32).unwrap();
+        let at = |x: usize, y: usize| px[(y * 32 + x) * 4];
+        assert!(
+            at(16, 16) < 1.05,
+            "{diffusion}, behind the cube: {}",
+            at(16, 16)
+        );
+        for (x, y) in [(2, 2), (19, 22), (15, 25)] {
+            assert!(
+                at(x, y) > 1.9,
+                "{diffusion}, clear at {x} {y}: {}",
+                at(x, y)
+            );
+        }
+    }
 }

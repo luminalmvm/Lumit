@@ -5,6 +5,30 @@ use super::{lighting_op, scene, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
 
 impl Realiser<'_> {
+    /// [`Self::shadow_casters`] from the pictures drawn so far in `order`,
+    /// which [`models_last`] made: every layer's but the models', which cast
+    /// none of these.
+    #[allow(clippy::type_complexity)]
+    pub(super) fn casters_so_far(
+        &self,
+        layers: &[CompLayerDraw],
+        (order, drawn, grown): (&[usize], &[wgpu::Texture], &[(f32, f32)]),
+        (width, height): (u32, u32),
+        eye: [f32; 3],
+    ) -> (
+        Vec<lumit_gpu::fx::lighting::ShadowCasters>,
+        Vec<(Option<usize>, Option<usize>)>,
+    ) {
+        let none = self.transparent(1, 1);
+        let mut textures = vec![none; layers.len()];
+        let mut grows = vec![(1.0, 1.0); layers.len()];
+        for ((&i, t), g) in order.iter().zip(drawn).zip(grown) {
+            textures[i] = t.clone();
+            grows[i] = *g;
+        }
+        self.shadow_casters(layers, &textures, &grows, width, height, eye)
+    }
+
     /// Each layer's shadows: which run of 3D layers' casters it takes, and its
     /// own place among them. A 2D layer ends a run, as in After Effects, so
     /// the layers either side of one don't shade each other. The runs share
@@ -114,13 +138,19 @@ fn run_plan(
         .iter()
         .zip(textures)
         .enumerate()
-        // A model isn't a plane, so it neither casts nor takes these.
+        // A model isn't a plane: it casts none of these, and takes them by
+        // its middle, below.
         .filter(|(_, (l, _))| l.material.accepts_shadows != LightingShadows::Off)
         .filter(|(_, (l, _))| !matches!(l.source, DrawSource::Model(_)))
         .filter_map(|(i, (l, tex))| {
             let op = lighting_op(l, tex.width(), tex.height(), eye)?;
             Some((i, l, op.corners(tex.width(), tex.height())))
         })
+        .collect();
+    let models: Vec<(&CompLayerDraw, [f32; 3])> = layers
+        .iter()
+        .filter(|l| l.material.accepts_shadows != LightingShadows::Off)
+        .filter_map(|l| Some((l, crate::model_layer::middle(l)?.to_array())))
         .collect();
     let mut kept: Vec<(f32, usize, CasterPlane)> = Vec::new();
     for (i, ((l, tex), g)) in layers.iter().zip(textures).zip(grown).enumerate() {
@@ -143,10 +173,9 @@ fn run_plan(
                             .iter()
                             .any(|g| lumit_gpu::fx::lighting::may_shade(corners, g, &plane)))
             })
-            .map(|(_, _, corners)| {
-                let c = centre(corners);
-                (0..3).map(|k| (c[k] - mid[k]).powi(2)).sum::<f32>()
-            })
+            .map(|(_, _, corners)| centre(corners))
+            .chain(models.iter().map(|(_, c)| *c))
+            .map(|c| (0..3).map(|k| (c[k] - mid[k]).powi(2)).sum::<f32>())
             .min_by(f32::total_cmp);
         if let Some(near) = near {
             kept.push((near, i, plane));
@@ -164,7 +193,9 @@ fn run_plan(
     for (k, (_, i, _)) in kept.iter().enumerate() {
         own[*i] = Some(k);
     }
-    let lights = receivers.iter().flat_map(|(_, l, _)| &l.lights);
+    let lights = (receivers.iter().map(|(_, l, _)| *l))
+        .chain(models.iter().map(|(l, _)| *l))
+        .flat_map(|l| &l.lights);
     Some(RunPlan {
         kept: kept.into_iter().map(|(_, i, p)| (i, p)).collect(),
         own,
@@ -196,4 +227,27 @@ pub(super) fn shadow_only(l: &CompLayerDraw) -> bool {
     use lumit_gpu::fx::lighting::LightingShadows as S;
     l.material.casts_shadows == S::Only
         || (l.material.accepts_shadows == S::Only && l.lights.is_empty())
+}
+
+/// The order a segment's layers are drawn in: as they stack, but with
+/// shadows the models last, so each has the casters of the 3D layers drawn
+/// before it.
+pub(super) fn models_last(layers: &[CompLayerDraw], shadowed: bool) -> Vec<usize> {
+    let model = |i: &usize| shadowed && matches!(layers[*i].source, DrawSource::Model(_));
+    let all = 0..layers.len();
+    all.clone()
+        .filter(|i| !model(i))
+        .chain(all.filter(model))
+        .collect()
+}
+
+/// `drawn`, made in `order`, put back in the order the layers stack.
+pub(super) fn unpermute<T>(drawn: Vec<T>, order: &[usize]) -> Vec<T> {
+    let mut back: Vec<Option<T>> = std::iter::repeat_with(|| None).take(drawn.len()).collect();
+    for (t, &i) in drawn.into_iter().zip(order) {
+        if let Some(slot) = back.get_mut(i) {
+            *slot = Some(t);
+        }
+    }
+    back.into_iter().flatten().collect()
 }

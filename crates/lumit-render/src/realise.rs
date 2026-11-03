@@ -2152,6 +2152,10 @@ impl Realiser<'_> {
         // A shadow needs every caster's picture before anything is lit, so
         // where this segment has one, the lighting waits for the whole list.
         let shadowed = casts_shadows(layers);
+        let maps = self.shadow_maps(layers);
+        // There, a model is drawn after the 3D layers, whose casters it takes.
+        let order = shadows::models_last(layers, shadowed);
+        let mut early = None;
         let mut waiting = Vec::new();
         // Each model's depth, by its place in the list.
         let mut model_depths = Vec::new();
@@ -2160,7 +2164,8 @@ impl Realiser<'_> {
         let (seen, mut made) = self.scene_frame(camera, (width, height), layers);
         let mut scene_depths = Vec::with_capacity(layers.len());
         let mut emitters = Vec::new();
-        for (i, l) in layers.iter().enumerate() {
+        for &i in &order {
+            let l = &layers[i];
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite
             // that follows is one pass over the whole segment rather than a
@@ -2173,7 +2178,18 @@ impl Realiser<'_> {
                 .map(|frame| scene::Seen::enter(frame, l));
             let (mut tex, mut grow, model_depth) = match made.get_mut(i).and_then(Option::take) {
                 Some(made) => made,
-                None => self.layer_picture(l, camera, (width, height), &mut fx_ms),
+                None => {
+                    let model = matches!(l.source, DrawSource::Model(_));
+                    let casters = (shadowed && model).then(|| {
+                        let (sets, each) = early.get_or_insert_with(|| {
+                            let so_far = (&order[..], &linear_textures[..], &grown[..]);
+                            self.casters_so_far(layers, so_far, (width, height), eye)
+                        });
+                        each[i].0.and_then(|k| sets.get(k))
+                    });
+                    let shadows = (casters.flatten(), maps.as_ref());
+                    self.layer_picture(l, camera, (width, height), shadows, &mut fx_ms)
+                }
             };
             drop(entered);
             if let Some(depth) = model_depth {
@@ -2200,8 +2216,7 @@ impl Realiser<'_> {
                     tex,
                     eye,
                     camera,
-                    None,
-                    None,
+                    (None, None, None),
                     grow,
                     (width, height),
                     claimed.as_ref(),
@@ -2216,9 +2231,19 @@ impl Realiser<'_> {
             linear_textures.push(tex);
             scene_depths.push(claimed);
         }
+        linear_textures = shadows::unpermute(linear_textures, &order);
+        grown = shadows::unpermute(grown, &order);
+        let waiting = shadows::unpermute(waiting, &order);
+        let scene_depths = shadows::unpermute(scene_depths, &order);
+        let model_depths = model_depths
+            .into_iter()
+            .map(|(k, d)| (order[k], d))
+            .collect();
+        let emitters: Vec<_> = emitters.into_iter().map(|(k, e)| (order[k], e)).collect();
         if shadowed {
-            let (sets, each) =
-                self.shadow_casters(layers, &linear_textures, &grown, width, height, eye);
+            let (sets, each) = early.unwrap_or_else(|| {
+                self.shadow_casters(layers, &linear_textures, &grown, width, height, eye)
+            });
             let lit: Vec<_> = linear_textures
                 .into_iter()
                 .zip(layers)
@@ -2236,8 +2261,7 @@ impl Realiser<'_> {
                             tex,
                             eye,
                             camera,
-                            casters,
-                            own,
+                            (casters, own, maps.as_ref()),
                             *grow,
                             size,
                             depth.as_ref(),
@@ -2610,11 +2634,12 @@ impl Realiser<'_> {
     /// A finished layer lit by the comp's lights (docs/06) and then blurred by
     /// the camera's depth of field (docs/impl/camera.md §5), each only where
     /// it applies, so a comp with neither renders byte-for-byte as before.
-    /// `casters` are the segment's shadows and `own` this layer's square
-    /// among them; `grow` is how much its effects grew it and `size` the
-    /// comp's, which the depth of field reads. Hands back the picture, how much
-    /// it has grown now, and the lit picture before the blur with its own grow
-    /// when it was blurred. Particles in the scene come with their `depth`.
+    /// `casters` are the segment's shadows, `own` this layer's square
+    /// among them and `maps` the models' shadows; `grow` is how much its
+    /// effects grew it and `size` the comp's, which the depth of field reads.
+    /// Hands back the picture, how much it has grown now, and the lit picture
+    /// before the blur with its own grow when it was blurred. Particles in
+    /// the scene come with their `depth`.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn lit(
         &self,
@@ -2622,8 +2647,11 @@ impl Realiser<'_> {
         mut tex: wgpu::Texture,
         eye: [f32; 3],
         camera: Option<lumit_core::model::CameraPose>,
-        casters: Option<&lumit_gpu::fx::lighting::ShadowCasters>,
-        own: Option<usize>,
+        (casters, own, maps): (
+            Option<&lumit_gpu::fx::lighting::ShadowCasters>,
+            Option<usize>,
+            Option<&lumit_gpu::mesh::shadow::ShadowMaps>,
+        ),
         grow: (f32, f32),
         size: (u32, u32),
         depth: Option<&wgpu::Texture>,
@@ -2651,12 +2679,19 @@ impl Realiser<'_> {
         // and so has to be cleared.
         let unshaded = l.material.unlit
             && casters.is_none()
+            && maps.is_none()
             && l.material.accepts_shadows != lumit_gpu::fx::lighting::LightingShadows::Only;
         if let Some(mut op) = lighting_op(l, tex.width(), tex.height(), eye).filter(|_| !unshaded) {
             op.own_caster = own;
-            tex = self
-                .fx
-                .lighting(&self.ctx, &tex, tex.width(), tex.height(), &op, casters);
+            tex = self.fx.lighting(
+                &self.ctx,
+                &tex,
+                tex.width(),
+                tex.height(),
+                &op,
+                casters,
+                maps,
+            );
         }
         // Depth of field (docs/impl/camera.md §5): each part of a 3D layer
         // off the camera's focus plane is blurred by its own circle of

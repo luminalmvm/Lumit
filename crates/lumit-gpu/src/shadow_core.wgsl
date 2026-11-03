@@ -108,3 +108,116 @@ fn transmitted(pos: vec3<f32>, l: Light) -> vec3<f32> {
     return through;
 }
 
+// The models' shadows (mesh/shadow.rs): each light that casts, seen from where
+// it shines, keeps how far the nearest model is at every texel of its map.
+// Each that reads them declares `shadow_maps`, `maps` and `map_sampler` too.
+
+struct ShadowMap {
+    // x = its first view, y = how many (six round a light inside the models),
+    // z = a texel's width per comp pixel of the view's w.
+    view: vec4<f32>,
+    // x = the nearest depth kept, y = how far past that the farthest is.
+    range: vec4<f32>,
+};
+
+struct ShadowMaps {
+    // x = how many lights have maps, y = the maps' side in texels.
+    head: vec4<f32>,
+    lights: array<ShadowMap, 8>,
+    // Comp pixels to a view: xy = where on the map times w, z = depth in comp
+    // pixels, w = 1, or the depth for a light that is somewhere.
+    views: array<mat4x4<f32>, 48>,
+};
+
+const MAP_TAPS: u32 = 16u;
+const MAP_MAX_SOFT: f32 = 24.0;
+// Past this many texels the soft edge takes twice the taps, so it doesn't band.
+const MAP_WIDE: f32 = 8.0;
+
+// How much of light `l` gets past the models to `pos`, 0 to 1. `n` is the
+// surface there, which it is read a little off so a model doesn't shade
+// itself, nought in the air. A light's Shadow diffusion softens it as it
+// does a 3D layer's shadow: wider the farther the model is from `pos`.
+fn mapped(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
+    let slot = u32(l.c1.w + 0.5);
+    if (slot == 0u || slot > u32(shadow_maps.head.x + 0.5)) {
+        return 1.0;
+    }
+    let m = shadow_maps.lights[slot - 1u];
+    var to_light = light_centre(l) - pos;
+    if (u32(l.flags.x + 0.5) == 2u) {
+        to_light = -l.axis.xyz;
+    }
+    var view = u32(m.view.x + 0.5);
+    if (m.view.y > 1.5) {
+        // All round the light: the face the way from it points along most.
+        let d = -to_light;
+        let a = abs(d);
+        if (a.x >= a.y && a.x >= a.z) {
+            view = view + select(1u, 0u, d.x > 0.0);
+        } else if (a.y >= a.z) {
+            view = view + select(3u, 2u, d.y > 0.0);
+        } else {
+            view = view + select(5u, 4u, d.z > 0.0);
+        }
+    }
+    let seen = shadow_maps.views[min(view, 47u)];
+    let w = (seen * vec4<f32>(pos, 1.0)).w;
+    if (w <= 0.0) {
+        return 1.0;
+    }
+    let texel = w * m.view.z;
+    // A texel and a half off the face that looks at the light.
+    let lift = select(-n, n, dot(n, to_light) >= 0.0) * texel * 1.5;
+    let q = seen * vec4<f32>(pos + lift, 1.0);
+    let uv = q.xy / q.w;
+    if (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0))) {
+        return 1.0;
+    }
+    let side = shadow_maps.head.y;
+    let layer = i32(view);
+    let here = q.z - texel;
+    // Nothing past the farthest model casts, and an empty texel is there.
+    let ref_depth = min((here - m.range.x) / m.range.y, 1.0);
+    let soft = l.shadow.y;
+    if (soft <= 0.0 || all(n == vec3<f32>(0.0))) {
+        return textureSampleCompareLevel(maps, map_sampler, uv, layer, ref_depth);
+    }
+    // How far the models in the way are, on average, over the widest the
+    // soft edge can be.
+    let reach = clamp(soft / texel, 1.0, MAP_MAX_SOFT);
+    let centre = uv * side;
+    var sum: f32 = 0.0;
+    var found: f32 = 0.0;
+    for (var i: u32 = 0u; i < MAP_TAPS; i = i + 1u) {
+        let at = centre + vec2<f32>(f32(i % 4u) - 1.5, f32(i / 4u) - 1.5) * reach / 1.5;
+        let xy = clamp(vec2<i32>(at), vec2<i32>(0), vec2<i32>(i32(side) - 1));
+        let raw = textureLoad(maps, xy, layer, 0);
+        let d = m.range.x + raw * m.range.y;
+        if (raw < 1.0 && d < here) {
+            sum = sum + d;
+            found = found + 1.0;
+        }
+    }
+    if (found == 0.0) {
+        return 1.0;
+    }
+    let blocker = sum / found;
+    // As the 3D layers' shadows: the soft edge on the model times how much
+    // farther the shadow lands.
+    var away = max(blocker, 1.0);
+    if (u32(l.flags.x + 0.5) == 2u) {
+        away = max(length(light_centre(l) - pos), 1.0);
+    }
+    let radius = clamp(soft * (here - blocker) / away / texel, 0.5, MAP_MAX_SOFT);
+    let taps = select(MAP_TAPS, MAP_TAPS * 2u, radius > MAP_WIDE);
+    var lit: f32 = 0.0;
+    for (var i: u32 = 0u; i < taps; i = i + 1u) {
+        // A sunflower's seeds: even over the disc, no two on one ring.
+        let r = sqrt((f32(i) + 0.5) / f32(taps)) * radius / side;
+        let a = f32(i) * 2.39996;
+        let at = uv + vec2<f32>(cos(a), sin(a)) * r;
+        lit = lit + textureSampleCompareLevel(maps, map_sampler, at, layer, ref_depth);
+    }
+    return lit / f32(taps);
+}
