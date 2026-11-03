@@ -25,8 +25,10 @@ pub fn samples(
     natural: (f32, f32),
     context: Arc<ExpressionContext>,
 ) -> Vec<MbSample> {
-    // A model blurs in the mesh pass, from its own placements (model::draw).
-    let model = matches!(layer.kind, lumit_core::model::LayerKind::Model { .. });
+    // A model blurs in the mesh pass, from its own placements (model::draw),
+    // and particles in the scene along their own paths.
+    let model = matches!(layer.kind, lumit_core::model::LayerKind::Model { .. })
+        || crate::realise::scene::in_scene(layer);
     if !layer.switches.motion_blur || model {
         return Vec::new();
     }

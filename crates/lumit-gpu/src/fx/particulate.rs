@@ -120,12 +120,12 @@ pub struct ParticulateOp<'a> {
     pub candidates: u32,
     /// The two baked over-life curves, size then opacity, 257 entries each.
     pub curves: &'a [f32],
-    /// The mask path as `(x, y, arc length, unused)` per vertex; empty
-    /// for every other emitter shape, and the documented no-op for Mask path.
+    /// The mask path as `(x, y, arc length, unused)` per vertex, empty for any other shape.
     pub path: &'a [[f32; 4]],
     pub path_total: f32,
-    /// Streak length in seconds; zero in every other mode.
+    /// Streak length in seconds, zero in every other mode, and how far on the head is.
     pub tail_seconds: f32,
+    pub tail_lead: f32,
     /// `0..=1`.
     pub feather: f32,
     /// The host Mix, `0..=1`, folded into the particle's own coverage.
@@ -200,7 +200,7 @@ pub(super) struct ParticulateParams {
     pub(super) eps: f32,
 
     pub(super) dt: f32,
-    pub(super) _spare: [u32; 2],
+    pub(super) lead: [f32; 2],
     pub(super) frames: u32,
 
     pub(super) candidates: u32,
@@ -660,7 +660,7 @@ impl FxEngine {
             turb_speed: op.turbulence_speed,
             eps: op.eps,
             dt: op.dt,
-            _spare: [0; 2],
+            lead: [op.tail_lead, 0.0],
             frames: op.frames.len() as u32 - 1,
             candidates,
             path_len: op.path.len() as u32,

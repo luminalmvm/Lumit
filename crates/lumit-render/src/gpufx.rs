@@ -4744,8 +4744,7 @@ fn particulate_op<'a>(
         turbulence: f.turbulence,
         turbulence_scale: f.turbulence_scale,
         turbulence_speed: f.turbulence_speed,
-        // The **fixed** central difference the CPU reference takes, so one
-        // frame key names one picture whatever raster is previewing.
+        // The CPU reference's fixed central difference, whatever the raster.
         eps: ((dt * 0.5) as f32).max(1e-6),
         dt: dt as f32,
         frames,
@@ -4754,6 +4753,7 @@ fn particulate_op<'a>(
         path,
         path_total,
         tail_seconds: style.streak_seconds,
+        tail_lead: 0.0,
         feather: style.feather,
         mix: style.mix,
         mode,

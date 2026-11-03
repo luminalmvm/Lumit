@@ -3595,6 +3595,7 @@ fn comp_walk(
                 temporal_below: None,
                 accumulation_below: None,
                 flow_below: Vec::new(),
+                in_scene: None,
             });
         };
     // The open unit while the walk is inside a live span: the span's start
@@ -4480,6 +4481,7 @@ fn comp_walk(
                             keys,
                         )
                     },
+                    in_scene: None,
                 }));
                 continue;
             }
@@ -4728,6 +4730,7 @@ fn comp_walk(
             temporal_below: None,
             accumulation_below: None,
             flow_below,
+            in_scene: crate::realise::scene::carried(comp, layer),
         }));
     }
     // A live span reaching the top of the stack closes with the walk itself.
@@ -5021,6 +5024,7 @@ fn graph_comp_draw(
         temporal_below: None,
         accumulation_below: None,
         flow_below: Vec::new(),
+        in_scene: None,
     }
 }
 
@@ -6205,6 +6209,7 @@ fn read_draw(
         temporal_below: None,
         accumulation_below: None,
         flow_below: Vec::new(),
+        in_scene: None,
     }
 }
 

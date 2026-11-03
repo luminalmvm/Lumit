@@ -103,6 +103,7 @@ pub(crate) fn add(
             temporal_below: None,
             accumulation_below: None,
             flow_below: Vec::new(),
+            in_scene: None,
         },
     );
 }

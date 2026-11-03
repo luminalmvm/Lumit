@@ -24,6 +24,8 @@ pub(super) struct Frame {
     /// which keeps the half floats it is laid in fine where the particles are.
     occluder: Option<wgpu::Texture>,
     near: f32,
+    /// What the layer drawing now carries.
+    carried: Carried,
 }
 
 /// What a Particulate in the scene drew beside its picture.
@@ -43,6 +45,36 @@ thread_local! {
     static FRAMES: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
     // What the last Particulate in the scene drew, until its layer claims it.
     static PENDING: RefCell<Option<Joined>> = const { RefCell::new(None) };
+}
+
+/// What a layer whose Particulate is in the scene takes from the comp beyond
+/// its own rows.
+#[derive(Clone, Default)]
+pub struct Carried {
+    /// How long the shutter stays open, in seconds, when the layer blurs,
+    /// and when it opens, from now.
+    pub shutter: f32,
+    pub opens: f32,
+}
+
+/// Whether `layer` is a 3D layer with a Particulate in the scene.
+#[must_use]
+pub fn in_scene(layer: &Layer) -> bool {
+    layer.switches.three_d && layer.effects.iter().any(is_scene)
+}
+
+/// What `layer` carries into the scene, `None` when it has nothing there.
+pub(crate) fn carried(comp: &Composition, layer: &Layer) -> Option<Carried> {
+    if !in_scene(layer) {
+        return None;
+    }
+    let blurs = layer.switches.motion_blur && !comp.motion_blur.sample_offsets().is_empty();
+    let frame = 1.0 / comp.frame_rate.fps().max(1.0);
+    let open = comp.motion_blur.shutter_angle / 360.0 * frame;
+    Some(Carried {
+        shutter: if blurs { open as f32 } else { 0.0 },
+        opens: (comp.motion_blur.shutter_phase / 360.0 * frame) as f32,
+    })
 }
 
 /// The layer a Layer emitter names, if `e` is one.
@@ -148,6 +180,9 @@ pub(crate) fn draw(
         .cross(place.y_axis.truncate())
         .length()
         .sqrt();
+    // A blurring layer draws each disc from where it was when the shutter
+    // opened to where it was when it closed, as a streak is drawn.
+    let blur = frame.carried.shutter > 0.0 && op.tail_seconds == 0.0 && op.mode != 1;
     let target = lumit_gpu::composite::scaled_size(cw, ch, r);
     let zoom = frame.camera.zoom.max(1.0);
     // The camera's blur, as the layers take it (dof.rs).
@@ -157,6 +192,16 @@ pub(crate) fn draw(
     });
     let op = lumit_gpu::fx::particulate::ParticulateOp {
         projection: Some(projection),
+        tail_seconds: if blur {
+            frame.carried.shutter
+        } else {
+            op.tail_seconds
+        },
+        tail_lead: if blur {
+            frame.carried.opens + frame.carried.shutter
+        } else {
+            0.0
+        },
         ..*op
     };
     let middle = place.transform_point3(glam::Vec3::from(at) / s);
@@ -176,6 +221,7 @@ pub(crate) fn draw(
             fallback: if w_middle > 0.0 { 1.0 / w_middle } else { 0.0 },
             lens,
             scale,
+            blur,
         },
     );
     joined(depth);
@@ -194,8 +240,12 @@ pub(super) fn claim(l: &CompLayerDraw) -> Option<(wgpu::Texture, glam::Vec3)> {
 pub(super) struct Seen;
 
 impl Seen {
-    pub(super) fn enter(frame: &Frame) -> Self {
-        FRAMES.with(|f| f.borrow_mut().push(frame.clone()));
+    pub(super) fn enter(frame: &Frame, l: &CompLayerDraw) -> Self {
+        let frame = Frame {
+            carried: l.in_scene.clone().unwrap_or_default(),
+            ..frame.clone()
+        };
+        FRAMES.with(|f| f.borrow_mut().push(frame));
         Seen
     }
 }
@@ -278,6 +328,7 @@ impl Realiser<'_> {
             camera: pose,
             occluder,
             near,
+            carried: Carried::default(),
         };
         (Some(frame), made)
     }

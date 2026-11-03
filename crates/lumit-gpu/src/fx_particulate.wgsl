@@ -72,8 +72,9 @@ struct Params {
 
     // Schedule and the frame.
     dt: f32,
-    _spare0: u32,
-    _spare1: u32,
+    // Seconds on from now the head is drawn at, the tail following it.
+    lead: f32,
+    _spare1: f32,
     frames: u32,
 
     candidates: u32,
@@ -785,11 +786,15 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
         + radians(p.spin) * age;
 
     var head = m.pos + d;
+    if (p.lead != 0.0) {
+        let on = max(age + p.lead, 0.0);
+        head = pt_integrate(p0, v0, on).pos + pt_turbulence(p0, phase, on);
+    }
     var tail = head;
     if (p.tail > 0.0) {
         // Where it was a Streak length ago — the same closed form at an earlier
         // age, never a remembered position.
-        let back = max(age - p.tail, 0.0);
+        let back = max(age + p.lead - p.tail, 0.0);
         let mb = pt_integrate(p0, v0, back);
         tail = mb.pos + pt_turbulence(p0, phase, back);
     }

@@ -35,6 +35,9 @@ pub struct SceneView<'a> {
     pub lens: [f32; 3],
     /// How much the layer's scale sizes each particle.
     pub scale: f32,
+    /// Whether each particle is drawn across the shutter, its tail where it
+    /// was when the shutter opened.
+    pub blur: bool,
 }
 
 #[repr(C)]
@@ -406,7 +409,7 @@ impl FxEngine {
                         0.0,
                     ],
                     lens: [view.lens[0], view.lens[1], view.lens[2], 0.0],
-                    look: [view.scale, 0.0, 0.0, 0.0],
+                    look: [view.scale, f32::from(u8::from(view.blur)), 0.0, 0.0],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
             },

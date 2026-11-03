@@ -19,7 +19,8 @@ struct Scene {
     // `|distance − focus| / clip w`, nought for none, y the zoom, z the focus
     // distance, comp pixels.
     lens: vec4<f32>,
-    // x: how much the layer's scale sizes each particle.
+    // x: how much the layer's scale sizes each particle, y: 1 when each is
+    // drawn across the shutter.
     look: vec4<f32>,
 };
 
@@ -60,6 +61,10 @@ fn pt_vs_scene(@builtin(vertex_index) vi: u32, @builtin(instance_index) slot: u3
         g.geom.y = max(g.geom.y, blur);
         let share = size / max(size + 2.0 * blur, 1e-6);
         g.colour = g.colour * share * share;
+    }
+    if (sc.look.y > 0.5) {
+        // Across the shutter its light is spread along the smear.
+        g.colour = g.colour * size / max(size + length(g.head - g.tail), 1e-6);
     }
     var corner = vec2<f32>(-1.0, -1.0);
     if (vi == 1u || vi == 4u) { corner = vec2<f32>(1.0, -1.0); }

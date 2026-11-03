@@ -2168,7 +2168,7 @@ impl Realiser<'_> {
             let entered = seen
                 .as_ref()
                 .filter(|_| scene::draws_in_scene(l))
-                .map(scene::Seen::enter);
+                .map(|frame| scene::Seen::enter(frame, l));
             let (mut tex, mut grow, model_depth) = match made.get_mut(i).and_then(Option::take) {
                 Some(made) => made,
                 None => self.layer_picture(l, camera, (width, height), &mut fx_ms),
@@ -2268,7 +2268,7 @@ impl Realiser<'_> {
             .zip(layers)
             .zip(&grown)
             .map(|((tex, l), g)| {
-                (!l.mb.is_empty() && !scene::draws_in_scene(l)).then(|| {
+                (!l.mb.is_empty()).then(|| {
                     // A grown picture is placed by the grown transform at every
                     // sub-frame too, or the smear would be of a layer
                     // in a different place from the one the composite draws.
