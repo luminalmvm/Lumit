@@ -45,7 +45,7 @@ pub const NOISE_FLOOR_MS: f64 = 1.0;
 ///
 /// Asserted only under [`reference_hardware`]. Anywhere else these are what the
 /// harness is aiming at, not what it is judged by.
-pub const DESKTOP_BUDGET_MS: [(&str, f64); 27] = [
+pub const DESKTOP_BUDGET_MS: [(&str, f64); 29] = [
     ("B3", 50.0),
     ("B4", 500.0),
     ("B5", 1000.0 / 60.0),
@@ -82,6 +82,8 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 27] = [
     ("B30", 8.0),
     ("B31", 16.0),
     ("B33", 12.0),
+    ("B34", 50.0),
+    ("B35", 9.0),
 ];
 
 /// A run's numbers, keyed by budget — the results file the harness writes and,

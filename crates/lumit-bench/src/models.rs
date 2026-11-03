@@ -8,7 +8,9 @@
 //! frame. The model is uploaded once before the stopwatch starts, as the
 //! engine keeps it between frames, so the number is the draw alone. B33 has
 //! both lights cast, a point and a parallel one, so each frame makes their
-//! shadow maps and the model is drawn taking them.
+//! shadow maps and the model is drawn taking them. **B34** makes the cubes an
+//! Environment light lights with from a 2K panorama, which happens once a
+//! picture, and **B35** is B30 lit by them with the background drawn.
 
 use std::sync::Arc;
 
@@ -23,7 +25,7 @@ const WARMUP: u32 = 4;
 /// The fastest of these is kept, as for Particulate's three.
 const REPEATS: u32 = 3;
 
-/// Measure B30 and B33. `Err` when there is no graphics adapter.
+/// Measure B30, B33, B34 and B35. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let ctx = lumit_gpu::GpuContext::headless().map_err(|e| format!("no GPU adapter: {e}"))?;
     let fx = lumit_gpu::fx::FxEngine::new(&ctx);
@@ -145,8 +147,34 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
             .map(drop)
             .map_err(|e| e.to_string())
     })?;
+    // What the cubes are made from doesn't change how long they take, so the
+    // model's own picture stands in for a 2K panorama: it makes cubes as big.
+    let picture = fx
+        .model(&ctx, &scene, &view)
+        .map_err(|e| e.to_string())?
+        .colour;
+    let b34 = time(&|| {
+        drop(fx.environment(&ctx, None, &picture));
+        Ok(())
+    })?;
+    let surround = lumit_gpu::fx::environment::EnvironmentLight {
+        maps: fx.environment(&ctx, None, &picture),
+        colour: [1.0; 3],
+        turn: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    };
+    let ray = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let b35 = time(&|| {
+        drop(fx.environment_background(&ctx, &surround, (ray, zoom), SIZE, 1.0, 0.0));
+        let view = lumit_gpu::mesh::ModelView {
+            environment: Some(&surround),
+            ..view
+        };
+        fx.model(&ctx, &scene, &view)
+            .map(drop)
+            .map_err(|e| e.to_string())
+    })?;
     let mut out = Vec::new();
-    for (budget, value_ms) in [("B30", b30), ("B33", b33)] {
+    for (budget, value_ms) in [("B30", b30), ("B33", b33), ("B34", b34), ("B35", b35)] {
         let m = Measurement {
             budget,
             value_ms,
