@@ -2635,9 +2635,12 @@ impl Realiser<'_> {
         if matches!(l.source, DrawSource::Model(_)) {
             return (tex, grow, None);
         }
-        // Particles in the scene were drawn through the camera already.
-        if depth.is_some() {
-            return (tex, grow, None);
+        if let Some(depth) = depth {
+            return (
+                self.scene_lit(l, tex, depth, camera, size, casters),
+                grow,
+                None,
+            );
         }
         // After its effects and before it is placed. `l.lights` is empty
         // unless the comp holds lights and this layer accepts them, and empty
@@ -3071,9 +3074,10 @@ fn run_plan(
             .iter()
             .filter(|(r, l, corners)| {
                 *r != i
-                    && l.lights
-                        .iter()
-                        .any(|g| lumit_gpu::fx::lighting::may_shade(corners, g, &plane))
+                    && (scene::draws_in_scene(l)
+                        || l.lights
+                            .iter()
+                            .any(|g| lumit_gpu::fx::lighting::may_shade(corners, g, &plane)))
             })
             .map(|(_, _, corners)| {
                 let c = centre(corners);

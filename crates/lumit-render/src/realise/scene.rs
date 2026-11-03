@@ -274,4 +274,56 @@ impl Realiser<'_> {
         };
         (Some(frame), made)
     }
+
+    /// Particles in the scene lit by the comp's lights where the layer takes
+    /// them, each pixel where `depth` puts it, and shaded by `casters`. They
+    /// were drawn through the camera, so nothing lights them as a plane or
+    /// blurs them as one.
+    // ponytail: each pixel is lit as its nearest particle, so in a dense cloud
+    // the ones behind take the front one's light and shadow. Lighting each
+    // particle in its own draw is the way up (item 11).
+    pub(super) fn scene_lit(
+        &self,
+        l: &CompLayerDraw,
+        tex: wgpu::Texture,
+        depth: &wgpu::Texture,
+        camera: Option<CameraPose>,
+        (cw, ch): (u32, u32),
+        casters: Option<&lumit_gpu::fx::lighting::ShadowCasters>,
+    ) -> wgpu::Texture {
+        if l.lights.is_empty() {
+            return tex;
+        }
+        let pose = camera
+            .unwrap_or_else(|| lumit_core::camera::default_pose(f64::from(cw), f64::from(ch)));
+        // Comp pixels back from a pixel and its clip w, the camera undone.
+        let cam = crate::export::camera_mat(cw, ch, pose);
+        let rows = cam.transpose().to_cols_array_2d();
+        let a = glam::Mat3::from_cols_array_2d(&[
+            [rows[0][0], rows[1][0], rows[3][0]],
+            [rows[0][1], rows[1][1], rows[3][1]],
+            [rows[0][2], rows[1][2], rows[3][2]],
+        ]);
+        let back = a.inverse();
+        if !back.is_finite() {
+            return tex;
+        }
+        let turn = -(back * glam::vec3(rows[0][3], rows[1][3], rows[3][3]));
+        let per = cw as f32 / tex.width().max(1) as f32;
+        let eye = pose.position;
+        let op = lumit_gpu::fx::lighting::LightingOp {
+            origin: turn.to_array(),
+            du: (back.col(0) * per).to_array(),
+            dv: (back.col(1) * per).to_array(),
+            normal: back.col(2).to_array(),
+            material: lumit_gpu::fx::lighting::LightingMaterial {
+                eye: [eye.0 as f32, eye.1 as f32, eye.2 as f32],
+                specular: 0.0,
+                ..l.material
+            },
+            lights: l.lights.clone(),
+            own_caster: None,
+        };
+        self.fx.lighting_scene(&self.ctx, &tex, depth, &op, casters)
+    }
 }
