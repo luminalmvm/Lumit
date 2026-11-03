@@ -4736,7 +4736,7 @@ fn comp_walk(
     if !spliced && seen_through.dof.is_some() {
         let size = (comp.width, comp.height);
         for d in draws.iter_mut().filter(|d| d.three_d) {
-            if !crate::realise::dof_leaves_sharp(seen_through, d, size) {
+            if !crate::realise::dof::dof_leaves_sharp(seen_through, d, size) {
                 at_own_size(d);
             }
         }

@@ -4858,7 +4858,7 @@ impl Particulate {
         // resolve step already rescaled, so scaling it again would draw the
         // ring at twice the size on a half-resolution preview.
         let poly = if packed.emitter.shape.is_outline() {
-            lumit_core::fx::points::outline_polyline(&packed.emitter)
+            lumit_core::fx::points::emitter::outline_polyline(&packed.emitter)
         } else {
             lumit_core::fx::points::scale_path(&path_of(aux), P::px_scale_of(p))
         };
@@ -6540,7 +6540,7 @@ mod tests {
         // Size run by speed, so the speed's length is held to the CPU's too.
         inst.size_by = 1;
         inst.shape = shape;
-        if lumit_core::fx::points::EmitterShape::from_code(shape).is_outline() {
+        if lumit_core::fx::points::emitter::EmitterShape::from_code(shape).is_outline() {
             // **Turbulence off for the outline twin, on purpose.** What this
             // run measures is that the two paths walk the polyline to the same
             // point, and turbulence is a magnifier sitting on top of it: the
@@ -6556,7 +6556,7 @@ mod tests {
         let packed = packed.framed(w as f32, h as f32);
         // The outline the emitter walks, flattened by the one function both
         // paths call — the shipping pass does exactly this.
-        let outline = lumit_core::fx::points::outline_polyline(&packed.emitter);
+        let outline = lumit_core::fx::points::emitter::outline_polyline(&packed.emitter);
         let path: Vec<[f32; 4]> = outline
             .points
             .iter()

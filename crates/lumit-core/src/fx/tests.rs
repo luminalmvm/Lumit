@@ -8571,7 +8571,7 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
 // ---------------------------------------------------------------------------
 
 use crate::fx::effects::particulate::Particulate;
-use crate::fx::points::{self, EmitterShape, PointsStream, Schedule};
+use crate::fx::points::{self, emitter::EmitterShape, PointsStream, Schedule};
 use crate::mask::MaskPolyline;
 
 /// A Particulate instance with its declared defaults, and `edits` applied —

@@ -29,8 +29,9 @@ use std::sync::{Arc, Mutex};
 use rayon::prelude::*;
 
 use super::{
-    attr, birth_point, burst_base, draw, integrate, jitter, launch, look_of, outline_polyline,
-    turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream, BURST_ID, BURST_MAX,
+    attr, burst_base, draw, emitter::birth_point, emitter::outline_polyline, integrate, jitter,
+    launch, look_of, turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream,
+    BURST_ID, BURST_MAX,
 };
 use crate::camera::Place;
 use crate::expression::ExpressionContext;
