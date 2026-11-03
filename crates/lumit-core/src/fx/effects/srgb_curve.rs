@@ -83,3 +83,50 @@ impl EffectDef for SrgbCurveDef {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use crate::model::EffectValue;
+
+    fn curve(direction: u32) -> crate::model::EffectInstance {
+        let mut curve = crate::fx::builtins::instantiate("srgb_curve").unwrap();
+        let param = curve
+            .params
+            .iter_mut()
+            .find(|p| p.id == "direction")
+            .unwrap();
+        param.value = EffectValue::Choice(direction);
+        curve
+    }
+
+    fn run(effects: &[crate::model::EffectInstance], rgba: &mut [f32]) {
+        let ops = crate::fx::resolved::resolve_stack(
+            effects,
+            0.0,
+            1.0,
+            1.0,
+            &crate::fx::markers::MarkerContext::default(),
+            std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
+        );
+        crate::fx::cpu::apply_stack(rgba, 1, (rgba.len() / 4) as u32, &ops);
+    }
+
+    // An imported Photoshop adjustment sits between these two, so a wrong
+    // curve is a wrong picture.
+    #[test]
+    fn the_curve_lands_on_srgb_and_the_two_directions_undo_each_other() {
+        let start = [0.214, 0.001, -0.5, 1.0, 0.25, 0.5, 2.0, 0.5];
+        let mut encoded = start;
+        run(&[curve(0)], &mut encoded);
+        let want = [0.5, 0.012_92, -0.735_4, 1.0, 0.367_7, 0.5, 0.912_4, 0.5];
+        for (got, want) in encoded.iter().zip(want) {
+            assert!((got - want).abs() < 1e-3, "{encoded:?}");
+        }
+        let mut back = start;
+        run(&[curve(0), curve(1)], &mut back);
+        for (got, want) in back.iter().zip(start) {
+            assert!((got - want).abs() < 1e-5, "{back:?}");
+        }
+    }
+}
