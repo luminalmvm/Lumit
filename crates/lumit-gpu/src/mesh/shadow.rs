@@ -1,6 +1,7 @@
 //! Shadow maps: each light that casts, seen from where it shines, with how
-//! far the nearest model is at every texel. Models and 3D layers read them
-//! (`mapped` in `shadow_core.wgsl`), so a model's shadow falls on both.
+//! far the nearest model is at every texel. Models, 3D layers and the haze
+//! read them (`mapped` in `shadow_core.wgsl`), so a model's shadow falls on
+//! all three.
 //!
 //! Made once a frame from the models that cast, each light's views fitted
 //! round them. A comp with no model that casts never makes any.

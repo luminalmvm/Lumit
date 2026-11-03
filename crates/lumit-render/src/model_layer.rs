@@ -56,12 +56,16 @@ impl Realiser<'_> {
     }
 
     /// The shadow maps of the models in `layers` that cast, for the lights
-    /// that cast on what takes shadows. `None`, and nothing made, when no
-    /// model casts.
+    /// that cast on what takes shadows or show in `haze`. `None`, and nothing
+    /// made, when no model casts.
     ///
     /// ponytail: made again every frame. Keep them while the models and
     /// lights hold still if they show in a profile.
-    pub(crate) fn shadow_maps(&self, layers: &[CompLayerDraw]) -> Option<ShadowMaps> {
+    pub(crate) fn shadow_maps(
+        &self,
+        layers: &[CompLayerDraw],
+        haze: Option<&crate::haze::HazeLights>,
+    ) -> Option<ShadowMaps> {
         // ponytail: a faded model casts its whole shadow, as a depth can't
         // carry how see-through it is. Fade it into the maps if it's missed.
         let casters: Vec<MapCaster> = layers
@@ -82,6 +86,7 @@ impl Realiser<'_> {
             .iter()
             .filter(|l| l.material.accepts_shadows != LightingShadows::Off)
             .flat_map(|l| l.lights.iter().copied())
+            .chain(haze.into_iter().flatten().map(|(l, _)| *l))
             .collect();
         // About a texel a pixel at 1080p, fewer at a smaller preview.
         let side = ((2048.0 * self.render_scale) as u32)

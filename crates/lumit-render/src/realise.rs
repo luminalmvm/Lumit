@@ -2152,7 +2152,7 @@ impl Realiser<'_> {
         // A shadow needs every caster's picture before anything is lit, so
         // where this segment has one, the lighting waits for the whole list.
         let shadowed = casts_shadows(layers);
-        let maps = self.shadow_maps(layers);
+        let maps = self.shadow_maps(layers, haze);
         // There, a model is drawn after the 3D layers, whose casters it takes.
         let order = shadows::models_last(layers, shadowed);
         let mut early = None;
@@ -2596,7 +2596,7 @@ impl Realiser<'_> {
             haze,
             (layers, &linear_textures, &grown),
             &comp_layers[..split],
-            &models,
+            (&models, maps.as_ref()),
             camera,
             (width, height),
         );

@@ -444,12 +444,16 @@ fn gpu_casters(casters: Option<&ShadowCasters>) -> ([GpuCaster; MAX_SHADOW_CASTE
 
 /// The kernel's uniform for lights seen in the air rather than on a layer:
 /// no plane, and every caster can cut every light.
-pub(super) fn air_params(lights: &[LightingLight], casters: Option<&ShadowCasters>) -> Vec<u8> {
+pub(super) fn air_params(
+    lights: &[LightingLight],
+    casters: Option<&ShadowCasters>,
+    maps: Option<&ShadowMaps>,
+) -> Vec<u8> {
     let (planes, count, size) = gpu_casters(casters);
     let mask = (1u32 << count) - 1;
     let mut slots = [GpuLight::default(); MAX_LIT_LIGHTS];
     for (slot, l) in slots.iter_mut().zip(lights) {
-        *slot = gpu_light(l, mask, None);
+        *slot = gpu_light(l, mask, maps);
     }
     let live = lights.len().min(MAX_LIT_LIGHTS) as f32;
     bytemuck::bytes_of(&LightingParams {
