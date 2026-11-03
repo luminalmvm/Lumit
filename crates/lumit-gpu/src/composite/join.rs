@@ -9,7 +9,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 /// What a model's picture joins a run with: its shader, its layout, and per
 /// sample count and format the draw that lays its depth, the two that draw it
-/// in front of and behind what the run laid, and the two scene depth draws.
+/// in front of and behind what the run laid, the two scene depth draws, and
+/// the two a holdout draws in front and behind with.
 /// Built the first time a model joins, so a comp with none never builds them.
 #[derive(Default)]
 pub(super) struct Joins {
@@ -19,7 +20,7 @@ pub(super) struct Joins {
         wgpu::PipelineLayout,
     )>,
     #[allow(clippy::type_complexity)]
-    sets: Mutex<HashMap<(u32, wgpu::TextureFormat), Arc<[wgpu::RenderPipeline; 5]>>>,
+    sets: Mutex<HashMap<(u32, wgpu::TextureFormat), Arc<[wgpu::RenderPipeline; 7]>>>,
 }
 
 #[repr(C)]
@@ -66,6 +67,7 @@ impl Compositor {
                             count: None,
                         },
                         texture(2, false),
+                        texture(4, false),
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -89,13 +91,13 @@ impl Compositor {
         })
     }
 
-    /// The five join draws at `samples`, built the first time they are asked
+    /// The seven join draws at `samples`, built the first time they are asked
     /// for.
     pub(super) fn join_set(
         &self,
         ctx: &GpuContext,
         samples: u32,
-    ) -> Arc<[wgpu::RenderPipeline; 5]> {
+    ) -> Arc<[wgpu::RenderPipeline; 7]> {
         let (shader, _, layout) = self.join_shader(ctx);
         let build = || {
             let make = |entry: &str,
@@ -167,6 +169,9 @@ impl Compositor {
                     None,
                 ),
                 make("fs_join_depth", None, W::ALL, None),
+                // A holdout puts back what was under the run, so it replaces.
+                make("fs_join", None, W::ALL, Some((false, C::Equal))),
+                make("fs_join", None, W::ALL, Some((false, C::Less))),
             ])
         };
         match self.joins.sets.lock() {
@@ -176,7 +181,8 @@ impl Compositor {
     }
 
     /// A model's picture placed full frame, with `params` and `flags` as
-    /// `model_join.wgsl` reads them.
+    /// `model_join.wgsl` reads them, and `plate` what was under its run, for
+    /// a holdout.
     pub(super) fn join_group(
         &self,
         ctx: &GpuContext,
@@ -184,6 +190,7 @@ impl Compositor {
         matrix: [[f32; 4]; 4],
         params: [f32; 4],
         flags: [f32; 4],
+        plate: Option<&wgpu::Texture>,
     ) -> wgpu::BindGroup {
         let buffer = wgpu::util::DeviceExt::create_buffer_init(
             &ctx.device,
@@ -217,6 +224,12 @@ impl Compositor {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&view(
+                        plate.unwrap_or(&self.black),
+                    )),
                 },
             ],
         })

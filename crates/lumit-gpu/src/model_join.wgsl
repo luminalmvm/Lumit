@@ -8,7 +8,8 @@ struct Join {
     // x: opacity, y: the clip z its run is cut at, z: the clip w scene depth
     // is counted from, w: metres per clip w.
     params: vec4<f32>,
-    // x: 1 to clear what a later run covers, for scene depth.
+    // x: 1 to clear what a later run covers, for scene depth, y: 1 for a
+    // holdout.
     flags: vec4<f32>,
 };
 
@@ -17,6 +18,8 @@ struct Join {
 // One over clip w, nought where the model shows nothing.
 @group(0) @binding(2) var inv_w: texture_2d<f32>;
 @group(0) @binding(3) var<uniform> u: Join;
+// What was under the run, which a holdout puts back.
+@group(0) @binding(4) var plate: texture_2d<f32>;
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
@@ -55,6 +58,14 @@ fn fs_join(in: VsOut) -> Drawn {
     if (iw <= 0.0) {
         discard;
     }
+    if (u.flags.y > 0.5) {
+        // Its own picture, its shadows, over what was under the run.
+        // ponytail: a holdout is the model's sharp outline, so a blurred
+        // object in the footage isn't matched. Its motion would want a
+        // coverage the depth can't carry.
+        let under = textureLoad(plate, vec2<i32>(in.pos.xy), 0);
+        return Drawn(c + under * (1.0 - c.a), min(u.params.y * iw, 1.0));
+    }
     return Drawn(c, min(u.params.y * iw, 1.0));
 }
 
@@ -64,7 +75,8 @@ fn fs_join(in: VsOut) -> Drawn {
 fn fs_join_cut(in: VsOut) -> Drawn {
     let a = textureSample(colour, samp, in.uv).a * u.params.x;
     let iw = inv_w_at(in.uv);
-    if (a <= 0.0 || iw <= 0.0) {
+    // A holdout is solid wherever it is, whatever it shows.
+    if ((a <= 0.0 && u.flags.y < 0.5) || iw <= 0.0) {
         discard;
     }
     return Drawn(vec4<f32>(0.0), min(u.params.y * iw, 1.0));
@@ -75,7 +87,7 @@ fn fs_join_cut(in: VsOut) -> Drawn {
 fn fs_join_depth(in: VsOut) -> @location(0) vec4<f32> {
     let a = textureSample(colour, samp, in.uv).a * u.params.x;
     let iw = inv_w_at(in.uv);
-    if (a < 0.5 || iw <= 0.0) {
+    if ((a < 0.5 && u.flags.y < 0.5) || iw <= 0.0) {
         discard;
     }
     let m = select((1.0 / iw - u.params.z) * u.params.w, 65504.0, u.flags.x > 0.5);

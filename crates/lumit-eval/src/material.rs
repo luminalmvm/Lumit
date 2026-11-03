@@ -9,6 +9,12 @@ use crate::feed_f64;
 /// existed, so those keys stay valid.
 pub(crate) fn feed(h: &mut blake3::Hasher, comp: &Composition, layer: &Layer, lt: f64) {
     let m = &layer.transform.material;
+    // Its shadows, and whether a Model layer is a holdout.
+    let shadows = [
+        m.casts_shadows as u8,
+        m.accepts_shadows as u8,
+        u8::from(m.holdout),
+    ];
     if layer.switches.three_d
         && comp.layers.iter().any(|l| l.is_light())
         && **m != lumit_core::model::Material::legacy()
@@ -24,10 +30,10 @@ pub(crate) fn feed(h: &mut blake3::Hasher, comp: &Composition, layer: &Layer, lt
         ] {
             feed_f64(h, p.value_at(lt));
         }
-        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
-    } else if [m.casts_shadows, m.accepts_shadows].contains(&lumit_core::model::ShadowMode::Only) {
-        // Set to Only, a layer can go undrawn with no light in the comp too.
+        h.update(&shadows);
+    } else if m.holdout || shadows[..2].contains(&(lumit_core::model::ShadowMode::Only as u8)) {
+        // Set to Only or a holdout, a layer draws differently with no light too.
         h.update(b"shadow only");
-        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
+        h.update(&shadows);
     }
 }

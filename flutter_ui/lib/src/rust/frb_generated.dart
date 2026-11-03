@@ -26922,11 +26922,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeMaterialSettings dco_decode_bridge_material_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeMaterialSettings(
       castsShadows: dco_decode_bridge_shadow_mode(arr[0]),
       acceptsShadows: dco_decode_bridge_shadow_mode(arr[1]),
+      holdout: dco_decode_bool(arr[2]),
     );
   }
 
@@ -34516,8 +34517,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_castsShadows = sse_decode_bridge_shadow_mode(deserializer);
     var var_acceptsShadows = sse_decode_bridge_shadow_mode(deserializer);
+    var var_holdout = sse_decode_bool(deserializer);
     return BridgeMaterialSettings(
-        castsShadows: var_castsShadows, acceptsShadows: var_acceptsShadows);
+        castsShadows: var_castsShadows,
+        acceptsShadows: var_acceptsShadows,
+        holdout: var_holdout);
   }
 
   @protected
@@ -42709,6 +42713,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_shadow_mode(self.castsShadows, serializer);
     sse_encode_bridge_shadow_mode(self.acceptsShadows, serializer);
+    sse_encode_bool(self.holdout, serializer);
   }
 
   @protected

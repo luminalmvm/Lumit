@@ -80,11 +80,13 @@ pub struct ModelCopy {
 }
 
 /// A model's picture at render size, and its depth as one over clip w at
-/// each pixel, nought where it shows nothing.
+/// each pixel, nought where it shows nothing. A holdout shows what is under
+/// its run where it is, with its picture over that.
 #[derive(Clone)]
 pub struct ModelPicture {
     pub colour: wgpu::Texture,
     pub depth: wgpu::Texture,
+    pub holdout: bool,
 }
 
 #[repr(C)]
@@ -873,7 +875,11 @@ impl MeshFx {
                 *k = Some(scratch);
             }
         }
-        ModelPicture { colour, depth }
+        ModelPicture {
+            colour,
+            depth,
+            holdout: false,
+        }
     }
 }
 

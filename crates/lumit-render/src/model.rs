@@ -33,6 +33,7 @@ pub struct ModelDraw {
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
     pub accepts_lights: bool,
+    pub holdout: bool,
 }
 
 /// The most bytes kept scenes hold between them, in memory.
@@ -177,6 +178,7 @@ pub(crate) fn draw(
         casts_shadows: material.casts_shadows,
         accepts_shadows: material.accepts_shadows,
         accepts_lights: layer.switches.accepts_lights,
+        holdout: material.holdout,
     })
 }
 

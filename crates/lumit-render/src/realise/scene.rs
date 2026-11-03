@@ -491,6 +491,7 @@ impl Realiser<'_> {
                     Some(ModelPicture {
                         colour: colour.clone(),
                         depth: depth.clone()?,
+                        holdout: false,
                     })
                 })
                 .collect();

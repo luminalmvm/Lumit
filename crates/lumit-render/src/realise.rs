@@ -2193,11 +2193,12 @@ impl Realiser<'_> {
             };
             drop(entered);
             if let Some(depth) = model_depth {
-                model_depths.push((linear_textures.len(), depth));
+                let holdout = matches!(&l.source, DrawSource::Model(m) if m.holdout);
+                model_depths.push((linear_textures.len(), depth, holdout));
             }
             let claimed = scene::claim(l).map(|(depth, emitter)| {
                 emitters.push((linear_textures.len(), emitter));
-                model_depths.push((linear_textures.len(), depth.clone()));
+                model_depths.push((linear_textures.len(), depth.clone(), false));
                 depth
             });
             if shadowed {
@@ -2237,7 +2238,7 @@ impl Realiser<'_> {
         let scene_depths = shadows::unpermute(scene_depths, &order);
         let model_depths = model_depths
             .into_iter()
-            .map(|(k, d)| (order[k], d))
+            .map(|(k, d, h)| (order[k], d, h))
             .collect();
         let emitters: Vec<_> = emitters.into_iter().map(|(k, e)| (order[k], e)).collect();
         if shadowed {

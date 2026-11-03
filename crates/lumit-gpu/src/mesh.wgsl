@@ -163,7 +163,12 @@ fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     }
     let emissive = mat.emissive.rgb * glow;
     let count = min(u32(frame.eye.w), 8u);
+    let accepts = u32(frame.flags.y + 0.5);
     if (mat.mode.z > 0.5 || count == 0u) {
+        // Showing only its shadows, with none to show.
+        if (accepts == 2u) {
+            return vec4<f32>(0.0);
+        }
         return vec4<f32>((base.rgb + emissive) * alpha, alpha);
     }
 
@@ -192,7 +197,6 @@ fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
             n = normalise(t * mapped.x * s + b * mapped.y * s + n * mapped.z);
         }
     }
-    let accepts = u32(frame.flags.y + 0.5);
     if (frame.flags.x > 0.5 || accepts == 2u) {
         // Unlit, or showing only its shadows, so only the shadows touch it.
         var dim = vec3<f32>(1.0);

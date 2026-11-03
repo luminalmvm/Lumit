@@ -225,8 +225,10 @@ pub(super) fn casts_shadows(layers: &[CompLayerDraw]) -> bool {
 /// when no light reaches it at all.
 pub(super) fn shadow_only(l: &CompLayerDraw) -> bool {
     use lumit_gpu::fx::lighting::LightingShadows as S;
-    l.material.casts_shadows == S::Only
-        || (l.material.accepts_shadows == S::Only && l.lights.is_empty())
+    let holdout = matches!(&l.source, DrawSource::Model(m) if m.holdout);
+    !holdout
+        && (l.material.casts_shadows == S::Only
+            || (l.material.accepts_shadows == S::Only && l.lights.is_empty()))
 }
 
 /// The order a segment's layers are drawn in: as they stack, but with

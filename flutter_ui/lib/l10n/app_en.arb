@@ -288,6 +288,10 @@
   "@acceptsShadows": {
     "description": "Material options row: whether shadows fall on the layer."
   },
+  "holdout": "Holdout",
+  "@holdout": {
+    "description": "Material options switch on a Model layer: it shows what is under its 3D layers in its place, so it hides what is behind it."
+  },
   "shadowsOn": "On",
   "@shadowsOn": {
     "description": "Casts shadows or Accepts shadows: yes."

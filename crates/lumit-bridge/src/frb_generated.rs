@@ -29287,9 +29287,11 @@ impl SseDecode for crate::api::layer::BridgeMaterialSettings {
         let mut var_castsShadows = <crate::api::layer::BridgeShadowMode>::sse_decode(deserializer);
         let mut var_acceptsShadows =
             <crate::api::layer::BridgeShadowMode>::sse_decode(deserializer);
+        let mut var_holdout = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeMaterialSettings {
             casts_shadows: var_castsShadows,
             accepts_shadows: var_acceptsShadows,
+            holdout: var_holdout,
         };
     }
 }
@@ -40882,6 +40884,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMaterialSettings
         [
             self.casts_shadows.into_into_dart().into_dart(),
             self.accepts_shadows.into_into_dart().into_dart(),
+            self.holdout.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -47947,6 +47950,7 @@ impl SseEncode for crate::api::layer::BridgeMaterialSettings {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::layer::BridgeShadowMode>::sse_encode(self.casts_shadows, serializer);
         <crate::api::layer::BridgeShadowMode>::sse_encode(self.accepts_shadows, serializer);
+        <bool>::sse_encode(self.holdout, serializer);
     }
 }
 

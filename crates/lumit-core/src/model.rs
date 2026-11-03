@@ -752,6 +752,10 @@ pub struct Material {
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
     pub light_transmission: Property,
+    /// A Model layer drawn as what is under its run, so it hides what is
+    /// behind it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub holdout: bool,
 }
 
 /// After Effects' three answers to Casts shadows and Accepts shadows: no,
@@ -771,6 +775,8 @@ pub enum ShadowMode {
 pub struct MaterialSettings {
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
+    #[serde(default)]
+    pub holdout: bool,
 }
 
 /// How one two-axis transform property is shown and edited.

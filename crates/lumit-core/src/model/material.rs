@@ -42,7 +42,16 @@ impl Material {
         MaterialSettings {
             casts_shadows: self.casts_shadows,
             accepts_shadows: self.accepts_shadows,
+            holdout: self.holdout,
         }
+    }
+
+    /// Take `s`, handing back what it had.
+    pub fn set_settings(&mut self, s: MaterialSettings) -> MaterialSettings {
+        let previous = self.settings();
+        (self.casts_shadows, self.accepts_shadows) = (s.casts_shadows, s.accepts_shadows);
+        self.holdout = s.holdout;
+        previous
     }
 
     pub fn get_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
@@ -70,6 +79,7 @@ impl Default for Material {
             casts_shadows: ShadowMode::Off,
             accepts_shadows: ShadowMode::On,
             light_transmission: Property::zero(),
+            holdout: false,
         }
     }
 }

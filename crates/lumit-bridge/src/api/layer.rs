@@ -2345,27 +2345,25 @@ pub enum BridgeShadowMode {
     Only,
 }
 
-/// Whether a layer casts and accepts shadows, one op
+/// Whether a layer casts and accepts shadows and is a holdout, one op
 /// ([`lumit_core::model::MaterialSettings`]).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BridgeMaterialSettings {
     pub casts_shadows: BridgeShadowMode,
     pub accepts_shadows: BridgeShadowMode,
+    pub holdout: bool,
 }
 
 impl BridgeMaterialSettings {
     #[frb(ignore)]
     pub(crate) fn of(s: lumit_core::model::MaterialSettings) -> Self {
-        use lumit_core::model::ShadowMode as M;
-        let mode = |m: M| match m {
-            M::Off => BridgeShadowMode::Off,
-            M::On => BridgeShadowMode::On,
-            M::Only => BridgeShadowMode::Only,
-        };
+        use BridgeShadowMode as B;
+        let mode = |m: lumit_core::model::ShadowMode| [B::Off, B::On, B::Only][m as usize];
         Self {
             casts_shadows: mode(s.casts_shadows),
             accepts_shadows: mode(s.accepts_shadows),
+            holdout: s.holdout,
         }
     }
 
@@ -2380,6 +2378,7 @@ impl BridgeMaterialSettings {
         lumit_core::model::MaterialSettings {
             casts_shadows: mode(self.casts_shadows),
             accepts_shadows: mode(self.accepts_shadows),
+            holdout: self.holdout,
         }
     }
 }
