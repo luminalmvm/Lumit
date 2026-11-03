@@ -55,6 +55,8 @@ const List<String> footageExtensions = [
   'psd', 'ai',
   // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
+  // 3D models
+  'gltf', 'glb', 'fbx', 'obj',
 ];
 /// The footage type group.
 XTypeGroup _footageGroup() =>

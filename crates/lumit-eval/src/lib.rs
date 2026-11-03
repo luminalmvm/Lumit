@@ -32,6 +32,7 @@ use uuid::Uuid;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
+mod model;
 mod moments;
 pub mod pool;
 pub mod schedule;
@@ -2486,6 +2487,7 @@ fn feed_source(
                 h.update(&json);
             }
         }
+        LayerKind::Model { item, settings } => model::feed(h, *item, settings, stamper)?,
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a

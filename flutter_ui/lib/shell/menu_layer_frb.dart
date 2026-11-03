@@ -38,6 +38,7 @@ import '../panels/transform_rows_frb.dart'
     show TransformSection, hasThreeDSwitch, transformGroups;
 import '../panels/viewer_layer_map.dart' show panBehindPosition;
 import 'camera_settings_dialog.dart';
+import 'model_settings_dialog.dart';
 import 'layer_settings_frb.dart';
 import 'light_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
@@ -680,6 +681,23 @@ VoidCallback? _lightWindow(BuildContext context, LumitState app,
   };
 }
 
+/// Layer ▸ Model settings: the Model layer's window again, greyed until one is
+/// picked.
+MenuEntry modelSettingsRow(BuildContext context, LumitUiState ui) => MenuEntry(
+      l10n.modelSettings,
+      _modelWindow(
+          context,
+          selectedEntries(ui)
+              .where((entry) => entry.info.kind == BridgeLayerKind.model)
+              .firstOrNull),
+    );
+
+/// Opens [picked]'s Model settings, or null where there is none to open.
+VoidCallback? _modelWindow(BuildContext context, BridgeLayerEntry? picked) {
+  if (picked == null) return null;
+  return () => showModelSettingsFrb(context: context, layer: picked.layer);
+}
+
 /// Layer ▸ Layer settings: a light's or a camera's own window on those, as
 /// After Effects opens them, and the layer's name and source on the rest.
 Future<void> layerSettingsOf(BuildContext context, LumitState app,
@@ -687,9 +705,11 @@ Future<void> layerSettingsOf(BuildContext context, LumitState app,
   final entry = ui.model.layers
       .where((e) => e.layer.internallayerId == layer.internallayerId)
       .firstOrNull;
-  final own = entry?.info.light != null
-      ? _lightWindow(context, app, ui, entry)
-      : _cameraWindow(context, app, ui, entry);
+  final own = entry?.info.kind == BridgeLayerKind.model
+      ? _modelWindow(context, entry)
+      : entry?.info.light != null
+          ? _lightWindow(context, app, ui, entry)
+          : _cameraWindow(context, app, ui, entry);
   if (own != null) {
     own();
     return;

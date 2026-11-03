@@ -17,6 +17,9 @@
 use crate::draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw,
 };
+use order::{draw_order, runs_of};
+
+mod order;
 
 /// One `node_graph` op's own walk, as [`crate::fxops::run_ops`] calls it: the
 /// picture in, its raster, and the picture out. Borrowed for as long as the
@@ -981,9 +984,10 @@ impl Realiser<'_> {
                         // A Read box makes no other kind of source; a
                         // transparent texel keeps the no-panic rule if that
                         // ever regresses.
-                        DrawSource::Adjust | DrawSource::Graph(_) | DrawSource::Haze(_) => {
-                            self.transparent(1, 1)
-                        }
+                        DrawSource::Adjust
+                        | DrawSource::Graph(_)
+                        | DrawSource::Haze(_)
+                        | DrawSource::Model(_) => self.transparent(1, 1),
                     };
                     // The placement is in the graph's own pixels, so it is
                     // carried into the raster by the one factor everything
@@ -2143,6 +2147,8 @@ impl Realiser<'_> {
         // where this segment has one, the lighting waits for the whole list.
         let shadowed = casts_shadows(layers);
         let mut waiting = Vec::new();
+        // Each model's depth, by its place in the list.
+        let mut model_depths = Vec::new();
         for l in layers {
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite
@@ -2209,6 +2215,13 @@ impl Realiser<'_> {
                     );
                     self.realise_graph(plan, None, gw, gh, self.render_scale)
                 }
+                DrawSource::Model(m) => match self.model_picture(l, m, camera, (width, height)) {
+                    Some(p) => {
+                        model_depths.push((linear_textures.len(), p.depth));
+                        p.colour
+                    }
+                    None => self.transparent(1, 1),
+                },
                 DrawSource::Adjust | DrawSource::Haze(_) => {
                     // realise splits segments at every Adjust draw, so none
                     // reaches here; a transparent texel keeps the no-panic
@@ -2413,6 +2426,7 @@ impl Realiser<'_> {
                 linear_textures.push(tex);
             }
         }
+        let models = crate::model_layer::joined(&self.ctx, &mut linear_textures, model_depths);
         let cam_mat = camera.map(|pose| crate::export::camera_mat(width, height, pose));
         // Per-layer motion blur (docs/06 §4): a blurring layer's
         // fx-processed texture is drawn at each sub-frame placement and
@@ -2601,7 +2615,7 @@ impl Realiser<'_> {
         // The depth of everything so far, for an adjustment layer above that
         // reads it, laid over what the segments below left.
         if let (Some((metres_per_w, depth)), Some(cam)) = (below, cam_mat) {
-            *depth = Some(self.compositor.composite_depth(
+            *depth = Some(self.compositor.composite_depth_joined(
                 &self.ctx,
                 width,
                 height,
@@ -2611,10 +2625,11 @@ impl Realiser<'_> {
                 0.0,
                 self.render_scale,
                 depth.as_ref(),
+                &models,
             ));
         }
         if let (Some(metres_per_w), Some(cam)) = (scene_depth, cam_mat) {
-            let depth = self.compositor.composite_depth(
+            let depth = self.compositor.composite_depth_joined(
                 &self.ctx,
                 width,
                 height,
@@ -2624,6 +2639,7 @@ impl Realiser<'_> {
                 0.0,
                 self.render_scale,
                 None,
+                &models,
             );
             // The 3D layers themselves too, for rays to meet: each picture and
             // its plane in the camera's frame, and the 2D layers drawn flat
@@ -2647,7 +2663,7 @@ impl Realiser<'_> {
                 let mut planes = Vec::new();
                 let mut textures = Vec::new();
                 for ((texture, l), g) in linear_textures.iter().zip(layers).zip(&grown) {
-                    if !l.three_d || shadow_only(l) {
+                    if !l.three_d || shadow_only(l) || matches!(l.source, DrawSource::Model(_)) {
                         continue;
                     }
                     let m = frame * placed_in_3d(texture, l, *g).world();
@@ -2700,7 +2716,7 @@ impl Realiser<'_> {
                 .map_or(0, |i| i + 1),
             None => comp_layers.len(),
         };
-        let below = self.compositor.composite_cut(
+        let below = self.compositor.composite_joined(
             &self.ctx,
             width,
             height,
@@ -2712,23 +2728,33 @@ impl Realiser<'_> {
             self.samples,
             region,
             &cuts[..split],
+            &models,
         );
         let below = self.haze_over(
             below,
             haze,
             (layers, &linear_textures, &grown),
             &comp_layers[..split],
+            &models,
             camera,
             (width, height),
         );
         let Some((ground, pose, cam)) = ground else {
             return below;
         };
-        let floored = self.ground_over(below, &comp_layers, cam, &pose, (width, height), ground);
+        let floored = self.ground_over(
+            below,
+            &comp_layers,
+            &models,
+            cam,
+            &pose,
+            (width, height),
+            ground,
+        );
         if split == comp_layers.len() {
             return floored;
         }
-        self.compositor.composite_cut(
+        self.compositor.composite_joined(
             &self.ctx,
             width,
             height,
@@ -2740,6 +2766,7 @@ impl Realiser<'_> {
             self.samples,
             region,
             &cuts[split..],
+            &models,
         )
     }
 
@@ -2767,6 +2794,11 @@ impl Realiser<'_> {
         (f32, f32),
         Option<(wgpu::Texture, (f32, f32))>,
     ) {
+        // The mesh pass lit a model already, and its depth of field comes from
+        // the comp's depth.
+        if matches!(l.source, DrawSource::Model(_)) {
+            return (tex, grow, None);
+        }
         // After its effects and before it is placed. `l.lights` is empty
         // unless the comp holds lights and this layer accepts them, and empty
         // means the pass never runs. An unlit layer only takes shadows, so
@@ -2884,11 +2916,16 @@ impl Realiser<'_> {
     pub(crate) fn view_depth(
         &self,
         layers: &[lumit_gpu::composite::CompositeLayer<'_>],
+        models: &[lumit_gpu::mesh::ModelPicture],
         cam: glam::Mat4,
         (width, height): (u32, u32),
     ) -> (wgpu::Texture, f32) {
         let mut near = f32::INFINITY;
-        for l in layers.iter().filter(|l| l.three_d) {
+        // A model's quad is the whole frame, not where the model is.
+        let model = |l: &&lumit_gpu::composite::CompositeLayer<'_>| {
+            models.iter().any(|m| &m.colour == l.texture)
+        };
+        for l in layers.iter().filter(|l| l.three_d && !model(l)) {
             let m = cam * l.world();
             for (u, v) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
                 near = near.min(m.col(0).w * u + m.col(1).w * v + m.col(3).w);
@@ -2899,7 +2936,7 @@ impl Realiser<'_> {
         } else {
             0.0
         };
-        let depth = self.compositor.composite_depth(
+        let depth = self.compositor.composite_depth_joined(
             &self.ctx,
             width,
             height,
@@ -2909,22 +2946,25 @@ impl Realiser<'_> {
             near,
             self.render_scale,
             None,
+            models,
         );
         (depth, near)
     }
 
     /// A 3D viewport's ground laid over `frame`, hidden wherever one of
     /// `layers` is nearer the eye.
+    #[allow(clippy::too_many_arguments)]
     fn ground_over(
         &self,
         frame: wgpu::Texture,
         layers: &[lumit_gpu::composite::CompositeLayer<'_>],
+        models: &[lumit_gpu::mesh::ModelPicture],
         cam: glam::Mat4,
         pose: &lumit_core::model::CameraPose,
         (width, height): (u32, u32),
         ground: ViewGround,
     ) -> wgpu::Texture {
-        let (depth, near) = self.view_depth(layers, cam, (width, height));
+        let (depth, near) = self.view_depth(layers, models, cam, (width, height));
         let [right, up, forward] = lumit_core::camera::axes(pose.rotation_deg);
         let v = |p: (f64, f64, f64)| [p.0 as f32, p.1 as f32, p.2 as f32];
         let (tw, th) = (frame.width(), frame.height());
@@ -3013,73 +3053,6 @@ pub(crate) fn placed_in_3d<'a>(
         layer_mask: None,
         pre: l.pre,
     }
-}
-
-/// The order a segment's layers draw in: each run of adjacent 3D layers
-/// farthest first, as After Effects draws them, with how each draw is cut
-/// where layers pass through each other (a layer cut into pieces draws once
-/// per piece). A 2D layer ends a run, even one drawn on a collapsed 3D
-/// precomp's plane, and so does an adjustment layer, which already splits
-/// the segments. With no 3D layer, or no camera (only a Sequence mix, whose
-/// parts are 2D), the stack order stands.
-fn draw_order(
-    layers: &[CompLayerDraw],
-    textures: &[wgpu::Texture],
-    grown: &[(f32, f32)],
-    camera: Option<(glam::Mat4, [f32; 3])>,
-) -> Vec<(usize, Option<lumit_gpu::composite::Cut>)> {
-    // A layer there only for its shadows draws nothing, so it neither takes
-    // a place nor cuts anything.
-    let shown = |i: &usize| !shadow_only(&layers[*i]);
-    let Some((view_proj, eye)) = camera.filter(|_| layers.iter().any(|l| l.three_d)) else {
-        return (0..layers.len()).filter(shown).map(|i| (i, None)).collect();
-    };
-    let mut order = Vec::with_capacity(layers.len());
-    let mut start = 0;
-    while start < layers.len() {
-        let end = (start..layers.len())
-            .find(|&i| !layers[i].three_d || layers[i].ends_run)
-            .unwrap_or(layers.len());
-        let run: Vec<usize> = (start..end).filter(shown).collect();
-        let worlds: Vec<glam::Mat4> = run
-            .iter()
-            .map(|&i| placed_in_3d(&textures[i], &layers[i], grown[i]).world())
-            .collect();
-        // A motion-blurred layer draws as a flat smear, which can't be cut
-        // itself, so whatever it crosses is cut along its plane instead.
-        let flat: Vec<bool> = run.iter().map(|&i| !layers[i].mb.is_empty()).collect();
-        order.extend(
-            lumit_gpu::composite::depth_order(&worlds, &flat, view_proj, eye)
-                .into_iter()
-                .filter_map(|(i, cut)| Some((*run.get(i)?, cut))),
-        );
-        // The 2D layer that ended the run keeps its place.
-        if end < layers.len() && shown(&end) {
-            order.push((end, None));
-        }
-        start = end + 1;
-    }
-    order
-}
-
-/// The draws in their order cut into the runs [`draw_order`] sorted: each
-/// run of 3D layers, and each layer that ended one on its own.
-fn runs_of<'a, 'b>(
-    layers: &[CompLayerDraw],
-    order: &[usize],
-    placed: &'b [lumit_gpu::composite::CompositeLayer<'a>],
-) -> Vec<&'b [lumit_gpu::composite::CompositeLayer<'a>]> {
-    let mut runs = Vec::new();
-    let mut start = 0;
-    for (k, &i) in order.iter().enumerate() {
-        if layers.get(i).is_some_and(|l| !l.three_d || l.ends_run) {
-            runs.push(&placed[start..k]);
-            runs.push(&placed[k..=k]);
-            start = k + 1;
-        }
-    }
-    runs.push(&placed[start..]);
-    runs
 }
 
 /// The pixels per metre a slot that reads the depth below carries, if one does.
@@ -3419,7 +3392,9 @@ fn run_plan(
         .iter()
         .zip(textures)
         .enumerate()
+        // A model isn't a plane, so it neither casts nor takes these.
         .filter(|(_, (l, _))| l.material.accepts_shadows != LightingShadows::Off)
+        .filter(|(_, (l, _))| !matches!(l.source, DrawSource::Model(_)))
         .filter_map(|(i, (l, tex))| {
             let op = lighting_op(l, tex.width(), tex.height(), eye)?;
             Some((i, l, op.corners(tex.width(), tex.height())))
@@ -3427,7 +3402,8 @@ fn run_plan(
         .collect();
     let mut kept: Vec<(f32, usize, CasterPlane)> = Vec::new();
     for (i, ((l, tex), g)) in layers.iter().zip(textures).zip(grown).enumerate() {
-        if l.material.casts_shadows == LightingShadows::Off || l.opacity <= 0.0 {
+        let model = matches!(l.source, DrawSource::Model(_));
+        if l.material.casts_shadows == LightingShadows::Off || l.opacity <= 0.0 || model {
             continue;
         }
         let plane = crate::build::shading::caster_plane(tex, l, *g);

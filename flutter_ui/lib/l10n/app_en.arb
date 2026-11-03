@@ -223,6 +223,30 @@
   "@lightSettings": {
     "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
   },
+  "modelSettings": "Model settings",
+  "@modelSettings": {
+    "description": "Layer menu item, and the title of the window it opens: how a 3D model sits in its Model layer. The window also opens when a 3D model is dropped into a comp."
+  },
+  "modelUpAxis": "Up axis",
+  "@modelUpAxis": {
+    "description": "Model settings row: which of the 3D model file's axes points up, Y or Z."
+  },
+  "modelFitToComp": "Fit to comp",
+  "@modelFitToComp": {
+    "description": "Model settings row, a checkbox: size the 3D model to fill the composition and centre it."
+  },
+  "modelUnits": "Units",
+  "@modelUnits": {
+    "description": "Model settings row: how big the 3D model is, as comp pixels for each metre of the model."
+  },
+  "modelPixelsPerMetre": "px per metre",
+  "@modelPixelsPerMetre": {
+    "description": "Unit after the Units number in Model settings: comp pixels for each metre of the 3D model."
+  },
+  "keyLightName": "Key light",
+  "@keyLightName": {
+    "description": "The name of the light a first 3D model dropped into a composition with no lights brings with it, the main light that shows the model's shape. Beside it comes an Ambient light."
+  },
   "lightLayerName": "{kind} light",
   "@lightLayerName": {
     "description": "The name a new light starts with in the light settings window, from its type, as in \"Spot light\".",

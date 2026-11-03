@@ -52,6 +52,8 @@ import '../icons/lumit_icon.dart' as glyph_set;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/model_settings_dialog.dart'
+    show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../state/comp_model.dart';
 import '../state/dock.dart';
@@ -4283,12 +4285,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // The files land on the row they were dropped on, in the
                   // order the panel lists them, as one undo step. Several lie
                   // end to end, and Shift stacks them all at the start.
-                  comp.addFootageLayers(
+                  final placed = comp.addFootageLayers(
                       footage: footage,
                       asSequence: _videoAsSequence(context),
                       row: at,
                       arrival: ui.streamsArrival,
-                      endToEnd: !HardwareKeyboard.instance.isShiftPressed);
+                      endToEnd: !HardwareKeyboard.instance.isShiftPressed,
+                      lightNames: modelLightNames());
+                  // A 3D model asks how it sits as it lands.
+                  showDroppedModelSettingsFrb(context, placed);
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
                   // the drop simply does nothing.

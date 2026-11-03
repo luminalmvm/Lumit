@@ -12,6 +12,7 @@ import 'effect.dart';
 import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
+import 'model.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -1129,6 +1130,9 @@ enum BridgeLayerKind {
   /// `audio_only` set — but the frontend draws it as its own kind (its own
   /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
   audio,
+
+  /// A Model layer: a 3D model file drawn in the comp's 3D space.
+  model,
   ;
 }
 
@@ -3609,6 +3613,36 @@ class LayerReference {
         that: this,
       );
 
+  /// The corners of a Model layer's box in its own pixels, three numbers
+  /// each, once its file has been read. Empty before that and on any other
+  /// kind of layer.
+  Float64List getModelBox() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelBox(
+        that: this,
+      );
+
+  /// The comp pixels a metre Fit to comp gives a Model layer's model with
+  /// `up_axis` up, once its file has been read. `None` before that and on
+  /// any other kind of layer.
+  double? getModelFittedUnits({required BridgeUpAxis upAxis}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelFittedUnits(
+          that: this, upAxis: upAxis);
+
+  /// How far along the ray from `origin` by `direction`, three numbers
+  /// each in the layer's own pixels, it first meets a Model layer's model,
+  /// in parts of `direction`. `None` where it misses, before the file has
+  /// been read and on any other kind of layer. Asked once a click.
+  double? getModelHit(
+          {required List<double> origin, required List<double> direction}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelHit(
+          that: this, origin: origin, direction: direction);
+
+  /// A Model layer's settings, or `None` on any other kind of layer.
+  BridgeModelSettings? getModelSettings() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelSettings(
+        that: this,
+      );
+
   String getName() => BridgeLib.instance.api.crateApiLayerLayerReferenceGetName(
         that: this,
       );
@@ -4425,6 +4459,12 @@ class LayerReference {
   /// set a matte and delete its target without the document becoming invalid.
   void setMatte({BridgeMatte? matte}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetMatte(that: this, matte: matte);
+
+  /// Replace a Model layer's settings, as one undo step. Refused on any
+  /// other kind of layer.
+  void setModelSettings({required BridgeModelSettings settings}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetModelSettings(
+          that: this, settings: settings);
 
   /// Set the Pan, as one undoable step — the same shape as the Volume, and
   /// animatable in exactly the same way.

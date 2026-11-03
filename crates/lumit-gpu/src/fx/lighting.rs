@@ -312,7 +312,7 @@ pub fn may_shade(receiver: &[[f32; 3]; 4], light: &LightingLight, caster: &Caste
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
-struct GpuLight {
+pub(crate) struct GpuLight {
     /// w = 1 for a light from before it had rows.
     c0: [f32; 4],
     c1: [f32; 4],
@@ -382,7 +382,7 @@ fn v4(v: [f32; 3], w: f32) -> [f32; 4] {
 
 /// One light as the kernel reads it, with `mask` saying which casters can
 /// shade it.
-fn gpu_light(l: &LightingLight, mask: u32) -> GpuLight {
+pub(crate) fn gpu_light(l: &LightingLight, mask: u32) -> GpuLight {
     GpuLight {
         c0: v4(l.corners[0], f32::from(u8::from(l.legacy))),
         c1: v4(l.corners[1], 0.0),
@@ -548,7 +548,11 @@ impl LightingFx {
         Self {
             pipeline: compute(
                 &layout,
-                include_str!("../fx_lighting.wgsl"),
+                &format!(
+                    "{}{}",
+                    include_str!("../light_core.wgsl"),
+                    include_str!("../fx_lighting.wgsl")
+                ),
                 "fx-lighting",
                 "lighting",
             ),

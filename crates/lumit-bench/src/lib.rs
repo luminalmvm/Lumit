@@ -28,6 +28,7 @@
 //!   two-hour cut of two thousand clips, and [`long`] times what a long cut
 //!   costs around the drawing: B18 to B24. [`long_sound`] asks the same of
 //!   its sound: B25 to B29.
+//! - [`models`] times a Model layer of a million triangles: B30.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.
@@ -48,5 +49,6 @@ pub mod long;
 pub mod long_comp;
 pub mod long_sound;
 pub mod media;
+pub mod models;
 pub mod ofx;
 pub mod scenarios;

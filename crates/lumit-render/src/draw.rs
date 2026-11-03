@@ -482,6 +482,8 @@ pub enum DrawSource {
             lumit_gpu::fx::volumetric::Haze,
         )>,
     ),
+    /// A Model layer's 3D model, for the mesh pass.
+    Model(Box<crate::model::ModelDraw>),
 }
 
 /// The below-stack re-rendered at a held/sample time for a temporal adjustment

@@ -2,13 +2,15 @@
 //! Project panel selection on the Timeline makes.
 
 use flutter_rust_bridge::frb;
-use lumit_core::model::{Layer, ProjectItem};
+use lumit_core::anim::Property;
+use lumit_core::model::{Layer, LayerKind, ProjectItem};
 use lumit_core::ops::Op;
 use lumit_core::time::{CompTime, Duration, Rational};
 
 use crate::api::{
     composition::{insert_row, CompositionReference},
     footage::FootageReference,
+    layer::LayerReference,
     streams::BridgeStreamsArrival,
     BridgeError,
 };
@@ -27,7 +29,10 @@ impl CompositionReference {
     /// does. Without it they all start together, as After Effects stacks them.
     ///
     /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
-    /// `as_sequence` and `arrival` as there.
+    /// `as_sequence` and `arrival` as there. The first 3D model in a comp with
+    /// no lights brings an Ambient light and a Key light with it, in the same
+    /// undo step, named by `light_names` (ambient, then key) when given.
+    /// Answers the layers made from the items.
     #[frb(sync)]
     pub fn add_footage_layers(
         &self,
@@ -36,7 +41,8 @@ impl CompositionReference {
         row: Option<u32>,
         arrival: Option<BridgeStreamsArrival>,
         end_to_end: bool,
-    ) -> Result<(), BridgeError> {
+        light_names: Option<Vec<String>>,
+    ) -> Result<Vec<LayerReference>, BridgeError> {
         let arrival = arrival.unwrap_or(BridgeStreamsArrival::First);
         let proj = self.project()?;
         let comp = self.composition()?;
@@ -49,6 +55,7 @@ impl CompositionReference {
             .map_err(|_| BridgeError::InvalidTime)?
             .0;
         let mut ops = Vec::new();
+        let mut placed = Vec::new();
         {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             let doc = p.store.snapshot();
@@ -85,6 +92,7 @@ impl CompositionReference {
                     if end_to_end {
                         shift(&mut layer, Duration(start))?;
                     }
+                    placed.push(LayerReference::new(self.project, self.id, layer.id));
                     ops.push(Op::AddLayer {
                         comp: self.id,
                         index,
@@ -98,7 +106,47 @@ impl CompositionReference {
             }
         }
         if ops.is_empty() {
-            return Ok(());
+            return Ok(placed);
+        }
+        let model = ops.iter().any(|op| {
+            matches!(op, Op::AddLayer { layer, .. } if matches!(layer.kind, LayerKind::Model { .. }))
+        });
+        if model
+            && !comp
+                .layers
+                .iter()
+                .any(|l| matches!(l.kind, LayerKind::Light { .. }))
+        {
+            // Ambient (4) and Parallel (3), as Layer > New > Light makes them,
+            // so a lone model isn't drawn as a flat silhouette.
+            let mut ambient = Self::light_layer(&comp, 4);
+            let mut key = Self::light_layer(&comp, 3);
+            key.name = "Key light".into();
+            if let Some([a, k]) = light_names.as_deref() {
+                ambient.name.clone_from(a);
+                key.name.clone_from(k);
+            }
+            // Up and to the left, about 45 degrees each way from the lens,
+            // so the model shows its shape.
+            let w = f64::from(comp.width);
+            key.transform.position_x = Property::fixed(w * 0.15);
+            key.transform.position_y = Property::fixed(f64::from(comp.height) * 0.5 - w * 0.35);
+            key.transform.position_z = Property::fixed(-w * 0.5);
+            if let LayerKind::Light { light } = &mut ambient.kind {
+                light.intensity = Property::fixed(25.0);
+            }
+            if let LayerKind::Light { light } = &mut key.kind {
+                light.casts_shadows = true;
+                light.shadow_diffusion = Property::fixed(f64::from(comp.width) * 0.01);
+            }
+            for mut light in [key, ambient] {
+                crate::edits::solo_on_arrival(&mut light, comp.layers.iter());
+                ops.push(Op::AddLayer {
+                    comp: self.id,
+                    index: 0,
+                    layer: Box::new(light),
+                });
+            }
         }
         if end_to_end && start > comp.duration.0 {
             ops.push(Op::SetCompSettings {
@@ -115,7 +163,55 @@ impl CompositionReference {
         proj.store
             .commit(Op::Batch { ops })
             .map_err(BridgeError::OpError)?;
-        Ok(())
+        Ok(placed)
+    }
+
+    /// The Light layer [`Self::add_light_layer`] makes in `comp`.
+    #[frb(ignore)]
+    pub(crate) fn light_layer(
+        comp: &lumit_core::model::Composition,
+        kind: u32,
+    ) -> lumit_core::model::Layer {
+        use lumit_core::anim::Property;
+        use lumit_core::model::{LightDef, LightKind, TransformGroup};
+
+        let kind = match kind {
+            1 => LightKind::Spot,
+            2 => LightKind::Area,
+            3 => LightKind::Parallel,
+            4 => LightKind::Ambient,
+            _ => LightKind::Point,
+        };
+        let (w, h) = (f64::from(comp.width), f64::from(comp.height));
+        let light = Box::new(LightDef {
+            kind,
+            size: [Property::fixed(w * 0.2), Property::fixed(h * 0.2)],
+            two_node: true,
+            point_of_interest: [
+                Property::fixed(w * 0.5),
+                Property::fixed(h * 0.5),
+                Property::zero(),
+            ],
+            ..LightDef::default()
+        });
+        let name = match kind {
+            LightKind::Point => "Point light",
+            LightKind::Spot => "Spot light",
+            LightKind::Area => "Area light",
+            LightKind::Parallel => "Parallel light",
+            LightKind::Ambient => "Ambient light",
+        };
+        crate::edits::base_layer(
+            name.into(),
+            lumit_core::model::LayerKind::Light { light },
+            comp.duration.0,
+            TransformGroup {
+                position_x: Property::fixed(w * 0.4),
+                position_y: Property::fixed(h * 0.35),
+                position_z: Property::fixed(-w * 0.35),
+                ..TransformGroup::default()
+            },
+        )
     }
 }
 

@@ -3405,6 +3405,7 @@ pub mod composite;
 pub mod device;
 pub mod drm;
 pub mod fx;
+pub mod mesh;
 pub mod scope;
 /// The Windows-only zero-copy Viewer target. Present only in the opt-in
 /// `shared-texture` build on Windows; every other build has no shared texture at

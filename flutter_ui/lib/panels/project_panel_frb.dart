@@ -44,6 +44,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -602,6 +603,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// in a rebuild: the budget test expects a hover to cost nothing.
   final Map<String, BridgeProxy?> _proxies = {};
 
+  /// Which footage items are 3D models, asked once per document change.
+  final Map<String, bool> _models = {};
+
   /// The project-wide *use proxies* switch, cached with the rest: it is
   /// a document read, so a rebuild must never ask for it again.
   bool? _useProxies;
@@ -830,6 +834,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Footage the engine found on disk but cannot decode, by id.
   final Set<String> _undecodable = {};
+
+  /// The pictures each 3D model names that are missing or won't read.
+  final Map<String, List<String>> _pictures = {};
 
   /// Bumped whenever the document changes, to key the thumbnail futures so a
   /// relink re-decodes rather than showing the stale picture. The frb equivalent
@@ -1142,10 +1149,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         depth: row.depth,
         missing: missing,
         undecodable: _undecodable.contains(id),
+        missingPictures: _pictures[id] ?? const [],
         audio: audio,
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
         nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
+        model: _models[id] ??= _isModel(item),
         inUse: _used[id] ??= _isUsed(item),
         proxy: _proxies.putIfAbsent(
             id,
@@ -1544,6 +1553,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Whether this item is a node graph composition. False for every other
   /// kind, and for a comp that has gone from under the panel.
+  bool _isModel(ItemReference item) {
+    if (item case ItemReference_Footage(:final field0)) {
+      try {
+        return field0.isModel();
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   bool _isNodeGraph(ItemReference item) {
     if (item case ItemReference_Composition(:final field0)) {
       try {
@@ -1677,6 +1697,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _names.clear();
       _nodeGraphs.clear();
       _proxies.clear();
+      _models.clear();
       _useProxies = null;
       _dropThumbs();
       _dropScrub();
@@ -1750,6 +1771,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             // throws. Nothing is missing in a document that is gone, and the
             // panel is about to be rebuilt from the new one.
           }).catchError((_) {});
+          if (_models[id] ??= _isModel(item)) {
+            // The old names stay until the new answer lands, so the badge
+            // doesn't blink on every edit.
+            item.field0.getModelMissing().then((names) {
+              if (!mounted) return;
+              final had = _pictures[id];
+              if (names.isEmpty ? had == null : listEquals(had, names)) return;
+              if (names.isEmpty) {
+                _pictures.remove(id);
+              } else {
+                _pictures[id] = names;
+              }
+              _bookRebuild();
+            }).catchError((_) {});
+          }
         }
       }
       if (item is ItemReference_Folder) {

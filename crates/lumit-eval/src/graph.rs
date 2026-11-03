@@ -214,8 +214,10 @@ fn source_ref(kind: &LayerKind) -> Option<SourceRef> {
         // handled before this point (it wraps what is below it); a Camera, a
         // Light and a Null reach here and are dropped by the caller's
         // `continue` — a light is something other layers see, never a picture.
+        // A Model layer joins them until the mesh pass draws it.
         LayerKind::Camera { .. }
         | LayerKind::Light { .. }
+        | LayerKind::Model { .. }
         | LayerKind::Adjustment
         | LayerKind::Null => return None,
     })

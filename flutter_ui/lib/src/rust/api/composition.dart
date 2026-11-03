@@ -640,13 +640,17 @@ class CompositionReference {
   /// does. Without it they all start together, as After Effects stacks them.
   ///
   /// Each layer is what [`Self::add_footage_layer`] makes of its item, with
-  /// `as_sequence` and `arrival` as there.
-  void addFootageLayers(
+  /// `as_sequence` and `arrival` as there. The first 3D model in a comp with
+  /// no lights brings an Ambient light and a Key light with it, in the same
+  /// undo step, named by `light_names` (ambient, then key) when given.
+  /// Answers the layers made from the items.
+  List<LayerReference> addFootageLayers(
           {required List<FootageReference> footage,
           required bool asSequence,
           int? row,
           BridgeStreamsArrival? arrival,
-          required bool endToEnd}) =>
+          required bool endToEnd,
+          List<String>? lightNames}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddFootageLayers(
               that: this,
@@ -654,7 +658,8 @@ class CompositionReference {
               asSequence: asSequence,
               row: row,
               arrival: arrival,
-              endToEnd: endToEnd);
+              endToEnd: endToEnd,
+              lightNames: lightNames);
 
   /// Append the built-in effect named `name` to a group header's stack — the
   /// group arm of `LayerReference::add_effect`, and the same road every

@@ -2522,12 +2522,15 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
-  // Material options, beside Transform rather than inside it.
+  // Material options, beside Transform rather than inside it. A Model layer
+  // has the switches and none of the numbers.
   final material = [
     for (final g in groups)
       if (g.section == TransformSection.material) g
   ];
-  if (material.isNotEmpty && !soloed) {
+  final materialSwitches =
+      settings.any((s) => s.section == TransformSection.material);
+  if ((material.isNotEmpty || materialSwitches) && !soloed) {
     final materialOpen = open.contains(materialPath(id));
     rows.add(FoldGroupRow(
       path: materialPath(id),
