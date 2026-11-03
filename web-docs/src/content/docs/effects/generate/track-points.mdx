@@ -56,6 +56,7 @@ Any points effect can read these points, and so can
 | **Min area** | Slider, whole numbers | 0 to 10000; higher | 16 | - |
 | **Max area** | Slider, whole numbers | 0 to 1000000; higher | 1000000 | - |
 | **Max distance** | Slider | 0 to 500; higher | 50 | Pixels at composition size |
+| **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
 | **Analyse** | Button | - | - | - |
 | **Cancel** | Button | - | - | - |
 | **Size** | Slider | 0 to 200; higher | 8 | Pixels at composition size |
@@ -92,6 +93,9 @@ In the Effect Controls panel:
 - **Max area**: the largest blob kept, in pixels of the footage.
 - **Max distance**: how far a blob may move between two frames and still be the same blob,
   in the footage's own pixels.
+- **Frames**: which frames Analyse tracks. **All frames** is the whole footage however the
+  layer is trimmed, **Layer in to out** is the frames between the layer's in and out
+  points, and **Work area** is the frames inside the composition's work area.
 - **Analyse**: start tracking.
 - **Cancel**: stop a track that is running.
 - **Size**: the diameter of the disc a point is drawn as. A blob is drawn at its own size

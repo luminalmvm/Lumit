@@ -364,14 +364,15 @@ class BridgeTrackStatus {
   final int points;
 
   /// How many frames of the clip carry a solved camera. The span always
-  /// starts at the clip's first frame — the analysis tracks the source from
-  /// its beginning and can only stop early, never start late — so this and
+  /// starts where the analysis started, the clip's first frame or the Frames
+  /// row's, and can only stop early, never start late, so this and
   /// `clip_frames` are the whole of the bar the panel draws.
   final int frames;
 
-  /// How many frames the clip has. `frames < clip_frames` is a **partial**
-  /// track: the shot could not be followed all the way through, and what was
-  /// solved is the part before it stopped carrying
+  /// How many frames the clip has, or the Frames row's span of it.
+  /// `frames < clip_frames` is a **partial** track: the shot could not be
+  /// followed all the way through, and what was solved is the part before it
+  /// stopped carrying
   /// ([`lumit_render::track::Solved::is_partial`]).
   final int clipFrames;
 
