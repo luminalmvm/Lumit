@@ -1332,6 +1332,9 @@ class BridgeLightChannels {
   final BridgeScalar hazeNoiseSize;
   final BridgeScalar hazeNoiseSpeed;
 
+  /// An Environment light's Background blur, percent.
+  final BridgeScalar backgroundBlur;
+
   const BridgeLightChannels({
     required this.poiX,
     required this.poiY,
@@ -1358,6 +1361,7 @@ class BridgeLightChannels {
     required this.hazeNoise,
     required this.hazeNoiseSize,
     required this.hazeNoiseSpeed,
+    required this.backgroundBlur,
   });
 
   @override
@@ -1386,7 +1390,8 @@ class BridgeLightChannels {
       hazeScatter.hashCode ^
       hazeNoise.hashCode ^
       hazeNoiseSize.hashCode ^
-      hazeNoiseSpeed.hashCode;
+      hazeNoiseSpeed.hashCode ^
+      backgroundBlur.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1417,7 +1422,8 @@ class BridgeLightChannels {
           hazeScatter == other.hazeScatter &&
           hazeNoise == other.hazeNoise &&
           hazeNoiseSize == other.hazeNoiseSize &&
-          hazeNoiseSpeed == other.hazeNoiseSpeed;
+          hazeNoiseSpeed == other.hazeNoiseSpeed &&
+          backgroundBlur == other.backgroundBlur;
 }
 
 /// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
@@ -1435,6 +1441,7 @@ enum BridgeLightKind {
   area,
   parallel,
   ambient,
+  environment,
   ;
 }
 
@@ -1453,6 +1460,11 @@ class BridgeLightSettings {
   final bool inAir;
   final bool noisy;
 
+  /// An Environment light's picture, a layer of the same comp, and whether
+  /// it shows behind everything.
+  final UuidValue? source;
+  final bool background;
+
   const BridgeLightSettings({
     required this.kind,
     required this.falloff,
@@ -1460,6 +1472,8 @@ class BridgeLightSettings {
     required this.castsShadows,
     required this.inAir,
     required this.noisy,
+    this.source,
+    required this.background,
   });
 
   @override
@@ -1469,7 +1483,9 @@ class BridgeLightSettings {
       twoNode.hashCode ^
       castsShadows.hashCode ^
       inAir.hashCode ^
-      noisy.hashCode;
+      noisy.hashCode ^
+      source.hashCode ^
+      background.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1481,7 +1497,9 @@ class BridgeLightSettings {
           twoNode == other.twoNode &&
           castsShadows == other.castsShadows &&
           inAir == other.inAir &&
-          noisy == other.noisy;
+          noisy == other.noisy &&
+          source == other.source &&
+          background == other.background;
 }
 
 /// One mask on a layer: a bezier path that gates the layer's alpha before its
@@ -1616,6 +1634,7 @@ class BridgeMaterialChannels {
   final BridgeScalar shininess;
   final BridgeScalar metal;
   final BridgeScalar lightTransmission;
+  final BridgeScalar reflection;
 
   const BridgeMaterialChannels({
     required this.ambient,
@@ -1624,6 +1643,7 @@ class BridgeMaterialChannels {
     required this.shininess,
     required this.metal,
     required this.lightTransmission,
+    required this.reflection,
   });
 
   @override
@@ -1633,7 +1653,8 @@ class BridgeMaterialChannels {
       specular.hashCode ^
       shininess.hashCode ^
       metal.hashCode ^
-      lightTransmission.hashCode;
+      lightTransmission.hashCode ^
+      reflection.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1645,7 +1666,8 @@ class BridgeMaterialChannels {
           specular == other.specular &&
           shininess == other.shininess &&
           metal == other.metal &&
-          lightTransmission == other.lightTransmission;
+          lightTransmission == other.lightTransmission &&
+          reflection == other.reflection;
 }
 
 /// Whether a layer casts and accepts shadows and is a holdout, one op
@@ -2705,12 +2727,14 @@ enum BridgeTransformProp {
   hazeNoise,
   hazeNoiseSize,
   hazeNoiseSpeed,
+  backgroundBlur,
   ambient,
   diffuse,
   specular,
   shininess,
   metal,
   lightTransmission,
+  reflection,
   ;
 }
 

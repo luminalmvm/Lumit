@@ -753,6 +753,9 @@ pub struct Material {
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
     pub light_transmission: Property,
+    /// How much of an Environment light it reflects.
+    #[serde(skip_serializing_if = "crate::paint::is_static_zero")]
+    pub reflection: Property,
     /// A Model layer drawn as what is under its run, so it hides what is
     /// behind it.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -958,6 +961,8 @@ pub enum TransformProp {
     HazeNoise,
     HazeNoiseSize,
     HazeNoiseSpeed,
+    /// An Environment light's, in [`crate::environment::LightEnvironment`].
+    BackgroundBlur,
     /// A layer's Material options, in [`Material`].
     Ambient,
     Diffuse,
@@ -965,6 +970,7 @@ pub enum TransformProp {
     Shininess,
     Metal,
     LightTransmission,
+    Reflection,
 }
 
 fn zero3() -> [Property; 3] {
@@ -2517,15 +2523,15 @@ pub enum LightKind {
     Point,
     /// A cone, aimed by the layer's own rotation.
     Spot,
-    /// A rectangle of a real size: a softbox, a window, a strip light. The
-    /// kind a compositor actually reaches for, and the reason [`LightDef`]
-    /// carries a width and a height at all.
+    /// A rectangle of a real size: a softbox, a window, a strip light.
     Area,
     /// Light from so far away that every ray runs the same way, like the sun.
     /// It shines along the layer's own forward axis.
     Parallel,
     /// Light from everywhere at once: no place and no direction.
     Ambient,
+    /// Light from a picture of everything round the scene.
+    Environment,
 }
 
 /// How a composition's lights fall on its layers.
@@ -2620,6 +2626,11 @@ pub struct LightDef {
     pub legacy_shape: bool,
     #[serde(default, skip_serializing_if = "crate::haze::LightHaze::is_default")]
     pub haze: crate::haze::LightHaze,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::environment::LightEnvironment::is_default"
+    )]
+    pub environment: crate::environment::LightEnvironment,
 }
 
 /// The non-animatable part of a light, what `Op::SetLightSettings` carries.
@@ -2634,6 +2645,8 @@ pub struct LightSettings {
     pub legacy_shape: bool,
     #[serde(default)]
     pub casts_shadows: bool,
+    #[serde(default)]
+    pub environment: crate::environment::EnvironmentSettings,
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the
@@ -2871,15 +2884,10 @@ impl Composition {
         }
     }
 
-    /// Every visible Light layer whose span contains `t`, evaluated at its own
-    /// layer time and in the comp's own pixels.
-    ///
-    /// Top of the stack first, which is the order the effects that read lights
-    /// take them in — so a frame that has more lights than an effect can carry
-    /// spends its slots on the ones nearest the top, the same rule the layer
-    /// stack uses everywhere else. A light switched off is not a light, exactly
-    /// as a layer switched off is not on the picture.
-    ///
+    /// Every visible Light layer whose span contains `t` but an Environment
+    /// light ([`Self::environment_at`]), at its own layer time and in the
+    /// comp's own pixels. Top of the stack first, so a frame with more lights
+    /// than an effect carries spends its slots on the ones nearest the top.
     /// `read` reads their properties and their parents', and with `solves` a
     /// light on a solved camera follows the solve.
     pub fn lights_at(&self, t: f64, read: &Read<'_>, solves: Solves<'_>) -> Vec<ResolvedLight> {
@@ -2889,7 +2897,11 @@ impl Composition {
                 let LayerKind::Light { light } = &l.kind else {
                     return None;
                 };
-                if !l.switches.visible || t < l.in_point.0.to_f64() || t >= l.out_point.0.to_f64() {
+                if !l.switches.visible
+                    || light.kind == LightKind::Environment
+                    || t < l.in_point.0.to_f64()
+                    || t >= l.out_point.0.to_f64()
+                {
                     return None;
                 }
                 let lt = crate::time::layer_time(t, l.start_offset.0);

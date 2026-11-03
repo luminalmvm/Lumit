@@ -431,7 +431,7 @@ fn feed_comp(
         h.update(&comp.motion_blur.samples.to_le_bytes());
         h.update(&comp.motion_blur.limit.to_le_bytes());
     }
-    lights::feed_lights(h, doc, comp, t, stamper);
+    lights::feed_lights(h, doc, comp, t, quality, stamper, visited)?;
     // **A node graph composition** (docs/impl/node-graph-comp.md §2.5). The
     // walk forks here, so every byte a layer comp feeds is unchanged and no
     // key ever made moves: a comp with no graph never reaches this line, and a

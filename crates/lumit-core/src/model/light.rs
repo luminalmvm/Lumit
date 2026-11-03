@@ -46,7 +46,7 @@ impl LightDef {
             TransformProp::PoiZ => &self.point_of_interest[2],
             TransformProp::ShadowDarkness => &self.shadow_darkness,
             TransformProp::ShadowDiffusion => &self.shadow_diffusion,
-            _ => return self.haze.channel(prop),
+            _ => return self.environment.channel(prop).or(self.haze.channel(prop)),
         })
     }
 
@@ -67,6 +67,7 @@ impl LightDef {
             TransformProp::PoiZ => &mut self.point_of_interest[2],
             TransformProp::ShadowDarkness => &mut self.shadow_darkness,
             TransformProp::ShadowDiffusion => &mut self.shadow_diffusion,
+            TransformProp::BackgroundBlur => &mut self.environment.blur,
             _ => return self.haze.channel_mut(prop),
         })
     }
@@ -80,6 +81,7 @@ impl LightDef {
             two_node: self.two_node,
             legacy_shape: self.legacy_shape,
             casts_shadows: self.casts_shadows,
+            environment: self.environment.settings(),
         }
     }
 
@@ -89,6 +91,7 @@ impl LightDef {
         self.two_node = s.two_node;
         self.legacy_shape = s.legacy_shape;
         self.casts_shadows = s.casts_shadows;
+        self.environment.set_settings(s.environment);
     }
 }
 
@@ -113,6 +116,7 @@ impl Default for LightDef {
             shadow_diffusion: Property::zero(),
             legacy_shape: false,
             haze: crate::haze::LightHaze::default(),
+            environment: crate::environment::LightEnvironment::default(),
         }
     }
 }

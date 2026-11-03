@@ -316,8 +316,16 @@ class ViewerStage extends StatelessWidget {
         uiState.liveTransforms.value[a.layer.internallayerId] ??
         a.info.transform;
     final out = <LayerBox>[];
+    // An environment light is nowhere, and the picture it reads is never
+    // drawn, so neither has a box to pick or move.
+    final surround = [
+      for (final e in model.heldLayers)
+        if (e.info.light?.kind == BridgeLightKind.environment) e.info.light?.source
+    ];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
+      if (entry.info.light?.kind == BridgeLightKind.environment) continue;
+      if (surround.contains(entry.layer.internallayerId)) continue;
       // Nor does a layer that only makes a sound: a box the size of the comp
       // round nothing, and a click on the picture that picked it.
       if (!_drawsPicture(entry)) continue;

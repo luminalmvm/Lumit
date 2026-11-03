@@ -110,6 +110,8 @@ void main() {
           castsShadows: false,
           inAir: false,
           noisy: false,
+          source: null,
+          background: false,
         ),
       ));
       expect(

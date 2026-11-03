@@ -2334,6 +2334,7 @@ pub struct BridgeMaterialChannels {
     pub shininess: BridgeScalar,
     pub metal: BridgeScalar,
     pub light_transmission: BridgeScalar,
+    pub reflection: BridgeScalar,
 }
 
 /// Casts shadows and Accepts shadows ([`lumit_core::model::ShadowMode`]).
@@ -2418,6 +2419,8 @@ pub struct BridgeLightChannels {
     pub haze_noise: BridgeScalar,
     pub haze_noise_size: BridgeScalar,
     pub haze_noise_speed: BridgeScalar,
+    /// An Environment light's Background blur, percent.
+    pub background_blur: BridgeScalar,
 }
 
 /// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
@@ -2429,6 +2432,7 @@ pub enum BridgeLightKind {
     Area,
     Parallel,
     Ambient,
+    Environment,
 }
 
 /// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
@@ -2454,6 +2458,10 @@ pub struct BridgeLightSettings {
     /// noise's size and speed show. Read only.
     pub in_air: bool,
     pub noisy: bool,
+    /// An Environment light's picture, a layer of the same comp, and whether
+    /// it shows behind everything.
+    pub source: Option<Uuid>,
+    pub background: bool,
 }
 
 /// The seven animatable channels a Camera layer has beyond its transform.
@@ -2680,12 +2688,14 @@ pub enum BridgeTransformProp {
     HazeNoise,
     HazeNoiseSize,
     HazeNoiseSpeed,
+    BackgroundBlur,
     Ambient,
     Diffuse,
     Specular,
     Shininess,
     Metal,
     LightTransmission,
+    Reflection,
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2838,7 +2848,9 @@ impl BridgeTransformProp {
             BridgeTransformProp::HazeNoise => P::HazeNoise,
             BridgeTransformProp::HazeNoiseSize => P::HazeNoiseSize,
             BridgeTransformProp::HazeNoiseSpeed => P::HazeNoiseSpeed,
+            BridgeTransformProp::BackgroundBlur => P::BackgroundBlur,
             BridgeTransformProp::LightTransmission => P::LightTransmission,
+            BridgeTransformProp::Reflection => P::Reflection,
         }
     }
 }
@@ -2916,6 +2928,7 @@ impl BridgeTransform {
                 haze_noise: read(&light.haze.noise),
                 haze_noise_size: read(&light.haze.noise_size),
                 haze_noise_speed: read(&light.haze.noise_speed),
+                background_blur: read(&light.environment.blur),
             });
         }
         if layer.is_3d() {
@@ -2940,6 +2953,7 @@ impl BridgeTransform {
                 shininess: read(&m.shininess),
                 metal: read(&m.metal),
                 light_transmission: read(&m.light_transmission),
+                reflection: read(&m.reflection),
             });
         }
         out
@@ -2999,6 +3013,7 @@ impl BridgeTransform {
                 (&mut light.haze.noise, &c.haze_noise),
                 (&mut light.haze.noise_size, &c.haze_noise_size),
                 (&mut light.haze.noise_speed, &c.haze_noise_speed),
+                (&mut light.environment.blur, &c.background_blur),
             ] {
                 to.animation = from.animation_at(offset)?;
             }
@@ -3080,6 +3095,7 @@ impl BridgeTransform {
                 (&mut to.shininess, &m.shininess),
                 (&mut to.metal, &m.metal),
                 (&mut to.light_transmission, &m.light_transmission),
+                (&mut to.reflection, &m.reflection),
             ] {
                 to.animation = from.animation_at(offset)?;
             }

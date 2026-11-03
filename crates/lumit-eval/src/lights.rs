@@ -3,8 +3,9 @@
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Document};
+use uuid::Uuid;
 
-use crate::{feed_f64, SourceStamper};
+use crate::{feed_f64, feed_layer, Quality, SourceStamper};
 
 /// The comp's lights (docs/06). Hashed once here rather than per
 /// layer, because a light shades every layer that accepts it — and hashed
@@ -16,8 +17,10 @@ pub(crate) fn feed_lights(
     doc: &Arc<Document>,
     comp: &Composition,
     t: f64,
+    quality: Quality,
     stamper: &dyn SourceStamper,
-) {
+    visited: &mut Vec<Uuid>,
+) -> Option<()> {
     let context = lumit_core::model::comp_context(doc, comp, t);
     let read = lumit_core::model::context_reader(&context, t);
     let lights = comp.lights_at(t, &read, stamper.solves().map(|store| (doc, store)));
@@ -34,6 +37,7 @@ pub(crate) fn feed_lights(
                 lumit_core::model::LightKind::Area => 2,
                 lumit_core::model::LightKind::Parallel => 3,
                 lumit_core::model::LightKind::Ambient => 4,
+                lumit_core::model::LightKind::Environment => 5,
             }]);
             h.update(&[l.falloff as u8, u8::from(l.legacy_shape)]);
             for v in [
@@ -62,4 +66,23 @@ pub(crate) fn feed_lights(
             l.haze.cache_key(|v| feed_f64(h, f64::from(v)));
         }
     }
+    // The environment, fed only when there is one, its picture with it, as
+    // the walk leaves out a layer that isn't drawn.
+    if let Some(e) = comp.environment_at(t, &read, stamper.solves().map(|store| (doc, store))) {
+        h.update(b"environment/");
+        let (x, y, z) = e.rotation_deg;
+        for v in [x, y, z, f64::from(e.blur)] {
+            feed_f64(h, v);
+        }
+        e.colour.iter().for_each(|c| feed_f64(h, f64::from(*c)));
+        h.update(&[u8::from(e.background)]);
+        if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
+            h.update(&[u8::from(linear)]);
+        }
+        if let Some(source) = comp.layers.iter().find(|l| l.id == e.source) {
+            let lt = lumit_core::time::layer_time(t, source.start_offset.0);
+            feed_layer(h, doc, comp, source, t, lt, quality, stamper, visited)?;
+        }
+    }
+    Some(())
 }

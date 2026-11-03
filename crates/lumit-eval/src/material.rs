@@ -31,6 +31,12 @@ pub(crate) fn feed(h: &mut blake3::Hasher, comp: &Composition, layer: &Layer, lt
             feed_f64(h, p.value_at(lt));
         }
         h.update(&shadows);
+        // Fed only once it is asked for, so the keys before it stay.
+        let reflection = m.reflection.value_at(lt);
+        if reflection != 0.0 {
+            h.update(b"reflection");
+            feed_f64(h, reflection);
+        }
     } else if m.holdout || shadows[..2].contains(&(lumit_core::model::ShadowMode::Only as u8)) {
         // Set to Only or a holdout, a layer draws differently with no light too.
         h.update(b"shadow only");

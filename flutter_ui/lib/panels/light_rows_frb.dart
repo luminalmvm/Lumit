@@ -5,16 +5,22 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
+import '../state/ui_state.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
+import '../widgets/layer_picker.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
 
 /// One choice row.
 enum LayerSetting {
   lightType,
+  lightSource,
+  lightBackground,
   lightFalloff,
   lightCastsShadows,
   castsShadows,
@@ -24,7 +30,11 @@ enum LayerSetting {
 
   /// The heading the row sits under.
   TransformSection get section => switch (this) {
-        lightType || lightFalloff || lightCastsShadows =>
+        lightType ||
+        lightSource ||
+        lightBackground ||
+        lightFalloff ||
+        lightCastsShadows =>
           TransformSection.light,
         castsShadows || acceptsShadows || holdout || acceptsLights =>
           TransformSection.material,
@@ -32,6 +42,8 @@ enum LayerSetting {
 
   String get label => switch (this) {
         lightType => l10n.lightType,
+        lightSource => l10n.lightSource,
+        lightBackground => l10n.lightShowInBackground,
         lightFalloff => l10n.lightFalloff,
         lightCastsShadows || castsShadows => l10n.castsShadows,
         acceptsShadows => l10n.acceptsShadows,
@@ -49,6 +61,8 @@ const BridgeLightSettings plainLight = BridgeLightSettings(
   castsShadows: false,
   inAir: false,
   noisy: false,
+  source: null,
+  background: false,
 );
 
 /// The same for a material, on After Effects' defaults.
@@ -80,11 +94,14 @@ List<LayerSetting> layerSettings({
     ];
   }
   final s = light ?? plainLight;
+  final surround = s.kind == BridgeLightKind.environment;
   return [
     LayerSetting.lightType,
+    if (surround) ...[LayerSetting.lightSource, LayerSetting.lightBackground],
     if (lightFallsOff(s.kind)) LayerSetting.lightFalloff,
-    // An ambient light comes from nowhere, so it has nowhere to cast from.
-    if (s.kind != BridgeLightKind.ambient) LayerSetting.lightCastsShadows,
+    // Ambient and environment light come from no one place, so they have
+    // nowhere to cast from.
+    if (lightCasts(s.kind)) LayerSetting.lightCastsShadows,
   ];
 }
 
@@ -93,6 +110,11 @@ bool lightFallsOff(BridgeLightKind kind) =>
     kind == BridgeLightKind.point ||
     kind == BridgeLightKind.spot ||
     kind == BridgeLightKind.area;
+
+/// Whether a light of this kind comes from somewhere a shadow can be cast
+/// from.
+bool lightCasts(BridgeLightKind kind) =>
+    kind != BridgeLightKind.ambient && kind != BridgeLightKind.environment;
 
 /// Whether a light of this kind has a direction to aim.
 bool lightAims(BridgeLightKind kind) =>
@@ -106,6 +128,7 @@ String lightKindLabel(BridgeLightKind kind) => switch (kind) {
       BridgeLightKind.area => l10n.lightArea,
       BridgeLightKind.parallel => l10n.lightParallel,
       BridgeLightKind.ambient => l10n.lightAmbient,
+      BridgeLightKind.environment => l10n.lightEnvironment,
     };
 
 String shadowModeLabel(BridgeShadowMode mode) => switch (mode) {
@@ -128,6 +151,8 @@ BridgeLightSettings lightSettingsWith(
   BridgeLightFalloff? falloff,
   bool? twoNode,
   bool? castsShadows,
+  (UuidValue?,)? source,
+  bool? background,
 }) =>
     BridgeLightSettings(
       kind: kind ?? s.kind,
@@ -136,6 +161,8 @@ BridgeLightSettings lightSettingsWith(
       castsShadows: castsShadows ?? s.castsShadows,
       inAir: s.inAir,
       noisy: s.noisy,
+      source: source == null ? s.source : source.$1,
+      background: background ?? s.background,
     );
 
 /// One choice row. Each pick is one op, so one undo step.
@@ -195,6 +222,27 @@ class LayerSettingRowFrb extends StatelessWidget {
           options: BridgeLightKind.values,
           label: lightKindLabel,
           onChanged: (k) => write(lightSettingsWith(s, kind: k)),
+        ),
+      // Any layer of the comp with a picture, read as a panorama.
+      LayerSetting.lightSource => LayerPicker(
+          key: key,
+          dense: valueColumn != null,
+          layers: Provider.of<LumitUiState>(context, listen: false)
+              .model
+              .layers,
+          value: s.source,
+          empty: l10n.none,
+          missing: l10n.missingLayer,
+          offered: (l) => l.layer.hasPicture(),
+          onChanged: (id) => write(lightSettingsWith(s, source: (id,))),
+        ),
+      LayerSetting.lightBackground => Align(
+          alignment: Alignment.centerLeft,
+          child: HouseCheckbox(
+            key: key,
+            value: s.background,
+            onChanged: (on) => write(lightSettingsWith(s, background: on)),
+          ),
         ),
       LayerSetting.lightFalloff => BareDropdown<BridgeLightFalloff>(
           key: key,

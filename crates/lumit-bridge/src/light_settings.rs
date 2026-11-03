@@ -13,6 +13,7 @@ impl BridgeLightSettings {
                 K::Area => BridgeLightKind::Area,
                 K::Parallel => BridgeLightKind::Parallel,
                 K::Ambient => BridgeLightKind::Ambient,
+                K::Environment => BridgeLightKind::Environment,
             },
             falloff: match s.falloff {
                 F::None => BridgeLightFalloff::None,
@@ -23,6 +24,8 @@ impl BridgeLightSettings {
             casts_shadows: s.casts_shadows,
             in_air: false,
             noisy: false,
+            source: s.environment.source,
+            background: s.environment.background,
         }
     }
 
@@ -36,6 +39,7 @@ impl BridgeLightSettings {
                 BridgeLightKind::Area => K::Area,
                 BridgeLightKind::Parallel => K::Parallel,
                 BridgeLightKind::Ambient => K::Ambient,
+                BridgeLightKind::Environment => K::Environment,
             },
             falloff: match self.falloff {
                 BridgeLightFalloff::None => F::None,
@@ -45,6 +49,10 @@ impl BridgeLightSettings {
             two_node: self.two_node,
             legacy_shape,
             casts_shadows: self.casts_shadows,
+            environment: lumit_core::environment::EnvironmentSettings {
+                source: self.source,
+                background: self.background,
+            },
         }
     }
 }

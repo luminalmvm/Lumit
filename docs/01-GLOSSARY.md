@@ -129,6 +129,7 @@ Not interchangeable.
 | **Sparks** | Small particles Particulate throws out where one of its particles dies. Worked out from the frame before |
 | **Trails** | Particulate drawing each frame's particles over the picture it kept from the frame before, faded, zoomed and turned, so they leave smears |
 | **Volumetric light** | A light seen in the air it shines through: its beam, the shafts 3D layers cut in it, its glow |
+| **Environment light** | A light from a picture of everything round the scene, an HDRI, that lights 3D layers and models and can show behind them. Its picture is its **Source** layer |
 | **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
 | **OCIO config** | An OpenColorIO config a project can name |
 

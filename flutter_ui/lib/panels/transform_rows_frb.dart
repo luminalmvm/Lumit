@@ -193,8 +193,10 @@ List<TransformGroup> transformGroups({
   ]);
 
   // The placement a viewpoint has: where it stands, and which way it faces.
-  List<TransformGroup> placement() => [
-        ...pairRows(
+  // An environment light is nowhere, so it only faces.
+  List<TransformGroup> placement({bool placed = true}) => [
+        if (placed)
+          ...pairRows(
           BridgeTransformPair.position,
           l10n.transformPosition,
           [
@@ -259,7 +261,7 @@ List<TransformGroup> transformGroups({
           TransformAxis(BridgeTransformProp.poiY),
           TransformAxis(BridgeTransformProp.poiZ),
         ]),
-      ...placement(),
+      ...placement(placed: s.kind != BridgeLightKind.environment),
       TransformGroup(l10n.lightIntensity, const [
         TransformAxis(BridgeTransformProp.lightIntensity,
             suffix: '%', decimals: 0, speed: 0.5),
@@ -300,7 +302,12 @@ List<TransformGroup> transformGroups({
           TransformAxis(BridgeTransformProp.falloffDistance,
               suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
         ], section: option),
-      if (s.castsShadows && s.kind != BridgeLightKind.ambient) ...[
+      if (s.kind == BridgeLightKind.environment && s.background)
+        TransformGroup(l10n.lightBackgroundBlur, const [
+          TransformAxis(BridgeTransformProp.backgroundBlur,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+      if (s.castsShadows && lightCasts(s.kind)) ...[
         TransformGroup(l10n.lightShadowDarkness, const [
           TransformAxis(BridgeTransformProp.shadowDarkness,
               suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
@@ -311,13 +318,14 @@ List<TransformGroup> transformGroups({
         ], section: option),
       ],
       // How it shows in the air, and once it does, what the air is like. An
-      // ambient light comes from nowhere, so it has no beam to show.
-      if (s.kind != BridgeLightKind.ambient)
+      // ambient or environment light comes from nowhere, so it has no beam
+      // to show.
+      if (lightCasts(s.kind))
         TransformGroup(l10n.lightVolumetric, const [
           TransformAxis(BridgeTransformProp.hazeAmount,
               suffix: '%', min: 0, decimals: 0, speed: 0.5),
         ], section: option),
-      if (s.kind != BridgeLightKind.ambient && s.inAir) ...[
+      if (lightCasts(s.kind) && s.inAir) ...[
         TransformGroup(l10n.lightHazeDensity, const [
           TransformAxis(BridgeTransformProp.hazeDensity,
               suffix: '%', min: 0, decimals: 0, speed: 0.5),
@@ -344,7 +352,7 @@ List<TransformGroup> transformGroups({
               suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
         ], section: option),
       ],
-      if (s.kind != BridgeLightKind.ambient && s.inAir && s.noisy) ...[
+      if (lightCasts(s.kind) && s.inAir && s.noisy) ...[
         TransformGroup(l10n.lightNoiseSize, [
           TransformAxis(BridgeTransformProp.hazeNoiseSize,
               suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
@@ -433,6 +441,7 @@ List<TransformGroup> transformGroups({
         (l10n.materialSpecular, BridgeTransformProp.specular),
         (l10n.materialShininess, BridgeTransformProp.shininess),
         (l10n.materialMetal, BridgeTransformProp.metal),
+        (l10n.materialReflection, BridgeTransformProp.reflection),
       ])
         TransformGroup(label, [
           TransformAxis(prop,
@@ -1437,6 +1446,8 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
         tf.light?.hazeNoiseSize ?? _noChannel,
       BridgeTransformProp.hazeNoiseSpeed =>
         tf.light?.hazeNoiseSpeed ?? _noChannel,
+      BridgeTransformProp.backgroundBlur =>
+        tf.light?.backgroundBlur ?? _noChannel,
       BridgeTransformProp.ambient => tf.material?.ambient ?? _noChannel,
       BridgeTransformProp.diffuse => tf.material?.diffuse ?? _noChannel,
       BridgeTransformProp.specular => tf.material?.specular ?? _noChannel,
@@ -1444,6 +1455,7 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.metal => tf.material?.metal ?? _noChannel,
       BridgeTransformProp.lightTransmission =>
         tf.material?.lightTransmission ?? _noChannel,
+      BridgeTransformProp.reflection => tf.material?.reflection ?? _noChannel,
     };
 
 /// A copy of `tf` with one property replaced — what the preview renders.
@@ -1531,6 +1543,8 @@ BridgeTransform writeScalar(
                 pick(BridgeTransformProp.hazeNoiseSize, light.hazeNoiseSize),
             hazeNoiseSpeed:
                 pick(BridgeTransformProp.hazeNoiseSpeed, light.hazeNoiseSpeed),
+            backgroundBlur:
+                pick(BridgeTransformProp.backgroundBlur, light.backgroundBlur),
           ),
     material: material == null
         ? null
@@ -1542,6 +1556,7 @@ BridgeTransform writeScalar(
             metal: pick(BridgeTransformProp.metal, material.metal),
             lightTransmission: pick(BridgeTransformProp.lightTransmission,
                 material.lightTransmission),
+            reflection: pick(BridgeTransformProp.reflection, material.reflection),
           ),
     depth: depth == null
         ? null

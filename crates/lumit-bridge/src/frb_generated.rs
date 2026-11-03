@@ -29064,6 +29064,7 @@ impl SseDecode for crate::api::layer::BridgeLightChannels {
         let mut var_hazeNoise = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_hazeNoiseSize = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_hazeNoiseSpeed = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_backgroundBlur = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeLightChannels {
             poi_x: var_poiX,
             poi_y: var_poiY,
@@ -29090,6 +29091,7 @@ impl SseDecode for crate::api::layer::BridgeLightChannels {
             haze_noise: var_hazeNoise,
             haze_noise_size: var_hazeNoiseSize,
             haze_noise_speed: var_hazeNoiseSpeed,
+            background_blur: var_backgroundBlur,
         };
     }
 }
@@ -29117,6 +29119,7 @@ impl SseDecode for crate::api::layer::BridgeLightKind {
             2 => crate::api::layer::BridgeLightKind::Area,
             3 => crate::api::layer::BridgeLightKind::Parallel,
             4 => crate::api::layer::BridgeLightKind::Ambient,
+            5 => crate::api::layer::BridgeLightKind::Environment,
             _ => unreachable!("Invalid variant for BridgeLightKind: {}", inner),
         };
     }
@@ -29131,6 +29134,8 @@ impl SseDecode for crate::api::layer::BridgeLightSettings {
         let mut var_castsShadows = <bool>::sse_decode(deserializer);
         let mut var_inAir = <bool>::sse_decode(deserializer);
         let mut var_noisy = <bool>::sse_decode(deserializer);
+        let mut var_source = <Option<uuid::Uuid>>::sse_decode(deserializer);
+        let mut var_background = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeLightSettings {
             kind: var_kind,
             falloff: var_falloff,
@@ -29138,6 +29143,8 @@ impl SseDecode for crate::api::layer::BridgeLightSettings {
             casts_shadows: var_castsShadows,
             in_air: var_inAir,
             noisy: var_noisy,
+            source: var_source,
+            background: var_background,
         };
     }
 }
@@ -29296,6 +29303,7 @@ impl SseDecode for crate::api::layer::BridgeMaterialChannels {
         let mut var_metal = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_lightTransmission =
             <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_reflection = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeMaterialChannels {
             ambient: var_ambient,
             diffuse: var_diffuse,
@@ -29303,6 +29311,7 @@ impl SseDecode for crate::api::layer::BridgeMaterialChannels {
             shininess: var_shininess,
             metal: var_metal,
             light_transmission: var_lightTransmission,
+            reflection: var_reflection,
         };
     }
 }
@@ -32361,12 +32370,14 @@ impl SseDecode for crate::api::layer::BridgeTransformProp {
             42 => crate::api::layer::BridgeTransformProp::HazeNoise,
             43 => crate::api::layer::BridgeTransformProp::HazeNoiseSize,
             44 => crate::api::layer::BridgeTransformProp::HazeNoiseSpeed,
-            45 => crate::api::layer::BridgeTransformProp::Ambient,
-            46 => crate::api::layer::BridgeTransformProp::Diffuse,
-            47 => crate::api::layer::BridgeTransformProp::Specular,
-            48 => crate::api::layer::BridgeTransformProp::Shininess,
-            49 => crate::api::layer::BridgeTransformProp::Metal,
-            50 => crate::api::layer::BridgeTransformProp::LightTransmission,
+            45 => crate::api::layer::BridgeTransformProp::BackgroundBlur,
+            46 => crate::api::layer::BridgeTransformProp::Ambient,
+            47 => crate::api::layer::BridgeTransformProp::Diffuse,
+            48 => crate::api::layer::BridgeTransformProp::Specular,
+            49 => crate::api::layer::BridgeTransformProp::Shininess,
+            50 => crate::api::layer::BridgeTransformProp::Metal,
+            51 => crate::api::layer::BridgeTransformProp::LightTransmission,
+            52 => crate::api::layer::BridgeTransformProp::Reflection,
             _ => unreachable!("Invalid variant for BridgeTransformProp: {}", inner),
         };
     }
@@ -40651,6 +40662,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLightChannels {
             self.haze_noise.into_into_dart().into_dart(),
             self.haze_noise_size.into_into_dart().into_dart(),
             self.haze_noise_speed.into_into_dart().into_dart(),
+            self.background_blur.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -40697,6 +40709,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLightKind {
             Self::Area => 2.into_dart(),
             Self::Parallel => 3.into_dart(),
             Self::Ambient => 4.into_dart(),
+            Self::Environment => 5.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -40722,6 +40735,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLightSettings {
             self.casts_shadows.into_into_dart().into_dart(),
             self.in_air.into_into_dart().into_dart(),
             self.noisy.into_into_dart().into_dart(),
+            self.source.into_into_dart().into_dart(),
+            self.background.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -40926,6 +40941,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMaterialChannels
             self.shininess.into_into_dart().into_dart(),
             self.metal.into_into_dart().into_dart(),
             self.light_transmission.into_into_dart().into_dart(),
+            self.reflection.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -44729,12 +44745,14 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeTransformProp {
             Self::HazeNoise => 42.into_dart(),
             Self::HazeNoiseSize => 43.into_dart(),
             Self::HazeNoiseSpeed => 44.into_dart(),
-            Self::Ambient => 45.into_dart(),
-            Self::Diffuse => 46.into_dart(),
-            Self::Specular => 47.into_dart(),
-            Self::Shininess => 48.into_dart(),
-            Self::Metal => 49.into_dart(),
-            Self::LightTransmission => 50.into_dart(),
+            Self::BackgroundBlur => 45.into_dart(),
+            Self::Ambient => 46.into_dart(),
+            Self::Diffuse => 47.into_dart(),
+            Self::Specular => 48.into_dart(),
+            Self::Shininess => 49.into_dart(),
+            Self::Metal => 50.into_dart(),
+            Self::LightTransmission => 51.into_dart(),
+            Self::Reflection => 52.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -47864,6 +47882,7 @@ impl SseEncode for crate::api::layer::BridgeLightChannels {
         <crate::api::effect::BridgeScalar>::sse_encode(self.haze_noise, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.haze_noise_size, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.haze_noise_speed, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.background_blur, serializer);
     }
 }
 
@@ -47894,6 +47913,7 @@ impl SseEncode for crate::api::layer::BridgeLightKind {
                 crate::api::layer::BridgeLightKind::Area => 2,
                 crate::api::layer::BridgeLightKind::Parallel => 3,
                 crate::api::layer::BridgeLightKind::Ambient => 4,
+                crate::api::layer::BridgeLightKind::Environment => 5,
                 _ => {
                     unimplemented!("");
                 }
@@ -47912,6 +47932,8 @@ impl SseEncode for crate::api::layer::BridgeLightSettings {
         <bool>::sse_encode(self.casts_shadows, serializer);
         <bool>::sse_encode(self.in_air, serializer);
         <bool>::sse_encode(self.noisy, serializer);
+        <Option<uuid::Uuid>>::sse_encode(self.source, serializer);
+        <bool>::sse_encode(self.background, serializer);
     }
 }
 
@@ -48050,6 +48072,7 @@ impl SseEncode for crate::api::layer::BridgeMaterialChannels {
         <crate::api::effect::BridgeScalar>::sse_encode(self.shininess, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.metal, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.light_transmission, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.reflection, serializer);
     }
 }
 
@@ -50377,12 +50400,14 @@ impl SseEncode for crate::api::layer::BridgeTransformProp {
                 crate::api::layer::BridgeTransformProp::HazeNoise => 42,
                 crate::api::layer::BridgeTransformProp::HazeNoiseSize => 43,
                 crate::api::layer::BridgeTransformProp::HazeNoiseSpeed => 44,
-                crate::api::layer::BridgeTransformProp::Ambient => 45,
-                crate::api::layer::BridgeTransformProp::Diffuse => 46,
-                crate::api::layer::BridgeTransformProp::Specular => 47,
-                crate::api::layer::BridgeTransformProp::Shininess => 48,
-                crate::api::layer::BridgeTransformProp::Metal => 49,
-                crate::api::layer::BridgeTransformProp::LightTransmission => 50,
+                crate::api::layer::BridgeTransformProp::BackgroundBlur => 45,
+                crate::api::layer::BridgeTransformProp::Ambient => 46,
+                crate::api::layer::BridgeTransformProp::Diffuse => 47,
+                crate::api::layer::BridgeTransformProp::Specular => 48,
+                crate::api::layer::BridgeTransformProp::Shininess => 49,
+                crate::api::layer::BridgeTransformProp::Metal => 50,
+                crate::api::layer::BridgeTransformProp::LightTransmission => 51,
+                crate::api::layer::BridgeTransformProp::Reflection => 52,
                 _ => {
                     unimplemented!("");
                 }
