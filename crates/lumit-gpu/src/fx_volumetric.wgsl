@@ -1,6 +1,8 @@
 // Volumetric light (lumit_core::haze, which is the oracle and carries the
 // explanation). Compiled after the noise core and fx_lighting.wgsl, whose
-// lights, casters and `transmitted` it reads through the same uniform `p`.
+// lights, casters and `transmitted` it reads through the same uniform `p`,
+// and the models' shadow maps through `mapped`, which the oracle has no
+// models for.
 //
 // haze_march runs at half size: each texel walks its ray from the eye to the
 // scene's depth and keeps the light scattered towards the eye and how much of
@@ -115,7 +117,8 @@ fn haze_step(i: u32, jit: f32, t0: f32, dt: f32, d: vec3<f32>, dl: f32, dir: vec
         let phase = (1.0 - g * g) / pow(max(1.0 + g * g - 2.0 * g * cos_t, 1e-6), 1.5);
         var through = vec3<f32>(1.0);
         if (l.shadow.x > 0.0) {
-            through = 1.0 - l.shadow.x * (1.0 - transmitted(pos, l));
+            let past = transmitted(pos, l) * mapped(pos, vec3<f32>(0.0), l);
+            through = 1.0 - l.shadow.x * (1.0 - past);
         }
         let amount = left * k.x / 100.0 * k.y / 100.0 * SCATTER_PER_PX
             * thickness(pos, j) * strength * glow * phase;

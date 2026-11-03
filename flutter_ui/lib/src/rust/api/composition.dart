@@ -16,6 +16,7 @@ import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
 import 'layer.dart';
+import 'model.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'planes.dart';
@@ -1692,6 +1693,12 @@ class CompositionReference {
         that: this,
       );
 
+  /// Whether this comp draws a model, its own or inside a precomp.
+  bool holdsModels() =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceHoldsModels(
+        that: this,
+      );
+
   /// Insert a saved graph group at canvas point `(x, y)`: **one commit**, so
   /// one undo step however many boxes and wires it carries.
   ///
@@ -2326,22 +2333,22 @@ class CompositionReference {
           that: this, grid: grid);
 
   /// Look at this comp in Viewer view `view` through `pose` rather than its
-  /// active camera, or through the active camera again with `None`. Panel
+  /// active camera, or through the active camera again with `None`, and
+  /// show its models the `look` way. Panel
   /// state, kept per view like the look, so the frontend sends it whenever a
-  /// view's 3D view changes and that view's next render looks through it.
-  /// Export never sees a view.
+  /// view's 3D view changes. Export never sees a view.
   ///
   /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
   /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
-  /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
-  /// middle, the shape of its pane. Zero is the comp's own size.
+  /// picture `canvas` comp pixels wide and high round the comp's middle, the
+  /// shape of its pane. Zero is the comp's own size.
   void setCameraView(
           {BridgeCameraPose? pose,
           required int view,
           required bool draft,
           int? ground,
-          required int canvasWidth,
-          required int canvasHeight}) =>
+          required (int, int) canvas,
+          required BridgeModelLook look}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetCameraView(
               that: this,
@@ -2349,8 +2356,8 @@ class CompositionReference {
               view: view,
               draft: draft,
               ground: ground,
-              canvasWidth: canvasWidth,
-              canvasHeight: canvasHeight);
+              canvas: canvas,
+              look: look);
 
   void setGroupLabel({required UuidValue group, required int label}) =>
       BridgeLib.instance.api

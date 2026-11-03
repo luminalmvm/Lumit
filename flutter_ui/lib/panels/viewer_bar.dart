@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:provider/provider.dart';
 
@@ -19,7 +20,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/settings.dart' show LoopMode;
 import '../state/timecode.dart';
-import '../state/viewer_view.dart' show ViewerView;
+import '../state/viewer_view.dart' show ModelDisplayRow, ViewerView;
 import '../state/workspace.dart' show ViewerLook;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -835,6 +836,18 @@ class _ViewPicker extends StatelessWidget {
     // from the state rather than from its own rebuild.
     final ui = context.watch<LumitUiState>();
     final view = ui.viewOf(viewId);
+    final display = ui.displayOf(viewId);
+    final faces = ui.facesShown(viewId);
+    Widget rule() => Container(
+        height: 1,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        color: t.hairline);
+    Widget row(String key, bool on, String text, VoidCallback pick) =>
+        MenuRow(
+          key: ValueKey<String>(key),
+          onPressed: pick,
+          child: Row(children: [menuTick(on), Text(text)]),
+        );
     return LumitTooltip(
       message: l10n.tipViewerView,
       child: Builder(
@@ -845,6 +858,8 @@ class _ViewPicker extends StatelessWidget {
           onPressed: () {
             final box = context.findRenderObject();
             if (box is! RenderBox) return;
+            // Asked as the menu opens, never on a rebuild.
+            final models = ui.holdsModels(viewId);
             showMenuAt<void>(
               context: context,
               position: box.localToGlobal(Offset(0, box.size.height + 2)),
@@ -861,10 +876,22 @@ class _ViewPicker extends StatelessWidget {
                       Text(v.title),
                     ]),
                   ),
-                Container(
-                    height: 1,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: t.hairline),
+                // How models show, only where there are any to show.
+                if (models) ...[
+                  rule(),
+                  for (final d in BridgeModelDisplay.values)
+                    row('viewer-display-${d.name}', d == display, d.title, () {
+                      close(null);
+                      ui.setModelDisplay(viewId, display: d);
+                    }),
+                  rule(),
+                  row('viewer-display-faces', faces, l10n.viewerDisplayFaces,
+                      () {
+                    close(null);
+                    ui.setModelDisplay(viewId, faces: !faces);
+                  }),
+                ],
+                rule(),
                 MenuRow(
                   key: const ValueKey('viewer-view-viewport'),
                   onPressed: () {

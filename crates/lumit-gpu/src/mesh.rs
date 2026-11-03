@@ -8,16 +8,21 @@
 //! it.
 
 use crate::composite::scaled_size;
-use crate::fx::lighting::{gpu_light, GpuLight, LightingLight, LightingMaterial, MAX_LIT_LIGHTS};
+use crate::fx::lighting::{
+    gpu_light, GpuLight, LightingFx, LightingLight, LightingMaterial, LightingShadows,
+    ShadowCasters, MAX_LIT_LIGHTS,
+};
 use crate::fx::FxEngine;
 use crate::GpuContext;
 use glam::{Mat3, Mat4, Vec3};
 use lumit_scene::ModelScene;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use wgpu::util::DeviceExt;
 
 mod blur;
+pub mod display;
+pub mod shadow;
 mod upload;
 
 /// What the picture is made in: linear, premultiplied, the compositor's own
@@ -26,6 +31,8 @@ const COLOUR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// The depth the compositor reads: one over clip w, nought where empty.
 const INV_W: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
+/// The pipeline set that draws edges as lines.
+const WIRE: usize = 6;
 
 /// Why a model can't be drawn.
 #[derive(Debug, thiserror::Error)]
@@ -60,6 +67,14 @@ pub struct ModelView<'a> {
     pub material: LightingMaterial,
     /// Each copy of the model. Empty draws it once where it is.
     pub instances: &'a [ModelCopy],
+    /// The shadows it takes, as `material.accepts_shadows` says: the 3D
+    /// layers' casters and the models' maps. Only the look it exports with
+    /// reads them.
+    pub casters: Option<&'a ShadowCasters>,
+    pub maps: Option<&'a shadow::ShadowMaps>,
+    /// How the view shows it, which is the look it exports with everywhere
+    /// but a Viewer that asks otherwise.
+    pub display: display::ModelDisplay,
 }
 
 /// One copy of a model: where it goes after `model_to_comp`, in comp pixels,
@@ -72,11 +87,13 @@ pub struct ModelCopy {
 }
 
 /// A model's picture at render size, and its depth as one over clip w at
-/// each pixel, nought where it shows nothing.
+/// each pixel, nought where it shows nothing. A holdout shows what is under
+/// its run where it is, with its picture over that.
 #[derive(Clone)]
 pub struct ModelPicture {
     pub colour: wgpu::Texture,
     pub depth: wgpu::Texture,
+    pub holdout: bool,
 }
 
 #[repr(C)]
@@ -96,6 +113,7 @@ struct FrameUniform {
     clip: [[f32; 4]; 4],
     eye: [f32; 4],
     flags: [f32; 4],
+    wire: [f32; 4],
     lights: [GpuLight; MAX_LIT_LIGHTS],
 }
 
@@ -135,6 +153,8 @@ pub(crate) struct GpuModel {
     /// Each material's bind group, whether it blends and whether it is
     /// double-sided. The last is glTF's default, for parts with none.
     materials: Vec<(wgpu::BindGroup, bool, bool)>,
+    /// Its edges as lines, made the first time a view draws them.
+    edges: OnceLock<(wgpu::Buffer, lumit_budget::Reservation)>,
     _held: lumit_budget::Reservation,
 }
 
@@ -144,7 +164,10 @@ pub(crate) struct MeshFx {
     shader: wgpu::ShaderModule,
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
+    shadows_layout: wgpu::BindGroupLayout,
     layout: wgpu::PipelineLayout,
+    /// Draws a shadow map's view ([`shadow`]), made when first asked for.
+    shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
     depth_one: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     depth_many: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     /// A picture's next level down from the one above, plain and sRGB.
@@ -154,8 +177,9 @@ pub(crate) struct MeshFx {
         wgpu::Sampler,
     ),
     /// By sample count and kind: opaque and blended, each culled and
-    /// double-sided, then depth alone, culled and double-sided. Each is made
-    /// the first time a draw needs it, as making one takes a while.
+    /// double-sided, then depth alone, culled and double-sided, then lines
+    /// ([`WIRE`]). Each is made the first time a draw needs it, as making one
+    /// takes a while.
     sets: Mutex<HashMap<(u32, usize), Arc<wgpu::RenderPipeline>>>,
     /// Adds a shutter sample's picture to the rest ([`blur`]).
     add: wgpu::RenderPipeline,
@@ -211,9 +235,9 @@ impl MeshFx {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("mesh"),
             source: wgpu::ShaderSource::Wgsl(
-                format!(
-                    "{}{}",
+                concat!(
                     include_str!("light_core.wgsl"),
+                    include_str!("shadow_core.wgsl"),
                     include_str!("mesh.wgsl")
                 )
                 .into(),
@@ -253,6 +277,7 @@ impl MeshFx {
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
         entries.extend((6..=10).map(sampler));
         let material_layout = layout("mesh-material", &entries);
+        let shadows_layout = layout("mesh-shadows", &shadow::layout());
         let pipeline_layout = |label, layouts: &[&wgpu::BindGroupLayout]| {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(label),
@@ -352,10 +377,12 @@ impl MeshFx {
             &[255; 4],
         );
         Self {
-            layout: pipeline_layout("mesh", &[&frame_layout, &material_layout]),
+            layout: pipeline_layout("mesh", &[&frame_layout, &material_layout, &shadows_layout]),
             shader,
             frame_layout,
             material_layout,
+            shadows_layout,
+            shadow: std::sync::OnceLock::new(),
             depth_one,
             depth_many,
             down,
@@ -427,6 +454,14 @@ impl MeshFx {
         set: usize,
     ) -> Arc<wgpu::RenderPipeline> {
         let build = || {
+            if set == WIRE {
+                return Arc::new(display::wire_pipeline(
+                    device,
+                    &self.shader,
+                    &self.layout,
+                    samples,
+                ));
+            }
             let attributes = wgpu::vertex_attr_array![
                 0 => Float32x3, 1 => Float32x3, 2 => Float32x4,
                 3 => Float32x2, 4 => Float32x2, 5 => Float32x4,
@@ -533,7 +568,13 @@ impl MeshFx {
         Ok(model)
     }
 
-    fn draw(&self, ctx: &GpuContext, model: &GpuModel, view: &ModelView<'_>) -> ModelPicture {
+    fn draw(
+        &self,
+        ctx: &GpuContext,
+        lighting: &LightingFx,
+        model: &GpuModel,
+        view: &ModelView<'_>,
+    ) -> ModelPicture {
         let (w, h) = view.comp;
         let (tw, th) = scaled_size(w, h, view.render_scale);
         let samples = ctx.cut_sample_count(view.samples).max(1);
@@ -601,11 +642,14 @@ impl MeshFx {
             ))
             * view.camera;
         let m = &view.material;
+        let takes = m.accepts_shadows != LightingShadows::Off && view.display.takes_shadows();
+        let (casters, maps) = (view.casters.filter(|_| takes), view.maps.filter(|_| takes));
         let mut lights = [GpuLight::default(); MAX_LIT_LIGHTS];
         for (slot, l) in lights.iter_mut().zip(view.lights) {
-            *slot = gpu_light(l, 0);
+            *slot = gpu_light(l, 0xffff, maps);
         }
         let live = view.lights.len().min(MAX_LIT_LIGHTS);
+        let (shade, faces) = view.display.flags();
         let frame = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -613,7 +657,13 @@ impl MeshFx {
                 contents: bytemuck::bytes_of(&FrameUniform {
                     clip: clip.to_cols_array_2d(),
                     eye: [m.eye[0], m.eye[1], m.eye[2], live as f32],
-                    flags: [f32::from(u8::from(m.unlit)), 0.0, 0.0, 0.0],
+                    flags: [
+                        f32::from(u8::from(m.unlit)),
+                        shade,
+                        faces,
+                        f32::from(if takes { m.accepts_shadows as u8 } else { 0 }),
+                    ],
+                    wire: view.display.wire(),
                     lights,
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
@@ -680,7 +730,9 @@ impl MeshFx {
                 let (blend, double) = look(p);
                 // ponytail: a mirrored part is drawn from both sides rather than
                 // with its winding turned round.
-                let set = usize::from(blend) * 2 + usize::from(double || mirrored);
+                // Tinted faces show their backs too.
+                let both = double || mirrored || view.display.faces;
+                let set = usize::from(blend) * 2 + usize::from(both);
                 these.push((p, offset as u32, set));
             }
             draws.push(these);
@@ -729,6 +781,7 @@ impl MeshFx {
                 },
             ],
         });
+        let shadows_group = self.shadows_group(ctx, lighting, casters, maps);
         let view_of = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (colour_view, z_view, depth_view) = (view_of(&colour), view_of(z), view_of(&depth));
         let msaa_view = msaa.as_ref().map(view_of);
@@ -737,7 +790,12 @@ impl MeshFx {
         let blurred = draws.len() > 1;
         // Depth alone never blends, and is culled as the part is.
         let depth_set = |set: usize| 4 + set % 2;
-        let mut pipelines: [Option<Arc<wgpu::RenderPipeline>>; 6] = Default::default();
+        let mut pipelines: [Option<Arc<wgpu::RenderPipeline>>; 7] = Default::default();
+        let edges = model.edges.get();
+        let edges = edges.filter(|_| view.display.draws_wires());
+        if edges.is_some() {
+            pipelines[WIRE] = Some(self.pipeline(&ctx.device, samples, WIRE));
+        }
         for &(_, _, set) in draws.iter().flatten() {
             let wanted = std::iter::once(set).chain(blurred.then(|| depth_set(set)));
             for set in wanted {
@@ -775,7 +833,7 @@ impl MeshFx {
                           depth: bool| {
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
-            for &(p, offset, set) in these {
+            for &(p, offset, set) in these.iter().filter(|_| view.display.draws_faces()) {
                 let Some((group, _, _)) = model.materials.get(p.material) else {
                     continue;
                 };
@@ -785,8 +843,28 @@ impl MeshFx {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
+                pass.set_bind_group(2, &shadows_group, &[]);
                 pass.draw_indexed(
                     p.first..p.first + p.count,
+                    p.base_vertex,
+                    0..places.len() as u32,
+                );
+            }
+            // Each triangle's edges, two indices for each of its corners.
+            let (Some((lines, _)), Some(wire), false) = (edges, &pipelines[WIRE], depth) else {
+                return;
+            };
+            pass.set_index_buffer(lines.slice(..), wgpu::IndexFormat::Uint32);
+            pass.set_pipeline(wire);
+            for &(p, offset, _) in these {
+                let Some((group, _, _)) = model.materials.get(p.material) else {
+                    continue;
+                };
+                pass.set_bind_group(0, &frame_group, &[offset]);
+                pass.set_bind_group(1, group, &[]);
+                pass.set_bind_group(2, &shadows_group, &[]);
+                pass.draw_indexed(
+                    p.first * 2..(p.first + p.count) * 2,
                     p.base_vertex,
                     0..places.len() as u32,
                 );
@@ -844,7 +922,11 @@ impl MeshFx {
                 *k = Some(scratch);
             }
         }
-        ModelPicture { colour, depth }
+        ModelPicture {
+            colour,
+            depth,
+            holdout: false,
+        }
     }
 }
 
@@ -878,6 +960,11 @@ impl FxEngine {
     ) -> Result<ModelPicture, MeshError> {
         let fx = self.mesh.get_or_init(|| MeshFx::new(ctx));
         let model = fx.model_for(ctx, scene)?;
-        Ok(fx.draw(ctx, &model, view))
+        if view.display.draws_wires() && model.edges.get().is_none() {
+            if let Some(edges) = display::edges(ctx, scene) {
+                let _ = model.edges.set(edges);
+            }
+        }
+        Ok(fx.draw(ctx, &self.lighting, &model, view))
     }
 }

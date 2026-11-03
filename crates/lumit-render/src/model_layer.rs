@@ -8,21 +8,33 @@ use crate::model::ModelDraw;
 use crate::realise::Realiser;
 use glam::{Mat4, Vec3};
 use lumit_gpu::composite::{order::cut_by_depth, Cut};
+use lumit_gpu::fx::lighting::{LightingShadows, ShadowCasters};
+use lumit_gpu::mesh::shadow::{MapCaster, ShadowMaps};
 use lumit_gpu::mesh::{ModelPicture, ModelView};
 
 impl Realiser<'_> {
     /// Model draw `m` seen through the comp's camera, or the default one when
     /// it has none, and lit by `l`'s lights as `l`'s Material options take
-    /// them, at this render's scale and anti-aliasing. `None` when the card
-    /// can't hold the model, which leaves it out of the frame rather than
-    /// failing it.
+    /// them, with the 3D layers' and models' shadows, at this render's scale
+    /// and anti-aliasing. `None` when the card can't hold the model, which
+    /// leaves it out of the frame rather than failing it, or when it is only
+    /// there to cast. A holdout draws only the shadows it takes, if any, to
+    /// lay over what is under its run.
     pub fn model_picture(
         &self,
         l: &CompLayerDraw,
         m: &ModelDraw,
         camera: Option<lumit_core::model::CameraPose>,
         (width, height): (u32, u32),
+        (casters, maps): (Option<&ShadowCasters>, Option<&ShadowMaps>),
     ) -> Option<ModelPicture> {
+        // Only there to cast, unless it is a holdout, which is never seen, or
+        // a view is showing the models themselves.
+        let display = crate::model::display();
+        let only = l.material.casts_shadows == LightingShadows::Only;
+        if only && !m.holdout && display.takes_shadows() {
+            return None;
+        }
         let pose = camera.unwrap_or_else(|| {
             lumit_core::camera::default_pose(f64::from(width), f64::from(height))
         });
@@ -32,6 +44,7 @@ impl Realiser<'_> {
             .iter()
             .map(|p| Mat4::from_cols_array_2d(p) * Mat4::from_cols_array_2d(&m.model_to_comp))
             .collect();
+        let takes = !m.holdout || l.material.accepts_shadows != LightingShadows::Off;
         let view = ModelView {
             comp: (width, height),
             render_scale: self.render_scale,
@@ -40,10 +53,70 @@ impl Realiser<'_> {
             model_to_comp: to_comp(m),
             shutter: &shutter,
             lights: &l.lights,
-            material: lumit_gpu::fx::lighting::LightingMaterial { eye, ..l.material },
+            material: lumit_gpu::fx::lighting::LightingMaterial {
+                eye,
+                accepts_shadows: match m.holdout {
+                    true => LightingShadows::Only,
+                    false => l.material.accepts_shadows,
+                },
+                ..l.material
+            },
             instances: &[],
+            casters: casters.filter(|_| takes),
+            // ponytail: a holdout takes no model's shadow, as the maps hold its
+            // own and the footage has those already. A map without it if a
+            // model's shadow on a stand-in is missed.
+            maps: maps.filter(|_| takes && !m.holdout),
+            display,
         };
-        self.fx.model(&self.ctx, &m.scene, &view).ok()
+        let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
+        Some(ModelPicture {
+            holdout: m.holds_out(),
+            ..picture
+        })
+    }
+
+    /// The shadow maps of the models in `layers` that cast, for the lights
+    /// that cast on what takes shadows or show in `haze`. `None`, and nothing
+    /// made, when no model casts or a view shows models without shadows.
+    ///
+    /// ponytail: made again every frame. Keep them while the models and
+    /// lights hold still if they show in a profile.
+    pub(crate) fn shadow_maps(
+        &self,
+        layers: &[CompLayerDraw],
+        haze: Option<&crate::haze::HazeLights>,
+    ) -> Option<ShadowMaps> {
+        if !crate::model::display().takes_shadows() {
+            return None;
+        }
+        // ponytail: a faded model casts its whole shadow, as a depth can't
+        // carry how see-through it is. Fade it into the maps if it's missed.
+        let casters: Vec<MapCaster> = layers
+            .iter()
+            .filter(|l| l.material.casts_shadows != LightingShadows::Off && l.opacity > 0.0)
+            .filter_map(|l| match &l.source {
+                DrawSource::Model(m) => Some(MapCaster {
+                    scene: &m.scene,
+                    model_to_comp: to_comp(m),
+                }),
+                _ => None,
+            })
+            .collect();
+        if casters.is_empty() {
+            return None;
+        }
+        let lights: Vec<_> = layers
+            .iter()
+            .filter(|l| l.material.accepts_shadows != LightingShadows::Off)
+            .flat_map(|l| l.lights.iter().copied())
+            .chain(haze.into_iter().flatten().map(|(l, _)| *l))
+            .collect();
+        // About a texel a pixel at 1080p, fewer at a smaller preview.
+        let side = ((2048.0 * self.render_scale) as u32)
+            .next_power_of_two()
+            .clamp(512, 2048);
+        self.fx.shadow_maps(&self.ctx, &casters, &lights, side)
     }
 }
 
@@ -65,17 +138,17 @@ pub(crate) fn middle(l: &CompLayerDraw) -> Option<Vec3> {
 }
 
 /// Each model's picture after its effects, with the depth the mesh pass
-/// drew beside it. `depths` names each model by its place in `pictures`. An
-/// effect that grew the picture is cropped back to the frame, so each pixel
-/// still lines up with its depth.
+/// drew beside it. `depths` names each model by its place in `pictures`,
+/// and whether it is a holdout. An effect that grew the picture is cropped
+/// back to the frame, so each pixel still lines up with its depth.
 pub(crate) fn joined(
     ctx: &lumit_gpu::GpuContext,
     pictures: &mut [wgpu::Texture],
-    depths: Vec<(usize, wgpu::Texture)>,
+    depths: Vec<(usize, wgpu::Texture, bool)>,
 ) -> Vec<ModelPicture> {
     depths
         .into_iter()
-        .filter_map(|(i, depth)| {
+        .filter_map(|(i, depth, holdout)| {
             let colour = pictures.get_mut(i)?;
             if (colour.width(), colour.height()) != (depth.width(), depth.height()) {
                 *colour =
@@ -84,6 +157,7 @@ pub(crate) fn joined(
             Some(ModelPicture {
                 colour: colour.clone(),
                 depth,
+                holdout,
             })
         })
         .collect()

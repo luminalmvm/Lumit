@@ -5,8 +5,9 @@
 //! The maths lives in `lumit_core::haze`, the oracle this kernel is compared
 //! against.
 
-use super::lighting::{air_params, LightingLight, ShadowCasters};
+use super::lighting::{air_params, map_layout, LightingLight, ShadowCasters};
 use super::{work_texture, FxEngine};
+use crate::mesh::shadow::ShadowMaps;
 use crate::GpuContext;
 
 /// How many steps a ray takes, as the oracle's `STEPS`.
@@ -136,19 +137,21 @@ impl HazeFx {
             },
         );
         use wgpu::TextureViewDimension as D;
+        let mut entries = vec![
+            tex(1, false, D::D2),
+            store,
+            uniform(3),
+            tex(4, true, D::D2Array),
+            entry(
+                5,
+                wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            ),
+            uniform(6),
+        ];
+        entries.extend(map_layout(8, wgpu::ShaderStages::COMPUTE));
         let march_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-haze-march-layout"),
-            entries: &[
-                tex(1, false, D::D2),
-                store,
-                uniform(3),
-                tex(4, true, D::D2Array),
-                entry(
-                    5,
-                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                ),
-                uniform(6),
-            ],
+            entries: &entries,
         });
         let apply_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-haze-apply-layout"),
@@ -166,6 +169,7 @@ impl HazeFx {
                 concat!(
                     include_str!("../fx_noise_core.wgsl"),
                     include_str!("../light_core.wgsl"),
+                    include_str!("../shadow_core.wgsl"),
                     include_str!("../fx_lighting.wgsl"),
                     include_str!("../fx_volumetric.wgsl")
                 )
@@ -229,13 +233,14 @@ impl FxEngine {
     /// The light the haze scatters towards the eye and how much of what is
     /// behind is left, at half the size of `depth` (the scene's clip w less
     /// [`HazeOp::near`], as [`crate::Compositor::composite_depth`] makes it).
-    /// `casters` cut the lights that cast shadows.
+    /// `casters` and the models' `maps` cut the lights that cast shadows.
     pub fn haze_scatter(
         &self,
         ctx: &GpuContext,
         depth: &wgpu::Texture,
         op: &HazeOp,
         casters: Option<&ShadowCasters>,
+        maps: Option<&ShadowMaps>,
     ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
         let fx = self.haze.get(ctx);
@@ -246,7 +251,7 @@ impl FxEngine {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("fx-haze-lights"),
-                contents: &air_params(&lights, casters),
+                contents: &air_params(&lights, casters, maps),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
         let hbuf = Self::haze_uniform(ctx, op);
@@ -259,35 +264,38 @@ impl FxEngine {
             depth.create_view(&Default::default()),
             out.create_view(&Default::default()),
         );
+        let v_maps = self.lighting.map_view(maps);
+        let mut entries = vec![
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&v_depth),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(&v_out),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: pbuf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(&v_array),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::Sampler(&self.lighting.sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: hbuf.as_entire_binding(),
+            },
+        ];
+        entries.extend(self.lighting.map_entries(8, &v_maps, maps));
         let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-haze-march"),
             layout: &fx.march_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&v_depth),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&v_out),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: pbuf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&v_array),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&self.lighting.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: hbuf.as_entire_binding(),
-                },
-            ],
+            entries: &entries,
         });
         let mut enc = ctx.encoder("fx-haze-march");
         {
@@ -313,8 +321,9 @@ impl FxEngine {
         depth: &wgpu::Texture,
         op: &HazeOp,
         casters: Option<&ShadowCasters>,
+        maps: Option<&ShadowMaps>,
     ) -> wgpu::Texture {
-        let scatter = self.haze_scatter(ctx, depth, op, casters);
+        let scatter = self.haze_scatter(ctx, depth, op, casters, maps);
         let fx = self.haze.get(ctx);
         let (w, h) = (frame.width(), frame.height());
         let out = work_texture(ctx, w, h, "fx-haze-out");
@@ -483,7 +492,13 @@ mod tests {
         }];
         let (hw, hh) = (w / 2, h / 2);
         let run = |cut: bool| {
-            let s = fx.haze_scatter(&ctx, &depth, &op, if cut { squares.as_ref() } else { None });
+            let s = fx.haze_scatter(
+                &ctx,
+                &depth,
+                &op,
+                cut.then_some(squares.as_ref()).flatten(),
+                None,
+            );
             readback_linear_f32(&ctx, &s, hw, hh).unwrap()
         };
         let (open, shut) = (run(false), run(true));

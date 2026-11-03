@@ -100,7 +100,7 @@ pub struct FxEngine {
     /// The lighting pass (docs/06). Not an effect — the realiser calls
     /// it directly, between a layer's effect stack and its composite. Its own
     /// layout, for the shadow casters it reads.
-    lighting: lighting::LightingFx,
+    pub(crate) lighting: lighting::LightingFx,
     /// Volumetric light, waited for the first time a comp shows a light in
     /// the air.
     haze: volumetric::HazeSlot,

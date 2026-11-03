@@ -46,6 +46,8 @@ import 'package:lumit_flutter/src/rust/api/footage.dart'
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart'
+    show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
@@ -1258,7 +1260,7 @@ class LumitUiState extends ChangeNotifier {
       return;
     }
     // Drawn as lines only: nothing to ask the engine for.
-    if (viewport && view.wireframeOnly) return;
+    if (linesOnly(view.engineId)) return;
     // One picture in flight at a time beside the view being worked in.
     final beside = view.id != views.activeId && _followsPlayhead(view);
     if (beside) {
@@ -1270,10 +1272,12 @@ class LumitUiState extends ChangeNotifier {
       }
     }
     final frame = frameFor(view);
-    // A viewport draws at its own tier, every other view at the comp's.
-    final scale = viewport
-        ? view.resolution.scaleFor(_panelScale) * view.canvasShare
-        : _compResolution.scaleFor(_panelScale);
+    // A viewport draws at its own tier, every other view at the comp's, and
+    // half that while a slow one is being moved.
+    final scale = (viewport
+            ? view.resolution.scaleFor(_panelScale) * view.canvasShare
+            : _compResolution.scaleFor(_panelScale)) *
+        (_drafting(view) ? 0.5 : 1);
     final stamp = '${comp.internalid}/$frame/$scale/${model.heldRevision}/'
         '${view.look.stops}/${view.look.toneMap}/${view.region}/'
         '${view.colourView}/$viewerPrefixStamp';
@@ -1298,6 +1302,9 @@ class LumitUiState extends ChangeNotifier {
         active: view.id == views.activeId,
       );
       if (beside) _viewportAsked[view.engineId] = DateTime.now();
+      if (cameraDragging || cameraFlying) {
+        _askedAt[view.engineId] = DateTime.now();
+      }
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
       // move or edit asks again; there is nothing to recover here.
@@ -1784,6 +1791,8 @@ class LumitUiState extends ChangeNotifier {
       _pushedCamera.remove(engineId);
       _viewportAsked.remove(engineId);
       _viewportWaiting.remove(engineId);
+      _askedAt.remove(engineId);
+      _pictureTook.remove(engineId);
       viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
@@ -2797,6 +2806,10 @@ class LumitUiState extends ChangeNotifier {
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when field0.done) {
         _viewportLanded(field0.view);
+        final asked = _askedAt.remove(field0.view);
+        if (asked != null) {
+          _pictureTook[field0.view] = DateTime.now().difference(asked);
+        }
       }
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when !field0.done) {
@@ -4136,13 +4149,66 @@ class LumitUiState extends ChangeNotifier {
 
   /// Whether a camera tool's drag is running, which holds the 3D view still
   /// until it ends.
-  bool cameraDragging = false;
+  bool get cameraDragging => _cameraDragging;
+  set cameraDragging(bool on) {
+    _cameraDragging = on;
+    _moved();
+  }
+
+  bool _cameraDragging = false;
 
   /// Whether a 3D viewport is flying, which keeps the keys from everything
   /// else until it lands, and whether the right button is down in one, which
   /// keeps the fly keys for it.
-  bool cameraFlying = false;
+  bool get cameraFlying => _cameraFlying;
+  set cameraFlying(bool on) {
+    _cameraFlying = on;
+    _moved();
+  }
+
+  bool _cameraFlying = false;
   bool flyKeysArmed = false;
+
+  /// The view drawn at half its scale while it moves, because a picture
+  /// asked during this move came slower than [_slowPicture], and how long
+  /// each picture asked during the move took from the ask to the engine
+  /// finishing it. The Viewer draws a draft smooth at any zoom.
+  final ValueNotifier<int?> draftView = ValueNotifier(null);
+  final Map<int, DateTime> _askedAt = {};
+  final Map<int, Duration> _pictureTook = {};
+  static const _slowPicture = Duration(milliseconds: 50);
+
+  /// A drag or a flight started or ended. Each move is timed afresh, and
+  /// ending one puts a view drawn as a draft back to its full scale.
+  void _moved() {
+    final draft = draftView.value;
+    if (cameraDragging || cameraFlying) {
+      if (draft == null) _pictureTook.clear();
+      return;
+    }
+    _askedAt.clear();
+    if (draft == null) return;
+    draftView.value = null;
+    _askedFor.remove(draft);
+    requestFrame();
+  }
+
+  /// Whether [view] is drawn as a draft: it is being moved, and a picture
+  /// of this move was slow. Never lines, which halved go thick and soft.
+  bool _drafting(ViewerSurface view) {
+    if (!(cameraDragging || cameraFlying) || view.id != views.activeId) {
+      return false;
+    }
+    final lines = switch (displayOf(view.engineId)) {
+      BridgeModelDisplay.wireframe || BridgeModelDisplay.shadedWire => true,
+      _ => false,
+    };
+    final took = _pictureTook[view.engineId] ?? Duration.zero;
+    if (draftView.value == null && !lines && took > _slowPicture) {
+      draftView.value = view.engineId;
+    }
+    return draftView.value == view.engineId;
+  }
 
   /// The 3D views view [viewId] can be switched to: a 3D viewport's free
   /// view only in a viewport.
@@ -4175,18 +4241,88 @@ class LumitUiState extends ChangeNotifier {
 
   final Map<int, ((int, int), double)> _canvasDue = {};
 
-  /// Whether view [viewId], a 3D viewport, is drawn as lines only.
-  bool viewportWireframe(int viewId) =>
-      _surfaceOf(viewId)?.wireframeOnly ?? false;
+  /// How view [viewId] shows models: its own pick, else shaded in a fixed or
+  /// custom view and as they export through the comp's own camera.
+  BridgeModelDisplay displayOf(int viewId) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return BridgeModelDisplay.final_;
+    return _displayIn(view, viewPoseOf(viewId));
+  }
 
-  /// Draw view [viewId], a 3D viewport, as lines only, or as the picture.
-  void setViewportWireframe(int viewId, bool on) {
+  BridgeModelDisplay _displayIn(ViewerSurface view, BridgeCameraPose? pose) =>
+      pose == null
+          ? view.cameraDisplay ?? BridgeModelDisplay.final_
+          : view.viewDisplay ?? BridgeModelDisplay.shaded;
+
+  /// Whether view [viewId] tints models' faces by which way they face.
+  bool facesShown(int viewId) => _surfaceOf(viewId)?.faces ?? false;
+
+  /// Show models in view [viewId] the [display] way, kept for the kind of
+  /// view it is looking through, and tint their faces or not.
+  void setModelDisplay(int viewId, {BridgeModelDisplay? display, bool? faces}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
-    if (view == null || comp == null || view.wireframeOnly == on) return;
-    view.wireframeOnly = on;
+    if (view == null || comp == null) return;
+    if (display != null && viewPoseOf(viewId) == null) {
+      view.cameraDisplay = display;
+    } else if (display != null) {
+      view.viewDisplay = display;
+    }
+    view.faces = faces ?? view.faces;
     rememberSession();
     _cameraMoved(view, comp);
+  }
+
+  /// The cube's Lines only: Wireframe, and back to the look before.
+  void toggleLines(int viewId) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return;
+    final now = displayOf(viewId);
+    if (now == BridgeModelDisplay.wireframe) {
+      setModelDisplay(viewId,
+          display: view.beforeLines ?? BridgeModelDisplay.shaded);
+    } else {
+      view.beforeLines = now;
+      setModelDisplay(viewId, display: BridgeModelDisplay.wireframe);
+    }
+  }
+
+  /// Whether view [viewId]'s comp draws a model, its own or inside a
+  /// precomp. Asked of the engine once per comp and document revision.
+  bool holdsModels(int viewId) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    return comp != null && _holdsModels(comp);
+  }
+
+  bool _holdsModels(CompositionReference comp) {
+    final id = comp.internalid.toString();
+    final revision = model.heldRevision;
+    final was = _modelsIn[id];
+    if (was != null && was.$1 == revision) return was.$2;
+    var holds = true;
+    try {
+      holds = comp.holdsModels();
+    } catch (_) {
+      // No worker yet. Taken as holding one, which only asks the engine.
+    }
+    _modelsIn[id] = (revision, holds);
+    return holds;
+  }
+
+  /// What [_holdsModels] last said for each comp, by id.
+  final Map<String, (int?, bool)> _modelsIn = {};
+
+  /// Whether view [viewId] is a fixed or custom view drawn as lines only with
+  /// no model in its comp, which leaves the engine nothing to draw: the
+  /// layers are all outlined over the picture. Read from what the engine last
+  /// said, so a build never asks it.
+  bool linesOnly(int viewId) {
+    final view = _surfaceOf(viewId);
+    return view != null &&
+        viewPoseOf(viewId) != null &&
+        displayOf(viewId) == BridgeModelDisplay.wireframe &&
+        _modelsIn[view.compId]?.$2 == false;
   }
 
   /// A 3D viewport's view ended a drag or a flight: the Viewer's own menu
@@ -4447,7 +4583,8 @@ class LumitUiState extends ChangeNotifier {
 
   /// What each view was last told it looks through, by engine id. A worker is
   /// born knowing no view, which reads here as null.
-  final Map<int, (String, BridgeCameraPose?, int?, (int, int))?>
+  final Map<int,
+          (String, BridgeCameraPose?, int?, (int, int), BridgeModelLook)?>
       _pushedCamera = {};
 
   /// Tell the engine which pose [view] draws [comp] through, when that has
@@ -4462,8 +4599,17 @@ class LumitUiState extends ChangeNotifier {
         ? theme.textMuted.toARGB32()
         : null;
     final canvas = viewport ? view.canvas : (0, 0);
-    final target =
-        pose == null && !viewport ? null : (id, pose, ground, canvas);
+    // A comp with no model keeps the names its frames have always had.
+    final models = _holdsModels(comp);
+    final look = BridgeModelLook(
+      display: models ? _displayIn(view, pose) : BridgeModelDisplay.final_,
+      faces: models && view.faces,
+    );
+    final plain = pose == null &&
+        !viewport &&
+        look.display == BridgeModelDisplay.final_ &&
+        !look.faces;
+    final target = plain ? null : (id, pose, ground, canvas, look);
     if (_pushedCamera[view.engineId] == target) return;
     try {
       comp.setCameraView(
@@ -4471,8 +4617,8 @@ class LumitUiState extends ChangeNotifier {
         view: view.engineId,
         draft: viewport,
         ground: ground,
-        canvasWidth: canvas.$1,
-        canvasHeight: canvas.$2,
+        canvas: canvas,
+        look: look,
       );
     } catch (_) {
       // No worker yet, or a comp that has gone.

@@ -2339,10 +2339,7 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            let m = &mut l.transform.material;
-            let previous = m.settings();
-            m.casts_shadows = settings.casts_shadows;
-            m.accepts_shadows = settings.accepts_shadows;
+            let previous = l.transform.material.set_settings(*settings);
             Ok(Op::SetMaterialSettings {
                 comp: *comp,
                 layer: *layer,

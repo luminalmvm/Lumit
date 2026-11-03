@@ -364,7 +364,9 @@ impl NestedKeyer for NestedKeys<'_> {
         if self.quality.draft {
             return None;
         }
+        // Named the way this thread shows models, as the frame around it is.
         frame_key_at(self.doc, nested, lt, self.quality, self.probes)
+            .map(crate::model::named_as_shown)
     }
 
     fn nested_key_with(
