@@ -6,8 +6,42 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `engine`, `snapshot`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// How a Viewer view shows its models: lit as they export, in a studio
+/// light of the view's own, as lines, both, or as the way they face.
+enum BridgeModelDisplay {
+  final_,
+  shaded,
+  wireframe,
+  shadedWire,
+  normals,
+  ;
+}
+
+/// How a Viewer view shows its models, and whether it tints their faces by
+/// which way they face.
+class BridgeModelLook {
+  final BridgeModelDisplay display;
+  final bool faces;
+
+  const BridgeModelLook({
+    required this.display,
+    required this.faces,
+  });
+
+  @override
+  int get hashCode => display.hashCode ^ faces.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeModelLook &&
+          runtimeType == other.runtimeType &&
+          display == other.display &&
+          faces == other.faces;
+}
 
 /// How a 3D model sits in its Model layer, so its Scale stays at 100%.
 class BridgeModelSettings {

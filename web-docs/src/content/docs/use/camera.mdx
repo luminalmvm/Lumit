@@ -87,6 +87,12 @@ The drawing, painting, Roto, Puppet and Zoom tools keep `Alt` for themselves.
 `Ctrl` is `Cmd` on macOS, where `F10` to `F12` need `Fn` and `F11` shows the desktop unless
 that is turned off.
 
+In a composition with a Model layer, the Viewer bar's 3D view menu also sets how each view
+shows models: **Final**, lit by the composition's lights, **Shaded**, in a studio light of
+the view's own, **Wireframe**, **Shaded with wire**, or **Normals**, each point's direction
+as colour. **Face orientation** tints fronts blue and backs red. A fixed or custom view starts
+on **Shaded** and the active camera on **Final**. Export always draws **Final**.
+
 A camera moved by these takes a key at the playhead where it is keyed, Reset included, as one
 undo step.
 
@@ -109,7 +115,7 @@ time it shows a composition, and keeps its free view of each with the session.
 | `Shift+F` | Frame every layer and camera. |
 | Click an axis in the corner | Look along it, orthographically, until the next orbit. Drag the axes to orbit. |
 | **Persp** / **Ortho** under the axes | Switch between perspective and orthographic. |
-| **Lines only** under the axes | Draw the outlines on the ground with no picture. |
+| **Lines only** under the axes | Switch **Wireframe** on and off. |
 
 Moving it while it looks through the active camera or a fixed view switches it to its free
 view from there. The ground is drawn into its picture, under any 2D layer stacked above the

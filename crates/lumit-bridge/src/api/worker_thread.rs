@@ -316,19 +316,23 @@ struct ViewerLook {
     /// A 3D viewport's ground, from [`WorkerState::grounds`] rather than the
     /// look message.
     ground: Option<lumit_render::realise::ViewGround>,
+    /// How the view shows models, from its [`ViewLatch`].
+    display: lumit_gpu::mesh::display::ModelDisplay,
 }
 
 /// One view's 3D view of a comp as the worker holds it: the pose it is drawn
-/// through, and for a 3D viewport the draft that leaves out motion blur and
-/// the size of the picture it fills, comp pixels round the comp's middle.
-/// A canvas of `(0, 0)` is the comp's own size.
+/// through, `None` for the comp's own camera, how it shows models, and for a
+/// 3D viewport the draft that leaves out motion blur and the size of the
+/// picture it fills, comp pixels round the comp's middle. A canvas of
+/// `(0, 0)` is the comp's own size.
 #[frb(ignore)]
 #[derive(Clone, Copy, PartialEq)]
 struct ViewLatch {
     comp: Uuid,
-    pose: lumit_core::model::CameraPose,
+    pose: Option<lumit_core::model::CameraPose>,
     draft: bool,
     canvas: (u32, u32),
+    display: lumit_gpu::mesh::display::ModelDisplay,
 }
 
 /// Make the renderer look the way `view` looks, if it does not already.
@@ -346,6 +350,10 @@ struct ViewLatch {
 fn look_at(state: &mut WorkerState, view: u32) {
     let mut want = state.looks.get(&view).cloned().unwrap_or_default();
     want.ground = state.grounds.get(&view).copied();
+    want.display = state
+        .camera_views
+        .get(&view)
+        .map_or_else(Default::default, |v| v.display);
     if state.applied_look.0 == view && state.applied_look.1 == want {
         return;
     }
@@ -364,6 +372,7 @@ fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
     renderer.set_region(look.region);
     renderer.set_colour_view(look.colour_view.clone());
     renderer.set_ground(look.ground);
+    lumit_render::model::show_models(look.display);
 }
 
 /// The device and engines between one worker's renderer and the next, and
@@ -1980,6 +1989,7 @@ pub enum WorkerRequest {
         draft: bool,
         ground: Option<[f32; 4]>,
         canvas: (u32, u32),
+        display: lumit_gpu::mesh::display::ModelDisplay,
     },
     SetViewerLook {
         stops: f64,
@@ -4304,12 +4314,15 @@ fn handle_requests(
                     draft,
                     ground,
                     canvas,
+                    display,
                 } => {
-                    let latch = pose.map(|p| ViewLatch {
+                    let shown = pose.is_some() || display != Default::default();
+                    let latch = shown.then(|| ViewLatch {
                         comp,
-                        pose: p.core(),
+                        pose: pose.map(|p| p.core()),
                         draft,
                         canvas,
+                        display,
                     });
                     let ground = ground.and_then(|colour| ground_of(state, comp, colour));
                     set_view(state, view, latch, ground);
@@ -4338,7 +4351,7 @@ fn handle_requests(
                             transparent_background,
                             region,
                             colour_view,
-                            ground: None,
+                            ..Default::default()
                         },
                     );
                     look_at(state, view);
@@ -6065,9 +6078,10 @@ mod tests {
         };
         let latch = super::ViewLatch {
             comp,
-            pose,
+            pose: Some(pose),
             draft: false,
             canvas: (0, 0),
+            display: Default::default(),
         };
         let through = super::viewed_through(None, Some(latch), two.clone());
         let layers = &through.comp(comp).expect("comp").layers;
@@ -6123,9 +6137,10 @@ mod tests {
         let top = camera_view_pose(BridgeCameraView::Top, 64.0, 32.0).core();
         let latch = super::ViewLatch {
             comp,
-            pose: top,
+            pose: Some(top),
             draft: false,
             canvas: (0, 0),
+            display: Default::default(),
         };
         super::set_view(&mut state, 1, Some(latch), None);
 
@@ -6265,7 +6280,7 @@ mod tests {
                 transparent_background: true,
                 region: None,
                 colour_view: None,
-                ground: None,
+                ..Default::default()
             },
         );
         super::look_at(&mut state, 0);

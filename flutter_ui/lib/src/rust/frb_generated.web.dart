@@ -326,6 +326,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMediaInfo dco_decode_box_autoadd_bridge_media_info(dynamic raw);
 
   @protected
+  BridgeModelLook dco_decode_box_autoadd_bridge_model_look(dynamic raw);
+
+  @protected
   BridgeModelSettings dco_decode_box_autoadd_bridge_model_settings(dynamic raw);
 
   @protected
@@ -495,6 +498,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   ProjectReference dco_decode_box_autoadd_project_reference(dynamic raw);
+
+  @protected
+  (int, int) dco_decode_box_autoadd_record_u_32_u_32(dynamic raw);
 
   @protected
   SolidReference dco_decode_box_autoadd_solid_reference(dynamic raw);
@@ -1026,6 +1032,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMetadataField dco_decode_bridge_metadata_field(dynamic raw);
+
+  @protected
+  BridgeModelDisplay dco_decode_bridge_model_display(dynamic raw);
+
+  @protected
+  BridgeModelLook dco_decode_bridge_model_look(dynamic raw);
 
   @protected
   BridgeModelSettings dco_decode_bridge_model_settings(dynamic raw);
@@ -2202,6 +2214,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   (String, String) dco_decode_record_string_string(dynamic raw);
 
   @protected
+  (int, int) dco_decode_record_u_32_u_32(dynamic raw);
+
+  @protected
   ScopedChange dco_decode_scoped_change(dynamic raw);
 
   @protected
@@ -2511,6 +2526,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeModelLook sse_decode_box_autoadd_bridge_model_look(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeModelSettings sse_decode_box_autoadd_bridge_model_settings(
       SseDeserializer deserializer);
 
@@ -2722,6 +2741,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   ProjectReference sse_decode_box_autoadd_project_reference(
+      SseDeserializer deserializer);
+
+  @protected
+  (int, int) sse_decode_box_autoadd_record_u_32_u_32(
       SseDeserializer deserializer);
 
   @protected
@@ -3336,6 +3359,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeMetadataField sse_decode_bridge_metadata_field(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeModelDisplay sse_decode_bridge_model_display(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelLook sse_decode_bridge_model_look(SseDeserializer deserializer);
 
   @protected
   BridgeModelSettings sse_decode_bridge_model_settings(
@@ -4721,6 +4751,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  (int, int) sse_decode_record_u_32_u_32(SseDeserializer deserializer);
+
+  @protected
   ScopedChange sse_decode_scoped_change(SseDeserializer deserializer);
 
   @protected
@@ -5032,6 +5065,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMediaInfo self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_model_look(
+      BridgeModelLook self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_model_settings(
       BridgeModelSettings self, SseSerializer serializer);
 
@@ -5245,6 +5282,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_project_reference(
       ProjectReference self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_record_u_32_u_32(
+      (int, int) self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_solid_reference(
@@ -5935,6 +5976,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_metadata_field(
       BridgeMetadataField self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_display(
+      BridgeModelDisplay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_look(
+      BridgeModelLook self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_model_settings(
@@ -7393,6 +7442,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_record_string_string(
       (String, String) self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_u_32_u_32((int, int) self, SseSerializer serializer);
 
   @protected
   void sse_encode_scoped_change(ScopedChange self, SseSerializer serializer);

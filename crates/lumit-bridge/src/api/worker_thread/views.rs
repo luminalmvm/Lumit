@@ -75,7 +75,8 @@ pub(super) struct Viewed {
 /// the frame key and every nested reading alike. No second render path: a
 /// patched copy of the snapshot goes down the ordinary one. Another comp's
 /// view leaves the document alone. A 3D viewport's draft view also leaves out
-/// the comp's motion blur.
+/// the comp's motion blur, and a view drawing its models as lines draws
+/// nothing else, as it outlines every other layer over the picture.
 #[frb(ignore)]
 pub(super) fn viewed_through(
     prefix: Option<crate::api::state::BridgePrefixPoint>,
@@ -88,28 +89,41 @@ pub(super) fn viewed_through(
         pose,
         draft,
         canvas,
+        display,
     }) = view
     else {
         return document;
     };
-    let Some(comp) = document.comp(comp_id) else {
+    // Only a fixed or custom view outlines the layers it leaves out.
+    let lines = display.shading == lumit_gpu::mesh::display::Shading::Wireframe && pose.is_some();
+    let Some(comp) = document.comp(comp_id).filter(|_| pose.is_some() || lines) else {
         return document;
     };
-    let mut layer = crate::edits::fresh_camera(comp, "View".into(), None);
-    layer.id = VIEW_CAMERA_ID;
-    if let lumit_core::model::LayerKind::Camera { zoom, .. } = &mut layer.kind {
-        *zoom = lumit_core::anim::Property::fixed(pose.zoom);
-    }
-    let tr = &mut layer.transform;
-    tr.position_x = lumit_core::anim::Property::fixed(pose.position.0);
-    tr.position_y = lumit_core::anim::Property::fixed(pose.position.1);
-    tr.position_z = lumit_core::anim::Property::fixed(pose.position.2);
-    tr.rotation_x = lumit_core::anim::Property::fixed(pose.rotation_deg.0);
-    tr.rotation_y = lumit_core::anim::Property::fixed(pose.rotation_deg.1);
-    tr.rotation = lumit_core::anim::Property::fixed(pose.rotation_deg.2);
+    let camera = pose.map(|pose| {
+        let mut layer = crate::edits::fresh_camera(comp, "View".into(), None);
+        layer.id = VIEW_CAMERA_ID;
+        if let lumit_core::model::LayerKind::Camera { zoom, .. } = &mut layer.kind {
+            *zoom = lumit_core::anim::Property::fixed(pose.zoom);
+        }
+        let tr = &mut layer.transform;
+        tr.position_x = lumit_core::anim::Property::fixed(pose.position.0);
+        tr.position_y = lumit_core::anim::Property::fixed(pose.position.1);
+        tr.position_z = lumit_core::anim::Property::fixed(pose.position.2);
+        tr.rotation_x = lumit_core::anim::Property::fixed(pose.rotation_deg.0);
+        tr.rotation_y = lumit_core::anim::Property::fixed(pose.rotation_deg.1);
+        tr.rotation = lumit_core::anim::Property::fixed(pose.rotation_deg.2);
+        layer
+    });
     let mut doc = (*document).clone();
     if let Some(c) = doc.comp_mut(comp_id) {
-        c.layers.insert(0, layer);
+        if let Some(layer) = camera {
+            c.layers.insert(0, layer);
+        }
+        // Hidden rather than taken out, so they still parent what they parent.
+        for l in c.layers.iter_mut().filter(|_| lines) {
+            use lumit_core::model::LayerKind::{Camera, Model};
+            l.switches.visible &= matches!(l.kind, Camera { .. } | Model { .. });
+        }
         c.motion_blur.enabled &= !draft;
         // A 3D viewport fills its pane: a wider picture round the comp's
         // middle, the 2D layers kept where they sit on the comp. The camera

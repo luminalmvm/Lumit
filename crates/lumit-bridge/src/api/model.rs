@@ -4,7 +4,10 @@ use flutter_rust_bridge::frb;
 use lumit_core::model::{LayerKind, ProjectItem};
 use lumit_core::model_layer::{ModelSettings, UpAxis};
 
-use crate::api::{footage::FootageReference, layer::LayerReference, BridgeError};
+use crate::api::{
+    composition::CompositionReference, footage::FootageReference, layer::LayerReference,
+    BridgeError,
+};
 
 /// Which of a 3D model file's axes points up.
 #[frb(non_opaque)]
@@ -12,6 +15,72 @@ use crate::api::{footage::FootageReference, layer::LayerReference, BridgeError};
 pub enum BridgeUpAxis {
     Y,
     Z,
+}
+
+/// How a Viewer view shows its models: lit as they export, in a studio
+/// light of the view's own, as lines, both, or as the way they face.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeModelDisplay {
+    Final,
+    Shaded,
+    Wireframe,
+    ShadedWire,
+    Normals,
+}
+
+/// How a Viewer view shows its models, and whether it tints their faces by
+/// which way they face.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeModelLook {
+    pub display: BridgeModelDisplay,
+    pub faces: bool,
+}
+
+impl BridgeModelLook {
+    /// The engine's own.
+    #[frb(ignore)]
+    pub(crate) fn engine(self) -> lumit_gpu::mesh::display::ModelDisplay {
+        use lumit_gpu::mesh::display::Shading;
+        let shading = match self.display {
+            BridgeModelDisplay::Final => Shading::Final,
+            BridgeModelDisplay::Shaded => Shading::Shaded,
+            BridgeModelDisplay::Wireframe => Shading::Wireframe,
+            BridgeModelDisplay::ShadedWire => Shading::ShadedWire,
+            BridgeModelDisplay::Normals => Shading::Normals,
+        };
+        lumit_gpu::mesh::display::ModelDisplay {
+            shading,
+            faces: self.faces,
+        }
+    }
+}
+
+impl CompositionReference {
+    /// Whether this comp draws a model, its own or inside a precomp.
+    #[frb(sync)]
+    pub fn holds_models(&self) -> Result<bool, BridgeError> {
+        let doc = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        let mut seen = vec![self.id];
+        let mut i = 0;
+        // Each comp once, so a comp nested twice or in a loop is walked once.
+        while let Some(&id) = seen.get(i) {
+            i += 1;
+            for layer in doc.comp(id).map_or(&[][..], |c| &c.layers) {
+                match &layer.kind {
+                    LayerKind::Model { .. } => return Ok(true),
+                    LayerKind::Precomp { comp } if !seen.contains(comp) => seen.push(*comp),
+                    _ => {}
+                }
+            }
+        }
+        Ok(false)
+    }
 }
 
 /// How a 3D model sits in its Model layer, so its Scale stays at 100%.

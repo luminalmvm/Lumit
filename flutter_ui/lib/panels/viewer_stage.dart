@@ -796,7 +796,7 @@ class ViewerStage extends StatelessWidget {
                       view: view,
                       ask: ask,
                       ground: aids.ground,
-                      grid: !viewport || uiState.viewportWireframe(viewId),
+                      grid: !viewport || uiState.linesOnly(viewId),
                       axes: axes,
                       only: only,
                       frame: uiState.playheadFrame.value,

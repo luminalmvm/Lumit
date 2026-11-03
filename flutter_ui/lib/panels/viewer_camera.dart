@@ -60,6 +60,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeWheelAction;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -1326,7 +1327,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
               child: ViewerViewCube(
                 rotation: (seen.rotationX, seen.rotationY, seen.rotationZ),
                 ortho: ui.viewportOrtho(widget.viewId),
-                wireframe: _surface?.wireframeOnly ?? false,
+                wireframe: ui.displayOf(widget.viewId) ==
+                    BridgeModelDisplay.wireframe,
                 onSnap: _snapTo,
                 onOrbitStart: _cubeOrbitStart,
                 onOrbit: _cubeOrbit,
@@ -1339,8 +1341,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
                     distance: orthoDistance(widget.compSize),
                   );
                 },
-                onWireframe: () => ui.setViewportWireframe(
-                    widget.viewId, !(_surface?.wireframeOnly ?? false)),
+                onWireframe: () => ui.toggleLines(widget.viewId),
               ),
             ),
           // How fast a flight goes, for a moment after the wheel sets it.
