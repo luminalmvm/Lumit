@@ -73,6 +73,8 @@ impl Realiser<'_> {
             maps: maps.filter(|_| takes && !m.holdout),
             display,
             environment,
+            looks: &[],
+            behind: None,
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
         Some(ModelPicture {

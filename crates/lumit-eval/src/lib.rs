@@ -92,7 +92,8 @@ pub mod schedule;
 ///   they are handed.
 /// * 25: Model layers cast and take shadows.
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
-pub const ALGO_VERSION: u32 = 26;
+/// * 27: a 3D model's glass and clearcoat from its file are drawn.
+pub const ALGO_VERSION: u32 = 27;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4808,12 +4809,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 26, which renamed every frame.
+        // Pinned under ALGO_VERSION 27, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                227_890_055_451_045_895_250_876_588_966_720_741_802,
-                292_465_701_935_215_467_852_406_669_579_654_097_275
+                118_634_670_240_222_371_657_714_716_082_324_829_986,
+                221_618_990_867_148_256_207_561_963_013_861_605_031
             )
         );
 

@@ -89,6 +89,8 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         maps: None,
         display: Default::default(),
         environment: None,
+        looks: &[],
+        behind: None,
     };
     let time = |run: &dyn Fn() -> Result<(), String>| -> Result<f64, String> {
         for _ in 0..WARMUP {
@@ -137,6 +139,8 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
             lights: &casting,
             maps: maps.as_ref(),
             environment: None,
+            looks: &[],
+            behind: None,
             material: LightingMaterial {
                 accepts_shadows: lumit_gpu::fx::lighting::LightingShadows::On,
                 ..view.material
@@ -167,6 +171,8 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         drop(fx.environment_background(&ctx, &surround, (ray, zoom), SIZE, 1.0, 0.0));
         let view = lumit_gpu::mesh::ModelView {
             environment: Some(&surround),
+            looks: &[],
+            behind: None,
             ..view
         };
         fx.model(&ctx, &scene, &view)

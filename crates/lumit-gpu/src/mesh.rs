@@ -23,6 +23,7 @@ use wgpu::util::DeviceExt;
 
 mod blur;
 pub mod display;
+pub mod look;
 pub mod shadow;
 mod upload;
 
@@ -78,6 +79,10 @@ pub struct ModelView<'a> {
     pub display: display::ModelDisplay,
     /// The comp's environment, which lights it unless Accepts lights is off.
     pub environment: Option<&'a EnvironmentLight>,
+    /// The materials its layer's rows change, and the comp's picture under
+    /// its run of 3D layers for glass to bend.
+    pub looks: &'a [look::Look],
+    pub behind: Option<&'a wgpu::Texture>,
 }
 
 /// One copy of a model: where it goes after `model_to_comp`, in comp pixels,
@@ -127,16 +132,6 @@ struct DrawUniform {
     normal: [[f32; 4]; 3],
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct MaterialUniform {
-    base_colour: [f32; 4],
-    emissive: [f32; 4],
-    params: [f32; 4],
-    mode: [f32; 4],
-    slots: [[f32; 4]; 10],
-}
-
 /// One primitive where one node puts it.
 struct Part {
     first: u32,
@@ -158,6 +153,7 @@ pub(crate) struct GpuModel {
     materials: Vec<(wgpu::BindGroup, bool, bool)>,
     /// Its edges as lines, made the first time a view draws them.
     edges: OnceLock<(wgpu::Buffer, lumit_budget::Reservation)>,
+    kept: Vec<look::Kept>,
     _held: lumit_budget::Reservation,
 }
 
@@ -174,10 +170,11 @@ pub(crate) struct MeshFx {
     shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
     depth_one: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     depth_many: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
-    /// A picture's next level down from the one above, plain and sRGB.
+    /// A picture's next level down from the one above, plain, sRGB and in
+    /// the pass's own format.
     down: (
         wgpu::BindGroupLayout,
-        [wgpu::RenderPipeline; 2],
+        [wgpu::RenderPipeline; 3],
         wgpu::Sampler,
     ),
     /// By sample count and kind: opaque and blended, each culled and
@@ -188,6 +185,7 @@ pub(crate) struct MeshFx {
     /// Adds a shutter sample's picture to the rest ([`blur`]).
     add: wgpu::RenderPipeline,
     white: wgpu::Texture,
+    shared: look::Shared,
     models: Mutex<Vec<(Weak<ModelScene>, Arc<GpuModel>)>>,
     scratch: Mutex<Option<Scratch>>,
 }
@@ -281,6 +279,9 @@ impl MeshFx {
         let mut entries = vec![uniform_entry(0, false)];
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
         entries.extend((6..=10).map(sampler));
+        // The opacity picture, and the picture behind for glass.
+        entries.extend([11, 12].map(|b| texture_entry(b, float, false)));
+        entries.push(sampler(13));
         let material_layout = layout("mesh-material", &entries);
         let shadows_layout = layout("mesh-shadows", &shadow::layout());
         let environment = environment::Binding::new(device);
@@ -353,6 +354,7 @@ impl MeshFx {
             [
                 down_pipeline(wgpu::TextureFormat::Rgba8Unorm),
                 down_pipeline(wgpu::TextureFormat::Rgba8UnormSrgb),
+                down_pipeline(COLOUR),
             ],
             device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("mesh-down"),
@@ -403,6 +405,7 @@ impl MeshFx {
             down,
             add,
             sets: Mutex::new(HashMap::new()),
+            shared: look::Shared::new(device, &white),
             white,
             models: Mutex::new(Vec::new()),
             scratch: Mutex::new(None),
@@ -416,7 +419,10 @@ impl MeshFx {
     /// encoding, so it is averaged in linear light.
     fn mips(&self, ctx: &GpuContext, texture: &wgpu::Texture) {
         let (layout, pipelines, sampler) = &self.down;
-        let pipeline = &pipelines[usize::from(texture.format().is_srgb())];
+        let pipeline = &pipelines[match texture.format() {
+            COLOUR => 2,
+            f => usize::from(f.is_srgb()),
+        }];
         let level = |k| {
             texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some("mesh-level"),
@@ -688,9 +694,9 @@ impl MeshFx {
         // ponytail: blended parts sort by their middles, not per triangle.
         let world = |p: &Part| view.model_to_comp * p.node;
         let far = |p: &Part| (view.camera * world(p).transform_point3(p.centre).extend(1.0)).w;
+        let materials = self.looked(ctx, model, view.looks, view.behind);
         let look = |p: &Part| {
-            model
-                .materials
+            materials
                 .get(p.material)
                 .map_or((false, false), |m| (m.1, m.2))
         };
@@ -852,7 +858,7 @@ impl MeshFx {
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for &(p, offset, set) in these.iter().filter(|_| view.display.draws_faces()) {
-                let Some((group, _, _)) = model.materials.get(p.material) else {
+                let Some((group, _, _)) = materials.get(p.material) else {
                     continue;
                 };
                 let Some(pipeline) = &pipelines[if depth { depth_set(set) } else { set }] else {
