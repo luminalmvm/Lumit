@@ -12063,7 +12063,10 @@
             "Rectangle",
             "Mask path",
             "Ellipse outline",
-            "Rectangle outline"
+            "Rectangle outline",
+            "Box",
+            "Sphere",
+            "Layer"
           ],
           "dividers_after": []
         },
@@ -12150,6 +12153,13 @@
           "kind": "mask_path",
           "unit": "raw",
           "self_default": true
+        },
+        {
+          "id": "emitter_layer",
+          "label": "Emitter layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
         },
         {
           "id": "density_layer",
@@ -12921,6 +12931,7 @@
             "emitter_angle",
             "path_from",
             "mask_path",
+            "emitter_layer",
             "density_layer",
             "density_layer_placement",
             "emit_rate",
@@ -13064,6 +13075,18 @@
           "on": "mode",
           "cond": "choice_is",
           "value": 2
+        },
+        {
+          "param": "emitter_layer",
+          "on": "shape",
+          "cond": "choice_is",
+          "value": 9
+        },
+        {
+          "param": "density_layer",
+          "on": "shape",
+          "cond": "choice_is_not",
+          "value": 9
         },
         {
           "param": "burst_count",

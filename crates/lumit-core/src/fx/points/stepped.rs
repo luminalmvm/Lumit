@@ -1010,9 +1010,8 @@ fn born(p: &PointsParams, walk: &MaskPolyline, b: u64, age: f32) -> Option<(Part
     let p0 = birth_point(
         &p.emitter,
         walk,
-        draw(p.seed, b, attr::EMIT_U),
-        draw(p.seed, b, attr::EMIT_V),
-        draw(p.seed, b, attr::EMIT_W),
+        p.frame,
+        [attr::EMIT_U, attr::EMIT_V, attr::EMIT_W].map(|a| draw(p.seed, b, a)),
     )?;
     let v0 = launch(p, b);
     let phase = draw(p.seed, b, attr::TURB_PHASE) * 1000.0;

@@ -814,7 +814,7 @@
   },
   "fxLayer": "Layer",
   "@fxLayer": {
-    "description": "Effect controls: the Audio level driver's source dropdown entry that measures one named layer of the mix."
+    "description": "Effect controls: the Audio level driver's source dropdown entry that measures one named layer of the mix. Also an option of Shape on Particulate: particles are born from another layer's picture."
   },
   "fxLayerKnocksOutShadow": "Layer knocks out shadow",
   "@fxLayerKnocksOutShadow": {
@@ -4097,6 +4097,10 @@
   "@fxEmitterAngle": {
     "description": "Effect controls — a control on Particulate: rotates the shape particles are born along."
   },
+  "fxEmitterLayer": "Emitter layer",
+  "@fxEmitterLayer": {
+    "description": "Effect controls — a control on Particulate: the layer whose picture particles are born from when Shape is Layer."
+  },
   "fxEndColour": "End colour",
   "@fxEndColour": {
     "description": "Effect controls — a control on Gradient and on Particulate: the colour a particle dies at."
@@ -5608,6 +5612,10 @@
   "fxSpeedJitter": "Speed jitter",
   "@fxSpeedJitter": {
     "description": "Effect controls — a control on Particulate: how much particle speeds differ from one another."
+  },
+  "fxSphere": "Sphere",
+  "@fxSphere": {
+    "description": "Effect controls — an option of Shape on Particulate: particles are born anywhere inside a ball."
   },
   "fxSpin": "Spin",
   "@fxSpin": {
@@ -23186,7 +23194,7 @@
   },
   "fxBox": "Box",
   "@fxBox": {
-    "description": "Effect controls: an option of Shape on Falloff."
+    "description": "Effect controls: an option of Shape on Falloff, and of Shape on Particulate, where particles are born anywhere inside a box."
   },
   "fxSweep": "Sweep",
   "@fxSweep": {

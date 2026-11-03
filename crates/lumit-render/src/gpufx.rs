@@ -4853,10 +4853,8 @@ impl Particulate {
             .projection
             .map(|proj| proj.rescaled(P::px_scale_of(p)).m);
         // The polyline the emitter walks. A Mask path's arrives in px@comp and
-        // takes the raster factor like every other distance; an
-        // outline's is built **from the packed emitter**, whose extents the
-        // resolve step already rescaled, so scaling it again would draw the
-        // ring at twice the size on a half-resolution preview.
+        // takes the raster factor. An outline's is built from the packed
+        // emitter, which the resolve step already rescaled.
         let poly = if packed.emitter.shape.is_outline() {
             lumit_core::fx::points::emitter::outline_polyline(&packed.emitter)
         } else {
@@ -4868,7 +4866,7 @@ impl Particulate {
             .zip(poly.arc.iter())
             .map(|(pt, a)| [pt[0], pt[1], *a, 0.0])
             .collect();
-        let density = picture("density_layer");
+        let density = picture(inst.density_row());
         let op = particulate_op(
             &packed,
             style,
@@ -6400,6 +6398,7 @@ mod tests {
             emitter_angle: 20.0,
             path_from: 0,
             mask_path: false,
+            emitter_layer: false,
             emit_rate: 220.0,
             burst: 0,
             burst_count: 100.0,

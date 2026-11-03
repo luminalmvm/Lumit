@@ -398,12 +398,20 @@ fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
         // the emitter's own place and turn do not move it.
         return vec4<f32>(pt_path_at(u * p.path_total), p.em_z, 1.0);
     }
+    if (p.shape == 9u) {
+        // A Layer emitter fills the frame, as the mask path does already placed,
+        // and with no picture to read gives birth to nothing.
+        if (p.density == 0u) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        return vec4<f32>(u * p.target_w, v * p.target_h, p.em_z, 1.0);
+    }
     let a = radians(p.em_angle);
     let s = sin(a);
     let c = cos(a);
     var local = vec2<f32>(0.0, 0.0);
     var depth = (w_die - 0.5) * p.em_depth;
-    if (p.shape >= 5u) {
+    if (p.shape == 5u || p.shape == 6u) {
         // The two outline shapes. The host flattened the emitter's own
         // outline into the very buffer a mask path uses, in the emitter's local
         // frame, so the walk is the same walk and the turn and the placement
@@ -417,8 +425,16 @@ fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
         let r = sqrt(max(u, 0.0));
         let ang = v * 6.28318530717958647692;
         local = vec2<f32>(0.5 * p.em_wh.x * r * cos(ang), 0.5 * p.em_wh.y * r * sin(ang));
-    } else if (p.shape == 3u) {
+    } else if (p.shape == 3u || p.shape == 7u) {
         local = vec2<f32>((u - 0.5) * p.em_wh.x, (v - 0.5) * p.em_wh.y);
+    } else if (p.shape == 8u) {
+        // == the CPU's ball: the cube root for the radius, an even height.
+        let r = 0.5 * p.em_wh.x * pow(max(u, 0.0), 1.0 / 3.0);
+        let up = 1.0 - 2.0 * v;
+        let round = sqrt(max(1.0 - up * up, 0.0));
+        let ang = w_die * 6.28318530717958647692;
+        local = vec2<f32>(r * round * cos(ang), r * round * sin(ang));
+        depth = r * up;
     }
     return vec4<f32>(
         p.em_pos.x + local.x * c - local.y * s,

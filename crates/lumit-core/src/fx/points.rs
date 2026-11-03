@@ -2069,9 +2069,8 @@ pub fn evaluate_dense(
         let Some(p0) = birth_point(
             e,
             walk,
-            draw(p.seed, b, attr::EMIT_U),
-            draw(p.seed, b, attr::EMIT_V),
-            draw(p.seed, b, attr::EMIT_W),
+            p.frame,
+            [attr::EMIT_U, attr::EMIT_V, attr::EMIT_W].map(|a| draw(p.seed, b, a)),
         ) else {
             // A Mask path emitter with nothing to walk emits nothing at all,
             // and no later birth will find a path either.
@@ -2090,9 +2089,8 @@ pub fn evaluate_dense(
                     let q = birth_point(
                         e,
                         walk,
-                        draw(p.seed, b, die),
-                        draw(p.seed, b, die + 1),
-                        draw(p.seed, b, die + 2),
+                        p.frame,
+                        [die, die + 1, die + 2].map(|a| draw(p.seed, b, a)),
                     );
                     kept = q.filter(|q| draw(p.seed, b, die + 3) < d.at(q[0], q[1]));
                 }

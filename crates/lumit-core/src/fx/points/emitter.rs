@@ -22,6 +22,13 @@ pub enum EmitterShape {
     EllipseOutline,
     /// Uniformly along a rectangle's **outline**, by arc length.
     RectangleOutline,
+    /// Uniformly through a box of `width` × `height` × `depth`.
+    Box,
+    /// Uniformly through a ball as wide as `width`.
+    Sphere,
+    /// Over the whole frame, where another layer's picture is bright, and on
+    /// that layer's plane when the particles are in the scene.
+    Layer,
 }
 
 impl EmitterShape {
@@ -41,6 +48,9 @@ impl EmitterShape {
         "Mask path",
         "Ellipse outline",
         "Rectangle outline",
+        "Box",
+        "Sphere",
+        "Layer",
     ];
 
     /// The shape for a stored Choice index; anything unknown is a Point, which
@@ -55,6 +65,9 @@ impl EmitterShape {
             4 => EmitterShape::MaskPath,
             5 => EmitterShape::EllipseOutline,
             6 => EmitterShape::RectangleOutline,
+            7 => EmitterShape::Box,
+            8 => EmitterShape::Sphere,
+            9 => EmitterShape::Layer,
             _ => EmitterShape::Point,
         }
     }
@@ -181,12 +194,13 @@ pub struct Emitter {
 /// a Mask path emitter, and the emitter's own local outline for the two outline
 /// shapes. One argument, because both are the same question — where is
 /// `u` of the way along? — answered by the same arc-length walk.
+///
+/// `frame` is the picture's width and height, which a Layer emitter fills.
 pub(crate) fn birth_point(
     e: &Emitter,
     path: &MaskPolyline,
-    u: f32,
-    v: f32,
-    w: f32,
+    frame: [f32; 2],
+    [u, v, w]: [f32; 3],
 ) -> Option<[f32; 3]> {
     let (s, c) = e.angle_deg.to_radians().sin_cos();
     let (local, depth) = match e.shape {
@@ -212,10 +226,22 @@ pub(crate) fn birth_point(
                 (w - 0.5) * e.depth,
             )
         }
-        EmitterShape::Rectangle => (
+        EmitterShape::Rectangle | EmitterShape::Box => (
             [(u - 0.5) * e.width, (v - 0.5) * e.height],
             (w - 0.5) * e.depth,
         ),
+        EmitterShape::Sphere => {
+            // The cube root for the radius, as volume grows as r³, and an even
+            // height up the ball for an even spread over its surface.
+            let r = 0.5 * e.width * u.max(0.0).cbrt();
+            let up = 1.0 - 2.0 * v;
+            let round = (1.0 - up * up).max(0.0).sqrt();
+            let (sa, ca) = (w * std::f32::consts::TAU).sin_cos();
+            ([r * round * ca, r * round * sa], r * up)
+        }
+        // With no picture to fill, nothing is born.
+        EmitterShape::Layer if frame[0] <= 0.0 || frame[1] <= 0.0 => return None,
+        EmitterShape::Layer => return Some([u * frame[0], v * frame[1], e.position[2]]),
         EmitterShape::MaskPath => {
             // The mask's own line, by arc length. Nothing to walk is
             // the documented no-op: no path, no particles.

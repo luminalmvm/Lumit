@@ -79,7 +79,7 @@ pub struct ParticulateOp<'a> {
     /// `0..=1`.
     pub speed_jitter: f32,
     /// The `EmitterShape` code: 0 Point, 1 Line, 2 Ellipse, 3 Rectangle,
-    /// 4 Mask path.
+    /// 4 Mask path, 5 and 6 the outlines, 7 Box, 8 Sphere, 9 Layer.
     pub shape: u32,
     pub seed: u32,
     /// The most particles to **draw**: Max particles, halved once per

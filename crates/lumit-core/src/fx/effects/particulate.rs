@@ -119,6 +119,11 @@ pub struct Particulate {
     #[mask_path(label = "Mask path")]
     pub mask_path: bool,
 
+    /// The layer a Layer emitter gives birth from, where its picture is
+    /// bright.
+    #[layer(label = "Emitter layer")]
+    pub emitter_layer: bool,
+
     /// A picture births follow: a particle is born where it is bright, inside
     /// the emitter's shape. Unset, births fill the shape evenly as before.
     #[layer(label = "Density layer")]
@@ -660,6 +665,17 @@ impl Particulate {
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
+    }
+
+    /// The layer row births are weighted by: a Layer emitter's own layer, or
+    /// the Density layer.
+    #[must_use]
+    pub fn density_row(&self) -> &'static str {
+        if self.shape == 9 {
+            "emitter_layer"
+        } else {
+            "density_layer"
+        }
     }
 
     /// The bundle the closed forms read (docs/impl/effect-registry.md §2.4) —

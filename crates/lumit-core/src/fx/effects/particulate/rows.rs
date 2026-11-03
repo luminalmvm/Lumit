@@ -29,6 +29,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "emitter_angle",
             "path_from",
             "mask_path",
+            "emitter_layer",
             "density_layer",
             "density_layer_placement",
             "emit_rate",
@@ -134,6 +135,16 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "streak_length",
         on: "mode",
         cond: EnabledCond::ChoiceIs(2),
+    },
+    EnabledWhen {
+        param: "emitter_layer",
+        on: "shape",
+        cond: EnabledCond::ChoiceIs(9),
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "shape",
+        cond: EnabledCond::ChoiceIsNot(9),
     },
     // Each burst row means something only in the bursts that read it.
     EnabledWhen {
