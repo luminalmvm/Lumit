@@ -310,7 +310,7 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
     match_name = "clone_to_points",
     label = "Clone to points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be anywhere, and a stamp reaches half its own size past it.
     roi = FullFrame,

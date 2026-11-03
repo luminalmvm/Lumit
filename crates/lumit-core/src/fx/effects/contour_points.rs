@@ -83,7 +83,7 @@ pub fn centre_of(piece: &[[f32; 2]]) -> ([f32; 2], f32) {
     match_name = "contour_points",
     label = "Contour points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,

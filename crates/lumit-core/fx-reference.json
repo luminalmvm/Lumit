@@ -18,6 +18,10 @@
       "label": "Generate"
     },
     {
+      "slug": "points",
+      "label": "Points"
+    },
+    {
       "slug": "stylise",
       "label": "Stylise"
     },
@@ -12081,8 +12085,8 @@
       "match_name": "grid",
       "label": "Grid",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "kind",
@@ -12796,8 +12800,8 @@
       "match_name": "scatter",
       "label": "Scatter",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "density",
@@ -12953,8 +12957,8 @@
       "match_name": "emit_from_image",
       "label": "Emit from image",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "source",
@@ -13155,8 +13159,8 @@
       "match_name": "points_along_path",
       "label": "Points along path",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "path_from",
@@ -13525,8 +13529,8 @@
       "match_name": "math_points",
       "label": "Math points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "shape",
@@ -13819,8 +13823,8 @@
       "match_name": "contour_points",
       "label": "Contour points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "path_from",
@@ -13976,8 +13980,8 @@
       "match_name": "intersection_points",
       "label": "Intersection points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "path_from",
@@ -14126,8 +14130,8 @@
       "match_name": "text_to_points",
       "label": "Text to points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "text_layer",
@@ -14345,8 +14349,8 @@
       "match_name": "track_points",
       "label": "Track points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "mode",
@@ -14628,8 +14632,8 @@
       "match_name": "clone_to_points",
       "label": "Clone to points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "distribution",
@@ -15417,8 +15421,8 @@
       "match_name": "clone_deformer",
       "label": "Clone deformer",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "mode",
@@ -15680,8 +15684,8 @@
       "match_name": "trail",
       "label": "Trail",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "back_samples",
@@ -15884,8 +15888,8 @@
       "match_name": "connect_points",
       "label": "Connect points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "mode",
@@ -16208,8 +16212,8 @@
       "match_name": "points_field",
       "label": "Points field",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "output",
@@ -16395,8 +16399,8 @@
       "match_name": "label_points",
       "label": "Label points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "apply_to",
@@ -17111,8 +17115,8 @@
       "match_name": "vary_points",
       "label": "Vary points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "apply_to",
@@ -17962,8 +17966,8 @@
       "match_name": "pick_points",
       "label": "Pick points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "result",
@@ -18479,8 +18483,8 @@
       "match_name": "transform_points",
       "label": "Transform points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "apply_to",
@@ -18948,8 +18952,8 @@
       "match_name": "merge_points",
       "label": "Merge points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "number_by_input",
@@ -19077,8 +19081,8 @@
       "match_name": "relax_points",
       "label": "Relax points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "apply_to",
@@ -19312,8 +19316,8 @@
       "match_name": "flow_points",
       "label": "Flow points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "apply_to",
@@ -19716,8 +19720,8 @@
       "match_name": "bake_points",
       "label": "Bake points",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "mode",
@@ -19848,8 +19852,8 @@
       "match_name": "sort_points",
       "label": "Sort distribution",
       "version": 1,
-      "category": "Generate",
-      "category_slug": "generate",
+      "category": "Points",
+      "category_slug": "points",
       "params": [
         {
           "id": "sort_by",

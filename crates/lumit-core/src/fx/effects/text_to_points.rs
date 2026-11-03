@@ -66,7 +66,7 @@ pub const TEXT_TO_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     match_name = "text_to_points",
     label = "Text to points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // The discs are drawn over the whole picture.
     roi = FullFrame,

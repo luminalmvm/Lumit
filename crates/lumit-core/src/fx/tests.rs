@@ -11576,6 +11576,25 @@ fn math_points_lays_out_waves_and_a_rose() {
         rose.position.iter().any(|p| p[0].hypot(p[1]) < 1.0),
         "the petals meet in the middle"
     );
+    // A Denominator keyed through 1 does not jump there: five petals over 1
+    // lie where five over a hair more do.
+    let five = |denominator: f32| {
+        MathPoints {
+            shape: 1,
+            count: 64,
+            radius: 100.0,
+            petals: 5.0,
+            denominator,
+            ..base
+        }
+        .stream(points::Projection::FLAT)
+    };
+    let (on, near) = (five(1.0), five(1.0001));
+    assert!(on
+        .position
+        .iter()
+        .zip(&near.position)
+        .all(|(a, b)| (a[0] - b[0]).hypot(a[1] - b[1]) < 0.5));
 }
 
 /// **Contour points puts one point on each piece**: two squares are two

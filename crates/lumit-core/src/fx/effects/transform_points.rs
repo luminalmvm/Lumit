@@ -89,7 +89,7 @@ pub const TRANSFORM_POINTS_ENABLED_WHEN: &[EnabledWhen] = &[
     match_name = "transform_points",
     label = "Transform points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be moved anywhere.
     roi = FullFrame,

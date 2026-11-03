@@ -104,7 +104,7 @@ pub const DEFORMER_ENABLED_WHEN: &[EnabledWhen] = &[
     match_name = "clone_deformer",
     label = "Clone deformer",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // Align moves the picture anywhere in the frame.
     roi = FullFrame,

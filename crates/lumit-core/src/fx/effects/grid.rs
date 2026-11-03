@@ -219,7 +219,7 @@ impl GridLayout {
     match_name = "grid",
     label = "Grid",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A cell may be jittered anywhere, and the discs are drawn over the whole
     // picture, so no padding covers it.

@@ -67,7 +67,7 @@ pub const RELAX_ENABLED_WHEN: &[EnabledWhen] = &[
     match_name = "relax_points",
     label = "Relax points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be pushed anywhere.
     roi = FullFrame,

@@ -151,7 +151,7 @@ impl Placement {
     match_name = "points_along_path",
     label = "Points along path",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A mask may be drawn anywhere, and the discs are drawn over the whole
     // picture.

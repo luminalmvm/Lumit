@@ -103,7 +103,7 @@ pub fn crossings(path: &MaskPolyline) -> Vec<([f32; 2], f32)> {
     match_name = "intersection_points",
     label = "Intersection points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,

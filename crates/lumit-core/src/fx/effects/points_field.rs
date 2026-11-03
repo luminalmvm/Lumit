@@ -96,7 +96,7 @@ pub struct Seed {
     match_name = "points_field",
     label = "Points field",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point anywhere decides pixels everywhere.
     roi = FullFrame,

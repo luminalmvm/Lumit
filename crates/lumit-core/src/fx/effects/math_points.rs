@@ -51,7 +51,7 @@ const ROUND_ROWS: &[&str] = &["radius", "turns"];
     match_name = "math_points",
     label = "Math points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,
@@ -237,18 +237,13 @@ impl MathPoints {
                 )
             }
             SHAPE_ROSE => {
-                // r = cos(kθ), k = n / d, which closes after d turns when n·d is
-                // odd and 2d when it is even; d turns for a fraction is the
-                // usual compromise and draws every petal at least once.
+                // r = cos(kθ), k = n / d, which closes after 2d half turns, or
+                // after d when n·d is odd. It always runs 2d: going round once
+                // only on the odd whole numbers would make the points jump when
+                // a keyed Denominator lands on one, as at a key of 1.
                 let d = self.denominator.max(0.01);
                 let k = self.petals / d;
-                let whole = (self.petals.fract() == 0.0) && (d.fract() == 0.0);
-                let laps = if whole && (self.petals as i64 * d as i64) % 2 == 1 {
-                    d
-                } else {
-                    2.0 * d
-                };
-                let theta = along(true) * laps * std::f32::consts::PI;
+                let theta = along(true) * 2.0 * d * std::f32::consts::PI;
                 let r = self.radius * (k * theta).cos();
                 (r * theta.cos(), r * theta.sin())
             }
