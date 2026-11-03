@@ -9,14 +9,13 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use lumit_core::expression::ExpressionContext;
-use lumit_core::model::{Composition, Document, Layer, ProjectItem, ShadowMode};
+use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, ShadowMode};
 use lumit_core::model_layer::{ModelSettings, UpAxis};
 use lumit_gpu::mesh::display::ModelDisplay;
 use lumit_scene::{Bounds, ModelScene};
 use uuid::Uuid;
 
 /// One Model layer, as the mesh pass draws it.
-#[derive(Debug, Clone)]
 pub struct ModelDraw {
     pub item: Uuid,
     pub scene: Arc<ModelScene>,
@@ -35,6 +34,10 @@ pub struct ModelDraw {
     pub accepts_shadows: ShadowMode,
     pub accepts_lights: bool,
     pub holdout: bool,
+    /// The materials its rows change, and when one of them is glass, what
+    /// it bends, laid there each time its run of 3D layers is drawn.
+    pub(crate) looks: Vec<crate::model_material::Look>,
+    pub(crate) behind: Mutex<Behind>,
 }
 
 impl ModelDraw {
@@ -43,6 +46,15 @@ impl ModelDraw {
     pub(crate) fn holds_out(&self) -> bool {
         self.holdout && display().takes_shadows()
     }
+}
+
+/// What a model's glass bends.
+pub(crate) enum Behind {
+    Unset,
+    /// Left out of its run while the picture it bends is made.
+    LeftOut,
+    /// The comp under its run with the run drawn over it, glass left out.
+    Bends(wgpu::Texture),
 }
 
 /// The most bytes kept scenes hold between them, in memory.
@@ -174,11 +186,14 @@ pub(crate) fn draw(
     doc: &Document,
     comp: &Composition,
     layer: &Layer,
-    item: Uuid,
-    settings: &ModelSettings,
     t_comp: f64,
     context: &Arc<ExpressionContext>,
+    picture: &dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
 ) -> Option<ModelDraw> {
+    let LayerKind::Model { item, settings } = &layer.kind else {
+        return None;
+    };
+    let (item, settings) = (*item, &**settings);
     let scene = scene(doc, item)?;
     let material = &layer.transform.material;
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
@@ -204,6 +219,7 @@ pub(crate) fn draw(
     if shutter.iter().all(|s| *s == placement) {
         shutter.clear();
     }
+    let looks = crate::model_material::looks(settings, &scene, lt, context, picture);
     Some(ModelDraw {
         item,
         placement,
@@ -222,6 +238,8 @@ pub(crate) fn draw(
         accepts_shadows: material.accepts_shadows,
         accepts_lights: layer.switches.accepts_lights,
         holdout: material.holdout,
+        looks,
+        behind: Mutex::new(Behind::Unset),
     })
 }
 
@@ -242,6 +260,20 @@ fn kept(key: &Key) -> Option<Option<Arc<ModelScene>>> {
     let mut slot = KEPT.lock().ok()?;
     let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
     kept.get(key).map(|Kept(scene)| scene.clone())
+}
+
+/// The scene of model item `item` once its file has been read, `None` inside
+/// when it wouldn't open. `None` while it hasn't been, and a read beside
+/// starts, so a panel can ask as it draws.
+pub fn scene_if_read(doc: &Document, item: Uuid) -> Option<Option<Arc<ModelScene>>> {
+    let Some(key) = key_of(doc, item) else {
+        return Some(None);
+    };
+    if let Some(scene) = kept(&key) {
+        return Some(scene);
+    }
+    read_beside(key);
+    None
 }
 
 /// The eight corners of the box model item `item` fills in its layer's

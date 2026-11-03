@@ -1756,11 +1756,10 @@ fn feed_layer(
         true,
     )?;
 
-    // The **style stack** (docs/impl/layer-styles.md §1), immediately
-    // after it and through the very same fold: styles are picture, not metadata,
-    // so editing one has to retire the cached frames it changed. Emits nothing
-    // at all when the list is empty, which is every layer that has none — so
-    // every key written before styles existed is still the key that layer names.
+    // The **style stack** (docs/impl/layer-styles.md §1), and a Model layer's
+    // material rows, which draw whatever the fx switch says, through the very
+    // same fold: they're picture, not metadata. Nothing at all for an empty
+    // list, so every key written before either existed is still that layer's.
     feed_effect_stack(
         h,
         layer.switches.fx,
@@ -1774,6 +1773,10 @@ fn feed_layer(
         stamper,
         visited,
         true,
+    )?;
+    let (m, l) = (lumit_core::model_material::stored(layer), Some(layer));
+    feed_effect_stack(
+        h, true, &m, l, comp, doc, t, lt, quality, stamper, visited, true,
     )?;
 
     // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
@@ -2409,12 +2412,8 @@ fn feed_source(
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
         }
         LayerKind::Light { light } => {
-            // A light draws nothing of its own, but unlike a Camera it is not
-            // enough to say so: what it *is* changes every frame that reads it
-            // (the Lens flare's Lights mode), so its own properties have to be
-            // in the name or moving a light would serve a stale frame. The
-            // transform is hashed at the layer level, like every other
-            // layer's, which covers where it is.
+            // A light draws nothing, but the Lens flare's Lights mode reads what it
+            // *is*, so its properties are in the name. Where it is comes with the layer's.
             h.update(b"light");
             if let Ok(json) = serde_json::to_vec(light) {
                 h.update(&json);

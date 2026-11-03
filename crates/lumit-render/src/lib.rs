@@ -77,6 +77,7 @@ pub mod headless;
 pub mod media_index;
 pub mod model;
 pub mod model_layer;
+pub mod model_material;
 pub mod placement;
 pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame

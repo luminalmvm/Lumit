@@ -530,8 +530,8 @@ pub fn collect_comp_jobs(
             // Layer-input references (e.g. a DoF depth pass) decode
             // exactly like matte sources: the referenced layer is usually
             // hidden (you don't want the depth map rendering), but its
-            // pixels still feed the effect.
-            for e in l.effects.iter().filter(|e| e.enabled) {
+            // pixels still feed the effect, or a model's material.
+            for e in lumit_core::model_material::and_effects(l).filter(|e| e.enabled) {
                 for p in &e.params {
                     if let lumit_core::model::EffectValue::Layer(Some(id)) = p.value {
                         if !wanted.contains(&id) {

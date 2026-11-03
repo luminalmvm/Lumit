@@ -615,14 +615,13 @@ impl Realiser<'_> {
         }
     }
 
-    /// [`LayerInputDraw::ThisLayer`] renders nothing here: it names
-    /// the texture `run_ops` is already carrying, which only `run_ops` can
-    /// hand over, so it passes through as [`LayerInput::ThisLayer`].
+    /// [`LayerInputDraw::ThisLayer`] renders nothing here: it names the texture
+    /// `run_ops` is carrying, so it passes through as [`LayerInput::ThisLayer`].
     ///
     /// `of` is the consuming layer's own size, px at comp size, which a map
     /// set down where its layer sits is measured against. `below` is the
     /// depth of the layers below an adjustment layer, when it was made.
-    fn render_layer_inputs(
+    pub(crate) fn render_layer_inputs(
         &self,
         inputs: &[LayerInputDraw],
         w: u32,
@@ -1507,9 +1506,10 @@ impl Realiser<'_> {
         });
         let mut depth: Option<wgpu::Texture> = None;
         for (i, l) in layers.iter().enumerate() {
-            // The haze ends its segment, which lays it over what is below.
+            // The haze ends its segment, and so does the picture glass bends.
             let haze = matches!(l.source, DrawSource::Haze(_));
-            if !haze && !matches!(l.source, DrawSource::Adjust) {
+            let glass = crate::model_layer::glass_starts(layers, i);
+            if !haze && !glass && !matches!(l.source, DrawSource::Adjust) {
                 continue;
             }
             let below = self.realise_segment(
@@ -1526,8 +1526,10 @@ impl Realiser<'_> {
                 if haze { ground.take() } else { None },
                 environment,
             );
-            if haze {
-                (acc, start) = (Some(below), i + 1);
+            if haze || glass {
+                (acc, start) = (Some(below), i + usize::from(haze));
+                let at = (width, height);
+                self.lay_behind(layers, i, &acc, camera, at, background, region, environment);
                 continue;
             }
             // An adjustment layer processes the composite below, which has no
@@ -2129,7 +2131,7 @@ impl Realiser<'_> {
     #[allow(clippy::too_many_arguments)]
     /// Composite one adjustment-free run of draws; `seed` (a previous
     /// stage's output) replaces the cleared background when present.
-    fn realise_segment(
+    pub(crate) fn realise_segment(
         &self,
         camera: Option<lumit_core::model::CameraPose>,
         width: u32,
@@ -2854,12 +2856,7 @@ fn straight_to_composite(l: &CompLayerDraw, camera: Option<lumit_core::model::Ca
 /// caller crops. Nothing about the image changes — only how much of it was
 /// computed to get there.
 fn region_is_safe(layers: &[CompLayerDraw]) -> bool {
-    !layers.iter().any(|l| {
-        matches!(
-            l.source,
-            DrawSource::Adjust | DrawSource::Haze(_) | DrawSource::Environment(_)
-        ) || !l.mb.is_empty()
-    })
+    !layers.iter().any(CompLayerDraw::needs_whole_frame)
 }
 
 /// One propagated matte on the card: a gray8 plane at the source's own

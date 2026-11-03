@@ -4,11 +4,12 @@
 //! [`lumit_gpu::composite::Compositor::composite_joined`].
 
 use crate::draw::{CompLayerDraw, DrawSource};
-use crate::model::ModelDraw;
+use crate::model::{Behind, ModelDraw};
 use crate::realise::Realiser;
 use glam::{Mat4, Vec3};
 use lumit_gpu::composite::{order::cut_by_depth, Cut};
 use lumit_gpu::fx::lighting::{LightingShadows, ShadowCasters};
+use lumit_gpu::mesh::display::Shading;
 use lumit_gpu::mesh::shadow::{MapCaster, ShadowMaps};
 use lumit_gpu::mesh::{ModelPicture, ModelView};
 
@@ -49,6 +50,20 @@ impl Realiser<'_> {
             .map(|p| Mat4::from_cols_array_2d(p) * Mat4::from_cols_array_2d(&m.model_to_comp))
             .collect();
         let takes = !m.holdout || l.material.accepts_shadows != LightingShadows::Off;
+        // The glass is left out of the picture it bends.
+        let behind = match m.behind.lock().as_deref() {
+            Ok(Behind::LeftOut) => return None,
+            Ok(Behind::Bends(picture)) => Some(picture.clone()),
+            _ => None,
+        };
+        // Lines show no material, so they make no layer's picture.
+        let wire = display.shading == Shading::Wireframe;
+        let looks: Vec<_> = m
+            .looks
+            .iter()
+            .filter(|_| !wire)
+            .map(|k| self.look(k))
+            .collect();
         let view = ModelView {
             comp: (width, height),
             render_scale: self.render_scale,
@@ -73,8 +88,8 @@ impl Realiser<'_> {
             maps: maps.filter(|_| takes && !m.holdout),
             display,
             environment,
-            looks: &[],
-            behind: None,
+            looks: &looks,
+            behind: behind.as_ref(),
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
         Some(ModelPicture {
@@ -125,6 +140,106 @@ impl Realiser<'_> {
             .clamp(512, 2048);
         self.fx.shadow_maps(&self.ctx, &casters, &lights, side)
     }
+
+    /// A material's rows for the mesh pass, the layers they name made into
+    /// pictures at their own size.
+    fn look(&self, look: &crate::model_material::Look) -> lumit_gpu::mesh::look::Look {
+        let picture = |slot: &crate::draw::LayerInputDraw| {
+            let [w, h] = slot.size()?;
+            let px = |v: f32| ((v * self.render_scale).ceil() as u32).clamp(1, 8192);
+            let made =
+                self.render_layer_inputs(std::slice::from_ref(slot), px(w), px(h), (w, h), None);
+            match made.into_iter().next()? {
+                crate::fxops::LayerInput::Texture(t) => Some(t),
+                _ => None,
+            }
+        };
+        lumit_gpu::mesh::look::Look {
+            index: look.index,
+            material: look.material.clone(),
+            pictures: std::array::from_fn(|k| look.pictures.get(k).and_then(picture)),
+            textures: look.textures,
+        }
+    }
+}
+
+/// How many layers from `i` on make a run of 3D layers.
+fn run_from(layers: &[CompLayerDraw], i: usize) -> usize {
+    let in_run = |l: &CompLayerDraw| l.three_d && !l.ends_run;
+    let starts = layers.get(i).is_some_and(in_run) && (i == 0 || !in_run(&layers[i - 1]));
+    match starts {
+        true => layers[i..].iter().take_while(|l| in_run(l)).count(),
+        false => 0,
+    }
+}
+
+/// Whether a run of 3D layers starts at `i` with a model of glass in it,
+/// which bends the comp's picture under the run, so that is made first.
+pub(crate) fn glass_starts(layers: &[CompLayerDraw], i: usize) -> bool {
+    (layers.iter().skip(i).take(run_from(layers, i))).any(|l| glass(l).is_some())
+}
+
+impl Realiser<'_> {
+    /// Lay the picture behind the glass in the run of 3D layers that begins
+    /// at `i`, if it has any: `seed`, the comp under the run, with the run
+    /// drawn over it without its glass. Cards in front of the glass are in it
+    /// too, but they cover the glass by depth.
+    // ponytail: the run is drawn twice, so glass costs about an adjustment
+    // layer plus the run again. Drawing the run's pictures once and
+    // compositing them twice is the upgrade.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn lay_behind(
+        &self,
+        layers: &[CompLayerDraw],
+        i: usize,
+        seed: &Option<wgpu::Texture>,
+        camera: Option<lumit_core::model::CameraPose>,
+        (width, height): (u32, u32),
+        background: [f64; 4],
+        region: Option<lumit_gpu::composite::Region>,
+        environment: Option<&lumit_gpu::fx::environment::EnvironmentLight>,
+    ) {
+        let run = &layers[i..i + run_from(layers, i)];
+        if !run.iter().any(|l| glass(l).is_some()) {
+            return;
+        }
+        let lay = |behind: &dyn Fn() -> Behind| {
+            for m in run.iter().filter_map(glass) {
+                if let Ok(mut b) = m.behind.lock() {
+                    *b = behind();
+                }
+            }
+        };
+        lay(&|| Behind::LeftOut);
+        let picture = self.realise_segment(
+            camera,
+            width,
+            height,
+            background,
+            run,
+            seed,
+            region,
+            None,
+            None,
+            None,
+            None,
+            environment,
+        );
+        lay(&|| Behind::Bends(picture.clone()));
+    }
+}
+
+/// `l`'s model if it has glass that bends what is behind it: only as it
+/// exports, and never one that only shows or casts shadows or holds out.
+pub(crate) fn glass(l: &CompLayerDraw) -> Option<&ModelDraw> {
+    let DrawSource::Model(m) = &l.source else {
+        return None;
+    };
+    let surface = !m.holdout
+        && l.material.accepts_shadows != LightingShadows::Only
+        && l.material.casts_shadows != LightingShadows::Only;
+    let bends = surface && crate::model::display().takes_shadows();
+    (bends && m.looks.iter().any(|k| k.material.transmission > 0.0)).then_some(m)
 }
 
 /// A Model draw's metres to comp pixels, parents and all.
