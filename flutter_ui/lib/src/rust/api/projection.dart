@@ -9,7 +9,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `frame_width_at`, `placed_at_points`, `projection_source`
+// These functions are ignored because they are not marked as `pub`: `frame_width_at`, `holds_a_still`, `placed_at_points`, `projection_source`
 
 /// Add a card at solved points `tracks` of `tracked`, filling the frame of the
 /// camera solved from it, with `tracked`'s picture projected from that camera.

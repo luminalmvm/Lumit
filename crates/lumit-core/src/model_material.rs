@@ -395,15 +395,15 @@ pub fn camera_at(
 
 /// What Project from camera uses for Model layer `model` of `comp` at comp time
 /// `t`, as (camera, picture). The camera is a selected one, else the comp's
-/// own. The picture is the shot that camera was solved from, else a selected
-/// picture, else the nearest below the model.
+/// own, and `None` when it has none to use. The picture is the shot that camera
+/// was solved from, else a selected picture, else the nearest below the model.
 #[must_use]
 pub fn projection_source(
     comp: &Composition,
     model: Uuid,
     selected: &[Uuid],
     t: f64,
-) -> Option<(Uuid, Uuid)> {
+) -> Option<(Option<Uuid>, Uuid)> {
     let picked = || {
         let find = |id: &Uuid| comp.layers.iter().find(|l| l.id == *id);
         selected.iter().filter_map(find)
@@ -416,24 +416,31 @@ pub fn projection_source(
     };
     let camera = picked()
         .find(|l| matches!(l.kind, LayerKind::Camera { .. }))
-        .or_else(|| comp.active_camera(t))?;
-    let solved = match camera.kind {
+        .or_else(|| comp.active_camera(t));
+    let solved = camera.and_then(|c| match c.kind {
         LayerKind::Camera { solve_link, .. } => solve_link,
         _ => None,
-    };
+    });
     let below = comp.layers.iter().skip_while(|l| l.id != model).skip(1);
     let picture = solved
         .or_else(|| picked().find(is_picture).map(|l| l.id))
         .or_else(|| below.clone().find(is_picture).map(|l| l.id))?;
-    Some((camera.id, picture))
+    Some((camera.map(|c| c.id), picture))
 }
 
-/// Set material rows `rows` to project `picture` from `camera`.
-pub fn set_projection(rows: &mut EffectInstance, picture: Uuid, camera: Uuid) {
+/// Set material rows `rows` to project `picture` from `camera`, held at comp
+/// frame `hold` or following the playhead.
+pub fn set_projection(rows: &mut EffectInstance, picture: Uuid, camera: Uuid, hold: Option<i64>) {
     for p in &mut rows.params {
         match p.id.as_str() {
             "base_colour_layer" => p.value = EffectValue::Layer(Some(picture)),
             "camera" => p.value = EffectValue::Layer(Some(camera)),
+            "projection_time" => p.value = EffectValue::Choice(u32::from(hold.is_some())),
+            "hold_frame" => {
+                if let Some(frame) = hold {
+                    p.value = EffectValue::Float(crate::anim::Property::fixed(frame as f64));
+                }
+            }
             _ => {}
         }
     }
@@ -466,16 +473,7 @@ mod tests {
         });
         let camera = crate::edits::fresh_camera(&comp, "Camera".into(), None);
         let mut rows = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();
-        set_projection(&mut rows, near.id, camera.id);
-        if hold {
-            for p in &mut rows.params {
-                match p.id.as_str() {
-                    "projection_time" => p.value = EffectValue::Choice(1),
-                    "hold_frame" => p.value = EffectValue::Float(crate::anim::Property::fixed(6.0)),
-                    _ => {}
-                }
-            }
-        }
+        set_projection(&mut rows, near.id, camera.id, hold.then_some(6));
         let mut model = layer(LayerKind::Model {
             item: Uuid::now_v7(),
             settings: Box::new(crate::model_layer::ModelSettings {
@@ -496,18 +494,16 @@ mod tests {
         let (mut comp, [camera, model, near, far]) = set(false);
         let pick =
             |comp: &Composition, selected: &[Uuid]| projection_source(comp, model, selected, 0.0);
-        assert_eq!(pick(&comp, &[]), Some((camera, near)));
-        assert_eq!(pick(&comp, &[far]), Some((camera, far)));
+        assert_eq!(pick(&comp, &[]), Some((Some(camera), near)));
+        assert_eq!(pick(&comp, &[far]), Some((Some(camera), far)));
         if let LayerKind::Camera { solve_link, .. } = &mut comp.layers[0].kind {
             *solve_link = Some(far);
         }
-        assert_eq!(pick(&comp, &[near]), Some((camera, far)));
+        assert_eq!(pick(&comp, &[near]), Some((Some(camera), far)));
         comp.layers.remove(0);
-        assert_eq!(
-            pick(&comp, &[near]),
-            None,
-            "no camera, nothing to project from"
-        );
+        assert_eq!(pick(&comp, &[near]), Some((None, near)), "one is made");
+        comp.layers.retain(|l| l.id == model);
+        assert_eq!(pick(&comp, &[]), None, "no picture, nothing to project");
     }
 
     /// A hidden picture only a held projection reads is fetched at the frame
@@ -537,7 +533,7 @@ mod tests {
         // Read by anything else too, it's fetched at the playhead after all.
         let mut read_twice = comp.clone();
         let mut other = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();
-        set_projection(&mut other, near, near);
+        set_projection(&mut other, near, near, None);
         read_twice.layers[3].effects.push(other);
         assert_eq!(
             with_held_frames(&read_twice, vec![1.0; 4], 1.0),

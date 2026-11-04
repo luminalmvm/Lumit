@@ -3077,7 +3077,7 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceCameraOwnPoseAt(that: this, frame: frame);
 
-  /// Whether Project from camera has a camera and a picture to use.
+  /// Whether Project from camera has a picture to use.
   bool canProjectFromCamera(
           {required List<UuidValue> selected, required int frame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceCanProjectFromCamera(
@@ -4093,7 +4093,8 @@ class LayerReference {
       .crateApiLayerLayerReferencePasteSequenceShape(that: this, text: text);
 
   /// Project a picture on every material of this Model layer, as one undo
-  /// step.
+  /// step: held at `frame` for a still, following the playhead otherwise, with
+  /// a Camera layer made first if the comp has none.
   void projectFromCamera(
           {required List<UuidValue> selected, required int frame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceProjectFromCamera(

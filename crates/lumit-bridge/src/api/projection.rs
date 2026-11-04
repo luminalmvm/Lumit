@@ -5,17 +5,18 @@ use flutter_rust_bridge::frb;
 use uuid::Uuid;
 
 use crate::api::composition::CompositionReference;
-use crate::api::layer::{InstanceHome, LayerReference};
+use crate::api::layer::LayerReference;
 use crate::api::BridgeError;
 use lumit_core::anim::Property;
-use lumit_core::model::{Document, LayerKind, TransformGroup};
+use lumit_core::model::{Document, LayerKind, ProjectItem, TransformGroup};
 use std::sync::Arc;
 
 impl LayerReference {
     /// The camera and picture Project from camera would use on this Model
-    /// layer at comp frame `frame`, `None` while it can't.
+    /// layer at comp frame `frame`, `None` while it has no picture to use. A
+    /// comp with no camera is told so by `None` for the camera.
     #[frb(ignore)]
-    fn projection_source(&self, selected: &[Uuid], frame: i64) -> Option<(Uuid, Uuid)> {
+    fn projection_source(&self, selected: &[Uuid], frame: i64) -> Option<(Option<Uuid>, Uuid)> {
         let (doc, layer) = (self.document().ok()?, self.item().ok()?);
         lumit_render::model_material::rows(&doc, &layer)?;
         let comp = doc.comp(self.comp_id)?;
@@ -23,25 +24,75 @@ impl LayerReference {
         lumit_core::model_material::projection_source(comp, self.layer_id, selected, t)
     }
 
-    /// Whether Project from camera has a camera and a picture to use.
+    /// Whether Project from camera has a picture to use.
     #[frb(sync)]
     pub fn can_project_from_camera(&self, selected: Vec<Uuid>, frame: i64) -> bool {
         self.projection_source(&selected, frame).is_some()
     }
 
+    /// Whether picture layer `picture` is a still with no solved camera on it,
+    /// which only shows parallax held.
+    #[frb(ignore)]
+    fn holds_a_still(&self, doc: &Document, picture: Uuid, camera: Option<Uuid>) -> bool {
+        let Some(comp) = doc.comp(self.comp_id) else {
+            return false;
+        };
+        let find = |id| comp.layers.iter().find(|l| l.id == id);
+        let solved = camera.and_then(find).is_some_and(|c| {
+            matches!(
+                c.kind,
+                LayerKind::Camera {
+                    solve_link: Some(_),
+                    ..
+                }
+            )
+        });
+        let footage = find(picture).and_then(|l| match l.kind {
+            LayerKind::Footage { item } => doc.item(item),
+            _ => None,
+        });
+        let (Some(ProjectItem::Footage(footage)), false) = (footage, solved) else {
+            return false;
+        };
+        let Ok(project) = self.project() else {
+            return false;
+        };
+        let state = project.read();
+        state.is_ok_and(|state| crate::api::cut::is_still(&state, footage))
+    }
+
     /// Project a picture on every material of this Model layer, as one undo
-    /// step.
+    /// step: held at `frame` for a still, following the playhead otherwise, with
+    /// a Camera layer made first if the comp has none.
     #[frb(sync)]
     pub fn project_from_camera(&self, selected: Vec<Uuid>, frame: i64) -> Result<(), BridgeError> {
         let (camera, picture) = self
             .projection_source(&selected, frame)
             .ok_or(BridgeError::InvalidLayer)?;
-        self.with_instances(InstanceHome::Materials, move |list| {
+        let doc = self.document()?;
+        let hold = self.holds_a_still(&doc, picture, camera).then_some(frame);
+        let mut ops = Vec::new();
+        let camera = match camera {
+            Some(camera) => camera,
+            None => {
+                let comp = self.composition()?;
+                let made = crate::edits::fresh_camera(&comp, "Camera".into(), None);
+                let id = made.id;
+                ops.push(lumit_core::ops::Op::AddLayer {
+                    comp: self.comp_id,
+                    index: 0,
+                    layer: Box::new(made),
+                });
+                id
+            }
+        };
+        ops.push(self.materials_op(move |list| {
             for rows in list {
-                lumit_core::model_material::set_projection(rows, picture, camera);
+                lumit_core::model_material::set_projection(rows, picture, camera, hold);
             }
             Ok(())
-        })
+        })?);
+        self.commit(lumit_core::ops::Op::Batch { ops })
     }
 }
 
@@ -180,7 +231,7 @@ pub fn add_card_at_points(
     let id = lumit_core::model_material::material_id(layer.id, 0);
     let mut rows = lumit_render::model_material::file_rows(&doc, &layer, id)
         .ok_or(BridgeError::InvalidEffect)?;
-    lumit_core::model_material::set_projection(&mut rows, tracked.layer_id, camera_id);
+    lumit_core::model_material::set_projection(&mut rows, tracked.layer_id, camera_id, None);
     if let LayerKind::Model { settings, .. } = &mut layer.kind {
         settings.materials = vec![Some(rows)];
     }
