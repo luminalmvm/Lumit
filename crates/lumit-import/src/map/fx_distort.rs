@@ -373,8 +373,7 @@ fn spherize(fx: &mut Fx<'_, '_>) {
     fx.point(2, "centre_x", "centre_y", Unit::Px);
 }
 
-/// AE `ADBE Ripple` → Ripple (docs/11 §5). Wave Speed reads the clock, which
-/// docs/08 §2.4 forbids, so it becomes Evolution keyframes.
+/// AE `ADBE Ripple` → Ripple (docs/11 §5).
 fn ripple(fx: &mut Fx<'_, '_>) {
     fx.carry(1, "radius", Unit::LayerPct);
     fx.point(2, "centre_x", "centre_y", Unit::Px);
@@ -382,18 +381,19 @@ fn ripple(fx: &mut Fx<'_, '_>) {
     fx.choice(3, "wave_type", &[1, 0], "Asymmetric");
     fx.carry(5, "wave_width", Unit::Px);
     fx.carry(6, "wave_height", Unit::Px);
-    fx.clock(4, 7, "evolution");
+    fx.carry(4, "wave_speed", Unit::Direct);
+    fx.carry(7, "evolution", Unit::Direct);
 }
 
-/// AE `ADBE Wave Warp` → Wave warp (docs/11 §5). Wave Speed becomes Phase
-/// keyframes, for §3.53's reason.
+/// AE `ADBE Wave Warp` → Wave warp (docs/11 §5).
 fn wave_warp(fx: &mut Fx<'_, '_>) {
     fx.choice(1, "wave_type", &[0, 1, 2, 3, 4, 5, 6, 7, 8], "Sine");
     fx.carry(2, "wave_height", Unit::Px);
     fx.carry(3, "wave_width", Unit::Px);
     fx.carry(4, "direction", Unit::Direct);
     fx.choice(6, "pinning", &[0, 1, 2, 3, 4, 5, 6, 7], "None");
-    fx.clock(5, 7, "phase");
+    fx.carry(5, "wave_speed", Unit::Direct);
+    fx.carry(7, "phase", Unit::Direct);
     fx.drop_ae(8); // Antialiasing (Best Quality)
                    // docs/11 §5 also names a Warp Axis here; the 2026-08-20 audit shows
                    // `ADBE Wave Warp` has no such property (that is `ADBE WRPMESH`'s), and the
@@ -1069,44 +1069,6 @@ impl<'a, 'c> Fx<'a, 'c> {
         }
     }
 
-    /// An After Effects control that reads the clock (Ripple's Wave Speed, Wave
-    /// warp's) becomes two keyframes on Lumit's phase-like dial across the
-    /// layer's own span: the same motion, and deterministic (docs/08 §2.4).
-    fn clock(&mut self, speed_n: u32, phase_n: u32, id: &str) {
-        let speed = self.still(speed_n).unwrap_or(0.0);
-        let phase_keyed = self
-            .find(phase_n)
-            .is_some_and(|p| p.keyframes.as_deref().is_some_and(|k| !k.is_empty()));
-        self.carry(phase_n, id, Unit::Direct);
-        if !speed.is_finite() || speed == 0.0 {
-            return;
-        }
-        if phase_keyed {
-            // The phase's own keys already say where the wave is; two more
-            // would fight them.
-            self.not_carried("Wave Speed");
-            return;
-        }
-        let (from, to) = self.conv.span;
-        let seconds = to.to_f64() - from.to_f64();
-        if seconds <= 0.0 {
-            return;
-        }
-        let base = self.inst.float_at(id, 0.0).unwrap_or(0.0);
-        // One turn of the dial is one whole wave, so a speed of s is 360·s
-        // degrees a second.
-        let end = base + 360.0 * speed * seconds;
-        self.set(id, EffectValue::Float(props::ramp(from, base, to, end)));
-        let effect = self.name.clone();
-        self.row(
-            Outcome::Adjusted,
-            Reason::EffectSpeedAsKeyframes {
-                effect,
-                param: "Wave Speed".to_string(),
-            },
-        );
-    }
-
     /// Hold a parameter to a documented cap, and say whether it bit.
     fn clamp(&mut self, id: &str, max: f64) -> bool {
         let Some(EffectValue::Float(property)) = self.inst.param(id).cloned() else {
@@ -1525,10 +1487,10 @@ mod tests {
         assert!(approximated(&r, "Set Alpha To Source 4's"));
     }
 
-    /// Wave Speed reads the clock, which docs/08 §2.4 forbids: it becomes two
-    /// Evolution keyframes of 360·speed degrees a second across the layer.
+    /// Wave Speed carries onto Lumit's own Wave speed, and Ripple Phase onto
+    /// Evolution, as they are.
     #[test]
-    fn ripple_rebases_its_three_lengths_and_turns_wave_speed_into_keyframes() {
+    fn ripple_rebases_its_three_lengths_and_carries_wave_speed() {
         let ae = "ADBE Ripple";
         let r = run(&fx(
             ae,
@@ -1548,17 +1510,8 @@ mod tests {
         assert_eq!(choice(&r, "wave_type"), 0, "AE's second entry is Symmetric");
         assert_eq!(keys_of(&r, "wave_width")[1], (2.0, 60.0, 20.0));
         assert_eq!(f(&r, "wave_height"), 40.0);
-        // Two seconds of layer at one and a half turns a second, from the phase
-        // After Effects was sitting at.
-        assert_eq!(
-            keys_of(&r, "evolution"),
-            vec![(0.0, 90.0, 0.0), (2.0, 90.0 + 360.0 * 1.5 * 2.0, 0.0)]
-        );
-        assert!(r
-            .report
-            .rows
-            .iter()
-            .any(|row| matches!(&row.reason, Reason::EffectSpeedAsKeyframes { .. })));
+        assert_eq!(f(&r, "wave_speed"), 1.5);
+        assert_eq!(f(&r, "evolution"), 90.0);
     }
 
     /// The five Expression Controls carry their one property, keyframes and

@@ -42,6 +42,14 @@ File associations for `.lum` and `.lumfx` are not created after installing the f
 If you would like to be able to click on project files to open them directly, then clone
 the repository from GitHub, and run `packaging/linux/install.sh`.
 
+The `.AppImage` runs without installing. It needs glibc 2.35 or newer, and uses the
+system's own GTK and WebKitGTK:
+
+```bash
+chmod +x lumit-*.AppImage
+./lumit-*.AppImage
+```
+
 ## macOS
 
 Lumit runs on Macs with Apple silicon and macOS 12 or newer. Download the `.dmg` installer
@@ -117,7 +125,8 @@ An update goes through these windows in turn:
    **Later**, **Restart without saving** and **Save and restart**. **Later** keeps the
    download, and the next press comes straight back here.
 
-On Windows the installer runs silently and Lumit comes back by itself. A Flatpak is
+On Windows the installer runs silently and Lumit comes back by itself. An AppImage
+replaces its own file and comes back by itself. A Flatpak is
 updated by Flatpak: the last window offers **Show the file**, and gives the
 `flatpak install --user` command for the downloaded bundle.
 

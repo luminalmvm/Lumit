@@ -928,6 +928,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       case SettingsPage.viewer:
         workspace.setSmoothZoomedViewer(false);
         settings.showToneMap = shipped.showToneMap;
+        settings.invertOrbitAcross = shipped.invertOrbitAcross;
+        settings.invertOrbitUpDown = shipped.invertOrbitUpDown;
         workspace.settingsChanged();
         ui.pushViewerLook();
       case SettingsPage.audio:
@@ -2213,6 +2215,23 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             // button, so the picture has to be asked for again — the look the
             // Viewer is now reading is not the one the engine was given.
             ui.pushViewerLook();
+          }),
+        ],
+      ),
+      (
+        l10n.settingsGroupOrbit,
+        [
+          _flag(t, 'settings-invert-orbit-across',
+              l10n.settingsInvertOrbitAcross,
+              value: settings.invertOrbitAcross, set: (on) {
+            settings.invertOrbitAcross = on;
+            ui.workspace.settingsChanged();
+          }),
+          _flag(t, 'settings-invert-orbit-up-down',
+              l10n.settingsInvertOrbitUpDown,
+              value: settings.invertOrbitUpDown, set: (on) {
+            settings.invertOrbitUpDown = on;
+            ui.workspace.settingsChanged();
           }),
         ],
       ),

@@ -7631,7 +7631,7 @@
       "slug": "ripple",
       "match_name": "ripple",
       "label": "Ripple",
-      "version": 1,
+      "version": 2,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [
@@ -7702,6 +7702,15 @@
           "unit": "degrees",
           "default": 0.0,
           "dial_step": 45.0
+        },
+        {
+          "id": "wave_speed",
+          "label": "Wave speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -5.0,
+          "slider_max": 5.0
         },
         {
           "id": "mix",
@@ -7791,7 +7800,7 @@
       "slug": "wave-warp",
       "match_name": "wave_warp",
       "label": "Wave warp",
-      "version": 1,
+      "version": 2,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [
@@ -7848,6 +7857,15 @@
           "unit": "degrees",
           "default": 0.0,
           "dial_step": 45.0
+        },
+        {
+          "id": "wave_speed",
+          "label": "Wave speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -5.0,
+          "slider_max": 5.0
         },
         {
           "id": "pinning",

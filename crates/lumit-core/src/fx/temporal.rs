@@ -203,13 +203,15 @@ impl AccumulationMbParams {
 
     /// The shutter as a [`crate::model::MotionBlur`] — the shared centred-shutter
     /// maths the per-layer switch uses, always enabled with this effect's
-    /// angle/phase/samples.
+    /// angle/phase/samples. A layer it forces to blur goes up to the default
+    /// limit when it moves fast, as one blurred by its own switch does.
     fn shutter(&self) -> crate::model::MotionBlur {
         crate::model::MotionBlur {
             enabled: true,
             shutter_angle: self.shutter_angle,
             shutter_phase: self.shutter_phase,
             samples: self.samples,
+            ..crate::model::MotionBlur::default()
         }
     }
 

@@ -1713,6 +1713,7 @@ void main() {
           background: settings.background,
           shutterAngle: settings.shutterAngle,
           motionBlurSamples: settings.motionBlurSamples,
+          motionBlurLimit: settings.motionBlurLimit,
           duration: const BridgeRational(num: 5, den: 1),
         ),
       );

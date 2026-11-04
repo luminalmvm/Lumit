@@ -43,7 +43,6 @@ use lumit_media::sequence::MediaSource;
 #[cfg(feature = "media")]
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
     sync::{
         atomic::{AtomicU64, Ordering},
         mpsc::{channel, Receiver, Sender},
@@ -157,7 +156,7 @@ fn run(rx: &Receiver<Job>) {
         let wanted = job.generation == generation().load(Ordering::Relaxed);
         // A stamp is one `stat`; a file that has gone away since it was
         // queued is not probed at all, and nothing is remembered for it.
-        let stamp = wanted.then(|| stamp(job.src.on_disk())).flatten();
+        let stamp = wanted.then(|| stamp(&job.src)).flatten();
         let Some(stamp) = stamp else {
             unqueue(&job.src);
             continue;
@@ -176,10 +175,14 @@ fn run(rx: &Receiver<Job>) {
 /// This file's length and modification time, or `None` when it is not a file
 /// we can read at all — which is the same answer a probe of it would give.
 #[cfg(feature = "media")]
-fn stamp(path: &Path) -> Option<Stamp> {
-    let meta = std::fs::metadata(path).ok()?;
+fn stamp(src: &MediaSource) -> Option<Stamp> {
+    let meta = std::fs::metadata(src.on_disk()).ok()?;
     if !meta.is_file() {
         return None;
+    }
+    // A run still being exported is longer each time it is asked about.
+    if src.sequence_fps.is_some() {
+        return src.stamp_now().map(|(files, at)| (files, Some(at)));
     }
     Some((meta.len(), meta.modified().ok()))
 }
@@ -263,7 +266,7 @@ fn whole_file(mut src: MediaSource) -> MediaSource {
 #[cfg(feature = "media")]
 pub(crate) fn request(src: impl Into<MediaSource>) {
     let src = whole_file(src.into());
-    let Some(stamp) = stamp(src.on_disk()) else {
+    let Some(stamp) = stamp(&src) else {
         return;
     };
     {
@@ -317,7 +320,7 @@ pub(crate) fn ensure_probed(
     src: impl Into<MediaSource>,
 ) -> Option<Arc<lumit_media::probe::MediaProbe>> {
     let src = whole_file(src.into());
-    let stamp = stamp(src.on_disk())?;
+    let stamp = stamp(&src)?;
     let probed = match lookup(&src, stamp) {
         Some(hit) => hit,
         None => {
@@ -392,7 +395,7 @@ pub(crate) fn clear() {
 /// Tests only: what makes "the async path ran" and "the fallback ran" separate,
 /// checkable claims rather than one counter that cannot tell them apart.
 #[cfg(all(test, feature = "media"))]
-pub(crate) fn probed_off_thread(path: &Path) -> Option<bool> {
+pub(crate) fn probed_off_thread(path: &std::path::Path) -> Option<bool> {
     let held = cache().lock().ok()?;
     held.by_path
         .get(&MediaSource::file(path))
@@ -417,10 +420,10 @@ mod tests {
     /// Spin until `path` has an answer, up to two seconds. Returns whether one
     /// arrived — a bounded wait rather than a sleep, so the test is as quick as
     /// the machine is and still cannot hang the suite.
-    fn wait_for(path: &Path) -> bool {
+    fn wait_for(path: &std::path::Path) -> bool {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
         while std::time::Instant::now() < deadline {
-            if stamp(path)
+            if stamp(&MediaSource::file(path))
                 .and_then(|s| lookup(&MediaSource::file(path), s))
                 .is_some()
             {
@@ -469,7 +472,10 @@ mod tests {
 
         assert!(ensure_probed(&text).is_none());
         assert!(matches!(
-            lookup(&MediaSource::file(&text), stamp(&text).expect("stamped")),
+            lookup(
+                &MediaSource::file(&text),
+                stamp(&MediaSource::file(&text)).expect("stamped")
+            ),
             Some(Probed::Unreadable)
         ));
 
@@ -492,11 +498,11 @@ mod tests {
         let path = dir.path().join("clip.txt");
         std::fs::write(&path, b"one").expect("write");
         assert!(ensure_probed(&path).is_none());
-        let first = stamp(&path).expect("stamped");
+        let first = stamp(&MediaSource::file(&path)).expect("stamped");
 
         // A longer file: a different stamp, whatever the clock's resolution.
         std::fs::write(&path, b"a longer body entirely").expect("rewrite");
-        let second = stamp(&path).expect("stamped again");
+        let second = stamp(&MediaSource::file(&path)).expect("stamped again");
         assert_ne!(first, second);
         assert!(
             lookup(&MediaSource::file(&path), second).is_none(),

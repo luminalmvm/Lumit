@@ -7,6 +7,8 @@
 // dragged, with Shift keeping it square. The **Pen** is different: it builds a
 // path a point at a time, and clicking its first point again closes and applies
 // it. Enter, Esc, a click outside the Viewer or another tool applies it open.
+// A click on either end of the selected layer's open path carries that path
+// on, and a click on its other end closes it.
 // (That gesture was briefly on the polygon tool; it is After Effects' pen, and
 // it belongs on the Pen.)
 //
@@ -33,7 +35,7 @@ import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
-import 'layer_fold_frb.dart' show stillColour;
+import 'layer_fold_frb.dart' show shapeItemWith, stillColour;
 import 'viewer_gizmo.dart';
 import 'viewer_tool_cursor.dart';
 import '../widgets/escape_ladder.dart';
@@ -112,6 +114,10 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   PathDraft _draft = const PathDraft();
   Offset? _penPointer;
 
+  /// The open path the Pen is carrying on, when the draft began on one of
+  /// its ends.
+  _Carrying? _carrying;
+
   /// Where the pointer is, for the drawn cursor. Tracked for every
   /// shape tool, not only the Pen, because every one of them wears one.
   Offset? _pointer;
@@ -155,27 +161,42 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         old.tool == ToolMode.pen &&
         (!widget.active || widget.tool != ToolMode.pen);
     if (!penGone || _draft.vertices.length < 2) {
-      if (penGone) _draft = const PathDraft();
+      if (penGone) _clearDraft();
       return;
     }
     final path = _draft.vertices;
     final box = _target;
-    _draft = const PathDraft();
+    final carrying = _carrying;
+    _clearDraft();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _place(path, box, closed: false);
+      if (mounted) _place(path, box, closed: false, carrying: carrying);
     });
   }
 
   /// The path in progress, applied as it stands: open.
   void _finishOpen() {
     final path = _draft.vertices;
-    setState(() => _draft = const PathDraft());
+    final carrying = _carrying;
+    setState(_clearDraft);
     if (path.length < 2) return;
-    _place(path, _target, closed: false);
+    _place(path, _target, closed: false, carrying: carrying);
   }
 
-  /// A finished Pen path, onto [box] or into a new shape layer.
-  void _place(List<BridgeVertex> path, LayerBox? box, {required bool closed}) {
+  void _clearDraft() {
+    _draft = const PathDraft();
+    _carrying = null;
+  }
+
+  /// A finished Pen path, onto [box] or into a new shape layer, or over the
+  /// path it carried on.
+  void _place(List<BridgeVertex> path, LayerBox? box,
+      {required bool closed, required _Carrying? carrying}) {
+    if (carrying != null) {
+      if (box != null && (closed || path.length > carrying.had)) {
+        _carryOn(box, carrying, path, closed);
+      }
+      return;
+    }
     if (box == null) {
       _commitShapeLayer(ToolMode.pen, path, closed: closed);
     } else {
@@ -209,7 +230,10 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         (HardwareKeyboard.instance.isControlPressed ||
             HardwareKeyboard.instance.isMetaPressed);
     if (undo || event.logicalKey == LogicalKeyboardKey.backspace) {
-      setState(() => _draft = _draft.withoutLast());
+      // A carried path gives back the points added to it, then lets go.
+      setState(() => _draft.vertices.length == _carrying?.had
+          ? _clearDraft()
+          : _draft = _draft.withoutLast());
       return true;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter ||
@@ -274,7 +298,8 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
     final t = ThemeScope.of(context).theme;
-    final art = _drawsArt;
+    // A carried path is already on the picture, so its draft is outline only.
+    final art = _drawsArt && _carrying == null;
     final space = _space;
     return Positioned.fill(
       // A click anywhere outside the Viewer ends a Pen path, open.
@@ -315,6 +340,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                       // that will never appear.
                       fill: !art
                           ? widget.accent
+                              .withValues(alpha: _carrying == null ? 1 : 0)
                           : widget.uiState.tools.fillOn
                               ? colourOf(widget.uiState.tools.fill)
                               : const Color(0x00000000),
@@ -448,11 +474,36 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         _draft.canClose &&
         withinClosingDistance(at, start, screenScale: space.screenScale)) {
       final path = _draft.vertices;
-      setState(() => _draft = const PathDraft());
-      _place(path, _target, closed: true);
+      final carrying = _carrying;
+      setState(_clearDraft);
+      _place(path, _target, closed: true, carrying: carrying);
       return;
     }
+    if (_draft.isEmpty && _startCarrying(details.localPosition)) return;
     setState(() => _draft = _draft.withCorner(at));
+  }
+
+  /// A first click on either end of an open path of the selected layer
+  /// carries that path on. Its points become the draft with that end last,
+  /// so the other end is the one that closes it.
+  bool _startCarrying(Offset at) {
+    final box = _target;
+    if (box == null) return false;
+    final only = pathBeingEdited(widget.uiState.selectedProperties.value);
+    final hit = pathPointAt([box], at, only: only);
+    if (hit == null) return false;
+    final path = pathsOf(box).firstWhere((p) => p.id == hit.pathId);
+    final last = path.vertices.length - 1;
+    if (path.closed || (hit.index != 0 && hit.index != last)) return false;
+    final points =
+        _shifted(path.vertices, hit.shape ? -box.artOrigin : Offset.zero);
+    final turned = hit.index == 0 && last > 0;
+    setState(() {
+      _carrying =
+          (id: path.id, shape: hit.shape, turned: turned, had: points.length);
+      _draft = PathDraft(vertices: turned ? _turned(points) : points);
+    });
+    return true;
   }
 
   /// A click that turned into a drag: the vertex is placed where the press was
@@ -555,6 +606,41 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     }
   }
 
+  /// The carried path written back over itself, the way round it was, in one
+  /// undo step.
+  void _carryOn(LayerBox box, _Carrying carrying, List<BridgeVertex> path,
+      bool closed) {
+    final points = carrying.turned ? _turned(path) : path;
+    final at =
+        widget.comp.timeOfFrame(frame: widget.uiState.playheadFrame.value);
+    try {
+      if (carrying.shape) {
+        final art = _shifted(points, box.artOrigin);
+        box.layer.setShapeContents(contents: [
+          for (final entry in box.shapeContents)
+            if (entry.kind case BridgeShapeEntryKind_Item(field0: final item)
+                when item.id == carrying.id)
+              BridgeShapeEntry(
+                  depth: entry.depth,
+                  kind: BridgeShapeEntryKind.item(
+                      shapeItemWith(item, vertices: art, closed: closed)))
+            else
+              entry,
+        ], at: at);
+      } else {
+        final mask = box.masks.firstWhere((m) => m.id == carrying.id);
+        box.layer.setMask(
+          mask: maskWith(maskEdited(box, mask, (_, __, ___) => points)!,
+              closed: closed),
+          at: at,
+        );
+      }
+      widget.onChanged();
+    } catch (_) {
+      // The path went away while it was being carried on.
+    }
+  }
+
   /// A new piece of art on top of the shape layer [box]. The path was drawn
   /// in the layer's pixels, and the art's own coordinates sit a bounding box
   /// away from those.
@@ -565,16 +651,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
         BridgeScalar.static_((s as BridgeScalar_Static).field0 + by);
     try {
       box.layer.addShapeItem(
-        item: _item(tool, [
-          for (final v in path)
-            BridgeVertex(
-                x: v.x + o.dx,
-                y: v.y + o.dy,
-                tanInX: v.tanInX,
-                tanInY: v.tanInY,
-                tanOutX: v.tanOutX,
-                tanOutY: v.tanOutY),
-        ], switch (primitive) {
+        item: _item(tool, _shifted(path, o), switch (primitive) {
           null => null,
           final p => BridgeShapePrimitive(
               kind: p.kind,
@@ -598,6 +675,35 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
     }
   }
 }
+
+/// An open path the Pen carries on: which one, whether its points were turned
+/// round so the clicked end is last, and how many it had.
+typedef _Carrying = ({UuidValue id, bool shape, bool turned, int had});
+
+/// [path] moved by [by].
+List<BridgeVertex> _shifted(List<BridgeVertex> path, Offset by) => [
+      for (final v in path)
+        BridgeVertex(
+            x: v.x + by.dx,
+            y: v.y + by.dy,
+            tanInX: v.tanInX,
+            tanInY: v.tanInY,
+            tanOutX: v.tanOutX,
+            tanOutY: v.tanOutY),
+    ];
+
+/// [path] run the other way: its points reversed, each with its handles
+/// swapped.
+List<BridgeVertex> _turned(List<BridgeVertex> path) => [
+      for (final v in path.reversed)
+        BridgeVertex(
+            x: v.x,
+            y: v.y,
+            tanInX: v.tanOutX,
+            tanInY: v.tanOutY,
+            tanOutX: v.tanInX,
+            tanOutY: v.tanInY),
+    ];
 
 /// The shape being dragged, and the polygon being built.
 /// Where the art being drawn lives, and how to put it on screen.

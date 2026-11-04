@@ -38,8 +38,8 @@ use crate::instance::{ParamSnapshot, Settled};
 /// 6 added `Settle`, and a press answers with the plugin's controls as well as
 /// its values. 7 added the generator and transition contexts. 8 added the
 /// ring's cancel word, `Cancelled`, and which graphics card path each plugin
-/// renders through.
-pub const PROTOCOL_VERSION: u32 = 8;
+/// renders through. 9 hashes a slot eight bytes at a time.
+pub const PROTOCOL_VERSION: u32 = 9;
 
 /// Which instance a message is about. The host mints these; the broker only
 /// ever quotes one back.

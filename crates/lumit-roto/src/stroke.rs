@@ -248,29 +248,42 @@ impl Seeds {
         if radius == 0 {
             return;
         }
+        let (w, h) = (self.width as usize, self.height as usize);
+        let r = radius as usize;
+        if self.cells.len() != w * h {
+            return;
+        }
+        // Separable, which reaches the same answer as reading the square: the
+        // square agrees with a seed exactly when every row of it does. So first
+        // each pixel keeps its seed only where its own row of the window
+        // agrees with it, into `scratch`...
         self.scratch.clear();
-        self.scratch.extend_from_slice(&self.cells);
-        let (w, h) = (self.width as i64, self.height as i64);
-        let r = radius as i64;
+        self.scratch.resize(w * h, Seed::None);
         for y in 0..h {
+            let row = &self.cells[y * w..(y + 1) * w];
+            let out = &mut self.scratch[y * w..(y + 1) * w];
+            for (x, slot) in out.iter_mut().enumerate() {
+                let seed = row[x];
+                if seed != Seed::None
+                    && row[x.saturating_sub(r)..=(x + r).min(w - 1)]
+                        .iter()
+                        .all(|&s| s == seed)
+                {
+                    *slot = seed;
+                }
+            }
+        }
+        // ...then a seed survives where every row above and below it in the
+        // window did too. Clipped at the frame border rather than counted as
+        // disagreement.
+        for y in 0..h {
+            let (top, bottom) = (y.saturating_sub(r), (y + r).min(h - 1));
             for x in 0..w {
-                let i = (y * w + x) as usize;
-                let seed = self.scratch.get(i).copied().unwrap_or_default();
-                if seed == Seed::None {
-                    continue;
-                }
-                let mut keep = true;
-                'window: for ny in (y - r).max(0)..=(y + r).min(h - 1) {
-                    for nx in (x - r).max(0)..=(x + r).min(w - 1) {
-                        let j = (ny * w + nx) as usize;
-                        if self.scratch.get(j).copied().unwrap_or_default() != seed {
-                            keep = false;
-                            break 'window;
-                        }
-                    }
-                }
-                if !keep {
-                    self.set(i, Seed::None);
+                let i = y * w + x;
+                let seed = self.cells[i];
+                if seed != Seed::None && !(top..=bottom).all(|ny| self.scratch[ny * w + x] == seed)
+                {
+                    self.cells[i] = Seed::None;
                 }
             }
         }

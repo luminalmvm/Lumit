@@ -6,10 +6,12 @@ import { releasesNewestFirst } from "../scripts/releases";
 
 const RELEASES = "https://github.com/luminalmvm/Lumit/releases";
 const APP_STORE = "https://apps.apple.com/app/lumit/id6824000097";
+const ANDROID = "https://cloud.lumitlab.com/android/lumit.apk";
 const DOCS = "https://docs.lumitlab.com";
 
 // `ext` is the file a card hands over, and `note` is the one thing to know
-// before running it. `code` is a command to copy, where there is one.
+// before running it. `code` is a command to copy, where there is one, and
+// `alt` a second file for the same system.
 const platforms = [
   {
     key: "win",
@@ -27,6 +29,7 @@ const platforms = [
     cta: "Download .flatpak",
     note: "Any distribution with Flatpak. Install with the command below, then launch from your applications menu. FFmpeg ships inside the bundle.",
     code: "flatpak install lumit-*.flatpak",
+    alt: { key: "img", cta: "Alternative .AppImage download" },
   },
   {
     key: "mac",
@@ -118,6 +121,11 @@ const [latest] = await releasesNewestFirst();
               </a>
               <p class="mt-6 border-t border-line pt-5 text-[14px] leading-[1.5] text-fg-3">{p.note}</p>
               {p.code && <code class="cmd">{p.code}</code>}
+              {p.alt && (
+                <a class="mt-4 text-[13.5px] text-fg-2 underline underline-offset-2 hover:text-fg" href={RELEASES + "/latest"} data-link={p.alt.key}>
+                  {p.alt.cta}
+                </a>
+              )}
             </article>
           ))
         }
@@ -125,16 +133,24 @@ const [latest] = await releasesNewestFirst();
 
       <article class="phone card lit">
         <div>
-          <span class="ext">App Store</span>
-          <h2 class="mt-6 text-[28px] leading-none tracking-[-0.03em]">iPhone</h2>
+          <span class="ext">Phone</span>
+          <h2 class="mt-6 text-[28px] leading-none tracking-[-0.03em]">iPhone and Android</h2>
           <p class="mt-3 max-w-[640px] text-[14px] leading-[1.5] text-fg-3">
-            Lumit for iPhone pairs with Lumit on your computer, to start and follow exports and
+            Lumit for your phone pairs with Lumit on your computer, to start and follow exports and
             read the comments on your previews. Pair it in Settings, under Account and Devices.
           </p>
         </div>
         <div class="flex flex-col items-start gap-2.5 lg:items-end">
-          <a href={APP_STORE}><img src="/media/app-store-badge.svg" alt="Download on the App Store" width="120" height="40" /></a>
-          <span class="text-[13px] text-fg-4">Android coming soon</span>
+          <div class="flex flex-wrap items-center gap-3">
+            <a href={APP_STORE}><img src="/media/app-store-badge.svg" alt="Download on the App Store" width="120" height="40" /></a>
+            <a class="btn" href={ANDROID}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
+              </svg>
+              Download .apk
+            </a>
+          </div>
+          <span class="text-[13px] text-fg-4">On Android, let your browser install it when asked.</span>
         </div>
       </article>
 
@@ -191,8 +207,7 @@ const [latest] = await releasesNewestFirst();
 </Base>
 
 <style>
-  /* Lumit for iPhone: one row under the computers, since it is not installed
-     from here. */
+  /* Lumit for phones: one row under the computers. */
   .phone {
     display: grid;
     align-items: end;
@@ -292,6 +307,7 @@ const [latest] = await releasesNewestFirst();
   const MATCH: Record<string, RegExp> = {
     win: /windows.*\.exe$/i,
     lin: /linux.*\.flatpak$/i,
+    img: /linux.*\.appimage$/i,
     mac: /\.dmg$/i,
   };
 

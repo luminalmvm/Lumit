@@ -80,7 +80,12 @@ pub mod schedule;
 /// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
 /// * 21: an open shape path is filled, as if a straight line closed it, and
 ///   an open mask no longer hides its layer.
-pub const ALGO_VERSION: u32 = 21;
+/// * 22: Depth of field pro smooths the grain out of a wide blur.
+/// * 23: a blurred layer is drawn with more copies the faster it moves, its
+///   parents and the camera move them too, a still one is drawn once, and the
+///   inner layers of a collapsed Precomp blur.
+/// * 28: a project at 8 or 32 bits draws its effects.
+pub const ALGO_VERSION: u32 = 28;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -418,6 +423,7 @@ fn feed_comp(
         feed_f64(h, comp.motion_blur.shutter_angle);
         feed_f64(h, comp.motion_blur.shutter_phase);
         h.update(&comp.motion_blur.samples.to_le_bytes());
+        h.update(&comp.motion_blur.limit.to_le_bytes());
     }
     // The comp's lights (docs/06). Hashed once here rather than per
     // layer, because a light shades every layer that accepts it — and hashed
@@ -1622,6 +1628,43 @@ fn feed_points_rows_at(
     }
 }
 
+/// The placements `layer`'s parents give it at comp time `t`.
+fn feed_parents(
+    h: &mut blake3::Hasher,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &lumit_core::model::Layer,
+    t: f64,
+    stamper: &dyn SourceStamper,
+) {
+    let context = lumit_core::model::comp_context(doc, comp, t);
+    let read = lumit_core::model::context_reader(&context, t);
+    let solves = stamper.solves().map(|store| (doc, store));
+    for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &read, solves) {
+        for v in [
+            p.position.0,
+            p.position.1,
+            p.position.2,
+            p.anchor.0,
+            p.anchor.1,
+            p.scale.0,
+            p.scale.1,
+            p.rotation_deg.2,
+            p.rotation_deg.0,
+            p.rotation_deg.1,
+        ]
+        .into_iter()
+        .chain(
+            (p.anchor.2 != 0.0 || p.scale.2 != 100.0)
+                .then_some([p.anchor.2, p.scale.2])
+                .into_iter()
+                .flatten(),
+        ) {
+            feed_f64(h, v);
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn feed_layer(
     h: &mut blake3::Hasher,
@@ -1684,32 +1727,7 @@ fn feed_layer(
     // contribution is unchanged.
     if layer.parent.is_some() {
         h.update(b"parents/");
-        let context = lumit_core::model::comp_context(doc, comp, t);
-        let read = lumit_core::model::context_reader(&context, t);
-        let solves = stamper.solves().map(|store| (doc, store));
-        for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &read, solves) {
-            for v in [
-                p.position.0,
-                p.position.1,
-                p.position.2,
-                p.anchor.0,
-                p.anchor.1,
-                p.scale.0,
-                p.scale.1,
-                p.rotation_deg.2,
-                p.rotation_deg.0,
-                p.rotation_deg.1,
-            ]
-            .into_iter()
-            .chain(
-                (p.anchor.2 != 0.0 || p.scale.2 != 100.0)
-                    .then_some([p.anchor.2, p.scale.2])
-                    .into_iter()
-                    .flatten(),
-            ) {
-                feed_f64(h, v);
-            }
-        }
+        feed_parents(h, doc, comp, layer, t, stamper);
     }
     h.update(&[u8::from(layer.switches.three_d)]);
     h.update(&[blend_tag(layer.blend)]);
@@ -1784,6 +1802,27 @@ fn feed_layer(
                     feed_f64(h, v);
                 }
                 feed_depth(h, tr, slt, &|p| p.value_at(slt));
+                // Its parents and the camera move the copies too, and how far
+                // they all go picks how many there are.
+                let st = t + off * dt;
+                if layer.parent.is_some() {
+                    feed_parents(h, doc, comp, layer, st, stamper);
+                }
+                if layer.switches.three_d {
+                    if let Some(pose) = stamper.camera(doc, comp, st) {
+                        for v in [
+                            pose.zoom,
+                            pose.position.0,
+                            pose.position.1,
+                            pose.position.2,
+                            pose.rotation_deg.0,
+                            pose.rotation_deg.1,
+                            pose.rotation_deg.2,
+                        ] {
+                            feed_f64(h, v);
+                        }
+                    }
+                }
             }
         }
     }
@@ -4841,12 +4880,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 21, which renamed every frame.
+        // Pinned under ALGO_VERSION 28, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                3_442_992_140_865_201_264_137_942_798_082_220_911,
-                19_851_494_428_891_465_839_658_608_807_448_204_430
+                328_268_729_066_176_038_303_228_577_772_713_744_142,
+                36_726_106_807_010_197_772_526_010_792_187_696_186
             )
         );
 

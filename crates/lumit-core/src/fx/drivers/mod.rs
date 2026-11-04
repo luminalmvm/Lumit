@@ -3232,7 +3232,8 @@ mod tests {
     }
 
     /// Measure reads a precomp's frame in its own pixels, and through its
-    /// transform in the comp's, with the padding round both.
+    /// transform in the comp's, with the padding round both. Footage reads
+    /// the file's own size once the renderer has opened it.
     #[test]
     fn measure_reads_the_frame_where_it_is_drawn() {
         use crate::anim::Property;
@@ -3277,6 +3278,25 @@ mod tests {
         assert_eq!(read(&node, "left"), 850.0);
         assert_eq!(read(&node, "bottom"), 595.0);
         assert_eq!(read(&node, "centre_x"), 960.0);
+
+        let footage = Uuid::now_v7();
+        measure::note_footage_frame(footage, 640, 360);
+        let mut doc = (*context.document).clone();
+        for item in &mut doc.items {
+            let ProjectItem::Composition(c) = item else {
+                continue;
+            };
+            for l in c.layers.iter_mut().filter(|l| Some(l.id) == context.layer) {
+                l.kind = LayerKind::Footage { item: footage };
+            }
+        }
+        let context = Arc::new(ExpressionContext {
+            document: Arc::new(doc),
+            ..(*context).clone()
+        });
+        set_choice(&mut node, "space", 0);
+        let read = |port| driver_out(&node, port, 0.0, context.clone(), None);
+        assert_eq!([read("width"), read("height")], [660.0, 370.0]);
     }
 
     /// Beat trigger's four outputs from the comp's beat markers, and a level

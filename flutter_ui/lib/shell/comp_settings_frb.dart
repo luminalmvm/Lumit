@@ -72,9 +72,9 @@ const double compSamplesWell = 60;
 const double compRateList = 90;
 
 /// The background swatch, and the room between the shutter angle and the
-/// sample count beside it.
+/// sample counts beside it.
 const Size compSwatch = Size(20, 16);
-const double compShutterGap = 50;
+const double compShutterGap = 24;
 
 /// The frame rates worth one click. The `1001` denominators are the NTSC family,
 /// which is the whole reason the rate crosses the bridge as a pair.
@@ -234,6 +234,7 @@ Future<CompositionReference?> showNewCompositionFrb({
       background: initial.background,
       shutterAngle: initial.shutterAngle,
       motionBlurSamples: initial.motionBlurSamples,
+      motionBlurLimit: initial.motionBlurLimit,
     );
   }
   if (!context.mounted) return null;
@@ -259,6 +260,7 @@ Future<CompositionReference?> showNewCompositionFrb({
         background: initial.background,
         shutterAngle: initial.shutterAngle,
         motionBlurSamples: initial.motionBlurSamples,
+        motionBlurLimit: initial.motionBlurLimit,
       ),
       // A node graph has no layers to light.
       lightsLikeAfterEffects: nodeGraph ? null : false,
@@ -334,6 +336,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
   late List<double> _background;
   late double _shutterAngle;
   late int _samples;
+  late int _limit;
   late bool? _likeAfterEffects = widget.lightsLikeAfterEffects;
 
   /// Keep the shape when one side is edited. On by default, because resizing a
@@ -362,6 +365,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     _background = List<double>.from(s.background);
     _shutterAngle = s.shutterAngle;
     _samples = s.motionBlurSamples;
+    _limit = s.motionBlurLimit;
   }
 
   @override
@@ -430,6 +434,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       background: F32Array4(Float32List.fromList(_background)),
       shutterAngle: _shutterAngle,
       motionBlurSamples: _samples,
+      motionBlurLimit: _limit,
     ), _likeAfterEffects);
   }
 
@@ -776,6 +781,21 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
               max: 256,
               fill: t.surface0,
               onChanged: (v) => setState(() => _samples = v.toInt()),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(l10n.compSamplesTo, style: t.body),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: compSamplesWell,
+            height: dialogControlHeight,
+            child: DragValueField(
+              key: const ValueKey('comp-sample-limit'),
+              value: _limit,
+              min: 1,
+              max: 256,
+              fill: t.surface0,
+              onChanged: (v) => setState(() => _limit = v.toInt()),
             ),
           ),
         ],

@@ -98,7 +98,8 @@ fn record_to(file: &std::path::Path, line: &str) {
 /// only on the console, behind a variable nobody had been told to set. So the
 /// renderer's half is recorded here as soon as there is a renderer, before
 /// anything is drawn with it. The Flutter runner's half is appended to the same
-/// file by the shell, as soon as the runner knows it.
+/// file, by the shell on Linux as soon as the runner knows it, and here on
+/// Windows, where the runner has already said.
 ///
 /// Not a fault, and the only line in here that is not one. It earns its place
 /// because the next fault under it is read against it.
@@ -106,6 +107,15 @@ pub(crate) fn record_adapter() {
     ADAPTER.call_once(|| {
         if let Some(adapter) = lumit_gpu::adapter_summary() {
             record(&format!("graphics adapter: {adapter}"));
+        }
+        // Flutter's card, as the Windows runner gave it, and the line the
+        // Viewer writes if it has to go through memory (lumit_gpu::shared).
+        #[cfg(all(windows, feature = "shared-texture"))]
+        {
+            if let Some(adapter) = lumit_gpu::shared::flutter_adapter() {
+                record(&format!("display GPU: {adapter}"));
+            }
+            lumit_gpu::shared::report_to(record);
         }
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
         if let Some(why) = lumit_gpu::shared_linux::dmabuf_refused() {

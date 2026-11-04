@@ -1253,7 +1253,8 @@ class LumitUiState extends ChangeNotifier {
     // Drawn as lines only: nothing to ask the engine for.
     if (viewport && view.wireframeOnly) return;
     // One picture in flight at a time beside the view being worked in.
-    if (viewport && view.id != views.activeId) {
+    final beside = view.id != views.activeId && _followsPlayhead(view);
+    if (beside) {
       final asked = _viewportAsked[view.engineId];
       if (asked != null &&
           DateTime.now().difference(asked) < const Duration(seconds: 1)) {
@@ -1289,7 +1290,7 @@ class LumitUiState extends ChangeNotifier {
         view: view.engineId,
         active: view.id == views.activeId,
       );
-      if (viewport) _viewportAsked[view.engineId] = DateTime.now();
+      if (beside) _viewportAsked[view.engineId] = DateTime.now();
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
       // move or edit asks again; there is nothing to recover here.
@@ -1588,7 +1589,7 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// Which frame a view is standing on: the live playhead for the view the
-  /// user is working in and a 3D viewport of its comp, and the frame its own
+  /// user is working in and any other view of its comp, and the frame its own
   /// composition was left at for every other.
   int frameFor(ViewerSurface view) {
     if (_followsPlayhead(view)) return playheadFrame.value;
@@ -1604,8 +1605,7 @@ class LumitUiState extends ChangeNotifier {
       view.id == views.activeId ||
       view.id == views.previewing?.id ||
       (view.compId != null &&
-          view.compId == _selectedComp?.internalid.toString() &&
-          views.isViewport(view));
+          view.compId == _selectedComp?.internalid.toString());
 
   /// A frame arrived. While playing, the picture leads and the playhead follows
   /// it — that is what makes the transport show the frame actually on screen
@@ -2943,16 +2943,17 @@ class LumitUiState extends ChangeNotifier {
     _playAlong(tier);
   }
 
-  /// When each 3D viewport's last picture was asked for, while it is on its
-  /// way, and the viewports asked again meanwhile. A viewport beside the view
-  /// being worked in has one picture in flight at a time, so it never holds
-  /// that view's own up for long.
+  /// When each view beside the one being worked in last asked for a picture
+  /// of the comp, while it is on its way, and the views asked again meanwhile.
+  /// Each has one picture in flight at a time, so it never holds the view
+  /// being worked in up for long.
   final Map<int, DateTime> _viewportAsked = {};
   final Set<int> _viewportWaiting = {};
   int _playedAlong = 0;
 
-  /// A 3D viewport's render has ended, with a picture or without one, as a
-  /// failed or dropped one ends too: the picture asked for meanwhile goes.
+  /// A view's render beside the one being worked in has ended, with a picture
+  /// or without one, as a failed or dropped one ends too: the picture asked
+  /// for meanwhile goes.
   void _viewportLanded(int engineId) {
     if (_viewportAsked.remove(engineId) != null &&
         _viewportWaiting.remove(engineId)) {

@@ -4924,7 +4924,7 @@ mod tests {
     fn blur_samples(doc: &Document, comp_id: Uuid) -> usize {
         let comp = doc.comp(comp_id).unwrap();
         let context = Arc::new(lumit_core::expression::ExpressionContext::detached());
-        crate::build::motion_blur_samples(comp, &comp.layers[0], 0.5, context).len()
+        crate::build::motion_blur::samples(comp, &comp.layers[0], 0.5, (10.0, 10.0), context).len()
     }
 
     /// *Motion blur* is the export's own answer, at every depth: *on for

@@ -4,7 +4,7 @@
 
 use crate::GpuContext;
 
-use super::FxEngine;
+use super::{at_depth, FxEngine};
 
 impl FxEngine {
     pub fn new(ctx: &GpuContext) -> Self {
@@ -279,7 +279,7 @@ impl FxEngine {
             ctx.device
                 .create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some(name),
-                    source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+                    source: wgpu::ShaderSource::Wgsl(at_depth(ctx.working(), wgsl).into()),
                 })
         };
         // Compiling the kernels is nearly all of what building the engine

@@ -434,6 +434,7 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         migrate_lens_flare_background(e);
         migrate_audio_level_source(e);
         migrate_dof_pro_depth(e);
+        crate::fx::effects::wave_warp::migrate_v1(e);
         // A Map placement row missing beside a Layer row that was saved: that
         // map was stretched, so it goes on being stretched.
         let stretched: Vec<&str> = s

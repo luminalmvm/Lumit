@@ -31,6 +31,8 @@ struct Page {
   WebKitWebView* web = nullptr;
   // Where the panel is, in the window.
   GdkRectangle where = {0, 0, 1, 1};
+  // The part of it not under something Flutter draws, or null for all of it.
+  cairo_region_t* clip = nullptr;
   // The content filter is in. Until then a load waits in `waiting`, and a
   // filter that fails leaves the page unloaded.
   bool limited = false;
@@ -230,6 +232,21 @@ void uri_cb(WebKitWebView* web, GParamSpec* spec, gpointer user_data) {
                                   nullptr, nullptr);
 }
 
+// The page is drawn only where nothing of Flutter's is over it. GTK draws a
+// child window straight onto the window, so a shape on it would not hold the
+// drawing in. A clip set in a handler is gone before WebKit draws, so WebKit
+// is asked to draw from here.
+gboolean draw_cb(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+  Page* page = static_cast<Page*>(user_data);
+  if (page->clip == nullptr) {
+    return FALSE;
+  }
+  gdk_cairo_region(cr, page->clip);
+  cairo_clip(cr);
+  GTK_WIDGET_GET_CLASS(widget)->draw(widget, cr);
+  return TRUE;
+}
+
 // The overlay asks where each thing laid over it goes.
 gboolean position_cb(GtkOverlay* overlay,
                      GtkWidget* widget,
@@ -336,6 +353,7 @@ bool create(Views* self, FlValue* args) {
   webkit_settings_set_enable_developer_extras(settings,
                                               flag_of(args, "inspect"));
   g_signal_connect(page->web, "notify::uri", G_CALLBACK(uri_cb), page);
+  g_signal_connect(page->web, "draw", G_CALLBACK(draw_cb), page);
 
   page->cancellable = g_cancellable_new();
   g_autoptr(GBytes) source = g_bytes_new(rules, strlen(rules));
@@ -367,6 +385,41 @@ void place(Page* page, FlValue* args) {
   GtkWidget* widget = GTK_WIDGET(page->web);
   gtk_widget_set_visible(widget, flag_of(args, "shown"));
   gtk_widget_queue_resize(widget);
+
+  // What Flutter draws over the page is cut out of it, so it shows through
+  // and the page keeps running around it. The cuts are boxes in the window,
+  // rounded outwards.
+  if (page->clip != nullptr) {
+    cairo_region_destroy(page->clip);
+    page->clip = nullptr;
+  }
+  FlValue* cuts = fl_value_lookup_string(args, "cuts");
+  if (cuts != nullptr && fl_value_get_type(cuts) == FL_VALUE_TYPE_FLOAT_LIST &&
+      fl_value_get_length(cuts) >= 4) {
+    const cairo_rectangle_int_t whole = {0, 0, page->where.width,
+                                         page->where.height};
+    page->clip = cairo_region_create_rectangle(&whole);
+    const double* box = fl_value_get_float_list(cuts);
+    for (size_t i = 0; i + 4 <= fl_value_get_length(cuts); i += 4) {
+      const int left = static_cast<int>(std::floor(box[i]));
+      const int top = static_cast<int>(std::floor(box[i + 1]));
+      const cairo_rectangle_int_t cut = {
+          left - page->where.x, top - page->where.y,
+          static_cast<int>(std::ceil(box[i] + box[i + 2])) - left,
+          static_cast<int>(std::ceil(box[i + 1] + box[i + 3])) - top};
+      cairo_region_subtract_rectangle(page->clip, &cut);
+    }
+  }
+  gtk_widget_queue_draw(widget);
+  // The pointer goes through the cuts to Flutter, and through all of the
+  // page while a menu is waiting for a click beside it.
+  GdkWindow* window = gtk_widget_get_parent_window(widget);
+  if (window != nullptr) {
+    cairo_region_t* none = cairo_region_create();
+    gdk_window_input_shape_combine_region(
+        window, flag_of(args, "input") ? page->clip : none, 0, 0);
+    cairo_region_destroy(none);
+  }
 }
 
 void run(Page* page, const char* script) {
@@ -452,6 +505,9 @@ void dispose(Views* self, Page* page) {
       webkit_web_view_get_user_content_manager(page->web), page);
   self->pages.erase(page->number);
   gtk_widget_destroy(GTK_WIDGET(page->web));
+  if (page->clip != nullptr) {
+    cairo_region_destroy(page->clip);
+  }
   delete page;
 }
 

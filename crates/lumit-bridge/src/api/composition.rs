@@ -294,11 +294,13 @@ pub struct BridgeCompSettings {
     /// anyway: without it here the op had to be handed the colour the comp
     /// already had, purely so the dialog could not change it.
     pub background: [f32; 4],
-    /// The master shutter's angle in degrees, and how many sub-frame samples a
-    /// blurred layer is drawn at — the drawing's Motion blur section.
-    /// The shutter's *phase* is not in the dialog and is left as it stands.
+    /// The master shutter's angle in degrees, and the fewest and most
+    /// sub-frame samples a blurred layer is drawn at — the drawing's Motion
+    /// blur section. The shutter's *phase* is not in the dialog and is left as
+    /// it stands.
     pub shutter_angle: f64,
     pub motion_blur_samples: u32,
+    pub motion_blur_limit: u32,
 }
 
 impl BridgeCompSettings {
@@ -323,6 +325,7 @@ impl BridgeCompSettings {
             background: d.background,
             shutter_angle: d.shutter_angle,
             motion_blur_samples: d.motion_blur_samples,
+            motion_blur_limit: d.motion_blur_limit,
         }
     }
 
@@ -342,6 +345,7 @@ impl BridgeCompSettings {
             background: self.background,
             shutter_angle: self.shutter_angle,
             motion_blur_samples: self.motion_blur_samples,
+            motion_blur_limit: self.motion_blur_limit,
         })
     }
 }
@@ -481,6 +485,7 @@ impl CompositionReference {
             background: comp.background.0,
             shutter_angle: comp.motion_blur.shutter_angle,
             motion_blur_samples: comp.motion_blur.samples,
+            motion_blur_limit: comp.motion_blur.limit,
         })
     }
 

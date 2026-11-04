@@ -154,7 +154,7 @@ const RAY_BAND_ROWS: u32 = 64;
 /// Tables kept on the card. One is about 12 MB.
 const CACHE_CAP: usize = 4;
 
-struct GpuBake {
+pub(super) struct GpuBake {
     atlas: wgpu::Texture,
     spans: wgpu::Buffer,
     dz_max_mm: f32,
@@ -167,25 +167,26 @@ struct GpuBake {
 }
 
 /// A ray lens and its front glass on the card.
-type RayLensGpu = (RayLensData, wgpu::Texture);
+pub(super) type RayLensGpu = (RayLensData, wgpu::Texture);
 
 pub(super) struct LensBlurFx {
-    prep: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    tiles: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    dilate: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    gather: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    sprite: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
-    finish: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_min1: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_min2: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_setup: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_invert: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_back: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_trace: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_scene: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    ray_resolve: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
-    cache: Mutex<Vec<(u64, Arc<GpuBake>)>>,
-    ray_cache: Mutex<Vec<(u64, Arc<RayLensGpu>)>>,
+    pub(super) prep: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) tiles: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) dilate: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) gather: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) smooth: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) sprite: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
+    pub(super) finish: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_min1: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_min2: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_setup: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_invert: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_back: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_trace: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_scene: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) ray_resolve: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    pub(super) cache: Mutex<Vec<(u64, Arc<GpuBake>)>>,
+    pub(super) ray_cache: Mutex<Vec<(u64, Arc<RayLensGpu>)>>,
 }
 
 /// One binding of a lens pass's layout.
@@ -199,247 +200,6 @@ pub(super) enum Slot {
 }
 
 impl LensBlurFx {
-    fn new(ctx: &GpuContext) -> Self {
-        let device = &ctx.device;
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("fx-lens-blur"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_blur.wgsl").into()),
-        });
-        let layout = |label: &str, slots: &[(u32, Slot)], vis: wgpu::ShaderStages| {
-            bind_layout(device, label, slots, vis)
-        };
-        let compute = |label: &str, entry: &str, slots: &[(u32, Slot)]| {
-            let bgl = layout(label, slots, wgpu::ShaderStages::COMPUTE);
-            let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(label),
-                bind_group_layouts: &[&bgl],
-                push_constant_ranges: &[],
-            });
-            let pipe = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(label),
-                layout: Some(&pl),
-                module: &module,
-                entry_point: Some(entry),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-            (bgl, pipe)
-        };
-        use wgpu::TextureFormat as F;
-        let prep = compute(
-            "fx-lens-blur-prep",
-            "lb_prep",
-            &[
-                (0, Slot::Tex),
-                (1, Slot::Tex),
-                (2, Slot::Store(F::Rgba32Float)),
-                (3, Slot::Uniform),
-                (11, Slot::Spans),
-            ],
-        );
-        let tiles = compute(
-            "fx-lens-blur-tiles",
-            "lb_tiles",
-            &[
-                (4, Slot::Tex),
-                (5, Slot::Store(F::R32Float)),
-                (3, Slot::Uniform),
-            ],
-        );
-        let dilate = compute(
-            "fx-lens-blur-dilate",
-            "lb_dilate",
-            &[
-                (6, Slot::Tex),
-                (5, Slot::Store(F::R32Float)),
-                (3, Slot::Uniform),
-            ],
-        );
-        let gather = compute(
-            "fx-lens-blur-gather",
-            "lb_gather",
-            &[
-                (0, Slot::Tex),
-                (1, Slot::Tex),
-                (4, Slot::Tex),
-                (6, Slot::Tex),
-                (7, Slot::Tex),
-                (8, Slot::Store(F::Rgba16Float)),
-                (3, Slot::Uniform),
-                (12, Slot::Uniform),
-            ],
-        );
-        let finish = compute(
-            "fx-lens-blur-finish",
-            "lb_finish",
-            &[
-                (0, Slot::Tex),
-                (4, Slot::Tex),
-                (9, Slot::Tex),
-                (10, Slot::Store(ctx.working())),
-                (3, Slot::Uniform),
-            ],
-        );
-        let ray_min1 = compute(
-            "fx-lens-blur-ray-min1",
-            "lb_ray_min1",
-            &[
-                (4, Slot::Tex),
-                (16, Slot::Store(F::R32Float)),
-                (15, Slot::StorageRw),
-                (3, Slot::Uniform),
-            ],
-        );
-        let ray_min2 = compute(
-            "fx-lens-blur-ray-min2",
-            "lb_ray_min2",
-            &[
-                (17, Slot::Tex),
-                (18, Slot::Store(F::R32Float)),
-                (3, Slot::Uniform),
-            ],
-        );
-        let ray_setup = compute(
-            "fx-lens-blur-ray-setup",
-            "lb_ray_setup",
-            &[
-                (1, Slot::Tex),
-                (3, Slot::Uniform),
-                (13, Slot::Spans),
-                (14, Slot::StorageRw),
-                (20, Slot::Tex),
-            ],
-        );
-        let ray_invert = compute(
-            "fx-lens-blur-ray-invert",
-            "lb_ray_invert",
-            &[(13, Slot::Spans), (14, Slot::StorageRw)],
-        );
-        let ray_back = compute(
-            "fx-lens-blur-ray-back",
-            "lb_ray_back",
-            &[
-                (0, Slot::Tex),
-                (3, Slot::Uniform),
-                (4, Slot::Tex),
-                (6, Slot::Tex),
-                (22, Slot::Store(F::Rgba16Float)),
-                (24, Slot::Store(F::R32Float)),
-            ],
-        );
-        let ray_trace = compute(
-            "fx-lens-blur-ray-trace",
-            "lb_ray_trace",
-            &[
-                (0, Slot::Tex),
-                (3, Slot::Uniform),
-                (4, Slot::Tex),
-                (12, Slot::Uniform),
-                (13, Slot::Spans),
-                (14, Slot::StorageRw),
-                (15, Slot::StorageRw),
-                (17, Slot::Tex),
-                (19, Slot::Tex),
-                (20, Slot::Tex),
-                (21, Slot::StorageRw),
-                (23, Slot::Tex),
-                (25, Slot::Tex),
-            ],
-        );
-        let mut scene_slots = vec![
-            (3, Slot::Uniform),
-            (12, Slot::Uniform),
-            (13, Slot::Spans),
-            (14, Slot::StorageRw),
-            (20, Slot::Tex),
-            (21, Slot::StorageRw),
-            (26, Slot::Spans),
-            (39, Slot::Tex),
-        ];
-        scene_slots.extend((0..SCENE_LAYERS_MAX as u32).map(|i| (27 + i, Slot::Tex)));
-        let ray_scene = compute("fx-lens-blur-ray-scene", "lb_ray_scene", &scene_slots);
-        let ray_resolve = compute(
-            "fx-lens-blur-ray-resolve",
-            "lb_ray_resolve",
-            &[
-                (0, Slot::Tex),
-                (3, Slot::Uniform),
-                (8, Slot::Store(F::Rgba16Float)),
-                (12, Slot::Uniform),
-                (21, Slot::StorageRw),
-            ],
-        );
-        let sprite_bgl = layout(
-            "fx-lens-blur-sprite",
-            &[
-                (0, Slot::Tex),
-                (4, Slot::Tex),
-                (7, Slot::Tex),
-                (3, Slot::Uniform),
-                (12, Slot::Uniform),
-            ],
-            wgpu::ShaderStages::VERTEX_FRAGMENT,
-        );
-        let sprite_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("fx-lens-blur-sprite"),
-            bind_group_layouts: &[&sprite_bgl],
-            push_constant_ranges: &[],
-        });
-        let add = wgpu::BlendComponent {
-            src_factor: wgpu::BlendFactor::One,
-            dst_factor: wgpu::BlendFactor::One,
-            operation: wgpu::BlendOperation::Add,
-        };
-        let sprite = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("fx-lens-blur-sprite"),
-            layout: Some(&sprite_pl),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("lb_sprite_vs"),
-                buffers: &[],
-                compilation_options: Default::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("lb_sprite_fs"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: F::Rgba16Float,
-                    blend: Some(wgpu::BlendState {
-                        color: add,
-                        alpha: add,
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            primitive: Default::default(),
-            depth_stencil: None,
-            // Never multisampled: draw order alone fixes the sum, so a frame
-            // adds up the same every time.
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
-        Self {
-            prep,
-            tiles,
-            dilate,
-            gather,
-            sprite: (sprite_bgl, sprite),
-            finish,
-            ray_min1,
-            ray_min2,
-            ray_setup,
-            ray_invert,
-            ray_back,
-            ray_trace,
-            ray_scene,
-            ray_resolve,
-            cache: Mutex::new(Vec::new()),
-            ray_cache: Mutex::new(Vec::new()),
-        }
-    }
-
     /// The ray lens for `key` and its front glass, made on a miss.
     fn ray_lens(
         &self,
@@ -770,6 +530,14 @@ impl FxEngine {
             U::STORAGE_BINDING | U::TEXTURE_BINDING | U::RENDER_ATTACHMENT,
             "fx-lens-blur-acc",
         );
+        let smoothed = scratch(
+            ctx,
+            w,
+            h,
+            wgpu::TextureFormat::Rgba16Float,
+            U::STORAGE_BINDING | U::TEXTURE_BINDING | U::RENDER_ATTACHMENT,
+            "fx-lens-blur-smoothed",
+        );
         let out = work_texture(ctx, w, h, "fx-lens-blur-out");
 
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
@@ -782,6 +550,7 @@ impl FxEngine {
             view(&b.atlas),
             view(&out),
         );
+        let v_smoothed = view(&smoothed);
         // No matte: the source stands in a slot the kernel never reads.
         let v_depth = view(depth.unwrap_or(src));
         let bind = |bgl: &wgpu::BindGroupLayout, entries: &[(u32, wgpu::BindingResource<'_>)]| {
@@ -854,12 +623,21 @@ impl FxEngine {
                 ],
             )
         };
+        let smooth = bind(
+            &fx.smooth.0,
+            &[
+                (4, T(&v_info)),
+                (9, T(&v_acc)),
+                (8, T(&v_smoothed)),
+                (3, u.clone()),
+            ],
+        );
         let finish = bind(
             &fx.finish.0,
             &[
                 (0, T(&v_src)),
                 (4, T(&v_info)),
-                (9, T(&v_acc)),
+                (9, T(&v_smoothed)),
                 (10, T(&v_out)),
                 (3, u.clone()),
             ],
@@ -1133,6 +911,14 @@ impl FxEngine {
                 drop(enc);
                 ctx.flush();
             }
+        }
+        if !op.display_depth {
+            let mut enc = ctx.encoder("fx-lens-blur-smooth");
+            run(&mut enc, &fx.smooth.1, &smooth, w, h);
+            drop(enc);
+        }
+        // Highlights go on after, so the smoothing leaves their edges sharp.
+        if ray.is_none() && !op.display_depth {
             // One instance per block at every level.
             let blocks: u32 = (0..SPRITE_LEVELS)
                 .map(|l| w.div_ceil(1 << l) * h.div_ceil(1 << l))
@@ -1144,7 +930,7 @@ impl FxEngine {
                 let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("fx-lens-blur-sprites"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &v_acc,
+                        view: &v_smoothed,
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,

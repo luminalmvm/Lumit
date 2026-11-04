@@ -120,6 +120,7 @@ Future<void> main() async {
       background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
       shutterAngle: 180,
       motionBlurSamples: 16,
+      motionBlurLimit: 128,
     ),
   );
 

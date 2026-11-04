@@ -4120,6 +4120,14 @@ fn probe_item(src: &lumit_media::sequence::MediaSource) -> Probe {
     }
 }
 
+/// Hand Measure the frame size of footage just probed, which the document
+/// does not keep.
+fn note_frame(item: Uuid, probe: &Probe) {
+    if let Probe::Ok { width, height, .. } = probe {
+        lumit_core::fx::drivers::measure::note_footage_frame(item, *width, *height);
+    }
+}
+
 /// What a renderer has learnt about footage files.
 #[derive(Default)]
 struct Probes {
@@ -4179,6 +4187,7 @@ impl ProbeAhead {
     fn turn(&mut self, probes: &mut Probes, coming: &[&FootageItem]) {
         while let Ok((item, src, probe)) = self.rx.try_recv() {
             self.asked.remove(&item);
+            note_frame(item, &probe);
             probes.originals.insert(item, (src, probe));
         }
         if self.asked.len() > 1024 {
@@ -4237,6 +4246,7 @@ impl SourceProbes for ProbeView<'_> {
             _ => {
                 let probe = probe_item(&src);
                 let answer = seen(Some(&probe));
+                note_frame(item, &probe);
                 probes.originals.insert(item, (src, probe));
                 answer
             }
@@ -6657,6 +6667,7 @@ mod tests {
                     shutter_angle: 180.0,
                     shutter_phase: -90.0,
                     samples: 8,
+                    ..lumit_core::model::MotionBlur::default()
                 };
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.switches.motion_blur = true;

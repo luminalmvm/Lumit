@@ -32,6 +32,7 @@ enum _ProjectMenuAction {
   applyInterpretation,
   rename,
   relink,
+  reload,
   reveal,
   findMissing,
   addAudioOnly,
@@ -266,6 +267,12 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.relink),
               child: Text(
                   missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis),
+            ),
+          if (isFootage && !missing)
+            MenuRow(
+              key: const ValueKey('project-menu-reload'),
+              onPressed: () => close(_ProjectMenuAction.reload),
+              child: Text(l10n.reloadFootage),
             ),
           if (isFootage && !missing)
             MenuRow(
@@ -584,6 +591,12 @@ Future<void> showProjectMenuFrb({
       onStartRename?.call();
     case _ProjectMenuAction.relink:
       await onRelink?.call();
+    case _ProjectMenuAction.reload:
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
+        if (target case ItemReference_Footage(:final field0)) field0.reload();
+      });
+      onLocalEdit();
     case _ProjectMenuAction.reveal:
       if (item case ItemReference_Footage(:final field0)) field0.reveal();
     case _ProjectMenuAction.findMissing:

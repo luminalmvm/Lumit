@@ -44,6 +44,7 @@ BridgeCompSettings _settings(String name, int seconds) => BridgeCompSettings(
       background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
       shutterAngle: 180,
       motionBlurSamples: 16,
+      motionBlurLimit: 128,
     );
 
 Future<void> main() async {

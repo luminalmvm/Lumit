@@ -403,6 +403,28 @@ void main() {
       expect(sx, closeTo(200, 0.001));
       expect(sy, closeTo(200, 0.001));
     });
+
+    /// A pivot dragged by hand onto the bottom edge lands a hair off it, and
+    /// off the middle line. The top edge then threw the width to thousands
+    /// of percent, and the bottom edge scaled by a fraction of a pixel.
+    test('an edge scales its own axis only, and nothing about a pivot on it',
+        () {
+      final b0 = box();
+      final b = b0.copyWith(
+          map: b0.map.pivotedAt(100.4, 99.7,
+              position: b0.map.toScreen(100.4, 99.7)));
+      // The top edge's middle is at (300, 150), the pivot about 100 below.
+      final (sx, sy) = scaleForGizmoHandle(
+        box: b,
+        handle: GizmoHandle.top,
+        pointer: const Offset(340, 200),
+        uniform: false,
+      );
+      expect(sx, 100, reason: 'the pointer going sideways is not a scale');
+      expect(sy, closeTo(49.85, 0.01));
+      expect(b.scalesAlong(GizmoHandle.bottom), (false, false));
+      expect(b.handleHit(const Offset(300, 250)), GizmoHandle.anchor);
+    });
   });
 
   group('What a rotation drag means', () {

@@ -1352,6 +1352,7 @@ Warp
 Wave
 Wave angle
 Wave height
+Wave speed
 Wave type
 Wave warp
 Wave width

@@ -394,6 +394,7 @@ fn drawn(
         z: at.2 as f32,
         rotation_x_deg: p.rotation_deg.0 as f32,
         rotation_y_deg: p.rotation_deg.1 as f32,
+        pre: None,
     }
 }
 
@@ -1729,51 +1730,6 @@ fn invert3(m: &[[f32; 3]; 3]) -> Option<[[f32; 3]; 3]> {
         }
     }
     Some(out)
-}
-
-/// The per-layer motion-blur sub-frame placements for `layer` at comp time
-/// `t_comp` (docs/06 §4): the layer's own transform re-evaluated at each
-/// shutter sample time. Empty — so the layer draws normally — unless the comp
-/// master (`comp.motion_blur.enabled`) and the layer's own switch are both on
-/// and `samples` ≥ 2.
-///
-/// Each sample's comp time is `t_comp + offset · dt` (dt = one frame in comp
-/// seconds; offsets from [`MotionBlur::sample_offsets`], centred on the frame),
-/// and its layer time subtracts the layer's `start_offset`. Shared by every
-/// caller of the one comp walk so all paths smear identically. Parent motion
-/// within the shutter is a follow-up: only the layer's OWN transform is sampled
-/// here — a parented layer keeps its frame-time parent placement (`pre`) for
-/// every sub-copy.
-pub fn motion_blur_samples(
-    comp: &lumit_core::model::Composition,
-    layer: &lumit_core::model::Layer,
-    t_comp: f64,
-    context: Arc<ExpressionContext>,
-) -> Vec<lumit_gpu::composite::MbSample> {
-    if !layer.switches.motion_blur {
-        return Vec::new();
-    }
-    let offsets = comp.motion_blur.sample_offsets();
-    if offsets.is_empty() {
-        return Vec::new();
-    }
-    let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-
-    offsets
-        .iter()
-        .map(|off| {
-            let lt = lumit_core::time::layer_time(t_comp + off * dt, layer.start_offset.0);
-            // Each shutter sample is a different moment, so an expression that
-            // reads `time` has to be evaluated at that moment. Reusing the
-            // frame's context would return the same placement for every sample
-            // and an expression-driven layer would simply not smear.
-            let context = Arc::new(ExpressionContext {
-                comp_time: t_comp + off * dt,
-                ..(*context).clone()
-            });
-            drawn(layer, lt, &context)
-        })
-        .collect()
 }
 
 /// The comp's Light layers, reduced to what the lighting pass needs (docs/06):
@@ -4608,13 +4564,13 @@ fn comp_walk(
                             Some(p) => lumit_gpu::composite::concat_place(parent, p),
                             None => parent,
                         });
-                        // Per-layer motion blur on an inner layer of a collapsed
-                        // Precomp is a follow-up (docs/06 §4): the export
-                        // splice (collect_collapsed) carries no sub-frame
-                        // samples, so clearing them here keeps preview and export
-                        // identical. A non-collapsed Precomp layer still
-                        // blurs via its own switch on the main path.
-                        d.mb = Vec::new();
+                        // An inner layer's blur copies sit inside the
+                        // collapsed layer's placement too.
+                        for s in &mut d.mb {
+                            if let Some(p) = s.pre {
+                                s.pre = Some(lumit_gpu::composite::concat_place(parent, p));
+                            }
+                        }
                         // A Posterize Time adjustment inside a collapsed Precomp
                         // is a follow-up too (docs/08 §3.25): its held below-draws
                         // were sized for the nested comp, so splicing them into
@@ -4894,6 +4850,7 @@ fn comp_walk(
                         z: 0.0,
                         rotation_x_deg: 0.0,
                         rotation_y_deg: 0.0,
+                        pre: None,
                     }
                 };
                 draws.push(crate::trails::with_sprites(CompLayerDraw {
@@ -5230,10 +5187,9 @@ fn comp_walk(
             graph_fx: graph_fx_for(Some(layer), &layer.effects, effect_lt, frame_lt),
             fx_ref_width,
             fx_input_key,
-            // Per-layer motion blur (docs/06 §4): the layer's own
-            // transform sampled across the open shutter, empty unless it blurs.
-            // Built the same way export does, so the two smear identically.
-            mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
+            // Per-layer motion blur (docs/06 §4): where the layer is across
+            // the open shutter, empty unless it blurs.
+            mb: motion_blur::samples(comp, layer, t_comp, natural, context.clone()),
             // The comp's lights, if this layer takes them (docs/06).
             lights: shading_lights(comp, layer, t_comp, &context),
             material: shading_material(comp, layer, t_comp),
@@ -7372,6 +7328,8 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
         }
     }
 }
+
+pub(crate) mod motion_blur;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

@@ -41,6 +41,7 @@ BridgeCompSettings _settings(String name) => BridgeCompSettings(
       background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
       shutterAngle: 180,
       motionBlurSamples: 16,
+      motionBlurLimit: 128,
     );
 
 /// A context out of the live tree: the Project panel's Import button sits under

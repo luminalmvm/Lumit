@@ -8297,6 +8297,10 @@
   "@replaceFootageEllipsis": {
     "description": "Project panel, a footage item's right-click menu: point the item at a different file. The same command as Relink, offered under this name when the file is not missing. The ellipsis means a file dialogue opens."
   },
+  "reloadFootage": "Reload footage",
+  "@reloadFootage": {
+    "description": "Project panel, a footage item's right-click menu: read the file again, so a run of stills that has grown since it was imported gets its new length."
+  },
   "projectShowInFolder": "Show in folder",
   "@projectShowInFolder": {
     "description": "Project panel right-click menu, on a footage item whose file is there: opens the folder the file is in, in the desktop's own file manager, with the file selected."
@@ -11757,6 +11761,10 @@
   "@fxWaveHeight": {
     "description": "Effect controls — a control on Ripple and on Wave warp."
   },
+  "fxWaveSpeed": "Wave speed",
+  "@fxWaveSpeed": {
+    "description": "Effect controls: a control on Ripple and on Wave warp, how many waves pass a second."
+  },
   "fxWaveType": "Wave type",
   "@fxWaveType": {
     "description": "Effect controls — a control on Wave warp."
@@ -13058,6 +13066,18 @@
   "@settingsGroupKeymap": {
     "description": "Settings window, Shortcuts: the heading over the preset and import/export rows. A keymap is the whole set of keyboard shortcuts."
   },
+  "settingsGroupOrbit": "Orbit",
+  "@settingsGroupOrbit": {
+    "description": "Settings window, Viewer: the heading over the settings for which way dragging turns the view round a 3D scene."
+  },
+  "settingsInvertOrbitAcross": "Invert left and right",
+  "@settingsInvertOrbitAcross": {
+    "description": "Settings window, Viewer, under the Orbit heading: a switch that makes dragging sideways turn the 3D view the other way."
+  },
+  "settingsInvertOrbitUpDown": "Invert up and down",
+  "@settingsInvertOrbitUpDown": {
+    "description": "Settings window, Viewer, under the Orbit heading: a switch that makes dragging up and down turn the 3D view the other way."
+  },
   "settingsGroupPicture": "Picture",
   "@settingsGroupPicture": {
     "description": "Settings window, Viewer: the heading over the settings that change how the image itself is shown."
@@ -13681,7 +13701,11 @@
   },
   "compSamples": "Samples",
   "@compSamples": {
-    "description": "New composition / Composition settings dialog: label beside the shutter angle: how many sub-frame samples a blurred layer is drawn at."
+    "description": "New composition / Composition settings dialog: label beside the shutter angle: the fewest sub-frame samples a moving blurred layer is drawn at."
+  },
+  "compSamplesTo": "to",
+  "@compSamplesTo": {
+    "description": "New composition / Composition settings dialog: the word between the two sample counts, read as 'Samples 16 to 128': the fewest a moving blurred layer is drawn at, then the most a fast one is."
   },
   "compBackground": "Background",
   "@compBackground": {

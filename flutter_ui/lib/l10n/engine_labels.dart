@@ -1568,6 +1568,7 @@ Map<String, String> get _built => {
       "Warp": l10n.fxWarp,
       "Wave": l10n.fxWave,
       "Wave height": l10n.fxWaveHeight,
+      "Wave speed": l10n.fxWaveSpeed,
       "Wave type": l10n.fxWaveType,
       "Wave warp": l10n.fxWaveWarp,
       "Wave width": l10n.fxWaveWidth,

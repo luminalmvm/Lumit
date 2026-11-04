@@ -576,9 +576,14 @@ pub struct MotionBlur {
     /// frame time. -90 centres the blur on the frame (the AE default), pairing
     /// with a 180 angle to open a quarter-frame either side.
     pub shutter_phase: f64,
-    /// Sub-frame samples per blurred layer across the open shutter (≥ 2 to blur;
-    /// higher is smoother and more expensive). 16 is a tasteful default.
+    /// The fewest sub-frame samples a moving layer is drawn with across the
+    /// open shutter (≥ 2 to blur). After Effects' Samples per frame.
     pub samples: u32,
+    /// The most a fast layer is drawn with, After Effects' Adaptive sample
+    /// limit. A file saved before it existed takes the default, so its fast
+    /// layers smear smoothly too.
+    #[serde(default = "MotionBlur::default_limit")]
+    pub limit: u32,
 }
 
 impl Default for MotionBlur {
@@ -588,6 +593,7 @@ impl Default for MotionBlur {
             shutter_angle: 180.0,
             shutter_phase: -90.0,
             samples: 16,
+            limit: Self::default_limit(),
         }
     }
 }
@@ -621,7 +627,32 @@ impl MotionBlur {
         if !self.enabled || self.samples < 2 {
             return Vec::new();
         }
-        let n = self.samples.min(Self::MAX_SAMPLES);
+        self.offsets(self.samples)
+    }
+
+    /// After Effects' default Adaptive sample limit.
+    fn default_limit() -> u32 {
+        128
+    }
+
+    /// How many samples a layer whose corners travel `travel` comp pixels
+    /// across the open shutter is drawn with: enough to put the copies about
+    /// a pixel apart, from `samples` up to `limit`.
+    #[must_use]
+    pub fn samples_for(&self, travel: f64) -> u32 {
+        let most = self.limit.max(self.samples).min(Self::MAX_SAMPLES);
+        let needed = if travel.is_finite() {
+            travel.ceil().clamp(0.0, f64::from(most)) as u32
+        } else {
+            most
+        };
+        needed.clamp(self.samples.min(most), most)
+    }
+
+    /// [`Self::sample_offsets`] for `n` samples across the same shutter.
+    #[must_use]
+    pub fn offsets(&self, n: u32) -> Vec<f64> {
+        let n = n.clamp(1, Self::MAX_SAMPLES);
         let open_frac = self.shutter_angle / 360.0;
         let phase_frac = self.shutter_phase / 360.0;
         (0..n)
@@ -5434,6 +5465,7 @@ mod tests {
             shutter_angle: 180.0,
             shutter_phase: -90.0,
             samples: 4,
+            ..MotionBlur::default()
         };
         let offs = mb.sample_offsets();
         assert_eq!(offs.len(), 4);
@@ -5479,6 +5511,19 @@ mod tests {
             ..MotionBlur::default()
         };
         assert_eq!(at_cap.sample_offsets().len(), 256);
+
+        // The count a moving layer takes: Samples for a slow one, a copy a
+        // pixel for a fast one, never past the limit or the cap.
+        let mb = MotionBlur::default();
+        assert_eq!(mb.samples_for(3.0), 16);
+        assert_eq!(mb.samples_for(40.2), 41);
+        assert_eq!(mb.samples_for(1e9), 128);
+        assert_eq!(mb.samples_for(f64::NAN), 128);
+        let wide = MotionBlur {
+            limit: 1_000_000,
+            ..mb
+        };
+        assert_eq!(wide.samples_for(1e9), MotionBlur::MAX_SAMPLES);
     }
 
     /// **The adjustment switch survives a save/load, and an old file is

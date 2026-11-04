@@ -1022,10 +1022,12 @@ pub struct CompSettings {
     pub duration: lumit_core::time::Duration,
     /// Scene-linear RGBA.
     pub background: [f32; 4],
-    /// The master shutter's angle in degrees, and how many sub-frame samples a
-    /// blurred layer is drawn at. The shutter's phase is left as it stands.
+    /// The master shutter's angle in degrees, and the fewest and most
+    /// sub-frame samples a blurred layer is drawn at. The shutter's phase is
+    /// left as it stands.
     pub shutter_angle: f64,
     pub motion_blur_samples: u32,
+    pub motion_blur_limit: u32,
 }
 
 impl Default for CompSettings {
@@ -1043,6 +1045,7 @@ impl Default for CompSettings {
             background: [0.0, 0.0, 0.0, 1.0],
             shutter_angle: blur.shutter_angle,
             motion_blur_samples: blur.samples,
+            motion_blur_limit: blur.limit,
         }
     }
 }
@@ -1141,6 +1144,7 @@ pub fn new_comp_ops(
         motion_blur: MotionBlur {
             shutter_angle: settings.shutter_angle,
             samples: settings.motion_blur_samples.max(1),
+            limit: settings.motion_blur_limit.max(1),
             ..MotionBlur::default()
         },
         extra: serde_json::Map::new(),
@@ -1188,6 +1192,7 @@ pub fn comp_settings_ops(comp: &lumit_core::model::Composition, settings: CompSe
         // the shutter's phase is; both are left exactly as they stand.
         shutter_angle: settings.shutter_angle,
         samples: settings.motion_blur_samples.max(1),
+        limit: settings.motion_blur_limit.max(1),
         ..comp.motion_blur
     };
     let (width, height) = (

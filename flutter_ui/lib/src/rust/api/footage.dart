@@ -449,6 +449,13 @@ class FootageReference {
   void relink({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceRelink(that: this, path: path);
 
+  /// Read the file again, for a run of stills that has grown since it was
+  /// imported. Replace footage with the same file, so the run's name is
+  /// brought up to date too.
+  void reload() => BridgeLib.instance.api.crateApiFootageFootageReferenceReload(
+        that: this,
+      );
+
   /// Draw this footage item on its own, into Viewer view `view`
   /// (docs/impl/multi-viewer.md §3.6) — the footage view.
   ///

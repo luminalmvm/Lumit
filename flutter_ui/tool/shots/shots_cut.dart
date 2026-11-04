@@ -64,6 +64,7 @@ Future<void> main() async {
       background: defaults.background,
       shutterAngle: defaults.shutterAngle,
       motionBlurSamples: defaults.motionBlurSamples,
+      motionBlurLimit: defaults.motionBlurLimit,
     ),
   );
   final talk = project.importFootage(path: '$fixtures/Talk.mp4');

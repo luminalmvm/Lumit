@@ -835,6 +835,7 @@ fn comp_set(host: &dyn Host, a: CompSettingsArgs) -> Result<Value, ScriptError> 
         background: comp.background.0,
         shutter_angle: comp.motion_blur.shutter_angle,
         motion_blur_samples: comp.motion_blur.samples,
+        motion_blur_limit: comp.motion_blur.limit,
     };
     commit(store, edits::comp_settings_ops(comp, a.over(base)?))?;
     let doc = store.snapshot();

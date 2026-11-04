@@ -296,6 +296,7 @@ void main() {
         background: defaults.background,
         shutterAngle: defaults.shutterAngle,
         motionBlurSamples: defaults.motionBlurSamples,
+        motionBlurLimit: defaults.motionBlurLimit,
       ),
     );
     scene.addFootageLayer(footage: wav, asSequence: false);

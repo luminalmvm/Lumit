@@ -392,6 +392,20 @@ class LayerBox {
     return point + up * gizmoRotateReach;
   }
 
+  /// Which axes dragging [handle] scales. An edge scales only its own. An
+  /// axis where the handle sits on the anchor scales nothing either: the
+  /// factor is the pointer's offset over the handle's, and over a fraction
+  /// of a pixel a hair of travel threw the layer across the comp.
+  (bool, bool) scalesAlong(GizmoHandle handle) {
+    final (ux, uy) = handle.unit;
+    bool clear(double x, double y) =>
+        (map.toScreen(x, y) - anchorScreen).distance >= gizmoHandleSize / 2;
+    return (
+      ux != 0.5 && clear(ux * bounds.width, map.ay),
+      uy != 0.5 && clear(map.ax, uy * bounds.height),
+    );
+  }
+
   /// The box's own upward direction on screen, as a unit vector: the top edge's
   /// midpoint minus the bottom edge's, normalised. Falls back to straight up
   /// for a degenerate (zero-height) box.
@@ -419,10 +433,14 @@ class LayerBox {
           ? gizmoAnchorSlop / 2
           : gizmoHandleSlop / 2;
       final d = (handleAt(handle) - point).distance;
-      if (d <= slop && d <= bestDistance) {
-        bestDistance = d;
-        best = handle;
+      if (d > slop || d > bestDistance) continue;
+      // A handle on the anchor scales nothing, so the press is the anchor's.
+      if (GizmoHandle.scaling.contains(handle) &&
+          scalesAlong(handle) == (false, false)) {
+        continue;
       }
+      bestDistance = d;
+      best = handle;
     }
     return best;
   }
@@ -554,6 +572,30 @@ Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect,
         for (final p in pathPointsOf(box, only: only))
           if (rect.contains(p.at)) p.key,
     };
+
+/// The mask whose **Path** row is picked, or the shape item with any of its
+/// rows picked, if one is — the shape the author is editing, so it is the
+/// one whose points are offered even when the layer itself was never clicked.
+(UuidValue, UuidValue)? pathBeingEdited(Iterable<String> selectedProperties) {
+  for (final path in selectedProperties) {
+    final parts = path.split('/');
+    // <layer>/masks/<mask>/path or <layer>/contents/<item>[/<row>]
+    if ((parts.length == 4 &&
+            parts[1] == 'masks' &&
+            parts[3] == MaskValue.path.name) ||
+        (parts.length >= 3 && parts[1] == 'contents')) {
+      try {
+        return (
+          UuidValue.fromString(parts[0]),
+          UuidValue.fromString(parts[2])
+        );
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+  return null;
+}
 
 /// Whether [box]'s path [path] is drawn and offered: always, unless [only]
 /// names another path of the same layer.
@@ -1079,12 +1121,13 @@ BridgeMask maskWith(
   BridgeMask mask, {
   List<BridgeVertex>? vertices,
   List<BridgeScalar>? vertexFeather,
+  bool? closed,
 }) =>
     BridgeMask(
       id: mask.id,
       name: mask.name,
       vertices: vertices ?? mask.vertices,
-      closed: mask.closed,
+      closed: closed ?? mask.closed,
       inverted: mask.inverted,
       opacity: mask.opacity,
       mode: mask.mode,
@@ -1276,8 +1319,8 @@ List<LayerBox> layersInsideRect(List<LayerBox> boxes, Rect rect) => [
 /// for, which is what makes a corner drag follow the pointer's diagonal rather
 /// than snapping to whichever axis moved more.
 ///
-/// An edge handle resolves only its own axis — the other has no offset from the
-/// anchor to divide by — so under [uniform] the resolved axis drives both.
+/// Only the axes [LayerBox.scalesAlong] allows move, so under [uniform] an
+/// edge's own axis drives both.
 (double, double) scaleForGizmoHandle({
   required LayerBox box,
   required GizmoHandle handle,
@@ -1286,8 +1329,10 @@ List<LayerBox> layersInsideRect(List<LayerBox> boxes, Rect rect) => [
 }) {
   final (ux, uy) = handle.unit;
   final map = box.map;
-  final dx = ux * box.bounds.width - map.ax;
-  final dy = uy * box.bounds.height - map.ay;
+  final (alongX, alongY) = box.scalesAlong(handle);
+  // A zero offset is how the map is told to leave an axis alone.
+  final dx = alongX ? ux * box.bounds.width - map.ax : 0.0;
+  final dy = alongY ? uy * box.bounds.height - map.ay : 0.0;
   final (sx, sy) = map.scaleForHandle(
     dxFromAnchor: dx,
     dyFromAnchor: dy,
@@ -1297,15 +1342,12 @@ List<LayerBox> layersInsideRect(List<LayerBox> boxes, Rect rect) => [
 
   final currentX = map.sx * 100.0;
   final currentY = map.sy * 100.0;
-  // Which axes this handle can speak for at all: one with no offset from the
-  // anchor — an edge handle's other axis, or an anchor sitting on the edge
-  // being dragged — has nothing to divide by and came back unchanged. Deciding
-  // that from the *geometry* rather than from "did the number move?" is what
-  // keeps a corner drag that happens to leave one axis where it was from being
-  // read as an edge drag.
+  // Deciding which axes speak from the geometry rather than from "did the
+  // number move?" keeps a corner drag that happens to leave one axis where it
+  // was from being read as an edge drag.
   final ratios = <double>[
-    if (dx.abs() > 1e-9 && currentX.abs() > 1e-9) sx / currentX,
-    if (dy.abs() > 1e-9 && currentY.abs() > 1e-9) sy / currentY,
+    if (alongX && currentX.abs() > 1e-9) sx / currentX,
+    if (alongY && currentY.abs() > 1e-9) sy / currentY,
   ];
   if (ratios.isEmpty) return (sx, sy);
   final factor = ratios.reduce((a, b) => a + b) / ratios.length;
@@ -1852,29 +1894,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return out;
   }
 
-  /// The mask whose **Path** row is picked, or the shape item with any of its
-  /// rows picked, if one is — the shape the author is editing, so it is the
-  /// one whose points are offered even when the layer itself was never clicked.
-  (UuidValue, UuidValue)? get _pathBeingEdited {
-    for (final path in widget.uiState.selectedProperties.value) {
-      final parts = path.split('/');
-      // <layer>/masks/<mask>/path or <layer>/contents/<item>[/<row>]
-      if ((parts.length == 4 &&
-              parts[1] == 'masks' &&
-              parts[3] == MaskValue.path.name) ||
-          (parts.length >= 3 && parts[1] == 'contents')) {
-        try {
-          return (
-            UuidValue.fromString(parts[0]),
-            UuidValue.fromString(parts[2])
-          );
-        } catch (_) {
-          return null;
-        }
-      }
-    }
-    return null;
-  }
+  (UuidValue, UuidValue)? get _pathBeingEdited =>
+      pathBeingEdited(widget.uiState.selectedProperties.value);
 
   @override
   Widget build(BuildContext context) {
@@ -3010,7 +3031,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return scaleForGizmoHandle(
       box: box,
       handle: handle,
-      pointer: _pointer,
+      // The handle keeps its distance from the pointer, or the box jumps by
+      // however far off centre it was grabbed.
+      pointer: _pointer + box.handleAt(handle) - _origin,
       uniform: HardwareKeyboard.instance.isShiftPressed,
     );
   }
