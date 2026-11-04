@@ -491,13 +491,24 @@ fn sim_first(a: vec3<f32>, b: vec3<f32>, pose_a: f32) -> SimHit {
             continue;
         }
         if (kind == K_WALLS) {
-            // Walls are across and down only, and found through their grid.
-            let lo = min(a.xy, b.xy);
-            let hi = max(a.xy, b.xy);
+            // Walls are across and down only, and found through their grid, which
+            // sits where they end the frame. Walls that moved see the move from
+            // there, so they can't step past what they come up against.
+            let moved = any(colliders[c].was_from0 != colliders[c].from0)
+                || any(colliders[c].was_from1 != colliders[c].from1)
+                || any(colliders[c].was_from2 != colliders[c].from2);
+            var pa = a;
+            var pb = b;
+            if (moved) {
+                pa = sim_back(c, 1.0, sim_own(c, pose_a, a1));
+                pb = sim_back(c, 1.0, sim_own(c, st.pose1, b1));
+            }
+            let lo = min(pa.xy, pb.xy);
+            let hi = max(pa.xy, pb.xy);
             if (hi.x < colliders[c].lo.x || lo.x > colliders[c].hi.x || hi.y < colliders[c].lo.y || lo.y > colliders[c].hi.y) {
                 continue;
             }
-            let r = b.xy - a.xy;
+            let r = pb.xy - pa.xy;
             let g = colliders[c].grid;
             let last = vec2<i32>(i32(g.z) - 1, i32(g.w) - 1);
             let from_cell = clamp(vec2<i32>(floor((lo - colliders[c].lo) / colliders[c].cell)), vec2<i32>(0, 0), last);
@@ -513,12 +524,12 @@ fn sim_first(a: vec3<f32>, b: vec3<f32>, pose_a: f32) -> SimHit {
                         if (abs(den) < 1e-12) {
                             continue;
                         }
-                        let qp = v.xy - a.xy;
+                        let qp = v.xy - pa.xy;
                         let s = (qp.x * w.y - qp.y * w.x) / den;
                         let u = (qp.x * r.y - qp.y * r.x) / den;
                         if (s >= 0.0 && s <= 1.0 && u >= 0.0 && u <= 1.0 && s < best.s) {
                             var n = normalize(vec2<f32>(-w.y, w.x));
-                            if (dot(a.xy - v.xy, n) < 0.0) {
+                            if (dot(pa.xy - v.xy, n) < 0.0) {
                                 n = -n;
                             }
                             best.s = s;
@@ -527,6 +538,11 @@ fn sim_first(a: vec3<f32>, b: vec3<f32>, pose_a: f32) -> SimHit {
                             best.at = a + (b - a) * s;
                             best.moving = vec3<f32>(0.0, 0.0, 0.0);
                             best.out = 0.0;
+                            if (moved) {
+                                let own = mix(sim_own(c, pose_a, a1), sim_own(c, st.pose1, b1), s);
+                                best.at = sim_back(c, st.pose1, own);
+                                best.moving = sim_moving(c, own);
+                            }
                         }
                     }
                 }

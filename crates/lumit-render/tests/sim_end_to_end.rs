@@ -288,6 +288,14 @@ fn walls_stop_what_falls() {
     };
     assert!(!row(&landed, 250), "the wall at 170 holds them");
     assert!(row(&landed, 160), "and they land on it");
+    // A wall coming up through falling particles lifts them.
+    let mut rising = Document::clone(&walled);
+    let c = rising.comp_mut(id).unwrap();
+    c.layers.last_mut().unwrap().transform.position_y =
+        moving(260.0, 100.0, Rational::new(3, 2).unwrap());
+    let lifted = pixels(&Arc::new(rising), id, 45).unwrap();
+    assert!(!row(&lifted, 150), "nothing is left under it");
+    assert!(row(&lifted, 80), "they are riding on it");
 }
 
 /// The floor stops what falls on it: below it nothing lands.
