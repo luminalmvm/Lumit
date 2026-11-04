@@ -16914,11 +16914,33 @@
           "default": "Flood|the|Grid"
         },
         {
+          "id": "repeat_words",
+          "label": "Repeat words",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 64.0,
+          "hard_min": 1.0,
+          "hard_max": 256.0
+        },
+        {
           "id": "column_widths",
           "label": "Column widths",
           "kind": "text",
           "unit": "raw",
           "default": ""
+        },
+        {
+          "id": "column_mix",
+          "label": "Column mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
         },
         {
           "id": "region_layer",
@@ -16985,6 +17007,13 @@
           "hard_max": 100.0
         },
         {
+          "id": "clip_to_region",
+          "label": "Clip to region",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
           "id": "threshold",
           "label": "Threshold",
           "kind": "float",
@@ -17025,6 +17054,44 @@
           "slider_min": 0.0,
           "slider_max": 200.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "row_open",
+          "label": "Row open",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "row_stagger",
+          "label": "Row stagger",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "row_shift",
+          "label": "Row shift",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "alternate_rows",
+          "label": "Alternate rows",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
         },
         {
           "id": "word_gap",

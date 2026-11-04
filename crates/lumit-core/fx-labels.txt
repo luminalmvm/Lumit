@@ -34,6 +34,7 @@ Alpha
 Alpha bias
 Alpha blur
 Alpha from
+Alternate rows
 Altitude
 Ambient
 Amount
@@ -193,6 +194,7 @@ Clearance
 Clip
 Clip black
 Clip rollback
+Clip to region
 Clip white
 Clock
 Clockwise
@@ -238,6 +240,7 @@ Colour overlay
 Colour ramp
 Colour variation
 Colours
+Column mix
 Column widths
 Columns
 Combine
@@ -979,6 +982,7 @@ Repeat
 Repeat edge pixels
 Repeat end
 Repeat start
+Repeat words
 Replace colour
 Replace method
 Reset interval
@@ -1019,6 +1023,9 @@ Roughen edges
 Round corners
 Roundness
 Row gap
+Row open
+Row shift
+Row stagger
 Rows
 Rows/columns jitter
 Same

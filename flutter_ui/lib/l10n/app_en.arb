@@ -5092,6 +5092,34 @@
   "@fxGridHeight": {
     "description": "Effect controls — a slider on Type fill: how tall the rows stand together, centred in the frame; 0 is the frame height."
   },
+  "fxRepeatWords": "Repeat words",
+  "@fxRepeatWords": {
+    "description": "Effect controls — a counter on Type fill: how many times the list of Words is set one after another in every row."
+  },
+  "fxColumnMix": "Column mix",
+  "@fxColumnMix": {
+    "description": "Effect controls — a slider on Type fill: how far the columns go from the words' own widths (0 %) to Column widths (100 %)."
+  },
+  "fxClipToRegion": "Clip to region",
+  "@fxClipToRegion": {
+    "description": "Effect controls — a checkbox on Type fill: with Fit piece, cut the words where the region stops, so none reaches past its edge."
+  },
+  "fxRowOpen": "Row open",
+  "@fxRowOpen": {
+    "description": "Effect controls — a slider on Type fill: how open the rows are, per cent; each row grows out of a flat line through its middle."
+  },
+  "fxRowStagger": "Row stagger",
+  "@fxRowStagger": {
+    "description": "Effect controls — a slider on Type fill: how far apart the rows open, per cent; the middle row first, the outer rows last."
+  },
+  "fxRowShift": "Row shift",
+  "@fxRowShift": {
+    "description": "Effect controls — a slider on Type fill: how far every row slides sideways, in pixels; the words wrap round, so it scrolls without end."
+  },
+  "fxAlternateRows": "Alternate rows",
+  "@fxAlternateRows": {
+    "description": "Effect controls — a checkbox on Type fill: every other row slides the other way."
+  },
   "fxRowGap": "Row gap",
   "@fxRowGap": {
     "description": "Effect controls — a control on Type fill: the room between one row and the next, in pixels."

@@ -6283,6 +6283,10 @@ impl GpuEffect for TypeFill {
             bands
                 .iter()
                 .map(|band| {
+                    // A row Row open has not opened yet holds nothing.
+                    if band[1] - band[0] < 1.0 {
+                        return vec![None; w as usize];
+                    }
                     let rows =
                         (band[0].max(0.0) as usize)..(band[1].ceil() as usize).min(h as usize);
                     (0..w as usize)
@@ -6328,7 +6332,12 @@ impl GpuEffect for TypeFill {
         // Each word laid out once at about the rows' height, trimmed to its
         // letters: its natural width a px of height, and the drawing that
         // is stretched into its boxes.
-        let row = bands.first().map_or(0.0, |b| b[1] - b[0]).max(1.0);
+        // The tallest row: with Row open the first may still be flat.
+        let row = bands
+            .iter()
+            .map(|b| b[1] - b[0])
+            .fold(0.0f32, f32::max)
+            .max(1.0);
         let sizes: Vec<f32> = words
             .iter()
             .map(|word| {
@@ -6385,8 +6394,11 @@ impl GpuEffect for TypeFill {
         let mut px = composite(&placed, [0, 0], [i64::from(w), i64::from(h)]);
         // The region cuts the words pixel by pixel: the rows read it only
         // along their middle, and a curved edge crosses a tall row. Fit piece
-        // keeps every word whole.
-        if let Some(region) = region.as_ref().filter(|_| !inst.fit_piece) {
+        // keeps every word whole, unless Clip to region cuts them at the edge.
+        if let Some(region) = region
+            .as_ref()
+            .filter(|_| !inst.fit_piece || inst.clip_to_region)
+        {
             for (out, t) in px.chunks_exact_mut(4).zip(region.chunks_exact(4)) {
                 let v = if luminance {
                     (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)
