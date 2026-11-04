@@ -100,20 +100,26 @@ impl Models {
         Some((d, at))
     }
 
-    /// Everything the particles hit at comp time `tc`, and every edge they read,
+    /// Everything the particles hit at layer time `lt`, and every edge they read,
     /// each collider's pose at the frame's start the one the frame before ended on.
     pub(super) fn at(
         &mut self,
         ctx: &GpuContext,
         src: &Source<'_>,
         start: f64,
-        tc: f64,
+        lt: f64,
         rows_now: &Particulate,
     ) -> (Vec<SimCollider>, Vec<u32>) {
-        let (mut out, edges) = self.posed(ctx, src, tc, rows_now);
+        let offset = src.layer.start_offset.0.to_f64();
+        let (mut out, edges) = self.posed(ctx, src, lt + offset, rows_now);
         let was = match self.last.take() {
             Some((at, poses)) if at == start => poses,
-            _ => self.posed(ctx, src, start, rows_now).0,
+            // A walk that picked up here poses the start with the rows at the start.
+            _ => {
+                let then = src.inputs(start);
+                let rows = then.as_ref().map_or(rows_now, |i| &i.rows);
+                self.posed(ctx, src, start + offset, rows).0
+            }
         };
         // A layer that comes or goes stands still for the frame.
         if was.len() == out.len() {
@@ -122,7 +128,7 @@ impl Models {
                 c.was_to = w.to;
             }
         }
-        self.last = Some((tc, out.clone()));
+        self.last = Some((lt, out.clone()));
         (out, edges)
     }
 

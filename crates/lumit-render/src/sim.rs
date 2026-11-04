@@ -292,8 +292,7 @@ fn run_steps(
         ..op
     };
     let frame = then.frame();
-    let offset = src.layer.start_offset.0.to_f64();
-    let (rows, edges) = models.at(ctx, src, from_lt + offset, lt + offset, &then.rows);
+    let (rows, edges) = models.at(ctx, src, from_lt, lt, &then.rows);
     fx.sim_steps(
         ctx,
         work,

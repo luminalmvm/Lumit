@@ -29,6 +29,23 @@ fn float(e: &mut EffectInstance, id: &str, v: f64) {
     set(e, id, EffectValue::Float(Property::fixed(v)));
 }
 
+/// A row going evenly from one value to another, from the start to `end`.
+fn moving(from: f64, to: f64, end: Rational) -> Property {
+    let key = |time: Rational, value: f64| lumit_core::anim::Keyframe {
+        time,
+        value,
+        interp_in: lumit_core::anim::SideInterp::Linear,
+        interp_out: lumit_core::anim::SideInterp::Linear,
+    };
+    Property {
+        animation: lumit_core::anim::Animation::Keyframed(vec![
+            key(Rational::ZERO, from),
+            key(end, to),
+        ]),
+        extra: serde_json::Map::new(),
+    }
+}
+
 fn solid_layer(def: Uuid) -> Layer {
     Layer {
         graph: Default::default(),
@@ -154,6 +171,18 @@ fn a_frame_is_the_same_however_it_is_reached() {
     let _ = pixels(&doc, id, 57);
     assert!(pixels(&doc, id, 44).unwrap() == walked, "scrubbed back");
     assert!(pixels(&doc, id, 33).unwrap() != walked, "another frame");
+    // A floor that moves is where its row says at the start of each frame.
+    let (doc, id) = project(|e| {
+        set(e, "ground", EffectValue::Bool(true));
+        set(
+            e,
+            "ground_height",
+            EffectValue::Float(moving(-60.0, 80.0, Rational::new(3, 2).unwrap())),
+        );
+    });
+    let walked = walked_alone(&doc, id, 44).unwrap();
+    let _ = pixels(&doc, id, 57);
+    assert!(pixels(&doc, id, 44).unwrap() == walked, "moving floor");
     // A comp that changes size moves the floor, so nothing kept before it serves.
     let (doc, id) = project(|e| {
         set(e, "ground", EffectValue::Bool(true));
@@ -337,19 +366,7 @@ fn a_3d_card_stops_what_falls() {
     let mut rising = Document::clone(&rising);
     let c = rising.comp_mut(id).unwrap();
     let card = c.layers.last_mut().unwrap();
-    let key = |time: Rational, value: f64| lumit_core::anim::Keyframe {
-        time,
-        value,
-        interp_in: lumit_core::anim::SideInterp::Linear,
-        interp_out: lumit_core::anim::SideInterp::Linear,
-    };
-    card.transform.position_y = Property {
-        animation: lumit_core::anim::Animation::Keyframed(vec![
-            key(Rational::ZERO, 260.0),
-            key(Rational::new(3, 2).unwrap(), 100.0),
-        ]),
-        extra: serde_json::Map::new(),
-    };
+    card.transform.position_y = moving(260.0, 100.0, Rational::new(3, 2).unwrap());
     let rising = Arc::new(rising);
     let lifted = pixels(&rising, id, 45).unwrap();
     assert!(
