@@ -265,6 +265,7 @@ impl FxEngine {
                     n.y_axis.extend(id as f32).to_array(),
                     n.z_axis.extend(f32::from(u8::from(shown))).to_array(),
                 ],
+                rest: [[0.0; 4]; 4],
             };
             uniforms[offset..][..size].copy_from_slice(bytemuck::bytes_of(&uniform));
             offset as u32

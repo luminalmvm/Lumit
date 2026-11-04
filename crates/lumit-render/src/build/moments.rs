@@ -66,11 +66,56 @@ fn picture_of(
             px_per_metre: comp.px_per_metre(t),
             read: None,
             trace_layers: false,
+            paint: Vec::new(),
+            paint_time: 0.0,
         })),
         colour_space: None,
         natural: [comp.width as f32, comp.height as f32],
         graph_fx: Vec::new(),
         place: None,
+    }
+}
+
+/// Effect `effect`'s layer row `row` as a picture at comp time `at`, made by
+/// walking the comp again at that moment. The third argument is the walk's copy
+/// and whether it is itself a rebuild.
+///
+/// No keyer: a nested comp built for another moment holds its footage a whole
+/// frame at a time, which is not always the picture its name would claim.
+pub(super) fn picture_at(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    (at, frame_t): (f64, f64),
+    frame_pixels: &HashMap<Uuid, &CompLayerPixels>,
+    visited: &[Uuid],
+    (clone, rebuild): ((u32, u32), bool),
+    (effect, row): (&EffectInstance, &str),
+) -> Option<DofInputDraw> {
+    let mut probe = Probe::Picture {
+        effect,
+        row,
+        found: None,
+    };
+    comp_walk(
+        doc,
+        comp,
+        at,
+        frame_t,
+        frame_pixels,
+        &mut visited.to_vec(),
+        None,
+        true,
+        Walk {
+            clone,
+            values: &[],
+            rebuild,
+            seen_through: None,
+        },
+        Some(&mut probe),
+    );
+    match probe {
+        Probe::Picture { found, .. } => found,
+        _ => None,
     }
 }
 

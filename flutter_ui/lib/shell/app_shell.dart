@@ -891,7 +891,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'layer.new.text' ||
             'layer.new.camera' ||
             'layer.new.adjustment' ||
-            'layer.new.null':
+            'layer.new.null' ||
+            'layer.new.card':
         if (comp == null) {
           handled = false;
         } else {
@@ -906,6 +907,10 @@ class _LumitAppViewState extends State<LumitAppView> {
               comp.addAdjustmentLayer(row: row);
             case 'layer.new.null':
               comp.addNullLayer(row: row);
+            case 'layer.new.card':
+              ui.setSelection([
+                comp.addCardLayer(row: row, frame: ui.playheadFrame.value),
+              ]);
           }
           state.notifyDocumentChanged();
         }
@@ -1332,6 +1337,9 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
       case 'layer.centre' || 'layer.centre.anchor':
         handled = MenuEntry.pressAction(transformRows(state, ui), action);
+      case 'layer.project.from.camera':
+        handled =
+            MenuEntry.pressAction([projectFromCameraRow(state, ui)], action);
       case 'mask.feather' || 'mask.invert':
         handled =
             MenuEntry.pressAction(maskRows(context, state, ui), action);

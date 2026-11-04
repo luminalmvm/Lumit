@@ -90,6 +90,7 @@ pub mod plan;
 pub mod planes;
 pub mod prefetch;
 pub mod profile;
+mod projection;
 pub mod proxy;
 pub mod puppet;
 pub mod realise;

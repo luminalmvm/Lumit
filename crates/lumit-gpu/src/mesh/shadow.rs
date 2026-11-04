@@ -51,6 +51,7 @@ struct GpuMaps {
 }
 
 /// One frame's shadow maps, one or six views a light in one array.
+#[derive(Clone)]
 pub struct ShadowMaps {
     pub(crate) texture: wgpu::Texture,
     pub(crate) uniform: wgpu::Buffer,
@@ -68,11 +69,26 @@ impl ShadowMaps {
 }
 
 /// One model that casts: its scene, and where it is in comp pixels.
+#[derive(Clone)]
 pub struct MapCaster<'a> {
     pub scene: &'a Arc<ModelScene>,
     pub model_to_comp: Mat4,
     /// Where its nodes are this frame, `None` at rest.
     pub pose: Option<&'a lumit_scene::pose::Pose>,
+}
+
+/// The corners of `c`'s box in comp pixels.
+pub(super) fn box_corners(c: &MapCaster<'_>) -> [Vec3; 8] {
+    let bounds = c.pose.map_or(c.scene.bounds, |p| p.bounds);
+    let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
+    std::array::from_fn(|k| {
+        let pick = |bit: usize, a: f32, b: f32| if k & bit == 0 { a } else { b };
+        c.model_to_comp.transform_point3(Vec3::new(
+            pick(1, lo.x, hi.x),
+            pick(2, lo.y, hi.y),
+            pick(4, lo.z, hi.z),
+        ))
+    })
 }
 
 /// What is bound when a frame has no maps: one empty map and a uniform
@@ -294,8 +310,10 @@ impl MeshFx {
     }
 
     /// Draws depth alone into a view of a map, made the first time.
-    fn shadow_pipeline(&self, device: &wgpu::Device) -> &wgpu::RenderPipeline {
-        self.shadow.get_or_init(|| {
+    /// What draws a depth: `front` for the faces a model is drawn with, or
+    /// both, so an open model casts too.
+    fn shadow_pipeline(&self, device: &wgpu::Device, front: bool) -> &wgpu::RenderPipeline {
+        self.shadow[usize::from(front)].get_or_init(|| {
             let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("mesh-shadow"),
                 bind_group_layouts: &[
@@ -328,8 +346,10 @@ impl MeshFx {
                     targets: &[],
                     compilation_options: Default::default(),
                 }),
-                // Both faces, so an open model casts too.
-                primitive: Default::default(),
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: front.then_some(wgpu::Face::Back),
+                    ..Default::default()
+                },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH,
                     depth_write_enabled: true,
@@ -362,18 +382,7 @@ impl FxEngine {
             .collect();
         let points: Vec<Vec3> = models
             .iter()
-            .flat_map(|(_, c)| {
-                let bounds = c.pose.map_or(c.scene.bounds, |p| p.bounds);
-                let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
-                (0..8).map(move |k| {
-                    let pick = |bit: usize, a: f32, b: f32| if k & bit == 0 { a } else { b };
-                    c.model_to_comp.transform_point3(Vec3::new(
-                        pick(1, lo.x, hi.x),
-                        pick(2, lo.y, hi.y),
-                        pick(4, lo.z, hi.z),
-                    ))
-                })
-            })
+            .flat_map(|(_, c)| box_corners(c))
             .filter(|p| p.is_finite())
             .collect();
         if points.is_empty() {
@@ -429,11 +438,34 @@ impl FxEngine {
         for (slot, m) in gpu.views.iter_mut().zip(&views) {
             *slot = m.to_cols_array_2d();
         }
-        Some(fx.draw_maps(ctx, &models, &views, &gpu, side, kept))
+        Some(fx.draw_maps(ctx, &models, &views, &gpu, (side, side), kept))
     }
 }
 
 impl MeshFx {
+    /// One view's depth from every part of `models`, between `range`'s nearest
+    /// depth and that much further, `size` texels in size.
+    pub(super) fn draw_one_view(
+        &self,
+        ctx: &GpuContext,
+        models: &[(Arc<super::GpuModel>, &MapCaster<'_>)],
+        view: Mat4,
+        (near, range): (f32, f32),
+        size: (u32, u32),
+    ) -> wgpu::Texture {
+        let mut gpu = GpuMaps {
+            head: [1.0, size.0 as f32, 0.0, 0.0],
+            lights: [GpuMap::default(); MAX_LIT_LIGHTS],
+            views: [[[0.0; 4]; 4]; MAX_VIEWS],
+        };
+        gpu.lights[0] = GpuMap {
+            view: [0.0, 1.0, 0.0, 0.0],
+            range: [near, range, 0.0, 0.0],
+        };
+        self.draw_maps(ctx, models, &[view], &gpu, size, Vec::new())
+            .texture
+    }
+
     /// Each view's depth from every part of `models`, into one array.
     fn draw_maps(
         &self,
@@ -441,16 +473,18 @@ impl MeshFx {
         models: &[(Arc<super::GpuModel>, &MapCaster<'_>)],
         views: &[Mat4],
         gpu: &GpuMaps,
-        side: u32,
+        (width, height): (u32, u32),
         lights: Vec<LightingLight>,
     ) -> ShadowMaps {
         let layers = views.len() as u32;
-        ctx.charge_vram(crate::texture_bytes(DEPTH, side, side).saturating_mul(u64::from(layers)));
+        ctx.charge_vram(
+            crate::texture_bytes(DEPTH, width, height).saturating_mul(u64::from(layers)),
+        );
         let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("shadow-maps"),
             size: wgpu::Extent3d {
-                width: side,
-                height: side,
+                width,
+                height,
                 depth_or_array_layers: layers,
             },
             mip_level_count: 1,
@@ -505,6 +539,7 @@ impl MeshFx {
             let draw = DrawUniform {
                 model: at.to_cols_array_2d(),
                 normal: [[0.0; 4]; 3],
+                rest: [[0.0; 4]; 4],
             };
             let offset = (stride(draw_size) * k as u64) as usize;
             draws[offset..][..draw_size].copy_from_slice(bytemuck::bytes_of(&draw));
@@ -527,7 +562,12 @@ impl MeshFx {
                 }),
                 usage: wgpu::BufferUsages::STORAGE,
             });
-        let pipeline = self.shadow_pipeline(&ctx.device);
+        let pipeline = self.shadow_pipeline(&ctx.device, false);
+        // A camera's depth, with no light to it, has to hide what the mesh pass
+        // will: a face drawn from the front only can't hide anything from behind.
+        let as_drawn = lights
+            .is_empty()
+            .then(|| self.shadow_pipeline(&ctx.device, true));
         let mut encoder = ctx.encoder("shadow-maps");
         for k in 0..layers {
             let group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -577,10 +617,15 @@ impl MeshFx {
                 ..Default::default()
             });
             pass.set_pipeline(pipeline);
-            for (i, (model, _, p, posed)) in parts.iter().enumerate() {
-                let Some((material, _, _, samplers)) = model.materials.get(p.material) else {
+            for (i, (model, at, p, posed)) in parts.iter().enumerate() {
+                let Some((material, _, double, samplers)) = model.materials.get(p.material) else {
                     continue;
                 };
+                // A mirrored part is drawn from both sides, so it hides as both.
+                if let Some(front) = as_drawn {
+                    let both = *double || at.determinant() < 0.0;
+                    pass.set_pipeline(if both { pipeline } else { front });
+                }
                 let (vertices, base) = posed.vertices(p, 0);
                 pass.set_vertex_buffer(0, vertices);
                 pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);

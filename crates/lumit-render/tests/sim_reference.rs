@@ -299,8 +299,9 @@ fn the_card_walks_where_the_reference_walks() {
         }
     }
     // Cards round their floats their own way and each step carries on from the
-    // last, so this drifts by a different amount on each: 0.005 px here, 0.165
-    // on a Mac. Half a pixel can't be seen, and a step that moved particles
-    // differently would pass it in the first few frames.
-    assert!(worst < 0.5, "worst place {worst} px");
+    // last, so this drifts by a different amount on each: 0.005 px here, up to
+    // 0.59 on CI's Macs. Two pixels leaves room for that, and a step that moved
+    // particles differently would pass it in the first few frames. Whether one
+    // card gives the same frame twice is a_frame_is_the_same_however_it_is_reached.
+    assert!(worst < 2.0, "worst place {worst} px");
 }

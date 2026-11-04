@@ -27,6 +27,7 @@ pub mod display;
 pub mod lens;
 pub mod look;
 pub mod passes;
+pub mod projector;
 mod samplers;
 mod setup;
 pub mod shadow;
@@ -146,6 +147,7 @@ struct FrameUniform {
 struct DrawUniform {
     model: [[f32; 4]; 4],
     normal: [[f32; 4]; 3],
+    rest: [[f32; 4]; 4],
 }
 
 /// One primitive where one node puts it.
@@ -190,7 +192,7 @@ pub(crate) struct MeshFx {
     environment: environment::Fallback,
     layout: wgpu::PipelineLayout,
     /// Draws a shadow map's view ([`shadow`]), made when first asked for.
-    shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
+    shadow: [std::sync::OnceLock<wgpu::RenderPipeline>; 2],
     /// The camera's blur ([`lens`]), made when first asked for.
     lens: std::sync::OnceLock<lens::LensPasses>,
     /// Writes a model's moving parts ([`deform`]), made when first asked for.
@@ -529,6 +531,7 @@ impl MeshFx {
                         n.y_axis.extend(0.0).to_array(),
                         n.z_axis.extend(0.0).to_array(),
                     ],
+                    rest: projector::rest_of(view.looks, p.material, *placed),
                 };
                 let offset = next * stride;
                 next += 1;

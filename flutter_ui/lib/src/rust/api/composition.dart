@@ -585,6 +585,13 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceAddCameraLayer(
           that: this, row: row);
 
+  /// Add a card filling the frame of the comp's camera at comp frame `frame`,
+  /// square on to it.
+  LayerReference addCardLayer({int? row, required int frame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddCardLayer(
+              that: this, row: row, frame: frame);
+
   /// Add an empty Audio layer: a row for sound clips with nothing on it yet,
   /// so there is somewhere to put them. One undo step.
   LayerReference addEmptyAudioLayer({int? row}) => BridgeLib.instance.api

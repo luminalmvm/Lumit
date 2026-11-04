@@ -6562,6 +6562,10 @@
   "@keyNewAdjustmentLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewCardLayer": "New Card layer",
+  "@keyNewCardLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A card is a flat Model layer with no 3D model behind it."
+  },
   "keyNewCameraLayer": "New Camera layer",
   "@keyNewCameraLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7554,6 +7558,10 @@
   "menuBlendingMode": "Blending mode",
   "@menuBlendingMode": {
     "description": "Menu item."
+  },
+  "menuCard": "Card",
+  "@menuCard": {
+    "description": "Layer > New menu item: a flat Model layer that needs no file."
   },
   "menuCamera": "Camera",
   "@menuCamera": {
@@ -13683,6 +13691,10 @@
   "trackCreateNull": "Create null",
   "@trackCreateNull": {
     "description": "Button over the Viewer's picture when solved points are selected: puts a Null layer at their average position."
+  },
+  "trackCreateCard": "Create card",
+  "@trackCreateCard": {
+    "description": "Button over the Viewer's picture when solved points are selected: puts a flat Model layer at their average position with the shot projected on it from the solved camera."
   },
   "trackCreateSolid": "Create solid",
   "@trackCreateSolid": {
@@ -24126,6 +24138,22 @@
   "fxBaseColourLayer": "Base colour layer",
   "@fxBaseColourLayer": {
     "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture stands in for the base colour."
+  },
+  "menuProjectFromCamera": "Project from camera",
+  "@menuProjectFromCamera": {
+    "description": "Layer menu and command palette: sets every material of the selected Model layers to read a picture from a camera, rather than on the model's own uvs."
+  },
+  "fxProjectedFrom": "Projected from",
+  "@fxProjectedFrom": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The Camera layer its base colour layer is projected from, rather than read on the model's own uvs. None leaves it on the uvs."
+  },
+  "fxProjectionTime": "Projection time",
+  "@fxProjectionTime": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Whether the projecting camera and its picture follow the playhead (Follow) or stop at one frame (Hold)."
+  },
+  "fxHoldFrame": "Hold frame",
+  "@fxHoldFrame": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The comp frame the projecting camera and its picture stop at."
   },
   "fxMetallic": "Metallic",
   "@fxMetallic": {

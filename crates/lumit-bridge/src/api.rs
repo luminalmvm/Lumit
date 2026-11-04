@@ -41,6 +41,7 @@ pub mod planes;
 pub mod presets;
 pub mod project;
 pub mod project_item;
+pub mod projection;
 pub mod retime;
 pub mod roto;
 pub mod routes;

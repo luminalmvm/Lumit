@@ -800,8 +800,22 @@ pub(crate) fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
 /// it — and they start at the pose captured here, which is that lane's nought.
 #[frb(sync)]
 pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, BridgeError> {
-    let comp = tracked.composition()?;
-    let mut layer = crate::edits::fresh_camera(&comp, "Camera".into(), Some(tracked.layer_id));
+    let layer = solved_camera_layer(&tracked.composition()?, tracked.layer_id);
+    let id = layer.id;
+    tracked.commit(lumit_core::ops::Op::AddLayer {
+        comp: tracked.comp_id,
+        index: 0,
+        layer: Box::new(layer),
+    })?;
+    Ok(LayerReference::new(tracked.project_id, tracked.comp_id, id))
+}
+
+/// A Camera layer of `comp` following the solve of layer `tracked`.
+pub(crate) fn solved_camera_layer(
+    comp: &lumit_core::model::Composition,
+    tracked: Uuid,
+) -> lumit_core::model::Layer {
+    let mut layer = crate::edits::fresh_camera(comp, "Camera".into(), Some(tracked));
     // The layer arrives already linked, so `Op::SetCameraSolveLink` — which is
     // where the base is normally captured — is never applied to it. Captured
     // here instead, off the layer that is about to be added, which is the same
@@ -813,13 +827,7 @@ pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, Brid
     {
         *correction_base = base.map(Box::new);
     }
-    let id = layer.id;
-    tracked.commit(lumit_core::ops::Op::AddLayer {
-        comp: tracked.comp_id,
-        index: 0,
-        layer: Box::new(layer),
-    })?;
-    Ok(LayerReference::new(tracked.project_id, tracked.comp_id, id))
+    layer
 }
 
 /// Bake a solve-linked camera into keyframes and sever the link.
@@ -909,51 +917,7 @@ pub fn add_layer_at_points(
     use lumit_core::ops::AutoFolderKind;
 
     let comp = tracked.composition()?;
-    let media = tracked_media(&tracked).ok_or(BridgeError::NotFootage)?;
-    let at = lumit_render::track::point_centroid(media, &tracks).ok_or(BridgeError::NoSolve)?;
-
-    // The camera the layer is turned to face: the active one at this frame,
-    // with its link followed, so a null made under a derived camera faces the
-    // motion that is actually being drawn.
-    let doc = {
-        let proj = tracked.project()?;
-        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-        state.store.snapshot()
-    };
-    let t = comp
-        .frame_rate
-        .time_of_frame(frame)
-        .map_err(|_| BridgeError::InvalidTime)?;
-    let facing = doc.comp(tracked.comp_id).map_or((0.0, 0.0, 0.0), |c| {
-        lumit_render::track::camera_pose(&doc, c, t.0.to_f64()).rotation_deg
-    });
-    // The solve's points sit in the space of the camera it drives, so a
-    // parented camera takes them with it.
-    let at = doc
-        .comp(tracked.comp_id)
-        .and_then(|c| {
-            let camera = c.active_camera(t.0.to_f64()).filter(|l| {
-                matches!(l.kind, lumit_core::model::LayerKind::Camera { solve_link: Some(id), .. } if id == tracked.layer_id)
-            })?;
-            let at = t.0.to_f64();
-            let context = lumit_core::model::comp_context(&doc, c, at);
-            let read = lumit_core::model::context_reader(&context, at);
-            lumit_core::model::parent_space(c, camera, at, &read, lumit_render::track::solves_for(&doc))
-        })
-        .map_or(at, |space| {
-            let p = space.point((at[0], at[1], at[2]));
-            [p.0, p.1, p.2]
-        });
-
-    let transform = TransformGroup {
-        position_x: Property::fixed(at[0]),
-        position_y: Property::fixed(at[1]),
-        position_z: Property::fixed(at[2]),
-        rotation_x: Property::fixed(facing.0),
-        rotation_y: Property::fixed(facing.1),
-        rotation: Property::fixed(facing.2),
-        ..TransformGroup::default()
-    };
+    let (transform, doc) = crate::api::projection::placed_at_points(&tracked, &tracks, frame)?;
 
     let mut ops = Vec::new();
     let (name, kind, transform) = if solid {
@@ -1020,7 +984,7 @@ pub fn add_layer_at_points(
 
 /// The media item a layer carrying an enabled Camera track reads, or `None` for
 /// any layer that is not one.
-fn tracked_media(layer: &LayerReference) -> Option<Uuid> {
+pub(crate) fn tracked_media(layer: &LayerReference) -> Option<Uuid> {
     lumit_core::track::tracked_source_id(&layer.item().ok()?)
 }
 // Which layer of a composition is the tracked one is deliberately **not** a
