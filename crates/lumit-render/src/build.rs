@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
-mod fx_key;
+pub(crate) mod fx_key;
 pub(crate) mod shading;
 
 /// One layer's source pixels ready for a draw: `(rgba, tex_w, tex_h, natural
@@ -4755,7 +4755,7 @@ fn comp_walk(
     }
     if !spliced {
         crate::haze::add(&mut draws, doc, comp, t_comp);
-        crate::environment::add(&mut draws, doc, comp, t_comp);
+        crate::environment::add(&mut draws, doc, comp, t_comp, pixels_by_layer);
     }
     draws
 }

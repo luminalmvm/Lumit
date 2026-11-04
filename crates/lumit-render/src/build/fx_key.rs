@@ -2,6 +2,9 @@
 
 use std::collections::HashMap;
 
+use lumit_core::fx::builtins::{LFX_MATCH_PREFIX, OFX_MATCH_PREFIX};
+use lumit_core::fx::params::ResolvedStack;
+
 use uuid::Uuid;
 
 use crate::decode::CompLayerPixels;
@@ -52,4 +55,33 @@ pub(super) fn fx_input_key(
     let mut k = [0u8; 16];
     k.copy_from_slice(&h.finalize().as_bytes()[..16]);
     Some(u128::from_le_bytes(k))
+}
+
+/// [`fx_input_key`] for what reads a picture only when it changes, so with no
+/// masks or paint a still is named the same at every moment. Not for the
+/// effect cache: a custom shader or a plugin is told the time beside its
+/// parameters, so `None` when `stack` holds one.
+pub(crate) fn still_input_key(
+    doc: &lumit_core::model::Document,
+    layer: &lumit_core::model::Layer,
+    pixels_by_layer: &HashMap<Uuid, &CompLayerPixels>,
+    t_comp: f64,
+    (tex_w, tex_h): (u32, u32),
+    stack: &ResolvedStack,
+) -> Option<u128> {
+    let clocked = stack.iter().any(|op| {
+        let name = op.def.schema().match_name;
+        name == "custom_shader"
+            || name.starts_with(OFX_MATCH_PREFIX)
+            || name.starts_with(LFX_MATCH_PREFIX)
+    });
+    if clocked {
+        return None;
+    }
+    let moves = !layer.masks.is_empty() || !layer.paint.is_empty();
+    let lt = match moves {
+        true => lumit_core::time::layer_time(t_comp, layer.start_offset.0),
+        false => 0.0,
+    };
+    fx_input_key(doc, layer, pixels_by_layer, lt, tex_w, tex_h)
 }
