@@ -2203,7 +2203,7 @@ fn comp_walk(
                     .filter(|_| !driven_inputs(src))
                     .and_then(|k| k.nested_key_with(nested, slt, src.graph_inputs.as_ref())),
                 px_per_metre: nested.px_per_metre(slt),
-                scene_depth: false,
+                read: None,
                 trace_layers: false,
             }))
         };
@@ -2650,25 +2650,7 @@ fn comp_walk(
         let mut input = match (below, nested_input_for(src)) {
             (Some(below), _) => below,
             (None, Some(nested)) => nested,
-            (None, None) => {
-                let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
-                DofInputDraw {
-                    rgba: rgba.to_vec(),
-                    tex_w,
-                    tex_h,
-                    format,
-                    fx: Default::default(),
-                    colour_tables: Default::default(),
-                    flare_lens_files: Vec::new(),
-                    roto_mattes: Vec::new(),
-                    planes: Vec::new(),
-                    nested: None,
-                    colour_space: crate::colour::footage_colour_space(doc, &src.kind),
-                    natural: [natural.0, natural.1],
-                    graph_fx: Vec::new(),
-                    place: None,
-                }
-            }
+            (None, None) => moments::plain_input(doc, src, pixels_for(src)?),
         };
         input.place = place;
         if src.switches.fx {
@@ -2944,14 +2926,29 @@ fn comp_walk(
                         // reads their distance rather than its picture. A flat
                         // precomp is a picture, a depth pass made as a comp.
                         let depth = def.depth_inputs().contains(&param);
-                        let three_d = e
+                        let named = e
                             .layer_ref(param)
-                            .and_then(|id| comp.layers.iter().find(|l| l.id == id))
-                            .and_then(|l| match l.kind {
-                                LayerKind::Precomp { comp } => doc.comp(comp),
-                                _ => None,
-                            })
-                            .is_some_and(|c| c.layers.iter().any(|l| l.switches.three_d));
+                            .and_then(|id| comp.layers.iter().find(|l| l.id == id));
+                        let three_d = named.is_some_and(|l| crate::passes::is_3d_precomp(doc, l));
+                        let read = def.scene_read(e);
+                        let model = named
+                            .filter(|l| matches!(l.kind, LayerKind::Model { .. }) && in_span(l));
+                        if let (Some(model), Some(read)) =
+                            (model, read.clone().filter(|r| !r.is_empty()))
+                        {
+                            return moments::model_pass(
+                                doc,
+                                comp,
+                                model,
+                                (t_comp, frame_t),
+                                frame_pixels,
+                                (&visited_path, clone_number),
+                                read,
+                            );
+                        }
+                        if read.as_ref().is_some_and(|r| !three_d || r.is_empty()) {
+                            return LayerInputDraw::Absent;
+                        }
                         let own = e.layer_ref(param) == Some(owner);
                         if let Some(ppm) = below.filter(|_| own && depth) {
                             return LayerInputDraw::Below(ppm);
@@ -2961,17 +2958,17 @@ fn comp_walk(
                         // input, which `run_ops` already holds. Except a Depth
                         // row on a 3D precomp, which wants that precomp's
                         // distance rather than its picture.
-                        if own && !(depth && three_d) {
+                        if own && !((depth || read.is_some()) && three_d) {
                             return LayerInputDraw::ThisLayer;
                         }
                         let Some(mut d) = layer_slot(e, param) else {
                             return LayerInputDraw::Absent;
                         };
-                        if depth && three_d {
-                            if let Some(n) = d.nested.as_mut() {
-                                n.scene_depth = true;
-                                n.trace_layers = own && def.traces_scene(e);
-                            }
+                        if let (Some(n), true) = (d.nested.as_mut(), read.is_some()) {
+                            n.read = read;
+                        } else if let Some(n) = d.nested.as_mut().filter(|_| depth && three_d) {
+                            n.read = crate::passes::depth_read();
+                            n.trace_layers = own && def.traces_scene(e);
                         }
                         LayerInputDraw::Layer(d)
                     };
@@ -5835,7 +5832,7 @@ impl GraphLower<'_> {
                 camera: Some(crate::track::camera_pose(self.doc, nested, self.t)),
                 key: None,
                 px_per_metre: nested.px_per_metre(self.t),
-                scene_depth: true,
+                read: crate::passes::depth_read(),
                 trace_layers: false,
             },
         )));

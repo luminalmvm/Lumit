@@ -9,7 +9,11 @@ use lumit_render::headless::HeadlessRenderer;
 // "what does a scale of 0.5 mean for the decode" would drift, and the two
 // frontends would then decode at different sizes for the same on-screen scale.
 use crate::render::quality_for;
-use dropper::{cut_patch, soloed};
+use dropper::cut_patch;
+#[cfg(not(target_arch = "wasm32"))]
+use dropper::sample_layer_alone;
+#[cfg(target_arch = "wasm32")]
+use dropper::soloed;
 use uuid::Uuid;
 use views::{close_view, ground_of, set_view, viewed_kept, viewed_through, Viewed};
 #[cfg(target_arch = "wasm32")]
@@ -287,12 +291,11 @@ fn frame_name(
 /// One soloed-layer render, held for the dropper (see [`sample_layer_alone`]).
 #[frb(ignore)]
 struct LayerSample {
-    /// `(comp, frame, layer, document revision, view)`, what this render is
-    /// of. The revision is what retires it when an edit lands: the frame
-    /// cache has no generation counter any more (every frame is named by its
-    /// content), and a soloed render is of a document nobody else holds, thus
-    /// it cannot be named the same way.
-    stamp: (Uuid, u64, Uuid, u64, u32),
+    /// `(comp, frame, layer, document revision, view, whether its part ids)`,
+    /// what this render is of. The revision is what retires it when an edit
+    /// lands: every frame is named by its content, and a soloed render is of a
+    /// document nobody else holds, so it cannot be named the same way.
+    stamp: (Uuid, u64, Uuid, u64, u32, bool),
     width: u32,
     height: u32,
     rgba: Vec<u8>,
@@ -2776,6 +2779,8 @@ pub struct SamplePixelsRequest {
     /// does, so a hidden depth pass (which never shows in the composite) can
     /// still be read. `None` samples the composite.
     pub layer: Option<LayerReference>,
+    /// Read that layer's Part id pass rather than its picture.
+    pub part_ids: bool,
 }
 
 /// The largest window one read may carry: 129×129 pixels, 66 KiB.
@@ -5362,50 +5367,6 @@ fn sample_pixels(
         },
     ));
     Ok(())
-}
-
-/// The composition rendered with one layer soloed — that layer alone, in its
-/// own place, on nothing.
-///
-/// Held in `state.layer_sample` against `(comp, frame, layer, revision,
-/// view)`: the dropper asks again on every pointer move, and re-compositing
-/// the whole composition per move is not a thing to do while someone is
-/// dragging a pointer. An edit moves the document's revision, which retires
-/// the entry.
-#[frb(ignore)]
-#[cfg(not(target_arch = "wasm32"))]
-fn sample_layer_alone(
-    document: &lumit_core::model::Document,
-    revision: u64,
-    layer: Uuid,
-    req: &SamplePixelsRequest,
-    state: &mut WorkerState,
-) -> Option<(u32, u32, Vec<u8>)> {
-    let stamp = (req.comp.id, req.frame, layer, revision, req.view);
-    if let Some(held) = &state.layer_sample {
-        if held.stamp == stamp {
-            return Some((held.width, held.height, held.rgba.clone()));
-        }
-    }
-
-    let patched = soloed(document, layer, req, state)?;
-    let (rgba, w, h) = state
-        .renderer
-        .render_preview(
-            &patched,
-            req.comp.id,
-            req.frame,
-            quality_for(req.scale),
-            req.scale,
-        )
-        .ok()?;
-    state.layer_sample = Some(LayerSample {
-        stamp,
-        width: w,
-        height: h,
-        rgba: rgba.clone(),
-    });
-    Some((w, h, rgba))
 }
 
 /// Render one frame and publish it to Dart — always as a GPU handle.

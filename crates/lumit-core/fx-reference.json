@@ -21291,6 +21291,131 @@
       "matte_role": "none"
     },
     {
+      "slug": "scene-pass",
+      "match_name": "scene_pass",
+      "label": "Scene pass",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "pass",
+          "label": "Pass",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normals",
+            "Position",
+            "Part id",
+            "Depth"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "space",
+          "label": "Space",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Comp",
+            "Camera"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": true
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "part-matte",
+      "match_name": "part_matte",
+      "label": "Part matte",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "parts",
+          "label": "Parts",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": true
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "set-channels",
       "match_name": "set_channels",
       "label": "Set channels",

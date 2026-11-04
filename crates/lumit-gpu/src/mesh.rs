@@ -25,6 +25,7 @@ mod blur;
 pub mod deform;
 pub mod display;
 pub mod look;
+pub mod passes;
 mod samplers;
 mod setup;
 pub mod shadow;
@@ -203,6 +204,7 @@ pub(crate) struct MeshFx {
     shared: look::Shared,
     models: Mutex<Vec<(Weak<ModelScene>, Arc<GpuModel>)>>,
     scratch: Mutex<Option<Scratch>>,
+    passes: OnceLock<passes::PassFx>,
 }
 
 /// The pass's multisample colour and depth, kept from one draw to the next

@@ -5338,6 +5338,46 @@
   "@fxFullOff": {
     "description": "Effect controls — an option on Set channels' four channel pickers: the channel is 0 everywhere."
   },
+  "fxScenePass": "Scene pass",
+  "@fxScenePass": {
+    "description": "Effect name in the Add effect menu: shows what a 3D precomp knows about its pixels, such as which way they face, in place of its picture."
+  },
+  "fxPartMatte": "Part matte",
+  "@fxPartMatte": {
+    "description": "Effect name in the Add effect menu: keeps only the parts of a 3D precomp that were picked."
+  },
+  "fxPass": "Pass",
+  "@fxPass": {
+    "description": "Effect controls: a control on Scene pass choosing what it shows."
+  },
+  "fxNormals": "Normals",
+  "@fxNormals": {
+    "description": "Effect controls: an option on Scene pass's Pass, which way each pixel faces."
+  },
+  "fxPartId": "Part id",
+  "@fxPartId": {
+    "description": "Effect controls: an option on Scene pass's Pass, each part of the 3D precomp in a flat colour of its own."
+  },
+  "fxParts": "Parts",
+  "@fxParts": {
+    "description": "Effect controls: a row on Part matte naming the parts it keeps."
+  },
+  "fxPartsMissing": "Missing",
+  "@fxPartsMissing": {
+    "description": "Effect controls: Part matte's Parts row when none of the parts it kept are in its source any more."
+  },
+  "fxPartsSomeMissing": "{names}, {count} missing",
+  "@fxPartsSomeMissing": {
+    "description": "Effect controls: Part matte's Parts row when some of the parts it kept are no longer in its source. {names} is the parts still there, {count} how many have gone.",
+    "placeholders": {
+      "names": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "tipPickParts": "Pick parts",
+  "@tipPickParts": {
+    "description": "Tooltip on the eyedropper that picks a part of a 3D precomp in the Viewer. Shift adds another. One or two words."
+  },
   "fxSetMatte": "Set matte",
   "@fxSetMatte": {
     "description": "Effect name in the Add effect menu — takes another layer's channel as this layer's transparency."

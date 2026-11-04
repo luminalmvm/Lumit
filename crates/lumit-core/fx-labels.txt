@@ -869,6 +869,7 @@ Normal
 Normal layer
 Normal strength
 Normalised
+Normals
 Not picked
 Note
 Nothing
@@ -937,9 +938,13 @@ Padding y
 Paint style
 Parametric EQ
 Part
+Part id
+Part matte
 Particle
 Particle blend
 Particulate
+Parts
+Pass
 Passes
 Path
 Path overlap
@@ -1144,6 +1149,7 @@ Scale x %
 Scale y %
 Scanlines
 Scatter
+Scene pass
 Scramble rate
 Scratches
 Screen

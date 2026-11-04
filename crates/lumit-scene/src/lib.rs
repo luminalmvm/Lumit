@@ -19,6 +19,7 @@ use lumit_ingress::{Budget, Limits};
 mod fbx_file;
 mod files;
 mod gltf_file;
+pub mod parts;
 pub mod pose;
 mod settle;
 
