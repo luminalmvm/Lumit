@@ -2816,36 +2816,18 @@ fn comp_walk(
                         return layer_slot(e, p.row)
                             .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer);
                     }
-                    let mut probe = Probe::Picture {
-                        effect: e,
-                        row: p.row,
-                        found: None,
-                    };
-                    // No keyer: a nested comp built for another moment holds its
-                    // footage a whole frame at a time, which is not always the
-                    // picture its name would claim. A copy with no number of
-                    // its own keeps the one this walk is already rendered as.
-                    comp_walk(
+                    // A copy with no number of its own keeps the one this walk
+                    // is already rendered as.
+                    moments::picture_at(
                         doc,
                         comp,
-                        p.time,
-                        frame_t,
+                        (p.time, frame_t),
                         frame_pixels,
-                        &mut visited_path.clone(),
-                        None,
-                        true,
-                        Walk {
-                            clone: p.clone.unwrap_or(clone_number),
-                            values: &[],
-                            rebuild: with.rebuild,
-                            seen_through: None,
-                        },
-                        Some(&mut probe),
-                    );
-                    match probe {
-                        Probe::Picture { found: Some(d), .. } => LayerInputDraw::Layer(d),
-                        _ => LayerInputDraw::Absent,
-                    }
+                        &visited_path,
+                        (p.clone.unwrap_or(clone_number), with.rebuild),
+                        (e, p.row),
+                    )
+                    .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
                 })
                 .collect(),
         )

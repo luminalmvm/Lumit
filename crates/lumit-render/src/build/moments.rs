@@ -64,6 +64,49 @@ pub(super) fn below_picture(
     }
 }
 
+/// Effect `effect`'s layer row `row` as a picture at comp time `at`, made by
+/// walking the comp again at that moment. The third argument is the walk's copy
+/// and whether it is itself a rebuild.
+///
+/// No keyer: a nested comp built for another moment holds its footage a whole
+/// frame at a time, which is not always the picture its name would claim.
+pub(super) fn picture_at(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    (at, frame_t): (f64, f64),
+    frame_pixels: &HashMap<Uuid, &CompLayerPixels>,
+    visited: &[Uuid],
+    (clone, rebuild): ((u32, u32), bool),
+    (effect, row): (&EffectInstance, &str),
+) -> Option<DofInputDraw> {
+    let mut probe = Probe::Picture {
+        effect,
+        row,
+        found: None,
+    };
+    comp_walk(
+        doc,
+        comp,
+        at,
+        frame_t,
+        frame_pixels,
+        &mut visited.to_vec(),
+        None,
+        true,
+        Walk {
+            clone,
+            values: &[],
+            rebuild,
+            seen_through: None,
+        },
+        Some(&mut probe),
+    );
+    match probe {
+        Probe::Picture { found, .. } => found,
+        _ => None,
+    }
+}
+
 /// Effect `e` on layer `owner`'s pictures at the moments its stack names at
 /// comp time `t`, first first, each made by walking the comp again at that
 /// moment. Absent unless `e` is the effect in its stack that shows them.
