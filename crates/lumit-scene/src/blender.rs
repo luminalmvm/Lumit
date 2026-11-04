@@ -349,13 +349,22 @@ fn forget_older(cache_dir: &Path, place: u64, keep: &Path) {
     }
 }
 
-/// The last lines Blender printed, which say why it failed.
+/// What Blender printed that says why it failed: its error lines less their
+/// timestamps, or with none its last lines.
 fn tail(text: &str) -> String {
     let lines: Vec<&str> = text
         .lines()
         .map(str::trim_end)
         .filter(|line| !line.is_empty())
+        .filter(|line| !line.starts_with("Blender "))
         .collect();
+    let mut errors: Vec<&str> = lines
+        .iter()
+        .filter(|line| line.contains("Error:") || line.contains("ERROR"))
+        .map(|line| line.rsplit_once("| ").map_or(*line, |(_, rest)| rest))
+        .collect();
+    errors.dedup();
+    let lines = if errors.is_empty() { lines } else { errors };
     lines[lines.len().saturating_sub(6)..].join("\n")
 }
 
