@@ -210,49 +210,6 @@ impl Fallback {
     }
 }
 
-/// The mesh pass's own group for the environment, and the one it binds
-/// without one.
-pub(crate) struct Binding {
-    pub(crate) layout: wgpu::BindGroupLayout,
-    fallback: Fallback,
-    none: wgpu::BindGroup,
-}
-
-impl Binding {
-    pub(crate) fn new(device: &wgpu::Device) -> Self {
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("mesh-environment"),
-            entries: &layout(0, wgpu::ShaderStages::FRAGMENT),
-        });
-        let fallback = Fallback::new(device);
-        let none = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("mesh-environment-none"),
-            layout: &layout,
-            entries: &fallback.views.entries(0, &fallback),
-        });
-        Self {
-            layout,
-            fallback,
-            none,
-        }
-    }
-
-    pub(crate) fn group(
-        &self,
-        ctx: &GpuContext,
-        light: Option<&EnvironmentLight>,
-    ) -> wgpu::BindGroup {
-        let Some(light) = light else {
-            return self.none.clone();
-        };
-        ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("mesh-environment"),
-            layout: &self.layout,
-            entries: &Views::of(ctx, light).entries(0, &self.fallback),
-        })
-    }
-}
-
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Filter {
