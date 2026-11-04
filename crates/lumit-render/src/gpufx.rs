@@ -7562,9 +7562,9 @@ mod tests {
             // time: Audio level measures the referenced layer's sound
             // and hands out a number, so there is no pass to receive a picture
             // and no side table to fill. Anything that draws nothing is excused
-            // for the same reason `every_migrated_effect_has_a_gpu_entry`
-            // excuses it.
-            if !def.is_image_op() {
+            // as `every_migrated_effect_has_a_gpu_entry` excuses it, and Depth
+            // points draws from the planes carriage in `run_ops`.
+            if !def.is_image_op() || name == lumit_core::planes::DEPTH_POINTS {
                 continue;
             }
             let gpu = gpu_effect(name).unwrap_or_else(|| {

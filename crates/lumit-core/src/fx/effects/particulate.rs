@@ -949,10 +949,22 @@ impl EffectDef for ParticulateDef {
     }
 }
 
-/// The op that gives `layer` in `comp` the effect stack `effects`. A
-/// Particulate arriving with In the scene on, by any route, puts a 2D layer in
-/// 3D in the same step, so its switch, gizmo and views agree with where the
-/// particles are.
+/// Whether `e` draws in the comp's scene: a Particulate with its particles
+/// there, or Depth points, which is never anywhere else.
+#[must_use]
+pub fn is_scene(e: &crate::model::EffectInstance) -> bool {
+    e.enabled
+        && (e.effect.match_name == crate::planes::DEPTH_POINTS
+            || e.effect.match_name == "particulate"
+                && matches!(
+                    e.param("in_scene"),
+                    Some(crate::model::EffectValue::Bool(true))
+                ))
+}
+
+/// The op that gives `layer` in `comp` the effect stack `effects`. An effect
+/// arriving that draws in the scene, by any route, puts a 2D layer in 3D in the
+/// same step, so its switch, gizmo and views agree with where it draws.
 #[must_use]
 pub fn set_effects(
     comp: uuid::Uuid,

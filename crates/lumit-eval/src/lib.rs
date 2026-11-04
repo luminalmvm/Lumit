@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 use lumit_core::{
     expression::ExpressionContext,
+    fx::effects::depth_points::stamp as points_stamp,
     model::{CameraPose, Composition, Document, LayerKind, MatteChannel},
 };
 use uuid::Uuid;
@@ -88,12 +89,13 @@ pub mod schedule;
 /// * 23: a blurred layer is drawn with more copies the faster it moves, its
 ///   parents and the camera move them too, a still one is drawn once, and the
 ///   inner layers of a collapsed Precomp blur.
-/// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
-///   they are handed.
+/// * 24: Corner pin and Bezier warp on a node graph box draw past their picture.
 /// * 25: Model layers cast and take shadows.
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
 /// * 27: a 3D model's glass and clearcoat from its file are drawn.
-pub const ALGO_VERSION: u32 = 27;
+/// * 28: a project at 8 or 32 bits draws its effects.
+/// * 29: Particulate in the scene follows a collapsed precomp.
+pub const ALGO_VERSION: u32 = 29;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -1323,20 +1325,18 @@ fn feed_effect_stack(
                     // source for no gain.
                     //
                     // **Audio level's Audio row is a reading, not a picture**
-                    // (docs/impl/audio-nodes.md §3). Every source the node
-                    // offers is the comp's mix under a filter, the whole of
-                    // it, one layer of it, or one clip of one layer, so a fader
-                    // anywhere in the comp can move the number the picture
-                    // follows, and folding the named layer's own file says
-                    // nothing about it. The mix's fingerprint is the term that
-                    // does. It is asked for this one row alone, so no other
-                    // reference pays for a job list. Beat trigger's Audio row
-                    // reads the same mix.
+                    // (docs/impl/audio-nodes.md §3). Every source the node offers
+                    // is the comp's mix under a filter, so a fader anywhere can
+                    // move the number the picture follows and the named layer's
+                    // file says nothing about it. The mix's fingerprint does. Asked
+                    // for this row alone, and Beat trigger's. Depth points' Camera
+                    // row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
                         && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
-                        .flatten();
+                        .flatten()
+                        .or_else(|| points_stamp(doc, comp, marker_layer, e, &p.id, t));
                     if let Some(sig) = mix {
                         h.update(&sig.to_le_bytes());
                     }
@@ -4808,12 +4808,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 27, which renamed every frame.
+        // Pinned under ALGO_VERSION 29, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                118_634_670_240_222_371_657_714_716_082_324_829_986,
-                221_618_990_867_148_256_207_561_963_013_861_605_031
+                190_720_434_069_497_492_070_195_274_496_161_950_711,
+                144_795_123_089_972_817_249_481_899_077_080_734_608
             )
         );
 

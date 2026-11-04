@@ -131,7 +131,9 @@ impl SpriteFlareFx {
         let device = &ctx.device;
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-sprite-flare"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_sprite_flare.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                super::at_depth(ctx.working(), include_str!("../fx_sprite_flare.wgsl")).into(),
+            ),
         });
         let draw_bgl = bind_layout(
             device,

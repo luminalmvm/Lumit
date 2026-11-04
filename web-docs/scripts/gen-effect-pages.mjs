@@ -131,7 +131,7 @@ function rangeCell(p) {
     case "text":
       return "A short line of text";
     case "layer":
-      return "Any layer in the composition";
+      return p.label === "Camera" ? "Any Camera layer in the composition" : "Any layer in the composition";
     case "mask_path":
       return "This layer's masks";
     case "curve":

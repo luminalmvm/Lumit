@@ -44,6 +44,7 @@ pub mod custom_controls;
 pub mod custom_shader;
 pub mod datamosh;
 pub mod depth;
+pub mod depth_points;
 pub mod directional_blur;
 pub mod displacement_map;
 pub mod dof;
