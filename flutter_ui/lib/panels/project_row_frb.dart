@@ -938,9 +938,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         // What is left past the name's floor goes to the people first, as
         // many as fit and never fewer than a count of them, and then to the
         // badges, in order, until one does not fit.
+        // A trip through Blender says why the model isn't drawing, so it's
+        // worth half the name's room. The tooltip still has the whole name.
+        final floor = widget.blender == null ? _nameFloor : _nameFloor / 2;
         final needs = widget.renaming
-            ? _nameFloor
-            : math.min(_nameFloor, _lineWidth(widget.name, t.body, scale));
+            ? floor
+            : math.min(floor, _lineWidth(widget.name, t.body, scale));
         var room = box.maxWidth - needs;
         const each = projectRowGap + _personDotSize;
         final marks =
