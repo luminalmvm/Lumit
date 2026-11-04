@@ -84,7 +84,7 @@ pub const DESKTOP_BUDGET_MS: [(&str, f64); 30] = [
     ("B33", 12.0),
     ("B34", 50.0),
     ("B35", 9.0),
-    ("B36", 16.0),
+    ("B38", 16.0),
 ];
 
 /// A run's numbers, keyed by budget — the results file the harness writes and,

@@ -31,7 +31,7 @@
 //! - [`models`] times a Model layer of a million triangles: B30, and B33
 //!   with its shadows.
 //! - [`scene_points`] times a million particles in the 3D scene, B31, and a
-//!   1080p shot's Depth points, B36.
+//!   1080p shot's Depth points, B38.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.

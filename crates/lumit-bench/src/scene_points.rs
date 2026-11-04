@@ -6,7 +6,7 @@
 //! frame with the particles drawn flat on their layer is the floor, so what is
 //! left is what the scene costs over B14.
 //!
-//! **B36 — a 1080p shot's Depth points**: one a pixel at Density full, through a
+//! **B38 — a 1080p shot's Depth points**: one a pixel at Density full, through a
 //! camera off to the side and turned, over the same layer drawn flat.
 
 use crate::comp::{layer, rat};
@@ -177,7 +177,7 @@ fn shot(points: bool, off: f64) -> Result<(Document, Uuid), String> {
             kind: PlaneKind::Depth,
             data,
         };
-        let run = run_from_planes(60.0, 1, "B36", &[(0, plane)])
+        let run = run_from_planes(60.0, 1, "B38", &[(0, plane)])
             .ok_or_else(|| "no run from the plane".to_string())?;
         publish(fx.id, run);
         plate.effects = vec![fx];
@@ -189,7 +189,7 @@ fn shot(points: bool, off: f64) -> Result<(Document, Uuid), String> {
         groups: Vec::new(),
         beat_grid: None,
         id: Uuid::now_v7(),
-        name: "B36".into(),
+        name: "B38".into(),
         width: 1920,
         height: 1080,
         frame_rate: FrameRate::new(60, 1).map_err(|e| format!("{e:?}"))?,
@@ -235,16 +235,16 @@ fn timed(r: &mut HeadlessRenderer, (doc, id): (Document, Uuid)) -> Result<f64, S
     Ok(best)
 }
 
-/// Measure B31 and B36. `Err` when there is no graphics adapter.
+/// Measure B31 and B38. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let mut r = HeadlessRenderer::new()?;
     let square = timed(&mut r, shot(true, 0.0)?)? - timed(&mut r, shot(false, 0.0)?)?;
     eprintln!("lumit-bench: Depth points square on {square:.3} ms over flat");
     let floor = timed(&mut r, shot(false, 40.0)?)?;
     let each = timed(&mut r, shot(true, 40.0)?)?;
-    eprintln!("lumit-bench: B36 flat floor {floor:.3} ms");
+    eprintln!("lumit-bench: B38 flat floor {floor:.3} ms");
     let b36 = Measurement {
-        budget: "B36",
+        budget: "B38",
         value_ms: (each - floor).max(0.0),
         frames: u64::from(RUNS),
     };

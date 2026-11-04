@@ -25,7 +25,8 @@ the camera's depth of field.
 The depth comes from **Analyse**, the same reading the [Depth](/effects/utility/depth/)
 effect makes, or from a **Depth layer**. With neither, the points lie flat on the layer and
 the row under **Analyse** says **Not analysed yet**. Each analysed frame is steadied against
-the frames before it, so something walking in does not rescale the rest.
+the frames before it, so something walking in does not rescale the rest, and a cut starts
+afresh.
 
 A depth map file takes the footage's colour space, so a map saved as sRGB reads a different
 shape from **Analyse** until it is interpreted as linear. A **Depth layer** is read from 0 to
@@ -67,8 +68,9 @@ In the Effect Controls panel:
 - **Depth layer**: a picture to read depth from instead, nearer being brighter.
 - **Invert**: read the depth the other way up, far being bright.
 - **Camera**: the Camera layer the points line up from. Setting it parents the layer to
-  that camera, where it sat in the frame, so a keyed or solved camera carries the shot. Unset,
-  the comp's own camera as it was at the layer's first frame, so moving it shows the depth.
+  that camera, where it sat in the frame, in place of any other parent, so a keyed or solved
+  camera carries the shot. A solve that changes the lens wants the row set again. Unset, the
+  comp's own camera as it was at the layer's first frame, so moving it shows the depth.
 - **Depth**: how far the points spread along their rays. At 0% they are flat on the layer.
 - **Point size**: how wide a point is from that camera.
 - **Density**: how many of the picture's pixels get a point. Points stay where they are as

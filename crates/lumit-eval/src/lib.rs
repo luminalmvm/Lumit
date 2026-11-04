@@ -1325,14 +1325,12 @@ fn feed_effect_stack(
                     // source for no gain.
                     //
                     // **Audio level's Audio row is a reading, not a picture**
-                    // (docs/impl/audio-nodes.md §3). Every source the node
-                    // offers is the comp's mix under a filter, the whole of
-                    // it, one layer of it, or one clip of one layer, so a fader
-                    // anywhere in the comp can move the number the picture
-                    // follows, and folding the named layer's own file says
-                    // nothing about it. The mix's fingerprint is the term that
-                    // does. Asked for this one row alone, and Beat trigger's. Depth
-                    // points' Camera row owes the name where its camera is.
+                    // (docs/impl/audio-nodes.md §3). Every source the node offers
+                    // is the comp's mix under a filter, so a fader anywhere can
+                    // move the number the picture follows and the named layer's
+                    // file says nothing about it. The mix's fingerprint does. Asked
+                    // for this row alone, and Beat trigger's. Depth points' Camera
+                    // row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
                         && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
                         && p.id == "audio")
