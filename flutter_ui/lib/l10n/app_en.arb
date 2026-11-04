@@ -8578,6 +8578,15 @@
   "@projectItemNoBlender": {
     "description": "Warning badge beside a 3D model in the Project panel that opens through Blender (a .blend, USD, Alembic file) when no Blender was found on this computer. Blender is a product name; keep it as it is. Lower case first word, like the other row badges. Clicking it opens Settings at the Blender row."
   },
+  "exportModelsUnread": "Can't read {names}",
+  "@exportModelsUnread": {
+    "description": "Export dialog, a warning line in the Composition group: these 3D models in the comp can't be read right now (no Blender, or the conversion failed or was stopped), so the export leaves them out or draws the last version read. {names} is their file names, comma separated.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
   "projectItemStopped": "stopped",
   "@projectItemStopped": {
     "description": "Project panel row badge, beside a 3D model: its conversion through the user's Blender was stopped by hand, so nothing draws until it is converted again. Lower case, one word, like the other row badges."
