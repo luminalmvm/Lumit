@@ -181,7 +181,7 @@ fn projected(at: vec3<f32>) -> vec3<f32> {
     // only a face the camera barely saw fades to Base colour.
     let to_eye = abs(dot(normalise(cross(dpdx(at), dpdy(at))), normalise(frame.eye.xyz - at)));
     let to_camera = abs(dot(normalise(cross(dpdx(still), dpdy(still))), normalise(mat.projector_eye.xyz - still)));
-    let keep = 1.0 - smoothstep(3.0, 8.0, to_eye / max(to_camera, 1e-4));
+    let keep = 1.0 - smoothstep(4.0, 10.0, to_eye / max(to_camera, 1e-4));
     // How fast depth changes across the camera's frame, on this face.
     let fx = dpdx(spot);
     let fy = dpdy(spot);
@@ -274,6 +274,17 @@ fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f
     return vec4<f32>(tint * (0.35 * c.a + 0.65 * light), c.a);
 }
 
+// How much of the light the shadows at `at` leave, each light faded in past the
+// edge it turns away at, so a normal map crossing it doesn't stipple the shadow.
+fn shadow_dim(at: vec3<f32>, n: vec3<f32>, count: u32) -> vec3<f32> {
+    var dim = vec3<f32>(1.0);
+    for (var i: u32 = 0u; i < count; i = i + 1u) {
+        let facing = smoothstep(0.0, 0.1, irradiance(at, n, frame.lights[i]));
+        dim = dim * mix(vec3<f32>(1.0), left_of(at, n, frame.lights[i]), facing);
+    }
+    return dim;
+}
+
 fn shade(in: VsOut, front: bool) -> vec4<f32> {
     // Every picture and slope read first, while every pixel of the quad is
     // still running.
@@ -288,10 +299,14 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     }
     let read = textureSample(base_tex, base_samp, seen.xy);
     var base = mat.base_colour * in.colour * read;
-    let plate = seen.z > 0.0;
+    // `seen.z` is how much of the picture a point keeps. All of it is shaded as
+    // the picture alone, some of it fades from the surface as it's lit.
+    let plate = seen.z >= 1.0;
+    let fading = seen.z > 0.0 && !plate;
+    let own = mat.base_colour * in.colour;
+    let whole = read.rgb + own.rgb * (1.0 - read.a);
     if (projecting) {
-        let own = mat.base_colour * in.colour;
-        base = vec4<f32>(read.rgb * seen.z + own.rgb * (1.0 - read.a * seen.z), own.a);
+        base = vec4<f32>(mix(own.rgb, whole, seen.z), own.a);
     }
     let mr = textureSample(mr_tex, mr_samp, slot_uv(mat.slots[1], in));
     var mapped = textureSample(normal_tex, normal_samp, normal_uv).xyz;
@@ -337,7 +352,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     if (look == 0u && (mat.mode.z > 0.5 || (count == 0u && !surround))) {
         // Showing only its shadows, with none to show.
         if (accepts == 2u && !plate) {
-            return vec4<f32>(0.0);
+            return untouched(in.at, eye, normalise(in.normal), whole + emissive, whole, alpha, glass) * seen.z;
         }
         return untouched(in.at, eye, normalise(in.normal), base.rgb + emissive, base.rgb, alpha, glass);
     }
@@ -372,17 +387,12 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
         // Unlit, or showing only its shadows, so only the shadows touch it. A
         // projected picture has its light in it already, and shadows on it are
         // how something new sits in the shot.
-        var dim = vec3<f32>(1.0);
-        for (var i: u32 = 0u; i < count; i = i + 1u) {
-            // Faded in past the edge the light turns away at, so a normal
-            // map crossing it doesn't stipple the shadow.
-            let facing = smoothstep(0.0, 0.1, irradiance(in.at, n, frame.lights[i]));
-            dim = dim * mix(vec3<f32>(1.0), left_of(in.at, n, frame.lights[i]), facing);
-        }
+        let dim = shadow_dim(in.at, n, count);
         if (accepts == 2u && !plate) {
             // Just the shadow, in the colour a caster lets through.
             let lo = clamp(min(dim.x, min(dim.y, dim.z)), 0.0, 1.0);
-            return vec4<f32>((dim - lo) * alpha, (1.0 - lo) * alpha);
+            let shadow = vec4<f32>((dim - lo) * alpha, (1.0 - lo) * alpha);
+            return mix(shadow, untouched(in.at, eye, n, (whole + emissive) * dim, whole, alpha, glass), seen.z);
         }
         return untouched(in.at, eye, n, (base.rgb + emissive) * dim, base.rgb, alpha, glass);
     }
@@ -396,7 +406,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     let metallic = clamp(mat.params.x * mr.b, 0.0, 1.0);
     let roughness = clamp(mat.params.y * mr.g, 0.045, 1.0);
     let ao = 1.0 + mat.params.w * (occlusion - 1.0);
-    let albedo = base.rgb;
+    let albedo = select(base.rgb, own.rgb, fading && look == 0u);
     if (look == 1u) {
         // The studio light: a key from over the eye's shoulder and a sky
         // that's brighter overhead, whatever lights the comp has.
@@ -489,9 +499,13 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     // What glass lets through is tinted by its colour, less what it reflects,
     // and over nothing only its reflections cover.
     if (glass > 0.0) {
-        let seen = behind(in.at, eye, n, mat.extra.y, roughness);
+        let behind_it = behind(in.at, eye, n, mat.extra.y, roughness);
         let reflects = max(env.r, max(env.g, env.b));
-        out = vec4<f32>(out.rgb + seen.rgb * albedo * glass * (1.0 - env), mix(alpha, max(seen.a, reflects), glass));
+        out = vec4<f32>(out.rgb + behind_it.rgb * albedo * glass * (1.0 - env), mix(alpha, max(behind_it.a, reflects), glass));
+    }
+    if (fading) {
+        let dim = shadow_dim(in.at, n, count);
+        out = mix(out, untouched(in.at, eye, n, (whole + emissive) * dim, whole, alpha, glass), seen.z);
     }
     return out;
 }
