@@ -17,6 +17,9 @@ struct View {
     look: vec4<f32>,
     // x and y: the scale and offset that steady the depth.
     steady: vec4<f32>,
+    // The camera's depth of field: x the blur per unit of `|distance - focus| /
+    // clip w`, nought for none, y the zoom, z the focus distance.
+    lens: vec4<f32>,
     // x: columns, y: the step between them, raster pixels.
     grid: vec4<u32>,
 };
@@ -38,8 +41,16 @@ struct Vs {
 // pixel keeps its number, so points never move as more arrive.
 fn dp_joins(x: u32, y: u32) -> f32 {
     let level = firstTrailingBit(x | y | 0x8000u);
-    let mixed = ((x * 73856093u) ^ (y * 19349663u)) * 2654435769u;
-    return (0.25 + 0.75 * f32(mixed >> 8u) / 16777216.0) / f32(1u << (2u * level));
+    return (0.25 + 0.75 * dp_hash(dp_mix(x, y))) / f32(1u << (2u * level));
+}
+
+fn dp_mix(x: u32, y: u32) -> u32 {
+    return ((x * 73856093u) ^ (y * 19349663u)) * 2654435769u;
+}
+
+// A number from 0 to 1 out of the top of a mixed word.
+fn dp_hash(mixed: u32) -> f32 {
+    return f32(mixed >> 8u) / 16777216.0;
 }
 
 @vertex
@@ -74,9 +85,23 @@ fn dp_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) i: u32) -> Vs 
         return out;
     }
     let scale = view.frame.z;
-    let middle = p.xy / p.z * scale;
-    // Never less than a pixel, or far points would fall between them.
-    let half = max(view.frame.w * k * scale / p.z, 0.5);
+    var middle = p.xy / p.z * scale;
+    // Never less than a pixel, or far points would fall between them, and never a
+    // disc that fills the view from one near point.
+    var half = clamp(view.frame.w * k * scale / p.z, 0.5, 32.0 * scale);
+    if (view.lens.x > 0.0) {
+        // Out of focus a point lands somewhere in its circle of confusion, the
+        // same place every frame, so it costs nothing and is opaque like the rest.
+        let blur = view.lens.x * abs(view.lens.y * p.z - view.lens.z) / p.z;
+        let mixed = dp_mix(x, y);
+        let turn = dp_hash(mixed) * 6.2831853;
+        let out = sqrt(dp_hash(mixed * 2654435769u)) * blur;
+        middle += vec2<f32>(cos(turn), sin(turn)) * out;
+        // Wide enough that scattering them leaves no gaps to see through.
+        if (blur > 1.0) {
+            half = max(half, 1.5);
+        }
+    }
     let corner = vec2<f32>(f32(vi & 1u) * 2.0 - 1.0, f32((vi >> 1u) & 1u) * 2.0 - 1.0);
     let px = middle + corner * half;
     let iw = 1.0 / p.z;

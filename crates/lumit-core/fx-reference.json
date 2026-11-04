@@ -21729,9 +21729,9 @@
           "label": "Depth",
           "kind": "float",
           "unit": "percent",
-          "default": 50.0,
+          "default": 100.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
+          "slider_max": 190.0,
           "hard_min": 0.0,
           "hard_max": 190.0
         },
@@ -21743,7 +21743,8 @@
           "default": 2.0,
           "slider_min": 1.0,
           "slider_max": 20.0,
-          "hard_min": 1.0
+          "hard_min": 1.0,
+          "hard_max": 100.0
         },
         {
           "id": "density",
@@ -21759,6 +21760,11 @@
       ],
       "groups": [],
       "enabled_when": [
+        {
+          "param": "analyse",
+          "on": "depth_layer",
+          "cond": "layer_unset"
+        },
         {
           "param": "frames",
           "on": "depth_layer",

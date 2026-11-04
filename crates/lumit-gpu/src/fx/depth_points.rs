@@ -31,6 +31,10 @@ pub struct DepthPointsOp {
     pub invert: bool,
     /// The scale and offset that steady the depth.
     pub steady: [f32; 2],
+    /// The camera's depth of field, as Particulate's `SceneView::lens`: the blur
+    /// in frame pixels per unit of `|distance − focus| / clip w`, nought for none,
+    /// the zoom, and the focus distance in comp pixels.
+    pub lens: [f32; 3],
     /// One over clip w for whatever lands where no point does.
     pub fallback: f32,
 }
@@ -45,6 +49,7 @@ struct View {
     frame: [f32; 4],
     look: [f32; 4],
     steady: [f32; 4],
+    lens: [f32; 4],
     grid: [u32; 4],
 }
 
@@ -207,6 +212,7 @@ impl FxEngine {
                         f32::from(u8::from(op.invert)),
                     ],
                     steady: [op.steady[0], op.steady[1], 0.0, 0.0],
+                    lens: [op.lens[0], op.lens[1], op.lens[2], 0.0],
                     grid: [columns, step, 0, 0],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,

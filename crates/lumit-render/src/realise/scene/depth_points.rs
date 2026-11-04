@@ -146,6 +146,13 @@ pub(crate) fn draw<'a>(
         .or(plane.and_then(|(_, slot)| slot))
         .map(|d| lumit_gpu::fx::fit_centred(ctx, d.clone(), w, h));
     let r = frame.render_scale.max(1e-6);
+    let zoom = frame.camera.zoom.max(1.0);
+    // The camera's blur, as the layers take it.
+    let lens = frame.camera.dof.map_or([0.0; 3], |dof| {
+        let k =
+            lumit_core::camera::coc_per_zoom(&dof, zoom) / 2.0 * crate::realise::dof::DOF_SOFTNESS;
+        [k as f32 * r, zoom as f32, dof.focus_distance as f32]
+    });
     let (colour, inv_w) = fx.depth_points(
         ctx,
         tex,
@@ -162,6 +169,7 @@ pub(crate) fn draw<'a>(
             density: p.density / 100.0,
             invert: p.invert,
             steady,
+            lens,
             fallback: if w_middle > 0.0 { 1.0 / w_middle } else { 0.0 },
         },
     );

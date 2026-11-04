@@ -19,12 +19,20 @@ use crate::track::{camera_pose_of, solve_store, Unsolved};
 use lumit_fx_macros::Effect;
 use std::sync::Arc;
 
-/// The Depth layer takes over from the analysis, so Frames stands aside.
-const ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
-    param: "frames",
-    on: "depth_layer",
-    cond: EnabledCond::LayerUnset,
-}];
+/// The Depth layer takes over from the analysis, so what asks for one stands
+/// aside. Cancel stays live, so a running job can still stop.
+const ENABLED_WHEN: &[EnabledWhen] = &[
+    EnabledWhen {
+        param: "analyse",
+        on: "depth_layer",
+        cond: EnabledCond::LayerUnset,
+    },
+    EnabledWhen {
+        param: "frames",
+        on: "depth_layer",
+        cond: EnabledCond::LayerUnset,
+    },
+];
 
 /// Depth points' controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -70,8 +78,8 @@ pub struct DepthPoints {
     #[slider(
         label = "Depth",
         min = 0.0,
-        max = 100.0,
-        default = 50.0,
+        max = 190.0,
+        default = 100.0,
         hard_min = 0.0,
         hard_max = 190.0,
         unit = Percent
@@ -84,6 +92,7 @@ pub struct DepthPoints {
         max = 20.0,
         default = 2.0,
         hard_min = 1.0,
+        hard_max = 100.0,
         unit = Px
     )]
     pub point_size: f32,
