@@ -70,6 +70,8 @@ impl ShadowMaps {
 pub struct MapCaster<'a> {
     pub scene: &'a Arc<ModelScene>,
     pub model_to_comp: Mat4,
+    /// Where its nodes are this frame, `None` at rest.
+    pub pose: Option<&'a lumit_scene::pose::Pose>,
 }
 
 /// What is bound when a frame has no maps: one empty map and a uniform
@@ -349,10 +351,8 @@ impl FxEngine {
         let points: Vec<Vec3> = models
             .iter()
             .flat_map(|(_, c)| {
-                let (lo, hi) = (
-                    Vec3::from(c.scene.bounds.min),
-                    Vec3::from(c.scene.bounds.max),
-                );
+                let bounds = c.pose.map_or(c.scene.bounds, |p| p.bounds);
+                let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
                 (0..8).map(move |k| {
                     let pick = |bit: usize, a: f32, b: f32| if k & bit == 0 { a } else { b };
                     c.model_to_comp.transform_point3(Vec3::new(
@@ -474,19 +474,22 @@ impl MeshFx {
                 contents: &frames,
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-        // Each part where its node and its model put it.
+        // Each part where its node and its model put it, as its pose has it.
         let draw_size = std::mem::size_of::<DrawUniform>();
+        let posed: Vec<_> = models
+            .iter()
+            .map(|(model, c)| self.posed(ctx, model, c.pose.map_or(&[], std::slice::from_ref)))
+            .collect();
         let parts: Vec<_> = models
             .iter()
-            .flat_map(|(model, c)| {
-                model
-                    .parts
-                    .iter()
-                    .map(move |p| (model, c.model_to_comp * p.node, p))
+            .zip(&posed)
+            .flat_map(|((model, c), posed)| {
+                let drawn = model.parts.iter().filter(|p| !posed.hidden(p, 0));
+                drawn.map(move |p| (model, c.model_to_comp * posed.node(p, 0), p, posed))
             })
             .collect();
         let mut draws = vec![0u8; (stride(draw_size) * parts.len().max(1) as u64) as usize];
-        for (k, (_, at, _)) in parts.iter().enumerate() {
+        for (k, (_, at, _, _)) in parts.iter().enumerate() {
             let draw = DrawUniform {
                 model: at.to_cols_array_2d(),
                 normal: [[0.0; 4]; 3],
@@ -562,15 +565,16 @@ impl MeshFx {
                 ..Default::default()
             });
             pass.set_pipeline(pipeline);
-            for (i, (model, _, p)) in parts.iter().enumerate() {
+            for (i, (model, _, p, posed)) in parts.iter().enumerate() {
                 let Some((material, _, _)) = model.materials.get(p.material) else {
                     continue;
                 };
-                pass.set_vertex_buffer(0, model.vertices.slice(..));
+                let (vertices, base) = posed.vertices(p, 0);
+                pass.set_vertex_buffer(0, vertices);
                 pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_bind_group(0, &group, &[(stride(draw_size) * i as u64) as u32]);
                 pass.set_bind_group(1, material, &[]);
-                pass.draw_indexed(p.first..p.first + p.count, p.base_vertex, 0..1);
+                pass.draw_indexed(p.first..p.first + p.count, base, 0..1);
             }
         }
         drop(encoder);

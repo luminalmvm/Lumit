@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 use wgpu::util::DeviceExt;
 
 mod blur;
+pub mod deform;
 pub mod display;
 pub mod look;
 mod setup;
@@ -84,6 +85,9 @@ pub struct ModelView<'a> {
     /// its run of 3D layers for glass to bend.
     pub looks: &'a [look::Look],
     pub behind: Option<&'a wgpu::Texture>,
+    /// Where its nodes are, one for each of `shutter` or one for the frame.
+    /// Empty draws it at rest, as its file has it.
+    pub poses: &'a [lumit_scene::pose::Pose],
 }
 
 /// One copy of a model: where it goes after `model_to_comp`, in comp pixels,
@@ -141,6 +145,9 @@ struct Part {
     material: usize,
     node: Mat4,
     centre: Vec3,
+    /// Which node draws it, and where it lands when it moves.
+    index: usize,
+    deform: Option<deform::Slot>,
 }
 
 /// A model on the graphics card: every primitive in one vertex and one index
@@ -155,6 +162,8 @@ pub(crate) struct GpuModel {
     /// Its edges as lines, made the first time a view draws them.
     edges: OnceLock<(wgpu::Buffer, lumit_budget::Reservation)>,
     kept: Vec<look::Kept>,
+    /// Its skins and morph targets, when it has any.
+    deforms: Option<deform::Deforms>,
     _held: lumit_budget::Reservation,
 }
 
@@ -169,6 +178,8 @@ pub(crate) struct MeshFx {
     layout: wgpu::PipelineLayout,
     /// Draws a shadow map's view ([`shadow`]), made when first asked for.
     shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
+    /// Writes a model's moving parts ([`deform`]), made when first asked for.
+    deform: std::sync::OnceLock<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>,
     depth_one: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     depth_many: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     /// A picture's next level down from the one above, plain, sRGB and in
@@ -481,7 +492,8 @@ impl MeshFx {
 
         // Opaque first, by material, then what blends, farthest first.
         // ponytail: blended parts sort by their middles, not per triangle.
-        let world = |p: &Part| view.model_to_comp * p.node;
+        let posed = self.posed(ctx, model, view.poses);
+        let world = |p: &Part| view.model_to_comp * posed.node(p, 0);
         let far = |p: &Part| (view.camera * world(p).transform_point3(p.centre).extend(1.0)).w;
         let materials = self.looked(ctx, model, view.looks, view.behind);
         let look = |p: &Part| {
@@ -515,10 +527,10 @@ impl MeshFx {
             vec![0u8; (stride * (order.len() * placements.len()).max(1) as u64) as usize];
         let mut next = 0;
         let mut draws = Vec::with_capacity(placements.len());
-        for placed in placements {
+        for (k, placed) in placements.iter().enumerate() {
             let mut these = Vec::with_capacity(order.len());
-            for &p in &order {
-                let at = *placed * p.node;
+            for &p in order.iter().filter(|p| !posed.hidden(p, k)) {
+                let at = *placed * posed.node(p, k);
                 let m3 = Mat3::from_mat4(at);
                 let det = m3.determinant();
                 if !det.is_normal() {
@@ -643,8 +655,10 @@ impl MeshFx {
         };
         let draw_parts = |pass: &mut wgpu::RenderPass<'_>,
                           these: &[(&Part, u32, usize)],
+                          k: usize,
                           depth: bool| {
             pass.set_vertex_buffer(0, model.vertices.slice(..));
+            let mut rest = true;
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for &(p, offset, set) in these.iter().filter(|_| view.display.draws_faces()) {
                 let Some((group, _, _)) = materials.get(p.material) else {
@@ -658,11 +672,8 @@ impl MeshFx {
                 pass.set_bind_group(1, group, &[]);
                 pass.set_bind_group(2, &shadows_group, &[]);
                 pass.set_bind_group(3, &environment_group, &[]);
-                pass.draw_indexed(
-                    p.first..p.first + p.count,
-                    p.base_vertex,
-                    0..places.len() as u32,
-                );
+                let base = posed.bind(pass, p, k, &mut rest);
+                pass.draw_indexed(p.first..p.first + p.count, base, 0..places.len() as u32);
             }
             // Each triangle's edges, two indices for each of its corners.
             let (Some((lines, _)), Some(wire), false) = (edges, &pipelines[WIRE], depth) else {
@@ -678,16 +689,14 @@ impl MeshFx {
                 pass.set_bind_group(1, group, &[]);
                 pass.set_bind_group(2, &shadows_group, &[]);
                 pass.set_bind_group(3, &environment_group, &[]);
-                pass.draw_indexed(
-                    p.first * 2..(p.first + p.count) * 2,
-                    p.base_vertex,
-                    0..places.len() as u32,
-                );
+                let base = posed.bind(pass, p, k, &mut rest);
+                let lines = p.first * 2..(p.first + p.count) * 2;
+                pass.draw_indexed(lines, base, 0..places.len() as u32);
             }
         };
         let mut encoder = ctx.encoder("mesh");
         for (k, these) in draws.iter().enumerate() {
-            draw_parts(&mut mesh_pass(&mut encoder, "mesh"), these, false);
+            draw_parts(&mut mesh_pass(&mut encoder, "mesh"), these, k, false);
             if let Some(shutter) = &shutter {
                 shutter.add(self, &mut encoder, &colour_view, k);
             }
@@ -696,8 +705,8 @@ impl MeshFx {
             // The nearest depth of every sample, so where the model meets the
             // scene its smear isn't cut to the outline it has at rest.
             let mut pass = mesh_pass(&mut encoder, "mesh-shutter-depth");
-            for these in &draws {
-                draw_parts(&mut pass, these, true);
+            for (k, these) in draws.iter().enumerate() {
+                draw_parts(&mut pass, these, k, true);
             }
         }
         {

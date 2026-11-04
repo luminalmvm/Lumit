@@ -90,6 +90,7 @@ impl Realiser<'_> {
             environment,
             looks: &looks,
             behind: behind.as_ref(),
+            poses: &[],
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
         Some(ModelPicture {
@@ -121,6 +122,7 @@ impl Realiser<'_> {
                 DrawSource::Model(m) => Some(MapCaster {
                     scene: &m.scene,
                     model_to_comp: to_comp(m),
+                    pose: None,
                 }),
                 _ => None,
             })

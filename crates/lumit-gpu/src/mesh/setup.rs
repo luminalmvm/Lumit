@@ -207,6 +207,7 @@ impl MeshFx {
             shadows_layout,
             environment,
             shadow: std::sync::OnceLock::new(),
+            deform: std::sync::OnceLock::new(),
             depth_one,
             depth_many,
             down,
