@@ -5400,7 +5400,17 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
             // A rule pointed at the wrong kind of parameter can never fire —
             // `param_enabled` leaves the row live rather than locking it
             // unreachably — so the mistake has to be caught here.
-            match rule.cond {
+            let mut cond = rule.cond;
+            while let EnabledCond::Or(other, then) = cond {
+                let is_bool = s
+                    .params
+                    .iter()
+                    .any(|p| p.id == other && matches!(p.kind, ParamKind::Bool { .. }));
+                assert!(is_bool, "{}: `{other}` is not a Bool", s.match_name);
+                cond = *then;
+            }
+            match cond {
+                EnabledCond::Or(..) => {}
                 EnabledCond::BoolIs(_) => assert!(
                     matches!(on, ParamKind::Bool { .. }),
                     "{}: `{}` is read as a Bool but is not one",
@@ -5485,6 +5495,7 @@ fn dof_greys_the_rows_its_switches_take_over() {
     // A fresh instance: no depth layer, so everything that reads one is greyed,
     // and Use focus point is off, so the point is greyed and the distance is
     // live.
+    use crate::fx::enabled::param_enabled;
     assert!(param_enabled(&e, "focus"));
     for id in [
         "depth_channel",

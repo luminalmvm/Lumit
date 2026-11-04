@@ -175,8 +175,33 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "shape",
         cond: EnabledCond::ChoiceIsNot(9),
     },
-    // The kept picture draws on the layer, so it stands aside while the
-    // particles are in the scene or on the card.
+    // The old walk and the kept picture draw on the layer, so they stand aside
+    // while the particles are in the scene, unless the card is walking them.
+    EnabledWhen {
+        param: "collide_with",
+        on: "in_scene",
+        cond: EnabledCond::Or("simulate", &EnabledCond::BoolIs(false)),
+    },
+    EnabledWhen {
+        param: "separation",
+        on: "in_scene",
+        cond: EnabledCond::Or("simulate", &EnabledCond::BoolIs(false)),
+    },
+    EnabledWhen {
+        param: "alignment",
+        on: "in_scene",
+        cond: EnabledCond::Or("simulate", &EnabledCond::BoolIs(false)),
+    },
+    EnabledWhen {
+        param: "cohesion",
+        on: "in_scene",
+        cond: EnabledCond::Or("simulate", &EnabledCond::BoolIs(false)),
+    },
+    EnabledWhen {
+        param: "sparks",
+        on: "in_scene",
+        cond: EnabledCond::Or("simulate", &EnabledCond::BoolIs(false)),
+    },
     EnabledWhen {
         param: "persistence",
         on: "in_scene",
@@ -253,6 +278,26 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         cond: EnabledCond::BoolIs(true),
     },
     EnabledWhen {
+        param: "collide_all",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "ground",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "ground_height",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "sparks_from",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
         param: "ground_height",
         on: "ground",
         cond: EnabledCond::BoolIs(true),
@@ -284,9 +329,34 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "path_from",
         cond: EnabledCond::ChoiceIsNot(1),
     },
-    // The step reads no pictures, so a collider, a flock or sparks leave
-    // births even. Particle blend stays live beside a collider and sparks, which
-    // a simulation draws together as ever.
+    // The old walk reads no pictures, so a collider, a flock or sparks leave
+    // births even, and its particles are drawn over the picture one by one. The
+    // card draws them together as ever.
+    EnabledWhen {
+        param: "particle_blend",
+        on: "separation",
+        cond: EnabledCond::Or("simulate", &EnabledCond::Nought),
+    },
+    EnabledWhen {
+        param: "particle_blend",
+        on: "alignment",
+        cond: EnabledCond::Or("simulate", &EnabledCond::Nought),
+    },
+    EnabledWhen {
+        param: "particle_blend",
+        on: "cohesion",
+        cond: EnabledCond::Or("simulate", &EnabledCond::Nought),
+    },
+    EnabledWhen {
+        param: "particle_blend",
+        on: "sparks",
+        cond: EnabledCond::Or("simulate", &EnabledCond::Nought),
+    },
+    EnabledWhen {
+        param: "particle_blend",
+        on: "collide_with",
+        cond: EnabledCond::Or("simulate", &EnabledCond::LayerUnset),
+    },
     EnabledWhen {
         param: "density_layer",
         on: "separation",
@@ -332,7 +402,7 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
     EnabledWhen {
         param: "particle_blend",
         on: "persistence",
-        cond: EnabledCond::Nought,
+        cond: EnabledCond::Or("simulate", &EnabledCond::Nought),
     },
     EnabledWhen {
         param: "density_layer",
@@ -353,6 +423,30 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "density_layer_placement",
         on: "collide_with",
         cond: EnabledCond::LayerUnset,
+    },
+    EnabledWhen {
+        param: "on_contact",
+        on: "collide_with",
+        cond: EnabledCond::Or(
+            "ground",
+            &EnabledCond::Or("collide_all", &EnabledCond::LayerSet),
+        ),
+    },
+    EnabledWhen {
+        param: "bounciness",
+        on: "collide_with",
+        cond: EnabledCond::Or(
+            "ground",
+            &EnabledCond::Or("collide_all", &EnabledCond::LayerSet),
+        ),
+    },
+    EnabledWhen {
+        param: "friction",
+        on: "collide_with",
+        cond: EnabledCond::Or(
+            "ground",
+            &EnabledCond::Or("collide_all", &EnabledCond::LayerSet),
+        ),
     },
     EnabledWhen {
         param: "bounciness",

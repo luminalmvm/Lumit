@@ -466,8 +466,7 @@ pub fn fire_effect_action(
             _ => Err(BridgeError::InvalidParam),
         };
     }
-    // Bake points' two, and a simulation's. The bake reads the document as it
-    // stands now.
+    // Bake points' two, and a simulation's. The bake reads the document as it stands now.
     if matches!(fx.effect.match_name.as_str(), "bake_points" | "particulate") {
         return match param.as_str() {
             CANCEL => {
@@ -481,8 +480,13 @@ pub fn fire_effect_action(
                     .map_err(|_| BridgeError::ReadFailed)?
                     .store
                     .snapshot();
-                let asked =
-                    lumit_render::track::request_bake(doc, layer.comp_id, layer.layer_id, effect);
+                let asked = crate::project_cache::press(
+                    &project,
+                    doc,
+                    layer.comp_id,
+                    layer.layer_id,
+                    effect,
+                );
                 match asked {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
@@ -1087,13 +1091,12 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     };
     // Track points files its progress under its own id too, so the one status
     // answers for both.
-    use lumit_core::fx::effects::{bake_points, track_points};
+    use lumit_core::fx::effects::track_points;
     let Some(inst) = item.effects.iter().find(|e| {
         e.id == effect
             && (e.effect.match_name == lumit_core::track::PLANAR_TRACK
                 || e.effect.match_name == track_points::MATCH_NAME
-                || e.effect.match_name == bake_points::MATCH_NAME
-                || e.effect.match_name == "particulate")
+                || matches!(e.effect.match_name.as_str(), "bake_points" | "particulate"))
     }) else {
         return status;
     };
@@ -1131,24 +1134,9 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         status.frames = baked.frames;
         status.clip_frames = baked.frames;
     }
-    // A bake this instance may read, its frames and its span. Fewer frames than
-    // the span is one a budget stopped early.
-    let bake = || {
-        let project = layer.project().ok()?;
-        let doc = project.read().ok()?.store.snapshot();
-        if inst.effect.match_name == "particulate" {
-            return lumit_render::sim::bake::status(&doc, layer.comp_id, layer.layer_id, effect);
-        }
-        if inst.effect.match_name != bake_points::MATCH_NAME {
-            return None;
-        }
-        let baked = bake_points::usable(&doc, doc.comp(layer.comp_id)?, &item, inst)?;
-        Some((
-            u32::try_from(baked.frames.len()).unwrap_or(u32::MAX),
-            baked.span,
-        ))
-    };
-    if let Some((frames, span)) = bake() {
+    // A bake this instance may read. Fewer frames than the span is one a
+    // budget stopped early.
+    if let Some((frames, span)) = crate::project_cache::reading(&layer, &item, inst, effect) {
         if status.stage == BridgeTrackStage::Idle {
             status.stage = BridgeTrackStage::Done;
         }

@@ -111,23 +111,8 @@ impl Models {
         let owner = space(src);
         let mut out = Vec::new();
         let mut edges = Vec::new();
-        let named = src.inst.layer_ref("collide_with");
-        let every = rows_now.collide_all;
-        let hits = comp.layers.iter().filter(|l| {
-            l.id != src.layer.id
-                && l.id != owner.id
-                && (Some(l.id) == named
-                    || every
-                        && l.switches.three_d
-                        && l.switches.visible
-                        && !matches!(
-                            l.kind,
-                            LayerKind::Camera { .. }
-                                | LayerKind::Light { .. }
-                                | LayerKind::Null
-                                | LayerKind::Adjustment
-                        ))
-        });
+        let hits = lumit_core::fx::points::stepped::sim::hit_layers(comp, src.inst, src.layer.id)
+            .filter(|l| l.id != owner.id);
         for target in hits.take(MAX_COLLIDERS) {
             let c = Collider::of_in_3d(doc, comp, owner, target, tc, context);
             if let LayerKind::Model { item, settings } = &target.kind {

@@ -3038,7 +3038,7 @@ fn comp_walk(
                 // picture the kernel ignores. One rule, every effect — the
                 // flare's own named gate, generalised.
                 if !lumit_core::fx::builtins::param_visible(e, param)
-                    || !lumit_core::fx::builtins::param_enabled(e, param)
+                    || !lumit_core::fx::enabled::param_enabled(e, param)
                 {
                     return LayerInputDraw::Absent;
                 }

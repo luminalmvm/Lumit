@@ -203,6 +203,9 @@ pub fn definition(
     inst: &EffectInstance,
     target: Option<&Layer>,
 ) -> [u8; 32] {
+    if sim::wanted(inst) {
+        return sim::definition(doc, comp, layer, inst);
+    }
     // Named afresh when the walk itself moves particles differently.
     let mut h = blake3::Hasher::new_derive_key("lumit walk 2");
     let _ = serde_json::to_writer(&mut h, &inst.params);
@@ -213,9 +216,6 @@ pub fn definition(
     let _ = serde_json::to_writer(&mut h, &layer.masks);
     let _ = serde_json::to_writer(&mut h, &layer.kind);
     let _ = serde_json::to_writer(&mut h, &target);
-    if sim::wanted(comp, inst) {
-        sim::feed_colliders(doc, comp, inst, &mut h);
-    }
     for one in std::iter::once(layer).chain(target) {
         // A solid's size is the frame Edge acts at, and the rectangle a
         // layer with no shapes is hit at.
@@ -265,7 +265,7 @@ const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
 #[must_use]
 pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
     crate::fx::effects::particulate::rows::on_its_layer(inst)
-        && !sim::wanted(comp, inst)
+        && !sim::wanted(inst)
         && (target(comp, inst).is_some() || WALK_ROWS.iter().any(|id| above(comp, inst, id)))
 }
 
@@ -274,7 +274,7 @@ pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
 #[must_use]
 pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
     crate::fx::effects::particulate::rows::on_its_layer(inst)
-        && !sim::wanted(comp, inst)
+        && !sim::wanted(inst)
         && above(comp, inst, "persistence")
 }
 
@@ -282,7 +282,7 @@ pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
 /// frame from the in point: its Trails, or its simulation.
 #[must_use]
 pub fn carried(comp: &Composition, inst: &EffectInstance) -> bool {
-    trails(comp, inst) || sim::wanted(comp, inst)
+    trails(comp, inst) || sim::wanted(inst)
 }
 
 /// Whether row `id` is above nought, or keyed, an expression or wired, as it

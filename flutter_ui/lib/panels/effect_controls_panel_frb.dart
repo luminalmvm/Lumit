@@ -2815,6 +2815,9 @@ class _EffectSection extends StatelessWidget {
         onLive: onLive,
         twoColumn: true,
         enabled: !disabled.contains(param.id),
+        offBecause: waitsForSimulate(info.name, param.id, shown)
+            ? l10n.fxNeedsSimulate
+            : null,
         // The effect's other values, for a control whose behaviour
         // depends on a sibling (the depth-of-field dropper reads the
         // effect's own `depth` layer).

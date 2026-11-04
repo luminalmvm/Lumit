@@ -6,74 +6,187 @@
 //! from the layer's in point, as in [`super::stepped`]: kept states only make
 //! it faster.
 
-use super::{above, burst_at};
+use super::burst_at;
 use crate::fx::effects::particulate::Particulate;
 use crate::fx::points::{burst_base, Contact};
-use crate::model::{Composition, Document, EffectInstance, EffectValue, LayerKind};
+use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, LayerKind};
 
 fn on(inst: &EffectInstance, id: &str) -> bool {
     matches!(inst.param(id), Some(EffectValue::Bool(true)))
 }
 
-/// Whether Particulate `inst` is simulated on the card. Simulate says so, and
-/// so does anything only the card can do: Ground, All 3D layers, sparks from
-/// anything but a death, and a collider, sparks or a flock in the scene.
+/// Whether Particulate `inst` is simulated on the card. Only Simulate says so,
+/// so nothing saved before it changes look.
 #[must_use]
-pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
-    inst.effect.match_name == "particulate"
-        && (on(inst, "simulate")
-            || on(inst, "ground")
-            || on(inst, "collide_all")
-            || !matches!(
-                inst.param("sparks_from"),
-                None | Some(EffectValue::Choice(0))
-            )
-            || (on(inst, "in_scene")
-                && (inst.layer_ref("collide_with").is_some()
-                    || ["sparks", "separation", "alignment", "cohesion"]
-                        .iter()
-                        .any(|id| above(comp, inst, id)))))
+pub fn wanted(inst: &EffectInstance) -> bool {
+    inst.effect.match_name == "particulate" && on(inst, "simulate")
 }
 
-/// Feeds everything a simulation reads beyond its own layer and Collide with:
-/// every 3D layer for All 3D layers, and a Layer emitter's model. They are
-/// read at every frame from the in point.
-pub(super) fn feed_colliders(
+/// Rows that only change how particles are drawn or that a walk never reads,
+/// so a change to them keeps every state and bake. A row not named here renames
+/// the walk, which is the safe way round for a new one.
+pub const LOOK_ROWS: &[&str] = &[
+    "size",
+    "size_jitter",
+    "size_over_life",
+    "opacity_over_life",
+    "colour",
+    "end_colour",
+    "rotation",
+    "rotation_jitter",
+    "spin",
+    "align_to_motion",
+    "size_by",
+    "opacity_by",
+    "colour_by",
+    "speed_min",
+    "speed_max",
+    "spark_size",
+    "mode",
+    "feather",
+    "sprite_layer",
+    "streak_length",
+    "particle_blend",
+    "mix",
+    "density_layer",
+    "density_layer_placement",
+    "persistence",
+    "zoom",
+    "turn",
+];
+
+/// The layers a simulation hits at any time: Collide with, and every 3D layer
+/// that shows for All 3D layers.
+pub fn hit_layers<'a>(
+    comp: &'a Composition,
+    inst: &EffectInstance,
+    owner: uuid::Uuid,
+) -> impl Iterator<Item = &'a Layer> {
+    let named = inst.layer_ref("collide_with");
+    let every = on(inst, "collide_all");
+    comp.layers.iter().filter(move |l| {
+        l.id != owner
+            && (Some(l.id) == named
+                || every
+                    && l.switches.three_d
+                    && l.switches.visible
+                    && !matches!(
+                        l.kind,
+                        LayerKind::Camera { .. }
+                            | LayerKind::Light { .. }
+                            | LayerKind::Null
+                            | LayerKind::Adjustment
+                    ))
+    })
+}
+
+/// Everything a layer's place is read from, and nothing else about it, so a
+/// rename or a label colour keeps the walk.
+fn feed_place(comp: &Composition, l: &Layer, h: &mut blake3::Hasher) {
+    h.update(&[u8::from(l.switches.three_d), u8::from(l.switches.visible)]);
+    let _ = serde_json::to_writer(&mut *h, &l.transform);
+    let _ = serde_json::to_writer(&mut *h, &l.start_offset);
+    for id in crate::model::layer_parent_chain(comp, l.id) {
+        if let Some(parent) = comp.layers.iter().find(|p| p.id == id) {
+            // A parent is placed in 3D by its switch, and a camera or a light
+            // by its aim too.
+            h.update(&[u8::from(parent.switches.three_d)]);
+            if matches!(
+                parent.kind,
+                LayerKind::Camera { .. } | LayerKind::Light { .. }
+            ) {
+                let _ = serde_json::to_writer(&mut *h, &parent.kind);
+            }
+            let _ = serde_json::to_writer(&mut *h, &parent.transform);
+            let _ = serde_json::to_writer(&mut *h, &parent.start_offset);
+        }
+    }
+}
+
+/// A layer's shape as a thing to hit or give birth on: its outlines, its size,
+/// and a model's content wherever it has been moved to.
+fn feed_shape(doc: &Document, l: &Layer, h: &mut blake3::Hasher) {
+    let _ = serde_json::to_writer(&mut *h, &l.masks);
+    match &l.kind {
+        LayerKind::Model { item, settings } => {
+            let _ = serde_json::to_writer(&mut *h, settings);
+            if let Some(crate::model::ProjectItem::Footage(f)) = doc.item(*item) {
+                match &f.media.fingerprint {
+                    Some(print) => {
+                        let _ = serde_json::to_writer(&mut *h, print);
+                    }
+                    None => {
+                        h.update(f.media.relative_path.as_bytes());
+                    }
+                }
+            }
+        }
+        LayerKind::Solid { def } => {
+            if let Some(solid) = doc.solid(*def) {
+                h.update(&solid.width.to_le_bytes());
+                h.update(&solid.height.to_le_bytes());
+            }
+        }
+        other => {
+            let _ = serde_json::to_writer(&mut *h, other);
+        }
+    }
+}
+
+/// Everything a simulation reads, as one name: its kept states and its bake are
+/// found by it. What only changes how it looks is left out, so a change to Size
+/// or Colour draws again rather than walking again.
+#[must_use]
+pub fn definition(
     doc: &Document,
     comp: &Composition,
+    layer: &Layer,
     inst: &EffectInstance,
-    h: &mut blake3::Hasher,
-) {
-    let mut feed = |l: &crate::model::Layer| {
-        let _ = serde_json::to_writer(&mut *h, l);
-        for id in crate::model::layer_parent_chain(comp, l.id) {
-            if let Some(parent) = comp.layers.iter().find(|p| p.id == id) {
-                let _ = serde_json::to_writer(&mut *h, parent);
-            }
+) -> [u8; 32] {
+    use crate::graph::{InputRef, NodeRef};
+    let mut h = blake3::Hasher::new_derive_key("lumit card walk 2");
+    h.update(&comp.width.to_le_bytes());
+    h.update(&comp.height.to_le_bytes());
+    let _ = serde_json::to_writer(&mut h, &comp.frame_rate);
+    for p in inst
+        .params
+        .iter()
+        .filter(|p| !LOOK_ROWS.contains(&p.id.as_str()))
+    {
+        let _ = serde_json::to_writer(&mut h, p);
+    }
+    // A wire into a look row keeps the walk too. The rest name the whole graph
+    // and what feeds it from above.
+    let wired = layer.graph.edges.iter().any(|e| {
+        matches!(&e.to, InputRef::Param { node: NodeRef::Effect(n), port }
+            if *n == inst.id && !LOOK_ROWS.contains(&port.as_str()))
+    });
+    if wired {
+        let _ = serde_json::to_writer(&mut h, &layer.graph);
+        for above in layer.effects.iter().take_while(|e| e.id != inst.id) {
+            let _ = serde_json::to_writer(&mut h, above);
         }
-        // A file's content, wherever it has been collected to.
-        if let LayerKind::Model { item, .. } = l.kind {
-            if let Some(crate::model::ProjectItem::Footage(f)) = doc.item(item) {
-                let _ = serde_json::to_writer(&mut *h, &f.media.fingerprint);
-            }
-        }
-    };
-    if on(inst, "collide_all") {
-        comp.layers
-            .iter()
-            .filter(|l| l.switches.three_d)
-            .for_each(&mut feed);
     }
-    let named = |id: &str| {
-        let id = inst.layer_ref(id)?;
-        comp.layers.iter().find(|l| l.id == id)
-    };
-    if let Some(l) = named("emitter_layer") {
-        feed(l);
+    feed_shape(doc, layer, &mut h);
+    let _ = serde_json::to_writer(&mut h, &layer.start_offset);
+    // The layer's place only matters against what the particles hit.
+    let hits_any =
+        on(inst, "ground") || on(inst, "collide_all") || inst.layer_ref("collide_with").is_some();
+    if hits_any {
+        feed_place(comp, layer, &mut h);
     }
-    if let Some(l) = named("collide_with") {
-        feed(l);
+    for l in hit_layers(comp, inst, layer.id) {
+        feed_shape(doc, l, &mut h);
+        feed_place(comp, l, &mut h);
     }
+    let emitter = inst
+        .layer_ref("emitter_layer")
+        .and_then(|id| comp.layers.iter().find(|l| l.id == id));
+    if let Some(l) = emitter {
+        feed_shape(doc, l, &mut h);
+        feed_place(comp, l, &mut h);
+    }
+    *h.finalize().as_bytes()
 }
 
 /// What the host carries beside the particles from frame to frame.
@@ -187,7 +300,6 @@ pub struct Physics {
 #[must_use]
 pub fn physics(rows: &Particulate) -> Physics {
     let real = |v: f32| if v.is_finite() { v } else { 0.0 };
-    let simulating = rows.simulate;
     let share = |v: f32| (real(v) / 100.0).clamp(0.0, 1.0);
     let (apart, along, together) = (
         share(rows.separation),
@@ -195,23 +307,18 @@ pub fn physics(rows: &Particulate) -> Physics {
         share(rows.cohesion),
     );
     let radius = real(rows.flock_radius).max(0.0);
-    let field = |v: f32| if simulating { real(v) } else { 0.0 };
     Physics {
-        steps: if simulating {
-            rows.sub_steps.clamp(1, 8) as u32
-        } else {
-            2
-        },
+        steps: rows.sub_steps.clamp(1, 8) as u32,
         field: [
             real(rows.field_x),
             real(rows.field_y),
             real(rows.field_z),
             real(rows.field_radius).max(1.0),
         ],
-        attractor: field(rows.attractor),
-        vortex: field(rows.vortex),
+        attractor: real(rows.attractor),
+        vortex: real(rows.vortex),
         axis: rows.vortex_axis.min(2),
-        sphere: field(rows.sphere).max(0.0),
+        sphere: real(rows.sphere).max(0.0),
         contact: Contact::from_code(rows.on_contact) as u32,
         keep: (real(rows.bounciness) / 100.0).clamp(0.0, 1.0),
         slip: 1.0 - (real(rows.friction) / 100.0).clamp(0.0, 1.0),
@@ -325,7 +432,6 @@ mod tests {
         assert_eq!(p.keep, 1.0);
         assert_eq!(p.spark_size, 0.25);
         rows.attractor = f32::NAN;
-        rows.simulate = false;
         assert_eq!(physics(&rows).attractor, 0.0);
     }
 
@@ -363,16 +469,15 @@ mod tests {
         assert!(above.2 > 0.0 && below.2 < 0.0, "{above:?} {below:?}");
         let there = floor.to_layer().point(above);
         assert!((there.1 - 600.0).abs() < 1e-6);
-        // Named layers feed a walk's name.
+        // Every 3D layer feeds the name of a walk that hits them all.
         let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
-        e.params
-            .iter_mut()
-            .find(|p| p.id == "collide_all")
-            .unwrap()
-            .value = EffectValue::Bool(true);
+        for id in ["simulate", "collide_all"] {
+            e.params.iter_mut().find(|p| p.id == id).unwrap().value = EffectValue::Bool(true);
+        }
         let named = super::super::definition(&doc, &comp, &layer, &e, None);
         let mut moved = comp.clone();
         let mut other = layer.clone();
+        other.id = uuid::Uuid::now_v7();
         other.switches.three_d = true;
         moved.layers.push(other);
         assert_ne!(
@@ -381,24 +486,62 @@ mod tests {
         );
     }
 
-    /// Anything only the card can do turns the card on, and a saved project
-    /// with none of it stays on the old walk.
+    /// Only Simulate turns the card on, so nothing saved before it looks new.
     #[test]
-    fn what_turns_the_card_on() {
-        let comp = comp();
+    fn only_simulate_turns_the_card_on() {
         let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
-        assert!(!wanted(&comp, &e));
         let set = |e: &mut EffectInstance, id: &str, v: EffectValue| {
             e.params.iter_mut().find(|p| p.id == id).unwrap().value = v;
         };
+        assert!(!wanted(&e));
         set(&mut e, "ground", EffectValue::Bool(true));
-        assert!(wanted(&comp, &e));
-        set(&mut e, "ground", EffectValue::Bool(false));
+        set(&mut e, "collide_all", EffectValue::Bool(true));
+        set(&mut e, "in_scene", EffectValue::Bool(true));
         set(&mut e, "sparks_from", EffectValue::Choice(1));
-        assert!(wanted(&comp, &e));
-        set(&mut e, "sparks_from", EffectValue::Choice(0));
-        assert!(!wanted(&comp, &e));
+        assert!(!wanted(&e));
         set(&mut e, "simulate", EffectValue::Bool(true));
-        assert!(wanted(&comp, &e));
+        assert!(wanted(&e));
+    }
+
+    /// A row in the list is a row, and the walk's name follows what it reads and
+    /// not how it looks.
+    #[test]
+    fn looks_keep_the_walk_and_physics_rename_it() {
+        let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
+        for id in LOOK_ROWS {
+            assert!(e.params.iter().any(|p| p.id == *id), "no row {id}");
+        }
+        let simulate = e.params.iter_mut().find(|p| p.id == "simulate").unwrap();
+        simulate.value = EffectValue::Bool(true);
+        let layer = crate::edits::base_layer(
+            "Particles".into(),
+            LayerKind::Null,
+            crate::time::Rational::new(1, 1).unwrap(),
+            Default::default(),
+        );
+        let mut comp = comp();
+        comp.layers = vec![layer.clone()];
+        let doc = Document::new();
+        let name = |comp: &Composition, e: &EffectInstance, l: &Layer| {
+            super::super::definition(&doc, comp, l, e, None)
+        };
+        let walk = name(&comp, &e, &layer);
+        let set = |e: &EffectInstance, id: &str, v: f64| {
+            let mut e = e.clone();
+            e.params.iter_mut().find(|p| p.id == id).unwrap().value =
+                EffectValue::Float(crate::anim::Property::fixed(v));
+            e
+        };
+        assert_eq!(walk, name(&comp, &set(&e, "size", 9.0), &layer));
+        assert_eq!(walk, name(&comp, &set(&e, "mix", 50.0), &layer));
+        assert_ne!(walk, name(&comp, &set(&e, "gravity", 9.0), &layer));
+        // A taller comp moves the floor, the model's fit and the Edge frame.
+        let mut taller = comp.clone();
+        taller.height += 1;
+        assert_ne!(walk, name(&taller, &e, &layer));
+        // Moving a layer with nothing to hit keeps it, as particles are in its pixels.
+        let mut moved = layer.clone();
+        moved.transform.position_x = crate::anim::Property::fixed(400.0);
+        assert_eq!(walk, name(&comp, &e, &moved));
     }
 }

@@ -139,6 +139,11 @@ In the Effect Controls panel:
 - **Streak length** is editable while **Mode** is set to Streak.
 - **Emitter layer** is editable while **Shape** is set to Layer.
 - **Density layer** is editable while **Shape** is anything but Layer.
+- **Collide with** is editable while **Simulate** is on, or **In the scene** is off.
+- **Separation** is editable while **Simulate** is on, or **In the scene** is off.
+- **Alignment** is editable while **Simulate** is on, or **In the scene** is off.
+- **Cohesion** is editable while **Simulate** is on, or **In the scene** is off.
+- **Sparks** is editable while **Simulate** is on, or **In the scene** is off.
 - **Persistence** is editable while **In the scene** is off.
 - **Persistence** is editable while **Simulate** is off.
 - **Density layer** is editable while **Simulate** is off.
@@ -154,12 +159,21 @@ In the Effect Controls panel:
 - **Field radius** is editable while **Simulate** is on.
 - **Bake** is editable while **Simulate** is on.
 - **Cancel** is editable while **Simulate** is on.
+- **All 3D layers** is editable while **Simulate** is on.
+- **Ground** is editable while **Simulate** is on.
+- **Ground height** is editable while **Simulate** is on.
+- **Sparks from** is editable while **Simulate** is on.
 - **Ground height** is editable while **Ground** is on.
 - **Burst count** is editable while **Burst** is anything but Off.
 - **Burst interval** is editable while **Burst** is set to Every N frames.
 - **Trigger** is editable while **Burst** is set to On trigger.
 - **Edge margin** is editable while **Edge** is anything but None.
 - **Mask path** is editable while **Follow** is anything but Shape.
+- **Particle blend** is editable while **Simulate** is on, or **Separation** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Alignment** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Cohesion** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Sparks** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Collide with** names no layer.
 - **Density layer** is editable while **Separation** is 0.
 - **Density layer** is editable while **Alignment** is 0.
 - **Density layer** is editable while **Cohesion** is 0.
@@ -168,11 +182,14 @@ In the Effect Controls panel:
 - **Map placement** is editable while **Alignment** is 0.
 - **Map placement** is editable while **Cohesion** is 0.
 - **Map placement** is editable while **Sparks** is 0.
-- **Particle blend** is editable while **Persistence** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Persistence** is 0.
 - **Density layer** is editable while **Persistence** is 0.
 - **Map placement** is editable while **Persistence** is 0.
 - **Density layer** is editable while **Collide with** names no layer.
 - **Map placement** is editable while **Collide with** names no layer.
+- **On contact** is editable while **Ground** is on, or **All 3D layers** is on, or **Collide with** names a layer.
+- **Bounciness** is editable while **Ground** is on, or **All 3D layers** is on, or **Collide with** names a layer.
+- **Friction** is editable while **Ground** is on, or **All 3D layers** is on, or **Collide with** names a layer.
 - **Bounciness** is editable while **On contact** is set to Bounce.
 - **Friction** is editable while **On contact** is anything but Stick.
 - **Friction** is editable while **On contact** is anything but Kill.
@@ -193,8 +210,7 @@ The **Simulation** group, particles worked out step by step on the graphics card
 - **Bake**: writes the simulation to the project's cache. A saved project keeps it in its
   cache folder and Collect takes it along. An edit to anything it reads leaves it unread.
 - **Cancel**: stops a running bake. The frames it reached stay baked.
-In the scene, Collide with, a flock and Sparks turn this walk on by themselves. A simulation may differ
-slightly between graphics cards. On one machine a frame is the same however it is reached.
+A simulation may differ slightly between graphics cards. On one machine a frame is the same however it is reached.
 
 The **Emitter** group, where particles come from and travel:
 
@@ -303,9 +319,8 @@ The **Collide** group, what particles hit:
   ends it.
 - **Bounciness**: how much of its speed a particle keeps as it bounces.
 - **Friction**: how much a particle slows along the surface.
-- **All 3D layers**: particles hit every 3D layer that is showing, up to 32. It turns
-  Simulate's walk on.
-- **Ground**: particles hit the floor the 3D views draw. It turns Simulate's walk on.
+- **All 3D layers**: particles hit every 3D layer that is showing, up to 32. Simulate only.
+- **Ground**: particles hit the floor the 3D views draw. Simulate only.
 - **Ground height**: how far above that floor they hit it.
 
 A layer facing the same way as this one is hit across and down, at every depth. One turned
@@ -329,8 +344,7 @@ The **Sparks** group, small particles thrown out where one dies:
 - **Sparks**: how many sparks a particle throws out when its life ends, Edge kills it or
   it is killed on contact. Sparks throw out none.
 - **Sparks from**: **Death** throws them as a particle dies. **Bounce** throws them each time
-  it hits something. **Flight** throws that many each second. Anything but Death turns
-  Simulate's walk on.
+  it hits something. **Flight** throws that many each second. Simulate only.
 - **Spark speed**: how fast they fly out, every way at once.
 - **Spark life**: how long a spark lasts.
 - **Spark size**: how big a spark is, against the particle it came from.

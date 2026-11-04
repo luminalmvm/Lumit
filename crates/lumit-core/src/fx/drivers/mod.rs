@@ -1234,7 +1234,7 @@ impl Eval<'_> {
                 ))),
                 "particulate" => {
                     // A simulation's particles are only ever on the card.
-                    if points::stepped::sim::wanted(comp, inst) {
+                    if points::stepped::sim::wanted(inst) {
                         return None;
                     }
                     let particulate = super::effects::particulate::Particulate::read(params);

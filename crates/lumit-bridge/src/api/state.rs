@@ -978,7 +978,6 @@ impl LumitBridgeState {
             // picker's problem, and Dart shows its own notice for it.
             return Ok(BridgeOpened::NotOpened);
         };
-        lumit_render::sim::bake::project_opened(&path);
         // What was kept is the copy as a guest left it, so it is what opens.
         // In the copy's own file only: another file with its id is a project
         // of its own (`share::copy_is_at`).
@@ -1246,10 +1245,10 @@ pub(crate) fn adopt(
     forget_streams_except(id)?;
 
     // The departed projects' solves go the way their caches did, and this
-    // one's are read back off the sidecar, in that order, outside the lock.
-    lumit_render::sim::let_go();
-    lumit_render::track::clear();
-    lumit_render::track::warm(solves);
+    // one's are read back off the sidecar — in that order, so the clear
+    // cannot empty what the warm has just filled. Outside the registry lock,
+    // like everything else below it.
+    crate::project_cache::project_changed(id, solves);
     lumit_render::roto::clear();
     lumit_render::roto::warm(mattes);
     lumit_render::planes::clear();

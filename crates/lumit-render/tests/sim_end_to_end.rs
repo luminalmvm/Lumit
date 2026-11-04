@@ -230,7 +230,7 @@ fn a_3d_card_stops_what_falls() {
 /// A frame read from a bake is the frame walked from the in point.
 #[test]
 fn a_baked_frame_is_the_walked_frame() {
-    use lumit_render::track::{progress, request_bake, Progress};
+    use lumit_render::track::{progress, Progress};
     let (doc, id) = project(|_| {});
     let mut shorter = Document::clone(&doc);
     let layer = &mut shorter.comp_mut(id).unwrap().layers[0];
@@ -240,7 +240,9 @@ fn a_baked_frame_is_the_walked_frame() {
     if HeadlessRenderer::shared().is_err() {
         return;
     }
-    let asked = request_bake(Arc::clone(&doc), id, layer, effect);
+    let folder = tempfile::tempdir().unwrap();
+    lumit_render::sim::bake::set_root(Some(folder.path().to_path_buf()));
+    let asked = lumit_render::sim::bake::press(Arc::clone(&doc), id, layer, effect);
     assert!(matches!(asked, lumit_render::track::Requested::Started));
     loop {
         match progress(effect) {
@@ -253,12 +255,18 @@ fn a_baked_frame_is_the_walked_frame() {
         lumit_render::sim::bake::status(&doc, id, layer, effect),
         Some((60, 60))
     );
+    use std::sync::atomic::Ordering;
+    let reads = lumit_render::sim::bake::READS.load(Ordering::Relaxed);
     let baked = walked_alone(&doc, id, 44).unwrap();
+    assert!(
+        lumit_render::sim::bake::READS.load(Ordering::Relaxed) > reads,
+        "the frame came off the bake"
+    );
     assert!(baked.iter().step_by(4).any(|v| *v > 40), "particles drew");
-    let dir = lumit_project::cache_dir().unwrap().join("sim");
-    std::fs::remove_dir_all(dir.join(effect.to_string())).unwrap();
+    std::fs::remove_dir_all(folder.path().join("sim")).unwrap();
     assert!(lumit_render::sim::bake::status(&doc, id, layer, effect).is_none());
     assert!(walked_alone(&doc, id, 44).unwrap() == baked, "walked again");
+    lumit_render::sim::bake::set_root(None);
 }
 
 /// Sparks are thrown from what dies on a floor and from what bounces off it, out

@@ -322,10 +322,14 @@ fn start_from(
         live.ledger = kept.ledger;
     }
     let reached = kept_frame(here, live, target);
-    if let Some(baked) = bake::nearest(src.inst.id, name, target, reached) {
-        if fx.sim_write(ctx, &live.work, &baked.bytes) {
-            live.ledger = baked.ledger;
-            return Some(());
+    // A walk already within a few frames needs no file, which is what keeps
+    // playing on from reading the disk every so often.
+    if reached.is_none_or(|r| target - r > KEEP_EVERY) {
+        if let Some(baked) = bake::nearest(src.inst.id, name, target, reached) {
+            if fx.sim_write(ctx, &live.work, &baked.bytes) {
+                live.ledger = baked.ledger;
+                return Some(());
+            }
         }
     }
     if reached.is_none() {
@@ -382,6 +386,21 @@ fn frame_on(
     let work = Arc::clone(&live.work);
     run_steps(fx, ctx, src, &work, &mut live.colliders, &then, lt, &steps);
     Some(then)
+}
+
+/// Particle steps between handing work to the card and waiting for it, so a
+/// stop lands soon and no one submission gets near the card's limit on a slow
+/// one (docs/13 section 5).
+const WORK_PER_SUBMIT: u64 = 2_000_000;
+
+/// Counts `more` particle steps of work, and hands them over once they add up.
+pub(crate) fn hand_over(ctx: &GpuContext, work: &mut u64, more: u64) {
+    *work += more;
+    if *work >= WORK_PER_SUBMIT {
+        *work = 0;
+        ctx.flush();
+        ctx.device.poll(wgpu::Maintain::Wait);
+    }
 }
 
 /// Keeps where `live` has got to, for the frames after it.
@@ -460,7 +479,7 @@ fn walked(
         give_back(ctx, live);
         return None;
     }
-    let long = target - live.ledger.frame > KEEP_EVERY;
+    let mut work = 0u64;
     let mut now = src.inputs(live.ledger.frame as f64 * dt)?;
     while live.ledger.frame < target {
         // A frame nobody wants any more stops here, and the walk is left where
@@ -478,11 +497,13 @@ fn walked(
         if keeps && live.ledger.frame % KEEP_EVERY == 0 {
             keep(fx, ctx, name, &live);
         }
-        // A long walk hands its work over as it goes and waits for the card,
-        // so a stop lands soon and no one submission gets near the card's limit.
-        if long && live.ledger.frame % KEEP_EVERY == 0 {
-            ctx.flush();
-            ctx.device.poll(wgpu::Maintain::Wait);
+        // The last frame's steps go with the draw.
+        if live.ledger.frame < target {
+            hand_over(
+                ctx,
+                &mut work,
+                u64::from(cap) * u64::from(physics(&now.rows).steps),
+            );
         }
     }
     // A time between frames is the frame before, moved on by the part of a

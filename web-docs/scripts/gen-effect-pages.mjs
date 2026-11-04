@@ -258,14 +258,16 @@ function panelNotes(effect) {
   for (const e of effect.enabled_when ?? []) {
     const on = effect.params.find((p) => p.id === e.on);
     const onLabel = `**${on?.label ?? e.on}**`;
-    let when;
-    if (e.cond === "bool_is") when = `${onLabel} is ${e.value ? "on" : "off"}`;
-    else if (e.cond === "choice_is") when = `${onLabel} is set to ${on?.options?.[e.value] ?? e.value}`;
-    else if (e.cond === "choice_is_not") when = `${onLabel} is anything but ${on?.options?.[e.value] ?? e.value}`;
-    else if (e.cond === "layer_unset") when = `${onLabel} names no layer`;
-    else if (e.cond === "nought") when = `${onLabel} is 0`;
-    else when = `${onLabel} names a layer`;
-    out.push(`- **${label(e.param)}** is editable while ${when}.`);
+    const says = (c) => {
+      if (c.cond === "bool_is") return `${onLabel} is ${c.value ? "on" : "off"}`;
+      if (c.cond === "choice_is") return `${onLabel} is set to ${on?.options?.[c.value] ?? c.value}`;
+      if (c.cond === "choice_is_not") return `${onLabel} is anything but ${on?.options?.[c.value] ?? c.value}`;
+      if (c.cond === "layer_unset") return `${onLabel} names no layer`;
+      if (c.cond === "nought") return `${onLabel} is 0`;
+      if (c.cond === "or") return `**${label(c.value.or)}** is on, or ${says(c.value)}`;
+      return `${onLabel} names a layer`;
+    };
+    out.push(`- **${label(e.param)}** is editable while ${says(e)}.`);
   }
 
   // What this effect's Matte row means. Every effect has the row, so

@@ -13269,6 +13269,56 @@
           "value": 9
         },
         {
+          "param": "collide_with",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "separation",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "alignment",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "cohesion",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "sparks",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
           "param": "persistence",
           "on": "in_scene",
           "cond": "bool_is",
@@ -13359,6 +13409,30 @@
           "value": true
         },
         {
+          "param": "collide_all",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground_height",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "sparks_from",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
           "param": "ground_height",
           "on": "ground",
           "cond": "bool_is",
@@ -13393,6 +13467,56 @@
           "on": "path_from",
           "cond": "choice_is_not",
           "value": 1
+        },
+        {
+          "param": "particle_blend",
+          "on": "separation",
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "particle_blend",
+          "on": "alignment",
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "particle_blend",
+          "on": "cohesion",
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "particle_blend",
+          "on": "sparks",
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "particle_blend",
+          "on": "collide_with",
+          "cond": "or",
+          "value": {
+            "cond": "layer_unset",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "density_layer",
@@ -13437,7 +13561,12 @@
         {
           "param": "particle_blend",
           "on": "persistence",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "density_layer",
@@ -13458,6 +13587,48 @@
           "param": "density_layer_placement",
           "on": "collide_with",
           "cond": "layer_unset"
+        },
+        {
+          "param": "on_contact",
+          "on": "collide_with",
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
+        },
+        {
+          "param": "bounciness",
+          "on": "collide_with",
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
+        },
+        {
+          "param": "friction",
+          "on": "collide_with",
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
         },
         {
           "param": "bounciness",

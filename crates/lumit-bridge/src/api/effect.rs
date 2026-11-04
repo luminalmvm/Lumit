@@ -1276,7 +1276,7 @@ pub enum BridgeParamKind {
 }
 
 /// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
-/// ([`lumit_core::fx::schema::ColourNameRole`]). A View row lists the views of the
+/// ([`lumit_core::fx::colour_name::ColourNameRole`]). A View row lists the views of the
 /// display its sibling `display` row names.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1386,11 +1386,13 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::schema::ParamSchema) -> Bridg
         ParamKind::Angle { default, dial_step } => BridgeParamKind::Angle { default, dial_step },
         ParamKind::ColourName { role } => BridgeParamKind::ColourName {
             role: match role {
-                lumit_core::fx::schema::ColourNameRole::Space => BridgeColourNameRole::Space,
-                lumit_core::fx::schema::ColourNameRole::Display => BridgeColourNameRole::Display,
-                lumit_core::fx::schema::ColourNameRole::View => BridgeColourNameRole::View,
-                lumit_core::fx::schema::ColourNameRole::Look => BridgeColourNameRole::Look,
-                lumit_core::fx::schema::ColourNameRole::Config => BridgeColourNameRole::Config,
+                lumit_core::fx::colour_name::ColourNameRole::Space => BridgeColourNameRole::Space,
+                lumit_core::fx::colour_name::ColourNameRole::Display => {
+                    BridgeColourNameRole::Display
+                }
+                lumit_core::fx::colour_name::ColourNameRole::View => BridgeColourNameRole::View,
+                lumit_core::fx::colour_name::ColourNameRole::Look => BridgeColourNameRole::Look,
+                lumit_core::fx::colour_name::ColourNameRole::Config => BridgeColourNameRole::Config,
             },
         },
         ParamKind::Text { default } => BridgeParamKind::Text {
@@ -1637,7 +1639,7 @@ pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
 /// One greying rule: `param`'s row is editable only while `on` satisfies
 /// `cond`. The panel evaluates it against values it already holds, so ticking
 /// a switch greys its dependent row without a round trip;
-/// `lumit_core::fx::builtins::param_enabled` is the same rule in Rust and the authority
+/// `lumit_core::fx::enabled::param_enabled` is the same rule in Rust and the authority
 /// the tests pin.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
@@ -1664,6 +1666,8 @@ pub enum BridgeEnabledCond {
     LayerUnset,
     /// Editable while the named number is a still nought.
     Nought,
+    /// Editable while this other bool is on, or while the condition holds.
+    Or(String, Box<BridgeEnabledCond>),
 }
 
 /// Every greying rule `effect` declares (empty for an effect whose controls are
@@ -1671,8 +1675,6 @@ pub enum BridgeEnabledCond {
 /// carrying an effect this build does not know still opens).
 #[frb(sync)]
 pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
-    use lumit_core::fx::schema::EnabledCond;
-
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
     // half alone. `def` rather than the catalogue itself, so a
@@ -1689,14 +1691,7 @@ pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
         .map(|r| BridgeEnabledWhen {
             param: r.param.to_owned(),
             on: r.on.to_owned(),
-            cond: match r.cond {
-                EnabledCond::BoolIs(v) => BridgeEnabledCond::BoolIs(v),
-                EnabledCond::ChoiceIs(i) => BridgeEnabledCond::ChoiceIs(i),
-                EnabledCond::ChoiceIsNot(i) => BridgeEnabledCond::ChoiceIsNot(i),
-                EnabledCond::LayerSet => BridgeEnabledCond::LayerSet,
-                EnabledCond::LayerUnset => BridgeEnabledCond::LayerUnset,
-                EnabledCond::Nought => BridgeEnabledCond::Nought,
-            },
+            cond: crate::enabled_rules::cond(r.cond),
         })
         .collect()
 }

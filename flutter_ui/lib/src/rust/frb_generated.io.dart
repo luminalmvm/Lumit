@@ -523,6 +523,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   WebFileStat dco_decode_box_autoadd_web_file_stat(dynamic raw);
 
   @protected
+  BridgeEnabledCond dco_decode_box_bridge_enabled_cond(dynamic raw);
+
+  @protected
   BridgeAddon dco_decode_bridge_addon(dynamic raw);
 
   @protected
@@ -2792,6 +2795,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   WebFileStat sse_decode_box_autoadd_web_file_stat(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeEnabledCond sse_decode_box_bridge_enabled_cond(
       SseDeserializer deserializer);
 
   @protected
@@ -5361,6 +5368,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_web_file_stat(
       WebFileStat self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_bridge_enabled_cond(
+      BridgeEnabledCond self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_addon(BridgeAddon self, SseSerializer serializer);

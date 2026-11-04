@@ -50,7 +50,7 @@ pub(crate) fn carriage(
         clone,
         inset,
         sprite: None,
-        sim: lumit_core::fx::points::stepped::sim::wanted(comp, e),
+        sim: lumit_core::fx::points::stepped::sim::wanted(e),
     }
 }
 

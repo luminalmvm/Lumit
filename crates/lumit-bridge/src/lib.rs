@@ -77,6 +77,8 @@ mod frb_generated;
 // module below it — see [`note`] for why no module may `println!`.
 #[macro_use]
 mod note;
+mod enabled_rules;
+mod project_cache;
 
 #[cfg(feature = "media")]
 mod audio;
