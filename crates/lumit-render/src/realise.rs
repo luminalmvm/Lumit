@@ -684,7 +684,7 @@ impl Realiser<'_> {
                     let depth = self.realise_scene_depth(n, n.trace_layers.then_some(&mut scene));
                     return LayerInput::Depth(set_down(&depth), scene.map(std::sync::Arc::new));
                 } else if let Some(n) = &d.nested {
-                    self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
+                    self.painted_input(n)
                 } else {
                     // Through the referenced layer's own colour space:
                     // a background plate is a picture like any other, and it is

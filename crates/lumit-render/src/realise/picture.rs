@@ -4,6 +4,15 @@ use super::{straight_to_composite, upload_roto_matte, Realiser};
 use crate::draw::{CompLayerDraw, DrawSource};
 
 impl Realiser<'_> {
+    /// A Precomp layer read as another's input: its comp with the strokes on
+    /// the layer itself over it, as the layer's own picture has them.
+    pub(super) fn painted_input(&self, n: &crate::draw::NestedInputDraw) -> wgpu::Texture {
+        let nested =
+            self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws);
+        let (w, h) = (f64::from(n.width), f64::from(n.height));
+        self.paint_over(nested, w, h, &n.paint, n.paint_time)
+    }
+
     /// `l`'s picture before it is lit or placed, how much its effects grew
     /// it, and the depth the mesh pass drew beside it when it is a model,
     /// which takes `shadows` and the comp's environment. `fx_ms` gathers each effect's own time when the

@@ -1248,15 +1248,11 @@ fn feed_effect_stack(
                 }
                 EffectValue::Layer(lref) => {
                     // The referenced layer is rendered alone at comp size as
-                    // this effect's auxiliary input (a depth pass for depth
-                    // of field, docs/impl/layer-input.md §4): its content is
-                    // content the parameter hash cannot otherwise see, so it
-                    // joins the key. It is rendered SOURCE-ONLY (its own
-                    // effect stack is not applied), so — exactly like a matte
-                    // source — the key is the referenced layer's source plus
-                    // its evaluated transform. A source-only render never
-                    // re-enters an effect stack, so a layer reference cannot
-                    // recurse; `visited` still guards any precomp cycle
+                    // this effect's auxiliary input (docs/impl/layer-input.md
+                    // §4), content the parameter hash cannot otherwise see.
+                    // Rendered source-only, the key is its source, its paint
+                    // and its evaluated transform, and a layer reference
+                    // cannot recurse; `visited` still guards any precomp cycle
                     // inside that source. An unset or dangling reference
                     // feeds a distinct 0 marker (the effect is a no-op).
                     //
@@ -1299,6 +1295,9 @@ fn feed_effect_stack(
                             h.update(src.id.as_bytes());
                             let slt = lumit_core::time::layer_time(t, src.start_offset.0);
                             feed_source(h, doc, comp, src, slt, t, quality, stamper, visited)?;
+                            if !src.paint.is_empty() {
+                                let _ = serde_json::to_writer(&mut *h, &src.paint);
+                            }
                             let dtr = &src.transform;
                             for v in [
                                 dtr.position_x.value_at(slt),
@@ -4753,12 +4752,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 32, which renamed every frame.
+        // Pinned under ALGO_VERSION 34, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                242_697_789_024_780_177_051_360_864_976_626_392_869,
-                337_561_387_740_218_213_199_485_657_473_987_713_466
+                246_152_009_537_925_735_509_102_981_633_514_220_166,
+                187_035_944_992_701_014_619_650_131_854_566_901_730
             )
         );
 

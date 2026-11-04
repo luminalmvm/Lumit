@@ -59,4 +59,5 @@
 ///   Blender is left out, and Shaded is a little darker.
 /// * 31: the 3D layers in a collapsed Precomp take the parent's lights.
 /// * 32: a layer that only shows shadows takes them with its back to a light.
-pub const ALGO_VERSION: u32 = 32;
+/// * 34: a row reading a Precomp layer sees that layer's own paint and effects.
+pub const ALGO_VERSION: u32 = 34;

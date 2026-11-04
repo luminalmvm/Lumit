@@ -97,6 +97,17 @@ fn add(doc: &mut Document, comp: Uuid, layer: Layer) {
 
 /// A comp holding the plate, on its own and hidden when `shows` is off.
 fn with_plate(doc: &mut Document, plate: &FootageItem, shows: bool) -> (Uuid, Uuid) {
+    let kind = LayerKind::Footage { item: plate.id };
+    with_layer(doc, kind, Vec::new(), shows)
+}
+
+/// A comp holding one layer of `kind` with `effects` on it.
+fn with_layer(
+    doc: &mut Document,
+    kind: LayerKind,
+    effects: Vec<EffectInstance>,
+    shows: bool,
+) -> (Uuid, Uuid) {
     let settings = CompSettings {
         width: SIZE,
         height: SIZE,
@@ -109,13 +120,9 @@ fn with_plate(doc: &mut Document, plate: &FootageItem, shows: bool) -> (Uuid, Uu
     let size = f64::from(SIZE);
     let duration = doc.comp(comp).unwrap().duration.0;
     let t = lumit_core::edits::centred_transform(size, size, SIZE, SIZE);
-    let mut layer = lumit_core::edits::base_layer(
-        "plate".into(),
-        LayerKind::Footage { item: plate.id },
-        duration,
-        t,
-    );
+    let mut layer = lumit_core::edits::base_layer("plate".into(), kind, duration, t);
     layer.switches.visible = shows;
+    layer.effects = effects;
     let id = layer.id;
     add(doc, comp, layer);
     (comp, id)
@@ -125,6 +132,11 @@ fn with_plate(doc: &mut Document, plate: &FootageItem, shows: bool) -> (Uuid, Uu
 /// sideways by frame 10, its time held at frame 0 or following the playhead.
 fn projected(doc: &mut Document, model: &FootageItem, plate: &FootageItem, held: bool) -> Uuid {
     let (comp, shown) = with_plate(doc, plate, false);
+    on_cards(doc, model, comp, shown, held)
+}
+
+/// [`projected`] for layer `shown` of `comp`.
+fn on_cards(doc: &mut Document, model: &FootageItem, comp: Uuid, shown: Uuid, held: bool) -> Uuid {
     let c = doc.comp(comp).unwrap().clone();
     let mut camera = lumit_core::edits::fresh_camera(&c, "Camera".into(), None);
     let x = camera.transform.position_x.value_at(0.0);
@@ -215,4 +227,28 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
     let followed = frame(follows, 10);
     assert!(off_by(&followed, &picture) <= 2);
     assert_eq!(reds(&followed), 0);
+}
+
+/// A Precomp layer read as a picture brings its own effects, as it shows
+/// them itself.
+#[test]
+fn a_precomp_picture_keeps_its_own_effects() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut doc = Document::new();
+    let plate = footage(&mut doc, &picture(dir.path()));
+    let model = footage(&mut doc, &cards(dir.path()));
+    let (inner, _) = with_plate(&mut doc, &plate, true);
+    let invert = || vec![lumit_core::fx::builtins::instantiate("invert").unwrap()];
+    let nested = || LayerKind::Precomp { comp: inner };
+    let (shown, _) = with_layer(&mut doc, nested(), invert(), true);
+    let (hidden, layer) = with_layer(&mut doc, nested(), invert(), false);
+    let seen = on_cards(&mut doc, &model, hidden, layer, false);
+    let doc = Arc::new(doc);
+    let mut frame = |comp| r.render_rgba(&doc, comp, 0, 1.0).expect("the render").0;
+    let (as_a_layer, as_a_picture) = (frame(shown), frame(seen));
+    assert!(off_by(&as_a_picture, &as_a_layer) <= 2);
 }

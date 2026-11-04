@@ -56,6 +56,8 @@ pub(super) fn below_picture(
             px_per_metre: comp.px_per_metre(t),
             scene_depth: false,
             trace_layers: false,
+            paint: Vec::new(),
+            paint_time: 0.0,
         })),
         colour_space: None,
         natural: [comp.width as f32, comp.height as f32],
