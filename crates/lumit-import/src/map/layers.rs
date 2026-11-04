@@ -158,6 +158,9 @@ pub(crate) fn map_layer(
     if conv.solids && matches!(kind, LayerKind::Text { .. } | LayerKind::Shape { .. }) {
         transform.material.geometry = geometry(conv, &path, props);
     }
+    if let LayerKind::Mesh { shape } = kind {
+        transform.material.geometry = super::mesh_shapes::rows(conv, &path, props, shape);
+    }
     // After Effects measures a text layer from its first baseline, and a
     // shape layer from its own zero, where Lumit measures both from the corner
     // of the raster they are drawn into. The anchor and the masks move by the
@@ -279,6 +282,9 @@ fn layer_kind(
         }
     }
 
+    if let Some(shape) = super::mesh_shapes::shape_of(props) {
+        return LayerKind::Mesh { shape };
+    }
     match kind {
         "camera" => {
             // After Effects' Position is the eye, as Lumit's is
