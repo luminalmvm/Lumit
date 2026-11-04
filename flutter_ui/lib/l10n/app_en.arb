@@ -8578,6 +8578,22 @@
   "@projectItemNoBlender": {
     "description": "Warning badge beside a 3D model in the Project panel that opens through Blender (a .blend, USD, Alembic file) when no Blender was found on this computer. Blender is a product name; keep it as it is. Lower case first word, like the other row badges. Clicking it opens Settings at the Blender row."
   },
+  "projectItemStopped": "stopped",
+  "@projectItemStopped": {
+    "description": "Project panel row badge, beside a 3D model: its conversion through the user's Blender was stopped by hand, so nothing draws until it is converted again. Lower case, one word, like the other row badges."
+  },
+  "tipProjectStopConverting": "Stop",
+  "@tipProjectStopConverting": {
+    "description": "Tooltip on the converting badge of a Project panel 3D model. Clicking the badge stops Blender converting the file."
+  },
+  "tipProjectConvertAgain": "Convert again",
+  "@tipProjectConvertAgain": {
+    "description": "Tooltip on the stopped badge of a Project panel 3D model. Clicking the badge starts converting the file through Blender again."
+  },
+  "tipProjectNoImporter": "This Blender can't open this file type",
+  "@tipProjectNoImporter": {
+    "description": "Tooltip on the unreadable badge of a Project panel 3D model whose file type the Blender found has no importer for, as with Collada files on Blender 5. Blender is a product name; keep it as it is."
+  },
   "tipProjectNoBlender": "Choose Blender",
   "@tipProjectNoBlender": {
     "description": "Tooltip on the no Blender badge of a Project panel 3D model. Clicking the badge opens Settings at the Blender row."

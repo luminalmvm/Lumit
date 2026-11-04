@@ -132,10 +132,12 @@ the file's values back. A preset starts from the file's values and turns Texture
 
 A `.blend`, USD (`.usd`, `.usdz`, `.usdc`, `.usda`), Alembic (`.abc`), PLY, STL or Collada
 (`.dae`) file opens through your own Blender, which turns it into a glTF in the cache. Its row
-reads **Converting** until then. An FBX Lumit can't read goes the same way. Saving the file
-again converts it again, and the layer keeps the old model until the new one is ready. With no
-Blender found the row reads **No Blender**; click it to choose one in
-[Settings](/use/settings/#general). Blender 5 and later have no Collada importer.
+reads **Converting** until then; click it to stop Blender, and click **Stopped** to start again.
+An FBX Lumit can't read goes the same way. Saving the file again converts it again, and the
+layer keeps the old model until the new one is ready, or if it won't convert. Objects hidden in
+Blender are left out. With no Blender found the row reads **No Blender**; click it to choose one
+in [Settings](/use/settings/#general). Blender 5 and later have no Collada importer. Two Blenders
+run at once, and the rest wait.
 **Edit in Blender**, on the **Layer** menu and the item's right-click menu, opens a `.blend` in
 Blender.
 

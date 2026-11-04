@@ -881,13 +881,42 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         if (mounted) setState(() {});
       }
       // No Blender stays watched, so picking one in Settings shows here.
-      final settled = state == null || state is BridgeBlenderState_Failed;
+      final settled = state == null ||
+          state is BridgeBlenderState_Failed ||
+          state is BridgeBlenderState_NoImporter ||
+          state is BridgeBlenderState_Stopped;
       if (settled && !_reading.contains(id)) _watched.remove(id);
     }
     if (_watched.isEmpty) {
       _blenderPoll?.cancel();
       _blenderPoll = null;
     }
+  }
+
+  void _stopBlender(ItemReference item) {
+    if (item is! ItemReference_Footage) return;
+    try {
+      item.field0.stopBlender();
+    } catch (_) {
+      // The item has gone, and the conversion was stopped with it.
+    }
+    _pollBlender();
+  }
+
+  /// Stopped, it converts again: the row is asked after as if it were new, and
+  /// the Viewer asks for its frame, which starts it there too.
+  void _convertAgain(ItemReference item) {
+    if (item is! ItemReference_Footage) return;
+    try {
+      item.field0.convertAgain();
+    } catch (_) {
+      return;
+    }
+    final id = projectItemId(item);
+    _blender.remove(id);
+    _missing.remove(id);
+    _bookRebuild();
+    Provider.of<LumitUiState>(context, listen: false).requestFrame();
   }
 
   /// Bumped whenever the document changes, to key the thumbnail futures so a
@@ -1203,6 +1232,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         undecodable: _undecodable.contains(id),
         missingPictures: _pictures[id] ?? const [],
         blender: _blender[id],
+        onStopBlender: () => _stopBlender(item),
+        onConvertAgain: () => _convertAgain(item),
         audio: audio,
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
@@ -1736,6 +1767,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   }
 
   void _documentChanged() {
+    // An item deleted, or a project closed, takes its conversion with it.
+    if (_watched.isNotEmpty) {
+      Provider.of<LumitState>(context, listen: false)
+          .project
+          ?.stopUnusedBlenders();
+    }
     setState(() {
       _epoch++;
       _missing.clear();

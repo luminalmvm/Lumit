@@ -9,4 +9,6 @@ pub(crate) fn let_go(project: &ProjectReference) {
     crate::claim::release(project.id);
     // Clips copied in the Cut workspace name this project's items.
     crate::api::cut::forget_copied(project.id);
+    // No Blender stays at work on a file nothing is waiting for.
+    project.stop_blenders_where(true);
 }

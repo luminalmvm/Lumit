@@ -299,6 +299,12 @@ class FootageReference {
         that: this,
       );
 
+  /// Convert this file again after it was stopped.
+  void convertAgain() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceConvertAgain(
+        that: this,
+      );
+
   /// Open this file in Blender's own window. False when no Blender was
   /// found or it wouldn't start.
   Future<bool> editInBlender() =>
@@ -590,6 +596,12 @@ class FootageReference {
   /// reads as the original or missing, with nobody holding it.
   BridgeFootageShare shareState() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceShareState(
+        that: this,
+      );
+
+  /// Stop this file's conversion.
+  void stopBlender() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceStopBlender(
         that: this,
       );
 

@@ -139,6 +139,53 @@ class ProjectBadge extends StatelessWidget {
   }
 }
 
+/// A badge waiting on something: its word breathes slowly while [on], as the
+/// file can take a while and nothing else on the row moves. Still with motion
+/// turned down.
+class _Breathing extends StatefulWidget {
+  final bool on;
+  final Widget child;
+
+  const _Breathing({required this.on, required this.child});
+
+  @override
+  State<_Breathing> createState() => _BreathingState();
+}
+
+class _BreathingState extends State<_Breathing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _beat = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  late final Animation<double> _opacity = _beat
+      .drive(CurveTween(curve: Curves.easeInOut))
+      .drive(Tween<double>(begin: 1, end: 0.5));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final moves =
+        widget.on && ThemeScope.of(context).motion.level == AnimationLevel.all;
+    if (moves && !_beat.isAnimating) {
+      _beat.repeat(reverse: true);
+    } else if (!moves && _beat.isAnimating) {
+      _beat.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _beat.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+        child: FadeTransition(opacity: _opacity, child: widget.child),
+      );
+}
+
 /// How wide [text] is on one line. Kept once measured, since rows ask on
 /// every build and a panel holds few different names and fewer badges.
 double _lineWidth(String text, TextStyle style, TextScaler scale) {
@@ -195,6 +242,10 @@ class ProjectRowFrb extends StatefulWidget {
   /// Where a 3D model's trip through the user's Blender stands, null when it
   /// needs none or is done.
   final BridgeBlenderState? blender;
+
+  /// A press on its converting badge and on its stopped one.
+  final VoidCallback? onStopBlender;
+  final VoidCallback? onConvertAgain;
 
   /// Sound with no picture — the media probe's own answer, which is what picks
   /// the speaker glyph over the film one.
@@ -331,6 +382,8 @@ class ProjectRowFrb extends StatefulWidget {
     this.undecodable = false,
     this.missingPictures = const [],
     this.blender,
+    this.onStopBlender,
+    this.onConvertAgain,
     required this.audio,
     required this.label,
     required this.inherited,
@@ -844,8 +897,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         BridgeBlenderState_NoBlender() => [
             ('no-blender-$id', l10n.projectItemNoBlender, t.warning)
           ],
-        BridgeBlenderState_Failed() => [
+        BridgeBlenderState_Failed() || BridgeBlenderState_NoImporter() => [
             ('blender-failed-$id', l10n.projectItemUndecodable, t.warning)
+          ],
+        BridgeBlenderState_Stopped() => [
+            ('stopped-$id', l10n.projectItemStopped, t.textMuted)
           ],
         null => const <(String, String, Color)>[],
       },
@@ -969,10 +1025,38 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     child: ProjectBadge(label: label, colour: colour),
                   ),
                 )
+              else if (key.startsWith('converting-') ||
+                  key.startsWith('stopped-'))
+                // A press on it stops the conversion, or starts it again.
+                LumitTooltip(
+                  message: key.startsWith('stopped-')
+                      ? l10n.tipProjectConvertAgain
+                      : l10n.tipProjectStopConverting,
+                  child: HoverMark(
+                    swells: true,
+                    builder: (context, lit) => GestureDetector(
+                      key: ValueKey<String>(key),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: key.startsWith('stopped-')
+                          ? widget.onConvertAgain
+                          : widget.onStopBlender,
+                      child: _Breathing(
+                        on: key.startsWith('converting-'),
+                        child: ProjectBadge(
+                          label: label,
+                          colour:
+                              Color.lerp(colour, t.textPrimary, 0.35 * lit)!,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
               else if (key.startsWith('blender-failed-'))
                 LumitTooltip(
                   message: switch (widget.blender) {
                     BridgeBlenderState_Failed(:final reason) => reason,
+                    BridgeBlenderState_NoImporter() =>
+                      l10n.tipProjectNoImporter,
                     _ => l10n.tipProjectUndecodable,
                   },
                   child: ProjectBadge(

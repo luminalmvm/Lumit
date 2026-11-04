@@ -54,6 +54,8 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
     TResult Function(BridgeBlenderState_Converting value)? converting,
     TResult Function(BridgeBlenderState_NoBlender value)? noBlender,
     TResult Function(BridgeBlenderState_Failed value)? failed,
+    TResult Function(BridgeBlenderState_NoImporter value)? noImporter,
+    TResult Function(BridgeBlenderState_Stopped value)? stopped,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -64,6 +66,10 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
         return noBlender(_that);
       case BridgeBlenderState_Failed() when failed != null:
         return failed(_that);
+      case BridgeBlenderState_NoImporter() when noImporter != null:
+        return noImporter(_that);
+      case BridgeBlenderState_Stopped() when stopped != null:
+        return stopped(_that);
       case _:
         return orElse();
     }
@@ -87,6 +93,8 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
     required TResult Function(BridgeBlenderState_Converting value) converting,
     required TResult Function(BridgeBlenderState_NoBlender value) noBlender,
     required TResult Function(BridgeBlenderState_Failed value) failed,
+    required TResult Function(BridgeBlenderState_NoImporter value) noImporter,
+    required TResult Function(BridgeBlenderState_Stopped value) stopped,
   }) {
     final _that = this;
     switch (_that) {
@@ -96,6 +104,10 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
         return noBlender(_that);
       case BridgeBlenderState_Failed():
         return failed(_that);
+      case BridgeBlenderState_NoImporter():
+        return noImporter(_that);
+      case BridgeBlenderState_Stopped():
+        return stopped(_that);
     }
   }
 
@@ -116,6 +128,8 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
     TResult? Function(BridgeBlenderState_Converting value)? converting,
     TResult? Function(BridgeBlenderState_NoBlender value)? noBlender,
     TResult? Function(BridgeBlenderState_Failed value)? failed,
+    TResult? Function(BridgeBlenderState_NoImporter value)? noImporter,
+    TResult? Function(BridgeBlenderState_Stopped value)? stopped,
   }) {
     final _that = this;
     switch (_that) {
@@ -125,6 +139,10 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
         return noBlender(_that);
       case BridgeBlenderState_Failed() when failed != null:
         return failed(_that);
+      case BridgeBlenderState_NoImporter() when noImporter != null:
+        return noImporter(_that);
+      case BridgeBlenderState_Stopped() when stopped != null:
+        return stopped(_that);
       case _:
         return null;
     }
@@ -147,6 +165,8 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
     TResult Function()? converting,
     TResult Function()? noBlender,
     TResult Function(String reason)? failed,
+    TResult Function()? noImporter,
+    TResult Function()? stopped,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -157,6 +177,10 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
         return noBlender();
       case BridgeBlenderState_Failed() when failed != null:
         return failed(_that.reason);
+      case BridgeBlenderState_NoImporter() when noImporter != null:
+        return noImporter();
+      case BridgeBlenderState_Stopped() when stopped != null:
+        return stopped();
       case _:
         return orElse();
     }
@@ -180,6 +204,8 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
     required TResult Function() converting,
     required TResult Function() noBlender,
     required TResult Function(String reason) failed,
+    required TResult Function() noImporter,
+    required TResult Function() stopped,
   }) {
     final _that = this;
     switch (_that) {
@@ -189,6 +215,10 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
         return noBlender();
       case BridgeBlenderState_Failed():
         return failed(_that.reason);
+      case BridgeBlenderState_NoImporter():
+        return noImporter();
+      case BridgeBlenderState_Stopped():
+        return stopped();
     }
   }
 
@@ -209,6 +239,8 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
     TResult? Function()? converting,
     TResult? Function()? noBlender,
     TResult? Function(String reason)? failed,
+    TResult? Function()? noImporter,
+    TResult? Function()? stopped,
   }) {
     final _that = this;
     switch (_that) {
@@ -218,6 +250,10 @@ extension BridgeBlenderStatePatterns on BridgeBlenderState {
         return noBlender();
       case BridgeBlenderState_Failed() when failed != null:
         return failed(_that.reason);
+      case BridgeBlenderState_NoImporter() when noImporter != null:
+        return noImporter();
+      case BridgeBlenderState_Stopped() when stopped != null:
+        return stopped();
       case _:
         return null;
     }
@@ -328,6 +364,48 @@ class _$BridgeBlenderState_FailedCopyWithImpl<$Res>
           : reason // ignore: cast_nullable_to_non_nullable
               as String,
     ));
+  }
+}
+
+/// @nodoc
+
+class BridgeBlenderState_NoImporter extends BridgeBlenderState {
+  const BridgeBlenderState_NoImporter() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeBlenderState_NoImporter);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeBlenderState.noImporter()';
+  }
+}
+
+/// @nodoc
+
+class BridgeBlenderState_Stopped extends BridgeBlenderState {
+  const BridgeBlenderState_Stopped() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeBlenderState_Stopped);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeBlenderState.stopped()';
   }
 }
 

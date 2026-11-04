@@ -2732,6 +2732,7 @@ class LumitUiState extends ChangeNotifier {
         // The endpoint's file goes with it, so nothing names a Lumit that
         // has gone.
         if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
+        await stopBlenders();
         return AppExitResponse.exit;
       },
     );
@@ -4177,6 +4178,7 @@ class LumitUiState extends ChangeNotifier {
   final Map<int, DateTime> _askedAt = {};
   final Map<int, Duration> _pictureTook = {};
   static const _slowPicture = Duration(milliseconds: 50);
+
 
   /// A drag or a flight started or ended. Each move is timed afresh, and
   /// ending one puts a view drawn as a draft back to its full scale.
