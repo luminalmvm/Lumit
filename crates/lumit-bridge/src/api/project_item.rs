@@ -364,7 +364,7 @@ impl Copier<'_> {
             ProjectItem::Solid(s) => s.id = copy,
             ProjectItem::Composition(c) => {
                 c.id = copy;
-                crate::edits::fresh_ids(std::slice::from_mut(c))?;
+                lumit_render::passes::fresh_ids_keeping_parts(self.doc, std::slice::from_mut(c))?;
             }
             ProjectItem::Folder(f) => {
                 f.id = copy;

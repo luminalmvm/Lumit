@@ -13,6 +13,32 @@ use crate::api::{
 use lumit_core::model::{EffectInstance, EffectValue};
 use uuid::Uuid;
 
+/// One part of a 3D precomp's scene: the number a matte keeps, and the name to
+/// show.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeScenePart {
+    pub id: u32,
+    pub name: String,
+}
+
+impl LayerReference {
+    /// The parts of this Model layer or 3D precomp, `None` for any other layer.
+    /// Not sync, as a model not read yet is read now.
+    pub fn scene_parts(&self) -> Result<Option<Vec<BridgeScenePart>>, BridgeError> {
+        let doc = self.document()?;
+        let layer = self.item()?;
+        Ok(
+            lumit_render::passes::scene_parts(&doc, &layer).map(|parts| {
+                parts
+                    .into_iter()
+                    .map(|(id, name)| BridgeScenePart { id, name })
+                    .collect()
+            }),
+        )
+    }
+}
+
 /// Which of a 3D model file's axes points up.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -49,6 +49,10 @@ enum DropperReads {
 
   /// The pixel's own position in the composition, for an x/y parameter pair.
   position,
+
+  /// The part of a 3D precomp under the pointer: its Part id pass, whose bytes
+  /// are the part's number.
+  part,
 }
 
 /// One armed dropper: what is being picked, where the pixels come from, and
@@ -88,6 +92,10 @@ class DropperArm {
   /// coming from rather than showing a colour nobody is picking.
   final String? sampleLayerName;
 
+  /// The name of a part by its number, for a part pick's caption. Null where
+  /// the number is no part at all.
+  final String? Function(int part)? partName;
+
   /// Write the picked value. Called **once**, on the release that ends the
   /// pick — never per pointer move, so the gesture is one undo step.
   final void Function(DropperSample sample) onPick;
@@ -111,6 +119,7 @@ class DropperArm {
     this.onRevert,
     this.sampleLayer,
     this.sampleLayerName,
+    this.partName,
   });
 }
 
@@ -137,6 +146,9 @@ class DropperSample {
   /// How many pixels a side were averaged.
   final int region;
 
+  /// The part a part pick lands on ([partNear]), nought for any other pick.
+  final int part;
+
   const DropperSample({
     required this.r,
     required this.g,
@@ -147,6 +159,7 @@ class DropperSample {
     this.xFrac = 0,
     this.yFrac = 0,
     required this.region,
+    this.part = 0,
   });
 }
 
@@ -245,6 +258,32 @@ int srgbEncode(double linear) {
   return (e * 255).round().clamp(0, 255);
 }
 
+/// How far a part pick looks for a part when the pixel under the pointer names
+/// none, as it can on a part's edge.
+const int dropperPartReach = 2;
+
+/// The part at `(x, y)` of a window of Part id bytes, or the nearest within
+/// [dropperPartReach], or nought. A number [known] doesn't know is no part.
+int partNear(
+  BridgeSampledPixels window,
+  int x,
+  int y,
+  String? Function(int part) known,
+) {
+  for (var reach = 0; reach <= dropperPartReach; reach++) {
+    for (var dy = -reach; dy <= reach; dy++) {
+      for (var dx = -reach; dx <= reach; dx++) {
+        if (dx.abs() != reach && dy.abs() != reach) continue;
+        final px = windowPixel(window, x + dx, y + dy);
+        if (px == null) continue;
+        final part = px.r << 16 | px.g << 8 | px.b;
+        if (known(part) != null) return part;
+      }
+    }
+  }
+  return 0;
+}
+
 /// Average the `region × region` pixels around `(x, y)` of a window, and say
 /// what they mean.
 ///
@@ -255,8 +294,9 @@ DropperSample sampleFromWindow(
   BridgeSampledPixels window,
   int region,
   int x,
-  int y,
-) {
+  int y, {
+  String? Function(int part)? partName,
+}) {
   final n = region.clamp(1, dropperGrid);
   final half = (n - 1) ~/ 2;
   var sr = 0.0, sg = 0.0, sb = 0.0;
@@ -287,6 +327,7 @@ DropperSample sampleFromWindow(
   }
   final r = sr / count, g = sg / count, b = sb / count;
   return DropperSample(
+    part: partName == null ? 0 : partNear(window, x, y, partName),
     r: r,
     g: g,
     b: b,

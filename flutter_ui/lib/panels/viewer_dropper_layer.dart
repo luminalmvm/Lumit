@@ -7,6 +7,7 @@
 // Viewer's stage, which is the only thing that knows where the picture is.
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -302,6 +303,9 @@ class _DropperLayerState extends State<DropperLayer> {
       // The window's content area: what the application can actually paint on,
       // and so the only edge the viewfinder has to answer to.
       _overlayBounds,
+      size: arm.reads == DropperReads.part
+          ? dropperPartTagSize
+          : dropperViewfinderSize,
     );
     return Positioned(
       left: origin.dx,
@@ -422,7 +426,7 @@ class _DropperLayerState extends State<DropperLayer> {
       return;
     } else {
       final (x, y) = windowPixelAt(window, _u(local), _v(local));
-      _staged = sampleFromWindow(window, _region, x, y);
+      _staged = sampleFromWindow(window, _region, x, y, partName: arm.partName);
     }
     if (arm.onPreview == null) return;
     // Built inside the closure, so a held tick sends where the pointer is now
@@ -446,6 +450,11 @@ class _DropperLayerState extends State<DropperLayer> {
     _staged = null;
     if (staged == null) return;
     arm.onPick(staged);
+    // Shift picks another part after this one.
+    if (arm.reads == DropperReads.part &&
+        HardwareKeyboard.instance.isShiftPressed) {
+      return;
+    }
     widget.uiState.disarmDropper();
   }
 

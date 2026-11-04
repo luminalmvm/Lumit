@@ -291,12 +291,11 @@ fn frame_name(
 /// One soloed-layer render, held for the dropper (see [`sample_layer_alone`]).
 #[frb(ignore)]
 struct LayerSample {
-    /// `(comp, frame, layer, document revision, view)`, what this render is
-    /// of. The revision is what retires it when an edit lands: the frame
-    /// cache has no generation counter any more (every frame is named by its
-    /// content), and a soloed render is of a document nobody else holds, thus
-    /// it cannot be named the same way.
-    stamp: (Uuid, u64, Uuid, u64, u32),
+    /// `(comp, frame, layer, document revision, view, whether its part ids)`,
+    /// what this render is of. The revision is what retires it when an edit
+    /// lands: every frame is named by its content, and a soloed render is of a
+    /// document nobody else holds, so it cannot be named the same way.
+    stamp: (Uuid, u64, Uuid, u64, u32, bool),
     width: u32,
     height: u32,
     rgba: Vec<u8>,
@@ -2780,6 +2779,8 @@ pub struct SamplePixelsRequest {
     /// does, so a hidden depth pass (which never shows in the composite) can
     /// still be read. `None` samples the composite.
     pub layer: Option<LayerReference>,
+    /// Read that layer's Part id pass rather than its picture.
+    pub part_ids: bool,
 }
 
 /// The largest window one read may carry: 129×129 pixels, 66 KiB.
