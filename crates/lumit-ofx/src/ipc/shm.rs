@@ -39,6 +39,8 @@ use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use half::f16;
+use half::slice::HalfFloatSliceExt;
 use memmap2::MmapMut;
 use thiserror::Error;
 
@@ -176,18 +178,28 @@ impl FrameHeader {
     }
 }
 
-/// FNV-1a, 64 bit. Not a cryptographic hash and not asked to be one: this
-/// catches a slot that was overwritten or never written, which is the failure
-/// shared memory has.
+/// FNV-1a, 64 bit, eight bytes a step. Not a cryptographic hash and not asked
+/// to be one: this catches a slot that was overwritten or never written, which
+/// is the failure shared memory has. A byte a step held up every frame.
 #[must_use]
 pub fn hash_bytes(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in bytes {
+    let words = bytes.chunks_exact(8);
+    let tail = words.remainder();
+    for word in words {
+        hash ^= u64::from_le_bytes(word.try_into().unwrap_or_default());
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    for byte in tail {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     hash
 }
+
+/// How many values the ring widens or narrows at a time, through a block on
+/// the stack.
+const BLOCK: usize = 1024;
 
 /// How many bytes one frame of this size needs in a slot.
 #[must_use]
@@ -436,10 +448,15 @@ impl Ring {
                 .map
                 .get_mut(body_start..body_end)
                 .ok_or(ShmError::NoSuchSlot(slot))?;
-            for (index, value) in pixels.iter().enumerate() {
-                let offset = index.saturating_mul(size_of::<f32>());
-                if let Some(cell) = body.get_mut(offset..offset + size_of::<f32>()) {
-                    cell.copy_from_slice(&f32::from(*value).to_le_bytes());
+            let mut floats = [0.0_f32; BLOCK];
+            for (values, cells) in pixels
+                .chunks(BLOCK)
+                .zip(body.chunks_mut(BLOCK * size_of::<f32>()))
+            {
+                let floats = &mut floats[..values.len()];
+                values.convert_to_f32_slice(floats);
+                for (cell, value) in cells.chunks_exact_mut(size_of::<f32>()).zip(floats) {
+                    cell.copy_from_slice(&value.to_le_bytes());
                 }
             }
         }
@@ -497,14 +514,21 @@ impl Ring {
             return Err(ShmError::Corrupt);
         }
 
-        let mut floats = Vec::with_capacity(body.len() / size_of::<f32>());
-        for chunk in body.chunks_exact(size_of::<f32>()) {
-            let bytes: [u8; 4] = chunk.try_into().unwrap_or([0; 4]);
-            floats.push(f32::from_le_bytes(bytes));
+        let mut pixels = vec![f16::ZERO; body.len() / size_of::<f32>()];
+        let mut floats = [0.0_f32; BLOCK];
+        for (cells, values) in body
+            .chunks(BLOCK * size_of::<f32>())
+            .zip(pixels.chunks_mut(BLOCK))
+        {
+            let floats = &mut floats[..values.len()];
+            for (value, cell) in floats.iter_mut().zip(cells.chunks_exact(size_of::<f32>())) {
+                *value = f32::from_le_bytes(cell.try_into().unwrap_or_default());
+            }
+            values.convert_from_f32_slice(floats);
         }
         let width = header.bounds.width();
         let height = header.bounds.height();
-        let frame = Frame16::from_f32(width, height, &floats).map_err(|_| ShmError::Corrupt)?;
+        let frame = Frame16::from_pixels(width, height, pixels).map_err(|_| ShmError::Corrupt)?;
         Ok((header, frame))
     }
 }
