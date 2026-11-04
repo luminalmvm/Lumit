@@ -3606,8 +3606,9 @@ fn comp_walk(
     // Solo / isolate: while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
     let any_solo = lumit_core::model::any_picture_solo(comp);
-    // An Environment light's picture is drawn for it, shown or not.
-    let surround = comp.environment_source(t_comp);
+    // An Environment light's picture is drawn for it, shown or not. A collapsed
+    // precomp's own Environment light lights nothing, so its picture just goes.
+    let surround = comp.environment_source(t_comp).filter(|_| !spliced);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
     for (idx, layer) in comp.layers.iter().enumerate().rev() {
         // A frame nobody wants any more stops here, and the renderer throws
@@ -3653,6 +3654,7 @@ fn comp_walk(
         let shown = layer.switches.visible && !layer.graph.out_unwired;
         if !(shown && !(any_solo && !layer.switches.solo) || Some(layer.id) == surround)
             || !in_span(layer)
+            || (spliced && comp.feeds_environment(layer.id))
         {
             continue;
         }
