@@ -6,7 +6,8 @@
 //! Made once a frame from the models that cast, each light's views fitted
 //! round them. A comp with no model that casts never makes any.
 
-use super::{uniform_entry, DrawUniform, FrameUniform, MeshFx, DEPTH};
+use super::setup::uniform_entry;
+use super::{DrawUniform, FrameUniform, MeshFx, DEPTH};
 use crate::fx::lighting::{
     caster_set, map_layout, LightingFx, LightingKind, LightingLight, ShadowCasters,
     DIFFUSION_SPREAD, MAX_LIT_LIGHTS,
