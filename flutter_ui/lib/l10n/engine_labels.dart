@@ -1712,6 +1712,15 @@ Map<String, String> get _built => {
       "Zoom": l10n.fxZoom,
       // A Model layer's material rows, and their presets.
       "Material": l10n.fxMaterial,
+      "Geometry options": l10n.fxGeometryOptions,
+      "Extrusion depth": l10n.fxExtrusionDepth,
+      "Bevel depth": l10n.fxBevelDepth,
+      "Bevel segments": l10n.fxBevelSegments,
+      "Hole bevel depth": l10n.fxHoleBevelDepth,
+      "Angular": l10n.fxBevelAngular,
+      "Convex": l10n.fxBevelConvex,
+      "Concave": l10n.fxBevelConcave,
+      "Bevel": l10n.fxFaceBevel,
       "Base colour": l10n.fxBaseColour,
       "Base colour layer": l10n.fxBaseColourLayer,
       "Metallic": l10n.fxMetallic,
@@ -2071,6 +2080,7 @@ Map<String, String> get _built => {
       "Set camera settings": l10n.histSetCameraSettings,
       "Set light settings": l10n.histSetLightSettings,
       "Set material settings": l10n.histSetMaterialSettings,
+      "Edit geometry options": l10n.histEditGeometryOptions,
       "Set lighting": l10n.histSetLighting,
       "Link camera to solve": l10n.histLinkCameraToSolve,
       "Edit volume": l10n.histEditVolume,
@@ -2204,6 +2214,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeLightKindApproximated(a('ae_kind'));
     case 'shadow_switch_keyed':
       return l10n.aeShadowSwitchKeyed;
+    case 'geometry_options_carried':
+      return l10n.aeGeometryOptionsCarried;
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':

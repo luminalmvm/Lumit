@@ -4547,7 +4547,7 @@ fn comp_walk(
                 }));
                 continue;
             }
-            LayerKind::Model { .. } => {
+            _ if lumit_core::extrude::draws_mesh(layer) => {
                 let Some(draw) =
                     crate::model::draw(doc, comp, layer, t_comp, &context, &layer_slot)
                 else {

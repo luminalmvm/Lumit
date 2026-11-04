@@ -71,6 +71,7 @@ impl Realiser<'_> {
             camera: crate::export::camera_mat(width, height, pose),
             model_to_comp: to_comp(m),
             shutter: &shutter,
+            shutter_scenes: &m.shutter_scenes,
             lights: &l.lights,
             material: lumit_gpu::fx::lighting::LightingMaterial {
                 eye,
@@ -93,6 +94,15 @@ impl Realiser<'_> {
             poses: &m.poses,
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
+        // A holdout stands in for something in the footage, sharp or not.
+        let lens = camera.filter(|_| !m.holds_out()).and_then(|cam| {
+            let (bounds, placed) = (&m.scene.bounds, to_comp(m));
+            crate::realise::dof::model_lens(cam, bounds, placed, (width, height), self.render_scale)
+        });
+        let picture = match lens {
+            Some(lens) => self.fx.model_lens(&self.ctx, &picture, &lens),
+            None => picture,
+        };
         Some(ModelPicture {
             holdout: m.holds_out(),
             ..picture

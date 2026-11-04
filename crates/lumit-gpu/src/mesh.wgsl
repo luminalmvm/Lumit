@@ -50,7 +50,8 @@ struct Material {
     emissive: vec4<f32>,
     // metallic, roughness, normal scale, occlusion strength.
     params: vec4<f32>,
-    // x = alpha mode (0 opaque, 1 mask, 2 blend), y = cutoff, z = unlit,
+    // x = alpha mode (0 opaque, 1 mask, 2 blend), y = cutoff, z = 1 unlit or
+    // -1 for highlights widened where the surface turns fast,
     // w = 1 with an opacity picture.
     mode: vec4<f32>,
     // transmission, IOR, clearcoat, clearcoat roughness.
@@ -234,6 +235,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     let dy = dpdy(in.at);
     let uv_dx = dpdx(normal_uv);
     let uv_dy = dpdy(normal_uv);
+    let turn = fwidth(in.normal);
 
     var alpha = base.a;
     if (mat.mode.w > 0.5) {
@@ -319,7 +321,12 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     }
 
     let metallic = clamp(mat.params.x * mr.b, 0.0, 1.0);
-    let roughness = clamp(mat.params.y * mr.g, 0.045, 1.0);
+    var roughness = clamp(mat.params.y * mr.g, 0.045, 1.0);
+    if (mat.mode.z < -0.5) {
+        // As rough as the turn across this pixel spreads the light anyway.
+        let a = roughness * roughness;
+        roughness = pow(a * a + min(0.125 * dot(turn, turn), 0.18), 0.25);
+    }
     let ao = 1.0 + mat.params.w * (occlusion - 1.0);
     let albedo = base.rgb;
     if (look == 1u) {

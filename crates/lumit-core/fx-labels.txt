@@ -57,6 +57,7 @@ Anchor y
 Angle
 Angle control
 Angle offset
+Angular
 Animate
 Animation
 Anticlockwise
@@ -79,6 +80,7 @@ Audio level
 Auto
 Away from points
 B
+Back
 Background
 Backing
 Backward
@@ -123,7 +125,10 @@ Beats
 Behind
 Bend
 Between
+Bevel
 Bevel and emboss
+Bevel depth
+Bevel segments
 Bevel style
 Bezier warp
 BiRefNet
@@ -265,6 +270,7 @@ Composite
 Composite on original
 Compositing
 Compressor
+Concave
 Conductivity state
 Confidence
 Connect points
@@ -274,6 +280,7 @@ Constant length
 Contrast
 Controls
 Conversion
+Convex
 Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
@@ -457,6 +464,7 @@ Expansion
 Exposure
 Expression
 Extract channels
+Extrusion depth
 F-stop
 Fade
 Fade in
@@ -536,6 +544,7 @@ From
 From group
 From x
 From y
+Front
 Frosted glass
 Fujicolor C200
 Fujicolor Pro 400H
@@ -550,6 +559,7 @@ Gate weave
 Gaussian
 Gaussian blur
 Generate
+Geometry options
 Ghost
 Ghost intensity
 Ghost softness
@@ -625,6 +635,7 @@ Highlight tonal width
 Highlights
 Hold
 Hold off
+Hole bevel depth
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -1199,6 +1210,7 @@ Shutter
 Shutter angle
 Shutter phase
 Siceliot
+Side
 Sides
 Simulate
 Simulation

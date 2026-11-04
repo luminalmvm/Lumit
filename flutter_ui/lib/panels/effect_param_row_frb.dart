@@ -16,6 +16,7 @@
 // Getting this wrong is what stopped effect parameters being draggable at all:
 // the first preview tick killed the handles and the rest of the gesture threw.
 
+import '../shell/model_settings_dialog.dart' show modelLightNames;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -2976,7 +2977,7 @@ class EffectStackEditor {
       _staged[(effect, entry.key)] = entry.value;
     }
     try {
-      layer.setEffects(effects: stackWith(layer));
+      layer.setEffects(effects: stackWith(layer), lightNames: modelLightNames());
     } catch (_) {
       // Someone else edited the stack mid-drag. Drop ours and re-read.
     }

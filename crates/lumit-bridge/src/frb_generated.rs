@@ -18276,12 +18276,14 @@ fn wire__crate__api__layer__layer_reference_set_effects_impl(
             let api_that = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_effects = <Vec<BridgeEffectInstance>>::sse_decode(&mut deserializer);
             let api_clip = <Option<uuid::Uuid>>::sse_decode(&mut deserializer);
+            let api_light_names = <Option<Vec<String>>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::layer::LayerReference::set_effects(
                     &api_that,
                     api_effects,
                     api_clip,
+                    api_light_names,
                 )?;
                 Ok(output_ok)
             })())
@@ -32912,6 +32914,9 @@ impl SseDecode for crate::api::assets::BridgeTextAnimator {
         let mut var_positionX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_positionY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_rotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_positionZ = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_rotationX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_rotationY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_scaleX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_scaleY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -32924,6 +32929,9 @@ impl SseDecode for crate::api::assets::BridgeTextAnimator {
             position_x: var_positionX,
             position_y: var_positionY,
             rotation: var_rotation,
+            position_z: var_positionZ,
+            rotation_x: var_rotationX,
+            rotation_y: var_rotationY,
             scale_x: var_scaleX,
             scale_y: var_scaleY,
             opacity: var_opacity,
@@ -45537,6 +45545,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeTextAnimator {
             self.position_x.into_into_dart().into_dart(),
             self.position_y.into_into_dart().into_dart(),
             self.rotation.into_into_dart().into_dart(),
+            self.position_z.into_into_dart().into_dart(),
+            self.rotation_x.into_into_dart().into_dart(),
+            self.rotation_y.into_into_dart().into_dart(),
             self.scale_x.into_into_dart().into_dart(),
             self.scale_y.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
@@ -51419,6 +51430,9 @@ impl SseEncode for crate::api::assets::BridgeTextAnimator {
         <crate::api::effect::BridgeScalar>::sse_encode(self.position_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.position_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.rotation, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.position_z, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.rotation_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.rotation_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.scale_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.scale_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);

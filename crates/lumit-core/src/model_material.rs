@@ -91,7 +91,8 @@ impl EffectDef for ModelMaterialDef {
 
 /// Kept apart from the effect catalogue, so no menu offers it as an effect.
 /// [`crate::fx::builtins::def`] finds it here.
-pub static MATERIAL_DEFS: Catalogue = Catalogue::new(&[&ModelMaterialDef]);
+pub static MATERIAL_DEFS: Catalogue =
+    Catalogue::new(&[&ModelMaterialDef, &crate::extrude::GeometryOptionsDef]);
 
 use PresetValue::{Bool, Colour, Float};
 
@@ -195,11 +196,19 @@ pub fn index_of(layer: Uuid, id: Uuid) -> Option<usize> {
 /// Layer `layer`'s effects, then the material rows it keeps when it's a Model
 /// layer: what an expression can name.
 pub fn and_effects(layer: &Layer) -> impl Iterator<Item = &EffectInstance> {
-    let kept = match &layer.kind {
+    layer
+        .effects
+        .iter()
+        .chain(rows_kept(layer).iter().flatten())
+}
+
+/// The rows `layer` keeps: a Model layer's materials, or a Text or Shape
+/// layer's Geometry options and faces.
+fn rows_kept(layer: &Layer) -> &[Option<EffectInstance>] {
+    match &layer.kind {
         LayerKind::Model { settings, .. } => settings.materials.as_slice(),
-        _ => &[],
-    };
-    layer.effects.iter().chain(kept.iter().flatten())
+        _ => crate::extrude::kept(layer),
+    }
 }
 
 /// The instance `id` names on layer `layer`: one of its effects, or one of
@@ -207,10 +216,7 @@ pub fn and_effects(layer: &Layer) -> impl Iterator<Item = &EffectInstance> {
 /// first kept on.
 #[must_use]
 pub fn instance(layer: &Layer, id: Uuid) -> Option<&EffectInstance> {
-    let kept = match &layer.kind {
-        LayerKind::Model { settings, .. } => settings.materials.as_slice(),
-        _ => &[],
-    };
+    let kept = rows_kept(layer);
     let by_index = index_of(layer.id, id).and_then(|i| kept.get(i)?.as_ref());
     and_effects(layer).find(|e| e.id == id).or(by_index)
 }
@@ -219,8 +225,5 @@ pub fn instance(layer: &Layer, id: Uuid) -> Option<&EffectInstance> {
 /// other layer.
 #[must_use]
 pub fn stored(layer: &Layer) -> Vec<EffectInstance> {
-    match &layer.kind {
-        LayerKind::Model { settings, .. } => settings.materials.iter().flatten().cloned().collect(),
-        _ => Vec::new(),
-    }
+    rows_kept(layer).iter().flatten().cloned().collect()
 }
