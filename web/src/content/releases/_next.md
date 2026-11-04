@@ -12,3 +12,4 @@ section below, and when the release note is written the lines move into it.
 - Measure in Comp space sees a 3D layer through the camera, where it used to measure it lying flat.
 - Corner pin and Bezier warp in a node graph now draw past the picture they're handed, so a graph that pins its picture and then scales it may show what used to be cut off.
 - An OpenEXR packed with PIZ is read by Lumit's own reader, as FFmpeg drew some with broken blocks, so those pictures can look different.
+- A layer with Accepts shadows on Only, or with Accepts lights off, now takes shadows with its back to the light, where it showed none. A floor at X rotation +90 can gain a shadow.

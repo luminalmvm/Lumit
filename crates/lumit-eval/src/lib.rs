@@ -92,7 +92,8 @@ pub mod schedule;
 /// * 25: Model layers cast and take shadows.
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
 /// * 27: a 3D model's glass and clearcoat from its file are drawn.
-pub const ALGO_VERSION: u32 = 27;
+/// * 32: a layer that only shows shadows takes them with its back to a light.
+pub const ALGO_VERSION: u32 = 32;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4807,12 +4808,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 27, which renamed every frame.
+        // Pinned under ALGO_VERSION 32.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                118_634_670_240_222_371_657_714_716_082_324_829_986,
-                221_618_990_867_148_256_207_561_963_013_861_605_031
+                242_697_789_024_780_177_051_360_864_976_626_392_869,
+                337_561_387_740_218_213_199_485_657_473_987_713_466
             )
         );
 

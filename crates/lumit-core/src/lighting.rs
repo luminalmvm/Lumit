@@ -725,6 +725,7 @@ pub fn shade_with_shadows(
         return;
     }
     let takes = m.accepts_shadows != ShadowMode::Off && !casters.is_empty();
+    let back = s.normal.map(|n| -n);
     for y in 0..h {
         for x in 0..w {
             let Some(px) = rgba
@@ -747,7 +748,11 @@ pub fn shade_with_shadows(
                 // stopped.
                 let mut dim = [1.0f32; 3];
                 for l in lights.iter().take(MAX_LIT_LIGHTS) {
-                    if !takes || l.shadow_darkness <= 0.0 || irradiance(p, s.normal, l) <= 0.0 {
+                    // Either face takes a shadow.
+                    if !takes
+                        || l.shadow_darkness <= 0.0
+                        || (irradiance(p, s.normal, l) <= 0.0 && irradiance(p, back, l) <= 0.0)
+                    {
                         continue;
                     }
                     let t = transmitted(p, l, casters, own);
@@ -1214,10 +1219,10 @@ mod tests {
     /// A card halfway between a light and a floor shades the floor under it
     /// and nowhere else, by its darkness. A red card letting light through
     /// tints it red, the card never shades itself, a floor showing only
-    /// shadows is black under the card, red under the red one, and clear
-    /// beside it, and an unlit one is only darkened. Diffusion leaves the
-    /// shadow of a card just off the floor hard and softens one further up,
-    /// as in After Effects.
+    /// shadows is black under the card whichever way it faces, red under the
+    /// red one, and clear beside it, and an unlit one is only darkened.
+    /// Diffusion leaves the shadow of a card just off the floor hard and
+    /// softens one further up.
     #[test]
     fn a_card_casts_its_shadow_on_the_floor_beneath_it() {
         use crate::model::{LightFalloff, ShadowMode};
@@ -1306,6 +1311,18 @@ mod tests {
         let red = card([1.0, 0.0, 0.0], 1.0);
         let px = lit(&only, &light, &[red], None);
         assert_eq!(&px[..4], &[1.0, 0.0, 0.0, 1.0], "red gets through");
+        let back = ShadingSurface {
+            normal: [0.0, 0.0, 1.0],
+            ..floor
+        };
+        let mut px = [0.5, 0.5, 0.5, 1.0].repeat(2);
+        let casters = std::slice::from_ref(&white);
+        shade_with_shadows(&mut px, 2, 1, &back, &only, &[light], casters, None);
+        assert_eq!(
+            px,
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            "its back to the light"
+        );
 
         // Accepts lights off: left as it is, but still in the shadow.
         let unlit = ShadingMaterial { unlit: true, ..m };
