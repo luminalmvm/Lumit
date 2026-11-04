@@ -12,6 +12,8 @@
 // track's rule, for the same reason: the engine keeps the reading as a
 // value and a stream would be a second mechanism for the same fact.
 
+import 'dart:ui' show FontFeature;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -191,7 +193,11 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
                 ? bakeStatusSentence(status)
                 : planarStatusSentence(status),
             key: const ValueKey('fx-planar-track-status'),
-            style: t.small.copyWith(color: t.textMuted),
+            // A count going up stays put as its digits change.
+            style: t.small.copyWith(
+              color: t.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
             overflow: TextOverflow.ellipsis,
           ),
           // A re-anchored track carries a little accumulated error at its far
