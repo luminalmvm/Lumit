@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'camera_track_display_frb.dart';
 import 'status_poller.dart';
+import 'effect_param_row_frb.dart';
 
 /// The sentence for one reading of a planar track.
 ///
@@ -150,10 +151,27 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
       was?.stage != BridgeTrackStage.done &&
       next.stage == BridgeTrackStage.done;
 
+  /// Tell a Cancel beside Bake whether there is anything to stop.
+  void _sayIfRunning(bool running) {
+    final effect = widget.effectId;
+    final was = bakesRunning.value;
+    if (was.contains(effect) == running) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      bakesRunning.value = running ? {...was, effect} : ({...was}..remove(effect));
+    });
+  }
+
+  @override
+  void dispose() {
+    if (widget.bake) _sayIfRunning(false);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final status = this.status;
+    if (widget.bake) _sayIfRunning(isMoving(status));
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(

@@ -1752,6 +1752,21 @@ class EffectParamRowFrb extends StatelessWidget {
   List<Widget> _rider(
       LumitTheme t, UuidValue id, BridgeParamInfo p, BridgeEffectValue? v,
       {double? wordCeiling, double? choiceCeiling}) {
+    if (p.kind is BridgeParamKind_Action) {
+      return [
+        ValueListenableBuilder<Set<UuidValue>>(
+          valueListenable: bakesRunning,
+          builder: (context, running, _) => HouseButton(
+            key: ValueKey<String>('fx-action-$id-${p.id}'),
+            small: true,
+            onPressed: onAction == null || !running.contains(id)
+                ? null
+                : () => onAction!(id, p.id),
+            child: Text(engineLabel(p.label), style: t.body),
+          ),
+        ),
+      ];
+    }
     // The key a row of its own would have drawn under: the control moved
     // house, it did not become a different control.
     switch (p.kind) {
@@ -2462,6 +2477,8 @@ List<BridgeParamInfo> paramRidersFor(
   final names = switch (host.kind) {
     BridgeParamKind_Layer() => {'${host.id}_invert', '${host.id}_channel'},
     BridgeParamKind_Float() when host.id == 'mix' => {'blend'},
+    // A bake's two buttons sit on the one row, by the line that says how it goes.
+    BridgeParamKind_Action() when host.id == 'bake' => {'cancel'},
     _ => const <String>{},
   };
   final out = <BridgeParamInfo>[];
@@ -2475,6 +2492,10 @@ List<BridgeParamInfo> paramRidersFor(
       (b.kind is BridgeParamKind_Bool ? 1 : 0));
   return out;
 }
+
+/// The effects with a bake running, which their status line keeps up to date, so
+/// a Cancel beside Bake takes presses only while there is something to stop.
+final ValueNotifier<Set<UuidValue>> bakesRunning = ValueNotifier(const {});
 
 final Map<String, List<BridgeEnabledWhen>> _enabledWhenSchema = {};
 

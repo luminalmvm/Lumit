@@ -207,8 +207,8 @@ The **Simulation** group, particles worked out step by step on the graphics card
   and a Layer emitter gives birth only on a model's surface. A flock steers by the cells round
   a particle, up to 64 cells a side, rather than by each neighbour.
 - **Sub-steps**: how many times a frame the particles move.
-- **Bake**: writes the simulation to the project's cache. A saved project keeps it in its
-  cache folder and Collect takes it along. An edit to anything it reads leaves it unread.
+- **Bake**: writes the frames the layer shows to the folder the project caches in. A change
+  to anything the walk reads leaves the bake unread. A change to how particles look does not.
 - **Cancel**: stops a running bake. The frames it reached stay baked.
 A simulation may differ slightly between graphics cards. On one machine a frame is the same however it is reached.
 
@@ -345,7 +345,9 @@ The **Sparks** group, small particles thrown out where one dies:
   it is killed on contact. Sparks throw out none.
 - **Sparks from**: **Death** throws them as a particle dies. **Bounce** throws them each time
   it hits something. **Flight** throws that many each second. Simulate only.
-- **Spark speed**: how fast they fly out, every way at once.
+- **Spark speed**: how fast they fly out, every way at once. From a hit, they fly off the side
+  the particle came from.
+- **Spark inherit**: how much of its parent's speed a spark starts with. Simulate only.
 - **Spark life**: how long a spark lasts.
 - **Spark size**: how big a spark is, against the particle it came from.
 

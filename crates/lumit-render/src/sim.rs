@@ -429,6 +429,9 @@ fn frame_on(
     Some(then)
 }
 
+/// How long a walk goes on before the Viewer's bar says so.
+const SAY_WALKING_AFTER_MS: u128 = 250;
+
 /// Particle steps between handing work to the card and waiting for it, so a
 /// stop lands soon and no one submission gets near the card's limit on a slow
 /// one (docs/13 section 5).
@@ -514,7 +517,13 @@ fn walked(
     }
     let mut work = 0u64;
     let mut now = src.inputs(live.ledger.frame as f64 * dt)?;
+    let (began, from_frame) = (web_time::Instant::now(), live.ledger.frame);
     while live.ledger.frame < target {
+        // A short walk says nothing; a long one shouldn't look like a hang.
+        if began.elapsed().as_millis() >= SAY_WALKING_AFTER_MS {
+            let done = (live.ledger.frame - from_frame) as f32;
+            crate::profile::report_walk(done / (target - from_frame).max(1) as f32);
+        }
         // A frame nobody wants any more stops here, and the walk is left where
         // it got to for the next.
         if crate::cancel::requested() {
@@ -652,6 +661,45 @@ pub(crate) fn view<'a>(work: &'a SimWork, p: Params<'_>) -> SimView<'a> {
         px: P::px_scale_of(p),
         spark_size: physics(&P::read(p)).spark_size,
     }
+}
+
+/// Where `effect`'s walk is after `frames` frames, on a card of its own: each
+/// particle's place and age, speed and life, and id, for a test to hold against
+/// the CPU reference.
+#[cfg(feature = "test-fixtures")]
+pub fn state_after(
+    doc: &Arc<Document>,
+    comp: uuid::Uuid,
+    layer: uuid::Uuid,
+    effect: uuid::Uuid,
+    frames: i64,
+) -> Option<Vec<([f32; 8], u64)>> {
+    let src = Source::find(doc, comp, layer, effect, lumit_core::fx::drivers::NO_CLONE)?;
+    let ctx = GpuContext::headless().ok()?;
+    let fx = FxEngine::new(&ctx);
+    let mut now = src.inputs(0.0)?;
+    let mut live = bake::fresh(&fx, &ctx, [0; 32], now.rows.points().cap);
+    start_from(&fx, &ctx, &src, &[0; 32], &mut live, 0, 0)?;
+    for _ in 0..frames {
+        now = frame_on(&fx, &ctx, &src, &mut live, &now)?;
+    }
+    let bytes = fx.sim_read(&ctx, &live.work)?;
+    let part = lumit_gpu::fx::particulate_sim::PART_BYTES as usize;
+    Some(
+        bytes
+            .get(16..)?
+            .chunks_exact(part)
+            .map(|p| {
+                let word = |i: usize| {
+                    u32::from_le_bytes([p[i * 4], p[i * 4 + 1], p[i * 4 + 2], p[i * 4 + 3]])
+                };
+                (
+                    std::array::from_fn(|i| f32::from_bits(word(i))),
+                    u64::from(word(8)) | (u64::from(word(9)) << 32),
+                )
+            })
+            .collect(),
+    )
 }
 
 /// A simulated Particulate over `input`.

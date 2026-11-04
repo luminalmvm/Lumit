@@ -8512,6 +8512,10 @@
   "@previewRendering": {
     "description": "What the Viewer is doing, when no more precise stage is known. This is the internal picture-making sense, not writing a file — Lumit says 'export' for that."
   },
+  "previewSimulating": "Simulating",
+  "@previewSimulating": {
+    "description": "Viewer: the progress bar's word while a particle simulation is being worked out up to the frame asked for."
+  },
   "previewShowing": "Showing",
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
