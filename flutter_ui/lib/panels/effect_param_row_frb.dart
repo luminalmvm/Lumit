@@ -190,6 +190,9 @@ class EffectParamRowFrb extends StatelessWidget {
   /// what is in charge.
   final bool enabled;
 
+  /// What a greyed row says for itself when hovered, if it can.
+  final String? offBecause;
+
   /// Clicking the parameter's *name* selects it for the graph editor
   /// (docs/07 §4.3) — the name, not the whole row.
   final VoidCallback? onLabelTap;
@@ -281,6 +284,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.twoColumn = false,
     this.siblings = const {},
     this.enabled = true,
+    this.offBecause,
     this.riders = const [],
     this.onAction,
     this.driven,
@@ -470,7 +474,12 @@ class EffectParamRowFrb extends StatelessWidget {
   /// value, so the field draws what the row holds and answers nothing.
   bool get _off => !enabled || driven != null;
 
-  Widget _greyed(Widget child) => _off ? IgnorePointer(child: child) : child;
+  Widget _greyed(Widget child) {
+    if (!_off) return child;
+    final why = enabled ? null : offBecause;
+    final deaf = IgnorePointer(child: child);
+    return why == null ? deaf : LumitTooltip(message: why, child: deaf);
+  }
 
   /// What a driven row shows **in the stopwatch's column**: a hollow
   /// ring in the wire's own colour with the word *driven* beside it, and the
@@ -1770,6 +1779,26 @@ class EffectParamRowFrb extends StatelessWidget {
   List<Widget> _rider(
       LumitTheme t, UuidValue id, BridgeParamInfo p, BridgeEffectValue? v,
       {double? wordCeiling, double? choiceCeiling}) {
+    if (p.kind is BridgeParamKind_Action) {
+      return [
+        ValueListenableBuilder<Set<UuidValue>>(
+          valueListenable: bakesRunning,
+          builder: (context, running, _) => HouseButton(
+            key: ValueKey<String>('fx-action-$id-${p.id}'),
+            small: true,
+            onPressed: onAction == null || !running.contains(id)
+                ? null
+                : () => onAction!(id, p.id),
+            child: Text(
+              engineLabel(p.label),
+              style: running.contains(id)
+                  ? t.body
+                  : t.body.copyWith(color: t.textDisabled),
+            ),
+          ),
+        ),
+      ];
+    }
     // The key a row of its own would have drawn under: the control moved
     // house, it did not become a different control.
     switch (p.kind) {
@@ -2480,6 +2509,8 @@ List<BridgeParamInfo> paramRidersFor(
   final names = switch (host.kind) {
     BridgeParamKind_Layer() => {'${host.id}_invert', '${host.id}_channel'},
     BridgeParamKind_Float() when host.id == 'mix' => {'blend'},
+    // A bake's two buttons sit on the one row, by the line that says how it goes.
+    BridgeParamKind_Action() when host.id == 'bake' => {'cancel'},
     _ => const <String>{},
   };
   final out = <BridgeParamInfo>[];
@@ -2493,6 +2524,10 @@ List<BridgeParamInfo> paramRidersFor(
       (b.kind is BridgeParamKind_Bool ? 1 : 0));
   return out;
 }
+
+/// The effects with a bake running, which their status line keeps up to date, so
+/// a Cancel beside Bake takes presses only while there is something to stop.
+final ValueNotifier<Set<UuidValue>> bakesRunning = ValueNotifier(const {});
 
 final Map<String, List<BridgeEnabledWhen>> _enabledWhenSchema = {};
 
@@ -2574,7 +2609,42 @@ Set<String> disabledParams(
   for (final rule in cachedListEnabledWhen(effect)) {
     final on = values[rule.on_];
     if (on == null) continue;
-    final ok = switch ((rule.cond, on)) {
+    if (!_ruleHolds(rule.cond, on, values)) out.add(rule.param);
+  }
+  return out;
+}
+
+/// Whether [param] of [effect] only comes alive with its Simulate row on, and
+/// that row is off, which is what a greyed row can say for itself.
+bool waitsForSimulate(
+  String effect,
+  String param,
+  Map<String, BridgeEffectValue> values,
+) {
+  final on = values['simulate'];
+  if (on is! BridgeEffectValue_Bool || on.field0) return false;
+  for (final rule in cachedListEnabledWhen(effect)) {
+    if (rule.param != param) continue;
+    final cond = rule.cond;
+    if (rule.on_ == 'simulate' && cond is BridgeEnabledCond_BoolIs) {
+      if (cond.field0) return true;
+    }
+    if (cond is BridgeEnabledCond_Or && cond.field0 == 'simulate') return true;
+  }
+  return false;
+}
+
+bool _isOn(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Bool && value.field0;
+
+bool _ruleHolds(
+  BridgeEnabledCond cond,
+  BridgeEffectValue on,
+  Map<String, BridgeEffectValue> values,
+) =>
+    switch ((cond, on)) {
+      (BridgeEnabledCond_Or(:final field0, :final field1), _) =>
+        _isOn(values[field0]) || _ruleHolds(field1, on, values),
       (
         BridgeEnabledCond_BoolIs(:final field0),
         BridgeEffectValue_Bool(field0: final v)
@@ -2607,10 +2677,6 @@ Set<String> disabledParams(
       // than locking one the owner can never reach.
       _ => true,
     };
-    if (!ok) out.add(rule.param);
-  }
-  return out;
-}
 
 /// An effect's display label from the schema, falling back to its match name
 /// for an effect this build does not know.

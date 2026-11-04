@@ -2815,6 +2815,9 @@ class _EffectSection extends StatelessWidget {
         onLive: onLive,
         twoColumn: true,
         enabled: !disabled.contains(param.id),
+        offBecause: waitsForSimulate(info.name, param.id, shown)
+            ? l10n.fxNeedsSimulate
+            : null,
         // The effect's other values, for a control whose behaviour
         // depends on a sibling (the depth-of-field dropper reads the
         // effect's own `depth` layer).
@@ -3499,6 +3502,10 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
       _ => null,
     };
 
+bool _simulating(Map<String, BridgeEffectValue> values) {
+  final on = values['simulate'];
+  return on is BridgeEffectValue_Bool && on.field0;
+}
 bool _namesALayer(BridgeEffectValue? value) =>
     value is BridgeEffectValue_Layer && value.field0 != null;
 
@@ -3565,8 +3572,17 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // Bake points' bake is filed and reported the same way, in its own words.
+      // Bake points' bake is filed and reported the same way, in its own words,
+      // and so is a simulation's.
       'bake_points' => PlanarTrackDisplayFrb(
+          key: ValueKey<String>('fx-planar-track-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+          bake: true,
+        ),
+      'particulate' when _simulating(values) => PlanarTrackDisplayFrb(
           key: ValueKey<String>('fx-planar-track-display-$effectId'),
           layer: layer,
           effectId: effectId,

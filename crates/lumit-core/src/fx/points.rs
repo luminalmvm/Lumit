@@ -1678,7 +1678,7 @@ impl ScheduleCache {
 
 /// Which per-particle draw is being made. A particle is a pure function of its
 /// birth index, and these separate the dice it rolls (particulate.md §3.1).
-mod attr {
+pub mod attr {
     pub const EMIT_U: u32 = 0;
     pub const EMIT_V: u32 = 1;
     pub const DIRECTION: u32 = 2;
@@ -1760,7 +1760,7 @@ pub fn draw(seed: u32, birth: u64, attribute: u32) -> f32 {
 }
 
 /// A per-particle spread about `base`: `±amount` of it, never below zero.
-fn jitter(base: f32, amount: f32, u: f32) -> f32 {
+pub fn jitter(base: f32, amount: f32, u: f32) -> f32 {
     (base * (1.0 + amount * (2.0 * u - 1.0))).max(0.0)
 }
 
@@ -1918,7 +1918,7 @@ fn drive_speed(speed: f32, range: [f32; 2]) -> f32 {
 }
 
 /// Which way and how fast particle `b` leaves the emitter.
-fn launch(p: &PointsParams, b: u64) -> [f32; 3] {
+pub fn launch(p: &PointsParams, b: u64) -> [f32; 3] {
     let e = &p.emitter;
     let dir = e.direction_deg.to_radians()
         + (draw(p.seed, b, attr::DIRECTION) - 0.5) * e.spread_deg.to_radians();

@@ -1,3 +1,4 @@
+use super::colour_name::ColourNameRole;
 use super::params::Unit;
 
 /// Cost class (docs/08 §1.3) — consumed by degradation ordering and budgets.
@@ -509,19 +510,6 @@ impl ParamKind {
     }
 }
 
-/// Which of a config's lists a [`ParamKind::ColourName`] row offers. A view
-/// row lists the views of the display its sibling `display` row names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColourNameRole {
-    Space,
-    Display,
-    View,
-    Look,
-    /// The Information row: read-only, showing what the loaded config calls
-    /// itself. Its value stays empty and nothing reads it.
-    Config,
-}
-
 /// How a transform- or displacement-domain effect treats the border pixels
 /// its warp reveals (P3): the one reusable Edges control, shared by
 /// the blur family (docs/08 §3.8) and Shake (§3.4). The `u32` codes are the
@@ -666,6 +654,8 @@ pub enum EnabledCond {
     /// Editable while the named number is a still nought. A keyed or an
     /// expression track greys the dependent row, as any other number does.
     Nought,
+    /// Editable while this other Bool is on, or while the condition holds.
+    Or(&'static str, &'static EnabledCond),
 }
 
 /// The Add-effect menu's grouping: every schema declares one.

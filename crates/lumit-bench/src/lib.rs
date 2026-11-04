@@ -32,6 +32,7 @@
 //!   with its shadows.
 //! - [`scene_points`] times a million particles in the 3D scene, B31, and a
 //!   1080p shot's Depth points, B38.
+//! - [`sim_step`] times one step of a million simulated particles: B37.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.
@@ -56,3 +57,4 @@ pub mod models;
 pub mod ofx;
 pub mod scenarios;
 pub mod scene_points;
+pub mod sim_step;

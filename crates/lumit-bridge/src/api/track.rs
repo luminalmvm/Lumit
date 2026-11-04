@@ -466,8 +466,8 @@ pub fn fire_effect_action(
             _ => Err(BridgeError::InvalidParam),
         };
     }
-    // Bake points' two. The bake reads the document as it stands now.
-    if fx.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+    // Bake points' two, and a simulation's. The bake reads the document as it stands now.
+    if matches!(fx.effect.match_name.as_str(), "bake_points" | "particulate") {
         return match param.as_str() {
             CANCEL => {
                 lumit_render::track::cancel(effect);
@@ -480,8 +480,13 @@ pub fn fire_effect_action(
                     .map_err(|_| BridgeError::ReadFailed)?
                     .store
                     .snapshot();
-                let asked =
-                    lumit_render::track::request_bake(doc, layer.comp_id, layer.layer_id, effect);
+                let asked = crate::project_cache::press(
+                    &project,
+                    doc,
+                    layer.comp_id,
+                    layer.layer_id,
+                    effect,
+                );
                 match asked {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
@@ -1086,12 +1091,12 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     };
     // Track points files its progress under its own id too, so the one status
     // answers for both.
-    use lumit_core::fx::effects::{bake_points, track_points};
+    use lumit_core::fx::effects::track_points;
     let Some(inst) = item.effects.iter().find(|e| {
         e.id == effect
             && (e.effect.match_name == lumit_core::track::PLANAR_TRACK
                 || e.effect.match_name == track_points::MATCH_NAME
-                || e.effect.match_name == bake_points::MATCH_NAME)
+                || matches!(e.effect.match_name.as_str(), "bake_points" | "particulate"))
     }) else {
         return status;
     };
@@ -1131,20 +1136,12 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     }
     // A bake this instance may read. Fewer frames than the span is one a
     // budget stopped early.
-    let bake = || {
-        if inst.effect.match_name != bake_points::MATCH_NAME {
-            return None;
-        }
-        let project = layer.project().ok()?;
-        let doc = project.read().ok()?.store.snapshot();
-        bake_points::usable(&doc, doc.comp(layer.comp_id)?, &item, inst)
-    };
-    if let Some(baked) = bake() {
+    if let Some((frames, span)) = crate::project_cache::reading(&layer, &item, inst, effect) {
         if status.stage == BridgeTrackStage::Idle {
             status.stage = BridgeTrackStage::Done;
         }
-        status.frames = u32::try_from(baked.frames.len()).unwrap_or(u32::MAX);
-        status.clip_frames = baked.span;
+        status.frames = frames;
+        status.clip_frames = span;
     }
     // Done with nothing to read: the rows have changed since, and the effect
     // is drawing without that answer. A Planar track always has its own.
