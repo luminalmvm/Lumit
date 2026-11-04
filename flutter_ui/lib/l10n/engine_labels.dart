@@ -1892,6 +1892,8 @@ Map<String, String> get _built => {
       "New Solid layer": l10n.keyNewSolidLayer,
       "New Text layer": l10n.keyNewTextLayer,
       "New Camera layer": l10n.keyNewCameraLayer,
+      "New Card layer": l10n.keyNewCardLayer,
+      "Project from camera": l10n.menuProjectFromCamera,
       "New Light layer": l10n.keyNewLightLayer,
       "New Adjustment layer": l10n.keyNewAdjustmentLayer,
       "New Null layer": l10n.keyNewNullLayer,

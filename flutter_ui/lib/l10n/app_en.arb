@@ -6562,6 +6562,10 @@
   "@keyNewAdjustmentLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewCardLayer": "New Card layer",
+  "@keyNewCardLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A card is a flat Model layer with no 3D model behind it."
+  },
   "keyNewCameraLayer": "New Camera layer",
   "@keyNewCameraLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
