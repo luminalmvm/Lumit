@@ -2813,6 +2813,7 @@ class _EffectSection extends StatelessWidget {
         onSeek: onSeek,
         onWrite: onWrite,
         onLive: onLive,
+        onWritePair: onWritePair,
         twoColumn: true,
         enabled: !disabled.contains(param.id),
         offBecause: waitsForSimulate(info.name, param.id, shown)

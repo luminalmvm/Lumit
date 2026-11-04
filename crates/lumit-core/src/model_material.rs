@@ -392,3 +392,49 @@ pub fn camera_at(
     let store = crate::track::solve_store().unwrap_or(&crate::track::Unsolved);
     crate::track::camera_pose_of(doc, comp, layer, t, store).map(|linked| linked.pose)
 }
+
+/// What Project from camera uses for Model layer `model` of `comp` at comp time
+/// `t`, as (camera, picture). The camera is a selected one, else the comp's
+/// own. The picture is the shot that camera was solved from, else a selected
+/// picture, else the nearest below the model.
+#[must_use]
+pub fn projection_source(
+    comp: &Composition,
+    model: Uuid,
+    selected: &[Uuid],
+    t: f64,
+) -> Option<(Uuid, Uuid)> {
+    let picked = || {
+        let find = |id: &Uuid| comp.layers.iter().find(|l| l.id == *id);
+        selected.iter().filter_map(find)
+    };
+    let is_picture = |l: &&Layer| {
+        matches!(
+            l.kind,
+            LayerKind::Footage { .. } | LayerKind::Precomp { .. }
+        )
+    };
+    let camera = picked()
+        .find(|l| matches!(l.kind, LayerKind::Camera { .. }))
+        .or_else(|| comp.active_camera(t))?;
+    let solved = match camera.kind {
+        LayerKind::Camera { solve_link, .. } => solve_link,
+        _ => None,
+    };
+    let below = comp.layers.iter().skip_while(|l| l.id != model).skip(1);
+    let picture = solved
+        .or_else(|| picked().find(is_picture).map(|l| l.id))
+        .or_else(|| below.clone().find(is_picture).map(|l| l.id))?;
+    Some((camera.id, picture))
+}
+
+/// Set material rows `rows` to project `picture` from `camera`.
+pub fn set_projection(rows: &mut EffectInstance, picture: Uuid, camera: Uuid) {
+    for p in &mut rows.params {
+        match p.id.as_str() {
+            "base_colour_layer" => p.value = EffectValue::Layer(Some(picture)),
+            "camera" => p.value = EffectValue::Layer(Some(camera)),
+            _ => {}
+        }
+    }
+}

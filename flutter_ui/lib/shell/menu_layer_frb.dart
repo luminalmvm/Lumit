@@ -682,6 +682,28 @@ VoidCallback? _lightWindow(BuildContext context, LumitState app,
   };
 }
 
+/// Layer ▸ Project from camera: a picture on every material of the Model layers
+/// selected, greyed until there is a camera and a picture to use.
+MenuEntry projectFromCameraRow(LumitState app, LumitUiState ui) {
+  final selected = [
+    for (final entry in selectedEntries(ui)) entry.layer.internallayerId,
+  ];
+  final frame = ui.playheadFrame.value;
+  return MenuEntry(
+    l10n.menuProjectFromCamera,
+    onSelection(
+      app,
+      ui,
+      (entry) =>
+          entry.layer.projectFromCamera(selected: selected, frame: frame),
+      when: (entry) =>
+          entry.info.kind == BridgeLayerKind.model &&
+          entry.layer.canProjectFromCamera(selected: selected, frame: frame),
+    ),
+    action: 'layer.project.from.camera',
+  );
+}
+
 /// Layer ▸ Model settings: the Model layer's window again, greyed until one is
 /// picked.
 MenuEntry modelSettingsRow(BuildContext context, LumitUiState ui) => MenuEntry(

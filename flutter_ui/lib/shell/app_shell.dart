@@ -1332,6 +1332,9 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
       case 'layer.centre' || 'layer.centre.anchor':
         handled = MenuEntry.pressAction(transformRows(state, ui), action);
+      case 'layer.project.from.camera':
+        handled =
+            MenuEntry.pressAction([projectFromCameraRow(state, ui)], action);
       case 'mask.feather' || 'mask.invert':
         handled =
             MenuEntry.pressAction(maskRows(context, state, ui), action);

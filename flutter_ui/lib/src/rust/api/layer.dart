@@ -3077,6 +3077,12 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceCameraOwnPoseAt(that: this, frame: frame);
 
+  /// Whether Project from camera has a camera and a picture to use.
+  bool canProjectFromCamera(
+          {required List<UuidValue> selected, required int frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCanProjectFromCamera(
+          that: this, selected: selected, frame: frame);
+
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
   /// The stopwatch turning off, and it matches what the stopwatch does
@@ -4085,6 +4091,13 @@ class LayerReference {
   /// a row that runs past its media.
   void pasteSequenceShape({required String text}) => BridgeLib.instance.api
       .crateApiLayerLayerReferencePasteSequenceShape(that: this, text: text);
+
+  /// Project a picture on every material of this Model layer, as one undo
+  /// step.
+  void projectFromCamera(
+          {required List<UuidValue> selected, required int frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceProjectFromCamera(
+          that: this, selected: selected, frame: frame);
 
   /// The wireframe this layer is showing, or `None` when no frame carrying a
   /// mesh on it has been built — an unpinned layer with no tool armed on it,

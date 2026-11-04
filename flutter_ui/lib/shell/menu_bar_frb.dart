@@ -1476,6 +1476,7 @@ List<MenuSection> lumitMenus(
             cameraSettingsRow(context, app, ui),
             lightSettingsRow(context, app, ui),
             modelSettingsRow(context, ui),
+            projectFromCameraRow(app, ui),
             editInBlenderRow(ui),
             modelLayersRow(app, ui),
             MenuEntry.todo(l10n.menuAutoOutline),

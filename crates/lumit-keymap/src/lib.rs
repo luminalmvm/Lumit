@@ -229,6 +229,7 @@ impl ActionId {
             "layer.new.light.point" => "New Light layer",
             "layer.new.adjustment" => "New Adjustment layer",
             "layer.new.null" => "New Null layer",
+            "layer.project.from.camera" => "Project from camera",
             "layer.new.sequence" => "New Sequence layer",
             "layer.new.audio" => "New Audio layer",
             "layer.settings" => "Layer settings",

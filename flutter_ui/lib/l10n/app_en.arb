@@ -24039,6 +24039,10 @@
   "@fxBaseColourLayer": {
     "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture stands in for the base colour."
   },
+  "menuProjectFromCamera": "Project from camera",
+  "@menuProjectFromCamera": {
+    "description": "Layer menu and command palette: sets every material of the selected Model layers to read a picture from a camera, rather than on the model's own uvs."
+  },
   "fxProjectedFrom": "Projected from",
   "@fxProjectedFrom": {
     "description": "Effect controls and the Timeline: a row on a Model layer's material. The Camera layer its base colour layer is projected from, rather than read on the model's own uvs. None leaves it on the uvs."

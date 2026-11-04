@@ -159,6 +159,10 @@ class EffectParamRowFrb extends StatelessWidget {
   final void Function(UuidValue effect, String param, BridgeEffectValue value)
       onLive;
 
+  /// Several rows of the effect as one write, where a row brings another along.
+  final void Function(UuidValue effect, Map<String, BridgeEffectValue> values)?
+      onWritePair;
+
   /// When set (the Timeline's fold-out), the control sits inside this fixed
   /// span so it lines up under the render-switch column group (docs/07 §4.3).
   final ValueColumn? valueColumn;
@@ -273,6 +277,7 @@ class EffectParamRowFrb extends StatelessWidget {
     required this.onSeek,
     required this.onWrite,
     required this.onLive,
+    this.onWritePair,
     required this.ownerLayerId,
     required this.ownerLayers,
     this.valueColumn,
@@ -608,6 +613,24 @@ class EffectParamRowFrb extends StatelessWidget {
   /// for the one call that consumes them.
   void _set(BridgeEffectValue value) => onWrite(effectId, param.id, value);
 
+  /// A dropdown's pick. Picking Hold holds where the playhead is, as one write,
+  /// rather than jumping to the comp's first frame.
+  void _setChoice(int picked, int was, int frame) {
+    final value = BridgeEffectValue.choice(picked);
+    if (param.id == 'projection_time' &&
+        picked == 1 &&
+        was != 1 &&
+        onWritePair != null) {
+      onWritePair!(effectId, {
+        param.id: value,
+        'hold_frame':
+            BridgeEffectValue.float(BridgeScalar.static_(frame.toDouble())),
+      });
+    } else {
+      _set(value);
+    }
+  }
+
   /// The same value, previewed rather than committed — one drag tick.
   void _setLive(BridgeEffectValue value) => onLive(effectId, param.id, value);
 
@@ -816,7 +839,7 @@ class EffectParamRowFrb extends StatelessWidget {
                     },
                     hint:
                         l10n.searchFor(engineLabel(param.label).toLowerCase()),
-                    onChanged: (i) => _set(BridgeEffectValue.choice(i)),
+                    onChanged: (i) => _setChoice(i, index, frame),
                   )
                 : BareDropdown<int>(
                     key: ValueKey<String>('fx-choice-$id-${param.id}'),
@@ -826,7 +849,7 @@ class EffectParamRowFrb extends StatelessWidget {
                     // value still asks for its label.
                     label: (i) =>
                         i < options.length ? engineLabel(options[i]) : '',
-                    onChanged: (i) => _set(BridgeEffectValue.choice(i)),
+                    onChanged: (i) => _setChoice(i, index, frame),
                   ),
           );
         }
