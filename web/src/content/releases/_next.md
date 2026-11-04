@@ -13,3 +13,5 @@ section below, and when the release note is written the lines move into it.
 - Measure in Comp space sees a 3D layer through the camera, where it used to measure it lying flat.
 - Corner pin and Bezier warp in a node graph now draw past the picture they're handed, so a graph that pins its picture and then scales it may show what used to be cut off.
 - An OpenEXR packed with PIZ is read by Lumit's own reader, as FFmpeg drew some with broken blocks, so those pictures can look different.
+- A 3D model mirrored by a negative Scale has its normal map the right way round, so its bumps can look different.
+- Objects hidden in Blender no longer come through from a `.blend`, which converts again.

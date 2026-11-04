@@ -54,4 +54,6 @@
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
 /// * 27: a 3D model's glass and clearcoat from its file are drawn.
 /// * 28: a project at 8 or 32 bits draws its effects.
-pub const ALGO_VERSION: u32 = 28;
+/// * 29: a mirrored model's normal map turns the right way, what's hidden in
+///   Blender is left out, and Shaded is a little darker.
+pub const ALGO_VERSION: u32 = 29;

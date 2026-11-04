@@ -287,7 +287,9 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
         }
         t = normalise(t - n * dot(n, t));
         if (any(t != vec3<f32>(0.0))) {
-            let b = cross(n, t) * select(1.0, -1.0, w < 0.0);
+            // A mirrored layer reverses the cross product, so it's put back.
+            let flip = select(1.0, -1.0, draw.normal0.w > 0.5);
+            let b = cross(n, t) * select(1.0, -1.0, w < 0.0) * flip;
             let s = mat.params.z;
             n = normalise(t * mapped.x * s + b * mapped.y * s + n * mapped.z);
         }
