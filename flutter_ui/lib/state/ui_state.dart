@@ -1261,8 +1261,12 @@ class LumitUiState extends ChangeNotifier {
     }
     // Drawn as lines only: nothing to ask the engine for.
     if (linesOnly(view.engineId)) return;
-    // One picture in flight at a time beside the view being worked in.
-    final beside = view.id != views.activeId && _followsPlayhead(view);
+    // One picture in flight at a time beside the view being worked in, and in
+    // a view being moved: a newer picture stops the one being made, so moves
+    // that come faster than a picture is drawn would land almost none.
+    final beside = (view.id != views.activeId && _followsPlayhead(view)) ||
+        cameraDragging ||
+        cameraFlying;
     if (beside) {
       final asked = _viewportAsked[view.engineId];
       if (asked != null &&
@@ -2807,11 +2811,11 @@ class LumitUiState extends ChangeNotifier {
       // up, and the card goes on it.
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when field0.done) {
-        _viewportLanded(field0.view);
         final asked = _askedAt.remove(field0.view);
         if (asked != null) {
           _pictureTook[field0.view] = DateTime.now().difference(asked);
         }
+        _viewportLanded(field0.view);
       }
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when !field0.done) {
@@ -2972,7 +2976,6 @@ class LumitUiState extends ChangeNotifier {
   /// letting one drive the transport would make a locked view's first frame
   /// drag the playhead somewhere nobody asked for.
   void _followFrame(int frame, int engineId, int tier) {
-    _viewportLanded(engineId);
     if (engineId != activeViewId) return;
     _arrived(frame);
     _playAlong(tier);
