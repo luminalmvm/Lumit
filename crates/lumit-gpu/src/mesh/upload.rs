@@ -289,8 +289,12 @@ impl GpuModel {
                     bound.push(view.unwrap_or(&white).clone());
                 }
                 let samplers = fx.samplers.group(&ctx.device, readings);
-                let kept = Kept { uv, bound };
-                let group = kept.group(ctx, fx, m, ([None; 4], true), None);
+                let kept = Kept {
+                    uv,
+                    bound,
+                    readings,
+                };
+                let group = kept.group(ctx, fx, m, ([None; 4], true), None, None);
                 (
                     (
                         group,

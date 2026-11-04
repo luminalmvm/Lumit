@@ -57,6 +57,12 @@ struct Material {
     extra: vec4<f32>,
     // Base colour, metal-rough, normal, occlusion, emissive.
     slots: array<Slot, 5>,
+    // Where a camera its base colour is projected from sees things, and how
+    // that lands on the picture (mesh/projector.rs).
+    projector: mat4x4<f32>,
+    plate: mat3x3<f32>,
+    // x = 1 when it projects, y and z its depth's range, z nought for none.
+    projection: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -84,6 +90,8 @@ struct MeshCopy {
 @group(1) @binding(11) var opacity_tex: texture_2d<f32>;
 // The comp's picture under the model's run of 3D layers, for glass to bend.
 @group(1) @binding(12) var behind_tex: texture_2d<f32>;
+// How far each surface is from a camera the base colour is projected from.
+@group(1) @binding(14) var projector_depth: texture_depth_2d;
 
 // The shadows it takes: the 3D layers' casters and the models' maps.
 struct Casters {
@@ -143,6 +151,41 @@ fn vs_mesh(v: VertexIn, @builtin(instance_index) slot: u32) -> VsOut {
 fn slot_uv(s: Slot, in: VsOut) -> vec2<f32> {
     let uv = vec3<f32>(select(in.uv0, in.uv1, s.row0.w > 0.5), 1.0);
     return vec2<f32>(dot(s.row0.xyz, uv), dot(s.row1.xyz, uv));
+}
+
+// Where on the picture the camera saw the point `at`, and in z whether it saw
+// it: 1 in front of the camera, inside its frame and the picture, and first
+// along its ray. Any texel within half a texel either way will do, and the depth
+// is a texel's worth easier on a slope, so a pixel the face only partly covers
+// isn't lost to what covers the rest, which would ring everything with the wrong
+// colour. The depth map is sized so that half a texel reaches past such a pixel.
+fn projected(at: vec3<f32>) -> vec3<f32> {
+    let q = mat.projector * vec4<f32>(at, 1.0);
+    let frame = q.xy / max(q.w, 1e-4);
+    let placed = mat.plate * vec3<f32>(frame, 1.0);
+    let uv = placed.xy / placed.z;
+    let edges = vec4<f32>(frame, uv);
+    // How fast depth changes across the camera's frame, on this face.
+    let fx = dpdx(frame);
+    let fy = dpdy(frame);
+    let zx = dpdx(q.z);
+    let zy = dpdy(q.z);
+    let det = fx.x * fy.y - fx.y * fy.x;
+    let slope = vec2<f32>(fy.y * zx - fy.x * zy, fx.x * zy - fx.y * zx) / max(abs(det), 1e-12);
+    var seen = q.w > 1e-4 && all(edges >= vec4<f32>(0.0)) && all(edges <= vec4<f32>(1.0));
+    if (seen && mat.projection.z > 0.0) {
+        let texel = 1.0 / vec2<f32>(textureDimensions(projector_depth));
+        let easier = 0.5 + dot(abs(slope), texel);
+        let here = (q.z - easier - mat.projection.y) / mat.projection.z;
+        seen = false;
+        for (var i = 0u; i < 4u; i = i + 1u) {
+            let side = vec2<f32>(f32(i & 1u), f32(i >> 1u)) - 0.5;
+            let at_side = frame + side * texel;
+            let near = textureGatherCompare(projector_depth, map_sampler, at_side, here);
+            seen = seen || any(near > vec4<f32>(0.5));
+        }
+    }
+    return vec3<f32>(uv, f32(seen));
 }
 
 // What is left of light `l` at `pos` past the shadows in its way, as a 3D
@@ -219,7 +262,20 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     // still running.
     let base_uv = slot_uv(mat.slots[0], in);
     let normal_uv = slot_uv(mat.slots[2], in);
-    let base = mat.base_colour * in.colour * textureSample(base_tex, base_samp, base_uv);
+    // Projected, the colour is the picture wherever the camera saw this point
+    // and its Base colour everywhere else.
+    let projecting = mat.projection.x > 0.5;
+    var seen = vec3<f32>(base_uv, 0.0);
+    if (projecting) {
+        seen = projected(in.at);
+    }
+    let read = textureSample(base_tex, base_samp, seen.xy);
+    var base = mat.base_colour * in.colour * read;
+    let plate = seen.z > 0.5;
+    if (projecting) {
+        let own = mat.base_colour * in.colour;
+        base = select(own, vec4<f32>(read.rgb + own.rgb * (1.0 - read.a), own.a), plate);
+    }
     let mr = textureSample(mr_tex, mr_samp, slot_uv(mat.slots[1], in));
     var mapped = textureSample(normal_tex, normal_samp, normal_uv).xyz;
     // A layer's normals come as light, so back to how a normal map stores them.
@@ -263,7 +319,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     let surface = mix(alpha, 1.0, glass);
     if (look == 0u && (mat.mode.z > 0.5 || (count == 0u && !surround))) {
         // Showing only its shadows, with none to show.
-        if (accepts == 2u) {
+        if (accepts == 2u && !plate) {
             return vec4<f32>(0.0);
         }
         return untouched(in.at, eye, normalise(in.normal), base.rgb + emissive, base.rgb, alpha, glass);
@@ -295,8 +351,10 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
             n = normalise(t * mapped.x * s + b * mapped.y * s + n * mapped.z);
         }
     }
-    if (look == 0u && (frame.flags.x > 0.5 || accepts == 2u)) {
-        // Unlit, or showing only its shadows, so only the shadows touch it.
+    if (look == 0u && (frame.flags.x > 0.5 || accepts == 2u || plate)) {
+        // Unlit, or showing only its shadows, so only the shadows touch it. A
+        // projected picture has its light in it already, and shadows on it are
+        // how something new sits in the shot.
         var dim = vec3<f32>(1.0);
         for (var i: u32 = 0u; i < count; i = i + 1u) {
             // Faded in past the edge the light turns away at, so a normal
@@ -304,7 +362,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
             let facing = smoothstep(0.0, 0.1, irradiance(in.at, n, frame.lights[i]));
             dim = dim * mix(vec3<f32>(1.0), left_of(in.at, n, frame.lights[i]), facing);
         }
-        if (accepts == 2u) {
+        if (accepts == 2u && !plate) {
             // Just the shadow, in the colour a caster lets through.
             let lo = clamp(min(dim.x, min(dim.y, dim.z)), 0.0, 1.0);
             return vec4<f32>((dim - lo) * alpha, (1.0 - lo) * alpha);

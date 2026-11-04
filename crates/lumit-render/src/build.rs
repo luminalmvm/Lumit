@@ -4479,8 +4479,14 @@ fn comp_walk(
                 continue;
             }
             LayerKind::Model { .. } => {
-                let Some(draw) =
-                    crate::model::draw(doc, comp, layer, t_comp, &context, &layer_slot)
+                let held = |e: &lumit_core::model::EffectInstance, row: &str, at: f64| {
+                    let by = (clone_number, with.rebuild);
+                    let times = (at, frame_t);
+                    let visited = &visited_path;
+                    moments::picture_at(doc, comp, times, frame_pixels, visited, by, (e, row))
+                };
+                let pictures: crate::model::Pictures<'_> = (&layer_slot, &held);
+                let Some(draw) = crate::model::draw(doc, comp, layer, t_comp, &context, pictures)
                 else {
                     continue;
                 };

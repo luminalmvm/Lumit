@@ -16,6 +16,9 @@ struct MaterialUniform {
     mode: [f32; 4],
     extra: [f32; 4],
     slots: [[f32; 4]; 10],
+    projector: [[f32; 4]; 4],
+    plate: [[f32; 4]; 3],
+    projection: [f32; 4],
 }
 
 /// One material as its layer's rows have it this frame.
@@ -28,18 +31,28 @@ pub struct Look {
     pub pictures: [Option<wgpu::Texture>; 4],
     /// Whether the file's base colour and metal-rough pictures still show.
     pub textures: bool,
+    /// The camera its base colour is projected from, in place of the model's
+    /// uvs. Read only when it has a base colour picture.
+    pub projector: Option<super::projector::Projector>,
 }
 
 /// What every material's bind group shares: the white picture an empty slot
-/// reads.
+/// reads, and the depth one on its uvs binds.
 pub(super) struct Shared {
     white: wgpu::TextureView,
+    no_depth: wgpu::TextureView,
 }
 
 impl Shared {
-    pub(super) fn new(white: &wgpu::Texture) -> Self {
+    pub(super) fn new(device: &wgpu::Device, white: &wgpu::Texture) -> Self {
         Self {
             white: white.create_view(&Default::default()),
+            no_depth: super::shadow::no_maps(device)
+                .0
+                .create_view(&wgpu::TextureViewDescriptor {
+                    dimension: Some(wgpu::TextureViewDimension::D2),
+                    ..Default::default()
+                }),
         }
     }
 }
@@ -49,6 +62,7 @@ impl Shared {
 pub(super) struct Kept {
     pub(super) uv: [[f32; 4]; 10],
     pub(super) bound: Vec<wgpu::TextureView>,
+    pub(super) readings: [super::samplers::Reading; 5],
 }
 
 impl Kept {
@@ -63,6 +77,7 @@ impl Kept {
         m: &Material,
         (pictures, textures): ([Option<&wgpu::TextureView>; 4], bool),
         behind: Option<&wgpu::TextureView>,
+        projector: Option<&super::projector::Projector>,
     ) -> wgpu::BindGroup {
         let shared = &fx.shared;
         let mut uv = self.uv;
@@ -76,6 +91,8 @@ impl Kept {
             uv[5][3] = 2.0;
         }
         let e = m.emissive.map(|c| c * m.emissive_strength);
+        let projector = projector.filter(|_| pictures[0].is_some());
+        let (from, plate, projection) = super::projector::Projector::uniform(projector);
         let uniform = MaterialUniform {
             base_colour: m.base_colour,
             emissive: [e[0], e[1], e[2], 0.0],
@@ -97,6 +114,9 @@ impl Kept {
             ],
             extra: [m.transmission, m.ior, m.clearcoat, m.clearcoat_roughness],
             slots: uv,
+            projector: from,
+            plate,
+            projection,
         };
         let buffer = ctx
             .device
@@ -128,6 +148,18 @@ impl Kept {
                 resource: wgpu::BindingResource::TextureView(view.unwrap_or(&shared.white)),
             });
         }
+        let depth = projector.and_then(|p| p.depth.as_ref()).map(|d| {
+            d.texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                ..Default::default()
+            })
+        });
+        entries.push(wgpu::BindGroupEntry {
+            binding: 14,
+            resource: wgpu::BindingResource::TextureView(
+                depth.as_ref().unwrap_or(&shared.no_depth),
+            ),
+        });
         ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("mesh-material"),
             layout: &fx.material_layout,
@@ -159,9 +191,22 @@ impl MeshFx {
                 .map(|p| p.as_ref().map(|t| view(&self.levelled(ctx, t))));
             let m = &look.material;
             let pictures = (pictures.each_ref().map(Option::as_ref), look.textures);
-            let group = kept.group(ctx, self, m, pictures, behind.as_ref());
+            let group = kept.group(
+                ctx,
+                self,
+                m,
+                pictures,
+                behind.as_ref(),
+                look.projector.as_ref(),
+            );
             slot.0 = group;
             (slot.1, slot.2) = (m.alpha_mode == AlphaMode::Blend, m.double_sided);
+            // A projected picture never wraps.
+            if look.projector.is_some() && look.pictures[0].is_some() {
+                let mut readings = kept.readings;
+                readings[0] = super::samplers::PLATE;
+                slot.3 = self.samplers.group(&ctx.device, readings);
+            }
         }
         out
     }

@@ -41,6 +41,10 @@ pub struct ModelDraw {
     /// it bends, laid there each time its run of 3D layers is drawn.
     pub(crate) looks: Vec<crate::model_material::Look>,
     pub(crate) behind: Mutex<Behind>,
+    /// The shadow maps it takes when it differs from every other model's:
+    /// a projected model's are made without the projected models, whose
+    /// shadows are in the picture already.
+    pub(crate) own_maps: Mutex<Option<Option<lumit_gpu::mesh::shadow::ShadowMaps>>>,
 }
 
 impl ModelDraw {
@@ -189,15 +193,22 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
     read_and_keep(key.clone()).or_else(|| last_read(&key))
 }
 
+/// How a Model layer's rows fetch a layer's picture: at this frame, and at
+/// another comp time for a held projection.
+pub(crate) type Pictures<'a> = (
+    &'a dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
+    &'a dyn Fn(&lumit_core::model::EffectInstance, &str, f64) -> Option<crate::draw::DofInputDraw>,
+);
+
 /// Model layer `layer` as the mesh pass draws it at comp time `t_comp`,
 /// `None` while its file is missing, won't open or is still being read.
 pub(crate) fn draw(
-    doc: &Document,
+    doc: &Arc<Document>,
     comp: &Composition,
     layer: &Layer,
     t_comp: f64,
     context: &Arc<ExpressionContext>,
-    picture: &dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
+    (picture, held): Pictures<'_>,
 ) -> Option<ModelDraw> {
     let LayerKind::Model { item, settings } = &layer.kind else {
         return None;
@@ -232,6 +243,13 @@ pub(crate) fn draw(
             .collect(),
         false => Vec::new(),
     };
+    let mut looks = crate::model_material::looks(settings, &scene, lt, context, picture);
+    let at = crate::projection::Moment {
+        t_comp,
+        lt,
+        context,
+    };
+    crate::projection::aim(doc, comp, settings, &scene, at, &mut looks, held);
     // A model that stays put over the shutter is drawn once.
     if shutter.iter().all(|s| *s == placement)
         && poses.iter().all(|p| Some(p) == frame_pose.as_ref())
@@ -241,7 +259,6 @@ pub(crate) fn draw(
     if shutter.is_empty() {
         poses = frame_pose.into_iter().collect();
     }
-    let looks = crate::model_material::looks(settings, &scene, lt, context, picture);
     Some(ModelDraw {
         item,
         placement,
@@ -263,6 +280,7 @@ pub(crate) fn draw(
         holdout: material.holdout,
         looks,
         behind: Mutex::new(Behind::Unset),
+        own_maps: Mutex::new(None),
     })
 }
 

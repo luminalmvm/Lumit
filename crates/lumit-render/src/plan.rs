@@ -400,11 +400,10 @@ pub fn collect_comp_jobs(
             && in_span(l)
             && !(any_solo && !l.switches.solo)
     };
-    // The other moments a Clone to points shows its clone layers at, as the
-    // layer and the comp time. Empty unless one has a time offset on. It is
-    // the list the builder renders, asked of the same code, so a clone
-    // layer's footage is fetched at every moment a stamp shows. Gathered
-    // before the walk, which plans the graphs a layer applies at them too.
+    // The other moments a Clone to points or a held projection shows a layer
+    // at, as the layer and the comp time. It is the list the builder renders,
+    // asked of the same code, so its footage is fetched at every one of them.
+    // Gathered before the walk, which plans the graphs a layer applies too.
     let clone_moments: Vec<(Uuid, f64)> = comp
         .layers
         .iter()
@@ -416,6 +415,7 @@ pub fn collect_comp_jobs(
                 .iter()
                 .filter(|e| e.enabled)
                 .flat_map(move |e| clone_moments_of(e, doc, comp, t, lt))
+                .chain(lumit_core::model_material::held_moments(l, comp, lt))
         })
         .collect();
     let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);

@@ -87,6 +87,7 @@ impl MeshFx {
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
         // The opacity picture, and the picture behind for glass.
         entries.extend([11, 12].map(|b| texture_entry(b, float, false)));
+        entries.push(texture_entry(14, wgpu::TextureSampleType::Depth, false));
         let material_layout = layout("mesh-material", &entries);
         let shadows_layout = layout("mesh-shadows", &shadow::layout());
         let samplers = samplers::Samplers::new(device);
@@ -212,7 +213,7 @@ impl MeshFx {
             down,
             add,
             sets: Mutex::new(HashMap::new()),
-            shared: look::Shared::new(&white),
+            shared: look::Shared::new(device, &white),
             white,
             models: Mutex::new(Vec::new()),
             scratch: Mutex::new(None),

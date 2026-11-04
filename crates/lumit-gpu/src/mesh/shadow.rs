@@ -51,6 +51,7 @@ struct GpuMaps {
 }
 
 /// One frame's shadow maps, one or six views a light in one array.
+#[derive(Clone)]
 pub struct ShadowMaps {
     pub(crate) texture: wgpu::Texture,
     pub(crate) uniform: wgpu::Buffer,
@@ -68,11 +69,26 @@ impl ShadowMaps {
 }
 
 /// One model that casts: its scene, and where it is in comp pixels.
+#[derive(Clone)]
 pub struct MapCaster<'a> {
     pub scene: &'a Arc<ModelScene>,
     pub model_to_comp: Mat4,
     /// Where its nodes are this frame, `None` at rest.
     pub pose: Option<&'a lumit_scene::pose::Pose>,
+}
+
+/// The corners of `c`'s box in comp pixels.
+pub(super) fn box_corners(c: &MapCaster<'_>) -> [Vec3; 8] {
+    let bounds = c.pose.map_or(c.scene.bounds, |p| p.bounds);
+    let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
+    std::array::from_fn(|k| {
+        let pick = |bit: usize, a: f32, b: f32| if k & bit == 0 { a } else { b };
+        c.model_to_comp.transform_point3(Vec3::new(
+            pick(1, lo.x, hi.x),
+            pick(2, lo.y, hi.y),
+            pick(4, lo.z, hi.z),
+        ))
+    })
 }
 
 /// What is bound when a frame has no maps: one empty map and a uniform
@@ -362,18 +378,7 @@ impl FxEngine {
             .collect();
         let points: Vec<Vec3> = models
             .iter()
-            .flat_map(|(_, c)| {
-                let bounds = c.pose.map_or(c.scene.bounds, |p| p.bounds);
-                let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
-                (0..8).map(move |k| {
-                    let pick = |bit: usize, a: f32, b: f32| if k & bit == 0 { a } else { b };
-                    c.model_to_comp.transform_point3(Vec3::new(
-                        pick(1, lo.x, hi.x),
-                        pick(2, lo.y, hi.y),
-                        pick(4, lo.z, hi.z),
-                    ))
-                })
-            })
+            .flat_map(|(_, c)| box_corners(c))
             .filter(|p| p.is_finite())
             .collect();
         if points.is_empty() {
@@ -429,11 +434,34 @@ impl FxEngine {
         for (slot, m) in gpu.views.iter_mut().zip(&views) {
             *slot = m.to_cols_array_2d();
         }
-        Some(fx.draw_maps(ctx, &models, &views, &gpu, side, kept))
+        Some(fx.draw_maps(ctx, &models, &views, &gpu, (side, side), kept))
     }
 }
 
 impl MeshFx {
+    /// One view's depth from every part of `models`, between `range`'s nearest
+    /// depth and that much further, `size` texels in size.
+    pub(super) fn draw_one_view(
+        &self,
+        ctx: &GpuContext,
+        models: &[(Arc<super::GpuModel>, &MapCaster<'_>)],
+        view: Mat4,
+        (near, range): (f32, f32),
+        size: (u32, u32),
+    ) -> wgpu::Texture {
+        let mut gpu = GpuMaps {
+            head: [1.0, size.0 as f32, 0.0, 0.0],
+            lights: [GpuMap::default(); MAX_LIT_LIGHTS],
+            views: [[[0.0; 4]; 4]; MAX_VIEWS],
+        };
+        gpu.lights[0] = GpuMap {
+            view: [0.0, 1.0, 0.0, 0.0],
+            range: [near, range, 0.0, 0.0],
+        };
+        self.draw_maps(ctx, models, &[view], &gpu, size, Vec::new())
+            .texture
+    }
+
     /// Each view's depth from every part of `models`, into one array.
     fn draw_maps(
         &self,
@@ -441,16 +469,18 @@ impl MeshFx {
         models: &[(Arc<super::GpuModel>, &MapCaster<'_>)],
         views: &[Mat4],
         gpu: &GpuMaps,
-        side: u32,
+        (width, height): (u32, u32),
         lights: Vec<LightingLight>,
     ) -> ShadowMaps {
         let layers = views.len() as u32;
-        ctx.charge_vram(crate::texture_bytes(DEPTH, side, side).saturating_mul(u64::from(layers)));
+        ctx.charge_vram(
+            crate::texture_bytes(DEPTH, width, height).saturating_mul(u64::from(layers)),
+        );
         let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("shadow-maps"),
             size: wgpu::Extent3d {
-                width: side,
-                height: side,
+                width,
+                height,
                 depth_or_array_layers: layers,
             },
             mip_level_count: 1,

@@ -40,6 +40,7 @@ mod material;
 mod model;
 mod moments;
 pub mod pool;
+mod projection;
 pub mod schedule;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
@@ -1701,10 +1702,9 @@ fn feed_layer(
         true,
     )?;
 
-    // The **style stack** (docs/impl/layer-styles.md §1), and a Model layer's
-    // material rows, which draw whatever the fx switch says, through the very
-    // same fold: they're picture, not metadata. Nothing at all for an empty
-    // list, so every key written before either existed is still that layer's.
+    // The **style stack** and a Model layer's material rows, which draw
+    // whatever the fx switch says, through the same fold. Nothing at all for
+    // an empty list, so every older key is still that layer's.
     feed_effect_stack(
         h,
         layer.switches.fx,
@@ -1723,10 +1723,10 @@ fn feed_layer(
     feed_effect_stack(
         h, true, &m, l, comp, doc, t, lt, quality, stamper, visited, true,
     )?;
+    projection::feed_projections(h, doc, comp, &m, (t, lt), quality, stamper, visited)?;
 
-    // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
-    // source frames, which are content the parameter hash cannot see:
-    // two comp times sharing the current frame — a held/frozen leading frame —
+    // A temporal effect (echo) reads the layer's neighbour source frames, which
+    // the parameter hash cannot see: two comp times sharing the current frame
     // can differ in their neighbours, so their echoes differ. Key the stamped
     // neighbour frames, exactly the ones the render decodes (same window, same
     // retime mapping, same comp frame step). Footage layers only, as the render

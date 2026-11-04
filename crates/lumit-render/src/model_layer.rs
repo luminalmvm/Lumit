@@ -10,6 +10,7 @@ use glam::{Mat4, Vec3};
 use lumit_gpu::composite::{order::cut_by_depth, Cut};
 use lumit_gpu::fx::lighting::{LightingShadows, ShadowCasters};
 use lumit_gpu::mesh::display::Shading;
+use lumit_gpu::mesh::projector::{Projector, ProjectorDepth};
 use lumit_gpu::mesh::shadow::{MapCaster, ShadowMaps};
 use lumit_gpu::mesh::{ModelPicture, ModelView};
 
@@ -58,12 +59,16 @@ impl Realiser<'_> {
         };
         // Lines show no material, so they make no layer's picture.
         let wire = display.shading == Shading::Wireframe;
+        let mut depths = Vec::new();
         let looks: Vec<_> = m
             .looks
             .iter()
             .filter(|_| !wire)
-            .map(|k| self.look(k))
+            .map(|k| self.look(k, (width, height), &mut depths))
             .collect();
+        let projected = projects(m);
+        let own_maps = m.own_maps.lock().ok().and_then(|own| own.clone());
+        let maps = own_maps.as_ref().map_or(maps, Option::as_ref);
         let view = ModelView {
             comp: (width, height),
             render_scale: self.render_scale,
@@ -84,8 +89,9 @@ impl Realiser<'_> {
             casters: casters.filter(|_| takes),
             // ponytail: a holdout takes no model's shadow, as the maps hold its
             // own and the footage has those already. A map without it if a
-            // model's shadow on a stand-in is missed.
-            maps: maps.filter(|_| takes && !m.holdout),
+            // model's shadow on a stand-in is missed. One carrying a projection
+            // has nothing under it to show those shadows, so it takes them.
+            maps: maps.filter(|_| takes && (!m.holdout || projected)),
             display,
             environment,
             looks: &looks,
@@ -140,12 +146,40 @@ impl Realiser<'_> {
         let side = ((2048.0 * self.render_scale) as u32)
             .next_power_of_two()
             .clamp(512, 2048);
+        // A projected model's shadows are in its picture, so it takes only
+        // what the others cast. Made only when a projected model casts.
+        let projected = |c: &MapCaster| {
+            layers.iter().any(|l| match &l.source {
+                DrawSource::Model(m) => projects(m) && std::ptr::eq(&m.scene, c.scene),
+                _ => false,
+            })
+        };
+        if casters.iter().any(projected) {
+            let others: Vec<_> = casters.iter().filter(|c| !projected(c)).cloned().collect();
+            let own = (!others.is_empty())
+                .then(|| self.fx.shadow_maps(&self.ctx, &others, &lights, side))
+                .flatten();
+            let models = layers.iter().filter_map(|l| match &l.source {
+                DrawSource::Model(m) if projects(m) => Some(m),
+                _ => None,
+            });
+            for m in models {
+                if let Ok(mut slot) = m.own_maps.lock() {
+                    *slot = Some(own.clone());
+                }
+            }
+        }
         self.fx.shadow_maps(&self.ctx, &casters, &lights, side)
     }
 
     /// A material's rows for the mesh pass, the layers they name made into
     /// pictures at their own size.
-    fn look(&self, look: &crate::model_material::Look) -> lumit_gpu::mesh::look::Look {
+    fn look(
+        &self,
+        look: &crate::model_material::Look,
+        comp: (u32, u32),
+        depths: &mut Vec<(Mat4, Option<ProjectorDepth>)>,
+    ) -> lumit_gpu::mesh::look::Look {
         let picture = |slot: &crate::draw::LayerInputDraw| {
             let [w, h] = slot.size()?;
             let px = |v: f32| ((v * self.render_scale).ceil() as u32).clamp(1, 8192);
@@ -161,6 +195,43 @@ impl Realiser<'_> {
             material: look.material.clone(),
             pictures: std::array::from_fn(|k| look.pictures.get(k).and_then(picture)),
             textures: look.textures,
+            projector: look
+                .projector
+                .as_ref()
+                .map(|p| self.projector(p, comp, depths)),
+        }
+    }
+
+    /// A material's camera for the mesh pass, with how far the models on it
+    /// are, for a picture of a comp `comp` pixels in size. `depths` keeps each
+    /// camera's, so a model's materials on one camera share it.
+    fn projector(
+        &self,
+        p: &crate::projection::Projector,
+        comp: (u32, u32),
+        depths: &mut Vec<(Mat4, Option<ProjectorDepth>)>,
+    ) -> Projector {
+        let made = depths.iter().find(|(view, _)| *view == p.view);
+        let depth = match made {
+            Some((_, depth)) => depth.clone(),
+            None => {
+                let size = lumit_gpu::composite::scaled_size(comp.0, comp.1, self.render_scale);
+                let stand_ins: Vec<MapCaster> = (p.stand_ins.iter())
+                    .map(|(scene, model_to_comp)| MapCaster {
+                        scene,
+                        model_to_comp: *model_to_comp,
+                        pose: None,
+                    })
+                    .collect();
+                let depth = (self.fx).projector_depth(&self.ctx, &stand_ins, p.view, size);
+                depths.push((p.view, depth.clone()));
+                depth
+            }
+        };
+        Projector {
+            view: p.view,
+            plate: p.plate,
+            depth,
         }
     }
 }
@@ -242,6 +313,11 @@ pub(crate) fn glass(l: &CompLayerDraw) -> Option<&ModelDraw> {
         && l.material.casts_shadows != LightingShadows::Only;
     let bends = surface && crate::model::display().takes_shadows();
     (bends && m.looks.iter().any(|k| k.material.transmission > 0.0)).then_some(m)
+}
+
+/// Whether any of `m`'s materials is projected from a camera.
+fn projects(m: &ModelDraw) -> bool {
+    m.looks.iter().any(|k| k.projector.is_some())
 }
 
 /// A Model draw's metres to comp pixels, parents and all.

@@ -25,6 +25,7 @@ mod blur;
 pub mod deform;
 pub mod display;
 pub mod look;
+pub mod projector;
 mod samplers;
 mod setup;
 pub mod shadow;

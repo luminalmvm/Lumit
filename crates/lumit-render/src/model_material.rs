@@ -25,7 +25,7 @@ const PICTURES: [&str; 4] = [
 
 /// A scene's materials, or for one with none the default the mesh pass
 /// draws it with, so it still has rows to colour.
-fn materials_of(scene: &ModelScene) -> Cow<'_, [Material]> {
+pub(crate) fn materials_of(scene: &ModelScene) -> Cow<'_, [Material]> {
     match scene.materials.is_empty() {
         true => Cow::Owned(vec![Material::default()]),
         false => Cow::Borrowed(&scene.materials),
@@ -35,7 +35,7 @@ fn materials_of(scene: &ModelScene) -> Cow<'_, [Material]> {
 /// The rows the layer keeps for file material `i`: by the material's name
 /// when it's the only one so named, else by its place, so a file whose
 /// materials move keeps each one's edits.
-fn kept_for<'a>(
+pub(crate) fn kept_for<'a>(
     settings: &'a ModelSettings,
     file: &[Material],
     i: usize,
@@ -127,11 +127,16 @@ fn rows_of(layer: Uuid, settings: &ModelSettings, scene: &ModelScene) -> Vec<Eff
         .filter_map(|(i, m)| match kept_for(settings, &file, i) {
             // Named for its layer and its file as they are now, whatever
             // layer it was first kept on.
-            Some(kept) => Some(EffectInstance {
-                id: material_id(layer, i),
-                custom_name: (!m.name.is_empty()).then(|| m.name.clone()),
-                ..kept.clone()
-            }),
+            Some(kept) => {
+                let mut rows = EffectInstance {
+                    id: material_id(layer, i),
+                    custom_name: (!m.name.is_empty()).then(|| m.name.clone()),
+                    ..kept.clone()
+                };
+                // Rows kept before a row was added get it at its default.
+                lumit_core::fx::builtins::backfill_builtin_params(std::slice::from_mut(&mut rows));
+                Some(rows)
+            }
             None => offered(layer, i, m),
         })
         .collect()
@@ -201,6 +206,8 @@ pub(crate) struct Look {
     pub pictures: Vec<LayerInputDraw>,
     /// Whether the file's base colour and metal-rough pictures still show.
     pub textures: bool,
+    /// Where its base colour is seen from, when it isn't on the model's uvs.
+    pub projector: Option<crate::projection::Projector>,
 }
 
 /// Every material of `scene` that a Model layer's `settings` change, or that
@@ -227,6 +234,7 @@ pub(crate) fn looks(
                     material,
                     pictures: Vec::new(),
                     textures: true,
+                    projector: None,
                 });
             }
             continue;
@@ -273,6 +281,7 @@ pub(crate) fn looks(
             material: m,
             pictures,
             textures: !matches!(rows.param("textures"), Some(EffectValue::Bool(false))),
+            projector: None,
         });
     }
     out
