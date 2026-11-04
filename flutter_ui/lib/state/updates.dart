@@ -4,7 +4,7 @@
 //
 // Releases are published as GitHub Releases on a `v*` tag, and every one of
 // them carries the finished installers as attachments: a `setup.exe` for
-// Windows, a `.dmg` for macOS, a `.tar.gz` and a `.flatpak` for Linux. So
+// Windows, a `.dmg` for macOS, a `.flatpak` and an `.AppImage` for Linux. So
 // "is there a newer Lumit?" is one small web request — GitHub will say what the
 // latest release is called and what is attached to it — and "get it" is an
 // ordinary download of the attachment that suits this machine.
@@ -380,9 +380,11 @@ String _plainNotes(String line) => line
 ///
 /// A Flatpak is offered the Flatpak bundle and nothing else: the sandbox cannot
 /// be updated from inside, so the other attachments would be useless there.
+/// An AppImage is offered the AppImage, the one file it can rename over itself.
 List<String> assetSuffixesFor(String platform,
     {InstallKind kind = InstallKind.unknown, bool replaceable = false}) {
   if (kind == InstallKind.flatpak) return const ['.flatpak'];
+  if (kind == InstallKind.appImage) return const ['.appimage'];
   switch (platform) {
     case 'windows':
       return const ['.exe'];
@@ -407,6 +409,9 @@ UpdateDelivery deliveryFor(
   required bool replaceable,
 }) {
   if (kind == InstallKind.flatpak) return UpdateDelivery.flatpakBundle;
+  if (kind == InstallKind.appImage) {
+    return replaceable ? UpdateDelivery.inPlace : UpdateDelivery.installer;
+  }
   final name = assetName.toLowerCase();
   final isArchive = name.endsWith('.zip') || name.endsWith('.tar.gz');
   return isArchive && replaceable
@@ -1027,7 +1032,9 @@ class UpdateService extends ChangeNotifier {
     if (file == null || _stage != UpdateStage.ready) return;
 
     if (delivery == UpdateDelivery.inPlace) {
-      await _applyInPlace(file);
+      await (site.kind == InstallKind.appImage
+          ? _applyAppImage(file)
+          : _applyInPlace(file));
       return;
     }
     try {
@@ -1074,7 +1081,36 @@ class UpdateService extends ChangeNotifier {
       _fail(l10n.updateSwapFailed);
       return;
     }
+    await _restart();
+  }
 
+  /// An AppImage is one file, so the swap is one rename. The new file is
+  /// copied beside the old one first, so the rename stays on one filesystem.
+  /// The running Lumit keeps the old file open and is not disturbed.
+  Future<void> _applyAppImage(File download) async {
+    final next = File(site.staging.path);
+    try {
+      download.copySync(next.path);
+      // The download has no execute bit, and an AppImage without one won't
+      // start. Windows has no such bit, and only runs this under test.
+      if (!Platform.isWindows) {
+        final chmod = await Process.run('chmod', ['755', next.path]);
+        if (chmod.exitCode != 0) {
+          throw ProcessException('chmod', [next.path], '${chmod.stderr}',
+              chmod.exitCode);
+        }
+      }
+      next.renameSync(site.launcher.path);
+    } catch (_) {
+      _discard(next);
+      _fail(l10n.updateSwapFailed);
+      return;
+    }
+    await _restart();
+  }
+
+  /// Start the new Lumit and leave.
+  Future<void> _restart() async {
     try {
       await _relaunch(site.launcher);
     } catch (_) {
