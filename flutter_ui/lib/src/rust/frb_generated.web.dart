@@ -31,6 +31,7 @@ import 'api/keymap.dart';
 import 'api/layer.dart';
 import 'api/lens.dart';
 import 'api/model.dart';
+import 'api/model_rows.dart';
 import 'api/planes.dart';
 import 'api/presets.dart';
 import 'api/project.dart';
@@ -334,6 +335,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeModelLook dco_decode_box_autoadd_bridge_model_look(dynamic raw);
+
+  @protected
+  BridgeModelPartPlace dco_decode_box_autoadd_bridge_model_part_place(
+      dynamic raw);
+
+  @protected
+  BridgeModelRows dco_decode_box_autoadd_bridge_model_rows(dynamic raw);
 
   @protected
   BridgeModelSettings dco_decode_box_autoadd_bridge_model_settings(dynamic raw);
@@ -1053,6 +1061,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeModelLook dco_decode_bridge_model_look(dynamic raw);
 
   @protected
+  BridgeModelPart dco_decode_bridge_model_part(dynamic raw);
+
+  @protected
+  BridgeModelPartPlace dco_decode_bridge_model_part_place(dynamic raw);
+
+  @protected
+  BridgeModelRows dco_decode_bridge_model_rows(dynamic raw);
+
+  @protected
   BridgeModelSettings dco_decode_bridge_model_settings(dynamic raw);
 
   @protected
@@ -1743,6 +1760,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeMetadataField> dco_decode_list_bridge_metadata_field(dynamic raw);
 
   @protected
+  List<BridgeModelPart> dco_decode_list_bridge_model_part(dynamic raw);
+
+  @protected
   List<BridgeMotionKey> dco_decode_list_bridge_motion_key(dynamic raw);
 
   @protected
@@ -2082,6 +2102,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo? dco_decode_opt_box_autoadd_bridge_media_info(dynamic raw);
+
+  @protected
+  BridgeModelPartPlace? dco_decode_opt_box_autoadd_bridge_model_part_place(
+      dynamic raw);
+
+  @protected
+  BridgeModelRows? dco_decode_opt_box_autoadd_bridge_model_rows(dynamic raw);
 
   @protected
   BridgeModelSettings? dco_decode_opt_box_autoadd_bridge_model_settings(
@@ -2559,6 +2586,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeModelLook sse_decode_box_autoadd_bridge_model_look(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelPartPlace sse_decode_box_autoadd_bridge_model_part_place(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelRows sse_decode_box_autoadd_bridge_model_rows(
       SseDeserializer deserializer);
 
   @protected
@@ -3407,6 +3442,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeModelLook sse_decode_bridge_model_look(SseDeserializer deserializer);
 
   @protected
+  BridgeModelPart sse_decode_bridge_model_part(SseDeserializer deserializer);
+
+  @protected
+  BridgeModelPartPlace sse_decode_bridge_model_part_place(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelRows sse_decode_bridge_model_rows(SseDeserializer deserializer);
+
+  @protected
   BridgeModelSettings sse_decode_bridge_model_settings(
       SseDeserializer deserializer);
 
@@ -4218,6 +4263,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeModelPart> sse_decode_list_bridge_model_part(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeMotionKey> sse_decode_list_bridge_motion_key(
       SseDeserializer deserializer);
 
@@ -4628,6 +4677,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo? sse_decode_opt_box_autoadd_bridge_media_info(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelPartPlace? sse_decode_opt_box_autoadd_bridge_model_part_place(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelRows? sse_decode_opt_box_autoadd_bridge_model_rows(
       SseDeserializer deserializer);
 
   @protected
@@ -5127,6 +5184,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_model_look(
       BridgeModelLook self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_model_part_place(
+      BridgeModelPartPlace self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_model_rows(
+      BridgeModelRows self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_model_settings(
@@ -6053,6 +6118,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeModelLook self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_model_part(
+      BridgeModelPart self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_part_place(
+      BridgeModelPartPlace self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_rows(
+      BridgeModelRows self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_model_settings(
       BridgeModelSettings self, SseSerializer serializer);
 
@@ -6932,6 +7009,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeMetadataField> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_model_part(
+      List<BridgeModelPart> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_motion_key(
       List<BridgeMotionKey> self, SseSerializer serializer);
 
@@ -7348,6 +7429,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_media_info(
       BridgeMediaInfo? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_model_part_place(
+      BridgeModelPartPlace? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_model_rows(
+      BridgeModelRows? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_model_settings(

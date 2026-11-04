@@ -90,7 +90,7 @@ impl Realiser<'_> {
             environment,
             looks: &looks,
             behind: behind.as_ref(),
-            poses: &[],
+            poses: &m.poses,
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
         Some(ModelPicture {
@@ -122,7 +122,7 @@ impl Realiser<'_> {
                 DrawSource::Model(m) => Some(MapCaster {
                     scene: &m.scene,
                     model_to_comp: to_comp(m),
-                    pose: None,
+                    pose: m.poses.get(m.poses.len() / 2),
                 }),
                 _ => None,
             })
@@ -254,10 +254,8 @@ pub(crate) fn middle(l: &CompLayerDraw) -> Option<Vec3> {
     let DrawSource::Model(m) = &l.source else {
         return None;
     };
-    let (lo, hi) = (
-        Vec3::from(m.scene.bounds.min),
-        Vec3::from(m.scene.bounds.max),
-    );
+    let bounds = m.poses.first().map_or(m.scene.bounds, |p| p.bounds);
+    let (lo, hi) = (Vec3::from(bounds.min), Vec3::from(bounds.max));
     Some(to_comp(m).transform_point3((lo + hi) / 2.0))
 }
 

@@ -340,7 +340,10 @@ class ViewerStage extends StatelessWidget {
       final tf = transformOf(entry);
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
       final light = entry.info.kind == BridgeLayerKind.light;
-      final cube = uiState.layerBounds.modelBoxOf(entry, revision: revision);
+      final cube = uiState.layerBounds.modelBoxOf(entry,
+          revision: revision,
+          frame: uiState.playheadFrame.value,
+          outlined: outlined.contains(entry.layer.internallayerId.toString()));
       final map = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft,
           viewScale: viewScale,
@@ -404,6 +407,7 @@ class ViewerStage extends StatelessWidget {
         rotationDegrees: rotation,
         marker: light,
         cube: cube,
+        cubeFrame: uiState.playheadFrame.value,
         transform: tf,
         // The path a keyed position follows, for the layers whose outline is
         // drawn: asked once per layer per document revision and held. A 3D

@@ -11,7 +11,28 @@ pub enum UpAxis {
     Z,
 }
 
-/// How a 3D model sits in its layer, so the layer's own Scale stays at 100%.
+/// Which of the file's takes a Model layer plays.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Take {
+    /// None: it stays as the file has it at rest, as every model did before
+    /// they played.
+    #[default]
+    Rest,
+    /// Whichever comes first in the file, which a new layer starts on.
+    First,
+    /// The one of this name. A file that has lost it draws at rest.
+    Named(String),
+}
+
+impl Take {
+    fn is_rest(&self) -> bool {
+        *self == Self::Rest
+    }
+}
+
+/// How a 3D model sits in its layer, so the layer's own Scale stays at 100%,
+/// and the rows it keeps.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModelSettings {
@@ -24,6 +45,16 @@ pub struct ModelSettings {
     /// file ([`crate::model_material`]). Nothing for one left as it is.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<Option<crate::model::EffectInstance>>,
+    #[serde(skip_serializing_if = "Take::is_rest")]
+    pub take: Take,
+    /// Its Loop and Offset rows, once either has changed
+    /// ([`crate::model_part::ModelPlayback`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playback: Option<crate::model::EffectInstance>,
+    /// The rows of the parts that have changed, each named by its node's path
+    /// ([`crate::model_part::ModelPart`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<crate::model::EffectInstance>,
 }
 
 impl Default for ModelSettings {
@@ -33,6 +64,9 @@ impl Default for ModelSettings {
             units: 100.0,
             fit: true,
             materials: Vec::new(),
+            take: Take::Rest,
+            playback: None,
+            parts: Vec::new(),
         }
     }
 }
@@ -48,7 +82,10 @@ pub fn model_layer(
         item.name.clone(),
         crate::model::LayerKind::Model {
             item: item.id,
-            settings: Box::default(),
+            settings: Box::new(ModelSettings {
+                take: Take::First,
+                ..ModelSettings::default()
+            }),
         },
         comp.duration.0,
         crate::edits::centred_transform(0.0, 0.0, comp.width, comp.height),
@@ -111,12 +148,15 @@ mod tests {
         doc.items.push(ProjectItem::Footage(item.clone()));
         assert!(doc.item_is_used(item.id));
 
+        let before = doc.comp(comp).unwrap().layers[0].kind.clone();
         let settings = ModelSettings {
             up_axis: UpAxis::Z,
             units: 250.0,
             fit: false,
             // A changed material is kept, an unchanged one is nothing.
             materials: vec![None, crate::fx::builtins::instantiate("model_material")],
+            parts: vec![crate::fx::builtins::instantiate(crate::model_part::PART_NAME).unwrap()],
+            ..ModelSettings::default()
         };
         let set = Op::SetLayerKind {
             comp,
@@ -141,10 +181,7 @@ mod tests {
         assert_eq!(*s, ModelSettings::default());
 
         apply(&mut doc, &undo).unwrap();
-        assert!(matches!(
-            &doc.comp(comp).unwrap().layers[0].kind,
-            LayerKind::Model { settings: s, .. } if **s == ModelSettings::default()
-        ));
+        assert_eq!(doc.comp(comp).unwrap().layers[0].kind, before);
 
         let other = Op::SetLayerKind {
             comp,

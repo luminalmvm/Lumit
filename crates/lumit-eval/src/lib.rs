@@ -2416,7 +2416,9 @@ fn feed_source(
                 h.update(&json);
             }
         }
-        LayerKind::Model { item, settings } => model::feed(h, *item, settings, stamper)?,
+        LayerKind::Model { .. } => {
+            model::feed(h, doc, owner, layer, comp_time, quality, stamper, visited)?;
+        }
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a

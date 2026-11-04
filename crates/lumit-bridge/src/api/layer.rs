@@ -42,6 +42,8 @@ pub(crate) enum InstanceHome {
     GraphInputs,
     /// A Model layer's material rows, one for each material in its file.
     Materials,
+    /// A Model layer's playback and part rows.
+    ModelRows,
 }
 
 /// The node graph `layer` places, when it places one.
@@ -1744,6 +1746,9 @@ pub struct BridgeLayerInfo {
     pub graph_inputs: Option<crate::api::effect::BridgeEffectInstanceInfo>,
     /// A Model layer's material rows, `None` while its file is being read.
     pub materials: Option<Vec<crate::api::effect::BridgeEffectInstanceInfo>>,
+    /// A Model layer's Animation and parts' rows, `None` while its file is
+    /// being read and on any other kind of layer.
+    pub model_rows: Option<crate::api::model_rows::BridgeModelRows>,
     /// Whether collapse is set on this layer but something forces an
     /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
     /// which is what the Timeline's collapse cell draws dimmed.
@@ -2007,6 +2012,7 @@ pub(crate) fn read_layer_info(
             let read = |r| crate::api::effect::read_instance_info(r, layer.start_offset.0, true);
             rows.iter().map(read).collect()
         }),
+        model_rows: crate::api::model_rows::read_model_rows(doc, layer),
         collapse_forced: lumit_core::model::collapse_state(
             doc,
             comp,
@@ -7569,6 +7575,7 @@ impl LayerReference {
                 edit(&mut clips[index].effects)?;
                 return self.commit_clips(clips);
             }
+            InstanceHome::ModelRows => self.model_rows_op(edit)?,
             // One instance, carried as a list of at most one so the edit
             // closure is the same closure the other three homes take. An edit
             // that empties the list clears the Inputs, which is what removing
@@ -7617,6 +7624,9 @@ impl LayerReference {
         }
         if layer.styles.iter().any(|s| s.id == id) {
             return Ok(InstanceHome::Styles);
+        }
+        if lumit_core::model_part::owns(layer.id, id) {
+            return Ok(InstanceHome::ModelRows);
         }
         if lumit_render::model_material::owns(&layer, std::slice::from_ref(instance)) {
             return Ok(InstanceHome::Materials);

@@ -4913,6 +4913,8 @@ fn render_comp_with_preview(
             layer.styles = effects;
         } else if lumit_render::model_material::owns(layer, &effects) {
             lumit_render::model_material::stage(layer, effects);
+        } else if lumit_render::model_motion::owns(layer, &effects) {
+            lumit_render::model_motion::stage(&*layer_ref.snapshot()?, layer, &effects);
         } else if let Some(clip) = staged_clip(layer, &effects) {
             clip.effects = effects;
         } else {

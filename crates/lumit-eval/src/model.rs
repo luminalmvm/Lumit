@@ -1,23 +1,73 @@
 //! A Model layer's part of a frame's name.
 
-use lumit_core::model_layer::ModelSettings;
+use std::sync::Arc;
+
+use lumit_core::model::{Composition, Document, Layer, LayerKind};
+use lumit_core::model_layer::{ModelSettings, Take};
 use uuid::Uuid;
 
-use crate::SourceStamper;
+use crate::{Quality, SourceStamper};
 
-/// The model's file, as the stamper names it, and how it sits in the layer.
-/// The scene is read from the file, so naming the file names the scene.
+/// The model's file, as the stamper names it, how it sits in the layer, and
+/// the moment of the take it shows. The scene is read from the file, so naming
+/// the file names the scene.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn feed(
+    h: &mut blake3::Hasher,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    quality: Quality,
+    stamper: &dyn SourceStamper,
+    visited: &mut Vec<Uuid>,
+) -> Option<()> {
+    let LayerKind::Model { item, settings } = &layer.kind else {
+        return None;
+    };
+    let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+    named(h, *item, settings, layer.source_time_at(lt), stamper)?;
+    // Its playback and part rows are picture too. Nothing at all for a layer
+    // that keeps none, so its name is the one it always had.
+    let rows = lumit_core::model_part::stored(layer);
+    crate::feed_effect_stack(
+        h,
+        true,
+        &rows,
+        Some(layer),
+        comp,
+        doc,
+        t,
+        lt,
+        quality,
+        stamper,
+        visited,
+        true,
+    )
+}
+
+/// The model's own part of the name: its file, how it sits, and when it plays a
+/// take, the moment as the stamper tells it, which is nothing for a still file.
+fn named(
     h: &mut blake3::Hasher,
     item: Uuid,
     settings: &ModelSettings,
+    source_time: f64,
     stamper: &dyn SourceStamper,
 ) -> Option<()> {
-    let (identity, _) = stamper.stamp(item, 0.0, false)?;
+    let at = if settings.take == Take::Rest {
+        0.0
+    } else {
+        source_time
+    };
+    let (identity, frame) = stamper.stamp(item, at, false)?;
     h.update(b"model/");
     h.update(identity.as_bytes());
     if let Ok(json) = serde_json::to_vec(settings) {
         h.update(&json);
+    }
+    if settings.take != Take::Rest {
+        h.update(&frame.to_le_bytes());
     }
     Some(())
 }
@@ -42,7 +92,7 @@ mod tests {
         let item = Uuid::now_v7();
         let name = |settings: &ModelSettings| {
             let mut h = blake3::Hasher::new();
-            feed(&mut h, item, settings, &Named).unwrap();
+            named(&mut h, item, settings, 0.0, &Named).unwrap();
             h.finalize()
         };
         let z = ModelSettings {

@@ -231,6 +231,9 @@ class LayerBox {
   /// numbered by the bits of x, y and z. Null on every other layer.
   final List<double>? cube;
 
+  /// The comp frame [cube] was read at, which a click meets the model at.
+  final int cubeFrame;
+
   const LayerBox({
     required this.layer,
     required this.id,
@@ -249,6 +252,7 @@ class LayerBox {
     this.transform,
     this.aim,
     this.cube,
+    this.cubeFrame = 0,
   });
 
   /// A point of the layer's **art** on screen.
@@ -287,6 +291,7 @@ class LayerBox {
         transform: transform,
         aim: aim,
         cube: cube,
+        cubeFrame: cubeFrame,
       );
 
   /// The same box with the layer scaled to [sxPercent] / [syPercent] — the
@@ -1535,6 +1540,45 @@ LayerBox? layerToDragAt(
 /// misses. The engine meets the ray with the model's triangles, so this is
 /// asked once a click, never on a hover.
 double? modelDepthAt(LayerBox box, Offset point) {
+  final ray = _modelRay(box, point);
+  if (ray == null) return null;
+  final (eye, d, away, w) = ray;
+  final double? t;
+  try {
+    t = box.layer.getModelHit(
+        origin: [eye.$1, eye.$2, eye.$3],
+        direction: [d.$1, d.$2, d.$3],
+        atFrame: box.cubeFrame);
+  } catch (_) {
+    return null;
+  }
+  if (t == null) return null;
+  final hit = (eye.$1 + d.$1 * t, eye.$2 + d.$2 * t, eye.$3 + d.$3 * t);
+  return away.$1 * hit.$1 + away.$2 * hit.$2 + away.$3 * hit.$3 + w;
+}
+
+/// The part of a Model layer's model the pointer at [point] first meets, as
+/// its rows' id, null where it misses. Asked once a double-click.
+String? modelPartAt(LayerBox box, Offset point) {
+  final ray = _modelRay(box, point);
+  if (ray == null) return null;
+  final (eye, d, _, _) = ray;
+  try {
+    return box.layer
+        .getModelPartAt(
+            origin: [eye.$1, eye.$2, eye.$3],
+            direction: [d.$1, d.$2, d.$3],
+            atFrame: box.cubeFrame)
+        ?.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// The ray through the pointer at [point] in [box]'s own pixels: from the eye,
+/// where it goes, the way depth runs away from the eye, and that depth's
+/// nought. Null off a Model layer seen through a camera.
+(Vec3, Vec3, Vec3, double)? _modelRay(LayerBox box, Offset point) {
   final map = box.map;
   if (box.cube == null || !map.projected) return null;
   // The layer's own pixels (x, y, z, 1) to the picture's (X, Y, W), row by
@@ -1584,16 +1628,7 @@ double? modelDepthAt(LayerBox box, Offset point) {
   if (rate.abs() < 1e-12) return null;
   final back = -(dot(away, from) + m[2][3]) / rate;
   final eye = (from.$1 + d.$1 * back, from.$2 + d.$2 * back, from.$3 + d.$3 * back);
-  final double? t;
-  try {
-    t = box.layer.getModelHit(
-        origin: [eye.$1, eye.$2, eye.$3], direction: [d.$1, d.$2, d.$3]);
-  } catch (_) {
-    return null;
-  }
-  if (t == null) return null;
-  final hit = (eye.$1 + d.$1 * t, eye.$2 + d.$2 * t, eye.$3 + d.$3 * t);
-  return dot(away, hit) + m[2][3];
+  return (eye, d, away, m[2][3]);
 }
 
 /// Every layer wholly inside [rect] — what a released marquee selects.
@@ -2608,6 +2643,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       WidgetsBinding.instance
           .addPostFrameCallback((_) => viewerTypeEditRequest = null);
       ui.tools.select(ToolMode.typeHorizontal);
+    } else if (kind == BridgeLayerKind.model) {
+      // A 3D model holds its parts: the one under the pointer opens in the
+      // Timeline, picked.
+      if (modelPartAt(hit, at) case final part?) {
+        ui.requestRevealProperty(hit.id, 'reveal.part/$part');
+      }
     } else if (kind == BridgeLayerKind.precomp) {
       try {
         if (hit.layer.getSourceItem()
@@ -3240,6 +3281,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// picked first, in the axes the toolbar is set to.
   List<Handles3d> _setsOf(List<LayerBox> selected) {
     if (!widget.showControls || !_selectionTool) return const [];
+    // A picked part's handles stand in for its layer's.
+    if (widget.uiState.pickedPart.value != null) return const [];
     final primary = primary3d([...selected, ...widget.cameras],
         widget.uiState.selectedLayer.value?.internallayerId);
     return primary == null

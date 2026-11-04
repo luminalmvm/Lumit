@@ -57,6 +57,7 @@ Angle
 Angle control
 Angle offset
 Animate
+Animation
 Anticlockwise
 Anywhere
 Aperture
@@ -515,6 +516,7 @@ Frame mix
 Frame rate
 Frames
 Free
+Freeze
 Frequency
 Friction
 From
@@ -919,6 +921,7 @@ Padding x
 Padding y
 Paint style
 Parametric EQ
+Part
 Particle
 Particle blend
 Particulate
@@ -1098,6 +1101,9 @@ Rotation jitter
 Rotation wave
 Rotation wave frequency
 Rotation wave phase
+Rotation x
+Rotation y
+Rotation z
 Roto brush
 Roughen
 Roughen edges
@@ -1297,6 +1303,7 @@ Swing
 Switch
 Symmetric
 Sync
+Take
 Taper
 Technique
 Tele lens width
@@ -1428,6 +1435,7 @@ Vibrato
 View
 Vignette
 Violet
+Visible
 Vision 2383
 Vision Premier 2393
 Vision3 200T
