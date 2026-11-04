@@ -720,7 +720,7 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
             (
                 quote! {
                     ::lumit_core::fx::schema::ParamKind::ColourName {
-                        role: ::lumit_core::fx::schema::ColourNameRole::#role,
+                        role: ::lumit_core::fx::colour_name::ColourNameRole::#role,
                     }
                 },
                 quote! { () },

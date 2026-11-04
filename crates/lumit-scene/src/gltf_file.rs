@@ -62,6 +62,7 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
                     positions: fit(pos.map(Iterator::collect).unwrap_or_default(), n),
                     normals: fit(nor.map(Iterator::collect).unwrap_or_default(), n),
                     tangents: fit(tan.map(Iterator::collect).unwrap_or_default(), n),
+                    ..MorphTarget::default()
                 })
                 .collect();
             primitives.push(Primitive {
@@ -123,6 +124,7 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
         scene.meshes.push(Mesh {
             name: mesh.name().unwrap_or_default().to_string(),
             primitives,
+            ..Mesh::default()
         });
     }
 
@@ -191,6 +193,7 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
                 .or_else(|| node.mesh().and_then(|m| m.weights()))
                 .map(<[f32]>::to_vec)
                 .unwrap_or_default(),
+            ..Node::default()
         });
     }
 
@@ -255,6 +258,7 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
         scene.skins.push(Skin {
             joints,
             inverse_bind,
+            ..Skin::default()
         });
     }
 
@@ -292,7 +296,67 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
         }
         scene.clips.push(clip);
     }
+    lens_tracks(&document, &mut scene);
     Ok(scene)
+}
+
+/// glTF has nowhere for a lens that moves, so the Blender route (to_glb.py)
+/// writes its focal length through the take in the camera node's extras, with
+/// the one the file's own camera has. Each scales the tangent of that camera's
+/// angle. A file with no takes gets one for it.
+fn lens_tracks(document: &gltf::Document, scene: &mut ModelScene) {
+    for node in document.nodes() {
+        let track = node
+            .extras()
+            .as_ref()
+            .and_then(|e| serde_json::from_str::<serde_json::Value>(e.get()).ok())
+            .and_then(|v| v.get("lumit_lens").cloned());
+        let camera = node.camera().and_then(|c| scene.cameras.get(c.index()));
+        let (Some(track), Some(camera)) = (track, camera) else {
+            continue;
+        };
+        let Projection::Perspective { yfov } = camera.projection else {
+            continue;
+        };
+        let numbers = |name: &str| -> Vec<f32> {
+            let list = track.get(name).and_then(|v| v.as_array());
+            let values = list
+                .into_iter()
+                .flatten()
+                .filter_map(serde_json::Value::as_f64);
+            values.map(|v| v as f32).collect()
+        };
+        let (times, lens) = (numbers("times"), numbers("lens"));
+        let at_rest = track
+            .get("rest")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.0) as f32;
+        if times.is_empty() || times.len() != lens.len() || at_rest <= 0.0 {
+            continue;
+        }
+        let tangent = (yfov / 2.0).tan() * at_rest;
+        let channel = Channel {
+            node: node.index(),
+            path: Target::YFov,
+            interpolation: Interpolation::Linear,
+            values: lens
+                .iter()
+                .map(|l| 2.0 * (tangent / l.max(1e-6)).atan())
+                .collect(),
+            times,
+        };
+        let end = channel.times.last().copied().unwrap_or(0.0);
+        if scene.clips.is_empty() {
+            scene.clips.push(Clip {
+                name: "Lens".into(),
+                ..Clip::default()
+            });
+        }
+        for clip in &mut scene.clips {
+            clip.duration = clip.duration.max(end);
+            clip.channels.push(channel.clone());
+        }
+    }
 }
 
 /// A primitive's indices as a plain triangle list, or `None` for points and

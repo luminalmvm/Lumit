@@ -137,7 +137,9 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
                 break;
             }
             let l = p.lights[i];
-            if (!takes || l.shadow.x <= 0.0 || lit_by(pos, l) <= 0.0) {
+            // Either face of a layer takes a shadow. A particle has no faces.
+            if (!takes || l.shadow.x <= 0.0 || (lit_by(pos, l) <= 0.0
+                && (p.casters_head.w > 0.5 || irradiance(pos, -p.normal.xyz, l) <= 0.0))) {
                 continue;
             }
             let through = transmitted(pos, l) * mapped(pos, p.normal.xyz, l);

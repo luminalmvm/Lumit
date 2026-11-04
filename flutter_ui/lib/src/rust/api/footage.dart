@@ -299,6 +299,12 @@ class FootageReference {
         that: this,
       );
 
+  /// Convert this file again after it was stopped.
+  void convertAgain() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceConvertAgain(
+        that: this,
+      );
+
   /// Open this file in Blender's own window. False when no Blender was
   /// found or it wouldn't start.
   Future<bool> editInBlender() =>
@@ -478,6 +484,13 @@ class FootageReference {
   void relink({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceRelink(that: this, path: path);
 
+  /// Read the file again, for a run of stills that has grown since it was
+  /// imported. Replace footage with the same file, so the run's name is
+  /// brought up to date too.
+  void reload() => BridgeLib.instance.api.crateApiFootageFootageReferenceReload(
+        that: this,
+      );
+
   /// Draw this footage item on its own, into Viewer view `view`
   /// (docs/impl/multi-viewer.md §3.6) — the footage view.
   ///
@@ -590,6 +603,12 @@ class FootageReference {
   /// reads as the original or missing, with nobody holding it.
   BridgeFootageShare shareState() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceShareState(
+        that: this,
+      );
+
+  /// Stop this file's conversion.
+  void stopBlender() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceStopBlender(
         that: this,
       );
 

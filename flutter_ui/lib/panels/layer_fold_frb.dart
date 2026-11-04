@@ -38,6 +38,7 @@ import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'graph_panel.dart' show DrivenParam;
 import 'light_rows_frb.dart';
+import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
@@ -52,6 +53,10 @@ sealed class LayerFoldRow {
 
 /// A section heading with its own twirl: Transform, Effects, an effect, Audio.
 final class FoldGroupRow extends LayerFoldRow {
+  /// Whether the part of a 3D model this heading names shows, the tick it
+  /// wears beside its twirl. Null on every other heading.
+  final bool? shown;
+
   /// Identifies this group in the open set. Built from ids, not labels, so two
   /// effects of the same kind on one layer open independently.
   final String path;
@@ -74,6 +79,7 @@ final class FoldGroupRow extends LayerFoldRow {
     required int depth,
     this.enabled,
     this.named = false,
+    this.shown,
   }) : super(depth);
 }
 
@@ -144,6 +150,10 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// A Model layer's material row: the style bit's pattern again, read from
   /// and written to the layer's material rows.
   final bool material;
+
+  /// A Model layer's Animation or part's row: the style bit's pattern again,
+  /// read from and written to the layer's model rows.
+  final bool model;
   const FoldEffectParamRow(this.info, this.param, this.value,
       {required int depth,
       this.driven,
@@ -151,7 +161,8 @@ final class FoldEffectParamRow extends LayerFoldRow {
       this.group,
       this.clip,
       this.inputs = false,
-      this.material = false})
+      this.material = false,
+      this.model = false})
       : super(depth);
 }
 
@@ -1996,7 +2007,8 @@ bool moveLaneKeys({
         :final group,
         clip: final clipId,
         :final inputs,
-        :final material
+        :final material,
+        :final model
       ):
       // Whichever list holds it — a style's keys move exactly as an effect's
       // do, and a group header's and a clip's the same way. The row
@@ -2012,6 +2024,8 @@ bool moveLaneKeys({
         stack = graphInputsOf(entry.layer);
       } else if (material) {
         stack = entry.layer.getMaterials();
+      } else if (model) {
+        stack = entry.layer.getModelRows();
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
@@ -2194,6 +2208,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${inputsPath(layerId)}/${param.id}',
       FoldEffectParamRow(:final info, :final param, material: true) =>
         '${modelMaterialPath(layerId, info.id.toString())}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, model: true) =>
+        '${info.name == 'model_part' ? modelPartPath(layerId, info.id.toString()) : modelAnimationPath(layerId)}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
@@ -2601,6 +2617,8 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
+  addModelFoldRows(rows: rows, info: info, id: id, open: open, driven: driven);
+
   // A placed node graph's Inputs, where Contents would be: they make the
   // layer's picture, which the masks then gate and the effects process. The
   // rows are the ordinary effect rows, so they key, drag and ease as any do.
@@ -2912,7 +2930,7 @@ List<LayerFoldRow> layerFoldRows({
           // A material its file gives no name is numbered.
           label: geometry
               ? engineLabel(material.customName ?? '')
-              : material.customName ?? '${effectLabelOf(material.name)} ${i + 1}',
+              : material.customName ?? l10n.modelMaterialNumbered(i + 1),
           open: materialOpen,
           depth: 2,
         ));

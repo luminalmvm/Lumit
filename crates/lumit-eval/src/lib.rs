@@ -18,8 +18,7 @@
 //!   keys.
 //! - **Evaluated values, not keyframe data**: a property animated elsewhere
 //!   but constant here hashes the same across the constant span.
-//! - **Algorithm version** (`ALGO_VERSION`) is bumped whenever rendering
-//!   output changes, invalidating every old entry by construction.
+//! - **Algorithm version** (`ALGO_VERSION`) is bumped when rendering output changes.
 
 use std::sync::Arc;
 
@@ -30,6 +29,9 @@ use lumit_core::{
 };
 use uuid::Uuid;
 
+use algo::ALGO_VERSION;
+
+mod algo;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
@@ -39,64 +41,6 @@ mod model;
 mod moments;
 pub mod pool;
 pub mod schedule;
-
-/// Bump when any rendering algorithm's output changes — or when the key itself
-/// starts covering something it did not: every cached frame keyed under the old
-/// version stops being addressed, which is what makes a fix to the key safe.
-///
-/// * 1 — the original key.
-/// * 2 — a layer's inherited parent-chain placement joined the key (see
-///   [`feed_layer`]). Under version 1 a hidden parent could be moved without
-///   renaming its children's frames, so those frames were served stale; every
-///   version-1 entry has to stop being addressed for the fix to mean anything.
-/// * 3 — anti-aliasing. Two reasons at once, either sufficient: the key
-///   now covers the project's sample count, and turning the setting on by
-///   default changes what every comp renders to. Every version-2 frame was made
-///   without anti-aliasing, so none of them may be served again.
-/// * 5 — the Lens flare's aperture. The key now covers a file
-///   parameter's size and modification time, so an edited .lens or .cube
-///   renames the frames that read it; and the flare's bake snaps its
-///   continuous iris dials to a step, which moves the picture very slightly
-///   at every f-stop between two steps.
-/// * 6: a 3D layer off z = 0 or tilted in a comp with no camera now
-///   draws, where it used to be cut away.
-/// * 7: a 2D layer and its children ignore the z and X/Y Rotation it
-///   kept from being 3D.
-/// * 8: a parented adjustment layer grades where its parent puts it.
-/// * 9: a lit plain solid is lit at its own size, not as a stretched tile.
-/// * 10: a Rhai expression reads another layer's properties at that layer's
-///   own time.
-/// * 11: Depth of field pro blurs up to the frame's edge, where it left a strip
-///   of the edge pixel.
-/// * 12: 3D layers draw farthest first and cut where they pass through each
-///   other, so a 3D comp with a camera can look different.
-/// * 13: with no camera layer, 3D layers are seen through the default camera.
-/// * 14: camera depth of field blurs a 3D layer by each pixel's distance, round
-///   on screen, Scene depth lets a higher group of 3D layers cover a lower
-///   one, and an adjustment layer's Depth row pointed at itself reads the 3D
-///   layers below.
-/// * 15: shadows are drawn, where a light and a layer cast them.
-/// * 16: camera depth of field blurs a 3D layer's outline too, and blurs as
-///   much as After Effects does.
-/// * 17: on main, a 3D layer's outline blurs under the camera's depth of
-///   field, and a plain solid under one is blurred at its own size.
-/// * 18: main's 17 meets 12 to 16.
-/// * 19: a shape whose outline crosses itself is filled where it crosses.
-/// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
-/// * 21: an open shape path is filled, as if a straight line closed it, and
-///   an open mask no longer hides its layer.
-/// * 22: Depth of field pro smooths the grain out of a wide blur.
-/// * 23: a blurred layer is drawn with more copies the faster it moves, its
-///   parents and the camera move them too, a still one is drawn once, and the
-///   inner layers of a collapsed Precomp blur.
-/// * 24: Corner pin and Bezier warp on a node graph box draw past their picture.
-/// * 25: Model layers cast and take shadows.
-/// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
-/// * 27: a 3D model's glass and clearcoat from its file are drawn.
-/// * 28: a project at 8 or 32 bits draws its effects.
-/// * 29: Particulate in the scene follows a collapsed precomp.
-/// * 30: the camera's depth of field blurs a Model layer.
-pub const ALGO_VERSION: u32 = 30;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -1042,8 +986,8 @@ fn feed_effect_stack(
         // under the name its kept walks go by. Trails draw every frame from
         // the in point too.
         if let Some(layer) = marker_layer.filter(|_| {
-            use lumit_core::fx::points::stepped::{trails, wanted};
-            wanted(comp, e) || trails(comp, e)
+            use lumit_core::fx::points::stepped::{carried, wanted};
+            wanted(comp, e) || carried(comp, e)
         }) {
             use lumit_core::fx::points::stepped::{definition, target};
             h.update(b"stepped/");
@@ -1785,9 +1729,8 @@ fn feed_layer(
     // two comp times sharing the current frame — a held/frozen leading frame —
     // can differ in their neighbours, so their echoes differ. Key the stamped
     // neighbour frames, exactly the ones the render decodes (same window, same
-    // retime mapping, same comp frame step). Footage layers only, matching the
-    // render's neighbour decode; empty otherwise, so a plain layer's key is
-    // untouched.
+    // retime mapping, same comp frame step). Footage layers only, as the render
+    // decodes; a plain layer's key is untouched.
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, layer.switches.fx) {
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -2413,14 +2356,16 @@ fn feed_source(
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
         }
         LayerKind::Light { light } => {
-            // A light draws nothing, but the Lens flare's Lights mode reads what it
-            // *is*, so its properties are in the name. Where it is comes with the layer's.
+            // Nothing drawn, but the Lens flare's Lights mode reads what it *is*.
             h.update(b"light");
             if let Ok(json) = serde_json::to_vec(light) {
                 h.update(&json);
             }
         }
-        kind @ (LayerKind::Model { .. } | LayerKind::Mesh { .. }) => model::feed(h, kind, stamper)?,
+        LayerKind::Model { .. } => {
+            model::feed(h, doc, owner, layer, comp_time, quality, stamper, visited)?;
+        }
+        LayerKind::Mesh { shape } => model::feed_shape(h, *shape),
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a
@@ -4809,12 +4754,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 30, which renamed every frame.
+        // Pinned under ALGO_VERSION 33, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                335_385_639_539_730_110_125_068_013_118_002_080_709,
-                247_824_813_857_488_947_080_300_049_656_569_167_839
+                183_948_385_866_439_700_105_040_621_817_922_866_642,
+                17_529_554_139_422_551_134_988_991_939_270_833_248
             )
         );
 

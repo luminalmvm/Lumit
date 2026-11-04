@@ -765,7 +765,7 @@ class BridgeColour {
 }
 
 /// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
-/// ([`lumit_core::fx::schema::ColourNameRole`]). A View row lists the views of the
+/// ([`lumit_core::fx::colour_name::ColourNameRole`]). A View row lists the views of the
 /// display its sibling `display` row names.
 enum BridgeColourNameRole {
   space,
@@ -1079,12 +1079,18 @@ sealed class BridgeEnabledCond with _$BridgeEnabledCond {
 
   /// Editable while the named number is a still nought.
   const factory BridgeEnabledCond.nought() = BridgeEnabledCond_Nought;
+
+  /// Editable while this other bool is on, or while the condition holds.
+  const factory BridgeEnabledCond.or(
+    String field0,
+    BridgeEnabledCond field1,
+  ) = BridgeEnabledCond_Or;
 }
 
 /// One greying rule: `param`'s row is editable only while `on` satisfies
 /// `cond`. The panel evaluates it against values it already holds, so ticking
 /// a switch greys its dependent row without a round trip;
-/// `lumit_core::fx::builtins::param_enabled` is the same rule in Rust and the authority
+/// `lumit_core::fx::enabled::param_enabled` is the same rule in Rust and the authority
 /// the tests pin.
 class BridgeEnabledWhen {
   final String param;

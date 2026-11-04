@@ -42,6 +42,8 @@ pub(crate) enum InstanceHome {
     GraphInputs,
     /// A Model layer's material rows, one for each material in its file.
     Materials,
+    /// A Model layer's playback and part rows.
+    ModelRows,
 }
 
 /// The node graph `layer` places, when it places one.
@@ -1747,6 +1749,9 @@ pub struct BridgeLayerInfo {
     pub graph_inputs: Option<crate::api::effect::BridgeEffectInstanceInfo>,
     /// A Model layer's material rows, `None` while its file is being read.
     pub materials: Option<Vec<crate::api::effect::BridgeEffectInstanceInfo>>,
+    /// A Model layer's Animation and parts' rows, `None` while its file is
+    /// being read and on any other kind of layer.
+    pub model_rows: Option<crate::api::model_rows::BridgeModelRows>,
     /// Whether collapse is set on this layer but something forces an
     /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
     /// which is what the Timeline's collapse cell draws dimmed.
@@ -2010,6 +2015,7 @@ pub(crate) fn read_layer_info(
             let read = |r| crate::api::effect::read_instance_info(r, layer.start_offset.0, true);
             rows.iter().map(read).collect()
         }),
+        model_rows: crate::api::model_rows::read_model_rows(doc, layer),
         collapse_forced: lumit_core::model::collapse_state(
             doc,
             comp,
@@ -2097,7 +2103,7 @@ pub(crate) fn read_layer_info(
             K::Text { document } => document
                 .animators
                 .iter()
-                .map(|a| crate::api::assets::read_animator(a, layer.start_offset.0))
+                .map(|a| crate::api::assets::animators::read_animator(a, layer.start_offset.0))
                 .collect(),
             _ => Vec::new(),
         },
@@ -4180,11 +4186,8 @@ impl LayerReference {
         // ponytail: the pin is stored at rest and holds nothing at this frame,
         // so pinning an *already deformed* puppet pulls that spot back to rest
         // rather than holding it where it was clicked. The upgrade is two keys
-        // on x/y — rest at the reference time, the clicked point at this frame —
-        // which is only worth writing when the ordinary flow (pins placed on the
-        // rest pose, as After Effects teaches) is not enough. Observable
-        // trigger: a pin added part-way through an animation making the puppet
-        // jump.
+        // on x/y, rest at the reference time and the clicked point at this frame.
+        // Trigger: a pin added part-way through an animation making the puppet jump.
         block.pins.push(lumit_core::puppet::PuppetPin::new(
             kind.write(),
             name,
@@ -5329,17 +5332,10 @@ impl LayerReference {
 
         // A retimed layer gets a keyframe *at the cut*, on both halves.
         //
-        // Both halves keep the whole map, so without this the two speed ramps
-        // stay welded together: editing one half's speed would bend the other
-        // half's curve, because they are the same curve. A key at the cut gives
-        // each half an end of its own to hold. It is inserted preserving the
-        // shape, so the cut itself changes nothing that plays — and it goes in
-        // *before* the clone, which is what puts it on both halves.
-        // **Only a layer that has actually been retimed**. Switching
-        // Retime on installs the identity map, and a map nobody has shaped
-        // needs no key at the cut: both halves play their source at their own
-        // clock whatever happens to the other. Keys appearing on a layer the
-        // user never retimed are keys they then have to notice and remove.
+        // Both halves keep the whole map, so a key at the cut stops one half's
+        // speed bending the other's. It keeps the shape, and goes in before the
+        // clone to land on both. Only on a layer actually retimed: a map nobody
+        // has shaped needs none, and the user would have to notice and remove it.
         let retimed = layer
             .retime
             .as_ref()
@@ -7561,6 +7557,9 @@ impl LayerReference {
         }
         if layer.styles.iter().any(|s| s.id == id) {
             return Ok(InstanceHome::Styles);
+        }
+        if lumit_core::model_part::owns(layer.id, id) {
+            return Ok(InstanceHome::ModelRows);
         }
         if lumit_render::model_material::owns(&layer, std::slice::from_ref(instance)) {
             return Ok(InstanceHome::Materials);

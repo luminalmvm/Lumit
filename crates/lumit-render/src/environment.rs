@@ -9,7 +9,9 @@
 
 use glam::Mat3;
 use lumit_gpu::fx::environment::EnvironmentLight;
+use std::collections::HashMap;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::draw::{CompLayerDraw, DrawSource};
 use crate::realise::Realiser;
@@ -33,6 +35,7 @@ pub(crate) fn add(
     doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
     t: f64,
+    pixels_by_layer: &HashMap<Uuid, &crate::decode::CompLayerPixels>,
 ) {
     use lumit_core::model::{LayerKind, LightKind};
     let any = comp.layers.iter().any(
@@ -83,7 +86,25 @@ pub(crate) fn add(
     source.mb.clear();
     source.lights.clear();
     source.material = Default::default();
-    let key = picture_key(&source);
+    // A still's picture is the same at every moment, so its cubes are too.
+    let input = match (
+        &source.source,
+        comp.layers.iter().find(|l| l.id == e.source),
+    ) {
+        (DrawSource::Pixels { tex_w, tex_h, .. }, Some(layer)) => {
+            let raster = (*tex_w, *tex_h);
+            crate::build::fx_key::still_input_key(
+                doc,
+                layer,
+                pixels_by_layer,
+                t,
+                raster,
+                &source.fx,
+            )
+        }
+        _ => source.fx_input_key,
+    };
+    let key = picture_key(&source, input);
     let look = EnvironmentDraw {
         source,
         key,
@@ -100,7 +121,7 @@ pub(crate) fn add(
 
 /// The content name of the source's picture: its own and its effects', when
 /// they read nothing but it. `None` makes the cubes again every frame.
-fn picture_key(d: &CompLayerDraw) -> Option<u128> {
+fn picture_key(d: &CompLayerDraw, input: Option<u128>) -> Option<u128> {
     let alone = d.dof_inputs.is_empty()
         && d.mattes.is_empty()
         && d.colour_tables.is_empty()
@@ -112,7 +133,7 @@ fn picture_key(d: &CompLayerDraw) -> Option<u128> {
         && d.flow_fields.is_empty()
         && d.mask_paths.is_empty()
         && d.points_schedules.is_empty();
-    let key = d.fx_input_key.filter(|_| alone)?;
+    let key = input.filter(|_| alone)?;
     let mut hash = blake3::Hasher::new();
     hash.update(&key.to_le_bytes());
     for op in d.fx.iter() {

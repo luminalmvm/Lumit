@@ -4,6 +4,8 @@
 // between perspective and orthographic, and the one that draws the view as
 // lines only.
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../icons/icons.dart';
@@ -31,6 +33,73 @@ const List<ViewerView> _faces = [
   ViewerView.back,
   ViewerView.front,
 ];
+
+/// How far in from the view's top left corner its look is named.
+const double viewLookInset = 8;
+
+/// Which look a view shows models in, when that isn't what exports: empty on
+/// Final. The words change at once, as a shortcut can change them. Bright for a
+/// moment after they do, so the eye finds them, then quiet over the picture.
+class ViewLookTag extends StatefulWidget {
+  final String look;
+
+  const ViewLookTag({super.key, required this.look});
+
+  @override
+  State<ViewLookTag> createState() => _ViewLookTagState();
+}
+
+class _ViewLookTagState extends State<ViewLookTag> {
+  static const _bright = Duration(milliseconds: 900);
+  bool _changed = false;
+  Timer? _settle;
+
+  @override
+  void didUpdateWidget(ViewLookTag old) {
+    super.didUpdateWidget(old);
+    if (old.look == widget.look) return;
+    _changed = true;
+    _settle?.cancel();
+    _settle = Timer(_bright, () {
+      if (mounted) setState(() => _changed = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.look.isEmpty) return const SizedBox.shrink();
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: t.surface0.withValues(alpha: 0.75),
+          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: AnimatedOpacity(
+            key: const ValueKey('viewer-look-tag'),
+            // At once on the way up, and slower on the way down.
+            duration: _changed ? Duration.zero : scope.motion.hoverOut.duration,
+            curve: scope.motion.hoverOut.curve,
+            opacity: _changed ? 1 : 0.7,
+            child: Text(
+              widget.look,
+              style: t.caption.copyWith(color: t.textPrimary),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class ViewerViewCube extends StatefulWidget {
   /// The view's rotation, degrees, as its pose holds it.

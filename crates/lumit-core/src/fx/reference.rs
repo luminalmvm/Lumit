@@ -20,8 +20,9 @@
 
 use serde::Serialize;
 
+use super::colour_name::ColourNameRole;
 use super::params::Unit;
-use super::schema::{ColourNameRole, EffectSchema, EnabledCond, FxCategory, ParamKind};
+use super::schema::{EffectSchema, EnabledCond, FxCategory, ParamKind};
 
 /// The whole catalogue, ready to serialise.
 #[derive(Debug, Serialize)]
@@ -384,14 +385,7 @@ fn effect(schema: &'static EffectSchema) -> Effect {
             .enabled_when
             .iter()
             .map(|e| {
-                let (cond, value) = match e.cond {
-                    EnabledCond::BoolIs(v) => ("bool_is", Some(v.into())),
-                    EnabledCond::ChoiceIs(v) => ("choice_is", Some(v.into())),
-                    EnabledCond::ChoiceIsNot(v) => ("choice_is_not", Some(v.into())),
-                    EnabledCond::LayerSet => ("layer_set", None),
-                    EnabledCond::LayerUnset => ("layer_unset", None),
-                    EnabledCond::Nought => ("nought", None),
-                };
+                let (cond, value) = cond_row(e.cond);
                 EnabledWhen {
                     param: e.param,
                     on: e.on,
@@ -428,6 +422,24 @@ pub fn reference() -> Reference {
 /// If the catalogue cannot be serialised to JSON.
 pub fn reference_json() -> Result<String, serde_json::Error> {
     Ok(serde_json::to_string_pretty(&reference())? + "\n")
+}
+
+/// A rule's condition as the reference writes it. An Or names its other switch
+/// and what it stands beside.
+fn cond_row(cond: EnabledCond) -> (&'static str, Option<serde_json::Value>) {
+    match cond {
+        EnabledCond::BoolIs(v) => ("bool_is", Some(v.into())),
+        EnabledCond::ChoiceIs(v) => ("choice_is", Some(v.into())),
+        EnabledCond::ChoiceIsNot(v) => ("choice_is_not", Some(v.into())),
+        EnabledCond::LayerSet => ("layer_set", None),
+        EnabledCond::LayerUnset => ("layer_unset", None),
+        EnabledCond::Nought => ("nought", None),
+        EnabledCond::Or(other, then) => {
+            let (cond, value) = cond_row(*then);
+            let value = serde_json::json!({"or": other, "cond": cond, "value": value});
+            ("or", Some(value))
+        }
+    }
 }
 
 #[cfg(test)]

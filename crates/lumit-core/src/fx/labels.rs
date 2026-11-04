@@ -37,6 +37,7 @@ pub fn user_facing_labels() -> BTreeSet<String> {
         super::styles::STYLE_DEFS
             .builtins()
             .chain(crate::model_material::MATERIAL_DEFS.builtins())
+            .chain(crate::model_part::PART_DEFS.builtins())
             .map(super::registry::EffectDef::schema),
     );
     for schema in schemas {

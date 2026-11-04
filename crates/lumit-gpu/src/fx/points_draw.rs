@@ -17,7 +17,9 @@
 
 use crate::GpuContext;
 
-use super::{particulate::ParticulateParams, particulate::STREAM_WORDS, work_texture, FxEngine};
+use super::{
+    particulate::STREAM_WORDS, particulate_params::ParticulateParams, work_texture, FxEngine,
+};
 
 /// **Which picture-derived field a point is put to a vote against**, in the
 /// vertex stage.

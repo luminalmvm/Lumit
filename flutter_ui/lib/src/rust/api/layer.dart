@@ -13,6 +13,7 @@ import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
 import 'model.dart';
+import 'model_rows.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -840,6 +841,10 @@ class BridgeLayerInfo {
   /// A Model layer's material rows, `None` while its file is being read.
   final List<BridgeEffectInstanceInfo>? materials;
 
+  /// A Model layer's Animation and parts' rows, `None` while its file is
+  /// being read and on any other kind of layer.
+  final BridgeModelRows? modelRows;
+
   /// Whether collapse is set on this layer but something forces an
   /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
   /// which is what the Timeline's collapse cell draws dimmed.
@@ -996,6 +1001,7 @@ class BridgeLayerInfo {
     required this.styles,
     this.graphInputs,
     this.materials,
+    this.modelRows,
     required this.collapseForced,
     required this.label,
     this.matte,
@@ -1042,6 +1048,7 @@ class BridgeLayerInfo {
       styles.hashCode ^
       graphInputs.hashCode ^
       materials.hashCode ^
+      modelRows.hashCode ^
       collapseForced.hashCode ^
       label.hashCode ^
       matte.hashCode ^
@@ -1090,6 +1097,7 @@ class BridgeLayerInfo {
           styles == other.styles &&
           graphInputs == other.graphInputs &&
           materials == other.materials &&
+          modelRows == other.modelRows &&
           collapseForced == other.collapseForced &&
           label == other.label &&
           matte == other.matte &&
@@ -3284,6 +3292,16 @@ class LayerReference {
   String copySequenceShape({UuidValue? clip}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceCopySequenceShape(that: this, clip: clip);
 
+  /// A Camera or Light layer for each camera and light a Model layer's file
+  /// holds, keyed so they follow it, as one undo step. The Key light its first
+  /// model brought goes if lights are made and nobody has touched it, as the
+  /// file's lights take its place. `camera_name` and `light_name` name one the
+  /// file doesn't. Answers how many were made.
+  int createLayersFromModel(
+          {required String cameraName, required String lightName}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCreateLayersFromModel(
+          that: this, cameraName: cameraName, lightName: lightName);
+
   /// **Text to points**: a copy of this Type layer beside it, fitted
   /// with **Emit from image**, so the words become a points stream in the
   /// shape of themselves.
@@ -3683,14 +3701,12 @@ class LayerReference {
         that: this,
       );
 
-  /// The corners of a Model layer's box in its own pixels, three numbers
-  /// each, once its file has been read, a 3D shape's, or a solid Text or
-  /// Shape layer's once it has been drawn. Empty before that and on any
-  /// other kind of layer.
-  Float64List getModelBox() =>
-      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelBox(
-        that: this,
-      );
+  /// The corners of a Model layer's box in its own pixels at comp frame
+  /// `at_frame`, three numbers each, once its file has been read, a 3D
+  /// shape's, or a solid Text or Shape layer's once it has been drawn.
+  /// Empty before that and on any other kind of layer.
+  Float64List getModelBox({required int atFrame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceGetModelBox(that: this, atFrame: atFrame);
 
   /// The comp pixels a metre Fit to comp gives a Model layer's model with
   /// `up_axis` up, once its file has been read. `None` before that and on
@@ -3703,11 +3719,41 @@ class LayerReference {
   /// each in the layer's own pixels, it first meets a Model layer's model,
   /// in parts of `direction`. `None` where it misses, before the file has
   /// been read and on any other kind of layer. A solid Text or Shape layer
-  /// answers the same, of what it was last drawn as. Asked once a click.
+  /// answers the same, of what it was last drawn as. Asked once a click, and
+  /// when the pointer rests for a moment, as the model is at comp frame
+  /// `at_frame`.
   double? getModelHit(
-          {required List<double> origin, required List<double> direction}) =>
+          {required List<double> origin,
+          required List<double> direction,
+          required int atFrame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelHit(
-          that: this, origin: origin, direction: direction);
+          that: this, origin: origin, direction: direction, atFrame: atFrame);
+
+  /// The id of the part of a Model layer's model first met along the ray
+  /// from `origin` by `direction`, three numbers each in the layer's own
+  /// pixels, as it is at comp frame `at_frame`. `None` where it misses. Asked
+  /// once a click.
+  UuidValue? getModelPartAt(
+          {required List<double> origin,
+          required List<double> direction,
+          required int atFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelPartAt(
+          that: this, origin: origin, direction: direction, atFrame: atFrame);
+
+  /// Where the part with rows `part` of a Model layer is at comp frame
+  /// `at_frame`. `None` before its file has been read. Asked while a part is
+  /// picked.
+  BridgeModelPartPlace? getModelPartPlace(
+          {required UuidValue part_, required int atFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelPartPlace(
+          that: this, part_: part_, atFrame: atFrame);
+
+  /// A Model layer's playback rows and every part's, as staged copies. Empty
+  /// until its file has been read, and on any other kind of layer.
+  List<BridgeEffectInstance> getModelRows() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelRows(
+        that: this,
+      );
 
   /// A Model layer's settings, or `None` on any other kind of layer.
   BridgeModelSettings? getModelSettings() =>

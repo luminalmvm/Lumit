@@ -68,7 +68,7 @@ fn every_wgsl_kernel_parses_and_validates() {
             continue;
         }
         // Appended to Particulate's kernel, as the engine compiles it.
-        let source = if name == "fx_particulate_scene.wgsl" {
+        let source = if name == "fx_particulate_scene.wgsl" || name == "fx_particulate_sim.wgsl" {
             format!("{}{source}", include_str!("../src/fx_particulate.wgsl"))
         } else {
             source
