@@ -83,6 +83,7 @@ mod audio;
 mod autosave;
 mod beats;
 mod claim;
+mod closing;
 // The command line, which the browser build has none of.
 #[cfg(not(target_arch = "wasm32"))]
 mod cli;

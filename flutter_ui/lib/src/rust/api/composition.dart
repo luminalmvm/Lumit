@@ -2756,6 +2756,15 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceUngroupSelection(
               that: this, layerIds: layerIds);
 
+  /// The names of the 3D models this comp draws, precomps included, that
+  /// can't be read right now. An export leaves them out, or draws the last
+  /// version read. Reads any not read yet beside the caller, so never from a
+  /// build.
+  List<String> unreadModels() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceUnreadModels(
+        that: this,
+      );
+
   /// How the picture sees the comp's 3D space at `frame`: twelve numbers,
   /// three rows of four, taking a comp-space `(x, y, z, 1)` to `(X, Y, W)`,
   /// with the comp pixel at `(X / W, Y / W)` and `W` above 0 in front of the

@@ -412,6 +412,9 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// of, in a shared project. Empty everywhere else.
   List<BridgeFootageLack> _lacking = const [];
 
+  /// The 3D models this comp draws that can't be read right now.
+  List<String> _unread = const [];
+
   /// What the export does about [_lacking]: one of the three below, or the
   /// number of the person whose computer does the export instead.
   int _footage = _footageAsItIs;
@@ -595,6 +598,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     _scroll.addListener(_spy);
     try {
       _lacking = widget.comp.shareLacking();
+      _unread = widget.comp.unreadModels();
     } catch (_) {
       // No engine to ask, as in a widget test.
     }
@@ -1231,6 +1235,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       ExportSection.output,
       l10n.exportGroupComposition,
       [
+        if (_unread.isNotEmpty)
+          _warning(t, l10n.exportModelsUnread(_unread.join(', ')),
+              key: const ValueKey('export-models-unread')),
         _columns(
           _row(
             t,

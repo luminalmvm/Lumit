@@ -2622,6 +2622,8 @@ Set<String> disabledParams(
 /// heading reading `style_drop_shadow` is what leaving them out looks like.
 /// The engine makes the same join in `fx::def`, and for the same reason.
 String effectLabelOf(String name) {
+  // A material's row is nothing anyone adds, so no list of effects has it.
+  if (name == 'model_material') return l10n.fxMaterial;
   for (final info in effectSchema.effectsFor(name)) {
     if (info.name == name) return engineLabel(info.label);
   }

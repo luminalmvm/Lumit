@@ -2098,7 +2098,7 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(rb.packed(), ([300.0, 700.0], 150.0, true, 1, 1.0));
+    assert_eq!(rb.packed(), ([300.0, 700.0], 150.0, 1, 1, 1.0));
 
     // The Type choice flips Spin/Zoom; Edges is honoured (Mirror = 2).
     for p in &mut radial.params {
@@ -2116,7 +2116,7 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         &MarkerContext::NONE,
     );
     let (_, _, spin, edge, _) = rb.packed();
-    assert!(!spin, "Type 1 is Zoom");
+    assert_eq!(spin, 0, "Type 1 is Zoom");
     assert_eq!(edge, 2, "Edges Mirror is honoured");
     // An out-of-range Choice clamps to Mirror rather than falling back, exactly
     // as the old arm's `(*c).min(2)` did.

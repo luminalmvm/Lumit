@@ -329,7 +329,8 @@
           "default": 0,
           "options": [
             "Spin",
-            "Zoom"
+            "Zoom",
+            "Rays"
           ],
           "dividers_after": []
         },

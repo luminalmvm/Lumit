@@ -3714,8 +3714,8 @@ class LayerReference {
   /// How far along the ray from `origin` by `direction`, three numbers
   /// each in the layer's own pixels, it first meets a Model layer's model,
   /// in parts of `direction`. `None` where it misses, before the file has
-  /// been read and on any other kind of layer. Asked once a click, as the
-  /// model is at comp frame `at_frame`.
+  /// been read and on any other kind of layer. Asked once a click, and when
+  /// the pointer rests for a moment, as the model is at comp frame `at_frame`.
   double? getModelHit(
           {required List<double> origin,
           required List<double> direction,

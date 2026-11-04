@@ -11,6 +11,7 @@ use crate::api::{
     BridgeError,
 };
 use lumit_core::model::{EffectInstance, EffectValue};
+use uuid::Uuid;
 
 /// Which of a 3D model file's axes points up.
 #[frb(non_opaque)]
@@ -69,21 +70,53 @@ impl CompositionReference {
             let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             proj.store.snapshot()
         };
-        let mut seen = vec![self.id];
-        let mut i = 0;
-        // Each comp once, so a comp nested twice or in a loop is walked once.
-        while let Some(&id) = seen.get(i) {
-            i += 1;
-            for layer in doc.comp(id).map_or(&[][..], |c| &c.layers) {
-                match &layer.kind {
-                    LayerKind::Model { .. } => return Ok(true),
-                    LayerKind::Precomp { comp } if !seen.contains(comp) => seen.push(*comp),
-                    _ => {}
-                }
+        Ok(!model_items(&doc, self.id).is_empty())
+    }
+
+    /// The names of the 3D models this comp draws, precomps included, that
+    /// can't be read right now. An export leaves them out, or draws the last
+    /// version read. Reads any not read yet beside the caller, so never from a
+    /// build.
+    #[frb(sync)]
+    pub fn unread_models(&self) -> Result<Vec<String>, BridgeError> {
+        let doc = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        let mut names = Vec::new();
+        for item in model_items(&doc, self.id) {
+            let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+                continue;
+            };
+            let state = lumit_scene::blender::state(std::path::Path::new(f.media.on_disk()));
+            let trouble = !matches!(state, None | Some(lumit_scene::blender::State::Converting));
+            let scene = lumit_render::model::scene_if_read(&doc, item);
+            if (trouble || matches!(scene, Some(None))) && !names.contains(&f.name) {
+                names.push(f.name.clone());
             }
         }
-        Ok(false)
+        Ok(names)
     }
+}
+
+/// The 3D models comp `comp` draws, precomps included.
+fn model_items(doc: &lumit_core::model::Document, comp: Uuid) -> Vec<Uuid> {
+    let mut seen = vec![comp];
+    let mut items = Vec::new();
+    let mut i = 0;
+    // Each comp once, so a comp nested twice or in a loop is walked once.
+    while let Some(&id) = seen.get(i) {
+        i += 1;
+        for layer in doc.comp(id).map_or(&[][..], |c| &c.layers) {
+            match &layer.kind {
+                LayerKind::Model { item, .. } if !items.contains(item) => items.push(*item),
+                LayerKind::Precomp { comp } if !seen.contains(comp) => seen.push(*comp),
+                _ => {}
+            }
+        }
+    }
+    items
 }
 
 /// How a 3D model sits in its Model layer, so its Scale stays at 100%.
@@ -197,8 +230,8 @@ impl LayerReference {
     /// How far along the ray from `origin` by `direction`, three numbers
     /// each in the layer's own pixels, it first meets a Model layer's model,
     /// in parts of `direction`. `None` where it misses, before the file has
-    /// been read and on any other kind of layer. Asked once a click, as the
-    /// model is at comp frame `at_frame`.
+    /// been read and on any other kind of layer. Asked once a click, and when
+    /// the pointer rests for a moment, as the model is at comp frame `at_frame`.
     #[frb(sync)]
     pub fn get_model_hit(
         &self,
