@@ -23,6 +23,7 @@ use wgpu::util::DeviceExt;
 
 mod blur;
 pub mod display;
+pub mod lens;
 pub mod look;
 mod samplers;
 pub mod shadow;
@@ -179,6 +180,8 @@ pub(crate) struct MeshFx {
     layout: wgpu::PipelineLayout,
     /// Draws a shadow map's view ([`shadow`]), made when first asked for.
     shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
+    /// The camera's blur ([`lens`]), made when first asked for.
+    lens: std::sync::OnceLock<lens::LensPasses>,
     depth_one: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     depth_many: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     /// A picture's next level down from the one above, plain, sRGB and in
@@ -410,6 +413,7 @@ impl MeshFx {
             samplers,
             environment: environment::Fallback::new(device),
             shadow: std::sync::OnceLock::new(),
+            lens: std::sync::OnceLock::new(),
             depth_one,
             depth_many,
             down,

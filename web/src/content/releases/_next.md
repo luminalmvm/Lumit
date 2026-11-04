@@ -7,6 +7,7 @@ section below, and when the release note is written the lines move into it.
 - A project set to 8 or 32 bits draws its effects, where most of them used to come out empty.
 - Particulate in the scene inside a collapsed 3D precomp now follows the precomp, where it used
   to stay behind when the precomp was moved.
+- The camera's depth of field now blurs Model layers, which it used to leave sharp.
 - Depth of field pro no longer leaves a fine grain over a wide blur, by either method.
 - Fast layers with motion blur are drawn with more copies, up to 128, so they smear instead of stepping. A child now blurs with its parent, a 3D layer blurs when the camera moves, and the layers inside a collapsed precomp blur. Exports of those can look smoother and take longer. Set the second number beside **Samples** in **Composition settings** to the first to keep a fixed count.
 - Glow, and the other effects that spread light, no longer show a faint box behind each letter

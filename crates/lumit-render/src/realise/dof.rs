@@ -73,6 +73,45 @@ pub(crate) fn dof_leaves_sharp(
         .all(|c| c.z > 0.0 && k * zoom * (c.z - focus).abs() / c.z < 0.25)
 }
 
+/// The camera's blur on a model whose box goes `to_comp` to comp pixels, as
+/// the mesh pass's picture of it takes it. `None` when none of it blurs by
+/// half a pixel, or there's no depth of field.
+pub(crate) fn model_lens(
+    cam: lumit_core::model::CameraPose,
+    bounds: &lumit_scene::Bounds,
+    to_comp: glam::Mat4,
+    comp: (u32, u32),
+    render_scale: f32,
+) -> Option<lumit_gpu::mesh::lens::ModelLens> {
+    let dof = cam.dof?;
+    let zoom = (cam.zoom as f32).max(1.0);
+    let k = (lumit_core::camera::coc_per_zoom(&dof, f64::from(zoom)) / 2.0 * DOF_SOFTNESS) as f32;
+    let focus = dof.focus_distance as f32;
+    let reach = k * zoom * render_scale;
+    if reach <= 0.0 {
+        return None;
+    }
+    let eye = from_eye(cam, comp, zoom) * to_comp;
+    let corner = |i: usize| {
+        glam::Vec3::from(std::array::from_fn(|a| match i >> a & 1 {
+            0 => bounds.min[a],
+            _ => bounds.max[a],
+        }))
+    };
+    let widest = (0..8)
+        .map(|i| eye.transform_point3(corner(i)).z)
+        .filter(|z| *z > 0.0)
+        .map(|z| reach * (z - focus).abs() / z)
+        .fold(0.0, f32::max);
+    (widest >= 0.5).then_some(lumit_gpu::mesh::lens::ModelLens {
+        reach,
+        focus,
+        cap: widest.min(DOF_REACH),
+        // The camera's matrix has w as distance over zoom.
+        z_per_w: zoom,
+    })
+}
+
 /// Depth of field on a 3D layer (docs/impl/camera.md §5), for
 /// `FxEngine::blur_field`: the layer seen from the eye, how far a pass may
 /// reach, and how many texels of room the layer needs on each side for its

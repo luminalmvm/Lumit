@@ -330,3 +330,104 @@ fn an_animated_title_stays_put_when_it_gains_depth() {
         assert!(a.abs_diff(b) <= 3, "{flat:?} became {solid:?}");
     }
 }
+
+/// The camera's depth of field blurs a solid off its focus.
+#[test]
+fn the_camera_blurs_a_solid_off_its_focus() {
+    if HeadlessRenderer::shared().is_err() {
+        lumit_gpu::no_adapter();
+        return;
+    }
+    let with_camera = |dof: bool| {
+        let (mut doc, id) = comp();
+        let kind = LayerKind::Shape { contents: square() };
+        let mut layer = base(&doc, id, "Solid", kind);
+        layer.transform.material.geometry = geometry(40.0, 0.0);
+        add(&mut doc, id, layer);
+        let zoom = lumit_core::camera::default_zoom(f64::from(SIZE));
+        let mut options = lumit_core::model::CameraOptions::fresh(zoom, (160.0, 160.0, 0.0));
+        options.depth_of_field = dof;
+        options.focus_distance = Property::fixed(zoom * 0.4);
+        options.aperture = Property::fixed(60.0);
+        let camera = LayerKind::Camera {
+            zoom: Property::fixed(zoom),
+            options: Box::new(options),
+            solve_link: None,
+            correction_base: None,
+        };
+        let mut lens = base(&doc, id, "Camera", camera);
+        lens.switches.three_d = false;
+        lens.transform.position_x = Property::fixed(160.0);
+        lens.transform.position_y = Property::fixed(160.0);
+        lens.transform.position_z = Property::fixed(-zoom);
+        add(&mut doc, id, lens);
+        render(doc, id)
+    };
+    let (sharp, soft) = (with_camera(false), with_camera(true));
+    assert_ne!(sharp, soft, "the camera's blur left a solid as it was");
+    // The fringe has colours neither the ground nor the square has.
+    let between = |p: &[u8]| {
+        p.chunks_exact(4)
+            .filter(|c| c[0] > 40 && c[0] < 160)
+            .count()
+    };
+    assert!(between(&soft) > between(&sharp) * 2, "no soft edge");
+
+    // A solid wider than the frame runs on past its edge, with no fade to the
+    // ground there.
+    let (mut doc, id) = comp();
+    let wide = vec![ShapeEntry::Item(ShapeItem::filled(
+        "Wall",
+        BezierPath {
+            vertices: vec![
+                Vertex {
+                    pos: (0.0, 0.0),
+                    tan_in: (0.0, 0.0),
+                    tan_out: (0.0, 0.0),
+                },
+                Vertex {
+                    pos: (4000.0, 0.0),
+                    tan_in: (0.0, 0.0),
+                    tan_out: (0.0, 0.0),
+                },
+                Vertex {
+                    pos: (4000.0, 4000.0),
+                    tan_in: (0.0, 0.0),
+                    tan_out: (0.0, 0.0),
+                },
+                Vertex {
+                    pos: (0.0, 4000.0),
+                    tan_in: (0.0, 0.0),
+                    tan_out: (0.0, 0.0),
+                },
+            ],
+            closed: true,
+        },
+        LinearColour([0.8, 0.2, 0.1, 1.0]),
+    ))];
+    let mut wall = base(&doc, id, "Wall", LayerKind::Shape { contents: wide });
+    wall.transform.anchor_x = Property::fixed(2000.0);
+    wall.transform.anchor_y = Property::fixed(2000.0);
+    wall.transform.material.geometry = geometry(40.0, 0.0);
+    add(&mut doc, id, wall);
+    let zoom = lumit_core::camera::default_zoom(f64::from(SIZE));
+    let mut options = lumit_core::model::CameraOptions::fresh(zoom, (160.0, 160.0, 0.0));
+    options.depth_of_field = true;
+    options.focus_distance = Property::fixed(zoom * 0.4);
+    options.aperture = Property::fixed(60.0);
+    let camera = LayerKind::Camera {
+        zoom: Property::fixed(zoom),
+        options: Box::new(options),
+        solve_link: None,
+        correction_base: None,
+    };
+    let mut lens = base(&doc, id, "Camera", camera);
+    lens.switches.three_d = false;
+    lens.transform.position_x = Property::fixed(160.0);
+    lens.transform.position_y = Property::fixed(160.0);
+    lens.transform.position_z = Property::fixed(-zoom);
+    add(&mut doc, id, lens);
+    let wall = render(doc, id);
+    let red = |x: u32| wall[((SIZE / 2 * SIZE + x) * 4) as usize];
+    assert_eq!(red(0), red(SIZE / 2), "the frame's edge faded");
+}
