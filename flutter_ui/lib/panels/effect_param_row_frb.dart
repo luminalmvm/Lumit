@@ -1762,7 +1762,12 @@ class EffectParamRowFrb extends StatelessWidget {
             onPressed: onAction == null || !running.contains(id)
                 ? null
                 : () => onAction!(id, p.id),
-            child: Text(engineLabel(p.label), style: t.body),
+            child: Text(
+              engineLabel(p.label),
+              style: running.contains(id)
+                  ? t.body
+                  : t.body.copyWith(color: t.textDisabled),
+            ),
           ),
         ),
       ];

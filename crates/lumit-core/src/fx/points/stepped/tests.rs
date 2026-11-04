@@ -1,5 +1,7 @@
 //! Particulate's walk from the in point, on the host.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use crate::expression::ExpressionContext;
 use crate::fx::effects::particulate::Particulate;
 use crate::fx::markers::MarkerContext;

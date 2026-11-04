@@ -208,8 +208,8 @@ fn only_simulate_changes_anything() {
 #[test]
 fn a_look_row_draws_again_without_walking() {
     use lumit_render::sim::walked_here;
-    // The same project, as only a look row differs.
-    let (doc, id) = project(|_| {});
+    // Rows of its own, or another test's walk of the same name could be in hand.
+    let (doc, id) = project(|e| float(e, "emit_rate", 2900.0));
     let Some(before) = pixels(&doc, id, 60) else {
         return;
     };

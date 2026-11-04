@@ -424,6 +424,24 @@ pub fn reference_json() -> Result<String, serde_json::Error> {
     Ok(serde_json::to_string_pretty(&reference())? + "\n")
 }
 
+/// A rule's condition as the reference writes it. An Or names its other switch
+/// and what it stands beside.
+fn cond_row(cond: EnabledCond) -> (&'static str, Option<serde_json::Value>) {
+    match cond {
+        EnabledCond::BoolIs(v) => ("bool_is", Some(v.into())),
+        EnabledCond::ChoiceIs(v) => ("choice_is", Some(v.into())),
+        EnabledCond::ChoiceIsNot(v) => ("choice_is_not", Some(v.into())),
+        EnabledCond::LayerSet => ("layer_set", None),
+        EnabledCond::LayerUnset => ("layer_unset", None),
+        EnabledCond::Nought => ("nought", None),
+        EnabledCond::Or(other, then) => {
+            let (cond, value) = cond_row(*then);
+            let value = serde_json::json!({"or": other, "cond": cond, "value": value});
+            ("or", Some(value))
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -472,23 +490,5 @@ mod tests {
     #[ignore = "writes the fixture; run after a schema change"]
     fn regenerate_fx_reference() {
         std::fs::write(fixture_path(), reference_json().unwrap()).expect("write fx-reference.json");
-    }
-}
-
-/// A rule's condition as the reference writes it. An Or names its other switch
-/// and what it stands beside.
-fn cond_row(cond: EnabledCond) -> (&'static str, Option<serde_json::Value>) {
-    match cond {
-        EnabledCond::BoolIs(v) => ("bool_is", Some(v.into())),
-        EnabledCond::ChoiceIs(v) => ("choice_is", Some(v.into())),
-        EnabledCond::ChoiceIsNot(v) => ("choice_is_not", Some(v.into())),
-        EnabledCond::LayerSet => ("layer_set", None),
-        EnabledCond::LayerUnset => ("layer_unset", None),
-        EnabledCond::Nought => ("nought", None),
-        EnabledCond::Or(other, then) => {
-            let (cond, value) = cond_row(*then);
-            let value = serde_json::json!({"or": other, "cond": cond, "value": value});
-            ("or", Some(value))
-        }
     }
 }

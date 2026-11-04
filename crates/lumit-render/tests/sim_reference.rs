@@ -294,8 +294,8 @@ fn the_card_walks_where_the_reference_walks() {
     let mut worst = 0.0f32;
     for ((state, gpu_id), q) in card.iter().zip(&reference) {
         assert_eq!(*gpu_id, q.id, "in the same order");
-        for k in 0..3 {
-            worst = worst.max((state[k] - q.at[k]).abs());
+        for (a, b) in state.iter().zip(&q.at) {
+            worst = worst.max((a - b).abs());
         }
     }
     assert!(worst < 0.1, "worst place {worst} px");

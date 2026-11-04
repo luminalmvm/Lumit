@@ -651,6 +651,7 @@ Map<String, String> get _built => {
       "Ground": l10n.fxGround,
       "Ground height": l10n.fxGroundHeight,
       "Sparks from": l10n.fxSparksFrom,
+      "Spark inherit": l10n.fxSparkInherit,
       "Death": l10n.fxDeath,
       "Flight": l10n.fxFlight,
       "Z": l10n.fxAxisZ,

@@ -4133,6 +4133,10 @@
   "@fxSparksFrom": {
     "description": "Effect controls: a control on Particulate: when a particle throws its sparks."
   },
+  "fxSparkInherit": "Spark inherit",
+  "@fxSparkInherit": {
+    "description": "Effect controls: a control on Particulate: how much of its parent's speed a spark starts with."
+  },
   "fxDeath": "Death",
   "@fxDeath": {
     "description": "Effect controls: an option of Sparks from on Particulate: a particle throws its sparks as it dies."

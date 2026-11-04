@@ -12,8 +12,6 @@
 // track's rule, for the same reason: the engine keeps the reading as a
 // value and a stream would be a second mechanism for the same fact.
 
-import 'dart:ui' show FontFeature;
-
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -182,11 +180,13 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
         children: [
           // The same bar the Camera track draws, measuring the same thing: how
           // far the answer reaches, once the work is over.
-          if (status != null && status.clipFrames > 0)
+          // A bake always keeps the bar's place, so its rows don't move when
+          // its first state lands.
+          if (widget.bake || (status != null && status.clipFrames > 0))
             TrackSpanBar(
               key: const ValueKey('fx-planar-track-span'),
-              analysed: status.frames,
-              total: status.clipFrames,
+              analysed: status?.frames ?? 0,
+              total: status?.clipFrames ?? 0,
             ),
           Text(
             widget.bake
