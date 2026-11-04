@@ -84,7 +84,8 @@ pub mod schedule;
 /// * 23: a blurred layer is drawn with more copies the faster it moves, its
 ///   parents and the camera move them too, a still one is drawn once, and the
 ///   inner layers of a collapsed Precomp blur.
-pub const ALGO_VERSION: u32 = 23;
+/// * 28: a project at 8 or 32 bits draws its effects.
+pub const ALGO_VERSION: u32 = 28;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4842,12 +4843,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 23, which renamed every frame.
+        // Pinned under ALGO_VERSION 28, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                182_280_591_360_908_586_824_180_793_851_848_185_389,
-                216_552_543_631_262_711_762_116_911_137_856_281_097
+                328_268_729_066_176_038_303_228_577_772_713_744_142,
+                36_726_106_807_010_197_772_526_010_792_187_696_186
             )
         );
 

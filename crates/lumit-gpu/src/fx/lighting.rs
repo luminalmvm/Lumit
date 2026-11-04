@@ -462,7 +462,7 @@ impl LightingFx {
         let compute = |layout: &wgpu::BindGroupLayout, wgsl: &str, label: &str, entry: &str| {
             let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(label),
-                source: wgpu::ShaderSource::Wgsl(wgsl.into()),
+                source: wgpu::ShaderSource::Wgsl(super::at_depth(working, wgsl).into()),
             });
             let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(label),
