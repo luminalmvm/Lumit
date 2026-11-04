@@ -76,6 +76,7 @@ mod haze;
 pub mod headless;
 pub mod media_index;
 pub mod model;
+pub mod model_extract;
 pub mod model_layer;
 pub mod model_material;
 pub mod model_motion;

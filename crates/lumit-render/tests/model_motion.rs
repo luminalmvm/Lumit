@@ -1,6 +1,6 @@
 //! A Model layer's rows through the walk: only what changed is kept and it
 //! finds its part again, a pose comes from the moment alone, a file that holds
-//! no take keeps one name for every frame.
+//! no take keeps one name for every frame, and a keyed camera comes out of a file.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -9,7 +9,7 @@ use lumit_core::edits::{new_comp_ops, CompSettings};
 use lumit_core::model::{Document, EffectValue, FootageItem, LayerKind, MediaRef, ProjectItem};
 use lumit_core::model_layer::Take;
 use lumit_core::ops::{apply, Op};
-use lumit_render::{model, model_motion};
+use lumit_render::{model, model_extract, model_motion};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -267,5 +267,16 @@ fn rows_keep_only_what_changed_and_the_take_plays() {
         }
     }
 
+    // The camera comes out keyed and following the layer, with nothing else.
+    let made = model_extract::layers_from_model(&doc, c, layer, ("Camera", "Light"));
+    assert_eq!(made.len(), 1);
+    assert_eq!(made[0].name, "Lens");
+    assert!(made[0].transform.position_x.is_animated());
+    assert!(!made[0].transform.position_y.is_animated());
+    let LayerKind::Camera { zoom, options, .. } = &made[0].kind else {
+        panic!("a Camera layer");
+    };
+    assert!(!options.two_node);
+    assert!((zoom.value_at(0.0) - 50.0 / (0.4f64).tan()).abs() < 1e-3);
     std::fs::remove_dir_all(&dir).ok();
 }

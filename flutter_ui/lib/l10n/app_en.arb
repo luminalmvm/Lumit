@@ -2140,6 +2140,18 @@
   "@foldParts": {
     "description": "Heading in a Model layer's fold-out, over the node tree of its 3D model's file."
   },
+  "menuCreateCamerasLights": "Create cameras and lights",
+  "@menuCreateCamerasLights": {
+    "description": "Layer menu item: makes keyed Camera and Light layers from what the selected Model layer's file holds."
+  },
+  "modelCameraName": "Camera",
+  "@modelCameraName": {
+    "description": "The name a Camera layer made from a 3D model gets when the file gives its camera none."
+  },
+  "modelLightName": "Light",
+  "@modelLightName": {
+    "description": "The name a Light layer made from a 3D model gets when the file gives its light none."
+  },
   "fxAnimation": "Animation",
   "@fxAnimation": {
     "description": "Effect controls and the Timeline: the row on a Model layer that picks which of its 3D model's takes plays."

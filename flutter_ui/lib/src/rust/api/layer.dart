@@ -3289,6 +3289,16 @@ class LayerReference {
   String copySequenceShape({UuidValue? clip}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceCopySequenceShape(that: this, clip: clip);
 
+  /// A Camera or Light layer for each camera and light a Model layer's file
+  /// holds, keyed so they follow it, as one undo step. The Key light its first
+  /// model brought goes if lights are made and nobody has touched it, as the
+  /// file's lights take its place. `camera_name` and `light_name` name one the
+  /// file doesn't. Answers how many were made.
+  int createLayersFromModel(
+          {required String cameraName, required String lightName}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCreateLayersFromModel(
+          that: this, cameraName: cameraName, lightName: lightName);
+
   /// **Text to points**: a copy of this Type layer beside it, fitted
   /// with **Emit from image**, so the words become a points stream in the
   /// shape of themselves.

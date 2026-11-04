@@ -8,10 +8,12 @@ use lumit_core::model_part::{part_id, PART_NAME};
 use lumit_scene::ModelScene;
 use uuid::Uuid;
 
+use crate::api::composition::CompositionReference;
 use crate::api::effect::{
     read_instance_info, BridgeEffectInstance, BridgeEffectInstanceInfo, BridgeRowOptions,
 };
 use crate::api::layer::LayerReference;
+use crate::api::place::AUTO_KEY;
 use crate::api::BridgeError;
 
 /// One node of a 3D model's file, in the tree under its layer.
@@ -54,6 +56,8 @@ pub struct BridgeModelRows {
     pub parts: Vec<BridgeModelPart>,
     /// Whether the model's shape changes with the playhead.
     pub moves: bool,
+    /// Whether the file holds a camera or a light to make a layer from.
+    pub holds_lights: bool,
     /// The take the layer names that the file no longer has.
     pub lost_take: Option<String>,
 }
@@ -72,6 +76,7 @@ pub(crate) fn read_model_rows(doc: &Document, layer: &Layer) -> Option<BridgeMod
             untouched: None,
             parts: Vec::new(),
             moves: false,
+            holds_lights: false,
             lost_take: None,
         });
     };
@@ -120,6 +125,7 @@ pub(crate) fn read_model_rows(doc: &Document, layer: &Layer) -> Option<BridgeMod
         untouched,
         parts,
         moves: lumit_render::model_motion::moves(settings, &scene),
+        holds_lights: lumit_render::model_extract::holds_any(&scene),
         lost_take: match &settings.take {
             Take::Named(name) if !scene.clips.iter().any(|c| &c.name == name) => Some(name.clone()),
             _ => None,
@@ -220,6 +226,59 @@ impl LayerReference {
             pivot: numbers(pivot).to_vec(),
             corners: corners.iter().flatten().flat_map(|&c| numbers(c)).collect(),
         }))
+    }
+
+    /// A Camera or Light layer for each camera and light a Model layer's file
+    /// holds, keyed so they follow it, as one undo step. The Key light its first
+    /// model brought goes if lights are made and nobody has touched it, as the
+    /// file's lights take its place. `camera_name` and `light_name` name one the
+    /// file doesn't. Answers how many were made.
+    #[frb(sync)]
+    pub fn create_layers_from_model(
+        &self,
+        camera_name: String,
+        light_name: String,
+    ) -> Result<u32, BridgeError> {
+        let (doc, layer) = (self.snapshot()?, self.item()?);
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        let made = lumit_render::model_extract::layers_from_model(
+            &doc,
+            comp,
+            &layer,
+            (&camera_name, &light_name),
+        );
+        if made.is_empty() {
+            return Ok(0);
+        }
+        let count = made.len() as u32;
+        let lights = made
+            .iter()
+            .any(|l| matches!(l.kind, LayerKind::Light { .. }));
+        let fresh = CompositionReference::key_light(comp);
+        let spent = comp.layers.iter().filter(|l| {
+            lights
+                && l.extra.contains_key(AUTO_KEY)
+                && l.kind == fresh.kind
+                && l.transform == fresh.transform
+                && l.switches == fresh.switches
+                && l.parent.is_none()
+                && l.effects.is_empty()
+        });
+        let removed = spent.map(|l| lumit_core::ops::Op::RemoveLayer {
+            comp: self.comp_id,
+            layer: l.id,
+        });
+        let added = made
+            .into_iter()
+            .rev()
+            .map(|layer| lumit_core::ops::Op::AddLayer {
+                comp: self.comp_id,
+                index: 0,
+                layer: Box::new(layer),
+            });
+        let ops = removed.chain(added).collect();
+        self.commit(lumit_core::ops::Op::Batch { ops })?;
+        Ok(count)
     }
 
     /// `layer`'s settings and its file's scene once read.

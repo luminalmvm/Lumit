@@ -97,6 +97,9 @@ class BridgeModelRows {
   /// Whether the model's shape changes with the playhead.
   final bool moves;
 
+  /// Whether the file holds a camera or a light to make a layer from.
+  final bool holdsLights;
+
   /// The take the layer names that the file no longer has.
   final String? lostTake;
 
@@ -105,6 +108,7 @@ class BridgeModelRows {
     this.untouched,
     required this.parts,
     required this.moves,
+    required this.holdsLights,
     this.lostTake,
   });
 
@@ -114,6 +118,7 @@ class BridgeModelRows {
       untouched.hashCode ^
       parts.hashCode ^
       moves.hashCode ^
+      holdsLights.hashCode ^
       lostTake.hashCode;
 
   @override
@@ -125,5 +130,6 @@ class BridgeModelRows {
           untouched == other.untouched &&
           parts == other.parts &&
           moves == other.moves &&
+          holdsLights == other.holdsLights &&
           lostTake == other.lostTake;
 }
