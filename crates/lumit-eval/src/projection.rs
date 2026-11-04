@@ -2,8 +2,9 @@
 //! need not be the comp's own, and a held picture, which isn't what the
 //! material's layer row shows at this frame.
 
-use super::{feed_f64, feed_layer, Quality, SourceStamper};
-use lumit_core::model::{Composition, Document, EffectInstance};
+use super::{feed_depth, feed_f64, feed_layer, feed_parents, Quality, SourceStamper};
+use lumit_core::expression::ExpressionContext;
+use lumit_core::model::{Composition, Document, EffectInstance, Layer, LayerKind};
 use lumit_core::model_material::{camera_at, projection};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -33,6 +34,22 @@ pub(super) fn feed_projections(
                 feed_f64(h, v);
             }
         }
+        // The models on this camera stop at the Hold frame too, and a frame's
+        // own name only has where they are at the playhead.
+        if let Some(held) = p.held {
+            let on_camera = |l: &&Layer| {
+                let LayerKind::Model { settings, .. } = &l.kind else {
+                    return false;
+                };
+                let lt = lumit_core::time::layer_time(t, l.start_offset.0);
+                let mut kept = settings.materials.iter().flatten();
+                l.switches.visible
+                    && kept.any(|r| projection(r, comp, lt).is_some_and(|q| q.camera == p.camera))
+            };
+            for l in comp.layers.iter().filter(on_camera) {
+                feed_placed(h, doc, comp, l, held, stamper);
+            }
+        }
         if let Some((held, src)) = p.held.zip(find(p.picture)) {
             // A layer holding itself, or two holding each other, would name
             // themselves for ever.
@@ -48,6 +65,45 @@ pub(super) fn feed_projections(
         }
     }
     Some(())
+}
+
+/// Where `layer` is at comp time `t`.
+fn feed_placed(
+    h: &mut blake3::Hasher,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    stamper: &dyn SourceStamper,
+) {
+    let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: Some(layer.id),
+        comp_time: t,
+        current_depth: 0,
+        inputs: None,
+    });
+    let tr = &layer.transform;
+    for p in [
+        &tr.position_x,
+        &tr.position_y,
+        &tr.position_z,
+        &tr.anchor_x,
+        &tr.anchor_y,
+        &tr.scale_x,
+        &tr.scale_y,
+        &tr.rotation,
+        &tr.rotation_x,
+        &tr.rotation_y,
+    ] {
+        feed_f64(h, p.value_at_with_context(lt, context.clone()));
+    }
+    feed_depth(h, tr, lt, &|p| p.value_at_with_context(lt, context.clone()));
+    if layer.parent.is_some() {
+        feed_parents(h, doc, comp, layer, t, stamper);
+    }
 }
 
 #[cfg(test)]
@@ -119,6 +175,8 @@ mod tests {
     /// Moving a camera that isn't the comp's own moves what the model shows,
     /// so a frame drawn before can't stand in for it. It isn't the active one
     /// here because a layer above it is, and only its pose says what changed.
+    /// Under Hold, moving the model at the Hold frame does the same, with the
+    /// model where it was at the playhead.
     #[test]
     fn a_projecting_camera_names_the_frame() {
         let mut doc = Document::new();
@@ -167,7 +225,7 @@ mod tests {
         if let LayerKind::Model { settings, .. } = &mut model.kind {
             settings.materials = vec![Some(rows)];
         }
-        let projector_id = projector.id;
+        let (projector_id, model_id) = (projector.id, model.id);
         for (index, layer) in [active, model, projector, picture].into_iter().enumerate() {
             let layer = Box::new(layer);
             apply(
@@ -182,11 +240,38 @@ mod tests {
         }
         doc.items
             .push(lumit_core::model::ProjectItem::Footage(item));
-        let name = |doc: Document| {
+        let name_at = |t: f64, doc: Document| {
             let doc = Arc::new(doc);
             let comp = doc.comp(id).unwrap().clone();
-            comp_frame_key(&doc, &comp, 0.0, Quality::default(), &Nothing)
+            comp_frame_key(&doc, &comp, t, Quality::default(), &Nothing)
         };
+        let name = |doc: Document| name_at(0.0, doc);
+        let held_from = |x: f64| {
+            let mut doc = doc.clone();
+            let c = doc.comp_mut(id).unwrap();
+            let rate = c.frame_rate;
+            let at = c.layers.iter_mut().find(|l| l.id == model_id).unwrap();
+            let key = |frame: i64, value: f64| lumit_core::anim::Keyframe {
+                time: rate.time_of_frame(frame).unwrap().0,
+                value,
+                interp_in: lumit_core::anim::SideInterp::Linear,
+                interp_out: lumit_core::anim::SideInterp::Linear,
+            };
+            at.transform.position_x = Property {
+                animation: lumit_core::anim::Animation::Keyframed(vec![
+                    key(0, x),
+                    key(rate.fps().round() as i64, 0.0),
+                ]),
+                ..Property::fixed(0.0)
+            };
+            if let LayerKind::Model { settings, .. } = &mut at.kind {
+                let rows = settings.materials[0].as_mut().unwrap();
+                let time = rows.params.iter_mut().find(|p| p.id == "projection_time");
+                time.unwrap().value = EffectValue::Choice(1);
+            }
+            doc
+        };
+        assert_ne!(name_at(1.0, held_from(0.0)), name_at(1.0, held_from(300.0)));
         let first = name(doc.clone());
         let at = doc
             .comp_mut(id)
