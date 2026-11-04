@@ -1793,6 +1793,7 @@ class LumitUiState extends ChangeNotifier {
       _viewportWaiting.remove(engineId);
       _askedAt.remove(engineId);
       _pictureTook.remove(engineId);
+      _slowMove.remove(engineId);
       viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
@@ -4179,6 +4180,10 @@ class LumitUiState extends ChangeNotifier {
   final Map<int, Duration> _pictureTook = {};
   static const _slowPicture = Duration(milliseconds: 50);
 
+  /// What each view was showing when a picture of a move last came out slow,
+  /// so moving the same thing again starts as a draft.
+  final Map<int, (String?, int?, BridgeModelDisplay)> _slowMove = {};
+
   /// Why a 3D model isn't drawing, as the Project panel's badge says it, so a
   /// view with no model to draw can say it too. Null when nothing's wrong.
   final ValueNotifier<String?> modelTrouble = ValueNotifier(null);
@@ -4209,7 +4214,13 @@ class LumitUiState extends ChangeNotifier {
       _ => false,
     };
     final took = _pictureTook[view.engineId] ?? Duration.zero;
-    if (draftView.value == null && !lines && took > _slowPicture) {
+    final showing = (
+      compFor(view)?.internalid.toString(),
+      model.heldRevision,
+      displayOf(view.engineId),
+    );
+    if (took > _slowPicture) _slowMove[view.engineId] = showing;
+    if (draftView.value == null && !lines && _slowMove[view.engineId] == showing) {
       draftView.value = view.engineId;
     }
     return draftView.value == view.engineId;
