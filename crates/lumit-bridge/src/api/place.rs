@@ -141,6 +141,43 @@ impl CompositionReference {
         Ok(placed)
     }
 
+    /// Add 3D shape `entry` of the menu (cube, sphere, cylinder, cone, torus,
+    /// plane, then pyramid) at comp point `at`, or the comp's centre. In a
+    /// comp with no lights it brings the lights a 3D model does, named by
+    /// `light_names`, in the same undo step.
+    #[frb(sync)]
+    pub fn add_mesh_layer(
+        &self,
+        entry: u32,
+        row: Option<u32>,
+        at: Option<Vec<f64>>,
+        light_names: Option<Vec<String>>,
+    ) -> Result<LayerReference, BridgeError> {
+        let comp = self.composition()?;
+        let mut layer = lumit_core::mesh_shape::mesh_layer(&comp, entry as usize)
+            .ok_or(BridgeError::InvalidParam)?;
+        if let Some([x, y]) = at.as_deref() {
+            layer.transform.position_x = Property::fixed(*x);
+            layer.transform.position_y = Property::fixed(*y);
+        }
+        crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
+        let id = layer.id;
+        let mut ops = vec![Op::AddLayer {
+            comp: self.id,
+            index: insert_row(row, comp.layers.len()),
+            layer: Box::new(layer),
+        }];
+        for light in Self::first_lights(&comp, light_names.as_deref()) {
+            ops.push(Op::AddLayer {
+                comp: self.id,
+                index: 0,
+                layer: Box::new(light),
+            });
+        }
+        self.commit(Op::Batch { ops })?;
+        Ok(LayerReference::new(self.project, self.id, id))
+    }
+
     /// The Key and Ambient lights a comp with no lights gets from its first
     /// model or solid layer, so that isn't drawn as a flat silhouette. Nothing
     /// for a comp that has a light. Named by `names` (ambient, then key) when

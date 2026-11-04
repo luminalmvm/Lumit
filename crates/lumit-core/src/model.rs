@@ -2087,7 +2087,10 @@ impl Layer {
         self.switches.three_d
             || matches!(
                 self.kind,
-                LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Model { .. }
+                LayerKind::Camera { .. }
+                    | LayerKind::Light { .. }
+                    | LayerKind::Model { .. }
+                    | LayerKind::Mesh { .. }
             )
     }
 
@@ -2475,6 +2478,8 @@ pub enum LayerKind {
         #[serde(default)]
         settings: Box<crate::model_layer::ModelSettings>,
     },
+    /// A 3D shape Lumit makes itself ([`crate::mesh_shape`]). Always 3D.
+    Mesh { shape: crate::mesh_shape::MeshShape },
 }
 
 impl LayerKind {
@@ -2493,7 +2498,7 @@ impl LayerKind {
             Self::Null => 8,
             Self::Shape { .. } => 9,
             Self::Light { .. } => 10,
-            Self::Model { .. } => 11,
+            Self::Model { .. } | Self::Mesh { .. } => 11,
         }
     }
 }
@@ -3888,6 +3893,7 @@ fn collect_comp_footage(
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
             | LayerKind::Model { .. }
+            | LayerKind::Mesh { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
         }
@@ -4009,6 +4015,7 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
         | LayerKind::Shape { .. }
         | LayerKind::Camera { .. }
         | LayerKind::Light { .. }
+        | LayerKind::Mesh { .. }
         | LayerKind::Adjustment
         | LayerKind::Null => false,
     }

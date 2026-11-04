@@ -46,6 +46,7 @@ import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
+import '../panels/viewer_shape3d.dart' show addShape3d, shape3dTools;
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
 import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
@@ -1312,6 +1313,11 @@ List<MenuSection> lumitMenus(
                           row: row(comp),
                           onDone: app.notifyDocumentChanged),
                   action: 'layer.new.light.point'),
+              MenuEntry.submenu(l10n.menuShape3d, [
+                for (final tool in shape3dTools)
+                  MenuEntry(tool.label,
+                      onComp((c) => addShape3d(ui, c, tool, row: row(c)))),
+              ]),
               MenuEntry(l10n.menuAdjustment,
                   onComp((c) => c.addAdjustmentLayer(row: row(c))),
                   action: 'layer.new.adjustment'),

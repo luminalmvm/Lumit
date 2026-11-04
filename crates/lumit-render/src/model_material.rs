@@ -119,7 +119,7 @@ pub fn file_rows(doc: &Document, layer: &Layer, id: Uuid) -> Option<EffectInstan
     let LayerKind::Model { item, .. } = &layer.kind else {
         return lumit_core::extrude::takes_geometry(layer)
             .then(|| crate::extrude::faces(layer))
-            .and_then(|file| crate::extrude::file_rows(layer.id, index_of(layer.id, id)?, &file));
+            .and_then(|file| crate::extrude::file_rows(layer, index_of(layer.id, id)?, &file));
     };
     let scene = crate::model::scene_if_read(doc, *item)??;
     let i = index_of(layer.id, id)?;

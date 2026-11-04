@@ -218,6 +218,7 @@ fn source_ref(kind: &LayerKind) -> Option<SourceRef> {
         LayerKind::Camera { .. }
         | LayerKind::Light { .. }
         | LayerKind::Model { .. }
+        | LayerKind::Mesh { .. }
         | LayerKind::Adjustment
         | LayerKind::Null => return None,
     })
