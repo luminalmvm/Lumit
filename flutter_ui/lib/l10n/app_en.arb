@@ -4342,6 +4342,10 @@
   "@fxAccumulationMotionBlur": {
     "description": "Effect name in the Add effect menu and the Effect controls panel — the slow, whole-scene motion blur that re-renders everything below at several sub-frame moments and averages them."
   },
+  "fxFocalLength": "Focal length",
+  "@fxFocalLength": {
+    "description": "Effect controls: a control on Camera track: the lens length in millimetres, such as 50. 0 leaves the track to work it out."
+  },
   "fxFeatureDensity": "Feature density",
   "@fxFeatureDensity": {
     "description": "Effect controls — a control on Camera track."

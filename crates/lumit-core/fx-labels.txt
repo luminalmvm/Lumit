@@ -506,6 +506,7 @@ Flock radius
 Flow points
 Flow resolution
 Flow smoothness
+Focal length
 Focus distance
 Focus distance (m)
 Focus map

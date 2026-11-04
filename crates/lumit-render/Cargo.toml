@@ -84,6 +84,7 @@ shared-texture-macos = ["lumit-gpu/shared-texture-macos"]
 [dev-dependencies]
 lumit-render = { path = ".", features = ["test-fixtures"] }
 lumit-media = { path = "../lumit-media", features = ["test-fixtures"] }
+lumit-scene = { path = "../lumit-scene", features = ["test-fixtures"] }
 tempfile = "3"
 # the working format is; `bytemuck` casts the row.
 half = "2"

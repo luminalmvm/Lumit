@@ -549,18 +549,16 @@ mod tests {
             .recv_timeout(std::time::Duration::from_millis(300))
             .is_err());
 
+        // A missing frame sends nothing back, so nothing says the clear is done.
+        // Its own time on a busy machine, then, which is what the wait is for.
         io.tx.send(Cmd::Clear).unwrap();
-        // Round-trip a command so the clear has certainly been handled.
-        io.tx
-            .send(Cmd::Load {
-                hash: 42,
-                bgra: false,
-            })
-            .unwrap();
-        assert!(io
-            .loaded
-            .recv_timeout(std::time::Duration::from_millis(500))
-            .is_err());
-        assert!(!io.contains(42), "Clear cache empties the tier");
+        let began = std::time::Instant::now();
+        while io.contains(42) {
+            assert!(
+                began.elapsed() < std::time::Duration::from_secs(30),
+                "Clear cache empties the tier"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 }
