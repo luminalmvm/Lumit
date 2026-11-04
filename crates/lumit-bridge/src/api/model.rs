@@ -155,6 +155,18 @@ impl FootageReference {
     }
 }
 
+/// A layer's pose at comp frame `frame`, `None` when it has none.
+#[frb(ignore)]
+pub(crate) fn pose_at_frame(
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    frame: i64,
+) -> Option<lumit_scene::pose::Pose> {
+    let t = comp.frame_rate.time_of_frame(frame.max(0)).ok()?.0.to_f64();
+    lumit_render::model_motion::layer_pose(doc, comp, layer, t)
+}
+
 impl LayerReference {
     /// A Model layer's settings, or `None` on any other kind of layer.
     #[frb(sync)]
@@ -172,18 +184,20 @@ impl LayerReference {
         })
     }
 
-    /// The corners of a Model layer's box in its own pixels, three numbers
-    /// each, once its file has been read. Empty before that and on any other
-    /// kind of layer.
+    /// The corners of a Model layer's box in its own pixels at comp frame
+    /// `at_frame`, three numbers each, once its file has been read. Empty
+    /// before that and on any other kind of layer.
     #[frb(sync)]
-    pub fn get_model_box(&self) -> Result<Vec<f64>, BridgeError> {
-        let LayerKind::Model { item, settings } = self.item()?.kind else {
+    pub fn get_model_box(&self, at_frame: i64) -> Result<Vec<f64>, BridgeError> {
+        let layer = self.item()?;
+        let LayerKind::Model { item, settings } = &layer.kind else {
             return Ok(Vec::new());
         };
         let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
         let size = (comp.width as f32, comp.height as f32);
-        let corners = lumit_render::model::layer_box(&doc, item, &settings, size);
+        let pose = pose_at_frame(&doc, comp, &layer, at_frame);
+        let corners = lumit_render::model::layer_box(&doc, *item, settings, size, pose.as_ref());
         Ok(corners
             .iter()
             .flatten()
@@ -217,14 +231,16 @@ impl LayerReference {
     /// each in the layer's own pixels, it first meets a Model layer's model,
     /// in parts of `direction`. `None` where it misses, before the file has
     /// been read and on any other kind of layer. Asked once a click, and when
-    /// the pointer rests for a moment.
+    /// the pointer rests for a moment, as the model is at comp frame `at_frame`.
     #[frb(sync)]
     pub fn get_model_hit(
         &self,
         origin: Vec<f64>,
         direction: Vec<f64>,
+        at_frame: i64,
     ) -> Result<Option<f64>, BridgeError> {
-        let LayerKind::Model { item, settings } = self.item()?.kind else {
+        let layer = self.item()?;
+        let LayerKind::Model { item, settings } = &layer.kind else {
             return Ok(None);
         };
         let (Ok([ox, oy, oz]), Ok([dx, dy, dz])) = (
@@ -235,20 +251,24 @@ impl LayerReference {
         };
         let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        let pose = pose_at_frame(&doc, comp, &layer, at_frame);
         Ok(lumit_render::model::hit(
             &doc,
-            item,
-            &settings,
+            *item,
+            settings,
             (comp.width as f32, comp.height as f32),
+            pose.as_ref(),
             [ox, oy, oz].map(|v| v as f32),
             [dx, dy, dz].map(|v| v as f32),
         )
-        .map(f64::from))
+        .map(|(along, _)| f64::from(along)))
     }
 
     /// The document as it is now.
     #[frb(ignore)]
-    fn snapshot(&self) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
+    pub(crate) fn snapshot(
+        &self,
+    ) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
         let proj = self.project()?;
         let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(proj.store.snapshot())
@@ -266,6 +286,9 @@ impl LayerReference {
             return Err(BridgeError::InvalidLayer);
         };
         let settings = ModelSettings {
+            take: kept.take,
+            playback: kept.playback,
+            parts: kept.parts,
             up_axis: match settings.up_axis {
                 BridgeUpAxis::Y => UpAxis::Y,
                 BridgeUpAxis::Z => UpAxis::Z,

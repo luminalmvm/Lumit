@@ -720,6 +720,29 @@ MenuEntry editInBlenderRow(LumitUiState ui) {
   );
 }
 
+/// Layer ▸ Create cameras and lights: keyed layers from what the picked Model
+/// layer's file holds, greyed when it holds neither.
+MenuEntry modelLayersRow(LumitState app, LumitUiState ui) {
+  final picked = selectedEntries(ui)
+      .where((entry) => entry.info.modelRows?.holdsLights ?? false)
+      .firstOrNull;
+  return MenuEntry(
+    l10n.menuCreateCamerasLights,
+    picked == null
+        ? null
+        : () {
+            try {
+              final made = picked.layer.createLayersFromModel(
+                  cameraName: l10n.modelCameraName,
+                  lightName: l10n.modelLightName);
+              if (made > 0) app.notifyDocumentChanged();
+            } catch (_) {
+              // The layer went away under the menu: nothing to make.
+            }
+          },
+  );
+}
+
 /// Opens [picked]'s Model settings, or null where there is none to open.
 VoidCallback? _modelWindow(BuildContext context, BridgeLayerEntry? picked) {
   if (picked == null) return null;

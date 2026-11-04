@@ -30,6 +30,27 @@ if ext != ".blend":
     bpy.ops.wm.read_factory_settings(use_empty=True)
     importer(filepath=source)
 
+# glTF has nowhere for a lens that moves, so each camera that has one writes
+# its focal length through the take in its node's extras.
+scene = bpy.context.scene
+now = scene.frame_current
+for o in scene.objects:
+    data = o.data if o.type == "CAMERA" else None
+    action = data and data.animation_data and data.animation_data.action
+    if action:
+        first, last = (int(f) for f in action.frame_range)
+        frames = range(first, last + 1)
+        lens = []
+        for f in frames:
+            scene.frame_set(f)
+            lens.append(data.lens)
+        scene.frame_set(now)
+        o["lumit_lens"] = {
+            "rest": data.lens,
+            "times": [f / scene.render.fps for f in frames],
+            "lens": lens,
+        }
+
 # Option names move between Blender versions, so only pass the ones this
 # exporter has.
 wanted = {

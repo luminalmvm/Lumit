@@ -92,19 +92,19 @@ pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
 /// lookup**.
 ///
 /// The catalogue is asked first, then the layer styles
-/// ([`STYLE_DEFS`](super::styles::STYLE_DEFS)), then a Model layer's materials. They
+/// ([`STYLE_DEFS`](super::styles::STYLE_DEFS)), then a Model layer's rows. They
 /// are separate lists on purpose: the catalogue is what the Add-effect menu, the
 /// command palette and the preset browser walk, and none of those should offer a
 /// style or a material as an effect. But both are read through the machinery an
 /// effect is, and every one of those places asks here rather than picking a list.
 ///
-/// `None` for a name this build does not know, which stays an inert placeholder
-/// rendering as identity.
+/// `None` for a name this build doesn't know: an inert placeholder, as identity.
 pub fn def(match_name: &str) -> Option<&'static dyn super::registry::EffectDef> {
     super::catalogue::BUILTIN_DEFS
         .get(match_name)
         .or_else(|| super::styles::STYLE_DEFS.get(match_name))
         .or_else(|| crate::model_material::MATERIAL_DEFS.get(match_name))
+        .or_else(|| crate::model_part::PART_DEFS.get(match_name))
 }
 
 /// What every OFX plugin's `match_name` begins with — the host mints

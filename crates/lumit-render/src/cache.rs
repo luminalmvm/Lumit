@@ -208,7 +208,12 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
                     .stamped()
                     .stamp;
                 let chosen = lumit_scene::blender::choices();
-                return Some((format!("model#{path}#{stamp:?}#{chosen}"), 0));
+                // The moment names the frame only if the file has takes to show.
+                let frame = match crate::model::known_still(self.doc, item) {
+                    true => 0,
+                    false => lt.to_bits(),
+                };
+                return Some((format!("model#{path}#{stamp:?}#{chosen}"), frame));
             }
         }
         // The same proxy resolution point the decode planner goes through

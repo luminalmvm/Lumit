@@ -446,6 +446,7 @@ fn shapes(
         samples: frame.samples,
         camera: crate::export::camera_mat(frame.comp.0, frame.comp.1, frame.camera),
         model_to_comp: *unit,
+        poses: &[],
         shutter: &[],
         lights: &frame.lights,
         material: lumit_gpu::fx::lighting::LightingMaterial {

@@ -10,7 +10,8 @@ use ufbx::{
 use crate::files::{find, obj_libraries, Reader, VERTEX_BYTES};
 use crate::{
     AlphaMode, Camera, Channel, Clip, Image, Interpolation, Light, LightKind, Material, Mesh,
-    ModelScene, Node, Path as Target, Primitive, Projection, SceneError, Texture, TextureRef, Wrap,
+    ModelScene, MorphTarget, Node, Path as Target, Primitive, Projection, SceneError, Skin,
+    Texture, TextureRef, Wrap,
 };
 
 pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
@@ -40,23 +41,39 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
             mesh: node.mesh.as_ref().map(|m| id(&m.element)),
             camera: node.camera.as_ref().map(|c| id(&c.element)),
             light: node.light.as_ref().map(|l| id(&l.element)),
-            // ponytail: no skins or blend shapes from FBX yet; the animation
-            // item reads them.
-            skin: None,
-            weights: Vec::new(),
+            skin: node
+                .mesh
+                .as_ref()
+                .and_then(|m| m.skin_deformers.iter().next())
+                .map(|s| id(&s.element)),
+            weights: node
+                .mesh
+                .as_ref()
+                .map(|m| shapes(m).map(|c| c.weight as f32).collect())
+                .unwrap_or_default(),
+            ..Node::default()
         });
     }
+
+    scene.skins = root.skin_deformers.iter().map(|s| skin(s, &id)).collect();
 
     for mesh in &root.meshes {
         let mut corners = vec![0u32; mesh.max_face_triangles * 3];
         let mut primitives = Vec::new();
+        let skin = mesh.skin_deformers.iter().next();
+        // Each shape's offsets by vertex, read for each corner below.
+        let offsets: Vec<_> = shapes(mesh).map(|c| shape_offsets(mesh, c)).collect();
         for part in &mesh.material_parts {
             if part.num_triangles == 0 {
                 continue;
             }
             r.take(part.num_triangles * 3 * VERTEX_BYTES)?;
+            r.take(part.num_triangles * 3 * offsets.len() * 24)?;
             let second_uv = mesh.uv_sets.get(1).map(|s| &s.vertex_uv);
-            let mut p = Primitive::default();
+            let mut p = Primitive {
+                morph_targets: vec![MorphTarget::default(); offsets.len()],
+                ..Primitive::default()
+            };
             for &face in &part.face_indices {
                 let Some(&face) = mesh.faces.get(face as usize) else {
                     continue;
@@ -81,6 +98,22 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
                         p.colours
                             .push([c.x as f32, c.y as f32, c.z as f32, c.w as f32]);
                     }
+                    let vertex = mesh.vertex_indices.get(i).map_or(0, |&v| v as usize);
+                    if let Some(skin) = &skin {
+                        let (joints, weights) = influences(skin, vertex);
+                        p.joints.push(joints);
+                        p.weights.push(weights);
+                    }
+                    for (target, (moved, turned)) in p.morph_targets.iter_mut().zip(&offsets) {
+                        target
+                            .positions
+                            .push(moved.get(vertex).copied().unwrap_or_default());
+                        if !turned.is_empty() {
+                            target
+                                .normals
+                                .push(turned.get(vertex).copied().unwrap_or_default());
+                        }
+                    }
                 }
             }
             // ponytail: every corner is its own vertex, three times the
@@ -95,6 +128,7 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
         scene.meshes.push(Mesh {
             name: mesh.element.name.to_string(),
             primitives,
+            ..Mesh::default()
         });
     }
 
@@ -177,7 +211,12 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
                 _ => LightKind::Point,
             },
             colour: [l.color.x as f32, l.color.y as f32, l.color.z as f32],
-            intensity: l.intensity as f32,
+            // In lux for a directional light. Otherwise it holds watts, spread
+            // round the whole sphere to make candela.
+            intensity: match l.type_ {
+                ufbx::LightType::Directional => l.intensity as f32,
+                _ => l.intensity as f32 / (4.0 * std::f32::consts::PI),
+            },
             range: None,
             // ufbx gives whole cone angles in degrees.
             inner_cone: (l.inner_angle as f32 / 2.0).to_radians(),
@@ -233,6 +272,39 @@ pub(crate) fn read(r: &mut Reader) -> Result<ModelScene, SceneError> {
             if !n.constant_scale {
                 let (t, v) = vec3_keys(&n.scale_keys);
                 push(Target::Scale, t, v);
+            }
+        }
+        for (node, n) in root.nodes.iter().enumerate() {
+            let Some(mesh) = &n.mesh else {
+                continue;
+            };
+            for (target, channel) in shapes(mesh).enumerate() {
+                let keys = baked
+                    .elements
+                    .iter()
+                    .filter(|e| e.element_id == channel.element.element_id)
+                    .flat_map(|e| e.props.iter())
+                    .find(|p| p.name.as_ref() == "DeformPercent");
+                let (Some(keys), Ok(target)) = (keys, u16::try_from(target)) else {
+                    continue;
+                };
+                // Blend weights arrive as percentages.
+                clip.channels.push(Channel {
+                    node,
+                    path: Target::Weight(target),
+                    interpolation: Interpolation::Linear,
+                    times: keys.keys.iter().map(|k| k.time as f32).collect(),
+                    values: keys.keys.iter().map(|k| k.value.x as f32 / 100.0).collect(),
+                });
+            }
+        }
+        for (node, n) in root.nodes.iter().enumerate() {
+            if let Some(channel) = n
+                .camera
+                .as_ref()
+                .and_then(|c| lens_channel(c, &baked, node))
+            {
+                clip.channels.push(channel);
             }
         }
         r.take(clip.channels.iter().map(|c| c.values.len() * 8).sum())?;
@@ -470,6 +542,124 @@ fn pack_metal_rough(
     }
     scene.textures.extend(packed);
     Ok(())
+}
+
+/// A camera's field of view through a take, when the take moves its lens. FBX
+/// keys a focal length or a horizontal angle, and either scales the tangent of
+/// the angle the camera has at rest.
+fn lens_channel(c: &ufbx::Camera, baked: &ufbx::BakedAnim, node: usize) -> Option<Channel> {
+    let props = baked
+        .elements
+        .iter()
+        .filter(|e| e.element_id == c.element.element_id)
+        .flat_map(|e| e.props.iter());
+    let rest = (c.field_of_view_deg.y.to_radians() / 2.0).tan();
+    let mut read = None;
+    for p in props.filter(|p| !p.constant_value) {
+        match p.name.as_ref() {
+            "FocalLength" if c.focal_length_mm > 0.0 => read = Some((p, true)),
+            "FieldOfView" if read.is_none() => read = Some((p, false)),
+            _ => {}
+        }
+    }
+    let (prop, focal) = read?;
+    let yfov = |v: f64| {
+        let share = match focal {
+            true => c.focal_length_mm / v.max(1e-6),
+            false => {
+                (v.to_radians() / 2.0).tan() / (c.field_of_view_deg.x.to_radians() / 2.0).tan()
+            }
+        };
+        (2.0 * (rest * share).atan()) as f32
+    };
+    Some(Channel {
+        node,
+        path: Target::YFov,
+        interpolation: Interpolation::Linear,
+        times: prop.keys.iter().map(|k| k.time as f32).collect(),
+        values: prop.keys.iter().map(|k| yfov(k.value.x)).collect(),
+    })
+}
+
+/// A mesh's blend channels that have a shape to draw, through all its blend
+/// deformers: its morph targets, in the order the weights are listed.
+fn shapes(mesh: &ufbx::Mesh) -> impl Iterator<Item = &ufbx::BlendChannel> {
+    mesh.blend_deformers
+        .iter()
+        .flat_map(|d| d.channels.iter())
+        .map(|c| &**c)
+        .filter(|c| c.target_shape.is_some())
+}
+
+/// How far `channel`'s shape moves each of `mesh`'s vertices, then turns its
+/// normal, by vertex. Empty for normals the shape doesn't carry.
+fn shape_offsets(
+    mesh: &ufbx::Mesh,
+    channel: &ufbx::BlendChannel,
+) -> (Vec<[f32; 3]>, Vec<[f32; 3]>) {
+    let Some(shape) = &channel.target_shape else {
+        return Default::default();
+    };
+    let count = mesh.num_vertices;
+    let mut moved = vec![[0.0; 3]; count];
+    let turns = !shape.normal_offsets.is_empty();
+    let mut turned = vec![[0.0; 3]; if turns { count } else { 0 }];
+    for (k, &v) in shape.offset_vertices.iter().enumerate() {
+        let v = v as usize;
+        if let (Some(slot), Some(&o)) = (moved.get_mut(v), shape.position_offsets.get(k)) {
+            *slot = v3(o);
+        }
+        if let (Some(slot), Some(&o)) = (turned.get_mut(v), shape.normal_offsets.get(k)) {
+            *slot = v3(o);
+        }
+    }
+    (moved, turned)
+}
+
+/// Each joint is a cluster's bone, what the bone does to the mesh read
+/// through the matrix from the mesh's own space into the bone's.
+fn skin(s: &ufbx::SkinDeformer, id: &dyn Fn(&ufbx::Element) -> usize) -> Skin {
+    let (joints, inverse_bind) = s
+        .clusters
+        .iter()
+        .map(|c| {
+            let m = &c.geometry_to_bone;
+            let column = |x: f64, y: f64, z: f64, w: f32| [x as f32, y as f32, z as f32, w];
+            (
+                // A cluster with no bone names a node that can't be, so the
+                // skin is refused when it is checked.
+                c.bone_node.as_ref().map_or(usize::MAX, |b| id(&b.element)),
+                [
+                    column(m.m00, m.m10, m.m20, 0.0),
+                    column(m.m01, m.m11, m.m21, 0.0),
+                    column(m.m02, m.m12, m.m22, 0.0),
+                    column(m.m03, m.m13, m.m23, 1.0),
+                ],
+            )
+        })
+        .unzip();
+    Skin {
+        joints,
+        inverse_bind,
+        ..Skin::default()
+    }
+}
+
+/// The four heaviest joints on vertex `v` and their shares of it, which ufbx
+/// lists heaviest first.
+fn influences(skin: &ufbx::SkinDeformer, v: usize) -> ([u16; 4], [f32; 4]) {
+    let (mut joints, mut weights) = ([0; 4], [0.0; 4]);
+    let Some(vertex) = skin.vertices.get(v) else {
+        return (joints, weights);
+    };
+    let first = vertex.weight_begin as usize;
+    let count = (vertex.num_weights as usize).min(4);
+    for (k, w) in skin.weights.iter().skip(first).take(count).enumerate() {
+        // Past what a u16 holds is past the joints too, which the check refuses.
+        joints[k] = u16::try_from(w.cluster_index).unwrap_or(u16::MAX);
+        weights[k] = w.weight as f32;
+    }
+    (joints, weights)
 }
 
 fn v3(v: ufbx::Vec3) -> [f32; 3] {

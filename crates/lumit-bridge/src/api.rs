@@ -34,6 +34,7 @@ pub mod keymap;
 pub mod layer;
 pub mod lens;
 pub mod model;
+pub mod model_rows;
 pub mod notes;
 pub mod place;
 pub mod planes;

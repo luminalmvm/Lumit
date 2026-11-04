@@ -145,13 +145,48 @@ A new Model layer casts shadows, on itself, on other models and on 3D layers, an
 theirs. Its **Casts shadows** and **Accepts shadows** rows work as on any 3D layer, and
 **Holdout** draws what is under it in its place (see [Layers](/use/layers/)).
 
+A file with takes shows an **Animation** group on its layer. **Take** picks one by name, and
+a new layer starts on the first. A take the file has lost reads as **(missing)** and draws at
+rest. **Offset** moves it in seconds. The layer's
+[Retime](/use/retime/) times it, as it times footage. **Loop** says what happens past its
+ends:
+
+| Loop | Past the ends of the take |
+| --- | --- |
+| **Off** | The model rests as its file has it |
+| **Loop** | The take goes round |
+| **Mirror** | The take runs there and back |
+| **Freeze** | The first and last poses hold |
+
+Skins and morph targets from glTF and FBX are drawn, and motion blur, shadows and the outline
+follow them. A skin that names a joint the file doesn't have draws at rest and wears
+**Missing**, as does a model too large for the graphics card to pose.
+
+**Parts** on the layer lists the file's nodes as a tree. Each part has a tick that hides it and
+what hangs from it, and a **Transform** heading over **Visible**, **Position**, **Rotation**
+and **Scale**, in the layer's pixels and axes, turning about the part's own origin. They key
+like any row. A part with nothing changed isn't saved. Hiding a bone shrinks what it moves to
+its origin. A mesh on a skin has only the tick. Double-clicking the model in the Viewer opens
+the part under the pointer, the bone that moves it on a skin.
+
+A picked part wears a thin box and the 3D handles at its pivot. A drag moves it, or turns it
+with the Rotation tool, along the layer's axes, in one undo step. Shift keeps a move to steps
+of 10 and a turn to steps of 15 degrees.
+
+**Layer ▸ Create cameras and lights** makes a Camera or Light layer for each one in the file,
+keyed over the layer's span, in one undo step, with Zoom keyed where an FBX or a `.blend` moves
+the lens. They follow the model at the time, and don't change if it changes later. Lights made
+this way take the place of the **Key light** the first model brought, if it hasn't been changed.
+
 :::note[Not built yet]
-A Model layer has no rows for its animation or parts. It takes no blur from the camera's
-depth of field. A faded model's shadow doesn't fade, and a holdout's outline doesn't blur
-with motion. Materials don't change the shadow a model casts, so glass casts a whole shadow,
-and they don't reach a model used as a particle's shape. Glass does not bend the model
-itself, and shadows and haze from 3D layers below a 2D layer don't reach a run with glass
-in it.
+A Model layer takes no blur from the camera's depth of field. A faded model's shadow doesn't
+fade, and a holdout's outline doesn't blur with motion. Expressions can't name a part's rows.
+FBX in-between shapes use the final shape. An orthographic camera gets the default lens. A
+glTF file's lens doesn't animate. A particle shape or emitter surface from a model stays at
+rest. Materials don't change the shadow a
+model casts, so glass casts a whole shadow, and they don't reach a model used as a particle's
+shape. Glass does not bend the model itself, and shadows and haze from 3D layers below a 2D
+layer don't reach a run with glass in it.
 :::
 
 ## Interpretation

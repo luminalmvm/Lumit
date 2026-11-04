@@ -375,6 +375,43 @@ class Gizmo3d {
     );
   }
 
+  /// Handles at [at] in [map]'s layer's own pixels, on its own axes, for what
+  /// lives in that space: a part of a 3D model. [turns] are the axes the rings
+  /// turn about. Null where that point is behind the eye.
+  static Gizmo3d? inLayer(ViewerLayerMap map,
+      {required Vec3 at, required List<Vec3> turns}) {
+    if (!map.projected) return null;
+    final r = map.parentRows;
+    final o = map.inParent(0, 0, 0);
+    final ends = [map.inParent(1, 0, 0), map.inParent(0, 1, 0), map.inParent(0, 0, 1)];
+    double through(int k, Vec3 p) =>
+        r[k * 4] * p.$1 + r[k * 4 + 1] * p.$2 + r[k * 4 + 2] * p.$3 + r[k * 4 + 3];
+    final rows = [
+      for (var k = 0; k < 3; k++) ...[
+        for (final e in ends) through(k, e) - through(k, o),
+        through(k, o),
+      ],
+    ];
+    final view = screenAxes(rows, at);
+    if (view == null) return null;
+    final (vx, vy, vz, perScreen) = view;
+    final perUnit = map.viewScale * perScreen;
+    if (perUnit < 1e-12) return null;
+    return Gizmo3d._(
+      rows,
+      map.origin,
+      map.viewScale,
+      at,
+      const [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
+      [for (final a in turns) _unit(a)],
+      vx,
+      vy,
+      vz,
+      gizmoArrowLength / perUnit,
+      const [],
+    );
+  }
+
   /// How the screen's right, down and away run through [at] in the space
   /// [rows] take in, unit long, and how many comp pixels on screen a unit to
   /// the right is. Through a camera right and down keep the depth, so a move

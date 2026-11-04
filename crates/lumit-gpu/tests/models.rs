@@ -82,6 +82,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                     environment: None,
                     looks: &[],
                     behind: None,
+                    poses: &[],
                 },
             )
             .expect("the model draws")
@@ -215,6 +216,7 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
     let caster = lumit_gpu::mesh::shadow::MapCaster {
         scene: &scene,
         model_to_comp,
+        pose: None,
     };
     let maps = fx.shadow_maps(&lease, &[caster], &[key], 512);
     assert!(maps.is_some(), "a model and a light that casts make maps");
@@ -244,6 +246,7 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
             environment: None,
             looks: &[],
             behind: None,
+            poses: &[],
         };
         let picture = fx.model(&lease, &scene, &view).expect("the model draws");
         let px = lease
@@ -278,6 +281,7 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
         let caster = lumit_gpu::mesh::shadow::MapCaster {
             scene: &scene,
             model_to_comp,
+            pose: None,
         };
         let maps = fx.shadow_maps(&lease, &[caster], &[key], 512);
         let op = lumit_gpu::fx::lighting::LightingOp {
@@ -365,6 +369,7 @@ fn a_white_environment_lights_white_things_white() {
         environment: Some(&surround),
         looks: &[],
         behind: None,
+        poses: &[],
     };
     let model = fx.model(&lease, &scene, &view).expect("the model draws");
     let px = lease
@@ -391,6 +396,189 @@ fn a_white_environment_lights_white_things_white() {
     for v in ball.iter().chain(card) {
         assert!((v - 1.0).abs() < 0.02, "ball {ball:?}, card {card:?}");
     }
+}
+
+/// A rig on bones draws where its pose has it, a moment drawn twice comes out
+/// the same however it was reached, and the shadow it casts follows the pose.
+#[test]
+fn a_posed_model_draws_and_casts_as_its_pose_has_it() {
+    use lumit_scene::pose::pose;
+    let Some(lease) = lumit_gpu::test_support::lease() else {
+        return lumit_gpu::no_adapter();
+    };
+    let rig = Arc::new(fixtures::bending(48, 48, 8));
+    let view_pose = lumit_core::camera::default_pose(f64::from(W), f64::from(H));
+    let eye = [
+        view_pose.position.0,
+        view_pose.position.1,
+        view_pose.position.2,
+    ]
+    .map(|v| v as f32);
+    let camera = camera_matrix(
+        W as f32,
+        H as f32,
+        view_pose.zoom as f32,
+        (eye[0], eye[1], eye[2]),
+        (0.0, 0.0, 0.0),
+    );
+    let model_to_comp = Mat4::from_translation(Vec3::new(160.0, 90.0, 0.0))
+        * Mat4::from_scale(Vec3::splat(30.0))
+        * Mat4::from_rotation_x(std::f32::consts::PI);
+    let take = rig.clips.first().expect("the take");
+    let at = |t: f64| pose(&rig, Some((take, t)), &[]);
+    let (start, bent) = (at(0.0), at(1.0));
+    let draw = |poses: &[lumit_scene::pose::Pose]| {
+        // A pose for each shutter sample when there are several.
+        let shutter = vec![model_to_comp; if poses.len() > 1 { poses.len() } else { 0 }];
+        let picture = lease
+            .fx()
+            .model(
+                &lease,
+                &rig,
+                &ModelView {
+                    comp: (W, H),
+                    render_scale: 1.0,
+                    samples: 1,
+                    camera,
+                    model_to_comp,
+                    shutter: &shutter,
+                    lights: &[],
+                    material: LightingMaterial {
+                        eye,
+                        ..LightingMaterial::default()
+                    },
+                    instances: &[],
+                    casters: None,
+                    maps: None,
+                    display: Default::default(),
+                    environment: None,
+                    looks: &[],
+                    behind: None,
+                    poses,
+                },
+            )
+            .expect("the model draws");
+        lease
+            .colour()
+            .readback_linear_f32(&lease, &picture.colour)
+            .unwrap()
+    };
+    // Where the most of it sits along x, by its alpha.
+    let middle = |px: &[f32]| {
+        let (mut sum, mut total) = (0.0, 0.0);
+        for (i, p) in px.chunks_exact(4).enumerate() {
+            sum += (i as u32 % W) as f32 * p[3];
+            total += p[3];
+        }
+        sum / total
+    };
+    let (rest, posed) = (
+        draw(std::slice::from_ref(&start)),
+        draw(std::slice::from_ref(&bent)),
+    );
+    assert!(
+        (middle(&rest) - middle(&posed)).abs() > 2.0,
+        "bent over: {} against {}",
+        middle(&rest),
+        middle(&posed)
+    );
+    let swells = |px: &[f32]| px.chunks_exact(4).filter(|p| p[3] > 0.5).count();
+    assert!(swells(&posed) > swells(&rest), "its morph target swells it");
+    assert_eq!(
+        posed,
+        draw(std::slice::from_ref(&bent)),
+        "the same moment again"
+    );
+    // Across the shutter the picture smears from one pose to the other, where
+    // a blur from the rest pose alone would be sharp.
+    let smear = draw(&[start.clone(), bent.clone()]);
+    let half = |px: &[f32]| {
+        px.chunks_exact(4)
+            .filter(|p| (0.3..0.7).contains(&p[3]))
+            .count()
+    };
+    assert!(
+        half(&smear) > half(&posed) + 100,
+        "half covered: {} against {}",
+        half(&smear),
+        half(&posed)
+    );
+
+    // A box of the rig at each pose for the shadow maps to fit, which a rest
+    // pose's box would clip.
+    assert!(bent.bounds.max[0] - bent.bounds.min[0] > start.bounds.max[0] - start.bounds.min[0]);
+    let light = LightingLight {
+        corners: [[160.0, -400.0, -50.0]; 4],
+        colour: [1.0; 3],
+        kind: LightingKind::Point,
+        falloff: 0,
+        radius_px: 0.0,
+        falloff_px: 0.0,
+        legacy: false,
+        cone_cos: -2.0,
+        cone_inner: -2.0,
+        axis: [0.0, 0.0, 1.0],
+        shadow_darkness: 1.0,
+        shadow_diffusion: 0.0,
+    };
+    let lights = [light];
+    let floor = Arc::new(fixtures::scene(
+        vec![(fixtures::cube(1.0, None), [0.0; 3])],
+        Vec::new(),
+        Vec::new(),
+    ));
+    let floor_place = Mat4::from_translation(Vec3::new(160.0, 170.0, 0.0))
+        * Mat4::from_scale(Vec3::new(400.0, 10.0, 400.0))
+        * Mat4::from_rotation_x(std::f32::consts::PI);
+    let shadowed = |p: Option<&lumit_scene::pose::Pose>| {
+        let caster = lumit_gpu::mesh::shadow::MapCaster {
+            scene: &rig,
+            model_to_comp,
+            pose: p,
+        };
+        let maps = lease
+            .fx()
+            .shadow_maps(&lease, std::slice::from_ref(&caster), &lights, 512)
+            .expect("the light casts");
+        let picture = lease
+            .fx()
+            .model(
+                &lease,
+                &floor,
+                &ModelView {
+                    comp: (W, H),
+                    render_scale: 1.0,
+                    samples: 1,
+                    camera,
+                    model_to_comp: floor_place,
+                    shutter: &[],
+                    lights: &lights,
+                    material: LightingMaterial {
+                        eye,
+                        accepts_shadows: LightingShadows::On,
+                        ..LightingMaterial::default()
+                    },
+                    instances: &[],
+                    casters: None,
+                    maps: Some(&maps),
+                    display: Default::default(),
+                    environment: None,
+                    looks: &[],
+                    behind: None,
+                    poses: &[],
+                },
+            )
+            .expect("the floor draws");
+        lease
+            .colour()
+            .readback_linear_f32(&lease, &picture.colour)
+            .unwrap()
+    };
+    assert_ne!(
+        shadowed(Some(&start)),
+        shadowed(Some(&bent)),
+        "the shadow moves with the pose"
+    );
 }
 
 /// Models are kept while their scenes live, and however many that is the
@@ -449,6 +637,7 @@ fn any_number_of_kept_models_still_draw() {
             environment: None,
             looks: &[],
             behind: None,
+            poses: &[],
         };
         last = Some(lease.fx().model(&lease, scene, &view).expect("it draws"));
     }

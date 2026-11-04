@@ -43,6 +43,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/scheduler.dart';
@@ -1240,7 +1241,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
         depth: row.depth,
         missing: missing,
         undecodable: _undecodable.contains(id),
-        missingPictures: _pictures[id] ?? const [],
+        missingPictures: [for (final n in _pictures[id] ?? const <String>[]) engineLabel(n)],
         blender: _blender[id],
         onStopBlender: () => _stopBlender(item),
         onConvertAgain: () => _convertAgain(item),

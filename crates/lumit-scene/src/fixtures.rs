@@ -1,7 +1,10 @@
 //! Models built in code, for tests and the bench: a box, a ball and a
 //! chequered picture to wrap round them.
 
-use crate::{Bounds, Image, Material, Mesh, ModelScene, Node, Primitive, Texture};
+use crate::{
+    Bounds, Channel, Clip, Image, Interpolation, Material, Mesh, ModelScene, MorphTarget, Node,
+    Path, Primitive, Skin, Texture,
+};
 
 /// A box `size` metres on a side round the origin, one picture square to a
 /// face.
@@ -70,6 +73,106 @@ pub fn sphere(radius: f32, segments: u32, rings: u32, material: Option<usize>) -
     p
 }
 
+/// A ball of `sphere`'s making hung on a chain of `joints` bones from pole to
+/// pole, with a morph target that swells it, and a two second take that bends
+/// the chain over and back as it swells. `joints` is at least two.
+#[must_use]
+pub fn bending(segments: u32, rings: u32, joints: usize) -> ModelScene {
+    let joints = joints.max(2);
+    let mut ball = sphere(1.0, segments, rings, None);
+    let step = 2.0 / (joints - 1) as f32;
+    // Each vertex hangs from the two bones either side of it.
+    for q in &ball.positions {
+        let along = ((q[1] + 1.0) / step).clamp(0.0, (joints - 1) as f32);
+        let low = (along as usize).min(joints - 2);
+        let share = along - low as f32;
+        ball.joints.push([low as u16, low as u16 + 1, 0, 0]);
+        ball.weights.push([1.0 - share, share, 0.0, 0.0]);
+    }
+    ball.morph_targets.push(MorphTarget {
+        positions: ball.normals.iter().map(|n| n.map(|c| c * 0.2)).collect(),
+        ..MorphTarget::default()
+    });
+    let at_rest = |parent, children, y: f32| Node {
+        parent,
+        children,
+        translation: [0.0, y, 0.0],
+        rotation: [0.0, 0.0, 0.0, 1.0],
+        scale: [1.0; 3],
+        ..Node::default()
+    };
+    // The mesh's node, then the bones in a chain, each a step up from the last.
+    let mut nodes = vec![Node {
+        mesh: Some(0),
+        skin: Some(0),
+        weights: vec![0.0],
+        ..at_rest(None, Vec::new(), 0.0)
+    }];
+    let mut inverse_bind = Vec::with_capacity(joints);
+    for j in 0..joints {
+        let k = j + 1;
+        let (parent, y) = if j == 0 {
+            (None, -1.0)
+        } else {
+            (Some(k - 1), step)
+        };
+        let children = if j + 1 < joints {
+            vec![k + 1]
+        } else {
+            Vec::new()
+        };
+        nodes.push(at_rest(parent, children, y));
+        let world_y = -1.0 + step * j as f32;
+        inverse_bind.push(
+            glam::Mat4::from_translation(glam::Vec3::new(0.0, -world_y, 0.0)).to_cols_array_2d(),
+        );
+    }
+    let (s, c) = (0.25f32 / joints as f32).sin_cos();
+    let times = vec![0.0, 1.0, 2.0];
+    let mut channels: Vec<Channel> = (2..=joints)
+        .map(|k| Channel {
+            node: k,
+            path: Path::Rotation,
+            interpolation: Interpolation::Linear,
+            times: times.clone(),
+            values: vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, s * 8.0, c, 0.0, 0.0, 0.0, 1.0],
+        })
+        .collect();
+    channels.push(Channel {
+        node: 0,
+        path: Path::Weights,
+        interpolation: Interpolation::Linear,
+        times,
+        values: vec![0.0, 1.0, 0.0],
+    });
+    let mut scene = ModelScene {
+        nodes,
+        roots: vec![0, 1],
+        meshes: vec![Mesh {
+            name: "ball".into(),
+            primitives: vec![ball],
+            ..Mesh::default()
+        }],
+        skins: vec![Skin {
+            joints: (1..=joints).collect(),
+            inverse_bind,
+            ..Skin::default()
+        }],
+        clips: vec![Clip {
+            name: "Bend".into(),
+            duration: 2.0,
+            channels,
+        }],
+        bounds: Bounds {
+            min: [-1.0; 3],
+            max: [1.0; 3],
+        },
+        ..ModelScene::default()
+    };
+    let _ = crate::settle::settle(&mut scene);
+    scene
+}
+
 /// A `size` pixel square of `cells` by `cells` squares, white and `ink`.
 #[must_use]
 pub fn chequer(size: u32, cells: u32, ink: [u8; 4]) -> Image {
@@ -115,6 +218,7 @@ pub fn scene(
         s.meshes.push(Mesh {
             name: format!("part {k}"),
             primitives: vec![primitive],
+            ..Mesh::default()
         });
         s.nodes.push(Node {
             name: format!("part {k}"),

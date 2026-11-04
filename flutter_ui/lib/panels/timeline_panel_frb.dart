@@ -98,6 +98,7 @@ import 'spectral_lane_frb.dart';
 import 'stagger.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart' show modelPartPath, modelPartReveal;
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/smooth_zoom.dart';
@@ -714,6 +715,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // so dropping it alone would leave the list holding what was let go.
       ui.clearSelection();
       _selectedProperties.clear();
+      _publishPickedPart();
       _laneKeySelection.clear();
       _graphKeySelection.clear();
       _highlighted = null;
@@ -1393,6 +1395,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishRowSelection();
     _publishLaneKeys();
     if (_graph) setState(() {});
+    _publishPickedPart();
   }
 
   /// The other direction: an effect picked in the Effect controls panel lights
@@ -1795,8 +1798,60 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final id = layerId.toString();
         _setOpen(id, true);
         _open.addAll(_revealPaths(id, entry, action));
+        // A part opens with its row picked and in view.
+        if (action.startsWith('reveal.part/')) {
+          final path =
+              modelPartPath(id, action.substring('reveal.part/'.length));
+          _selectedProperties
+            ..clear()
+            ..add(path);
+          _foldToShow = path;
+          _publishPickedPart();
+        }
       }
     });
+  }
+
+  /// Tell the Viewer which part of a 3D model the last picked row is on, for
+  /// its handles.
+  void _publishPickedPart() {
+    final path = _selectedProperties.lastOrNull;
+    final segments = path?.split('/') ?? const <String>[];
+    _ui?.pickedPart.value = segments.length >= 3 && segments[1] == 'parts'
+        ? (layer: UuidValue.fromString(segments[0]), part: segments[2])
+        : null;
+  }
+
+  /// The fold row the next build brings into view.
+  String? _foldToShow;
+
+  /// Bring the fold row at [path] into view, a short glide so its place in the
+  /// tree stays readable.
+  void _scrollToFold(List<LayerRow> rows, String path) {
+    var y = 0.0;
+    for (final row in rows) {
+      var at = y + row.rowHeight + (row.sequenceExtra ?? 0);
+      for (final fold in row.foldRows) {
+        if (foldRowPath(row.id, fold) == path) {
+          if (!_vOutline.hasClients) return;
+          final view = _vOutline.position;
+          // Enough for the part's own rows under it.
+          final block = row.rowHeight * 11;
+          if (at >= view.pixels &&
+              at + block <= view.pixels + view.viewportDimension) {
+            return;
+          }
+          // A row or two of what is above it stays on screen.
+          final to = (at - row.rowHeight * 2).clamp(0.0, view.maxScrollExtent);
+          _vOutline.animateTo(to,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut);
+          return;
+        }
+        at += row.rowHeight;
+      }
+      y += row.height;
+    }
   }
 
   /// Which fold paths a reveal key opens under [id]. Empty means the layer's
@@ -1830,6 +1885,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         entry.info.effects.isEmpty ? const [] : [effectsPath(id)],
       'reveal.masks' => entry.info.masks.isEmpty ? const [] : [masksPath(id)],
       'reveal.volume' => [audioPath(id)],
+      _ when action.startsWith('reveal.part/') => switch (entry.info.modelRows) {
+          final rows? =>
+            modelPartReveal(id, rows, action.substring('reveal.part/'.length)),
+          null => const [],
+        },
       _ => const [],
     };
   }
@@ -4209,6 +4269,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
+    if (_foldToShow case final path?) {
+      _foldToShow = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToFold(rows, path);
+      });
+    }
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,

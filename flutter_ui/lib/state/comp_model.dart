@@ -213,9 +213,11 @@ class CompModel extends ChangeNotifier {
     try {
       final revision = comp.documentRevision();
       if (revision == _revision && _model != null) return;
+      // Asked before the model is, so a read landing between the two is seen.
+      final reads = modelReads();
       _model = comp.getModel();
       _revision = revision;
-      _whileReading();
+      _whileReading(reads);
     } catch (_) {
       // The comp has gone (deleted, or the project closed): an empty model,
       // not a crash — the panels show their placeholders. The revision goes
@@ -226,16 +228,15 @@ class CompModel extends ChangeNotifier {
     }
   }
 
-  /// Held while a Model layer's file is still being read, so its material
-  /// rows, which come with the file, are read again once a read lands.
+  /// Held while a Model layer's file is still being read, so the rows that
+  /// come with the file are read again once a read lands.
   Timer? _reading;
 
-  void _whileReading() {
+  void _whileReading(int reads) {
     final waiting = _model?.layers.any((e) =>
-            e.info.kind == BridgeLayerKind.model && e.info.materials == null) ??
+            e.info.kind == BridgeLayerKind.model && e.info.modelRows == null) ??
         false;
     if (!waiting || _reading != null) return;
-    final reads = modelReads();
     _reading = Timer.periodic(const Duration(milliseconds: 300), (tick) {
       if (modelReads() == reads) return;
       tick.cancel();

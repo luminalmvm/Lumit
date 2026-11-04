@@ -271,6 +271,8 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
       _selected, widget.uiState.selectedLayer.value?.internallayerId);
 
   Gizmo3d? get _shownRings {
+    // A picked part's rings stand in for its layer's.
+    if (widget.uiState.pickedPart.value != null) return null;
     final first = _primary;
     return first == null ? null : _ringsOf(first);
   }

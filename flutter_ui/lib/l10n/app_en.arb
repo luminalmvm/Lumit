@@ -2144,6 +2144,71 @@
   "@foldContents": {
     "description": "Heading in a layer's fold-out, over what a shape layer is made of."
   },
+  "foldAnimation": "Animation",
+  "@foldAnimation": {
+    "description": "Heading in a Model layer's fold-out, over the rows that play its 3D model's embedded take."
+  },
+  "foldParts": "Parts",
+  "@foldParts": {
+    "description": "Heading in a Model layer's fold-out, over the node tree of its 3D model's file."
+  },
+  "menuCreateCamerasLights": "Create cameras and lights",
+  "@menuCreateCamerasLights": {
+    "description": "Layer menu item: makes keyed Camera and Light layers from what the selected Model layer's file holds."
+  },
+  "modelCameraName": "Camera",
+  "@modelCameraName": {
+    "description": "The name a Camera layer made from a 3D model gets when the file gives its camera none."
+  },
+  "modelLightName": "Light",
+  "@modelLightName": {
+    "description": "The name a Light layer made from a 3D model gets when the file gives its light none."
+  },
+  "fxAnimation": "Animation",
+  "@fxAnimation": {
+    "description": "Effect controls and the Timeline: the row on a Model layer that picks which of its 3D model's takes plays."
+  },
+  "fxFreeze": "Freeze",
+  "@fxFreeze": {
+    "description": "Timeline: a choice on a Model layer's Loop row. Holds the take's first and last poses past its ends."
+  },
+  "fxPart": "Part",
+  "@fxPart": {
+    "description": "Timeline: the name a part of a 3D model goes by when its file gives it none."
+  },
+  "fxRotationX": "Rotation x",
+  "@fxRotationX": {
+    "description": "Timeline: a row on a part of a 3D model. How far it is turned about the layer's x axis."
+  },
+  "fxRotationY": "Rotation y",
+  "@fxRotationY": {
+    "description": "Timeline: a row on a part of a 3D model. How far it is turned about the layer's y axis."
+  },
+  "fxRotationZ": "Rotation z",
+  "@fxRotationZ": {
+    "description": "Timeline: a row on a part of a 3D model. How far it is turned about the layer's z axis."
+  },
+  "fxVisible": "Visible",
+  "@fxVisible": {
+    "description": "Timeline: a row on a part of a 3D model, nought to hide it and one to show it, which can be keyed."
+  },
+  "modelTakeMissing": "{name} (missing)",
+  "@modelTakeMissing": {
+    "description": "Timeline: a Model layer's Take row, for a take the 3D model's file no longer has. {name} is the take's name, from the file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "fxTake": "Take",
+  "@fxTake": {
+    "description": "Timeline: the row on a Model layer that picks which of its 3D model's takes plays."
+  },
+  "modelTooLargeToMove": "Skins and morph targets, too large for this graphics card",
+  "@modelTooLargeToMove": {
+    "description": "Project panel, in the list of what a 3D model is missing: the model is too large for this card to pose, so it draws at rest."
+  },
   "foldMasks": "Masks",
   "@foldMasks": {
     "description": "Heading in a layer's fold-out, over its masks."
@@ -13662,6 +13727,18 @@
   "settingsGroupKeymap": "Keymap",
   "@settingsGroupKeymap": {
     "description": "Settings window, Shortcuts: the heading over the preset and import/export rows. A keymap is the whole set of keyboard shortcuts."
+  },
+  "settingsGroupOrbit": "Orbit",
+  "@settingsGroupOrbit": {
+    "description": "Settings window, Viewer: the heading over the settings for which way dragging turns the view round a 3D scene."
+  },
+  "settingsInvertOrbitAcross": "Invert left and right",
+  "@settingsInvertOrbitAcross": {
+    "description": "Settings window, Viewer, under the Orbit heading: a switch that makes dragging sideways turn the 3D view the other way."
+  },
+  "settingsInvertOrbitUpDown": "Invert up and down",
+  "@settingsInvertOrbitUpDown": {
+    "description": "Settings window, Viewer, under the Orbit heading: a switch that makes dragging up and down turn the 3D view the other way."
   },
   "settingsGroupPicture": "Picture",
   "@settingsGroupPicture": {

@@ -1430,6 +1430,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) {
                   _move = cameraMoveForButtons(e.buttons);
+                  _hold();
                   _begin(e.localPosition);
                 },
                 onPointerMove: (e) => _drag(e.localPosition, e.delta),
@@ -1439,9 +1440,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
               )
             : GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                dragStartBehavior: DragStartBehavior.down,
                 onTapUp: (_) {
                   if (_target == null) _sayNoCamera();
                 },
+                onPanDown: (_) => _hold(),
                 onPanStart: (d) => _begin(d.localPosition),
                 onPanUpdate: (d) => _drag(d.localPosition, d.delta),
                 onPanEnd: (_) => _end(),
@@ -1565,6 +1568,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   void _press(PointerDownEvent event) {
     _buttons = event.buttons;
     _pressAt = event.localPosition;
+    if (_navigatesWith(event.buttons)) _hold();
     widget.uiState.viewerNavigated = false;
     if (widget.viewport &&
         event.buttons == kSecondaryMouseButton &&
@@ -1649,6 +1653,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       HardwareKeyboard.instance.removeHandler(_flyKey);
     }
     if (_navigating && _start != null) _end();
+    // A press that never became a drag lets go of the pointer it held.
+    if (_locked && _start == null) {
+      thawCursor();
+      _locked = false;
+    }
     _navigating = false;
     if (_flyPose == null) {
       _lifecycle?.dispose();
@@ -1840,7 +1849,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   void _cubeOrbit(Offset delta) {
     final pose = _cubePose;
     if (pose == null) return;
-    final turned = orbitCamera(pose, delta.dx, delta.dy, around: _cubePivot);
+    final d = _orbitWay(delta);
+    final turned = orbitCamera(pose, d.dx, d.dy, around: _cubePivot);
     _cubePose = turned;
     _throttle.request(() => widget.uiState
         .setViewerViewPose(viewOfPose(turned), viewId: widget.viewId));
@@ -1882,9 +1892,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     var pose = _padPose;
     if (pose == null) return;
     final d = event.panDelta;
+    final turn = _orbitWay(d);
     pose = HardwareKeyboard.instance.isShiftPressed
         ? trackCamera(pose, d.dx, d.dy, scale: _scale, depth: _trackDepth)
-        : orbitCamera(pose, d.dx, d.dy, around: _padPivot);
+        : orbitCamera(pose, turn.dx, turn.dy, around: _padPivot);
     if (event.scale > 0 && (event.scale - _padScale).abs() > 1e-4) {
       pose = _dollied(pose, math.log(event.scale / _padScale) / dollyFraction);
       _padScale = event.scale;
@@ -2140,9 +2151,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     // being aimed at — so a pointer that wanders out of the Viewer, and finally
     // into the corner of the screen where it stops moving at all, is a drag
     // that ends before the user does. It reappears where it started when the
-    // button comes up, which is what every 3D application does.
+    // button comes up, which is what every 3D application does. [_hold] took
+    // it at the press, and [at] is the press too.
     _anchor = at;
-    _locked = freezeCursor();
     // Everything under the pointer is found through the pose the boxes were
     // drawn with, before an orbit carries a fixed view anywhere.
     final orbit = _activeMove == ToolMode.cameraOrbit;
@@ -2240,6 +2251,18 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     );
     ui.setViewerViewPose(viewOfPose(moved), viewId: id);
     return (moved, pivot ?? middle);
+  }
+
+  /// Pins the pointer where it is, at the press. Not when the drag is
+  /// recognised: by then the pointer has moved on from the press the drag is
+  /// measured from, and that first movement would repeat on every event.
+  void _hold() => _locked = freezeCursor();
+
+  /// A drag turned the way Settings has the orbit go.
+  Offset _orbitWay(Offset d) {
+    final s = widget.uiState.workspace.interface;
+    return Offset(s.invertOrbitAcross ? -d.dx : d.dx,
+        s.invertOrbitUpDown ? -d.dy : d.dy);
   }
 
   void _drag(Offset at, Offset delta) {
@@ -2596,8 +2619,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     final flying = _flyPose;
     if (flying != null) return flying;
     final shift = HardwareKeyboard.instance.isShiftPressed;
+    final turn = _orbitWay(_delta);
     return switch (_activeMove) {
-      ToolMode.cameraOrbit => orbitCamera(start, _delta.dx, _delta.dy,
+      ToolMode.cameraOrbit => orbitCamera(start, turn.dx, turn.dy,
           lockAxis: shift, around: _pivot),
       ToolMode.cameraPan => trackCamera(start, _delta.dx, _delta.dy,
           scale: _scale, lockAxis: shift, depth: _trackDepth),

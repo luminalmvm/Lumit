@@ -6778,6 +6778,10 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         accepts_shadows: ShadowMode::Only,
         ..takes
     };
+    let back = ShadingSurface {
+        normal: floor.normal.map(|n| -n),
+        ..floor
+    };
     let adds = ShadingMaterial { base: 1.0, ..takes };
     let very_wide = ShadingLight {
         shadow_diffusion: SPREAD,
@@ -6799,7 +6803,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         encoded: true,
         ..takes
     };
-    let encoded_only = ShadingMaterial {
+    let enc_only = ShadingMaterial {
         accepts_shadows: ShadowMode::Only,
         ..encoded
     };
@@ -6811,17 +6815,12 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         ("half", floor, takes, vec![half], None),
         ("sun", floor, takes, vec![spot, sun], None),
         ("only", floor, only, vec![diffused, sun], None),
+        ("only, from behind", back, only, vec![diffused, sun], None),
         ("adds", floor, adds, vec![spot], None),
         ("unlit", floor, unlit, vec![diffused, sun], None),
         ("unlit only", floor, unlit_only, vec![spot], None),
         ("encoded", floor, encoded, vec![diffused], None),
-        (
-            "encoded only",
-            floor,
-            encoded_only,
-            vec![diffused, sun],
-            None,
-        ),
+        ("encoded only", floor, enc_only, vec![diffused, sun], None),
         ("far reaching only", floor, only, vec![wide], None),
         ("own", card_surface, takes, vec![spot, sun], Some(0)),
     ] {
