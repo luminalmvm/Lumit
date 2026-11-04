@@ -5,6 +5,7 @@ mod effects;
 mod items;
 mod keys;
 mod layers;
+mod write;
 
 use std::path::{Path, PathBuf};
 
@@ -229,11 +230,11 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.add",
-        summary: "Add a null, camera, solid, footage or precomp layer to a comp",
+        summary: "Add a null, camera, solid, footage, precomp, text, shape, adjustment or light layer to a comp",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","kind":{"enum":["null","camera","solid","footage","precomp"]},"item":{"type":"string","description":"For footage: the footage item's id or name. For a precomp: the comp's"},"name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"colour":{"type":"array","items":{"type":"number","minimum":0,"maximum":1},"minItems":3,"maxItems":3,"description":"For a solid: its colour as a colour picker shows it, 0 to 1. White if left out"},"width":{"type":"integer","minimum":1,"maximum":16384,"description":"For a solid, the comp's if left out"},"height":{"type":"integer","minimum":1,"maximum":16384}},"required":["comp","kind"],"additionalProperties":false}"#
+            r#","kind":{"enum":["null","camera","solid","footage","precomp","text","shape","adjustment","light"]},"item":{"type":"string","description":"For footage: the footage item's id or name. For a precomp: the comp's"},"name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"colour":{"type":"array","items":{"type":"number","minimum":0,"maximum":1},"minItems":3,"maxItems":3,"description":"For a solid: its colour as a colour picker shows it, 0 to 1. White if left out"},"width":{"type":"integer","minimum":1,"maximum":16384,"description":"For a solid, the comp's if left out"},"height":{"type":"integer","minimum":1,"maximum":16384},"fields":{"type":"object","description":"Any of the layer's fields as a .lum file keeps them, laid over the new layer as layer.write lays them. A text layer turns about the middle of its words unless these set its anchor"}},"required":["comp","kind"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -243,6 +244,37 @@ pub const COMMANDS: &[Command] = &[
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
             r#","name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"items":{"type":"array","minItems":1,"description":"The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one","items":{"type":"object"}}},"required":["comp","items"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "layer.read",
+        summary: "One layer whole, in the form a .lum file keeps it, to change and give back to layer.write",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#"},"required":["comp","layer"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "layer.write",
+        summary: "Change any part of a layer, in the form a .lum file keeps it: its kind and contents, text, transform, masks, effects, styles, paint, switches and the rest",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","fields":{"type":"object","description":"Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {\"Keyframed\": [...]} replaces another such as {\"Static\": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place"}},"required":["comp","layer","fields"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "comp.write",
+        summary: "Change a comp's motion blur, lighting or node graph, in the form a .lum file keeps them",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","fields":{"type":"object","properties":{"motion_blur":{"type":"object"},"lighting":{"type":"object"},"graph":{"type":"object"}},"additionalProperties":false,"description":"Each laid over the comp's own as JSON Merge Patch does"}},"required":["comp","fields"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -434,6 +466,9 @@ pub(crate) fn run(
         "folder.new" => items::folder_new(host, parse(args)?),
         "layer.add" => layers::layer_add(host, parse(args)?),
         "shape.add" => layers::shape_add(host, parse(args)?),
+        "layer.read" => write::layer_read(host, parse(args)?),
+        "layer.write" => write::layer_write(host, parse(args)?),
+        "comp.write" => write::comp_write(host, parse(args)?),
         "layer.composite" => layers::layer_composite(host, parse(args)?),
         "layer.get" => layers::layer_get(host, parse(args)?),
         "layer.set" => layers::layer_set(host, parse(args)?),

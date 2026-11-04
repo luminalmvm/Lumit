@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::keys::{animation_json, markers_json, PROPERTIES};
+use super::write;
 use super::{
     bad, commit, find_comp, find_footage, find_layer, layer_json, layer_now, present, Time,
 };
@@ -15,12 +16,16 @@ use crate::{Host, ScriptError};
 
 #[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
-enum AddKind {
+pub(super) enum AddKind {
     Null,
     Camera,
     Solid,
     Footage,
     Precomp,
+    Text,
+    Shape,
+    Adjustment,
+    Light,
 }
 
 #[derive(Deserialize)]
@@ -34,6 +39,7 @@ pub(super) struct AddArgs {
     colour: Option<[f64; 3]>,
     width: Option<u32>,
     height: Option<u32>,
+    fields: Option<serde_json::Map<String, Value>>,
 }
 
 /// Whether `comp`, or a comp anywhere inside it, holds comp `id`.
@@ -126,6 +132,9 @@ pub(super) fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptErro
             let item = find_footage(&doc, key)?;
             (host.footage_layers(comp, item)?, Vec::new())
         }
+        AddKind::Text | AddKind::Shape | AddKind::Adjustment | AddKind::Light => {
+            (write::fresh(comp, a.kind).into_iter().collect(), Vec::new())
+        }
     };
     let first = layers
         .first_mut()
@@ -133,6 +142,7 @@ pub(super) fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptErro
     if let Some(name) = a.name {
         first.name = name;
     }
+    *first = write::with_fields(first.clone(), a.fields)?;
     let id = first.id;
     let index = a.index.unwrap_or(0).min(comp.layers.len());
     for (n, mut layer) in layers.into_iter().enumerate() {
