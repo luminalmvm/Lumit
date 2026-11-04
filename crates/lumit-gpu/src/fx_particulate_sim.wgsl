@@ -639,7 +639,8 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let rn = dot(rest, n);
                 let turned = (rest - n * rn) * st.slip - n * rn * keep + hit.moving * left;
                 a = at;
-                b = at + turned;
+                // Still hitting things: it stops where it last came off.
+                b = select(at + turned, at, k + 1u == SIM_HITS);
             }
         }
         if (p.edge == EDGE_KILL) {
