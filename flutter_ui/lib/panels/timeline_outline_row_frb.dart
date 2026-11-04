@@ -29,6 +29,7 @@ import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
 import 'audio_streams_menu_frb.dart';
+import 'layer_fold_frb.dart' show hasFlow;
 import 'light_rows_frb.dart' show feedsEnvironment;
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
@@ -786,7 +787,7 @@ class _OutlineRowState extends State<OutlineRow> {
           // layer's interpolation policy rather than a `BridgeLayerSwitch`,
           // because that is what flow *is* underneath ("the option surfaces
           // the policy").
-          ModeCell.flow => info.kind == BridgeLayerKind.footage
+          ModeCell.flow => hasFlow(info.kind)
               ? _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
                   tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff,
                   onSet: (to) {
