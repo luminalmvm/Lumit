@@ -169,6 +169,26 @@ fn take_room(stopped: &dyn Fn() -> bool) -> bool {
     }
 }
 
+/// A GLB from an earlier conversion of `place`'s file, as long as the file
+/// hasn't been saved since.
+fn converted_before(cache_dir: &Path, place: u64, source: &std::fs::Metadata) -> Option<PathBuf> {
+    let prefix = format!("{place:016x}-");
+    let saved = source.modified().ok()?;
+    std::fs::read_dir(cache_dir)
+        .ok()?
+        .flatten()
+        .find(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.starts_with(&prefix)
+                && name.ends_with(".glb")
+                && is_glb(&entry.path())
+                && entry
+                    .metadata()
+                    .and_then(|glb| glb.modified())
+                    .is_ok_and(|made| made >= saved)
+        })
+        .map(|entry| entry.path())
+}
 
 /// Turn `source` into a GLB in `cache_dir` and give its path, once Blender has
 /// finished, whose first launch can take a while. A source already being
@@ -188,16 +208,20 @@ pub fn to_glb(source: &Path, cache_dir: &Path, cancel: &AtomicBool) -> Result<Pa
         path: source.to_path_buf(),
         reason: e.to_string(),
     })?;
+    let mut hash = DefaultHasher::new();
+    source.hash(&mut hash);
+    let place = hash.finish();
     let Some(blender) = find() else {
+        if let Some(glb) = converted_before(cache_dir, place, &meta) {
+            set_state(source, None);
+            return Ok(glb);
+        }
         set_state(source, Some(State::NoBlender));
         return Err(SceneError::NoBlender {
             path: source.to_path_buf(),
         });
     };
 
-    let mut hash = DefaultHasher::new();
-    source.hash(&mut hash);
-    let place = hash.finish();
     (meta.len(), meta.modified().ok(), &blender.version, SCRIPT).hash(&mut hash);
     let glb = cache_dir.join(format!("{place:016x}-{:016x}.glb", hash.finish()));
     let mut waited = false;
@@ -488,20 +512,22 @@ fn candidates() -> Vec<PathBuf> {
         use windows_registry::{CLASSES_ROOT, CURRENT_USER, LOCAL_MACHINE};
         // Blender's installer leaves its folder in the uninstall list.
         let uninstall = r"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+        let mut installed = Vec::new();
         for list in [LOCAL_MACHINE, CURRENT_USER]
             .into_iter()
             .filter_map(|root| root.open(uninstall).ok())
         {
-            out.extend(list.keys().into_iter().flatten().filter_map(|name| {
+            installed.extend(list.keys().into_iter().flatten().filter_map(|name| {
                 let entry = list.open(name).ok()?;
                 let ours = entry.get_string("Publisher").ok()? == "Blender Foundation";
                 ours.then(|| entry.get_string("InstallLocation").ok().map(PathBuf::from))?
             }));
         }
+        out.extend(newest_first(installed));
         if let Some(programs) = std::env::var_os("ProgramFiles") {
-            out.extend(newest_first(
-                &Path::new(&programs).join("Blender Foundation"),
-            ));
+            let dir = Path::new(&programs).join("Blender Foundation");
+            let folders = std::fs::read_dir(dir).into_iter().flatten().flatten();
+            out.extend(newest_first(folders.map(|entry| entry.path()).collect()));
         }
         let steam = CURRENT_USER
             .open(r"Software\Valve\Steam")
@@ -545,18 +571,17 @@ fn candidates() -> Vec<PathBuf> {
     out
 }
 
-/// `Blender 5.2`, `Blender 4.5` and so on under `dir`, highest version first.
+/// The folders named `Blender 5.2`, `Blender 4.5` and so on in `folders`,
+/// highest version first.
 #[cfg(windows)]
-fn newest_first(dir: &Path) -> Vec<PathBuf> {
-    let mut found: Vec<(Vec<u32>, PathBuf)> = std::fs::read_dir(dir)
+fn newest_first(folders: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut found: Vec<(Vec<u32>, PathBuf)> = folders
         .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| {
-            let name = entry.file_name().to_string_lossy().into_owned();
+        .filter_map(|path| {
+            let name = path.file_name()?.to_string_lossy().into_owned();
             let version = name.strip_prefix("Blender ")?;
             let version = version.split('.').map(|n| n.parse().unwrap_or(0)).collect();
-            Some((version, entry.path()))
+            Some((version, path))
         })
         .collect();
     found.sort_by(|a, b| b.0.cmp(&a.0));
