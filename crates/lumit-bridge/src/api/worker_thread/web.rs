@@ -24,7 +24,10 @@ enum Then {
     Publish(u32),
     /// The frame, for the dropper, with the stamp a soloed layer's picture is
     /// kept under.
-    Sample(SamplePixelsRequest, Option<(Uuid, u64, Uuid, u64, u32)>),
+    Sample(
+        SamplePixelsRequest,
+        Option<(Uuid, u64, Uuid, u64, u32, bool)>,
+    ),
 }
 
 impl Then {
@@ -259,7 +262,14 @@ pub(super) fn sample_pixels(
     let quality = quality_for(req.scale);
 
     if let Some(layer) = req.layer.as_ref().map(|layer| layer.layer_id) {
-        let stamp = (req.comp.id, req.frame, layer, revision, req.view);
+        let stamp = (
+            req.comp.id,
+            req.frame,
+            layer,
+            revision,
+            req.view,
+            req.part_ids,
+        );
         if let Some(held) = state
             .layer_sample
             .as_ref()
@@ -271,13 +281,25 @@ pub(super) fn sample_pixels(
         let Some(alone) = soloed(&document, layer, &req, state) else {
             return Ok(());
         };
-        match state.renderer.start_preview_scaled(
-            &alone,
-            req.comp.id,
-            req.frame,
-            quality,
-            req.scale,
-        ) {
+        // Parts are read at full size with the Viewer's own view off, as in
+        // the native read.
+        let (quality, scale) = if req.part_ids {
+            (quality_for(1.0), 1.0)
+        } else {
+            (quality, req.scale)
+        };
+        let view = state.renderer.display_view();
+        if req.part_ids {
+            state
+                .renderer
+                .set_display_view(lumit_gpu::DisplayParams::NEUTRAL);
+        }
+        let started =
+            state
+                .renderer
+                .start_preview_scaled(&alone, req.comp.id, req.frame, quality, scale);
+        state.renderer.set_display_view(view);
+        match started {
             Ok(read) => wait_for(read, Then::Sample(req, Some(stamp)), None),
             Err(err) => note!("Dropper render failed: {err}"),
         }

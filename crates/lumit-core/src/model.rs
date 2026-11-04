@@ -2335,6 +2335,8 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
         // §1.4: any live effect on the Precomp layer itself — its stack runs
         // on the nested comp's raster, which splicing never produces.
         || (layer.switches.fx && layer.effects.iter().any(|e| e.enabled))
+        // Flow makes its frame from two nested pictures.
+        || matches!(layer.interpolation, crate::retime::Interpolation::Flow(_))
         || layer.blend != BlendMode::Normal
         || layer.transform.opacity.value_at(lt) < 99.999
         || inner_forces

@@ -82,6 +82,7 @@ pub mod model_extract;
 pub mod model_layer;
 pub mod model_material;
 pub mod model_motion;
+pub mod passes;
 pub mod placement;
 pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame

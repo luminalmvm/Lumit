@@ -2592,6 +2592,7 @@ class LumitUiState extends ChangeNotifier {
         window: dropperWindow,
         scale: viewerScale,
         layer: arm.sampleLayer,
+        partIds: arm.reads == DropperReads.part,
         view: activeViewId,
       );
     } catch (_) {
