@@ -28,6 +28,21 @@ use lumit_fx_macros::Effect;
 /// What Order offers.
 pub const TYPE_FILL_ORDER: &[&str] = &["In turn", "Shift per row", "Random"];
 
+/// What Direction offers.
+pub const TYPE_FILL_DIRECTION: &[&str] = &["Rows", "Columns"];
+
+/// What the rows are called when Direction is Columns, where each works down
+/// a column instead of along a row.
+pub const COLUMN_LABELS: &[(&str, &str)] = &[
+    ("rows", "Columns"),
+    ("grid_height", "Grid width"),
+    ("row_gap", "Column gap"),
+    ("row_open", "Column open"),
+    ("row_stagger", "Column stagger"),
+    ("row_shift", "Column shift"),
+    ("alternate_rows", "Alternate columns"),
+];
+
 /// Where the region is read from.
 pub const REGION_FROM: &[&str] = &["Alpha", "Luminance"];
 
@@ -66,6 +81,13 @@ pub struct TypeFill {
         unit = Raw
     )]
     pub repeat_words: i32,
+
+    /// Rows: the words run left to right in rows, one under another.
+    /// Columns: they stand one under another in columns side by side, still
+    /// upright; every row below then works down a column instead (Rows,
+    /// Grid height and Row gap across the frame, Row shift up and down).
+    #[choice(label = "Direction", options = TYPE_FILL_DIRECTION, default = 0)]
+    pub direction: u32,
 
     /// How wide each word's column is, as numbers in the order of Words,
     /// between bars, dashes or spaces (`46|8|40`, `46-8-40`): shares of the
@@ -698,6 +720,11 @@ impl EffectDef for TypeFillDef {
             } else {
                 vec!["piece_scale", "clip_to_region"]
             },
+            labels: if matches!(inst.param("direction"), Some(EffectValue::Choice(1))) {
+                COLUMN_LABELS.to_vec()
+            } else {
+                Vec::new()
+            },
             ..RowState::default()
         }
     }
@@ -896,6 +923,25 @@ mod tests {
         assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![2.0, 1.0, 2.0]);
         t.column_widths = crate::fx::params::ShortText::new("46|0");
         assert_eq!(t.shares(&[2.0, 1.0, 2.0]), vec![2.0, 1.0, 2.0]);
+    }
+
+    /// Direction: Columns renames the rows that then work down the columns,
+    /// and Rows keeps their own names.
+    #[test]
+    fn columns_rename_the_rows() {
+        use crate::fx::registry::EffectDef;
+        let mut inst = crate::fx::builtins::instantiate("type_fill").unwrap();
+        assert!(super::TypeFillDef.row_state(&inst).labels.is_empty());
+        inst.params.retain(|p| p.id != "direction");
+        inst.params.push(crate::model::EffectParam {
+            id: "direction".to_owned(),
+            value: crate::model::EffectValue::Choice(1),
+            extra: serde_json::Map::new(),
+        });
+        let labels = super::TypeFillDef.row_state(&inst).labels;
+        assert!(labels.contains(&("rows", "Columns")));
+        assert!(labels.contains(&("row_shift", "Column shift")));
+        assert!(labels.contains(&("grid_height", "Grid width")));
     }
 
     /// Repeat words sets the list one after another that many times.

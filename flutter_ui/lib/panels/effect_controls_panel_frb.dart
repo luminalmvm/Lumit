@@ -1468,7 +1468,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
-    final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
+    final params = instanceParameters(fx);
     // An LFX effect with a page of its own, which the heading opens.
     final interface =
         !style && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
@@ -2327,7 +2327,7 @@ class _EffectSection extends StatelessWidget {
   /// read model beside the values, because it is a fact about the instance and
   /// a fetch per card per rebuild is the traffic the budget test forbids.
   List<BridgeParamInfo> get _rows => relistedRows(
-        [...cachedListParameters(info.name), ...info.derivedParams],
+        instanceParameters(info),
         info.rowOptions,
       );
 

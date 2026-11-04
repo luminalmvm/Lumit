@@ -16925,6 +16925,18 @@
           "hard_max": 256.0
         },
         {
+          "id": "direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Rows",
+            "Columns"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "column_widths",
           "label": "Column widths",
           "kind": "text",

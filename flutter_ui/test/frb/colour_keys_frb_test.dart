@@ -5,6 +5,7 @@
 // one-number value, so a keyed Colour drew no diamonds at all.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:lumit_flutter/panels/graph_channels.dart';
 import 'package:lumit_flutter/panels/graph_edits.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
@@ -88,5 +89,27 @@ void main() {
         (written.field0.g as BridgeScalar_Keyframed).field0.first.value, 0.5);
     expect((written.field0.r as BridgeScalar_Keyframed).field0.first.value, 1.0,
         reason: 'the other channels kept');
+  });
+
+  /// Type fill's rows read as columns once its Direction is Columns: the
+  /// rows are the same, only their names follow what they do.
+  testWidgets('Type fill in Columns names its rows as columns', (tester) async {
+    final p = freshProject();
+    final comp = p.state.project!.newComposition(name: 'Scene');
+    comp.addSolidLayer();
+    final layer = comp.getLayers().single;
+    layer.addEffect(name: 'type_fill');
+    String label(String id) =>
+        instanceParameters(comp.getModel().layers.single.info.effects.single)
+            .firstWhere((r) => r.id == id)
+            .label;
+    expect(label('rows'), 'Rows');
+    final stack = layer.getEffects();
+    stack.single
+        .setValue(id: 'direction', value: const BridgeEffectValue.choice(1));
+    layer.setEffects(effects: stack);
+    expect(label('rows'), 'Columns');
+    expect(label('row_shift'), 'Column shift');
+    expect(label('grid_height'), 'Grid width');
   });
 }

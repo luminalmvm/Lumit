@@ -71,7 +71,7 @@ import 'effect_param_row_frb.dart'
     show
         EffectParamRowFrb,
         EffectStackEditor,
-        cachedListParameters,
+        instanceParameters,
         relistedRows,
         withChained;
 import 'graph_groups.dart';
@@ -1546,7 +1546,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           params[key] = compBoxRows(
             info.name,
             relistedRows(
-              [...cachedListParameters(info.name), ...info.derivedParams],
+              instanceParameters(info),
               info.rowOptions,
             ),
             {for (final v in info.values) v.id: v.value},

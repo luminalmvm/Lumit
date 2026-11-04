@@ -728,6 +728,10 @@ pub struct RowState {
     pub disabled: Vec<&'static str>,
     /// Choice rows whose list is not the schema's, with the list to draw.
     pub options: Vec<(&'static str, Vec<String>)>,
+    /// Rows drawn under another name, with the name to draw: the row and its
+    /// value are the same, only what it does has turned (Type fill's rows
+    /// read as columns when its Direction is Columns).
+    pub labels: Vec<(&'static str, &'static str)>,
 }
 
 /// What an effect wrote while it was pressed, or in answer to an edit.

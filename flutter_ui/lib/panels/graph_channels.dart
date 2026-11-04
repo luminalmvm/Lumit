@@ -371,7 +371,7 @@ List<GraphChannel> graphChannels({
         if (fx.id.toString() != effectId) continue;
         // The rows an instance derives are rows like any other: a Custom
         // controls slider is keyed and eased as a declared one is.
-        final rows = [...cachedListParameters(fx.name), ...fx.derivedParams];
+        final rows = instanceParameters(fx);
         // A chained pair is one curve, as a layer's linked Scale is. Either
         // half's row resolves to the x half, which is drawn and edited, and
         // the y half follows every write ([withLinkedPartners]).

@@ -2521,6 +2521,28 @@ Iterable<BridgeStyleInfo> offeredStyles() =>
 List<BridgeParamInfo> cachedListParameters(String effect) =>
     effectSchema.parameters(effect);
 
+/// Every row one instance draws: its effect's declared rows, then the rows it
+/// derives, each under the name the instance gives it right now
+/// ([BridgeEffectInstanceInfo.rowLabels]: Type fill's rows read as columns
+/// when its Direction is Columns).
+List<BridgeParamInfo> instanceParameters(BridgeEffectInstanceInfo info) {
+  final rows = [...cachedListParameters(info.name), ...info.derivedParams];
+  if (info.rowLabels.isEmpty) return rows;
+  final names = {for (final l in info.rowLabels) l.id: l.label};
+  return [
+    for (final p in rows)
+      if (names[p.id] case final label?)
+        BridgeParamInfo(
+            id: p.id,
+            label: label,
+            kind: p.kind,
+            unit: p.unit,
+            derived: p.derived)
+      else
+        p,
+  ];
+}
+
 /// An effect's parameter groups (docs/08 §1.2), memoised like
 /// the parameters: the twirls and conditional runs the panel folds the flat
 /// parameter list into.

@@ -5092,6 +5092,30 @@
   "@fxGridHeight": {
     "description": "Effect controls — a slider on Type fill: how tall the rows stand together, centred in the frame; 0 is the frame height."
   },
+  "fxGridWidth": "Grid width",
+  "@fxGridWidth": {
+    "description": "Effect controls — Type fill's Grid height when its Direction is Columns: how wide the columns stand together, centred in the frame."
+  },
+  "fxColumnGap": "Column gap",
+  "@fxColumnGap": {
+    "description": "Effect controls — Type fill's Row gap when its Direction is Columns: the room between the columns."
+  },
+  "fxColumnOpen": "Column open",
+  "@fxColumnOpen": {
+    "description": "Effect controls — Type fill's Row open when its Direction is Columns: how far each column has opened out of a thin line."
+  },
+  "fxColumnStagger": "Column stagger",
+  "@fxColumnStagger": {
+    "description": "Effect controls — Type fill's Row stagger when its Direction is Columns: how far apart the columns open, the middle one first."
+  },
+  "fxColumnShift": "Column shift",
+  "@fxColumnShift": {
+    "description": "Effect controls — Type fill's Row shift when its Direction is Columns: how far every column slides up or down, wrapping round."
+  },
+  "fxAlternateColumns": "Alternate columns",
+  "@fxAlternateColumns": {
+    "description": "Effect controls — Type fill's Alternate rows when its Direction is Columns: every other column slides the other way."
+  },
   "fxRepeatWords": "Repeat words",
   "@fxRepeatWords": {
     "description": "Effect controls — a counter on Type fill: how many times the list of Words is set one after another in every row."

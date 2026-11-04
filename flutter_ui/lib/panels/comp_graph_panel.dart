@@ -59,7 +59,7 @@ import 'effect_param_row_frb.dart'
     show
         EffectParamRowFrb,
         cachedListParameterGroups,
-        cachedListParameters,
+        instanceParameters,
         disabledParams,
         paramGroupVisible,
         paramRidersFor,
@@ -462,7 +462,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           params[key] = compBoxRows(
             info.name,
             relistedRows(
-              [...cachedListParameters(info.name), ...info.derivedParams],
+              instanceParameters(info),
               info.rowOptions,
             ),
             {for (final v in info.values) v.id: v.value},

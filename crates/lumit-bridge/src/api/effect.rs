@@ -2403,6 +2403,8 @@ pub struct BridgeEffectInstanceInfo {
     /// The choice rows whose list a plugin has replaced, with the list to
     /// draw in place of the schema's.
     pub row_options: Vec<BridgeRowOptions>,
+    /// The rows drawn under another name right now, with that name.
+    pub row_labels: Vec<BridgeRowLabel>,
     /// The node graph this instance applies (docs/impl/node-graph-comp.md
     /// §4.4), and `None` for every other effect.
     ///
@@ -2905,6 +2907,14 @@ pub(crate) fn read_instance_info(
                 options,
             })
             .collect(),
+        row_labels: rows
+            .labels
+            .into_iter()
+            .map(|(id, label)| BridgeRowLabel {
+                id: id.to_owned(),
+                label: label.to_owned(),
+            })
+            .collect(),
         node_graph_comp: lumit_core::fx::effects::node_graph::comp_of(effect),
     }
 }
@@ -2915,6 +2925,15 @@ pub(crate) fn read_instance_info(
 pub struct BridgeRowOptions {
     pub id: String,
     pub options: Vec<String>,
+}
+
+/// A row drawn under another name (`RowState::labels`): Type fill's rows
+/// when its Direction is Columns.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeRowLabel {
+    pub id: String,
+    pub label: String,
 }
 
 impl BridgeEffectInstance {

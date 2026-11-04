@@ -6258,7 +6258,12 @@ impl GpuEffect for TypeFill {
         if words.is_empty() || mix <= 0.0 || w == 0 || h == 0 {
             return tex.clone();
         }
-        let bands = inst.row_bands(h as f32, px_scale);
+        // Columns lays the words out in a frame turned on its side: the
+        // rows below run down the picture, and each box is turned back at
+        // the end, so the words stand upright one under another.
+        let down = inst.direction == 1;
+        let (lw, lh) = if down { (h, w) } else { (w, h) };
+        let bands = inst.row_bands(lh as f32, px_scale);
         // The region along the middle of each row, 0..1 a pixel; unset, all
         // of it.
         let region = aux
@@ -6268,6 +6273,25 @@ impl GpuEffect for TypeFill {
             .map(|l| &l.tex)
             .filter(|t| t.width() == w && t.height() == h)
             .and_then(|t| lumit_gpu::fx::common::readback_linear_f32(ctx, t, w, h).ok());
+        // The region as the layout reads it: turned on its side for Columns.
+        let laid: Option<Vec<f32>> = region.as_ref().map(|px| {
+            if !down {
+                return px.clone();
+            }
+            let (w, h) = (w as usize, h as usize);
+            let mut out = vec![0.0f32; w * h * 4];
+            for y in 0..w {
+                for x in 0..h {
+                    let from = (x * w + y) * 4;
+                    let to = (y * h + x) * 4;
+                    out[to..to + 4].copy_from_slice(&px[from..from + 4]);
+                }
+            }
+            out
+        });
+        // From here to the boxes, `w`, `h` and `region` are the layout's.
+        let (ow, oh, picture_region) = (w, h, region);
+        let (w, h, region) = (lw, lh, laid);
         let luminance = inst.region_from == 1;
         let read = |px: &[f32], at: usize| -> f32 {
             let t = px.get(at..at + 4).unwrap_or(&[0.0; 4]);
@@ -6342,8 +6366,10 @@ impl GpuEffect for TypeFill {
             .iter()
             .map(|word| {
                 let probe = word_drawing(doc, px_scale, 1.0, word).trimmed();
-                let k = if probe.height > 0 {
-                    px_scale * row / probe.height as f32
+                // A row holds a word as tall as it; a column as wide as it.
+                let across = if down { probe.width } else { probe.height };
+                let k = if across > 0 {
+                    px_scale * row / across as f32
                 } else {
                     px_scale
                 };
@@ -6359,11 +6385,26 @@ impl GpuEffect for TypeFill {
             .iter()
             .map(|d| d.width as f32 / d.height.max(1) as f32)
             .collect();
-        let pieces = if inst.fit_piece {
-            inst.fit_pieces(&reach, &natural, w as f32, px_scale)
+        // How long each word is along its row or column, a px of the other
+        // way: down a column an upright word is its height over its width.
+        let along: Vec<f32> = if down {
+            natural.iter().map(|n| 1.0 / n.max(1e-3)).collect()
         } else {
-            inst.pieces(&bands, &free, &natural, w as f32, px_scale)
+            natural.clone()
         };
+        let mut pieces = if inst.fit_piece {
+            inst.fit_pieces(&reach, &along, w as f32, px_scale)
+        } else {
+            inst.pieces(&bands, &free, &along, w as f32, px_scale)
+        };
+        // Back from the frame on its side: each box turned to the picture.
+        if down {
+            for piece in &mut pieces {
+                let [x0, y0, x1, y1] = piece.rect;
+                piece.rect = [y0, x0, y1, x1];
+            }
+        }
+        let (w, h, region) = (ow, oh, picture_region);
         // Each word is set again as wide as its boxes want it, in quarter
         // octaves, so a wide column gets wide letters instead of a smear.
         let step = |piece: &lumit_core::fx::effects::type_fill::Piece| -> i32 {
@@ -6384,8 +6425,13 @@ impl GpuEffect for TypeFill {
         let placed: Vec<Placed<'_>> = pieces
             .iter()
             .filter_map(|piece| {
-                Placed::boxed(wide.get(&(piece.word, step(piece)))?, piece.rect, None)
-                    .map(|p| p.clipped_x(piece.clip))
+                Placed::boxed(wide.get(&(piece.word, step(piece)))?, piece.rect, None).map(|p| {
+                    if down {
+                        p.clipped_y(piece.clip)
+                    } else {
+                        p.clipped_x(piece.clip)
+                    }
+                })
             })
             .collect();
         if placed.is_empty() {
