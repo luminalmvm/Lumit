@@ -99,6 +99,7 @@ fn run_with_masks(node: &AeProp, masks: Vec<(Uuid, f64)>) -> Ran {
             tb: TimeBase::of_fps(Some(25.0)).expect("a rate"),
             offset: Rational::ZERO,
             size: (W, H),
+            solids: false,
             span: (Rational::ZERO, Rational::new(4, 1).unwrap()),
             layer_ids: BTreeMap::new(),
             masks,

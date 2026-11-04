@@ -81,6 +81,7 @@ fn mapped(slots: Vec<Property>, transform: &TransformGroup) -> (Vec<EffectInstan
         tb: TimeBase::new(lumit_core::time::FrameRate::new(24, 1).expect("24 fps")),
         offset: lumit_core::time::Rational::ZERO,
         size: (1920.0, 1080.0),
+        solids: false,
         span: (
             lumit_core::time::Rational::ZERO,
             lumit_core::time::Rational::ZERO,

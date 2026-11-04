@@ -1263,6 +1263,7 @@ mod tests {
                 tb,
                 offset: Rational::ZERO,
                 size: (W, H),
+                solids: false,
                 span: (Rational::ZERO, tb.seconds(2.0)),
                 layer_ids: ids,
                 masks: Vec::new(),

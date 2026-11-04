@@ -13080,6 +13080,10 @@
       }
     }
   },
+  "aeGeometryOptionsCarried": "The geometry options were imported",
+  "@aeGeometryOptionsCarried": {
+    "description": "Import report: a Text or Shape layer's extrusion and bevel in After Effects came across."
+  },
   "aeShadowSwitchKeyed": "The shadow setting kept its first key",
   "@aeShadowSwitchKeyed": {
     "description": "Import report row reason. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."

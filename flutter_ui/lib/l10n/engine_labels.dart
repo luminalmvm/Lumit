@@ -2178,6 +2178,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeLightKindApproximated(a('ae_kind'));
     case 'shadow_switch_keyed':
       return l10n.aeShadowSwitchKeyed;
+    case 'geometry_options_carried':
+      return l10n.aeGeometryOptionsCarried;
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':

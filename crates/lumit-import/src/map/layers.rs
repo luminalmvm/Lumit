@@ -40,6 +40,7 @@ use lumit_core::model::{
     BlendMode, Layer, LayerInputSource, LayerKind, LightDef, LightKind, Material, MatteChannel,
     MatteRef, ShadowMode, Switches, TransformGroup,
 };
+use lumit_core::model::{EffectInstance, EffectValue};
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Rational};
 use uuid::Uuid;
@@ -154,6 +155,9 @@ pub(crate) fn map_layer(
         LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Null => Material::legacy(),
         _ => material(conv, &path, props),
     });
+    if conv.solids && matches!(kind, LayerKind::Text { .. } | LayerKind::Shape { .. }) {
+        transform.material.geometry = geometry(conv, &path, props);
+    }
     // After Effects measures a text layer from its first baseline, and a
     // shape layer from its own zero, where Lumit measures both from the corner
     // of the raster they are drawn into. The anchor and the masks move by the
@@ -462,6 +466,52 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
         holdout: false,
         geometry: Vec::new(),
     }
+}
+
+/// A Text or Shape layer's Geometry options, keyframes and all, or nothing for
+/// a layer with no depth and no bevel.
+fn geometry(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    props: &[Property],
+) -> Vec<Option<EffectInstance>> {
+    let options = group(props, "ADBE Extrsn Options Group");
+    let Some(mut rows) = lumit_core::fx::builtins::instantiate(lumit_core::extrude::MATCH_NAME)
+    else {
+        return Vec::new();
+    };
+    // After Effects numbers its styles None, Angular, Concave, Convex.
+    let style = still(options, "ADBE Bevel Styles", 0).map_or(1, |v| v.round() as i64);
+    for (id, name, fallback) in [
+        ("extrusion_depth", "ADBE Extrsn Depth", 0.0),
+        ("bevel_depth", "ADBE Bevel Depth", 0.0),
+        ("hole_bevel_depth", "ADBE Hole Bevel Depth", 100.0),
+    ] {
+        let value = match (id, style) {
+            ("bevel_depth", 1) => lumit_core::anim::Property::zero(),
+            _ => scalar(conv, path, options, name, 0, fallback),
+        };
+        if let Some(row) = rows.params.iter_mut().find(|p| p.id == id) {
+            row.value = EffectValue::Float(value);
+        }
+    }
+    let shape = match style {
+        3 => 2,
+        4 => 1,
+        _ => 0,
+    };
+    if let Some(row) = rows.params.iter_mut().find(|p| p.id == "bevel_style") {
+        row.value = EffectValue::Choice(shape);
+    }
+    if !lumit_core::extrude::is_solid(Some(&rows)) {
+        return Vec::new();
+    }
+    conv.report.row(
+        path.clone(),
+        Outcome::Adjusted,
+        Reason::GeometryOptionsCarried,
+    );
+    vec![Some(rows)]
 }
 
 /// A shadow switch's setting. Lumit keeps one, so a keyframed switch keeps
