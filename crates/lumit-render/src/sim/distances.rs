@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use glam::{Mat4, Vec3};
 use lumit_core::model::Document;
-use lumit_scene::ModelScene;
+use lumit_core::model_layer::ModelSettings;
+use lumit_scene::{Clip, ModelScene};
 
 /// Cells along a model's longest side.
 const CELLS: f32 = 96.0;
@@ -30,23 +31,33 @@ pub(super) struct Distances {
 /// Held with the scene they came from, so a relinked file works them out again.
 type Held = (Arc<ModelScene>, Arc<Distances>);
 
-static HOLD: Mutex<Option<HashMap<uuid::Uuid, Held>>> = Mutex::new(None);
+/// The model and the take it starts in, which two layers of one file can differ on.
+type Key = (uuid::Uuid, Option<String>);
 
-/// `item`'s distances, worked out the first time they are asked for.
-pub(super) fn of(doc: &Document, item: uuid::Uuid) -> Option<Arc<Distances>> {
+static HOLD: Mutex<Option<HashMap<Key, Held>>> = Mutex::new(None);
+
+/// `item`'s distances in the pose the take `settings` names starts in, worked
+/// out the first time they are asked for.
+pub(super) fn of(
+    doc: &Document,
+    item: uuid::Uuid,
+    settings: &ModelSettings,
+) -> Option<Arc<Distances>> {
     let scene = crate::model::scene(doc, item)?;
-    if let Some((from, found)) = HOLD.lock().ok()?.as_ref().and_then(|h| h.get(&item)) {
+    let take = crate::model_motion::clip_of(settings, &scene);
+    let key = (item, take.map(|clip| clip.name.clone()));
+    if let Some((from, found)) = HOLD.lock().ok()?.as_ref().and_then(|h| h.get(&key)) {
         if Arc::ptr_eq(from, &scene) {
             return Some(Arc::clone(found));
         }
     }
-    let made = Arc::new(worked_out(&scene)?);
+    let made = Arc::new(worked_out(&scene, take)?);
     let mut hold = HOLD.lock().ok()?;
     let held = hold.get_or_insert_with(HashMap::new);
     if held.len() >= HELD {
         held.clear();
     }
-    held.insert(item, (scene, Arc::clone(&made)));
+    held.insert(key, (Arc::clone(&scene), Arc::clone(&made)));
     Some(made)
 }
 
@@ -89,19 +100,19 @@ fn to_triangle(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> f32 {
     }
 }
 
-fn worked_out(scene: &ModelScene) -> Option<Distances> {
+fn worked_out(scene: &ModelScene, take: Option<&Clip>) -> Option<Distances> {
+    // The take's first moment, as a skin's file lists its vertices in a bind
+    // pose nothing draws. Moved parts are left out, so a part's rows draw again
+    // without another shape to work out.
+    let posed = lumit_scene::pose::pose(scene, take.map(|clip| (clip, 0.0)), &[]);
     let mut tris: Vec<[Vec3; 3]> = Vec::new();
     for (k, node) in scene.nodes.iter().enumerate() {
         let Some(mesh) = node.mesh.and_then(|m| scene.meshes.get(m)) else {
             continue;
         };
-        let at = scene.node_world(k);
+        let mover = posed.mover(scene, k);
         for p in &mesh.primitives {
-            let corner = |i: u32| {
-                p.positions
-                    .get(i as usize)
-                    .map(|v| at.transform_point3(Vec3::from(*v)))
-            };
+            let corner = |i: u32| mover.vertex(p, i as usize);
             for tri in p.indices.chunks_exact(3) {
                 if let (Some(a), Some(b), Some(c)) =
                     (corner(tri[0]), corner(tri[1]), corner(tri[2]))
@@ -243,4 +254,35 @@ fn worked_out(scene: &ModelScene) -> Option<Distances> {
         cells: [nx as u32, ny as u32, nz as u32],
         cell_to_model: Mat4::from_translation(start) * Mat4::from_scale(Vec3::splat(cell)),
     })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// The distance at model point `p`.
+    fn at(d: &Distances, p: Vec3) -> f32 {
+        let c = d.cell_to_model.inverse().transform_point3(p).round();
+        let [nx, ny, _] = d.cells.map(|n| n as usize);
+        d.values[c.x as usize + c.y as usize * nx + c.z as usize * nx * ny]
+    }
+
+    /// A skinned model is hit where its take starts, not in its bind pose.
+    #[test]
+    fn a_skin_is_hit_in_the_pose_its_take_starts_in() {
+        let mut scene = lumit_scene::fixtures::bending(24, 16, 4);
+        // Starts bent, by moving each bone's middle key to the front.
+        for channel in &mut scene.clips[0].channels {
+            if channel.path == lumit_scene::Path::Rotation {
+                let bent: Vec<f32> = channel.values[4..8].to_vec();
+                channel.values[..4].copy_from_slice(&bent);
+            }
+        }
+        let top = Vec3::new(0.0, 0.9, 0.0);
+        let bind = worked_out(&scene, None).unwrap();
+        assert!(at(&bind, top) < 0.0, "at rest the top is inside");
+        let posed = worked_out(&scene, scene.clips.first()).unwrap();
+        assert!(at(&posed, top) > 0.0, "bent, it has moved away from there");
+    }
 }
