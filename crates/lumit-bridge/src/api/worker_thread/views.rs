@@ -6,10 +6,9 @@ use uuid::Uuid;
 
 use super::{viewed, ViewLatch, WorkerState};
 
-/// The id the Viewer's view camera is inserted under: fixed, so every render
-/// through the same view builds the same document and names the same frames.
+/// The id the Viewer's view camera is inserted under.
 #[frb(ignore)]
-pub(super) const VIEW_CAMERA_ID: Uuid = Uuid::from_u128(0x6c75_6d69_7420_7669_6577_2063_616d_6572);
+pub(super) const VIEW_CAMERA_ID: Uuid = lumit_core::view_camera::ID;
 
 /// [`viewed_through`], kept between frames.
 ///

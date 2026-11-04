@@ -15,6 +15,7 @@ pub mod colour;
 pub mod common;
 /// The Custom shader's GPU half: validate, compile, cache, dispatch.
 pub mod custom_shader;
+pub mod depth_points;
 pub mod distort;
 pub mod dof;
 pub mod energy_line;
@@ -396,6 +397,8 @@ pub struct FxEngine {
     particulate_blend: particulate::ParticulateBlendPipelines,
     /// Particles in the 3D scene, built the first time some are.
     particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
+    /// Depth points, built the first time a shot is drawn as them.
+    depth_points: std::sync::OnceLock<depth_points::Pipeline>,
     /// Points field: the nearest point to every pixel, found by jump
     /// flooding. Its three passes share one layout of their own.
     points_field: points_field::PointsFieldPipelines,
@@ -733,6 +736,25 @@ pub fn fit_at(
     }
     drop(enc);
     out
+}
+
+/// A kernel's text for the project's colour depth. The kernels are written for
+/// sixteen bits, and the picture one hands on has to be declared in the format
+/// it is written in. What a kernel keeps for itself stays as it is.
+pub(crate) fn at_depth(working: wgpu::TextureFormat, wgsl: &str) -> String {
+    let format = match working {
+        wgpu::TextureFormat::Rgba8Unorm => "rgba8unorm",
+        wgpu::TextureFormat::Rgba32Float => "rgba32float",
+        _ => return wgsl.to_owned(),
+    };
+    ["dst", "dst_tex", "out_tex"]
+        .iter()
+        .fold(wgsl.to_owned(), |text, out| {
+            text.replace(
+                &format!("var {out}: texture_storage_2d<rgba16float,"),
+                &format!("var {out}: texture_storage_2d<{format},"),
+            )
+        })
 }
 
 /// A pass's output texture: one an earlier pass in this frame has finished

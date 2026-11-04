@@ -25,6 +25,7 @@ mod blur;
 pub mod deform;
 pub mod display;
 pub mod look;
+mod samplers;
 mod setup;
 pub mod shadow;
 mod upload;
@@ -156,9 +157,10 @@ pub(crate) struct GpuModel {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     parts: Vec<Part>,
-    /// Each material's bind group, whether it blends and whether it is
-    /// double-sided. The last is glTF's default, for parts with none.
-    materials: Vec<(wgpu::BindGroup, bool, bool)>,
+    /// Each material's bind group, whether it blends, whether it is
+    /// double-sided and the samplers it reads with. The last is glTF's
+    /// default, for parts with none.
+    materials: Vec<(wgpu::BindGroup, bool, bool, wgpu::BindGroup)>,
     /// Its edges as lines, made the first time a view draws them.
     edges: OnceLock<(wgpu::Buffer, lumit_budget::Reservation)>,
     kept: Vec<look::Kept>,
@@ -174,7 +176,8 @@ pub(crate) struct MeshFx {
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
     shadows_layout: wgpu::BindGroupLayout,
-    environment: environment::Binding,
+    samplers: samplers::Samplers,
+    environment: environment::Fallback,
     layout: wgpu::PipelineLayout,
     /// Draws a shadow map's view ([`shadow`]), made when first asked for.
     shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
@@ -603,10 +606,8 @@ impl MeshFx {
                 },
             ],
         });
-        let shadows_group = self.shadows_group(ctx, lighting, casters, maps);
-        let environment_group = self
-            .environment
-            .group(ctx, view.environment.filter(|_| !m.unlit));
+        let surround = view.environment.filter(|_| !m.unlit);
+        let shadows_group = self.shadows_group(ctx, lighting, casters, maps, surround);
         let view_of = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (colour_view, z_view, depth_view) = (view_of(&colour), view_of(z), view_of(&depth));
         let msaa_view = msaa.as_ref().map(view_of);
@@ -661,7 +662,7 @@ impl MeshFx {
             let mut rest = true;
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for &(p, offset, set) in these.iter().filter(|_| view.display.draws_faces()) {
-                let Some((group, _, _)) = materials.get(p.material) else {
+                let Some((group, _, _, samplers)) = materials.get(p.material) else {
                     continue;
                 };
                 let Some(pipeline) = &pipelines[if depth { depth_set(set) } else { set }] else {
@@ -670,8 +671,8 @@ impl MeshFx {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
-                pass.set_bind_group(2, &shadows_group, &[]);
-                pass.set_bind_group(3, &environment_group, &[]);
+                pass.set_bind_group(2, samplers, &[]);
+                pass.set_bind_group(3, &shadows_group, &[]);
                 let base = posed.bind(pass, p, k, &mut rest);
                 pass.draw_indexed(p.first..p.first + p.count, base, 0..places.len() as u32);
             }
@@ -682,13 +683,13 @@ impl MeshFx {
             pass.set_index_buffer(lines.slice(..), wgpu::IndexFormat::Uint32);
             pass.set_pipeline(wire);
             for &(p, offset, _) in these {
-                let Some((group, _, _)) = model.materials.get(p.material) else {
+                let Some((group, _, _, samplers)) = model.materials.get(p.material) else {
                     continue;
                 };
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
-                pass.set_bind_group(2, &shadows_group, &[]);
-                pass.set_bind_group(3, &environment_group, &[]);
+                pass.set_bind_group(2, samplers, &[]);
+                pass.set_bind_group(3, &shadows_group, &[]);
                 let base = posed.bind(pass, p, k, &mut rest);
                 let lines = p.first * 2..(p.first + p.count) * 2;
                 pass.draw_indexed(lines, base, 0..places.len() as u32);

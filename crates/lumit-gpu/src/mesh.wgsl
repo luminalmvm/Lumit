@@ -73,34 +73,35 @@ struct MeshCopy {
 @group(1) @binding(3) var normal_tex: texture_2d<f32>;
 @group(1) @binding(4) var occlusion_tex: texture_2d<f32>;
 @group(1) @binding(5) var emissive_tex: texture_2d<f32>;
-@group(1) @binding(6) var base_samp: sampler;
-@group(1) @binding(7) var mr_samp: sampler;
-@group(1) @binding(8) var normal_samp: sampler;
-@group(1) @binding(9) var occlusion_samp: sampler;
-@group(1) @binding(10) var emissive_samp: sampler;
+// In a group of their own, as a kept material takes no sampler slot (samplers.rs).
+@group(2) @binding(0) var base_samp: sampler;
+@group(2) @binding(1) var mr_samp: sampler;
+@group(2) @binding(2) var normal_samp: sampler;
+@group(2) @binding(3) var occlusion_samp: sampler;
+@group(2) @binding(4) var emissive_samp: sampler;
+@group(2) @binding(5) var behind_samp: sampler;
 // A layer's picture whose brightness is the opacity, on the base colour's uvs.
 @group(1) @binding(11) var opacity_tex: texture_2d<f32>;
 // The comp's picture under the model's run of 3D layers, for glass to bend.
 @group(1) @binding(12) var behind_tex: texture_2d<f32>;
-@group(1) @binding(13) var behind_samp: sampler;
 
 // The shadows it takes: the 3D layers' casters and the models' maps.
 struct Casters {
     casters_head: vec4<f32>,
     casters: array<Caster, 16>,
 };
-@group(2) @binding(0) var<uniform> p: Casters;
-@group(2) @binding(1) var squares: texture_2d_array<f32>;
-@group(2) @binding(2) var square_sampler: sampler;
-@group(2) @binding(3) var maps: texture_depth_2d_array;
-@group(2) @binding(4) var map_sampler: sampler_comparison;
-@group(2) @binding(5) var<uniform> shadow_maps: ShadowMaps;
+@group(3) @binding(0) var<uniform> p: Casters;
+@group(3) @binding(1) var squares: texture_2d_array<f32>;
+@group(3) @binding(2) var square_sampler: sampler;
+@group(3) @binding(3) var maps: texture_depth_2d_array;
+@group(3) @binding(4) var map_sampler: sampler_comparison;
+@group(3) @binding(5) var<uniform> shadow_maps: ShadowMaps;
 
 // The comp's environment (environment_core.wgsl, prepended).
-@group(3) @binding(0) var env_irradiance_cube: texture_cube<f32>;
-@group(3) @binding(1) var env_specular_cube: texture_cube<f32>;
-@group(3) @binding(2) var env_sampler: sampler;
-@group(3) @binding(3) var<uniform> environment: Environment;
+@group(3) @binding(6) var env_irradiance_cube: texture_cube<f32>;
+@group(3) @binding(7) var env_specular_cube: texture_cube<f32>;
+@group(3) @binding(8) var env_sampler: sampler;
+@group(3) @binding(9) var<uniform> environment: Environment;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,

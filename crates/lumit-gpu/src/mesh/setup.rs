@@ -1,7 +1,7 @@
 //! The mesh pass's shader, layouts and pipelines, made once when the first model
 //! is drawn.
 
-use super::{blur, look, shadow, MeshFx, COLOUR, INV_W};
+use super::{blur, look, samplers, shadow, MeshFx, COLOUR, INV_W};
 use crate::fx::environment;
 use crate::GpuContext;
 use std::collections::HashMap;
@@ -85,13 +85,11 @@ impl MeshFx {
         );
         let mut entries = vec![uniform_entry(0, false)];
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
-        entries.extend((6..=10).map(sampler));
         // The opacity picture, and the picture behind for glass.
         entries.extend([11, 12].map(|b| texture_entry(b, float, false)));
-        entries.push(sampler(13));
         let material_layout = layout("mesh-material", &entries);
         let shadows_layout = layout("mesh-shadows", &shadow::layout());
-        let environment = environment::Binding::new(device);
+        let samplers = samplers::Samplers::new(device);
         let pipeline_layout = |label, layouts: &[&wgpu::BindGroupLayout]| {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(label),
@@ -197,15 +195,16 @@ impl MeshFx {
                 &[
                     &frame_layout,
                     &material_layout,
+                    &samplers.layout,
                     &shadows_layout,
-                    &environment.layout,
                 ],
             ),
             shader,
             frame_layout,
             material_layout,
             shadows_layout,
-            environment,
+            samplers,
+            environment: environment::Fallback::new(device),
             shadow: std::sync::OnceLock::new(),
             deform: std::sync::OnceLock::new(),
             depth_one,
@@ -213,7 +212,7 @@ impl MeshFx {
             down,
             add,
             sets: Mutex::new(HashMap::new()),
-            shared: look::Shared::new(device, &white),
+            shared: look::Shared::new(&white),
             white,
             models: Mutex::new(Vec::new()),
             scratch: Mutex::new(None),

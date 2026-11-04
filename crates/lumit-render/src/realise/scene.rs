@@ -14,6 +14,8 @@ use lumit_gpu::mesh::ModelPicture;
 use std::cell::RefCell;
 use std::sync::Arc;
 
+pub(crate) mod depth_points;
+
 /// How the frame a Particulate in the scene draws into is seen.
 #[derive(Clone)]
 pub(super) struct Frame {
@@ -24,8 +26,9 @@ pub(super) struct Frame {
     /// which keeps the half floats it is laid in fine where the particles are.
     occluder: Option<wgpu::Texture>,
     near: f32,
-    /// What the layer drawing now carries.
+    /// What the layer drawing now carries, and its size.
     carried: Carried,
+    natural: (f32, f32),
     /// Its anti-aliasing, lights and Material options, which a model drawn as
     /// its particles takes.
     samples: u32,
@@ -52,6 +55,26 @@ thread_local! {
     static PENDING: RefCell<Option<Joined>> = const { RefCell::new(None) };
 }
 
+/// `d`, spliced out of a collapsed precomp by `outer`, keeps what it draws in the
+/// scene on the plane the precomp went to, seen from `comp`'s camera.
+pub(crate) fn collapsed(
+    d: &mut CompLayerDraw,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    outer: [[f32; 4]; 4],
+    t: f64,
+) {
+    let Some(carried) = d.in_scene.as_mut() else {
+        return;
+    };
+    let outer = glam::Mat4::from_cols_array_2d(&outer);
+    carried.outer = Some(outer * carried.outer.unwrap_or(glam::Mat4::IDENTITY));
+    if let Some(rays) = carried.rays.as_mut() {
+        rays.spliced(doc, comp, layer, outer.as_dmat4(), t);
+    }
+}
+
 /// What a layer whose Particulate is in the scene takes from the comp beyond
 /// its own rows.
 #[derive(Clone, Default)]
@@ -67,16 +90,27 @@ pub struct Carried {
     /// The model its Sprite layer names, drawn at each particle, and that
     /// model's space to a box a pixel across about nought.
     pub shape: Option<(Arc<lumit_scene::ModelScene>, glam::Mat4)>,
+    /// Where Depth points' rays start and the layer they pass through.
+    pub rays: Option<depth_points::Rays>,
+    /// The collapsed precomps' placements it was spliced out through, which its
+    /// own placement doesn't know about.
+    pub outer: Option<glam::Mat4>,
 }
 
-/// Whether `layer` is a 3D layer with a Particulate in the scene.
+/// Whether `layer` is a 3D layer with an effect drawing in the scene.
 #[must_use]
 pub fn in_scene(layer: &Layer) -> bool {
     layer.switches.three_d && layer.effects.iter().any(is_scene)
 }
 
 /// What `layer` carries into the scene, `None` when it has nothing there.
-pub(crate) fn carried(doc: &Document, comp: &Composition, layer: &Layer) -> Option<Carried> {
+pub(crate) fn carried(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    t_comp: f64,
+    source_frame: i64,
+) -> Option<Carried> {
     if !in_scene(layer) {
         return None;
     }
@@ -88,6 +122,8 @@ pub(crate) fn carried(doc: &Document, comp: &Composition, layer: &Layer) -> Opti
         opens: (comp.motion_blur.shutter_phase / 360.0 * frame) as f32,
         surface: surface(doc, comp, layer),
         shape: shape(doc, comp, layer),
+        rays: depth_points::rays(doc, comp, layer, t_comp, source_frame),
+        outer: None,
     })
 }
 
@@ -171,10 +207,12 @@ fn emitter_layer<'a>(comp: &'a Composition, e: &EffectInstance) -> Option<&'a La
         .and_then(|id| comp.layers.iter().find(|l| l.id == id))
 }
 
-/// Whether a resolved op is one.
+/// Whether a resolved op draws in the scene.
 pub(crate) fn is_scene_op(op: &lumit_core::fx::params::ResolvedFx<'_>) -> bool {
-    op.def.schema().match_name == <Particulate as EffectMetadata>::SCHEMA.match_name
-        && Particulate::read(op.params).in_scene
+    let name = op.def.schema().match_name;
+    name == lumit_core::planes::DEPTH_POINTS
+        || name == <Particulate as EffectMetadata>::SCHEMA.match_name
+            && Particulate::read(op.params).in_scene
 }
 
 pub(super) fn draws_in_scene(l: &CompLayerDraw) -> bool {
@@ -249,6 +287,7 @@ pub(crate) fn draw(
     let z = [z[0] * s, z[1] * s, z[2] * s, z[3]];
     let cam = crate::export::camera_mat(cw, ch, frame.camera);
     let place = glam::Mat4::from_cols_array_2d(&[x, y, z, [0.0, 0.0, 0.0, 1.0]]).transpose();
+    let place = frame.carried.outer.unwrap_or(glam::Mat4::IDENTITY) * place;
     let raster_to_clip = cam * place * glam::Mat4::from_scale(glam::Vec3::splat(1.0 / s));
     let m = raster_to_clip.transpose().to_cols_array_2d();
     // Into the frame at the render scale, foreshortened so a particle's size
@@ -430,6 +469,7 @@ impl Seen {
     pub(super) fn enter(frame: &Frame, l: &CompLayerDraw) -> Self {
         let frame = Frame {
             carried: l.in_scene.clone().unwrap_or_default(),
+            natural: l.natural_size,
             lights: l.lights.clone(),
             material: l.material,
             ..frame.clone()
@@ -525,6 +565,7 @@ impl Realiser<'_> {
             occluder,
             near,
             carried: Carried::default(),
+            natural: (0.0, 0.0),
             samples: self.samples,
             lights: Vec::new(),
             material: Default::default(),

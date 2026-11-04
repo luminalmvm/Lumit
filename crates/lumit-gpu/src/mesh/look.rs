@@ -31,31 +31,24 @@ pub struct Look {
 }
 
 /// What every material's bind group shares: the white picture an empty slot
-/// reads, and the sampler glass reads the picture behind with.
+/// reads.
 pub(super) struct Shared {
     white: wgpu::TextureView,
-    behind: wgpu::Sampler,
 }
 
 impl Shared {
-    pub(super) fn new(device: &wgpu::Device, white: &wgpu::Texture) -> Self {
+    pub(super) fn new(white: &wgpu::Texture) -> Self {
         Self {
             white: white.create_view(&Default::default()),
-            behind: device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("mesh-behind"),
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                ..Default::default()
-            }),
         }
     }
 }
 
 /// What a material's bind group is made of besides its numbers: each slot's
-/// uv transform, picture and sampler, as the upload made them.
+/// uv transform and picture, as the upload made them.
 pub(super) struct Kept {
     pub(super) uv: [[f32; 4]; 10],
-    pub(super) bound: Vec<(wgpu::TextureView, wgpu::Sampler)>,
+    pub(super) bound: Vec<wgpu::TextureView>,
 }
 
 impl Kept {
@@ -116,7 +109,7 @@ impl Kept {
             binding: 0,
             resource: buffer.as_entire_binding(),
         }];
-        for (k, (view, sampler)) in (0u32..).zip(&self.bound) {
+        for (k, view) in (0u32..).zip(&self.bound) {
             let view = match k {
                 0 => pictures[0].unwrap_or(if textures { view } else { &shared.white }),
                 1 if !textures => &shared.white,
@@ -128,10 +121,6 @@ impl Kept {
                 binding: 1 + k,
                 resource: wgpu::BindingResource::TextureView(view),
             });
-            entries.push(wgpu::BindGroupEntry {
-                binding: 6 + k,
-                resource: wgpu::BindingResource::Sampler(sampler),
-            });
         }
         for (binding, view) in [(11, pictures[2]), (12, behind)] {
             entries.push(wgpu::BindGroupEntry {
@@ -139,10 +128,6 @@ impl Kept {
                 resource: wgpu::BindingResource::TextureView(view.unwrap_or(&shared.white)),
             });
         }
-        entries.push(wgpu::BindGroupEntry {
-            binding: 13,
-            resource: wgpu::BindingResource::Sampler(&shared.behind),
-        });
         ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("mesh-material"),
             layout: &fx.material_layout,
@@ -161,7 +146,7 @@ impl MeshFx {
         model: &GpuModel,
         looks: &[Look],
         behind: Option<&wgpu::Texture>,
-    ) -> Vec<(wgpu::BindGroup, bool, bool)> {
+    ) -> Vec<(wgpu::BindGroup, bool, bool, wgpu::BindGroup)> {
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
         let behind = behind.map(view);
         let mut out = model.materials.clone();
@@ -175,7 +160,8 @@ impl MeshFx {
             let m = &look.material;
             let pictures = (pictures.each_ref().map(Option::as_ref), look.textures);
             let group = kept.group(ctx, self, m, pictures, behind.as_ref());
-            *slot = (group, m.alpha_mode == AlphaMode::Blend, m.double_sided);
+            slot.0 = group;
+            (slot.1, slot.2) = (m.alpha_mode == AlphaMode::Blend, m.double_sided);
         }
         out
     }

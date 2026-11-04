@@ -580,3 +580,71 @@ fn a_posed_model_draws_and_casts_as_its_pose_has_it() {
         "the shadow moves with the pose"
     );
 }
+
+/// Models are kept while their scenes live, and however many that is the
+/// card keeps room to bind them. Each scene here has more materials than the
+/// last would fit if each held samplers of its own.
+#[test]
+fn any_number_of_kept_models_still_draw() {
+    let Some(lease) = lumit_gpu::test_support::lease() else {
+        return lumit_gpu::no_adapter();
+    };
+    let pose = lumit_core::camera::default_pose(f64::from(W), f64::from(H));
+    let eye = [pose.position.0, pose.position.1, pose.position.2].map(|v| v as f32);
+    let camera = camera_matrix(
+        W as f32,
+        H as f32,
+        pose.zoom as f32,
+        (eye[0], eye[1], eye[2]),
+        (0.0, 0.0, 0.0),
+    );
+    let model_to_comp = Mat4::from_translation(Vec3::new(160.0, 90.0, 0.0))
+        * Mat4::from_scale(Vec3::splat(60.0))
+        * Mat4::from_rotation_x(std::f32::consts::PI);
+    let material = Material {
+        base_colour: [0.8, 0.5, 0.2, 1.0],
+        metallic: 0.0,
+        roughness: 0.5,
+        ..Material::default()
+    };
+    let scenes: Vec<_> = (0..120)
+        .map(|_| {
+            Arc::new(fixtures::scene(
+                vec![(fixtures::cube(1.0, Some(0)), [0.0; 3])],
+                vec![material.clone(); 25],
+                Vec::new(),
+            ))
+        })
+        .collect();
+    let mut last = None;
+    for scene in &scenes {
+        let view = ModelView {
+            comp: (W, H),
+            render_scale: 1.0,
+            samples: 1,
+            camera,
+            model_to_comp,
+            shutter: &[],
+            lights: &[],
+            material: LightingMaterial {
+                eye,
+                ..LightingMaterial::default()
+            },
+            instances: &[],
+            casters: None,
+            maps: None,
+            display: Default::default(),
+            environment: None,
+            looks: &[],
+            behind: None,
+            poses: &[],
+        };
+        last = Some(lease.fx().model(&lease, scene, &view).expect("it draws"));
+    }
+    let px = lease
+        .colour()
+        .readback_linear_f32(&lease, &last.expect("drawn").colour)
+        .unwrap();
+    let middle = &px[((90 * W + 160) * 4) as usize..][..4];
+    assert!(middle[3] > 0.9, "the last model is gone: {middle:?}");
+}

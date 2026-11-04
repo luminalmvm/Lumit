@@ -179,6 +179,7 @@ Burst interval
 Bursts
 By strength
 Bypass
+Camera
 Camera kick
 Camera track
 Cancel
@@ -328,9 +329,11 @@ Density layer
 Depth
 Depth Anything V2 Small
 Depth channel
+Depth layer
 Depth map
 Depth of field
 Depth of field pro
+Depth points
 Depth sort
 Despill amount
 Despill bias
