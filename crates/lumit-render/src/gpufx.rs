@@ -647,7 +647,7 @@ impl GpuEffect for RadialBlur {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let (centre_px, amount_px, spin, edge, mix) =
+        let (centre_px, amount_px, kind, edge, mix) =
             effects::radial_blur::RadialBlur::read(p).packed();
         fx.radial_blur(
             ctx,
@@ -659,7 +659,7 @@ impl GpuEffect for RadialBlur {
                 centre_px,
                 amount_px,
                 taps: lumit_core::fx::cpu::radial_blur_taps(amount_px),
-                spin,
+                kind,
                 edge,
                 mix,
             },
