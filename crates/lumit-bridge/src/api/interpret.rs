@@ -497,6 +497,23 @@ impl FootageReference {
             _ => Err(BridgeError::InvalidItem),
         }
     }
+
+    /// Read the file again, for a run of stills that has grown since it was
+    /// imported. Replace footage with the same file, so the run's name is
+    /// brought up to date too.
+    #[frb(sync)]
+    pub fn reload(&self) -> Result<(), BridgeError> {
+        let path = {
+            let state = self.project()?;
+            let proj = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            match proj.store.snapshot().item(self.id) {
+                Some(ProjectItem::Footage(f)) => Self::resolve_path(&proj, f),
+                _ => return Err(BridgeError::InvalidItem),
+            }
+        };
+        let path = path.ok_or(BridgeError::MediaPathUnresolved)?;
+        self.relink(path.to_string_lossy().into_owned())
+    }
 }
 
 /// What `to` would make of a file that says `file`: the rate, length and size
