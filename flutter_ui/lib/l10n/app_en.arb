@@ -23849,6 +23849,15 @@
   "@fxOn": {
     "description": "Effect controls: the switch at the top of one of Film's parts (Print, Halation, Bloom, Grain, Gate weave, Flicker) that turns that part on."
   },
+  "modelMaterialNumbered": "Material {number}",
+  "@modelMaterialNumbered": {
+    "description": "Heading of a Model layer's material row, in the Effect controls panel and the Timeline, when the 3D model file gives that material no name. {number} counts its materials from 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
   "fxMaterial": "Material",
   "@fxMaterial": {
     "description": "Effect controls and the Timeline: the name a 3D model's material goes by when its file gives it none."

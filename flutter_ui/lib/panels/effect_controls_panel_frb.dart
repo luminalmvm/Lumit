@@ -1496,7 +1496,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final graphName = inputs
         ? l10n.foldInputs
         : material
-            ? '${effectLabelOf(fx.name)} ${index + 1}'
+            ? l10n.modelMaterialNumbered(index + 1)
             : _graphNameOf(context, fx);
     // Neither a style nor the Inputs takes part in the effect selection.
     final fixed = style || inputs;
