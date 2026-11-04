@@ -205,6 +205,27 @@ pub struct TextAnimator {
         skip_serializing_if = "is_static_zero"
     )]
     pub rotation: Property,
+    /// How far a letter moves away from the eye, and how far it turns about
+    /// x and y through its own middle on the baseline, degrees. Only a solid
+    /// layer's letters can.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub position_z: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub rotation_x: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub rotation_y: Property,
     /// Per cent; 100 leaves the letter its own size.
     #[serde(
         default = "hundred",
@@ -265,6 +286,9 @@ impl TextAnimator {
             position_x: Property::zero(),
             position_y: Property::zero(),
             rotation: Property::zero(),
+            position_z: Property::zero(),
+            rotation_x: Property::zero(),
+            rotation_y: Property::zero(),
             scale_x: hundred(),
             scale_y: hundred(),
             opacity: hundred(),
@@ -399,6 +423,12 @@ pub fn glyph_xforms(animators: &[TextAnimator], text: &str, lt: f64) -> Vec<Glyp
             animator.fill_g.value_at(lt) as f32,
             animator.fill_b.value_at(lt) as f32,
         );
+        #[allow(clippy::cast_possible_truncation)] // px and degrees, f32 pictures
+        let (depth, turn_x, turn_y) = (
+            animator.position_z.value_at(lt) as f32,
+            animator.rotation_x.value_at(lt) as f32,
+            animator.rotation_y.value_at(lt) as f32,
+        );
         for (i, x) in out.iter_mut().enumerate() {
             let Some(w) = units.get(i).and_then(|u| weights.get(*u)).copied() else {
                 continue;
@@ -409,6 +439,9 @@ pub fn glyph_xforms(animators: &[TextAnimator], text: &str, lt: f64) -> Vec<Glyp
             x.position[0] += w * px;
             x.position[1] += w * py;
             x.rotation += w * rot;
+            x.depth += w * depth;
+            x.turn[0] += w * turn_x;
+            x.turn[1] += w * turn_y;
             // A scale of 100 % has to leave the letter alone at every weight,
             // so the weight interpolates from 1 rather than from 0.
             x.scale[0] *= 1.0 + w * (sx - 1.0);

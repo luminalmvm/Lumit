@@ -544,6 +544,10 @@ impl CompositionReference {
                     None => own,
                 }
             };
+            let solid = (lumit_core::extrude::takes_geometry(layer)
+                && lumit_core::extrude::draws_mesh(layer))
+            .then(|| lumit_render::extrude::layer_box(layer.id))
+            .flatten();
             match &layer.kind {
                 K::Camera { options, .. } => {
                     let Some(cam) = lumit_core::track::camera_pose_of(
@@ -715,10 +719,18 @@ impl CompositionReference {
                     drops.push(at);
                     outlines.push(Outline::Light(layer.id, kind, at, segs));
                 }
-                K::Model { item, settings } => {
+                // A Model layer, or a Text or Shape layer once it's a solid.
+                K::Model { .. } | K::Text { .. } | K::Shape { .. }
+                    if solid.is_some() || matches!(layer.kind, K::Model { .. }) =>
+                {
                     let size = (w as f32, h as f32);
-                    let Some(c) = lumit_render::model::layer_box(&doc, *item, settings, size)
-                    else {
+                    let c = match &layer.kind {
+                        K::Model { item, settings } => {
+                            lumit_render::model::layer_box(&doc, *item, settings, size)
+                        }
+                        _ => solid,
+                    };
+                    let Some(c) = c else {
                         continue;
                     };
                     let anchor = (tr.anchor_x.value_at(lt), tr.anchor_y.value_at(lt));

@@ -3681,8 +3681,9 @@ class LayerReference {
       );
 
   /// The corners of a Model layer's box in its own pixels, three numbers
-  /// each, once its file has been read. Empty before that and on any other
-  /// kind of layer.
+  /// each, once its file has been read, or a solid Text or Shape layer's
+  /// once it has been drawn. Empty before that and on any other kind of
+  /// layer.
   Float64List getModelBox() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelBox(
         that: this,
@@ -3698,7 +3699,8 @@ class LayerReference {
   /// How far along the ray from `origin` by `direction`, three numbers
   /// each in the layer's own pixels, it first meets a Model layer's model,
   /// in parts of `direction`. `None` where it misses, before the file has
-  /// been read and on any other kind of layer. Asked once a click.
+  /// been read and on any other kind of layer. A solid Text or Shape layer
+  /// answers the same, of what it was last drawn as. Asked once a click.
   double? getModelHit(
           {required List<double> origin, required List<double> direction}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetModelHit(
@@ -4408,9 +4410,11 @@ class LayerReference {
   /// stack. It is ignored while the list has anything in it, because then
   /// the ids say where the list lives.
   void setEffects(
-          {required List<BridgeEffectInstance> effects, UuidValue? clip}) =>
+          {required List<BridgeEffectInstance> effects,
+          UuidValue? clip,
+          List<String>? lightNames}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetEffects(
-          that: this, effects: effects, clip: clip);
+          that: this, effects: effects, clip: clip, lightNames: lightNames);
 
   /// Turn flow on or off. Off returns the layer to Nearest — the
   /// policy it had before flow is not recorded, and Nearest is the crisp

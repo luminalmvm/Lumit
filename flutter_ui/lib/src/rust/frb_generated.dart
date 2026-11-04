@@ -2016,7 +2016,8 @@ abstract class BridgeLibApi extends BaseApi {
   void crateApiLayerLayerReferenceSetEffects(
       {required LayerReference that,
       required List<BridgeEffectInstance> effects,
-      UuidValue? clip});
+      UuidValue? clip,
+      List<String>? lightNames});
 
   void crateApiLayerLayerReferenceSetFlowEnabled(
       {required LayerReference that, required bool on_});
@@ -17272,7 +17273,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   void crateApiLayerLayerReferenceSetEffects(
       {required LayerReference that,
       required List<BridgeEffectInstance> effects,
-      UuidValue? clip}) {
+      UuidValue? clip,
+      List<String>? lightNames}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -17280,6 +17282,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
             effects, serializer);
         sse_encode_opt_Uuid(clip, serializer);
+        sse_encode_opt_list_String(lightNames, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 506)!;
       },
       codec: SseCodec(
@@ -17288,7 +17291,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiLayerLayerReferenceSetEffectsConstMeta,
-      argValues: [that, effects, clip],
+      argValues: [that, effects, clip, lightNames],
       apiImpl: this,
     ));
   }
@@ -17296,7 +17299,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiLayerLayerReferenceSetEffectsConstMeta =>
       const TaskConstMeta(
         debugName: "layer_reference_set_effects",
-        argNames: ["that", "effects", "clip"],
+        argNames: ["that", "effects", "clip", "lightNames"],
       );
 
   @override
@@ -29339,20 +29342,23 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeTextAnimator dco_decode_bridge_text_animator(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return BridgeTextAnimator(
       name: dco_decode_String(arr[0]),
       selector: dco_decode_bridge_range_selector(arr[1]),
       positionX: dco_decode_bridge_scalar(arr[2]),
       positionY: dco_decode_bridge_scalar(arr[3]),
       rotation: dco_decode_bridge_scalar(arr[4]),
-      scaleX: dco_decode_bridge_scalar(arr[5]),
-      scaleY: dco_decode_bridge_scalar(arr[6]),
-      opacity: dco_decode_bridge_scalar(arr[7]),
-      fillR: dco_decode_bridge_scalar(arr[8]),
-      fillG: dco_decode_bridge_scalar(arr[9]),
-      fillB: dco_decode_bridge_scalar(arr[10]),
+      positionZ: dco_decode_bridge_scalar(arr[5]),
+      rotationX: dco_decode_bridge_scalar(arr[6]),
+      rotationY: dco_decode_bridge_scalar(arr[7]),
+      scaleX: dco_decode_bridge_scalar(arr[8]),
+      scaleY: dco_decode_bridge_scalar(arr[9]),
+      opacity: dco_decode_bridge_scalar(arr[10]),
+      fillR: dco_decode_bridge_scalar(arr[11]),
+      fillG: dco_decode_bridge_scalar(arr[12]),
+      fillB: dco_decode_bridge_scalar(arr[13]),
     );
   }
 
@@ -37142,6 +37148,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_positionX = sse_decode_bridge_scalar(deserializer);
     var var_positionY = sse_decode_bridge_scalar(deserializer);
     var var_rotation = sse_decode_bridge_scalar(deserializer);
+    var var_positionZ = sse_decode_bridge_scalar(deserializer);
+    var var_rotationX = sse_decode_bridge_scalar(deserializer);
+    var var_rotationY = sse_decode_bridge_scalar(deserializer);
     var var_scaleX = sse_decode_bridge_scalar(deserializer);
     var var_scaleY = sse_decode_bridge_scalar(deserializer);
     var var_opacity = sse_decode_bridge_scalar(deserializer);
@@ -37154,6 +37163,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         positionX: var_positionX,
         positionY: var_positionY,
         rotation: var_rotation,
+        positionZ: var_positionZ,
+        rotationX: var_rotationX,
+        rotationY: var_rotationY,
         scaleX: var_scaleX,
         scaleY: var_scaleY,
         opacity: var_opacity,
@@ -44993,6 +45005,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.positionX, serializer);
     sse_encode_bridge_scalar(self.positionY, serializer);
     sse_encode_bridge_scalar(self.rotation, serializer);
+    sse_encode_bridge_scalar(self.positionZ, serializer);
+    sse_encode_bridge_scalar(self.rotationX, serializer);
+    sse_encode_bridge_scalar(self.rotationY, serializer);
     sse_encode_bridge_scalar(self.scaleX, serializer);
     sse_encode_bridge_scalar(self.scaleY, serializer);
     sse_encode_bridge_scalar(self.opacity, serializer);

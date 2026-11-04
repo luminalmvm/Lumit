@@ -247,6 +247,9 @@ class BridgeTextAnimator {
   final BridgeScalar positionX;
   final BridgeScalar positionY;
   final BridgeScalar rotation;
+  final BridgeScalar positionZ;
+  final BridgeScalar rotationX;
+  final BridgeScalar rotationY;
   final BridgeScalar scaleX;
   final BridgeScalar scaleY;
   final BridgeScalar opacity;
@@ -260,6 +263,9 @@ class BridgeTextAnimator {
     required this.positionX,
     required this.positionY,
     required this.rotation,
+    required this.positionZ,
+    required this.rotationX,
+    required this.rotationY,
     required this.scaleX,
     required this.scaleY,
     required this.opacity,
@@ -275,6 +281,9 @@ class BridgeTextAnimator {
       positionX.hashCode ^
       positionY.hashCode ^
       rotation.hashCode ^
+      positionZ.hashCode ^
+      rotationX.hashCode ^
+      rotationY.hashCode ^
       scaleX.hashCode ^
       scaleY.hashCode ^
       opacity.hashCode ^
@@ -292,6 +301,9 @@ class BridgeTextAnimator {
           positionX == other.positionX &&
           positionY == other.positionY &&
           rotation == other.rotation &&
+          positionZ == other.positionZ &&
+          rotationX == other.rotationX &&
+          rotationY == other.rotationY &&
           scaleX == other.scaleX &&
           scaleY == other.scaleY &&
           opacity == other.opacity &&

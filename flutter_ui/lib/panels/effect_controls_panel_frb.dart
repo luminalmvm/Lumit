@@ -61,6 +61,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
+import '../state/layer_bounds.dart' show geometryOptionsName, isGeometryOptions, meshKindOf;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
 import '../l10n/strings.dart';
@@ -1211,7 +1212,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         // holds, not by asking the engine per rebuild.
                         threeD: info.switches.threeD ||
                             info.kind == BridgeLayerKind.camera,
-                        kind: info.kind,
+                        kind: meshKindOf(info),
                         twoNode: info.camera?.twoNode ?? false,
                         light: info.light,
                         acceptsLights: info.switches.acceptsLights,
@@ -1238,6 +1239,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       key: ValueKey<String>(
                           'anim-card-${layer.internallayerId}'),
                       layer: layer,
+                      solid: meshKindOf(info) == BridgeLayerKind.model,
                       onChanged: ui.model.refresh,
                       comp: comp,
                       playheadFrame: playhead,
@@ -1254,9 +1256,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // on the picture they make.
                     if (info.materials case final materials?
                         when materials.isNotEmpty) ...[
-                      _groupHeading(
-                          context, 'materials-group', l10n.foldMaterials),
-                      if (_isOpen('materials-group'))
+                      if (!isGeometryOptions(materials.first))
+                        _groupHeading(
+                            context, 'materials-group', l10n.foldMaterials),
+                      if (isGeometryOptions(materials.first) ||
+                          _isOpen('materials-group'))
                         for (var i = 0; i < materials.length; i++)
                           _effectCard(context, ui, comp, layer, info, i,
                               layersRead: layersRead,
@@ -1502,7 +1506,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final fixed = style || inputs;
     // A model with many materials starts with each closed, so its first
     // look is a list of names rather than a wall of rows.
-    final open = material && info.materials!.length > 3
+    final open = material &&
+            info.materials!.length > 3 &&
+            !isGeometryOptions(fx)
         ? _shut.contains('fx-${fx.id}')
         : _isOpen('fx-${fx.id}');
     final renaming = _renamingEffect == fx.id;
@@ -2513,7 +2519,11 @@ class _EffectSection extends StatelessWidget {
     return FxSection(
       // The user's own name where one is set, then the graph a Node graph
       // effect applies, then the effect's label.
-      title: info.customName ?? graphName ?? effectLabelOf(info.name),
+      title: (material && info.customName != null
+              ? engineLabel(info.customName!)
+              : info.customName) ??
+          graphName ??
+          effectLabelOf(info.name),
       open: open,
       onToggle: onToggle,
       pick: pick,
@@ -3263,7 +3273,9 @@ class _EffectSection extends StatelessWidget {
               ),
             // This one effect as a preset, settings and keyframes and all.
             // A group header's stack is not a layer's to save from.
-            if ((!style || material) && group == null)
+            if ((!style || material) &&
+                group == null &&
+                info.name != geometryOptionsName)
               MenuRow(
                 key: ValueKey<String>('fx-menu-save-preset-$id'),
                 onPressed: () {
