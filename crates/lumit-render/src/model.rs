@@ -179,14 +179,11 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
     }
     if ASIDE.with(Cell::get) {
         LEFT_OUT.fetch_add(1, Ordering::Relaxed);
-        let last = LAST
-            .lock()
-            .ok()
-            .and_then(|last| last.as_ref()?.get(&key.0)?.upgrade());
+        let last = last_read(&key);
         read_beside(key);
         return last;
     }
-    read_and_keep(key)
+    read_and_keep(key.clone()).or_else(|| last_read(&key))
 }
 
 /// Model layer `layer` as the mesh pass draws it at comp time `t_comp`,
@@ -264,11 +261,20 @@ fn key_of(doc: &Document, item: Uuid) -> Option<Key> {
     Some((path, len, Some(at), lumit_scene::blender::choices()))
 }
 
-/// What reading `key` came to, `None` when it hasn't been read.
+/// What reading `key` came to, `None` when it hasn't been read. A file saved
+/// over with something that won't open keeps its last good scene.
 fn kept(key: &Key) -> Option<Option<Arc<ModelScene>>> {
-    let mut slot = KEPT.lock().ok()?;
-    let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
-    kept.get(key).map(|Kept(scene)| scene.clone())
+    let scene = {
+        let mut slot = KEPT.lock().ok()?;
+        let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
+        kept.get(key)?.0.clone()
+    };
+    Some(scene.or_else(|| last_read(key)))
+}
+
+/// The last scene read from `key`'s file, while it lives.
+fn last_read(key: &Key) -> Option<Arc<ModelScene>> {
+    LAST.lock().ok()?.as_ref()?.get(&key.0)?.upgrade()
 }
 
 /// The scene of model item `item` once its file has been read, `None` inside
