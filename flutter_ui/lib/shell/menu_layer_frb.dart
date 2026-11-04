@@ -558,23 +558,23 @@ List<MenuEntry> axisModeRows(LumitState app, LumitUiState ui) {
 // Switches, markers, blend and matte
 // ---------------------------------------------------------------------------
 
-/// Layer ▸ Flow: optical flow on this layer, offered only on Footage, which is
-/// the only kind with source frames to interpolate between.
+/// Layer ▸ Flow: optical flow on this layer, offered on Footage and Precomp
+/// layers, the kinds with frames to make an in-between from ([hasFlow]).
 ///
 /// A ticked row rather than a [MenuEntry.toggle]: the tick says what the switch
 /// is, but this is a **document edit** and one is enough — the menu that stays
 /// open is for the panel switches, which are used several at a time.
 MenuEntry flowRow(LumitState app, LumitUiState ui) {
-  bool footage(BridgeLayerEntry e) => e.info.kind == BridgeLayerKind.footage;
+  bool flows(BridgeLayerEntry e) => hasFlow(e.info.kind);
   return MenuEntry(
     l10n.menuFlow,
     onSelection(
       app,
       ui,
       (entry) => entry.layer.setFlowEnabled(on_: !entry.info.flow),
-      when: footage,
+      when: flows,
     ),
-    checked: selectedEntries(ui).where(footage).firstOrNull?.info.flow ?? false,
+    checked: selectedEntries(ui).where(flows).firstOrNull?.info.flow ?? false,
   );
 }
 

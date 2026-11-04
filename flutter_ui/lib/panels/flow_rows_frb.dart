@@ -26,7 +26,7 @@ import '../widgets/controls.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
-import 'layer_fold_frb.dart' show flowPath;
+import 'layer_fold_frb.dart' show flowPath, hasFlow;
 
 /// The Flow section for [layer], or nothing when its flow switch is off.
 class FlowRowsFrb extends StatelessWidget {
@@ -57,9 +57,8 @@ class FlowRowsFrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (layer.getKind() != BridgeLayerKind.footage) {
-      return const SizedBox.shrink();
-    }
+    final kind = layer.getKind();
+    if (!hasFlow(kind)) return const SizedBox.shrink();
     if (!layer.getFlowEnabled()) return const SizedBox.shrink();
     final t = ThemeScope.of(context).theme;
     final p = layer.getFlowParams();
@@ -78,7 +77,8 @@ class FlowRowsFrb extends StatelessWidget {
       open: open,
       onToggle: onToggle,
       rows: [
-        _engineRow(context, t, p, write),
+        // A Precomp's in-between is made by the built-in engine alone.
+        if (kind == BridgeLayerKind.footage) _engineRow(context, t, p, write),
         _choice(
           context,
           t,

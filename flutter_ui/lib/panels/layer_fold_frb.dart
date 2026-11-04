@@ -833,6 +833,11 @@ enum FlowRowKind {
       };
 }
 
+/// Whether a layer of [kind] has a Flow switch: footage, and a Precomp, which
+/// is built at the frames either side and flowed between.
+bool hasFlow(BridgeLayerKind kind) =>
+    kind == BridgeLayerKind.footage || kind == BridgeLayerKind.precomp;
+
 /// The waveform lane: the outline names it, the lane side draws the
 /// layer's source peaks through its live in/out/offset.
 final class FoldWaveformRow extends LayerFoldRow {
@@ -2511,7 +2516,10 @@ List<LayerFoldRow> layerFoldRows({
       depth: 1,
     ));
     if (flowOpen) {
+      final footage = info.kind == BridgeLayerKind.footage;
       for (final kind in FlowRowKind.values) {
+        // A Precomp's in-between is made by the built-in engine alone.
+        if (!footage && kind == FlowRowKind.engine) continue;
         rows.add(FoldFlowRow(
           kind,
           rate: kind == FlowRowKind.inputRate ? info.flowInputRate : null,
