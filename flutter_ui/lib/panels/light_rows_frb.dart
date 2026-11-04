@@ -88,7 +88,8 @@ List<LayerSetting> layerSettings({
           kind != BridgeLayerKind.nullLayer) ...[
         LayerSetting.castsShadows,
         LayerSetting.acceptsShadows,
-        if (kind == BridgeLayerKind.model) LayerSetting.holdout,
+        if (kind == BridgeLayerKind.model || kind == BridgeLayerKind.mesh)
+          LayerSetting.holdout,
         LayerSetting.acceptsLights,
       ],
     ];

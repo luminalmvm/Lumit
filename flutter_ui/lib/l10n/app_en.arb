@@ -23940,6 +23940,34 @@
   "@fxBevelSegments": {
     "description": "Row in a Text or Shape layer's Geometry options: how many steps a rounded bevel is made of."
   },
+  "fxSliceStart": "Slice start",
+  "@fxSliceStart": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape starts, so part of it can be cut away."
+  },
+  "fxSliceEnd": "Slice end",
+  "@fxSliceEnd": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape ends."
+  },
+  "fxTopRadius": "Top radius",
+  "@fxTopRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its top is. Nought makes a point."
+  },
+  "fxBottomRadius": "Bottom radius",
+  "@fxBottomRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its base is."
+  },
+  "fxPipeRadius": "Pipe radius",
+  "@fxPipeRadius": {
+    "description": "Row in a torus’s Geometry options: how thick the ring is."
+  },
+  "fxPipeSegments": "Pipe segments",
+  "@fxPipeSegments": {
+    "description": "Row in a torus’s Geometry options: how many steps make the round of its ring’s thickness."
+  },
+  "fxCornerSegments": "Corner segments",
+  "@fxCornerSegments": {
+    "description": "Row in a 3D plane’s Geometry options: how many steps make each rounded corner."
+  },
   "fxHoleBevelDepth": "Hole bevel depth",
   "@fxHoleBevelDepth": {
     "description": "Row in a Text or Shape layer's Geometry options: a hole's bevel as a share of the Bevel depth, as in the middle of an o."

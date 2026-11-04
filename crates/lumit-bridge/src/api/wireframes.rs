@@ -719,8 +719,9 @@ impl CompositionReference {
                     drops.push(at);
                     outlines.push(Outline::Light(layer.id, kind, at, segs));
                 }
-                // A Model layer, or a Text or Shape layer once it's a solid.
-                K::Model { .. } | K::Text { .. } | K::Shape { .. }
+                // A Model layer, a 3D shape, or a Text or Shape layer once
+                // it's a solid.
+                K::Model { .. } | K::Mesh { .. } | K::Text { .. } | K::Shape { .. }
                     if solid.is_some() || matches!(layer.kind, K::Model { .. }) =>
                 {
                     let size = (w as f32, h as f32);

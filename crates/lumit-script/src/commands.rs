@@ -574,6 +574,7 @@ fn kind_name(kind: &LayerKind) -> &'static str {
         LayerKind::Shape { .. } => "shape",
         LayerKind::Light { .. } => "light",
         LayerKind::Model { .. } => "model",
+        LayerKind::Mesh { .. } => "mesh",
     }
 }
 

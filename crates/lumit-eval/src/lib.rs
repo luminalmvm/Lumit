@@ -2420,7 +2420,7 @@ fn feed_source(
                 h.update(&json);
             }
         }
-        LayerKind::Model { item, settings } => model::feed(h, *item, settings, stamper)?,
+        kind @ (LayerKind::Model { .. } | LayerKind::Mesh { .. }) => model::feed(h, kind, stamper)?,
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a

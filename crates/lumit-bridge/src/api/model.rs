@@ -140,13 +140,15 @@ impl LayerReference {
     }
 
     /// The corners of a Model layer's box in its own pixels, three numbers
-    /// each, once its file has been read, or a solid Text or Shape layer's
-    /// once it has been drawn. Empty before that and on any other kind of
-    /// layer.
+    /// each, once its file has been read, a 3D shape's, or a solid Text or
+    /// Shape layer's once it has been drawn. Empty before that and on any
+    /// other kind of layer.
     #[frb(sync)]
     pub fn get_model_box(&self) -> Result<Vec<f64>, BridgeError> {
-        let LayerKind::Model { item, settings } = self.item()?.kind else {
-            let corners = lumit_render::extrude::layer_box(self.layer_id);
+        let layer = self.item()?;
+        let LayerKind::Model { item, settings } = layer.kind else {
+            let corners = lumit_render::extrude::layer_box(self.layer_id)
+                .or_else(|| lumit_render::extrude::shape_box(&layer));
             return Ok(corners
                 .iter()
                 .flatten()
