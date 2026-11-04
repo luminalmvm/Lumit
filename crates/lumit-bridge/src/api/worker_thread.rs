@@ -4900,10 +4900,7 @@ fn render_comp_with_preview(
 
     if let Some(effects) = req.effects {
         // **Which list this is, read off the ids** (docs/impl/layer-styles.md
-        // §5). A style's or a material's row is dragged through the staging
-        // path an effect's is, so what arrives is the whole effect stack, style
-        // list or material rows, and the layer says which. Without this a drag
-        // on a shadow's Distance would preview the stack replaced by styles.
+        // §5). What is dragged arrives as one whole list, and the layer says which.
         let layer = &mut comp.layers[index];
         if staged_graph_inputs {
             // A placed graph's Inputs are one instance, staged as a list of

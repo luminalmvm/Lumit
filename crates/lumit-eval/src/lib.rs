@@ -18,8 +18,7 @@
 //!   keys.
 //! - **Evaluated values, not keyframe data**: a property animated elsewhere
 //!   but constant here hashes the same across the constant span.
-//! - **Algorithm version** (`ALGO_VERSION`) is bumped whenever rendering
-//!   output changes, invalidating every old entry by construction.
+//! - **Algorithm version** (`ALGO_VERSION`) is bumped when rendering output changes.
 
 use std::sync::Arc;
 
@@ -1784,9 +1783,8 @@ fn feed_layer(
     // two comp times sharing the current frame — a held/frozen leading frame —
     // can differ in their neighbours, so their echoes differ. Key the stamped
     // neighbour frames, exactly the ones the render decodes (same window, same
-    // retime mapping, same comp frame step). Footage layers only, matching the
-    // render's neighbour decode; empty otherwise, so a plain layer's key is
-    // untouched.
+    // retime mapping, same comp frame step). Footage layers only, as the render
+    // decodes; a plain layer's key is untouched.
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, layer.switches.fx) {
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -2412,8 +2410,7 @@ fn feed_source(
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
         }
         LayerKind::Light { light } => {
-            // A light draws nothing, but the Lens flare's Lights mode reads what it
-            // *is*, so its properties are in the name. Where it is comes with the layer's.
+            // Nothing drawn, but the Lens flare's Lights mode reads what it *is*.
             h.update(b"light");
             if let Ok(json) = serde_json::to_vec(light) {
                 h.update(&json);

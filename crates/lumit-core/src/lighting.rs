@@ -1,38 +1,20 @@
 //! Shading layers with the comp's Light layers.
 //!
-//! **In plain terms.** A Light layer is a shape that emits: a point, a
-//! cone, or — the one that matters — a rectangle, a softbox. This module works
-//! out how much of that light lands on each pixel of a layer, so a piece of
-//! footage can be lit by a softbox you placed and keyframed rather than by a
-//! gradient you painted.
+//! A Light layer is a shape that emits: a point, a cone or a rectangle. This
+//! module works out how much of that light lands on each pixel of a layer.
 //!
-//! The whole thing rests on one old and rather lovely piece of geometry. To
-//! know how brightly a flat surface is lit by a flat glowing rectangle, you do
-//! not need to fire rays at it. There is a closed-form answer: stand at the
-//! point being lit, look up, and measure how much of your sky the rectangle
-//! covers — weighted for the fact that light arriving at a glancing angle
-//! spreads over more surface and so counts for less. That measurement is a sum
-//! of one term per edge of the rectangle, and the sum is exact. Four edges,
-//! four terms, done — no sampling, no noise, no render time worth the name.
-//!
-//! (The term of art is the *diffuse form factor*, and the same integral is the
-//! identity-matrix case of Linearly Transformed Cosines — Heitz et al. 2016 —
-//! which is how one would later add roughness and specular highlights. The
-//! matrix tables that would need are deliberately not here: the diffuse case
-//! ships alone.)
-//!
-//! Two decisions worth knowing before reading the code:
+//! How brightly a flat surface is lit by a flat glowing rectangle has an exact
+//! answer, the *diffuse form factor*: stand at the point being lit and measure
+//! how much of the sky the rectangle covers, weighted for the glancing angle.
+//! It is one term per edge, with no sampling or noise.
 //!
 //! - **Light adds, it does not replace.** The result multiplies the picture by
 //!   `1 + light`, so a layer that no light reaches is untouched and a comp with
 //!   no lights renders byte-for-byte as it did before this existed. Physical
 //!   shading would multiply by the light alone and plunge everything unlit into
 //!   black, which is the correct answer to a question no compositor is asking.
-//! - **The surface is the layer's own plane.** A 2.5D compositor has no
-//!   per-pixel normals and inventing them from luminance is a quality cliff, so
-//!   every pixel of a layer shares one normal: the direction its plane faces.
-//!   For a softbox raking across footage that is exactly right, and it is the
-//!   honest answer rather than a guess.
+//! - **The surface is the layer's own plane.** Every pixel of a layer shares one
+//!   normal, the direction its plane faces.
 
 /// How many lights one layer can be shaded by in a single pass. Beyond this
 /// the nearest are kept — a budget, not a limit on the model (docs/13).
@@ -211,11 +193,8 @@ pub(crate) fn normalise(a: [f32; 3]) -> Option<[f32; 3]> {
 /// covers, cosine-weighted — the diffuse form factor, in 0..1 where 1 would be
 /// a light filling the entire sky.
 ///
-/// The rectangle is first clipped to the horizon: the part of a light that has
-/// sunk below the surface cannot light it, and including it would give a
-/// nonsense (often negative) answer. That clip is the reason for the loop
-/// below rather than a flat four-term sum, and it is why the polygon can come
-/// out with five corners.
+/// The rectangle is first clipped to the horizon, as a light below the surface
+/// cannot light it, which is why the polygon can come out with five corners.
 #[must_use]
 pub fn rect_form_factor(p: [f32; 3], n: [f32; 3], corners: &[[f32; 3]; 4]) -> f32 {
     // Sutherland–Hodgman against the single plane through `p` facing `n`. A
