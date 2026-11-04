@@ -32,6 +32,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
+mod fx_key;
 pub(crate) mod shading;
 
 /// One layer's source pixels ready for a draw: `(rgba, tex_w, tex_h, natural
@@ -4575,7 +4576,7 @@ fn comp_walk(
         // so the render scale is covered).
         let fx_input_key = match &source {
             DrawSource::Pixels { tex_w, tex_h, .. } => {
-                fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
+                fx_key::fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
             }
             DrawSource::Nested { key, .. } => *key,
             DrawSource::Adjust
@@ -4757,54 +4758,6 @@ fn comp_walk(
         crate::environment::add(&mut draws, doc, comp, t_comp);
     }
     draws
-}
-
-/// The content name of the picture a layer's effect stack runs on
-/// ([`CompLayerDraw::fx_input_key`]): what the source is, then everything
-/// `pixels_for` bakes into it before the stack sees it — the paint strokes,
-/// the masks at this layer time — and the raster it was made at. Footage and
-/// Sequence layers name their source by the decode job's identity
-/// ([`CompLayerPixels::source_key`]); a solid by its colour and size. `None`
-/// for the kinds nothing names yet (text, shapes), which run uncached.
-///
-/// The masks and paint go in serialised, as the file format writes them: a
-/// keyframed mask is named by its whole animation plus the time it is read
-/// at, which is coarser than the evaluated shape but never wrong.
-fn fx_input_key(
-    doc: &lumit_core::model::Document,
-    layer: &lumit_core::model::Layer,
-    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
-    lt: f64,
-    tex_w: u32,
-    tex_h: u32,
-) -> Option<u128> {
-    use lumit_core::model::LayerKind;
-    let mut h = blake3::Hasher::new();
-    h.update(b"fxinput/1/");
-    match &layer.kind {
-        LayerKind::Footage { .. } | LayerKind::Sequence { .. } => {
-            h.update(b"footage/");
-            h.update(&pixels_by_layer.get(&layer.id)?.source_key.to_le_bytes());
-        }
-        LayerKind::Solid { def } => {
-            let sd = doc.solid(*def)?;
-            h.update(b"solid/");
-            for ch in sd.colour.0 {
-                h.update(&ch.to_le_bytes());
-            }
-            h.update(&sd.width.to_le_bytes());
-            h.update(&sd.height.to_le_bytes());
-        }
-        _ => return None,
-    }
-    h.update(&bincode::serialize(&layer.masks).ok()?);
-    h.update(&bincode::serialize(&layer.paint).ok()?);
-    h.update(&lt.to_le_bytes());
-    h.update(&tex_w.to_le_bytes());
-    h.update(&tex_h.to_le_bytes());
-    let mut k = [0u8; 16];
-    k.copy_from_slice(&h.finalize().as_bytes()[..16]);
-    Some(u128::from_le_bytes(k))
 }
 
 /// The ordered file paths of a layer's enabled built-in `lut` effects
