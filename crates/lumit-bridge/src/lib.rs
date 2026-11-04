@@ -117,6 +117,8 @@ mod scratch;
 mod script;
 mod shape_paint;
 mod streams;
+#[cfg(test)]
+mod test_files;
 mod turns;
 #[cfg(target_arch = "wasm32")]
 mod web_kept;
