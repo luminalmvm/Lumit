@@ -123,6 +123,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   late final Set<String> _shut =
       Provider.of<LumitUiState>(context, listen: false).folds.effectsShut;
 
+  /// The cards that start closed and have been opened since, which keep their
+  /// rows from then on.
+  final Set<UuidValue> _everOpen = {};
+
   /// The last layer this panel drew. Deselecting does not empty the panel: the
   /// stack you were just editing stays up, because clicking away in the
   /// Timeline is not a request to lose your place. It is replaced the moment
@@ -1505,12 +1509,16 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // Neither a style nor the Inputs takes part in the effect selection.
     final fixed = style || inputs;
     // A model with many materials starts with each closed, so its first
-    // look is a list of names rather than a wall of rows.
-    final open = material &&
-            info.materials!.length > 3 &&
-            !isGeometryOptions(fx)
-        ? _shut.contains('fx-${fx.id}')
-        : _isOpen('fx-${fx.id}');
+    // look is a list of names rather than a wall of rows. Geometry options
+    // start closed on every Text and Shape layer, so selecting a layer never
+    // asks the engine for their rows. A card closed from the start draws none
+    // until it's first opened, then keeps them for the twirl to close over.
+    final startsClosed = material &&
+        (info.materials!.length > 3 || isGeometryOptions(fx));
+    final open =
+        startsClosed ? _shut.contains('fx-${fx.id}') : _isOpen('fx-${fx.id}');
+    if (open) _everOpen.add(fx.id);
+    final drawsRows = !startsClosed || _everOpen.contains(fx.id);
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
@@ -1543,6 +1551,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         info.trackCorrected,
         graphName,
         open,
+        drawsRows,
         renaming,
         style,
         inputs,
@@ -1574,6 +1583,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         inputs: inputs,
         material: material,
         open: open,
+        drawsRows: drawsRows,
         onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
         // The selection this heading follows, rather than an answer read here
         // and handed down: a pick recolours the heading and rebuilds nothing
@@ -2135,6 +2145,10 @@ class _EffectSection extends StatelessWidget {
   /// switch says, so the card is its rows, Reset and nothing else.
   final bool inputs;
 
+  /// Whether its rows are built at all, which a closed card that has never
+  /// been opened skips.
+  final bool drawsRows;
+
   /// This card is one of a Model layer's materials, which also sets [style]:
   /// fixed in place and taking no part in the selection.
   final bool material;
@@ -2228,6 +2242,7 @@ class _EffectSection extends StatelessWidget {
     required this.info,
     this.graphName,
     required this.open,
+    this.drawsRows = true,
     required this.onToggle,
     this.pick,
     required this.onSelect,
@@ -2657,7 +2672,7 @@ class _EffectSection extends StatelessWidget {
           if (input.key.startsWith('$id/'))
             _pointsRow(context, input.key.substring('$id/'.length),
                 input.value.label, input.value.from),
-        ..._paramRows(named, base, id, values),
+        if (drawsRows) ..._paramRows(named, base, id, values),
       ],
     );
   }
