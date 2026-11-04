@@ -3499,6 +3499,9 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
       _ => null,
     };
 
+bool _namesALayer(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Layer && value.field0 != null;
+
 /// The display an effect draws *above* its rows, or null for the effects that
 /// draw none — which is nearly all of them.
 ///
@@ -3512,9 +3515,6 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
 /// a shape for a value. Its five channel curves are five declared parameters
 /// that fold into one tabbed editor, exactly as an `_x`/`_y` pair folds into one
 /// point row — a fold, not a display, and `_paramRows` is where folds live.
-bool _namesALayer(BridgeEffectValue? value) =>
-    value is BridgeEffectValue_Layer && value.field0 != null;
-
 Widget? customEffectDisplay(
   String matchName, {
   required UuidValue effectId,
