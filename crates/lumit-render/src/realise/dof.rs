@@ -10,7 +10,7 @@ type DofField = [[f32; 4]; 3];
 /// How much wider the gaussian's reach is than half the circle of confusion.
 /// After Effects blurs with a box that wide either side, and this gaussian is
 /// the one that comes closest to its pictures.
-pub(super) const DOF_SOFTNESS: f64 = 1.37;
+pub(crate) const DOF_SOFTNESS: f64 = 1.37;
 
 /// Comp pixels as the camera's eye sees them: the eye at nought, looking
 /// down +z.

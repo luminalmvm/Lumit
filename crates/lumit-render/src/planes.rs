@@ -1013,10 +1013,9 @@ pub fn progress(instance: Uuid) -> Option<Progress> {
     jobs().lock().ok()?.progress.get(&instance).cloned()
 }
 
-/// Put a run in the store. Public because this is how one gets in and there is
-/// exactly one way - an analysis finishing, a sidecar being read back - and the
-/// bridge's own tests need one without a model to make it with.
+/// Put a run in the store: an analysis finishing, or a sidecar being read back.
 pub fn publish(instance: Uuid, run: PlaneRun) {
+    steady::hold(instance, &run);
     if let Ok(mut held) = runs().write() {
         held.insert(instance, Arc::new(run));
     }
@@ -1246,17 +1245,11 @@ pub(crate) fn run(job: PlaneJob, cancel: &AtomicBool) {
         return;
     }
 
-    // Opened here, on this thread, and dropped at the end of this function,
-    // never held between analyses and never behind a shared lock (§6.1).
-    let mut model = match open_model(job.settings) {
-        Ok(model) => model,
-        Err(why) => {
-            finish(instance, Some(Progress::Failed(why)), owns_slot);
-            return;
-        }
-    };
+    // Opened on this thread once the frames are, and dropped at the end of this
+    // function, never held between analyses or behind a shared lock (§6.1).
+    let mut model = lazy::Lazy::new(job.settings);
 
-    match analyse(job, resume, model.as_mut(), cancel, &|step| {
+    match analyse(job, resume, &mut model, cancel, &|step| {
         report(instance, step);
     }) {
         Ok((run, cancelled)) => {
@@ -1566,6 +1559,9 @@ pub fn warm(jobs: Vec<PlaneJob>) {
             }
         });
 }
+
+mod lazy;
+pub mod steady;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

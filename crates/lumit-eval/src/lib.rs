@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 use lumit_core::{
     expression::ExpressionContext,
+    fx::effects::depth_points::stamp as points_stamp,
     model::{CameraPose, Composition, Document, LayerKind, MatteChannel},
 };
 use uuid::Uuid;
@@ -1270,20 +1271,18 @@ fn feed_effect_stack(
                     // source for no gain.
                     //
                     // **Audio level's Audio row is a reading, not a picture**
-                    // (docs/impl/audio-nodes.md §3). Every source the node
-                    // offers is the comp's mix under a filter, the whole of
-                    // it, one layer of it, or one clip of one layer, so a fader
-                    // anywhere in the comp can move the number the picture
-                    // follows, and folding the named layer's own file says
-                    // nothing about it. The mix's fingerprint is the term that
-                    // does. It is asked for this one row alone, so no other
-                    // reference pays for a job list. Beat trigger's Audio row
-                    // reads the same mix.
+                    // (docs/impl/audio-nodes.md §3). Every source the node offers
+                    // is the comp's mix under a filter, so a fader anywhere can
+                    // move the number the picture follows and the named layer's
+                    // file says nothing about it. The mix's fingerprint does. Asked
+                    // for this row alone, and Beat trigger's. Depth points' Camera
+                    // row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
                         && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
-                        .flatten();
+                        .flatten()
+                        .or_else(|| points_stamp(doc, comp, marker_layer, e, &p.id, t));
                     if let Some(sig) = mix {
                         h.update(&sig.to_le_bytes());
                     }
@@ -4755,12 +4754,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 30, which renamed every frame.
+        // Pinned under ALGO_VERSION 31, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                335_385_639_539_730_110_125_068_013_118_002_080_709,
-                247_824_813_857_488_947_080_300_049_656_569_167_839
+                128_289_967_660_377_301_895_040_216_191_865_692_207,
+                15_537_038_217_396_671_194_944_687_530_628_085_491
             )
         );
 

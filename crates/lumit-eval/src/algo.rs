@@ -54,7 +54,8 @@
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
 /// * 27: a 3D model's glass and clearcoat from its file are drawn.
 /// * 28: a project at 8 or 32 bits draws its effects.
-/// * 29: a mirrored model's normal map turns the right way, what's hidden in
+/// * 29: Particulate in the scene follows a collapsed precomp.
+/// * 30: a mirrored model's normal map turns the right way, what's hidden in
 ///   Blender is left out, and Shaded is a little darker.
-/// * 30: the 3D layers in a collapsed Precomp take the parent's lights.
-pub const ALGO_VERSION: u32 = 30;
+/// * 31: the 3D layers in a collapsed Precomp take the parent's lights.
+pub const ALGO_VERSION: u32 = 31;

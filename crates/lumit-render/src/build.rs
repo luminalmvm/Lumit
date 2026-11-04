@@ -4080,9 +4080,9 @@ fn comp_walk(
                             d.rotation_x_deg = 0.0;
                             d.rotation_y_deg = 0.0;
                         }
+                        crate::realise::scene::collapsed(d, doc, comp, layer, parent, t_comp);
                         d.pre = Some(match d.pre {
-                            // A collapsed chain: this parent wraps the child's
-                            // own parent placement.
+                            // A collapsed chain wraps the child's own parent.
                             Some(p) => lumit_gpu::composite::concat_place(parent, p),
                             None => parent,
                         });
@@ -4744,7 +4744,7 @@ fn comp_walk(
             temporal_below: None,
             accumulation_below: None,
             flow_below,
-            in_scene: crate::realise::scene::carried(doc, comp, layer),
+            in_scene: crate::realise::scene::carried(doc, comp, layer, t_comp, source_frame),
         }));
     }
     // A live span reaching the top of the stack closes with the walk itself.

@@ -3499,6 +3499,9 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
       _ => null,
     };
 
+bool _namesALayer(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Layer && value.field0 != null;
+
 /// The display an effect draws *above* its rows, or null for the effects that
 /// draw none — which is nearly all of them.
 ///
@@ -3589,6 +3592,16 @@ Widget? customEffectDisplay(
       // models are two answers, not one.
       'depth' => PlaneDisplayFrb(
           key: ValueKey<String>('fx-depth-display-$effectId'),
+          card: PlaneCard.depth,
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+        ),
+      // Depth points asks for the same reading, unless a Depth layer has taken
+      // over from it.
+      'depth_points' when !_namesALayer(values['depth_layer']) => PlaneDisplayFrb(
+          key: ValueKey<String>('fx-depth-points-display-$effectId'),
           card: PlaneCard.depth,
           layer: layer,
           effectId: effectId,
