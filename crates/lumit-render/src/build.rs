@@ -1973,7 +1973,7 @@ fn comp_walk(
             // `Composition::lights_at`, not from the draw list.
             LayerKind::Light { .. } => None,
             // Drawn by the mesh pass, from its own draw source.
-            LayerKind::Model { .. } => None,
+            LayerKind::Model { .. } | LayerKind::Mesh { .. } => None,
         };
         // Footage is the only kind that can arrive as anything but bytes.
         let format = match &layer.kind {
@@ -6795,7 +6795,8 @@ fn rebuilt_as_itself(
             | LayerKind::Null
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
-            | LayerKind::Model { .. } => true,
+            | LayerKind::Model { .. }
+            | LayerKind::Mesh { .. } => true,
             LayerKind::Sequence { .. } => false,
         }
     })

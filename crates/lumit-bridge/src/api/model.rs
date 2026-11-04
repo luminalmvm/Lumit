@@ -243,9 +243,9 @@ impl LayerReference {
     }
 
     /// The corners of a Model layer's box in its own pixels at comp frame
-    /// `at_frame`, three numbers each, once its file has been read, or a solid
-    /// Text or Shape layer's once it has been drawn, or a box of smoke's. Empty
-    /// before that and on any other kind of layer.
+    /// `at_frame`, three numbers each, once its file has been read, a 3D
+    /// shape's, a solid Text or Shape layer's once it has been drawn, or a box
+    /// of smoke's. Empty before that and on any other kind of layer.
     #[frb(sync)]
     pub fn get_model_box(&self, at_frame: i64) -> Result<Vec<f64>, BridgeError> {
         let layer = self.item()?;
@@ -254,7 +254,8 @@ impl LayerReference {
         let LayerKind::Model { item, settings } = &layer.kind else {
             use lumit_core::fx::effects::smoke;
             if smoke::on_layer(&layer).is_none() {
-                let corners = lumit_render::extrude::layer_box(self.layer_id);
+                let corners = lumit_render::extrude::layer_box(self.layer_id)
+                    .or_else(|| lumit_render::extrude::shape_box(&layer));
                 return Ok(corners
                     .iter()
                     .flatten()

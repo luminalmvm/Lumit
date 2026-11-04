@@ -259,6 +259,7 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ("CEggAppTool", "ToolRotoBrush", Tools, "tool.roto"),
     ("CEggAppTool", "ToolPin", Tools, "tool.puppet"),
     ("CEggAppTool", "ToolCamera", Tools, "tool.camera"),
+    ("CEggAppTool", "ToolParametricMesh", Tools, "tool.shape3d"),
     // Timeline.
     (
         "CCompCompCmd",

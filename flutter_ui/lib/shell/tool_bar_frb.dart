@@ -98,6 +98,7 @@ const List<ToolGroup> toolBarOrder = [
   ToolGroup.anchor,
   ToolGroup.razor,
   ToolGroup.shape,
+  ToolGroup.shape3d,
   ToolGroup.pen,
   ToolGroup.type,
   ToolGroup.paint,
@@ -1327,6 +1328,7 @@ MouseCursor viewerCursorFor(ToolMode tool) => switch (tool) {
       // doing, and their overlays ask for the same pointer, adding only
       // decoration beside it — the badge, the brush ring.
       _ => tool.group == ToolGroup.shape ||
+              tool.group == ToolGroup.shape3d ||
               tool.group == ToolGroup.pen ||
               tool.group == ToolGroup.paint ||
               tool.group == ToolGroup.roto ||

@@ -29,6 +29,19 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="8" rx="5.5" ry="4.5"/></svg>';
   static const String polygon =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l5.5 4-2 6.5h-7l-2-6.5z"/></svg>';
+  /// 3D shapes. A ball with its equator's near half.
+  static const String sphere =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8a5.5 2 0 0 0 11 0"/></svg>';
+  static const String cylinder =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4" rx="4.5" ry="1.5"/><path d="M3.5 4v8a4.5 1.5 0 0 0 9 0V4"/></svg>';
+  static const String cone =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12L8 2.5l4.5 9.5"/><path d="M3.5 12a4.5 1.5 0 0 0 9 0"/></svg>';
+  static const String torus =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="8" rx="6" ry="3.5"/><path d="M5 7.5c1.5 1.2 4.5 1.2 6 0M6 8.3c1-.7 3-.7 4 0"/></svg>';
+  static const String plane =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h9l-3 7H2z"/></svg>';
+  static const String pyramid =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l5.5 8.5L8 13.5 2.5 11z"/><path d="M8 2.5v11"/></svg>';
   static const String pen =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l4 4-4.5 6.5L4 14l1.5-3.5z"/><circle cx="7.8" cy="8.7" r="1"/><path d="M5.5 10.5l2.3-1.8"/></svg>';
   static const String text =
@@ -447,6 +460,12 @@ abstract final class LumitIcons {
     'Rectangle': rectangle,
     'Ellipse': ellipse,
     'Polygon': polygon,
+    'Sphere': sphere,
+    'Cylinder': cylinder,
+    'Cone': cone,
+    'Torus': torus,
+    'Plane': plane,
+    'Pyramid': pyramid,
     'Pen': pen,
     'Text': text,
     'Razor': razor,

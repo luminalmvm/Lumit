@@ -198,6 +198,7 @@ pub fn default_keymap() -> Keymap {
         row(Tools, "Alt+W", "tool.roto"),
         row(Tools, "Mod+P", "tool.puppet"),
         row(Tools, "Shift+C", "tool.camera"),
+        row(Tools, "Shift+D", "tool.shape3d"),
         // With a camera tool in hand over the Viewer, After Effects' F and
         // Ctrl+Shift+F look at the selected layers and at all of them.
         row(Tools, "F", "viewer.3d.look.selected"),

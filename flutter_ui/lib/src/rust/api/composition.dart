@@ -697,6 +697,23 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddLightLayer(
               that: this, kind: kind, row: row);
 
+  /// Add 3D shape `entry` of the menu (cube, sphere, cylinder, cone, torus,
+  /// plane, then pyramid) at comp point `at`, or the comp's centre. In a
+  /// comp with no lights it brings the lights a 3D model does, named by
+  /// `light_names`, in the same undo step.
+  LayerReference addMeshLayer(
+          {required int entry,
+          int? row,
+          Float64List? at,
+          List<String>? lightNames}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddMeshLayer(
+              that: this,
+              entry: entry,
+              row: row,
+              at: at,
+              lightNames: lightNames);
+
   /// Add a Null layer: an invisible layer with no source of its own, carrying
   /// only a transform, for parenting rigs. It has no size, so only its
   /// position is centred and the anchor stays at the origin.

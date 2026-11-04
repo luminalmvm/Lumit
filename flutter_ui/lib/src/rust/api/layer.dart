@@ -1162,6 +1162,9 @@ enum BridgeLayerKind {
 
   /// A Model layer: a 3D model file drawn in the comp's 3D space.
   model,
+
+  /// A 3D shape Lumit makes itself: a cube, a sphere and so on.
+  mesh,
   ;
 }
 
@@ -3699,9 +3702,9 @@ class LayerReference {
       );
 
   /// The corners of a Model layer's box in its own pixels at comp frame
-  /// `at_frame`, three numbers each, once its file has been read, or a solid
-  /// Text or Shape layer's once it has been drawn, or a box of smoke's. Empty
-  /// before that and on any other kind of layer.
+  /// `at_frame`, three numbers each, once its file has been read, a 3D
+  /// shape's, a solid Text or Shape layer's once it has been drawn, or a box
+  /// of smoke's. Empty before that and on any other kind of layer.
   Float64List getModelBox({required int atFrame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceGetModelBox(that: this, atFrame: atFrame);
 
