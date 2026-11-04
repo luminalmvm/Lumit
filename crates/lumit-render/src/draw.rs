@@ -841,3 +841,17 @@ impl CompLayerDraw {
         }
     }
 }
+
+impl CompLayerDraw {
+    /// Whether this draw reads the comp's picture away from its own pixels,
+    /// so a frame with it can't be drawn as a cropped region: an adjustment
+    /// layer, the haze, the environment, a motion-blurred layer, or a 3D
+    /// model's glass.
+    pub(crate) fn needs_whole_frame(&self) -> bool {
+        matches!(
+            self.source,
+            DrawSource::Adjust | DrawSource::Haze(_) | DrawSource::Environment(_)
+        ) || !self.mb.is_empty()
+            || crate::model_layer::glass(self).is_some()
+    }
+}

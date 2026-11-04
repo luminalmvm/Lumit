@@ -80,6 +80,8 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                     maps: None,
                     display: Default::default(),
                     environment: None,
+                    looks: &[],
+                    behind: None,
                 },
             )
             .expect("the model draws")
@@ -240,6 +242,8 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
                 faces: false,
             },
             environment: None,
+            looks: &[],
+            behind: None,
         };
         let picture = fx.model(&lease, &scene, &view).expect("the model draws");
         let px = lease
@@ -359,6 +363,8 @@ fn a_white_environment_lights_white_things_white() {
         maps: None,
         display: Default::default(),
         environment: Some(&surround),
+        looks: &[],
+        behind: None,
     };
     let model = fx.model(&lease, &scene, &view).expect("the model draws");
     let px = lease

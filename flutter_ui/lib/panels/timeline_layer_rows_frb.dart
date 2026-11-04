@@ -797,6 +797,18 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     super.dispose();
   }
 
+  void _resetMaterialRow(FoldEffectParamRow row) {
+    for (final instance in widget.layer.getMaterials()) {
+      if (instance.id() != row.info.id) continue;
+      try {
+        widget.layer.resetMaterialRow(material: instance, param: row.param.id);
+      } catch (_) {
+        // The material went away under the press; nothing to put back.
+      }
+    }
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final row = widget.row;
@@ -817,6 +829,8 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     };
     return EffectParamRowFrb(
       key: ValueKey<String>('tl-fx-${row.info.id}-${row.param.id}'),
+      // A material row goes back to its file's value.
+      onReset: row.material ? () => _resetMaterialRow(row) : null,
       effectId: row.info.id,
       param: row.param,
       valueColumn: widget.valueColumn,

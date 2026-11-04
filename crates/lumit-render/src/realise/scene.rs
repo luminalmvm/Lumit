@@ -408,6 +408,8 @@ fn shapes(
         maps: None,
         display: crate::model::display(),
         environment: None,
+        looks: &[],
+        behind: None,
     };
     fx.model(ctx, model, &view).ok()
 }

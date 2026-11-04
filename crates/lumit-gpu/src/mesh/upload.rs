@@ -2,7 +2,7 @@
 //! pictures, their smaller levels made on the card, and a bind group per
 //! material.
 
-use super::{GpuModel, MaterialUniform, MeshError, MeshFx, Part, Vertex};
+use super::{look::Kept, GpuModel, MeshError, MeshFx, Part, Vertex};
 use crate::GpuContext;
 use glam::Vec3;
 use lumit_scene::{AlphaMode, Image, ModelScene, TextureRef, Wrap};
@@ -69,7 +69,7 @@ fn fitted(image: &Image, srgb: bool, limit: u32) -> Level {
 }
 
 /// How many levels a picture `w` by `h` has, down to a pixel.
-fn level_count(w: u32, h: u32) -> u32 {
+pub(super) fn level_count(w: u32, h: u32) -> u32 {
     32 - w.max(h).max(1).leading_zeros()
 }
 
@@ -255,7 +255,7 @@ impl GpuModel {
             })
         };
         let default = lumit_scene::Material::default();
-        let materials = scene
+        let (materials, kept) = scene
             .materials
             .iter()
             .chain(std::iter::once(&default))
@@ -286,62 +286,23 @@ impl GpuModel {
                         f32::from(u8::from(view.is_some())),
                     ];
                     let texture = r.and_then(|r| scene.textures.get(r.texture));
-                    bound.push((view.unwrap_or(&white), sampler(texture)));
+                    bound.push((view.unwrap_or(&white).clone(), sampler(texture)));
                 }
-                let e = m.emissive.map(|c| c * m.emissive_strength);
-                let uniform = buffer(
-                    "mesh-material",
-                    bytemuck::bytes_of(&MaterialUniform {
-                        base_colour: m.base_colour,
-                        emissive: [e[0], e[1], e[2], 0.0],
-                        params: [
-                            m.metallic,
-                            m.roughness,
-                            m.normal_scale,
-                            m.occlusion_strength,
-                        ],
-                        mode: [
-                            match m.alpha_mode {
-                                AlphaMode::Opaque => 0.0,
-                                AlphaMode::Mask => 1.0,
-                                AlphaMode::Blend => 2.0,
-                            },
-                            m.alpha_cutoff,
-                            f32::from(u8::from(m.unlit)),
-                            0.0,
-                        ],
-                        slots: uv,
-                    }),
-                    wgpu::BufferUsages::UNIFORM,
-                );
-                let mut entries = vec![wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform.as_entire_binding(),
-                }];
-                for (k, (view, sampler)) in (0u32..).zip(&bound) {
-                    entries.push(wgpu::BindGroupEntry {
-                        binding: 1 + k,
-                        resource: wgpu::BindingResource::TextureView(view),
-                    });
-                    entries.push(wgpu::BindGroupEntry {
-                        binding: 6 + k,
-                        resource: wgpu::BindingResource::Sampler(sampler),
-                    });
-                }
-                let group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("mesh-material"),
-                    layout: &fx.material_layout,
-                    entries: &entries,
-                });
-                (group, m.alpha_mode == AlphaMode::Blend, m.double_sided)
+                let kept = Kept { uv, bound };
+                let group = kept.group(ctx, fx, m, ([None; 4], true), None);
+                (
+                    (group, m.alpha_mode == AlphaMode::Blend, m.double_sided),
+                    kept,
+                )
             })
-            .collect();
+            .unzip();
         Ok(Self {
             vertices,
             indices,
             parts,
             materials,
             edges: std::sync::OnceLock::new(),
+            kept,
             _held: held,
         })
     }

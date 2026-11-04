@@ -27,6 +27,8 @@ pub enum PresetValue {
     Float(f64),
     Choice(u32),
     Bool(bool),
+    /// Scene-linear RGBA.
+    Colour([f64; 4]),
     /// Keyframes eased in and out, each a time in seconds after the playhead
     /// and a value: something moving from one state to another.
     Keys(&'static [(f64, f64)]),
@@ -47,11 +49,21 @@ pub fn presets(match_name: &str) -> &'static [EffectPreset] {
 /// would. The layers its rows read, those rows' own switches, and the seed are
 /// kept.
 pub fn apply(inst: &mut EffectInstance, preset: &EffectPreset, at: Rational, raster: (f64, f64)) {
-    let Some(fresh) =
+    if let Some(fresh) =
         crate::fx::builtins::instantiate_for_raster(&inst.effect.match_name, raster.0, raster.1)
-    else {
-        return;
-    };
+    {
+        apply_over(inst, preset, at, &fresh);
+    }
+}
+
+/// [`apply`] with every control first going back to `fresh` in place of a
+/// new effect's: a 3D model's material starts from its file's own values.
+pub fn apply_over(
+    inst: &mut EffectInstance,
+    preset: &EffectPreset,
+    at: Rational,
+    fresh: &EffectInstance,
+) {
     let keeps = |id: &str, v: &EffectValue| {
         matches!(v, EffectValue::Layer(_) | EffectValue::Seed(_))
             || id.ends_with("_placement")
@@ -74,6 +86,7 @@ pub fn apply(inst: &mut EffectInstance, preset: &EffectPreset, at: Rational, ras
             PresetValue::Float(v) => EffectValue::Float(Property::fixed(v)),
             PresetValue::Choice(c) => EffectValue::Choice(c),
             PresetValue::Bool(b) => EffectValue::Bool(b),
+            PresetValue::Colour(c) => EffectValue::Colour(c.map(Property::fixed)),
             PresetValue::Keys(keys) | PresetValue::KeysOut(keys) => {
                 let out = matches!(value, PresetValue::KeysOut(_));
                 let mut keys: Vec<Keyframe> = keys
@@ -129,7 +142,8 @@ mod tests {
     /// for it, would quietly do nothing.
     #[test]
     fn every_preset_sets_rows_its_effect_has() {
-        for def in crate::fx::catalogue::BUILTIN_DEFS.iter() {
+        let materials = crate::model_material::MATERIAL_DEFS.builtins();
+        for def in crate::fx::catalogue::BUILTIN_DEFS.iter().chain(materials) {
             let schema = def.schema();
             for preset in def.presets() {
                 for (id, value) in preset.values {
@@ -148,6 +162,7 @@ mod tests {
                             (*c as usize) < options.len()
                         }
                         (Some(ParamKind::Bool { .. }), PresetValue::Bool(_)) => true,
+                        (Some(ParamKind::Colour { .. }), PresetValue::Colour(_)) => true,
                         _ => false,
                     };
                     assert!(

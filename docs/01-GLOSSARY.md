@@ -40,7 +40,7 @@ composites over it.
 | **Audio layer** | An audio item, or footage's audio |
 | **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
-| **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100% |
+| **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100%. Its **Materials** rows change the file's materials on the layer |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the

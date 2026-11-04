@@ -4486,9 +4486,9 @@ fn comp_walk(
                 }));
                 continue;
             }
-            LayerKind::Model { item, settings } => {
+            LayerKind::Model { .. } => {
                 let Some(draw) =
-                    crate::model::draw(doc, comp, layer, *item, settings, t_comp, &context)
+                    crate::model::draw(doc, comp, layer, t_comp, &context, &layer_slot)
                 else {
                     continue;
                 };

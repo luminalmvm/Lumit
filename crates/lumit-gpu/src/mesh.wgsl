@@ -50,8 +50,11 @@ struct Material {
     emissive: vec4<f32>,
     // metallic, roughness, normal scale, occlusion strength.
     params: vec4<f32>,
-    // x = alpha mode (0 opaque, 1 mask, 2 blend), y = cutoff, z = unlit.
+    // x = alpha mode (0 opaque, 1 mask, 2 blend), y = cutoff, z = unlit,
+    // w = 1 with an opacity picture.
     mode: vec4<f32>,
+    // transmission, IOR, clearcoat, clearcoat roughness.
+    extra: vec4<f32>,
     // Base colour, metal-rough, normal, occlusion, emissive.
     slots: array<Slot, 5>,
 };
@@ -75,6 +78,11 @@ struct MeshCopy {
 @group(1) @binding(8) var normal_samp: sampler;
 @group(1) @binding(9) var occlusion_samp: sampler;
 @group(1) @binding(10) var emissive_samp: sampler;
+// A layer's picture whose brightness is the opacity, on the base colour's uvs.
+@group(1) @binding(11) var opacity_tex: texture_2d<f32>;
+// The comp's picture under the model's run of 3D layers, for glass to bend.
+@group(1) @binding(12) var behind_tex: texture_2d<f32>;
+@group(1) @binding(13) var behind_samp: sampler;
 
 // The shadows it takes: the 3D layers' casters and the models' maps.
 struct Casters {
@@ -145,6 +153,53 @@ fn left_of(pos: vec3<f32>, n: vec3<f32>, l: Light) -> vec3<f32> {
     return 1.0 - l.shadow.x * (1.0 - transmitted(pos, l) * mapped(pos, n, l));
 }
 
+// Karis' fit of the split-sum lookup, as a scale and bias on f0: how much a
+// uniform light round about reflects off a surface this rough, at this angle.
+fn env_fit(roughness: f32, nv: f32) -> vec2<f32> {
+    let r = roughness * vec4<f32>(-1.0, -0.0275, -0.572, 0.022) + vec4<f32>(1.0, 0.0425, 1.04, -0.04);
+    let a = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;
+    return vec2<f32>(a * -1.04 + r.z, a * 1.04 + r.w);
+}
+
+// GGX with Smith's height-correlated visibility, in the units the diffuse
+// term is in, which leaves out the pi.
+fn ggx(a2: f32, nh: f32, nl: f32, nv: f32) -> f32 {
+    let k = nh * nh * (a2 - 1.0) + 1.0;
+    let d = a2 / (PI * k * k);
+    let vis = 0.5 / max(nl * sqrt(nv * nv * (1.0 - a2) + a2) + nv * sqrt(nl * nl * (1.0 - a2) + a2), 1e-6);
+    return d * vis * PI * nl;
+}
+
+// What glass shows: the picture behind, where the ray through `at` lands once
+// it has bent at the surface, softened by roughness. ponytail: screen-space,
+// so it bends only what is under the run of 3D layers and never the model
+// itself, and the ray goes as far past the surface as a third of the way back
+// to the eye.
+fn behind(at: vec3<f32>, eye: vec3<f32>, n: vec3<f32>, ior: f32, roughness: f32) -> vec4<f32> {
+    let bent = refract(-eye, n, 1.0 / max(ior, 1.0));
+    let far = at + bent * 0.35 * length(frame.eye.xyz - at);
+    let clip = frame.clip * vec4<f32>(far, 1.0);
+    let uv = vec2<f32>(0.5, -0.5) * clip.xy / max(clip.w, 1e-6) + 0.5;
+    let spread = roughness * roughness * 0.12;
+    var sum = textureSampleLevel(behind_tex, behind_samp, uv, 0.0);
+    if (spread < 1e-4) {
+        return sum;
+    }
+    for (var i = 0u; i < 24u; i = i + 1u) {
+        let turn = f32(i) * 2.39996;
+        let off = vec2<f32>(cos(turn), sin(turn)) * spread * sqrt((f32(i) + 0.5) / 24.0);
+        sum = sum + textureSampleLevel(behind_tex, behind_samp, uv + off, 0.0);
+    }
+    return sum / 25.0;
+}
+
+// A surface no light touches: its own colour, and what glass shows in its
+// place, tinted.
+fn untouched(at: vec3<f32>, eye: vec3<f32>, n: vec3<f32>, own: vec3<f32>, tint: vec3<f32>, alpha: f32, glass: f32) -> vec4<f32> {
+    let seen = behind(at, eye, n, mat.extra.y, 0.0);
+    return vec4<f32>(own * alpha * (1.0 - glass) + seen.rgb * tint * glass, mix(alpha, seen.a, glass));
+}
+
 @fragment
 fn fs_mesh(in: VsOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
     let c = shade(in, front);
@@ -165,15 +220,24 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     let normal_uv = slot_uv(mat.slots[2], in);
     let base = mat.base_colour * in.colour * textureSample(base_tex, base_samp, base_uv);
     let mr = textureSample(mr_tex, mr_samp, slot_uv(mat.slots[1], in));
-    let mapped = textureSample(normal_tex, normal_samp, normal_uv).xyz * 2.0 - 1.0;
+    var mapped = textureSample(normal_tex, normal_samp, normal_uv).xyz;
+    // A layer's normals come as light, so back to how a normal map stores them.
+    if (mat.slots[2].row1.w > 1.5) {
+        mapped = select(1.055 * pow(mapped, vec3<f32>(1.0 / 2.4)) - 0.055, mapped * 12.92, mapped <= vec3<f32>(0.0031308));
+    }
+    mapped = mapped * 2.0 - 1.0;
     let occlusion = textureSample(occlusion_tex, occlusion_samp, slot_uv(mat.slots[3], in)).r;
     let glow = textureSample(emissive_tex, emissive_samp, slot_uv(mat.slots[4], in)).rgb;
+    let shown = textureSample(opacity_tex, base_samp, base_uv).rgb;
     let dx = dpdx(in.at);
     let dy = dpdy(in.at);
     let uv_dx = dpdx(normal_uv);
     let uv_dy = dpdy(normal_uv);
 
     var alpha = base.a;
+    if (mat.mode.w > 0.5) {
+        alpha = alpha * clamp(dot(shown, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    }
     let mode = u32(mat.mode.x + 0.5);
     if (mode == 1u) {
         if (alpha < mat.mode.y) {
@@ -188,15 +252,22 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     let count = min(u32(frame.eye.w), 8u);
     let accepts = u32(frame.flags.w + 0.5);
     let surround = environment.colour.w > 0.5;
+    let eye = normalise(frame.eye.xyz - in.at);
+    // How much it lets through. It bends the picture behind only as it
+    // exports, since the other looks draw none, and a model showing only its
+    // shadows has no surface to bend it.
+    let clear = mat.extra.x * (1.0 - clamp(mat.params.x * mr.b, 0.0, 1.0));
+    let glass = select(0.0, clear, look == 0u && accepts != 2u);
+    // Glass covers as much as what it shows does.
+    let surface = mix(alpha, 1.0, glass);
     if (look == 0u && (mat.mode.z > 0.5 || (count == 0u && !surround))) {
         // Showing only its shadows, with none to show.
         if (accepts == 2u) {
             return vec4<f32>(0.0);
         }
-        return vec4<f32>((base.rgb + emissive) * alpha, alpha);
+        return untouched(in.at, eye, normalise(in.normal), base.rgb + emissive, base.rgb, alpha, glass);
     }
 
-    let eye = normalise(frame.eye.xyz - in.at);
     // A mesh with no normals is shaded flat, facing the eye.
     var n = normalise(in.normal);
     if (all(n == vec3<f32>(0.0))) {
@@ -235,7 +306,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
             let lo = clamp(min(dim.x, min(dim.y, dim.z)), 0.0, 1.0);
             return vec4<f32>((dim - lo) * alpha, (1.0 - lo) * alpha);
         }
-        return vec4<f32>((base.rgb + emissive) * dim * alpha, alpha);
+        return untouched(in.at, eye, n, (base.rgb + emissive) * dim, base.rgb, alpha, glass);
     }
 
     if (look == 2u) {
@@ -255,16 +326,25 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
         let sky = mix(0.15, 0.45, 0.5 - 0.5 * n.y);
         let h = normalise(key + eye);
         let shine = pow(max(dot(n, h), 0.0), mix(80.0, 6.0, roughness)) * mix(0.3, 0.03, roughness);
-        let rgb = albedo * (sky + 0.75 * max(dot(n, key), 0.0)) * ao + shine + emissive;
-        return vec4<f32>(rgb * alpha, alpha);
+        // Glass keeps a film of its colour and its highlight, and lets the
+        // rest through without bending it, as a view has no picture to bend.
+        let film = alpha * (1.0 - 0.8 * clear);
+        let matte = albedo * (sky + 0.75 * max(dot(n, key), 0.0)) * ao;
+        return vec4<f32>(matte * film + (shine + emissive) * alpha, film);
     }
     let diffuse_colour = albedo * (1.0 - metallic);
     let f0 = mix(vec3<f32>(0.04), albedo, metallic);
     let a2 = roughness * roughness * roughness * roughness;
     let nv = max(dot(n, eye), 1e-4);
+    // A clear varnish over the rest: a second highlight, and what it
+    // reflects is light the layer under it doesn't get.
+    let coat = clamp(mat.extra.z, 0.0, 1.0);
+    let coat_rough = clamp(mat.extra.w, 0.045, 1.0);
+    let coat_a2 = coat_rough * coat_rough * coat_rough * coat_rough;
     var ambient = vec3<f32>(0.0);
     var diffuse = vec3<f32>(0.0);
     var specular = vec3<f32>(0.0);
+    var coat_specular = vec3<f32>(0.0);
     for (var i: u32 = 0u; i < count; i = i + 1u) {
         let l = frame.lights[i];
         if (u32(l.flags.x + 0.5) == 3u) {
@@ -284,42 +364,58 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
         let h = normalise(ld + eye);
         let nl = max(dot(n, ld), 0.0);
         let nh = max(dot(n, h), 0.0);
-        let f = f0 + (1.0 - f0) * pow(1.0 - max(dot(eye, h), 0.0), 5.0);
-        // GGX, with Smith's height-correlated visibility.
-        let k = nh * nh * (a2 - 1.0) + 1.0;
-        let d = a2 / (PI * k * k);
-        let vis = 0.5 / max(nl * sqrt(nv * nv * (1.0 - a2) + a2) + nv * sqrt(nl * nl * (1.0 - a2) + a2), 1e-6);
+        let schlick = pow(1.0 - max(dot(eye, h), 0.0), 5.0);
+        let f = f0 + (1.0 - f0) * schlick;
         let left = left_of(in.at, n, l) * l.colour.rgb;
-        // In the same units as the diffuse term, which leaves out the pi.
-        specular = specular + d * vis * f * PI * nl * strength * left;
+        specular = specular + ggx(a2, nh, nl, nv) * f * strength * left;
         diffuse = diffuse + (1.0 - f) * e * left;
+        if (coat > 0.0) {
+            let fc = 0.04 + 0.96 * schlick;
+            coat_specular = coat_specular + ggx(coat_a2, nh, nl, nv) * fc * coat * strength * left;
+        }
     }
-    // A uniform ambient reflects too, by Karis' fit of the split-sum
-    // lookup, or metal would stay black under it.
-    let r4 = roughness * vec4<f32>(-1.0, -0.0275, -0.572, 0.022) + vec4<f32>(1.0, 0.0425, 1.04, -0.04);
-    let a = min(r4.x * r4.x, exp2(-9.28 * nv)) * r4.x + r4.y;
-    let env = f0 * (a * -1.04 + r4.z) + (a * 1.04 + r4.w);
-    var rgb = (diffuse_colour + env) * ambient * ao + diffuse_colour * diffuse + specular + emissive;
+    // A uniform ambient reflects too, or metal would stay black under it.
+    let ab = env_fit(roughness, nv);
+    let env = f0 * ab.x + ab.y;
+    // Glass has no matte colour of its own, as that light goes through it.
+    let lit = diffuse_colour * (1.0 - glass);
+    var rgb = (lit + env) * ambient * ao + lit * diffuse + specular;
+    let r = reflect(-eye, n);
     if (surround) {
         // The environment's split sum: what a matte surface takes from every
         // way, and the reflection at this roughness, both darkened by the
         // model's own occlusion.
         let irradiance = env_irradiance(env_irradiance_cube, env_sampler, environment, n);
-        let r = reflect(-eye, n);
         let radiance = env_radiance(env_specular_cube, env_sampler, environment, r, roughness);
-        // Karis' fit as its scale and bias, then the light many bounces
-        // between the microfacets keep (Fdez-Aguera, as Bevy has it).
-        let ab = vec2<f32>(a * -1.04 + r4.z, a * 1.04 + r4.w);
+        // Then the light many bounces between the microfacets keep
+        // (Fdez-Aguera, as Bevy has it).
         let fr = max(vec3<f32>(1.0 - roughness), f0) - f0;
         let ks = f0 + fr * pow(1.0 - nv, 5.0);
         let fss_ess = ks * ab.x + ab.y;
         let ems = 1.0 - (ab.x + ab.y);
         let favg = f0 + (1.0 - f0) / 21.0;
         let fms_ems = fss_ess * favg / (1.0 - ems * favg) * ems;
-        let kd = diffuse_colour * (1.0 - (fss_ess + fms_ems));
+        let kd = lit * (1.0 - (fss_ess + fms_ems));
         rgb = rgb + ((fms_ems + kd) * irradiance + fss_ess * radiance) * ao;
     }
-    return vec4<f32>(rgb * alpha, alpha);
+    if (coat > 0.0) {
+        let fit = env_fit(coat_rough, nv);
+        let coat_env = 0.04 * fit.x + fit.y;
+        var about = ambient;
+        if (surround) {
+            about = about + env_radiance(env_specular_cube, env_sampler, environment, r, coat_rough);
+        }
+        rgb = rgb * (1.0 - coat * coat_env) + about * coat_env * coat + coat_specular;
+    }
+    var out = vec4<f32>((rgb + emissive) * surface, alpha);
+    // What glass lets through is tinted by its colour, less what it reflects,
+    // and over nothing only its reflections cover.
+    if (glass > 0.0) {
+        let seen = behind(in.at, eye, n, mat.extra.y, roughness);
+        let reflects = max(env.r, max(env.g, env.b));
+        out = vec4<f32>(out.rgb + seen.rgb * albedo * glass * (1.0 - env), mix(alpha, max(seen.a, reflects), glass));
+    }
+    return out;
 }
 
 // A view's lines along the model's edges, a hair nearer than the faces so

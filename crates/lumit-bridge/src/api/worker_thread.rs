@@ -4900,12 +4900,10 @@ fn render_comp_with_preview(
 
     if let Some(effects) = req.effects {
         // **Which list this is, read off the ids** (docs/impl/layer-styles.md
-        // §5). A style parameter is dragged through the same staging path an
-        // effect parameter is — one list read, edited, and sent along with the
-        // request — so what arrives here is either the whole effect stack or
-        // the whole style list, and the layer itself says which. Without this
-        // a drag on a shadow's Distance would preview the layer with its
-        // effect stack *replaced by its styles*.
+        // §5). A style's or a material's row is dragged through the staging
+        // path an effect's is, so what arrives is the whole effect stack, style
+        // list or material rows, and the layer says which. Without this a drag
+        // on a shadow's Distance would preview the stack replaced by styles.
         let layer = &mut comp.layers[index];
         if staged_graph_inputs {
             // A placed graph's Inputs are one instance, staged as a list of
@@ -4916,6 +4914,8 @@ fn render_comp_with_preview(
             .is_some_and(|f| layer.styles.iter().any(|s| s.id == f.id))
         {
             layer.styles = effects;
+        } else if lumit_render::model_material::owns(layer, &effects) {
+            lumit_render::model_material::stage(layer, effects);
         } else if let Some(clip) = staged_clip(layer, &effects) {
             clip.effects = effects;
         } else {

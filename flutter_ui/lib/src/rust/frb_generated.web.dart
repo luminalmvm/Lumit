@@ -2215,6 +2215,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<UuidValue>? dco_decode_opt_list_Uuid(dynamic raw);
 
   @protected
+  List<BridgeEffectInstanceInfo>?
+      dco_decode_opt_list_bridge_effect_instance_info(dynamic raw);
+
+  @protected
   List<BridgeFileComp>? dco_decode_opt_list_bridge_file_comp(dynamic raw);
 
   @protected
@@ -4770,6 +4774,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<UuidValue>? sse_decode_opt_list_Uuid(SseDeserializer deserializer);
+
+  @protected
+  List<BridgeEffectInstanceInfo>?
+      sse_decode_opt_list_bridge_effect_instance_info(
+          SseDeserializer deserializer);
 
   @protected
   List<BridgeFileComp>? sse_decode_opt_list_bridge_file_comp(
@@ -7484,6 +7493,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_list_Uuid(
       List<UuidValue>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_bridge_effect_instance_info(
+      List<BridgeEffectInstanceInfo>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_bridge_file_comp(

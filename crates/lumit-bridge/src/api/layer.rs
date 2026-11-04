@@ -26,9 +26,8 @@ use crate::api::{
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod style_tests;
 
-/// Which list an instance lives on: the five homes
-/// `LayerReference::with_instances` can commit to. Internal to the shared
-/// lookup: no panel ever sees it, which is the point.
+/// Which list an instance lives on, for `LayerReference::with_instances`.
+/// Internal to the shared lookup: no panel ever sees it, which is the point.
 #[frb(ignore)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstanceHome {
@@ -41,6 +40,8 @@ pub(crate) enum InstanceHome {
     /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
     /// instance rather than a list, held in `Layer::graph_inputs`.
     GraphInputs,
+    /// A Model layer's material rows, one for each material in its file.
+    Materials,
 }
 
 /// The node graph `layer` places, when it places one.
@@ -1741,6 +1742,8 @@ pub struct BridgeLayerInfo {
     /// file or an import. `LayerReference::get_graph_inputs` offers such a layer a
     /// fresh one, which the user's next edit adopts.
     pub graph_inputs: Option<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// A Model layer's material rows, `None` while its file is being read.
+    pub materials: Option<Vec<crate::api::effect::BridgeEffectInstanceInfo>>,
     /// Whether collapse is set on this layer but something forces an
     /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
     /// which is what the Timeline's collapse cell draws dimmed.
@@ -1999,6 +2002,10 @@ pub(crate) fn read_layer_info(
                 layer.start_offset.0,
                 !layer.is_adjustment(),
             )
+        }),
+        materials: lumit_render::model_material::rows(doc, layer).map(|rows| {
+            let read = |r| crate::api::effect::read_instance_info(r, layer.start_offset.0, true);
+            rows.iter().map(read).collect()
         }),
         collapse_forced: lumit_core::model::collapse_state(
             doc,
@@ -7510,16 +7517,10 @@ impl LayerReference {
         self.with_instances(InstanceHome::Effects, edit)
     }
 
-    /// [`Self::with_effects`] for any of the four instance lists a param
-    /// command can land on — the layer's effect stack, its **styles**
-    /// (docs/impl/layer-styles.md §5), a **group header's** stack in this comp
-    /// (docs/impl/group-effects.md §6), or one **clip's** own rack
-    /// (docs/impl/audio-timeline.md §4).
-    ///
-    /// A style, a header effect and a clip effect are all `EffectInstance`s in
-    /// another list, so the only thing that differs between editing one and
-    /// editing an effect is which list is read and which op commits it. All
-    /// four live here, which is why no command below grows a branch of its own.
+    /// [`Self::with_effects`] for any list a param command can land on
+    /// ([`InstanceHome`]). Each holds `EffectInstance`s, so all that differs is
+    /// which list is read and which op commits it, and no command below grows
+    /// a branch of its own.
     #[frb(ignore)]
     pub(crate) fn with_instances(
         &self,
@@ -7591,6 +7592,7 @@ impl LayerReference {
                     inputs: list.into_iter().next().map(Box::new),
                 }
             }
+            InstanceHome::Materials => self.materials_op(edit)?,
         };
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
@@ -7601,23 +7603,18 @@ impl LayerReference {
     /// **The one find-instance lookup** (docs/impl/layer-styles.md §5,
     /// docs/impl/group-effects.md §6): which list `instance` lives on.
     ///
-    /// The effect stack is searched first, then the style list, then this
-    /// layer's clips, then its own graph Inputs, then the comp's group headers.
-    /// Ids are unique across all five, so the order is only a statement about
-    /// which is the common case. `Effects` for an instance on none of them,
-    /// which leaves the caller's own "no such instance" error to be the one
-    /// the user sees rather than inventing a second one here.
+    /// The effect stack, the style list, a Model layer's materials, this
+    /// layer's clips, its graph Inputs, then the comp's group headers, ids
+    /// unique across them all. `Effects` for one on none of them, which leaves
+    /// the caller's own "no such instance" error to be the one the user sees.
     ///
-    /// The one exception to searching by id is a placed graph's Inputs
-    /// (docs/impl/node-graph-comp.md §5.3): a layer that has none is *offered*
-    /// a fresh instance, so the first commit carries an id no list holds yet
-    /// and [`is_graph_inputs`] recognises it by what it is bound to.
+    /// A placed graph's Inputs (docs/impl/node-graph-comp.md §5.3) a layer
+    /// hasn't got yet are *offered*, so the first commit carries an id no list
+    /// holds and [`is_graph_inputs`] recognises it by what it is bound to.
     ///
     /// Every param command — set a value, move a key, bypass, remove — routes
-    /// through this rather than asking whether its caller was a styles panel
-    /// or a group header's. That is the whole of what makes a style row's and
-    /// a header row's stopwatch, drag and expression the *same* code as an
-    /// effect row's (the shared route, grown its fourth arm).
+    /// through this, which is what makes a style's, a header's and a
+    /// material's rows the *same* code as an effect row's.
     #[frb(ignore)]
     pub(crate) fn instance_home(
         &self,
@@ -7630,6 +7627,9 @@ impl LayerReference {
         }
         if layer.styles.iter().any(|s| s.id == id) {
             return Ok(InstanceHome::Styles);
+        }
+        if lumit_render::model_material::owns(&layer, std::slice::from_ref(instance)) {
+            return Ok(InstanceHome::Materials);
         }
         if let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind {
             if let Some(clip) = clips.iter().find(|c| c.effects.iter().any(|e| e.id == id)) {

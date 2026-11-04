@@ -837,6 +837,9 @@ class BridgeLayerInfo {
   /// fresh one, which the user's next edit adopts.
   final BridgeEffectInstanceInfo? graphInputs;
 
+  /// A Model layer's material rows, `None` while its file is being read.
+  final List<BridgeEffectInstanceInfo>? materials;
+
   /// Whether collapse is set on this layer but something forces an
   /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
   /// which is what the Timeline's collapse cell draws dimmed.
@@ -992,6 +995,7 @@ class BridgeLayerInfo {
     required this.effects,
     required this.styles,
     this.graphInputs,
+    this.materials,
     required this.collapseForced,
     required this.label,
     this.matte,
@@ -1037,6 +1041,7 @@ class BridgeLayerInfo {
       effects.hashCode ^
       styles.hashCode ^
       graphInputs.hashCode ^
+      materials.hashCode ^
       collapseForced.hashCode ^
       label.hashCode ^
       matte.hashCode ^
@@ -1084,6 +1089,7 @@ class BridgeLayerInfo {
           effects == other.effects &&
           styles == other.styles &&
           graphInputs == other.graphInputs &&
+          materials == other.materials &&
           collapseForced == other.collapseForced &&
           label == other.label &&
           matte == other.matte &&
@@ -2938,6 +2944,16 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceApplyEffectPreset(
           that: this, effect: effect, preset: preset, atFrame: atFrame);
 
+  /// Set `material`'s rows to the first material in preset `text`, as one
+  /// undo step, any keyframes starting at comp frame `at_frame`, the
+  /// playhead. The layers its rows read are kept.
+  void applyMaterialPreset(
+          {required BridgeEffectInstance material,
+          required String text,
+          required int atFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceApplyMaterialPreset(
+          that: this, material: material, text: text, atFrame: atFrame);
+
   /// Ask the render for this layer's mesh before it has a puppet — what
   /// arming a puppet tool does, and what makes the first pin placeable
   /// (docs/impl/puppet.md §5).
@@ -3650,6 +3666,14 @@ class LayerReference {
         that: this,
       );
 
+  /// A Model layer's material rows as staged copies, one for each material
+  /// in its file, in the file's order. Empty until the file has been read,
+  /// and on any other kind of layer.
+  List<BridgeEffectInstance> getMaterials() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetMaterials(
+        that: this,
+      );
+
   /// The layer used as this one's matte, if any.
   BridgeMatte? getMatte() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetMatte(
@@ -4112,6 +4136,13 @@ class LayerReference {
           {required BridgeEffectInstance effect, required int newIndex}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceReorderEffect(
           that: this, effect: effect, newIndex: newIndex);
+
+  /// Put row `param` of `material` back to its file's value, as one undo
+  /// step.
+  void resetMaterialRow(
+          {required BridgeEffectInstance material, required String param}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceResetMaterialRow(
+          that: this, material: material, param: param);
 
   /// Which of this layer's property groups the reveal shortcuts should open
   /// (docs/07 §4.3's `U` / `UU`).

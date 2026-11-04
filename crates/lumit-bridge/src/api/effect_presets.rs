@@ -34,6 +34,8 @@ impl LayerReference {
         let comp = self.composition()?;
         let raster = (f64::from(comp.width), f64::from(comp.height));
         let layer = self.item()?;
+        // A 3D model's material starts from its file's own values.
+        let file = lumit_render::model_material::file_rows(&*self.document()?, &layer, id);
         let at = comp
             .frame_rate
             .time_of_frame(at_frame.max(0))
@@ -44,7 +46,10 @@ impl LayerReference {
                 .iter_mut()
                 .find(|e| e.id == id)
                 .ok_or(BridgeError::InvalidEffect)?;
-            lumit_core::fx::presets::apply(instance, &chosen, at.0, raster);
+            match &file {
+                Some(file) => lumit_core::fx::presets::apply_over(instance, &chosen, at.0, file),
+                None => lumit_core::fx::presets::apply(instance, &chosen, at.0, raster),
+            }
             Ok(())
         })
     }

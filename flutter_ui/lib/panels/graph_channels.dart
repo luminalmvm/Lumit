@@ -341,15 +341,22 @@ List<GraphChannel> graphChannels({
     // An effect's parameters, and a **layer style's** on the same road:
     // a style is an effect instance in a second list, so its curve is drawn,
     // edited and coloured by this branch rather than by a copy of it.
-    // A placed graph's Inputs too, whose one instance has no id in the path.
+    // A placed graph's Inputs too, whose one instance has no id in the path,
+    // and a Model layer's materials.
     final styles = path.startsWith('${stylesPath(layerId)}/');
     final inputs = path.startsWith('${inputsPath(layerId)}/');
-    if (inputs || styles || path.startsWith('${effectsPath(layerId)}/')) {
+    final materials = path.startsWith('${materialsPath(layerId)}/');
+    if (inputs ||
+        styles ||
+        materials ||
+        path.startsWith('${effectsPath(layerId)}/')) {
       final head = inputs
           ? inputsPath(layerId)
-          : styles
-              ? stylesPath(layerId)
-              : effectsPath(layerId);
+          : materials
+              ? materialsPath(layerId)
+              : styles
+                  ? stylesPath(layerId)
+                  : effectsPath(layerId);
       final rest = path.substring(head.length + 1);
       final slash = inputs ? -1 : rest.indexOf('/');
       if (!inputs && slash <= 0) continue;
@@ -359,9 +366,11 @@ List<GraphChannel> graphChannels({
       final paramId = rest.substring(slash + 1);
       for (final fx in inputs
           ? [if (graphInputs != null) graphInputs]
-          : styles
-              ? entry.info.styles
-              : entry.info.effects) {
+          : materials
+              ? entry.info.materials ?? const <BridgeEffectInstanceInfo>[]
+              : styles
+                  ? entry.info.styles
+                  : entry.info.effects) {
         if (fx.id.toString() != effectId) continue;
         // The rows an instance derives are rows like any other: a Custom
         // controls slider is keyed and eased as a declared one is.

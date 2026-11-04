@@ -92,7 +92,8 @@ pub mod schedule;
 ///   they are handed.
 /// * 25: Model layers cast and take shadows.
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
-pub const ALGO_VERSION: u32 = 26;
+/// * 27: a 3D model's glass and clearcoat from its file are drawn.
+pub const ALGO_VERSION: u32 = 27;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -1755,11 +1756,10 @@ fn feed_layer(
         true,
     )?;
 
-    // The **style stack** (docs/impl/layer-styles.md §1), immediately
-    // after it and through the very same fold: styles are picture, not metadata,
-    // so editing one has to retire the cached frames it changed. Emits nothing
-    // at all when the list is empty, which is every layer that has none — so
-    // every key written before styles existed is still the key that layer names.
+    // The **style stack** (docs/impl/layer-styles.md §1), and a Model layer's
+    // material rows, which draw whatever the fx switch says, through the very
+    // same fold: they're picture, not metadata. Nothing at all for an empty
+    // list, so every key written before either existed is still that layer's.
     feed_effect_stack(
         h,
         layer.switches.fx,
@@ -1773,6 +1773,10 @@ fn feed_layer(
         stamper,
         visited,
         true,
+    )?;
+    let (m, l) = (lumit_core::model_material::stored(layer), Some(layer));
+    feed_effect_stack(
+        h, true, &m, l, comp, doc, t, lt, quality, stamper, visited, true,
     )?;
 
     // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
@@ -2408,12 +2412,8 @@ fn feed_source(
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
         }
         LayerKind::Light { light } => {
-            // A light draws nothing of its own, but unlike a Camera it is not
-            // enough to say so: what it *is* changes every frame that reads it
-            // (the Lens flare's Lights mode), so its own properties have to be
-            // in the name or moving a light would serve a stale frame. The
-            // transform is hashed at the layer level, like every other
-            // layer's, which covers where it is.
+            // A light draws nothing, but the Lens flare's Lights mode reads what it
+            // *is*, so its properties are in the name. Where it is comes with the layer's.
             h.update(b"light");
             if let Ok(json) = serde_json::to_vec(light) {
                 h.update(&json);
@@ -4808,12 +4808,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 26, which renamed every frame.
+        // Pinned under ALGO_VERSION 27, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                227_890_055_451_045_895_250_876_588_966_720_741_802,
-                292_465_701_935_215_467_852_406_669_579_654_097_275
+                118_634_670_240_222_371_657_714_716_082_324_829_986,
+                221_618_990_867_148_256_207_561_963_013_861_605_031
             )
         );
 

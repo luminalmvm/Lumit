@@ -83,6 +83,9 @@ core. B27 and B28 are megabytes: decoded sound is kept in two-second blocks near
 playhead under one 512 MB budget, never a whole file. B29 is B4's wait, paid once per
 file: its peaks are then read from a file beside its frame index.
 
+A run of 3D layers with a model of glass in it costs about an adjustment layer plus the
+run drawn again, since the glass bends the run drawn without it.
+
 **Document scale.** With 200 comps, 5,000 layers, 250,000 keyframes and 2,000 footage
 items open, B1 still holds, an edit or undo commits in 16 ms, it opens in 5 s and saves in
 2 s without blocking. So the Timeline, Project panel and Graph editor draw only what's on

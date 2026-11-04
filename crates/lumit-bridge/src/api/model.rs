@@ -4,10 +4,13 @@ use flutter_rust_bridge::frb;
 use lumit_core::model::{LayerKind, ProjectItem};
 use lumit_core::model_layer::{ModelSettings, UpAxis};
 
+use crate::api::effect::BridgeEffectInstance;
+use crate::api::layer::InstanceHome;
 use crate::api::{
     composition::CompositionReference, footage::FootageReference, layer::LayerReference,
     BridgeError,
 };
+use lumit_core::model::{EffectInstance, EffectValue};
 
 /// Which of a 3D model file's axes points up.
 #[frb(non_opaque)]
@@ -221,7 +224,11 @@ impl LayerReference {
     /// other kind of layer.
     #[frb(sync)]
     pub fn set_model_settings(&self, settings: BridgeModelSettings) -> Result<(), BridgeError> {
-        let LayerKind::Model { item, .. } = self.item()?.kind else {
+        let LayerKind::Model {
+            item,
+            settings: kept,
+        } = self.item()?.kind
+        else {
             return Err(BridgeError::InvalidLayer);
         };
         let settings = ModelSettings {
@@ -232,6 +239,7 @@ impl LayerReference {
             // Nought would shrink the model to nothing and no further.
             units: settings.units.max(f64::EPSILON),
             fit: settings.fit,
+            materials: kept.materials,
         };
         self.commit(lumit_core::ops::Op::SetLayerKind {
             comp: self.comp_id,
@@ -242,4 +250,139 @@ impl LayerReference {
             }),
         })
     }
+
+    /// A Model layer's material rows as staged copies, one for each material
+    /// in its file, in the file's order. Empty until the file has been read,
+    /// and on any other kind of layer.
+    #[frb(sync)]
+    pub fn get_materials(&self) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
+        let (doc, layer) = (self.snapshot()?, self.item()?);
+        let rows = lumit_render::model_material::rows(&doc, &layer);
+        Ok(rows
+            .unwrap_or_default()
+            .into_iter()
+            .map(|rows| BridgeEffectInstance::new(rows, layer.start_offset.0))
+            .collect())
+    }
+
+    /// Set `material`'s rows to the first material in preset `text`, as one
+    /// undo step, any keyframes starting at comp frame `at_frame`, the
+    /// playhead. The layers its rows read are kept.
+    #[frb(sync)]
+    pub fn apply_material_preset(
+        &self,
+        material: &BridgeEffectInstance,
+        text: String,
+        at_frame: i64,
+    ) -> Result<(), BridgeError> {
+        let mut found = lumit_core::preset::from_json(&text)
+            .ok()
+            .and_then(|preset| {
+                (preset.effects.into_iter())
+                    .find(|e| e.effect.match_name == lumit_core::model_material::MATCH_NAME)
+            })
+            .ok_or(BridgeError::InvalidPreset)?;
+        let (comp, layer) = (self.composition()?, self.item()?);
+        let at = (comp.frame_rate.time_of_frame(at_frame.max(0)))
+            .and_then(|t| t.delta(layer.start_offset))
+            .map_err(|_| BridgeError::InvalidTime)?;
+        let found_keys = std::slice::from_mut(&mut found);
+        if let Some(first) = lumit_core::preset::first_key_time(found_keys) {
+            let delta =
+                at.0.checked_sub(first)
+                    .map_err(|_| BridgeError::InvalidTime)?;
+            lumit_core::preset::shift_keys(found_keys, delta);
+        }
+        let id = material.id();
+        self.with_instances(InstanceHome::Materials, move |list| {
+            let rows = list
+                .iter_mut()
+                .find(|e| e.id == id)
+                .ok_or(BridgeError::InvalidEffect)?;
+            for p in &mut rows.params {
+                let theirs = found.params.iter().find(|q| q.id == p.id);
+                if let Some(q) = theirs.filter(|q| !matches!(q.value, EffectValue::Layer(_))) {
+                    p.value = q.value.clone();
+                }
+            }
+            Ok(())
+        })
+    }
+
+    /// Put row `param` of `material` back to its file's value, as one undo
+    /// step.
+    #[frb(sync)]
+    pub fn reset_material_row(
+        &self,
+        material: &BridgeEffectInstance,
+        param: String,
+    ) -> Result<(), BridgeError> {
+        let (doc, layer, id) = (self.snapshot()?, self.item()?, material.id());
+        let file = lumit_render::model_material::file_rows(&doc, &layer, id)
+            .ok_or(BridgeError::InvalidEffect)?;
+        let value = (file.params.into_iter())
+            .find(|p| p.id == param)
+            .ok_or(BridgeError::InvalidEffect)?
+            .value;
+        self.with_instances(InstanceHome::Materials, move |list| {
+            let rows = list.iter_mut().find(|e| e.id == id);
+            let row = rows.and_then(|r| r.params.iter_mut().find(|p| p.id == param));
+            row.ok_or(BridgeError::InvalidEffect)?.value = value;
+            Ok(())
+        })
+    }
+
+    /// The op that keeps a Model layer's material rows once `edit` has
+    /// changed them: only the materials that differ from the file.
+    #[frb(ignore)]
+    pub(crate) fn materials_op(
+        &self,
+        edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
+    ) -> Result<lumit_core::ops::Op, BridgeError> {
+        let (doc, layer) = (self.snapshot()?, self.item()?);
+        let mut list =
+            lumit_render::model_material::rows(&doc, &layer).ok_or(BridgeError::InvalidEffect)?;
+        edit(&mut list)?;
+        let materials = lumit_render::model_material::kept(&doc, &layer, &list)
+            .ok_or(BridgeError::StaleEffectStack)?;
+        let LayerKind::Model { item, settings } = layer.kind else {
+            return Err(BridgeError::InvalidLayer);
+        };
+        let settings = Box::new(ModelSettings {
+            materials,
+            ..*settings
+        });
+        Ok(lumit_core::ops::Op::SetLayerKind {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            kind: Box::new(LayerKind::Model { item, settings }),
+        })
+    }
+}
+
+/// The user's saved material presets, sorted by name.
+#[frb(sync)]
+pub fn list_material_presets() -> Vec<crate::api::effect::BridgePresetInfo> {
+    lumit_project::presets_dir()
+        .map(|dir| {
+            crate::api::effect::presets_in(&dir, lumit_core::model_material::PRESET_EXTENSION)
+        })
+        .unwrap_or_default()
+}
+
+/// A number that moves when a 3D model's file starts or finishes being read,
+/// which is when a Model layer's material rows come.
+#[frb(sync)]
+pub fn model_reads() -> u64 {
+    lumit_render::model::reads()
+}
+
+/// `material`'s rows as the text of a preset named `name`.
+#[frb(sync)]
+pub fn material_preset(
+    material: &BridgeEffectInstance,
+    name: String,
+) -> Result<String, BridgeError> {
+    lumit_core::preset::to_json(&name, &[material.get_effects()])
+        .map_err(|_| BridgeError::InvalidPreset)
 }
