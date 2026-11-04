@@ -1,0 +1,73 @@
+---
+title: Depth points
+description: "Draws a shot as points in 3D space, pushed back by its depth."
+---
+
+Depth points is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Draws each pixel of the layer's picture as a point in the comp's 3D space, on the ray from
+a camera through that pixel. From that camera the points line up with the footage. From
+any other camera or 3D view they are the shape the depth describes.
+
+Adding it turns the layer's 3D switch on. Off a 3D layer it leaves the picture alone. The
+points are seen through the comp's camera and views, pass in front of and behind other 3D
+layers and models, and take the comp's lights where the layer accepts them.
+
+The depth comes from **Analyse**, the same reading the [Depth](/effects/utility/depth/)
+effect makes, or from a **Depth layer**. With neither, the points lie flat on the layer and
+the row under **Analyse** says **Not analysed yet**.
+
+:::note[Not built]
+Camera depth of field and motion blur on the points. Points are not handed on as a Points
+stream. A 3D precomp as the Depth layer reads as its picture, not its distances.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Analyse** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
+| **Depth layer** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Camera** | Layer | Any layer in the composition | None | - |
+| **Depth** | Slider | 0 to 100; up to 190 | 50 | Per cent |
+| **Point size** | Slider | 1 to 20; higher | 2 | Pixels at composition size |
+| **Density** | Slider | 0 to 100 | 100 | Per cent |
+
+In the Effect Controls panel:
+
+- **Frames** is editable while **Depth layer** names no layer.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Analyse**: read the shot and file its depth. Only one analysis runs at a time.
+- **Cancel**: stop a run and keep the frames already read.
+- **Frames**: which frames **Analyse** reads.
+- **Depth layer**: a picture to read depth from instead, nearer being brighter.
+- **Invert**: read the depth the other way up, far being bright.
+- **Camera**: the Camera layer the points line up from. Unset, the comp's own camera.
+- **Depth**: how far the points spread along their rays. At 0% they are flat on the layer.
+- **Point size**: how wide a point is from that camera.
+- **Density**: how many of the picture's pixels get a point. Points stay where they are as
+  it moves.
+
+## Related
+
+- [Depth](/effects/utility/depth/)
+- [Particulate](/effects/generate/particulate/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)
