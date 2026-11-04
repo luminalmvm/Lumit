@@ -64,6 +64,30 @@ pub(super) fn below_picture(
     }
 }
 
+/// A layer's own pixels as an input slot, with nothing done to them.
+pub(super) fn plain_input(
+    doc: &Document,
+    layer: &lumit_core::model::Layer,
+    (rgba, tex_w, tex_h, natural, format): super::LayerPixels,
+) -> DofInputDraw {
+    DofInputDraw {
+        rgba: rgba.to_vec(),
+        tex_w,
+        tex_h,
+        format,
+        fx: Default::default(),
+        colour_tables: Default::default(),
+        flare_lens_files: Vec::new(),
+        roto_mattes: Vec::new(),
+        planes: Vec::new(),
+        nested: None,
+        colour_space: crate::colour::footage_colour_space(doc, &layer.kind),
+        natural: [natural.0, natural.1],
+        graph_fx: Vec::new(),
+        place: None,
+    }
+}
+
 /// Effect `e` on layer `owner`'s pictures at the moments its stack names at
 /// comp time `t`, first first, each made by walking the comp again at that
 /// moment. Absent unless `e` is the effect in its stack that shows them.

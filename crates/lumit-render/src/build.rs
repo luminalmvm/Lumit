@@ -2650,25 +2650,7 @@ fn comp_walk(
         let mut input = match (below, nested_input_for(src)) {
             (Some(below), _) => below,
             (None, Some(nested)) => nested,
-            (None, None) => {
-                let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
-                DofInputDraw {
-                    rgba: rgba.to_vec(),
-                    tex_w,
-                    tex_h,
-                    format,
-                    fx: Default::default(),
-                    colour_tables: Default::default(),
-                    flare_lens_files: Vec::new(),
-                    roto_mattes: Vec::new(),
-                    planes: Vec::new(),
-                    nested: None,
-                    colour_space: crate::colour::footage_colour_space(doc, &src.kind),
-                    natural: [natural.0, natural.1],
-                    graph_fx: Vec::new(),
-                    place: None,
-                }
-            }
+            (None, None) => moments::plain_input(doc, src, pixels_for(src)?),
         };
         input.place = place;
         if src.switches.fx {
