@@ -185,6 +185,8 @@ impl Realiser<'_> {
             centre,
             radius,
             lights: lights.to_vec(),
+            volumes: Vec::new(),
+            no_shadow: None,
         };
         self.fx
             .haze(&self.ctx, &frame, &depth, &op, casters.as_ref(), maps)
