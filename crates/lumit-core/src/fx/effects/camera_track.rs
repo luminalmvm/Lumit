@@ -78,6 +78,17 @@ pub struct CameraTrack {
     /// tracker's own default.
     #[choice(options = DENSITY_OPTIONS, default = DENSITY_DEFAULT, label = "Feature density")]
     pub density: u32,
+    /// The lens in millimetres on 35 mm film, as a camera's own Focal length row
+    /// reads. Nought leaves the solve to work it out.
+    #[slider(
+        label = "Focal length",
+        min = 0.0,
+        max = 300.0,
+        default = 0.0,
+        hard_min = 0.0,
+        unit = Raw
+    )]
+    pub focal_length: f32,
     /// Whether the layer's masks exclude regions from tracking (the mask
     /// carriage, which the tracker reads). On by default: a mask drawn on a
     /// tracked layer is almost always drawn round the thing that moves.

@@ -102,6 +102,8 @@ pub struct AnalysisSettings {
     /// belongs in the cache key: two runs over the same boxes asking different
     /// questions are two answers.
     pub follow: u32,
+    /// The Focal length row's bits, so this stays `Eq`. Read by [`Self::focal`].
+    pub focal_bits: u64,
 }
 
 impl Default for AnalysisSettings {
@@ -110,11 +112,18 @@ impl Default for AnalysisSettings {
             density: lumit_core::fx::effects::camera_track::DENSITY_DEFAULT,
             use_masks: true,
             follow: lumit_core::fx::effects::planar_track::FOLLOW_DEFAULT,
+            focal_bits: 0,
         }
     }
 }
 
 impl AnalysisSettings {
+    /// The lens the Focal length row gives, in millimetres. `None` to solve it.
+    #[must_use]
+    pub fn focal(&self) -> Option<f64> {
+        Some(f64::from_bits(self.focal_bits)).filter(|f| f.is_finite() && *f > 0.0)
+    }
+
     /// Read the settings off one Camera track instance. A parameter the
     /// instance does not carry — an older project, a hand-edited file — reads
     /// as the effect's own default rather than failing (docs/14 §4).
@@ -133,6 +142,10 @@ impl AnalysisSettings {
             follow: match fx.param(lumit_core::track::FOLLOW_PARAM) {
                 Some(EffectValue::Choice(v)) => *v,
                 _ => d.follow,
+            },
+            focal_bits: match fx.param("focal_length") {
+                Some(EffectValue::Float(p)) => p.value_at(0.0).to_bits(),
+                _ => d.focal_bits,
             },
         }
     }
@@ -386,6 +399,11 @@ impl AnalysisKey {
         if settings.follow != 0 {
             h.update(b"follow/");
             h.update(&settings.follow.to_le_bytes());
+        }
+        // The same, so a track with the row at nought keeps its name too.
+        if let Some(focal) = settings.focal() {
+            h.update(b"focal/");
+            h.update(&focal.to_le_bytes());
         }
         masks.feed(&mut h);
         AnalysisKey(*h.finalize().as_bytes())
@@ -1517,6 +1535,7 @@ fn analyse(
     report: &dyn Fn(Progress),
 ) -> Result<(f64, usize, Answer), AnalysisError> {
     let kind = job.kind;
+    let focal = job.settings.focal();
     if let JobKind::TrackPoints(analysis) = kind {
         return follow_points(job, analysis, cancel, report);
     }
@@ -1569,13 +1588,18 @@ fn analyse(
     let pairs = select_keyframes(&set, &GeometrySettings::default());
     segment_dynamic_tracks(&mut set, &pairs, &SegmentSettings::default());
     let zooms = detect_zoom(&set, &ZoomSettings::default());
+    let settings = SolveSettings {
+        focal_px: focal.map(|mm| {
+            let width = set.source_size().0 as f64;
+            lumit_core::camera::zoom_for_focal(mm, lumit_core::camera::FILM_MM, width)
+        }),
+        ..SolveSettings::default()
+    };
     let mut solve =
-        solve_camera_cancellable(&set, &pairs, &zooms, &SolveSettings::default(), &stop).map_err(
-            |e| match e {
-                SolveError::Cancelled => AnalysisError::Cancelled,
-                other => AnalysisError::Solve(other),
-            },
-        )?;
+        solve_camera_cancellable(&set, &pairs, &zooms, &settings, &stop).map_err(|e| match e {
+            SolveError::Cancelled => AnalysisError::Cancelled,
+            other => AnalysisError::Solve(other),
+        })?;
     rescale(&mut solve, scale);
     Ok((fps, clip_frames, Answer::Camera(Box::new(solve))))
 }

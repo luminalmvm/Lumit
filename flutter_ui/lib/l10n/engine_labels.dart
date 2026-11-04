@@ -1012,6 +1012,7 @@ Map<String, String> get _built => {
       "Falloff": l10n.fxFalloff,
       "Far blur": l10n.fxFarBlur,
       "Feature density": l10n.fxFeatureDensity,
+      "Focal length": l10n.fxFocalLength,
       "Feather": l10n.fxFeather,
       "Field of view": l10n.fxFieldOfView,
       "File": l10n.fxFile,
