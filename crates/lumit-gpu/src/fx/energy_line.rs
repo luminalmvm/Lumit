@@ -143,7 +143,7 @@ impl EnergyLineFx {
         );
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-energy-line"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
+            source: wgpu::ShaderSource::Wgsl(super::at_depth(working, &source).into()),
         });
         let compute = |label: &str, entry: &str, slots: &[(u32, Slot)]| {
             let bgl = bind_layout(device, label, slots, wgpu::ShaderStages::COMPUTE);

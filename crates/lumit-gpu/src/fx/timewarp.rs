@@ -43,7 +43,9 @@ impl TimewarpKernels {
         let device = &ctx.device;
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-timewarp"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_timewarp.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                super::at_depth(ctx.working(), include_str!("../fx_timewarp.wgsl")).into(),
+            ),
         });
         let texture = |binding: u32| wgpu::BindGroupLayoutEntry {
             binding,
@@ -68,7 +70,7 @@ impl TimewarpKernels {
                     visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::StorageTexture {
                         access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: wgpu::TextureFormat::Rgba16Float,
+                        format: ctx.working(),
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,

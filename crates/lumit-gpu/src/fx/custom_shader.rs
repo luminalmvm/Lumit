@@ -370,7 +370,7 @@ impl FxEngine {
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("fx-custom-shader"),
-                source: wgpu::ShaderSource::Wgsl(assembled.into()),
+                source: wgpu::ShaderSource::Wgsl(super::at_depth(ctx.working(), assembled).into()),
             });
         let pipeline = Arc::new(ctx.device.create_compute_pipeline(
             &wgpu::ComputePipelineDescriptor {

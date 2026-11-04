@@ -887,8 +887,7 @@ impl LensFlareFx {
         let deposit_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("fx-lens-flare-deposit-layout"),
             entries: &[
-                // The splats, the f32 accumulator they scatter into, the dims,
-                // and the flare texture the resolve writes once at the end.
+                // The splats, their f32 accumulator, the dims, and the flare it resolves into.
                 storage_entry(0, true, c),
                 storage_entry(1, false, c),
                 uniform_entry(2, c),
@@ -942,6 +941,7 @@ impl LensFlareFx {
             ],
         });
 
+        let kernel = |text: &str| wgpu::ShaderSource::Wgsl(super::at_depth(format, text).into());
         let trace_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-lens-flare-trace"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_trace.wgsl").into()),
@@ -952,15 +952,15 @@ impl LensFlareFx {
         });
         let deposit_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-lens-flare-deposit"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_deposit.wgsl").into()),
+            source: kernel(include_str!("../fx_lens_flare_deposit.wgsl")),
         });
         let combine_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-lens-flare-combine"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_combine.wgsl").into()),
+            source: kernel(include_str!("../fx_lens_flare_combine.wgsl")),
         });
         let blur_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-lens-flare-blur"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_blur.wgsl").into()),
+            source: kernel(include_str!("../fx_lens_flare_blur.wgsl")),
         });
 
         let trace_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

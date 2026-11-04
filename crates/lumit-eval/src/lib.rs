@@ -88,12 +88,12 @@ pub mod schedule;
 /// * 23: a blurred layer is drawn with more copies the faster it moves, its
 ///   parents and the camera move them too, a still one is drawn once, and the
 ///   inner layers of a collapsed Precomp blur.
-/// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
-///   they are handed.
+/// * 24: Corner pin and Bezier warp on a node graph box draw past their picture.
 /// * 25: Model layers cast and take shadows.
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
 /// * 27: a 3D model's glass and clearcoat from its file are drawn.
-pub const ALGO_VERSION: u32 = 27;
+/// * 28: a project at 8 or 32 bits draws its effects.
+pub const ALGO_VERSION: u32 = 28;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4808,12 +4808,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 27, which renamed every frame.
+        // Pinned under ALGO_VERSION 28, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                118_634_670_240_222_371_657_714_716_082_324_829_986,
-                221_618_990_867_148_256_207_561_963_013_861_605_031
+                328_268_729_066_176_038_303_228_577_772_713_744_142,
+                36_726_106_807_010_197_772_526_010_792_187_696_186
             )
         );
 

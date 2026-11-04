@@ -102,10 +102,12 @@ impl LensDirtFx {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-lens-dirt"),
             source: wgpu::ShaderSource::Wgsl(
-                format!(
-                    "{}{}",
-                    include_str!("../fx_noise_core.wgsl"),
-                    include_str!("../fx_lens_dirt.wgsl")
+                super::at_depth(
+                    ctx.working(),
+                    concat!(
+                        include_str!("../fx_noise_core.wgsl"),
+                        include_str!("../fx_lens_dirt.wgsl")
+                    ),
                 )
                 .into(),
             ),

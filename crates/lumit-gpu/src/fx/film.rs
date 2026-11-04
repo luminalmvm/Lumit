@@ -163,10 +163,12 @@ impl FilmFx {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-film"),
             source: wgpu::ShaderSource::Wgsl(
-                format!(
-                    "{}{}",
-                    include_str!("../fx_noise_core.wgsl"),
-                    include_str!("../fx_film.wgsl")
+                super::at_depth(
+                    ctx.working(),
+                    concat!(
+                        include_str!("../fx_noise_core.wgsl"),
+                        include_str!("../fx_film.wgsl")
+                    ),
                 )
                 .into(),
             ),

@@ -10,7 +10,9 @@ impl LensBlurFx {
         let device = &ctx.device;
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-lens-blur"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_blur.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                super::at_depth(ctx.working(), include_str!("../fx_lens_blur.wgsl")).into(),
+            ),
         });
         let layout = |label: &str, slots: &[(u32, Slot)], vis: wgpu::ShaderStages| {
             bind_layout(device, label, slots, vis)
