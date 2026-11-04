@@ -56,7 +56,7 @@ pub(super) struct Live {
     name: [u8; 32],
     work: Arc<SmokeWork>,
     ledger: Ledger,
-    /// The models it reads, with where each one's distances start in `work`.
+    /// The Model layers it reads, with where each one's distances start in `work`.
     models: Vec<(Uuid, Arc<distances::Distances>, u32)>,
     _held: Option<Reservation>,
 }
@@ -204,7 +204,7 @@ enum Emits<'a> {
     Patch,
     Nothing,
     Particles(&'a Layer, Uuid),
-    Model(&'a Layer, uuid::Uuid),
+    Model(&'a Layer),
 }
 
 fn emits<'a>(src: &Source<'a>) -> Emits<'a> {
@@ -221,7 +221,7 @@ fn emits<'a>(src: &Source<'a>) -> Emits<'a> {
             })
             .unwrap_or(Emits::Nothing),
         Some(EffectValue::Choice(2)) => match source.map(|l| (l, &l.kind)) {
-            Some((l, LayerKind::Model { item, .. })) => Emits::Model(l, *item),
+            Some((l, LayerKind::Model { .. })) => Emits::Model(l),
             _ => Emits::Nothing,
         },
         _ => Emits::Patch,
@@ -234,28 +234,32 @@ fn emits<'a>(src: &Source<'a>) -> Emits<'a> {
 pub(super) fn fresh(fx: &FxEngine, ctx: &GpuContext, src: &Source<'_>) -> Option<Live> {
     let grid = smoke::grid(src.doc, src.comp, src.layer, src.inst);
     let what = emits(src);
-    // Every model the walk reads, one table on the card. One not read yet is a
-    // walk not started, which the next frame tries again.
-    let mut items: Vec<Uuid> = Vec::new();
-    if let Emits::Model(_, item) = &what {
-        items.push(*item);
+    // Every Model layer the walk reads, one table on the card. One not read yet
+    // is a walk not started, which the next frame tries again.
+    let mut readers: Vec<&Layer> = Vec::new();
+    if let Emits::Model(l) = &what {
+        readers.push(l);
     }
     let hits: Vec<&Layer> = smoke::solid_layers(src.comp, src.inst, src.layer.id)
         .take(MAX_SOLIDS)
         .collect();
-    for l in &hits {
-        if let LayerKind::Model { item, .. } = &l.kind {
-            if !items.contains(item) {
-                items.push(*item);
-            }
-        }
-    }
-    let mut models = Vec::with_capacity(items.len());
+    readers.extend(hits.iter().copied());
+    let mut models: Vec<(Uuid, Arc<distances::Distances>, u32)> = Vec::new();
     let mut table = Vec::new();
-    for item in items {
-        let d = distances::of(src.doc, item)?;
-        models.push((item, Arc::clone(&d), table.len() as u32));
-        table.extend_from_slice(&d.values);
+    for l in readers {
+        let LayerKind::Model { item, settings } = &l.kind else {
+            continue;
+        };
+        let d = distances::of(src.doc, *item, settings)?;
+        // A file on two takes has two shapes, and two layers in one pose share one.
+        let at = match models.iter().find(|m| Arc::ptr_eq(&m.1, &d)) {
+            Some(same) => same.2,
+            None => {
+                table.extend_from_slice(&d.values);
+                (table.len() - d.values.len()) as u32
+            }
+        };
+        models.push((l.id, d, at));
     }
     let bytes = lumit_gpu::fx::smoke::work_bytes(grid.cells);
     let device_most = u64::from(ctx.device.limits().max_storage_buffer_binding_size)
@@ -375,8 +379,8 @@ fn prepare_emit(
             let to_cells = cells_to_comp.inverse() * Mat4::from_cols_array_2d(&world);
             fx.smoke_splat(ctx, &live.work, &parts.state, parts.cap, rows_of(to_cells));
         }
-        Emits::Model(layer, item) => {
-            let (_, d, at) = live.models.iter().find(|m| m.0 == item)?;
+        Emits::Model(layer) => {
+            let (_, d, at) = live.models.iter().find(|m| m.0 == layer.id)?;
             let cell_to_comp = model_place(src, layer, d, tc)?;
             step.emit[3] = EmitKind::Model as u32 as f32;
             step.to_model = rows_of(cell_to_comp.inverse() * cells_to_comp);
@@ -396,8 +400,8 @@ fn solids_at(src: &Source<'_>, live: &Live, tc: f64, grid: &Grid) -> Vec<SmokeSo
     smoke::solid_layers(src.comp, src.inst, src.layer.id)
         .take(MAX_SOLIDS)
         .filter_map(|l| {
-            let (now, was, lo, hi, cells, kind) = if let LayerKind::Model { item, .. } = &l.kind {
-                let (_, d, at) = live.models.iter().find(|m| m.0 == *item)?;
+            let (now, was, lo, hi, cells, kind) = if matches!(l.kind, LayerKind::Model { .. }) {
+                let (_, d, at) = live.models.iter().find(|m| m.0 == l.id)?;
                 let [x, y, z] = d.cells;
                 (
                     model_place(src, l, d, tc)?,

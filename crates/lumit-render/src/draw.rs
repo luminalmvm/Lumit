@@ -285,12 +285,23 @@ pub struct NestedInputDraw {
     pub key: Option<u128>,
     /// How many of the comp's pixels make a metre, off its camera.
     pub px_per_metre: f64,
-    /// Draw the comp's 3D layers as distance from its camera instead of its
-    /// picture: what a lens effect's Depth row reads from a Precomp.
-    pub scene_depth: bool,
+    /// What to draw of the comp's 3D layers instead of its picture: their
+    /// distance from its camera, for a lens effect's Depth row, or another
+    /// pass, for a Scene pass or a Part matte. `None` is its picture.
+    pub read: Option<lumit_core::fx::effects::scene_pass::SceneRead>,
     /// Also hand over the 3D layers themselves, for rays to meet: a Depth row
     /// naming its own layer's precomp, on an effect that traces rays.
     pub trace_layers: bool,
+}
+
+impl NestedInputDraw {
+    /// Whether it reads as distance from its camera rather than a picture.
+    pub(crate) fn reads_depth(&self) -> bool {
+        use lumit_core::fx::effects::scene_pass::PassKind;
+        self.read
+            .as_ref()
+            .is_some_and(|r| r.pass == PassKind::Depth)
+    }
 }
 
 /// One node graph's picture as plain data (docs/impl/node-graph-comp.md §2.3):

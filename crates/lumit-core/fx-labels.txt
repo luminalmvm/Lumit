@@ -60,6 +60,7 @@ Anchor y
 Angle
 Angle control
 Angle offset
+Angular
 Animate
 Animation
 Anticlockwise
@@ -82,6 +83,7 @@ Audio level
 Auto
 Away from points
 B
+Back
 Background
 Backing
 Backward
@@ -126,7 +128,10 @@ Beats
 Behind
 Bend
 Between
+Bevel
 Bevel and emboss
+Bevel depth
+Bevel segments
 Bevel style
 Bezier warp
 BiRefNet
@@ -271,6 +276,7 @@ Composite
 Composite on original
 Compositing
 Compressor
+Concave
 Conductivity state
 Confidence
 Connect points
@@ -280,6 +286,7 @@ Constant length
 Contrast
 Controls
 Conversion
+Convex
 Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
@@ -468,6 +475,7 @@ Explosion
 Exposure
 Expression
 Extract channels
+Extrusion depth
 F-stop
 Fade
 Fade in
@@ -520,6 +528,7 @@ Flock radius
 Flow points
 Flow resolution
 Flow smoothness
+Focal length
 Focus distance
 Focus distance (m)
 Focus map
@@ -549,6 +558,7 @@ From
 From group
 From x
 From y
+Front
 Frosted glass
 Fuel
 Fujicolor C200
@@ -564,6 +574,7 @@ Gate weave
 Gaussian
 Gaussian blur
 Generate
+Geometry options
 Ghost
 Ghost intensity
 Ghost softness
@@ -639,6 +650,7 @@ Highlight tonal width
 Highlights
 Hold
 Hold off
+Hole bevel depth
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -885,6 +897,7 @@ Normal
 Normal layer
 Normal strength
 Normalised
+Normals
 Not picked
 Note
 Nothing
@@ -953,10 +966,14 @@ Padding y
 Paint style
 Parametric EQ
 Part
+Part id
+Part matte
 Particle
 Particle blend
 Particles from a layer
 Particulate
+Parts
+Pass
 Passes
 Path
 Path overlap
@@ -1162,6 +1179,7 @@ Scale x %
 Scale y %
 Scanlines
 Scatter
+Scene pass
 Scramble rate
 Scratches
 Screen
@@ -1212,6 +1230,7 @@ Shutter
 Shutter angle
 Shutter phase
 Siceliot
+Side
 Sides
 Simulate
 Simulation

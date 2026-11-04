@@ -45,6 +45,7 @@ composites over it.
 | **Part** | One node of a 3D model's file, listed under its Model layer. Only a part with a changed row is saved |
 | **Smoke and fire** | An effect that turns a 3D layer into a box of simulated gas, which the volumetric walk draws. A `.vdb` file opens as a Model layer with no faces and draws the same way. |
 | **Depth points** | An effect that draws a shot as points in the comp's 3D space, each on its ray from a camera, placed by the depth from Analyse or a Depth layer |
+| **Geometry options** | A Text or Shape layer's Extrusion depth and bevel, which make its outline a solid in the comp's 3D space, with **Front**, **Bevel**, **Side** and **Back** materials |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
@@ -119,6 +120,8 @@ Not interchangeable.
 | **Blend mode** | How a layer composites over what's below |
 | **Effect** | One operation in a layer's **effect stack**, or one box in a node graph |
 | **Source layer** | Another layer an effect reads as an input, such as the one Emit from image takes its points from |
+| **Scene pass** | What a 3D precomp knows about its pixels, handed to effects: **Normals**, **Position**, **Part id** and **Depth** |
+| **Part** | A node of a 3D model, each material of a node with more than one, or a whole 3D layer, as a scene pass counts them. Its number comes from its layer and its names. **Part matte** keeps the parts picked |
 | **Driver** | A node that makes a value rather than a picture and drives a parameter through a wire |
 | **Read**, **Input**, **Output** nodes | Bring an item in, take a value or picture from outside, the one picture the graph shows |
 | **Merge**, **Switch**, **Time offset** nodes | A over B, pick one input, show the input at another time |

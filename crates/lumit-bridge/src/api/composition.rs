@@ -1639,16 +1639,16 @@ impl CompositionReference {
             layer: lumit_core::model::Layer,
         }
         let copied: Copied = serde_json::from_str(&text).map_err(|_| BridgeError::InvalidItem)?;
-        let mut layer = copied.layer;
+        let mut layer = copied.layer.clone();
         let comp = self.composition()?;
 
         layer.id = Uuid::now_v7();
         for effect in &mut layer.effects {
             effect.id = Uuid::now_v7();
         }
-        // A reference only survives if what it names is here. Pasting back into
-        // the comp it was copied from keeps both; pasting elsewhere keeps
-        // neither, because neither id means anything there.
+        lumit_render::passes::follow_copy(&*self.document()?, &copied.layer, &mut layer);
+        // A reference only survives if what it names is here, which is only in
+        // the comp it was copied from.
         let here = |id: Uuid| copied.comp == self.id && comp.layers.iter().any(|l| l.id == id);
         if layer.parent.is_some_and(|p| !here(p)) {
             layer.parent = None;
@@ -1758,7 +1758,8 @@ impl CompositionReference {
         }
         // All at once, so a separate copy that names a layer in another one
         // follows it to its new id.
-        crate::edits::fresh_ids(&mut made).ok_or(BridgeError::InvalidComp)?;
+        lumit_render::passes::fresh_ids_keeping_parts(&doc, &mut made)
+            .ok_or(BridgeError::InvalidComp)?;
         let mut ops: Vec<Op> = made
             .into_iter()
             .enumerate()
@@ -2900,14 +2901,11 @@ impl CompositionReference {
     /// the window it already holds and asks again only when the pointer nears
     /// the window's edge, the frame changes, or an edit lands.
     ///
-    /// `layer` reads that layer **alone** rather than the composite — what a
-    /// depth pick does, since a depth pass is usually hidden and so never
-    /// appears in the composite at all. The answer arrives as
-    /// `WorkerResponse::Sampled`, on the stream the frames and traces already
-    /// ride; a frame with nothing to read publishes nothing, and the magnifier
-    /// keeps what it had.
-    // The window, where in the picture, at what scale, in which view, of which
-    // layer: a dropper read genuinely names that many things.
+    /// `layer` reads that layer **alone** rather than the composite, for a depth
+    /// pass that is usually hidden, and `part_ids` its parts as their numbers.
+    /// The answer arrives as `WorkerResponse::Sampled`; a frame with nothing to
+    /// read publishes nothing, and the magnifier keeps what it had.
+    // A dropper read genuinely names that many things.
     #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn sample_pixels(
@@ -2918,6 +2916,7 @@ impl CompositionReference {
         window: u32,
         scale: f32,
         layer: Option<LayerReference>,
+        part_ids: bool,
         view: u32,
     ) -> Result<(), BridgeError> {
         self.dispatch(WorkerRequest::SamplePixels(SamplePixelsRequest {
@@ -2928,6 +2927,7 @@ impl CompositionReference {
             v,
             window,
             layer,
+            part_ids,
             view,
         }))
     }

@@ -47,6 +47,10 @@ const Size dropperViewfinderSize = Size(
   _cell * dropperGrid + (_pad + _border) * 2 + _barHeight + _pad,
 );
 
+/// A part pick's viewfinder: its name and no pixels, whose colours only say
+/// which number a part goes by. A fixed width, so it doesn't jump between names.
+const Size dropperPartTagSize = Size(200, 30);
+
 /// How far below and right of the pointer the viewfinder sits, like the egui
 /// build, so the hand does not cover what is being read.
 const Offset dropperViewfinderOffset = Offset(18, 18);
@@ -75,7 +79,8 @@ const Offset dropperViewfinderOffset = Offset(18, 18);
 /// is one the window would have clipped anyway. Where the window sits on the
 /// display is not something Flutter tells us without a windowing plugin, and
 /// knowing it would not buy a pixel more room.
-Offset dropperViewfinderOrigin(Offset cursor, Rect bounds) {
+Offset dropperViewfinderOrigin(Offset cursor, Rect bounds,
+    {Size size = dropperViewfinderSize}) {
   double place(double at, double offset, double size, double low, double high) {
     // Below / to the right of the pointer, which is where it belongs.
     final after = at + offset;
@@ -89,10 +94,10 @@ Offset dropperViewfinderOrigin(Offset cursor, Rect bounds) {
   }
 
   return Offset(
-    place(cursor.dx, dropperViewfinderOffset.dx, dropperViewfinderSize.width,
-        bounds.left, bounds.right),
-    place(cursor.dy, dropperViewfinderOffset.dy, dropperViewfinderSize.height,
-        bounds.top, bounds.bottom),
+    place(cursor.dx, dropperViewfinderOffset.dx, size.width, bounds.left,
+        bounds.right),
+    place(cursor.dy, dropperViewfinderOffset.dy, size.height, bounds.top,
+        bounds.bottom),
   );
 }
 
@@ -123,6 +128,9 @@ class DropperViewfinder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    if (arm.reads == DropperReads.part) {
+      return _PartTag(arm: arm, window: window, centre: centre);
+    }
     final grid = _cell * dropperGrid;
     return Container(
       width: dropperViewfinderSize.width,
@@ -240,6 +248,7 @@ class DropperViewfinder extends StatelessWidget {
     return switch (arm.reads) {
       DropperReads.depth => '$from · ${sample.depth.toStringAsFixed(3)}',
       DropperReads.position => '${sample.x}, ${sample.y}',
+      DropperReads.part => '',
       DropperReads.colour => '',
     };
   }
@@ -253,6 +262,54 @@ class DropperViewfinder extends StatelessWidget {
           border: Border.all(color: t.hairlineStrong),
         ),
       );
+}
+
+/// A part pick's whole viewfinder: the name of the part under the pointer. It
+/// holds the name it has while the next window is read, so the tag doesn't blink
+/// as the pointer travels.
+class _PartTag extends StatefulWidget {
+  final DropperArm arm;
+  final BridgeSampledPixels? window;
+  final (int, int) centre;
+
+  const _PartTag({required this.arm, this.window, required this.centre});
+
+  @override
+  State<_PartTag> createState() => _PartTagState();
+}
+
+class _PartTagState extends State<_PartTag> {
+  /// Whether a window has been read yet, and the name it gave.
+  bool _read = false;
+  String? _name;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final (held, (x, y), name) = (widget.window, widget.centre, widget.arm.partName);
+    if (held != null && name != null && windowCovers(held, x, y)) {
+      _read = true;
+      _name = name(partNear(held, x, y, name));
+    }
+    return Container(
+      width: dropperPartTagSize.width,
+      height: dropperPartTagSize.height,
+      alignment: AlignmentDirectional.centerStart,
+      decoration: BoxDecoration(
+        color: t.surface3,
+        borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+        border: Border.all(color: t.hairlineStrong, width: _border),
+        boxShadow: t.tokens.cardShadow,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Text(
+        !_read ? l10n.dropperReading : _name ?? l10n.none,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: t.small.copyWith(color: _name == null ? t.textMuted : t.textPrimary),
+      ),
+    );
+  }
 }
 
 /// The nine-by-nine block, its dashed rules, and the border round the region

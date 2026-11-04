@@ -171,6 +171,7 @@ use super::effects::{
     saturation::{Saturation, SaturationDef},
     scanlines::{Scanlines, ScanlinesDef},
     scatter::{Scatter, ScatterDef},
+    scene_pass::{PartMatte, PartMatteDef, ScenePass, ScenePassDef},
     scribble::{Scribble, ScribbleDef},
     set_channels::{SetChannels, SetChannelsDef},
     set_matte::{SetMatte, SetMatteDef},
@@ -331,6 +332,9 @@ crate::catalogue![
     MatteKeyDef => MatteKey,
     // Set matte, at the Utility family's end.
     SetMatteDef => SetMatte,
+    // What a 3D precomp knows about its pixels, and a matte from it.
+    ScenePassDef => ScenePass,
+    PartMatteDef => PartMatte,
     // Set channels, beside it: the same question asked of all four channels
     // rather than only of the alpha.
     SetChannelsDef => SetChannels,

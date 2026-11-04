@@ -92,7 +92,11 @@ impl Kept {
                     AlphaMode::Blend => 2.0,
                 },
                 m.alpha_cutoff,
-                f32::from(u8::from(m.unlit)),
+                match (m.unlit, m.soft_turns) {
+                    (true, _) => 1.0,
+                    (false, true) => -1.0,
+                    (false, false) => 0.0,
+                },
                 f32::from(u8::from(pictures[2].is_some())),
             ],
             extra: [m.transmission, m.ior, m.clearcoat, m.clearcoat_roughness],

@@ -1,0 +1,61 @@
+---
+title: Scene pass
+description: "Shows which way a Model layer's or a 3D precomp's pixels face, where they are, or which part they belong to."
+---
+
+Scene pass is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Replaces the layer's picture with a pass of the Model layer, or the Precomp with 3D layers in
+it, named in **Source**. Models and 3D layers cut through each other as they do in the picture,
+a group of 3D layers covers the groups below it, and 2D layers draw nothing.
+
+On any other Source, the picture is left alone.
+
+**Normals**, **Position** and **Part id** have hard edges. An eight-bit project clips Position.
+
+Any effect after it in the stack reads the pass as its picture. A **Custom shader** reads
+it beside the picture of another copy of the Precomp in **Second input**.
+
+:::note[Not read here]
+Motion blur, a Model layer's own effects, track mattes, blend modes and the gas of Smoke and
+fire.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Pass** | Dropdown | Normals · Position · Part id · Depth | Normals | - |
+| **Space** | Dropdown | Comp · Camera | Comp | - |
+| **Source** | Layer | Any layer in the composition | This layer | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Pass**: what to show. **Normals** is which way each pixel faces, nought to one on each
+  axis with a half for none. **Position** is where it is, in metres. **Part id** is each part
+  of a model and each 3D layer in a flat colour of its own. **Depth** is how far it is from
+  the camera, in metres.
+- **Space**: what **Normals** and **Position** are measured from. **Comp** is the middle of
+  the composition and **Camera** is the camera. X runs right, Y up, and Z towards whoever is
+  looking.
+- **Source**: the Model layer or Precomp to read.
+
+## Related
+
+- [Part matte](/effects/utility/part-matte/)
+- [Custom shader](/effects/utility/custom-shader/)
+- [3D](/use/camera/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

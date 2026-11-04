@@ -124,7 +124,7 @@ void main() {
       );
       expect(
         rows.whereType<FoldAnimatorValueRow>().map((r) => r.value).toSet(),
-        TextAnimatorValue.values.toSet(),
+        TextAnimatorValue.values.toSet().difference(solidAnimatorValues),
         reason: 'every number an animator has needs a row to key it on',
       );
 

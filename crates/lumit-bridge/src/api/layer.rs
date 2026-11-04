@@ -2100,7 +2100,7 @@ pub(crate) fn read_layer_info(
             K::Text { document } => document
                 .animators
                 .iter()
-                .map(|a| crate::api::assets::read_animator(a, layer.start_offset.0))
+                .map(|a| crate::api::assets::animators::read_animator(a, layer.start_offset.0))
                 .collect(),
             _ => Vec::new(),
         },
@@ -5341,9 +5341,8 @@ impl LayerReference {
         if let Some(retime) = head.retime.as_mut().filter(|_| retimed) {
             // Layer time, not comp time: keyframes live in the layer's own
             // clock, measured from its start offset.
-            // A subtraction that cannot overflow is still a subtraction that
-            // can: an unrepresentable time leaves the map alone rather than
-            // taking the cut down with it.
+            // An unrepresentable time leaves the map alone rather than taking
+            // the cut down with it.
             if let Ok(local) = t.0.checked_sub(head.start_offset.0) {
                 retime.insert_key_preserving_shape(local);
             }
@@ -5356,6 +5355,7 @@ impl LayerReference {
             effect.id = Uuid::now_v7();
         }
         tail.in_point = t;
+        lumit_render::passes::follow_copy(&*self.document()?, &layer, &mut tail);
 
         let mut ops = vec![lumit_core::ops::Op::SetLayerSpan {
             comp: self.comp_id,
@@ -6049,9 +6049,9 @@ impl LayerReference {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
-        // A duplicate of a layer that was somebody's matte or parent must not
-        // inherit being pointed *at* — but it keeps what it points at itself.
+        // It isn't pointed *at* as its original was, but keeps what that points at.
         let new_id = copy.id;
+        lumit_render::passes::follow_copy(&*self.document()?, &self.item()?, &mut copy);
 
         self.commit(lumit_core::ops::Op::AddLayer {
             comp: self.comp_id,
@@ -7523,78 +7523,7 @@ impl LayerReference {
         home: InstanceHome,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
-        // A plugin on the list answers the edit in the same undo step.
-        let edit = |list: &mut Vec<EffectInstance>| {
-            let before = list.clone();
-            edit(list)?;
-            crate::api::track::settle(&before, list);
-            Ok(())
-        };
-        let op = match home {
-            InstanceHome::Effects | InstanceHome::Styles => {
-                let layer = self.item()?;
-                let mut list = if home == InstanceHome::Styles {
-                    layer.styles.clone()
-                } else {
-                    layer.effects.clone()
-                };
-                edit(&mut list)?;
-                if home == InstanceHome::Styles {
-                    lumit_core::ops::Op::SetLayerStyles {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
-                        styles: list,
-                    }
-                } else {
-                    let (doc, comp) = (self.document()?, self.composition()?);
-                    lumit_core::fx::effects::depth_points::set_effects(&doc, &comp, &layer, list)
-                }
-            }
-            InstanceHome::Group(group) => {
-                let comp = self.composition()?;
-                let mut list = comp
-                    .groups
-                    .iter()
-                    .find(|g| g.id == group)
-                    .map(|g| g.effects.clone())
-                    .ok_or(BridgeError::InvalidEffect)?;
-                edit(&mut list)?;
-                lumit_core::ops::Op::SetGroupEffects {
-                    comp: self.comp_id,
-                    group,
-                    effects: list,
-                }
-            }
-            // Through `commit_clips`, like every other clip write, so the
-            // whole-list replace and the row's bar stay one undo step. The
-            // op's inverse clones every clip's stack, plugin state and all;
-            // ponytail: that is the ceiling, and reusing the untouched clips
-            // is the upgrade if an edit ever breaks the docs/13 budget.
-            InstanceHome::Clip(clip) => {
-                let (mut clips, index) = self.clips_and_index(clip)?;
-                edit(&mut clips[index].effects)?;
-                return self.commit_clips(clips);
-            }
-            InstanceHome::ModelRows => self.model_rows_op(edit)?,
-            // One instance, carried as a list of at most one so the edit
-            // closure is the same closure the other three homes take. An edit
-            // that empties the list clears the Inputs, which is what removing
-            // them means.
-            InstanceHome::GraphInputs => {
-                let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
-                edit(&mut list)?;
-                lumit_core::ops::Op::SetLayerGraphInputs {
-                    comp: self.comp_id,
-                    layer: self.layer_id,
-                    inputs: list.into_iter().next().map(Box::new),
-                }
-            }
-            InstanceHome::Materials => self.materials_op(edit)?,
-        };
-        let proj = self.project()?;
-        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store.commit(op).map_err(BridgeError::OpError)?;
-        Ok(())
+        self.with_instances_naming(home, edit, None)
     }
 
     /// **The one find-instance lookup** (docs/impl/layer-styles.md §5,
@@ -7972,6 +7901,7 @@ impl LayerReference {
         &self,
         effects: Vec<BridgeEffectInstance>,
         clip: Option<Uuid>,
+        light_names: Option<Vec<String>>,
     ) -> Result<(), BridgeError> {
         let staged: Vec<EffectInstance> = effects
             .iter()
@@ -7987,21 +7917,26 @@ impl LayerReference {
             (None, Some(clip)) => InstanceHome::Clip(clip),
             (None, None) => InstanceHome::Effects,
         };
-        self.with_instances(home, move |current| {
-            // A placed graph's Inputs are offered before they are adopted
-            // (docs/impl/node-graph-comp.md §5.3), so the first commit lands
-            // one instance where the document had none. Everywhere else a
-            // staged list must still name what the document names.
-            let adopting = home == InstanceHome::GraphInputs && current.is_empty();
-            let same_stack = adopting
-                || (current.len() == staged.len()
-                    && current.iter().zip(&staged).all(|(a, b)| a.id == b.id));
-            if !same_stack {
-                return Err(BridgeError::StaleEffectStack);
-            }
-            *current = staged;
-            Ok(())
-        })
+        let names = light_names.as_deref();
+        self.with_instances_naming(
+            home,
+            move |current| {
+                // A placed graph's Inputs are offered before they are adopted
+                // (docs/impl/node-graph-comp.md §5.3), so the first commit lands
+                // one instance where the document had none. Everywhere else a
+                // staged list must still name what the document names.
+                let adopting = home == InstanceHome::GraphInputs && current.is_empty();
+                let same_stack = adopting
+                    || (current.len() == staged.len()
+                        && current.iter().zip(&staged).all(|(a, b)| a.id == b.id));
+                if !same_stack {
+                    return Err(BridgeError::StaleEffectStack);
+                }
+                *current = staged;
+                Ok(())
+            },
+            names,
+        )
     }
 
     /// One clip's own effect stack as staged copies, exactly as
@@ -8522,6 +8457,7 @@ impl LayerReference {
                         || [&a.selector.start, &a.selector.end, &a.selector.offset]
                             .into_iter()
                             .chain([&a.position_x, &a.position_y, &a.rotation, &a.scale_x])
+                            .chain([&a.position_z, &a.rotation_x, &a.rotation_y])
                             .chain([&a.scale_y, &a.opacity, &a.fill_r, &a.fill_g, &a.fill_b])
                             .any(animated)
                 })

@@ -4342,6 +4342,10 @@
   "@fxAccumulationMotionBlur": {
     "description": "Effect name in the Add effect menu and the Effect controls panel — the slow, whole-scene motion blur that re-renders everything below at several sub-frame moments and averages them."
   },
+  "fxFocalLength": "Focal length",
+  "@fxFocalLength": {
+    "description": "Effect controls: a control on Camera track: the lens length in millimetres, such as 50. 0 leaves the track to work it out."
+  },
   "fxFeatureDensity": "Feature density",
   "@fxFeatureDensity": {
     "description": "Effect controls — a control on Camera track."
@@ -5333,6 +5337,46 @@
   "fxFullOff": "Full off",
   "@fxFullOff": {
     "description": "Effect controls — an option on Set channels' four channel pickers: the channel is 0 everywhere."
+  },
+  "fxScenePass": "Scene pass",
+  "@fxScenePass": {
+    "description": "Effect name in the Add effect menu: shows what a 3D precomp knows about its pixels, such as which way they face, in place of its picture."
+  },
+  "fxPartMatte": "Part matte",
+  "@fxPartMatte": {
+    "description": "Effect name in the Add effect menu: keeps only the parts of a 3D precomp that were picked."
+  },
+  "fxPass": "Pass",
+  "@fxPass": {
+    "description": "Effect controls: a control on Scene pass choosing what it shows."
+  },
+  "fxNormals": "Normals",
+  "@fxNormals": {
+    "description": "Effect controls: an option on Scene pass's Pass, which way each pixel faces."
+  },
+  "fxPartId": "Part id",
+  "@fxPartId": {
+    "description": "Effect controls: an option on Scene pass's Pass, each part of the 3D precomp in a flat colour of its own."
+  },
+  "fxParts": "Parts",
+  "@fxParts": {
+    "description": "Effect controls: a row on Part matte naming the parts it keeps."
+  },
+  "fxPartsMissing": "Missing",
+  "@fxPartsMissing": {
+    "description": "Effect controls: Part matte's Parts row when none of the parts it kept are in its source any more."
+  },
+  "fxPartsSomeMissing": "{names}, {count} missing",
+  "@fxPartsSomeMissing": {
+    "description": "Effect controls: Part matte's Parts row when some of the parts it kept are no longer in its source. {names} is the parts still there, {count} how many have gone.",
+    "placeholders": {
+      "names": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "tipPickParts": "Pick parts",
+  "@tipPickParts": {
+    "description": "Tooltip on the eyedropper that picks a part of a 3D precomp in the Viewer. Shift adds another. One or two words."
   },
   "fxSetMatte": "Set matte",
   "@fxSetMatte": {
@@ -13258,6 +13302,10 @@
       }
     }
   },
+  "aeGeometryOptionsCarried": "The geometry options were imported",
+  "@aeGeometryOptionsCarried": {
+    "description": "Import report: a Text or Shape layer's extrusion and bevel in After Effects came across."
+  },
   "aeShadowSwitchKeyed": "The shadow setting kept its first key",
   "@aeShadowSwitchKeyed": {
     "description": "Import report row reason. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
@@ -16678,6 +16726,10 @@
   "histSetLightSettings": "Set light settings",
   "@histSetLightSettings": {
     "description": "Undo history entry: a light's type, falloff, aim or shadows were changed."
+  },
+  "histEditGeometryOptions": "Edit geometry options",
+  "@histEditGeometryOptions": {
+    "description": "Undo history entry: a Text or Shape layer's Geometry options, or a face's material, was changed."
   },
   "histSetMaterialSettings": "Set material settings",
   "@histSetMaterialSettings": {
@@ -24218,5 +24270,41 @@
   "foldMaterials": "Materials",
   "@foldMaterials": {
     "description": "Heading in a Model layer's fold-out and in the Effect controls panel, over a group of rows for each material in its 3D model."
+  },
+  "fxGeometryOptions": "Geometry options",
+  "@fxGeometryOptions": {
+    "description": "Heading in a Text or Shape layer's fold-out and in the Effect controls panel, over how its outline is made solid."
+  },
+  "fxExtrusionDepth": "Extrusion depth",
+  "@fxExtrusionDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: how far back its outline reaches, in pixels."
+  },
+  "fxBevelDepth": "Bevel depth",
+  "@fxBevelDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: how far in and how far back its bevel goes, in pixels."
+  },
+  "fxBevelSegments": "Bevel segments",
+  "@fxBevelSegments": {
+    "description": "Row in a Text or Shape layer's Geometry options: how many steps a rounded bevel is made of."
+  },
+  "fxHoleBevelDepth": "Hole bevel depth",
+  "@fxHoleBevelDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: a hole's bevel as a share of the Bevel depth, as in the middle of an o."
+  },
+  "fxBevelAngular": "Angular",
+  "@fxBevelAngular": {
+    "description": "Bevel style: a flat slope."
+  },
+  "fxBevelConvex": "Convex",
+  "@fxBevelConvex": {
+    "description": "Bevel style: rounded over."
+  },
+  "fxBevelConcave": "Concave",
+  "@fxBevelConcave": {
+    "description": "Bevel style: scooped out."
+  },
+  "fxFaceBevel": "Bevel",
+  "@fxFaceBevel": {
+    "description": "Name of a Text or Shape layer's material for its bevel, beside Front, Side and Back."
   }
 }

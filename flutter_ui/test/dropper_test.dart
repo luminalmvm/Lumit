@@ -90,6 +90,18 @@ void main() {
     });
   });
 
+  group('a part pick', () {
+    // A click on a part's blended edge names no part, and landing there used
+    // to let every pick go.
+    test('takes the nearest part when the pixel under it names none', () {
+      final window = windowOf((x, y) => x < 38 ? [0, 0, 7] : [9, 9, 9]);
+      String? known(int part) => part == 7 ? 'Visor' : null;
+      expect(partNear(window, 36, 20, known), 7);
+      expect(partNear(window, 39, 20, known), 7);
+      expect(partNear(window, 45, 20, known), 0);
+    });
+  });
+
   group('which pixel grid a point is in', () {
     /// **The bug this exists to prevent.** The picture the engine reads is a
     /// reduced-resolution preview whenever the Viewer is not at 100 %, so its

@@ -2534,6 +2534,7 @@ dependencies = [
  "lumit-import",
  "lumit-ingress",
  "lumit-peer",
+ "lumit-text",
  "rquickjs",
  "serde",
  "serde_json",

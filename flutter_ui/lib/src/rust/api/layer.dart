@@ -3699,8 +3699,9 @@ class LayerReference {
       );
 
   /// The corners of a Model layer's box in its own pixels at comp frame
-  /// `at_frame`, three numbers each, once its file has been read, or a box of
-  /// smoke's. Empty before that and on any other kind of layer.
+  /// `at_frame`, three numbers each, once its file has been read, or a solid
+  /// Text or Shape layer's once it has been drawn, or a box of smoke's. Empty
+  /// before that and on any other kind of layer.
   Float64List getModelBox({required int atFrame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceGetModelBox(that: this, atFrame: atFrame);
 
@@ -3714,8 +3715,10 @@ class LayerReference {
   /// How far along the ray from `origin` by `direction`, three numbers
   /// each in the layer's own pixels, it first meets a Model layer's model,
   /// in parts of `direction`. `None` where it misses, before the file has
-  /// been read and on any other kind of layer. Asked once a click, and when
-  /// the pointer rests for a moment, as the model is at comp frame `at_frame`.
+  /// been read and on any other kind of layer. A solid Text or Shape layer
+  /// answers the same, of what it was last drawn as. Asked once a click, and
+  /// when the pointer rests for a moment, as the model is at comp frame
+  /// `at_frame`.
   double? getModelHit(
           {required List<double> origin,
           required List<double> direction,
@@ -4251,6 +4254,13 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSavePreset(
           that: this, name: name, only: only);
 
+  /// The parts of this Model layer or 3D precomp, `None` for any other layer.
+  /// Not sync, as a model not read yet is read now.
+  Future<List<BridgeScenePart>?> sceneParts() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSceneParts(
+        that: this,
+      );
+
   /// The adjustment switch: set this layer's own picture aside and
   /// run its effect stack on the composite beneath it, or give it back.
   ///
@@ -4453,9 +4463,11 @@ class LayerReference {
   /// stack. It is ignored while the list has anything in it, because then
   /// the ids say where the list lives.
   void setEffects(
-          {required List<BridgeEffectInstance> effects, UuidValue? clip}) =>
+          {required List<BridgeEffectInstance> effects,
+          UuidValue? clip,
+          List<String>? lightNames}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetEffects(
-          that: this, effects: effects, clip: clip);
+          that: this, effects: effects, clip: clip, lightNames: lightNames);
 
   /// Turn flow on or off. Off returns the layer to Nearest — the
   /// policy it had before flow is not recorded, and Nearest is the crisp

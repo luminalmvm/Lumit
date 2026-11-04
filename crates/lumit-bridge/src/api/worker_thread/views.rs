@@ -120,8 +120,8 @@ pub(super) fn viewed_through(
         }
         // Hidden rather than taken out, so they still parent what they parent.
         for l in c.layers.iter_mut().filter(|_| lines) {
-            use lumit_core::model::LayerKind::{Camera, Model};
-            l.switches.visible &= matches!(l.kind, Camera { .. } | Model { .. });
+            l.switches.visible &= matches!(l.kind, lumit_core::model::LayerKind::Camera { .. })
+                || lumit_core::extrude::draws_mesh(l);
         }
         c.motion_blur.enabled &= !draft;
         // A 3D viewport fills its pane: a wider picture round the comp's

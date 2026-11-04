@@ -59,4 +59,5 @@
 ///   Blender is left out, and Shaded is a little darker.
 /// * 31: the 3D layers in a collapsed Precomp take the parent's lights.
 /// * 32: a layer that only shows shadows takes them with its back to a light.
-pub const ALGO_VERSION: u32 = 32;
+/// * 33: the camera's depth of field blurs a Model layer.
+pub const ALGO_VERSION: u32 = 33;
