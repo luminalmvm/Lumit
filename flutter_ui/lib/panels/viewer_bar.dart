@@ -107,6 +107,10 @@ class ViewerBar extends StatelessWidget {
   /// reads and sets.
   final int viewId;
 
+  /// The frame the comp's clock reads at its first frame, its Start
+  /// timecode: the clock adds it, the frame count beside it does not.
+  final int startFrame;
+
   const ViewerBar({
     super.key,
     required this.channel,
@@ -116,6 +120,7 @@ class ViewerBar extends StatelessWidget {
     required this.playing,
     required this.playhead,
     required this.settings,
+    this.startFrame = 0,
     required this.comp,
     required this.compSize,
     required this.tier,
@@ -211,6 +216,7 @@ class ViewerBar extends StatelessWidget {
                     playing: playing,
                     playhead: playhead,
                     settings: settings,
+                    startFrame: startFrame,
                     comp: comp,
                     onPlayPause: onPlayPause,
                     onSeek: onSeek,
@@ -369,6 +375,7 @@ List<Widget> viewerTransportMarks(
   bool clock = true,
   double clockSize = viewerTimecodeSize,
   bool playFilled = false,
+  int startFrame = 0,
 }) {
   // The one lit mark on the bar: the control the eye goes to without
   // looking for it (the drawing's own `.ico.on`).
@@ -474,11 +481,14 @@ List<Widget> viewerTransportMarks(
         builder: (context, frame, _) => TimeReadout(
           key: const ValueKey('viewer-timecode'),
           frame: frame,
-          format: (f) => timecodeOf(f, settings),
+          format: (f) => timecodeOf(f + startFrame, settings),
           widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
           style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
           parse: (text) =>
-              framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
+              switch (framesOfTimecode(text, settings.fpsNum, settings.fpsDen)) {
+            final f? => f - startFrame,
+            null => null,
+          },
           onCommit: onSeek,
           minFrame: 0,
           maxFrame: _lastFrameOf(settings),

@@ -3000,6 +3000,31 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
 }
 
 impl Composition {
+    /// The key the comp's **Start timecode** is kept under in [`Self::extra`].
+    pub const START_TIMECODE_KEY: &'static str = "start_timecode";
+
+    /// **Start timecode**: the time the comp's first frame reads in the
+    /// Timeline and the Viewer, zero unless set (AE: Start Timecode). Only what
+    /// the clock shows: every time inside the comp still counts from its first
+    /// frame. Kept in [`Self::extra`], so a Lumit that does not know it keeps
+    /// it and a project saved without it reads zero.
+    #[must_use]
+    pub fn start_timecode(&self) -> CompTime {
+        self.extra
+            .get(Self::START_TIMECODE_KEY)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or(CompTime::ZERO)
+    }
+
+    /// Set the Start timecode; zero takes the entry away.
+    pub fn set_start_timecode(&mut self, start: CompTime) {
+        if start == CompTime::ZERO {
+            self.extra.remove(Self::START_TIMECODE_KEY);
+        } else if let Ok(v) = serde_json::to_value(start) {
+            self.extra.insert(Self::START_TIMECODE_KEY.to_owned(), v);
+        }
+    }
+
     /// Every effect instance this composition holds, wherever it sits: on a
     /// layer's stack, among its styles, in its graph, on a clip, on a group's
     /// header, or as a box of the composition's own node graph.

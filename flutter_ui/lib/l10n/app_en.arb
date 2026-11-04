@@ -13687,6 +13687,10 @@
   "@compBackground": {
     "description": "New composition / Composition settings dialog: row label: the colour behind everything in the composition."
   },
+  "compStartTimecode": "Start timecode",
+  "@compStartTimecode": {
+    "description": "Composition settings — the row for the time the comp's first frame reads in the Timeline and the Viewer (AE: Start Timecode)."
+  },
   "compDurationReading": "{frames} frames · {seconds} s",
   "@compDurationReading": {
     "description": "New composition / Composition settings dialog: a factual reading beside the duration: what the timecode comes to.",

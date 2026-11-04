@@ -31,6 +31,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/dock_widget.dart' show DockPaneHandle;
+import '../shell/menu_bar_frb.dart' show trimCompAction;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -2185,6 +2186,12 @@ class _TimelineRulerState extends State<TimelineRuler> {
   Future<void> _groundMenu(Offset at, int frame) async {
     final setWork = widget.onWorkArea;
     if (setWork == null && widget.onMarkersChanged == null) return;
+    // The Composition menu's Trim comp to work area, here too, beside the
+    // work area it trims to; greyed when the comp has none.
+    final trim = setWork == null
+        ? null
+        : trimCompAction(
+            Provider.of<LumitState>(context, listen: false), widget.comp);
     final picked = await showMenuAt<String>(
       context: context,
       position: at,
@@ -2207,6 +2214,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
               key: const ValueKey('tl-ruler-work-clear'),
               onPressed: () => close('work-clear'),
               child: Text(l10n.workAreaClear)),
+          MenuRow(
+              key: const ValueKey('tl-ruler-trim-comp'),
+              enabled: trim != null,
+              onPressed: () => close('trim-comp'),
+              child: Text(l10n.menuTrimCompToWorkArea)),
         ],
       ],
     );
@@ -2216,6 +2228,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
         await _createMarkerAt(frame);
       case 'work-clear':
         setWork?.call(null);
+      case 'trim-comp':
+        trim?.call();
       case _:
         // A comp with no frames has no valid span: it keeps the one it has.
         try {

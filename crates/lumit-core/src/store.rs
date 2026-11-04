@@ -3108,6 +3108,11 @@ mod tests {
             t(2, 1),
             "markers travel with the picture"
         );
+        assert_eq!(
+            c.start_timecode(),
+            t(2, 1),
+            "the clock still reads what it read: the first frame is 2 s"
+        );
 
         store.undo().unwrap();
         assert_eq!(json(&store.snapshot()), before, "one undo puts it all back");
