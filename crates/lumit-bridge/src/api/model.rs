@@ -216,7 +216,8 @@ impl LayerReference {
     /// How far along the ray from `origin` by `direction`, three numbers
     /// each in the layer's own pixels, it first meets a Model layer's model,
     /// in parts of `direction`. `None` where it misses, before the file has
-    /// been read and on any other kind of layer. Asked once a click.
+    /// been read and on any other kind of layer. Asked once a click, and when
+    /// the pointer rests for a moment.
     #[frb(sync)]
     pub fn get_model_hit(
         &self,
