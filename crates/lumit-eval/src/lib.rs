@@ -2313,11 +2313,28 @@ fn feed_source(
             // render evaluates. The map itself feeds no byte of its own - two
             // layer times that land on one source time are one picture and
             // share one name - and an un-retimed Precomp keeps the name it had.
-            let st = lumit_core::model::nested_source_time(layer, nested, lt);
+            //
+            // On Flow between two frames the picture is made from both, so
+            // both are named, with how far along and the Flow settings.
+            let pair = lumit_core::precomp_flow::pair(layer, nested, lt, comp_fps);
+            let st = pair.map_or_else(
+                || lumit_core::model::nested_source_time(layer, nested, lt),
+                |(a, _, _)| a,
+            );
             visited.push(*comp);
             let r = comp_key_visited(doc, nested, st, quality, stamper, visited);
+            let then = pair.map(|(_, b, phase)| {
+                let r = comp_key_visited(doc, nested, b, quality, stamper, visited);
+                (r, phase)
+            });
             visited.pop();
             h.update(&r?.0.to_le_bytes());
+            if let Some((r, phase)) = then {
+                h.update(b"flow/");
+                h.update(&r?.0.to_le_bytes());
+                feed_interp(h, &layer.interpolation, lt, stamper);
+                feed_f64(h, f64::from(phase));
+            }
             // What an analysis filed for this layer, named by the nested
             // comp's own frame as a footage layer's is by the file's. Nothing
             // for a layer with no such effect, so its name stays what it was.

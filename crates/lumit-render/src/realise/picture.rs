@@ -57,9 +57,15 @@ impl Realiser<'_> {
                 key,
                 paint,
                 paint_time,
+                flow,
             } => {
-                let nested =
+                let mut nested =
                     self.realise_nested(*key, *camera, *width, *height, *background, draws);
+                // A Precomp on Flow: the frame after, and the picture between.
+                if let Some(f) = flow {
+                    let then = self.realise(f.camera, *width, *height, *background, &f.draws);
+                    nested = self.flow_between(&nested, &then, f.phase, &f.params);
+                }
                 self.paint_over(
                     nested,
                     f64::from(*width),

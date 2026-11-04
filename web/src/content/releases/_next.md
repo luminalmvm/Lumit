@@ -20,3 +20,4 @@ section below, and when the release note is written the lines move into it.
 - An environment light's Intensity stops at 0, where below it wrote negative pixels into a float export.
 - The 3D layers and models in a collapsed precomp take the lights of the composition it sits in, where they ignored them.
 - A collapsed precomp's own environment light no longer draws its picture flat in the parent.
+- A Precomp layer on Flow, as one from After Effects with Pixel Motion comes in, now makes the frames between, and is no longer collapsed.

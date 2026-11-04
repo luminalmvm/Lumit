@@ -407,6 +407,15 @@ pub enum GraphStep {
     },
 }
 
+/// The frame after, for a Precomp on Flow, and how far towards it the picture
+/// sits. The realiser makes the picture from the motion between the two.
+pub struct NestedFlow {
+    pub draws: Vec<CompLayerDraw>,
+    pub camera: Option<lumit_core::model::CameraPose>,
+    pub phase: f32,
+    pub params: lumit_core::retime::FlowParams,
+}
+
 /// Where a draw's pixels come from: decoded/synthesised bytes, a nested
 /// comp realised recursively on the GPU (Precomp layers), or a node graph
 /// walked box by box.
@@ -463,6 +472,9 @@ pub enum DrawSource {
         /// is read at. Meaningless — and unread — when `paint` is
         /// empty.
         paint_time: f64,
+        /// A Precomp on Flow between two frames: the frame after. `draws`
+        /// is then the frame before. `None` on every other.
+        flow: Option<Box<NestedFlow>>,
     },
     /// An adjustment layer's staging point (docs/06 §1.5): no pixels of its
     /// own — the draw's `fx` runs on the composite of every draw before it,

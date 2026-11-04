@@ -41,6 +41,8 @@ pub mod pixels;
 /// The planes tier's document half: which effects ask a model for a plane of
 /// depth or coverage, and the stamp that names one frame's answer.
 pub mod planes;
+/// Flow on a Precomp layer: the two nested frames a moment sits between.
+pub mod precomp_flow;
 pub mod preset;
 /// Puppet: the mesh over a layer's own silhouette and the as-rigid-as-possible
 /// deformer over it.
