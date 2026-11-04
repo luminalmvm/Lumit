@@ -1849,7 +1849,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   void _cubeOrbit(Offset delta) {
     final pose = _cubePose;
     if (pose == null) return;
-    final turned = orbitCamera(pose, delta.dx, delta.dy, around: _cubePivot);
+    final d = _orbitWay(delta);
+    final turned = orbitCamera(pose, d.dx, d.dy, around: _cubePivot);
     _cubePose = turned;
     _throttle.request(() => widget.uiState
         .setViewerViewPose(viewOfPose(turned), viewId: widget.viewId));
@@ -1891,9 +1892,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     var pose = _padPose;
     if (pose == null) return;
     final d = event.panDelta;
+    final turn = _orbitWay(d);
     pose = HardwareKeyboard.instance.isShiftPressed
         ? trackCamera(pose, d.dx, d.dy, scale: _scale, depth: _trackDepth)
-        : orbitCamera(pose, d.dx, d.dy, around: _padPivot);
+        : orbitCamera(pose, turn.dx, turn.dy, around: _padPivot);
     if (event.scale > 0 && (event.scale - _padScale).abs() > 1e-4) {
       pose = _dollied(pose, math.log(event.scale / _padScale) / dollyFraction);
       _padScale = event.scale;
@@ -2256,6 +2258,13 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   /// measured from, and that first movement would repeat on every event.
   void _hold() => _locked = freezeCursor();
 
+  /// A drag turned the way Settings has the orbit go.
+  Offset _orbitWay(Offset d) {
+    final s = widget.uiState.workspace.interface;
+    return Offset(s.invertOrbitAcross ? -d.dx : d.dx,
+        s.invertOrbitUpDown ? -d.dy : d.dy);
+  }
+
   void _drag(Offset at, Offset delta) {
     if (_start == null || !_escape.running) return;
     final anchor = _anchor;
@@ -2610,8 +2619,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     final flying = _flyPose;
     if (flying != null) return flying;
     final shift = HardwareKeyboard.instance.isShiftPressed;
+    final turn = _orbitWay(_delta);
     return switch (_activeMove) {
-      ToolMode.cameraOrbit => orbitCamera(start, _delta.dx, _delta.dy,
+      ToolMode.cameraOrbit => orbitCamera(start, turn.dx, turn.dy,
           lockAxis: shift, around: _pivot),
       ToolMode.cameraPan => trackCamera(start, _delta.dx, _delta.dy,
           scale: _scale, lockAxis: shift, depth: _trackDepth),

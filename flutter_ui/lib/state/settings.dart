@@ -428,6 +428,11 @@ class InterfaceSettings {
   /// button can never strand an engaged look with nothing to turn it off.
   bool showToneMap;
 
+  /// Whether an orbit in the Viewer turns the other way across, and up and
+  /// down. Off by default.
+  bool invertOrbitAcross;
+  bool invertOrbitUpDown;
+
   /// Whether the graph editor's **Easing…** button opens the shape editor as a
   /// popup over the footer, rather than docking the Easing panel.
   ///
@@ -587,6 +592,8 @@ class InterfaceSettings {
     this.reduceTransparency = false,
     this.waveformsFromBottom = false,
     this.showToneMap = false,
+    this.invertOrbitAcross = false,
+    this.invertOrbitUpDown = false,
     this.easingInPopup = false,
     this.layerNamesOnBars = false,
     this.markerLines = true,
@@ -633,6 +640,8 @@ class InterfaceSettings {
         'reduce_transparency': reduceTransparency,
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
+        'invert_orbit_across': invertOrbitAcross,
+        'invert_orbit_up_down': invertOrbitUpDown,
         'easing_in_popup': easingInPopup,
         'layer_names_on_bars': layerNamesOnBars,
         'marker_lines': markerLines,
@@ -723,6 +732,8 @@ class InterfaceSettings {
         // written before this field existed adopts it — a comp that stored an
         // engaged tone map is disengaged with it rather than left stranded.
         showToneMap: j['show_tone_map'] as bool? ?? false,
+        invertOrbitAcross: j['invert_orbit_across'] as bool? ?? false,
+        invertOrbitUpDown: j['invert_orbit_up_down'] as bool? ?? false,
         // Absent means off: the panel is the default, and the popup
         // this replaced never shipped in a release, so no settings file can be
         // asking for it by silence.

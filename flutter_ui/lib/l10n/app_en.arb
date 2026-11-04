@@ -13659,6 +13659,18 @@
   "@settingsGroupKeymap": {
     "description": "Settings window, Shortcuts: the heading over the preset and import/export rows. A keymap is the whole set of keyboard shortcuts."
   },
+  "settingsGroupOrbit": "Orbit",
+  "@settingsGroupOrbit": {
+    "description": "Settings window, Viewer: the heading over the settings for which way dragging turns the view round a 3D scene."
+  },
+  "settingsInvertOrbitAcross": "Invert left and right",
+  "@settingsInvertOrbitAcross": {
+    "description": "Settings window, Viewer, under the Orbit heading: a switch that makes dragging sideways turn the 3D view the other way."
+  },
+  "settingsInvertOrbitUpDown": "Invert up and down",
+  "@settingsInvertOrbitUpDown": {
+    "description": "Settings window, Viewer, under the Orbit heading: a switch that makes dragging up and down turn the 3D view the other way."
+  },
   "settingsGroupPicture": "Picture",
   "@settingsGroupPicture": {
     "description": "Settings window, Viewer: the heading over the settings that change how the image itself is shown."
