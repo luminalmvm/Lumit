@@ -80,14 +80,14 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "sub_steps",
             "bake",
             "cancel",
-            "attractor",
-            "vortex",
-            "vortex_axis",
-            "sphere",
             "field_x",
             "field_y",
             "field_z",
             "field_radius",
+            "attractor",
+            "vortex",
+            "vortex_axis",
+            "sphere",
         ],
     ),
     group(
@@ -178,41 +178,11 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "shape",
         cond: EnabledCond::ChoiceIsNot(9),
     },
-    // A flock and the kept picture draw on the layer, so they stand aside
-    // while the particles are in the scene or on the card.
-    EnabledWhen {
-        param: "separation",
-        on: "in_scene",
-        cond: EnabledCond::BoolIs(false),
-    },
-    EnabledWhen {
-        param: "alignment",
-        on: "in_scene",
-        cond: EnabledCond::BoolIs(false),
-    },
-    EnabledWhen {
-        param: "cohesion",
-        on: "in_scene",
-        cond: EnabledCond::BoolIs(false),
-    },
+    // The kept picture draws on the layer, so it stands aside while the
+    // particles are in the scene or on the card.
     EnabledWhen {
         param: "persistence",
         on: "in_scene",
-        cond: EnabledCond::BoolIs(false),
-    },
-    EnabledWhen {
-        param: "separation",
-        on: "simulate",
-        cond: EnabledCond::BoolIs(false),
-    },
-    EnabledWhen {
-        param: "alignment",
-        on: "simulate",
-        cond: EnabledCond::BoolIs(false),
-    },
-    EnabledWhen {
-        param: "cohesion",
-        on: "simulate",
         cond: EnabledCond::BoolIs(false),
     },
     EnabledWhen {
@@ -318,27 +288,8 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         cond: EnabledCond::ChoiceIsNot(1),
     },
     // The step reads no pictures, so a collider, a flock or sparks leave
-    // births even, and their particles are drawn over the picture one by one.
-    EnabledWhen {
-        param: "particle_blend",
-        on: "separation",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "particle_blend",
-        on: "alignment",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "particle_blend",
-        on: "cohesion",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "particle_blend",
-        on: "sparks",
-        cond: EnabledCond::Nought,
-    },
+    // births even. Particle blend stays live beside a collider and sparks, which
+    // a simulation draws together as ever.
     EnabledWhen {
         param: "density_layer",
         on: "separation",
@@ -397,11 +348,6 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         cond: EnabledCond::Nought,
     },
     EnabledWhen {
-        param: "particle_blend",
-        on: "collide_with",
-        cond: EnabledCond::LayerUnset,
-    },
-    EnabledWhen {
         param: "density_layer",
         on: "collide_with",
         cond: EnabledCond::LayerUnset,
@@ -430,7 +376,7 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
 ];
 
 /// Whether `inst` is a Particulate drawn on its layer rather than in the
-/// scene: the only place Collide with, a Flock, Sparks and Persistence apply.
+/// scene: the only place the older walk and Persistence apply.
 #[must_use]
 pub fn on_its_layer(inst: &crate::model::EffectInstance) -> bool {
     inst.effect.match_name == "particulate"

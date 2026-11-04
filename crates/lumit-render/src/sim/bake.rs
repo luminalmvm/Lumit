@@ -25,7 +25,7 @@ const HEAD: usize = 8 + 8 + 8 + 8 + 8;
 /// The most a baked state says it unpacks to: a million particles.
 const MOST: usize = 16 + 48 * 1_000_000;
 
-/// The cache folders of the projects open in this session, latest first.
+/// The cache folders of the projects opened so far, latest first.
 static ROOTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 /// Look for bakes beside `project`, in its cache folder and where Collect puts

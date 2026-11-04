@@ -1762,9 +1762,7 @@ fn bake(
 
 /// The most blobs followed on one frame.
 ///
-/// ponytail: one number rather than a row. It bounds what a noisy clip can
-/// cost: this many points a frame in the sidecar at twelve bytes each. A Max
-/// points row is the upgrade if somebody needs more.
+/// ponytail: one number rather than a row, bounding what a noisy clip costs.
 const MAX_BLOBS: usize = 1000;
 
 /// A Track points analysis: every frame of the clip through the feature

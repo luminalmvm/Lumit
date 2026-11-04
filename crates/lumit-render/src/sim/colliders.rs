@@ -26,6 +26,8 @@ pub(super) struct Models {
     /// Each model's distances, and where they start in `buffer`.
     list: Vec<(uuid::Uuid, Arc<Distances>, u32)>,
     buffer: Option<wgpu::Buffer>,
+    /// The surface a Layer emitter gives birth on, gathered once a walk.
+    surface: Option<Option<Arc<[[f32; 4]]>>>,
 }
 
 fn rows(p: &Place) -> [[f32; 4]; 3] {
@@ -60,6 +62,12 @@ fn space<'a>(src: &Source<'a>) -> &'a Layer {
 }
 
 impl Models {
+    pub(super) fn surface(&mut self, src: &Source<'_>) -> Option<Arc<[[f32; 4]]>> {
+        self.surface
+            .get_or_insert_with(|| crate::realise::scene::surface_of(src.doc, src.comp, src.layer))
+            .clone()
+    }
+
     pub(super) fn distances(&self) -> Option<&wgpu::Buffer> {
         self.buffer.as_ref()
     }

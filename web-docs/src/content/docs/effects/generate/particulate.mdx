@@ -65,6 +65,18 @@ A particle system.
 | **Colour by** | Dropdown | Age · Speed · Random | Age | - |
 | **Speed min** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
 | **Speed max** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
+| **Simulate** | Checkbox | On or off | Off | - |
+| **Sub-steps** | Slider, whole numbers | 1 to 8 | 2 | - |
+| **Bake** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **Field x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Field y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Field z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Field radius** | Slider | 1 to 2000; higher | 400 | Pixels at composition size |
+| **Attractor** | Slider | -5000 to 5000; any value by typing | 0 | Pixels at composition size |
+| **Vortex** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Vortex axis** | Dropdown | X · Y · Z | Y | - |
+| **Sphere** | Slider | 0 to 20000; higher | 0 | Pixels at composition size |
 | **Gravity** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind x** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind y** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -76,6 +88,9 @@ A particle system.
 | **Edge** | Dropdown | None · Kill · Wrap | None | - |
 | **Edge margin** | Slider | 0 to 500; higher | 20 | Pixels at composition size |
 | **Collide with** | Layer | Any layer in the composition | None | - |
+| **All 3D layers** | Checkbox | On or off | Off | - |
+| **Ground** | Checkbox | On or off | Off | - |
+| **Ground height** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **On contact** | Dropdown | Bounce · Slide · Stick · Kill | Bounce | - |
 | **Bounciness** | Slider | 0 to 100 | 60 | Per cent |
 | **Friction** | Slider | 0 to 100 | 10 | Per cent |
@@ -84,6 +99,7 @@ A particle system.
 | **Cohesion** | Slider | 0 to 100 | 0 | Per cent |
 | **Flock radius** | Slider | 0 to 500; higher | 150 | Pixels at composition size |
 | **Sparks** | Slider | 0 to 50 | 0 | - |
+| **Sparks from** | Dropdown | Death · Bounce · Flight | Death | - |
 | **Spark speed** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
 | **Spark life** | Slider | 0.1 to 5; down to 0 and higher | 0.5 | Seconds |
 | **Spark size** | Slider | 0 to 100; higher | 50 | Per cent |
@@ -109,11 +125,12 @@ In the Effect Controls panel:
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
+- **Simulation** groups **Simulate**, **Sub-steps**, **Bake**, **Cancel**, **Attractor**, **Vortex**, **Vortex axis**, **Sphere**, **Field x**, **Field y**, **Field z**, **Field radius**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Edges** groups **Edge**, **Edge margin**.
-- **Collide** groups **Collide with**, **On contact**, **Bounciness**, **Friction**.
+- **Collide** groups **Collide with**, **All 3D layers**, **Ground**, **Ground height**, **On contact**, **Bounciness**, **Friction**.
 - **Flock** groups **Separation**, **Alignment**, **Cohesion**, **Flock radius**.
-- **Sparks** groups **Sparks**, **Spark speed**, **Spark life**, **Spark size**.
+- **Sparks** groups **Sparks**, **Sparks from**, **Spark speed**, **Spark life**, **Spark size**.
 - **Trails** groups **Persistence**, **Zoom**, **Turn**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**.
 - **Feather** is editable while **Mode** is set to Disc.
@@ -121,12 +138,28 @@ In the Effect Controls panel:
 - **Streak length** is editable while **Mode** is set to Streak.
 - **Emitter layer** is editable while **Shape** is set to Layer.
 - **Density layer** is editable while **Shape** is anything but Layer.
-- **Collide with** is editable while **In the scene** is off.
 - **Separation** is editable while **In the scene** is off.
 - **Alignment** is editable while **In the scene** is off.
 - **Cohesion** is editable while **In the scene** is off.
-- **Sparks** is editable while **In the scene** is off.
 - **Persistence** is editable while **In the scene** is off.
+- **Separation** is editable while **Simulate** is off.
+- **Alignment** is editable while **Simulate** is off.
+- **Cohesion** is editable while **Simulate** is off.
+- **Persistence** is editable while **Simulate** is off.
+- **Density layer** is editable while **Simulate** is off.
+- **Map placement** is editable while **Simulate** is off.
+- **Sub-steps** is editable while **Simulate** is on.
+- **Attractor** is editable while **Simulate** is on.
+- **Vortex** is editable while **Simulate** is on.
+- **Vortex axis** is editable while **Simulate** is on.
+- **Sphere** is editable while **Simulate** is on.
+- **Field x** is editable while **Simulate** is on.
+- **Field y** is editable while **Simulate** is on.
+- **Field z** is editable while **Simulate** is on.
+- **Field radius** is editable while **Simulate** is on.
+- **Bake** is editable while **Simulate** is on.
+- **Cancel** is editable while **Simulate** is on.
+- **Ground height** is editable while **Ground** is on.
 - **Burst count** is editable while **Burst** is anything but Off.
 - **Burst interval** is editable while **Burst** is set to Every N frames.
 - **Trigger** is editable while **Burst** is set to On trigger.
@@ -135,7 +168,6 @@ In the Effect Controls panel:
 - **Particle blend** is editable while **Separation** is 0.
 - **Particle blend** is editable while **Alignment** is 0.
 - **Particle blend** is editable while **Cohesion** is 0.
-- **Particle blend** is editable while **Sparks** is 0.
 - **Density layer** is editable while **Separation** is 0.
 - **Density layer** is editable while **Alignment** is 0.
 - **Density layer** is editable while **Cohesion** is 0.
@@ -147,13 +179,9 @@ In the Effect Controls panel:
 - **Particle blend** is editable while **Persistence** is 0.
 - **Density layer** is editable while **Persistence** is 0.
 - **Map placement** is editable while **Persistence** is 0.
-- **Particle blend** is editable while **Collide with** names no layer.
 - **Density layer** is editable while **Collide with** names no layer.
 - **Map placement** is editable while **Collide with** names no layer.
-- **On contact** is editable while **Collide with** names a layer.
-- **Bounciness** is editable while **Collide with** names a layer.
 - **Bounciness** is editable while **On contact** is set to Bounce.
-- **Friction** is editable while **Collide with** names a layer.
 - **Friction** is editable while **On contact** is anything but Stick.
 - **Friction** is editable while **On contact** is anything but Kill.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
@@ -252,8 +280,8 @@ The **Collide** group, what particles hit:
 - **Collide with**: a layer whose shapes and masks particles hit. A layer with neither is
   hit at its rectangle. While it is set, each frame's particles are worked out from the
   frame before. A particle keeps the place it was born when the emitter moves, and a
-  change of force acts from the frame it happens on. Density layer and Particle blend are
-  not read, and at most 100,000 particles are alive at once.
+  change of force acts from the frame it happens on. Without Simulate, Density layer and
+  Particle blend are not read, and at most 100,000 particles are alive at once.
 - **On contact**: **Bounce** sends a particle off the other way. **Slide** carries it on
   along the surface. **Stick** holds it where it hit, moving with that layer. **Kill**
   ends it.
@@ -294,16 +322,17 @@ The **Sparks** group, small particles thrown out where one dies:
 Sparks fade and change colour by the Particle group's rows, over their own life.
 
 With Separation, Alignment, Cohesion or Sparks above nought, each frame's particles are
-worked out from the frame before, as with Collide with, and Density layer and Particle
-blend are not read. A row that is keyframed, has an expression or is wired counts as above
+worked out from the frame before, as with Collide with. Without Simulate, Density layer and
+Particle blend are not read. A row that is keyframed, has an expression or is wired counts as above
 nought.
 
 The **Simulation** group, particles worked out step by step on the graphics card:
 
 - **Simulate**: each frame's particles are worked out from the frame before, up to Max
   particles. **Turbulence amount**, **Turbulence scale** and **Turbulence speed** become a
-  flow that pushes particles about wherever they are. Density layer, Flock and Trails are not
-  read, and a Layer emitter gives birth only on a model's surface.
+  flow that pushes particles about wherever they are. Density layer and Trails are not read,
+  and a Layer emitter gives birth only on a model's surface. A flock steers by the cells round
+  a particle, up to 64 cells a side, rather than by each neighbour.
 - **Sub-steps**: how many times a frame the particles move.
 - **Bake**: writes the simulation to the project's cache. A saved project keeps it in its
   cache folder and Collect takes it along. An edit to anything it reads leaves it unread.
@@ -316,7 +345,7 @@ The **Simulation** group, particles worked out step by step on the graphics card
 - **Field x**, **Field y** and **Field z**: where the field's middle is.
 - **Field radius**: how far the three reach.
 
-In the scene, Collide with and Sparks turn this walk on by themselves. A simulation may differ
+In the scene, Collide with, a flock and Sparks turn this walk on by themselves. A simulation may differ
 slightly between graphics cards. On one machine a frame is the same however it is reached.
 
 The **Trails** group, a picture kept from frame to frame:

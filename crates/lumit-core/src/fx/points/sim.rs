@@ -17,7 +17,7 @@ fn on(inst: &EffectInstance, id: &str) -> bool {
 
 /// Whether Particulate `inst` is simulated on the card. Simulate says so, and
 /// so does anything only the card can do: Ground, All 3D layers, sparks from
-/// anything but a death, and a collider or sparks in the scene.
+/// anything but a death, and a collider, sparks or a flock in the scene.
 #[must_use]
 pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
     inst.effect.match_name == "particulate"
@@ -29,7 +29,10 @@ pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
                 None | Some(EffectValue::Choice(0))
             )
             || (on(inst, "in_scene")
-                && (inst.layer_ref("collide_with").is_some() || above(comp, inst, "sparks"))))
+                && (inst.layer_ref("collide_with").is_some()
+                    || ["sparks", "separation", "alignment", "cohesion"]
+                        .iter()
+                        .any(|id| above(comp, inst, id)))))
 }
 
 /// Feeds everything a simulation reads beyond its own layer and Collide with:
@@ -43,6 +46,11 @@ pub(super) fn feed_colliders(
 ) {
     let mut feed = |l: &crate::model::Layer| {
         let _ = serde_json::to_writer(&mut *h, l);
+        for id in crate::model::layer_parent_chain(comp, l.id) {
+            if let Some(parent) = comp.layers.iter().find(|p| p.id == id) {
+                let _ = serde_json::to_writer(&mut *h, parent);
+            }
+        }
         // A file's content, wherever it has been collected to.
         if let LayerKind::Model { item, .. } = l.kind {
             if let Some(crate::model::ProjectItem::Footage(f)) = doc.item(item) {
@@ -167,6 +175,12 @@ pub struct Physics {
     pub sparks_from: u32,
     /// A spark's size, as a share of its parent's.
     pub spark_size: f32,
+    /// How far off another particle still counts as a neighbour, nought for no
+    /// flock, and how strongly a particle steers each of the three ways.
+    pub flock_radius: f32,
+    pub apart: f32,
+    pub along: f32,
+    pub together: f32,
 }
 
 /// `rows` reduced to what a step reads. Nought for anything not a number.
@@ -174,6 +188,13 @@ pub struct Physics {
 pub fn physics(rows: &Particulate) -> Physics {
     let real = |v: f32| if v.is_finite() { v } else { 0.0 };
     let simulating = rows.simulate;
+    let share = |v: f32| (real(v) / 100.0).clamp(0.0, 1.0);
+    let (apart, along, together) = (
+        share(rows.separation),
+        share(rows.alignment),
+        share(rows.cohesion),
+    );
+    let radius = real(rows.flock_radius).max(0.0);
     let field = |v: f32| if simulating { real(v) } else { 0.0 };
     Physics {
         steps: if simulating {
@@ -199,6 +220,14 @@ pub fn physics(rows: &Particulate) -> Physics {
         spark_life: real(rows.spark_life).max(0.0),
         sparks_from: rows.sparks_from.min(2),
         spark_size: (real(rows.spark_size) / 100.0).max(0.0),
+        flock_radius: if apart + along + together > 0.0 {
+            radius
+        } else {
+            0.0
+        },
+        apart,
+        along,
+        together,
     }
 }
 

@@ -104,6 +104,12 @@ pub struct SimStep {
     pub sphere: f32,
     /// How hard the flow pushes, px@comp per second².
     pub curl: f32,
+    /// How far off another particle still counts as a neighbour, nought for no
+    /// flock, and how strongly a particle steers each of the three ways.
+    pub flock_radius: f32,
+    pub apart: f32,
+    pub along: f32,
+    pub together: f32,
 }
 
 #[repr(C)]
@@ -134,6 +140,10 @@ struct StepUniform {
     field: [f32; 4],
     sphere: f32,
     curl: f32,
+    flock_radius: f32,
+    apart: f32,
+    along: f32,
+    together: f32,
     _pad: [f32; 2],
 }
 
@@ -162,6 +172,8 @@ pub struct SimWork {
     /// What each particle moved to, within a step.
     moved: wgpu::Buffer,
     counts: wgpu::Buffer,
+    /// A flock's cells, made the first time one is asked for.
+    cells: std::sync::OnceLock<wgpu::Buffer>,
     pub cap: u32,
 }
 
@@ -201,11 +213,14 @@ pub(super) struct SimPipelines {
     sums: wgpu::ComputePipeline,
     place: wgpu::ComputePipeline,
     birth: wgpu::ComputePipeline,
+    flock_add: wgpu::ComputePipeline,
     out: wgpu::ComputePipeline,
     /// The picture births would follow, which nothing reads here.
     no_picture: wgpu::TextureView,
     /// A storage binding cannot be empty.
     nothing: wgpu::Buffer,
+    /// Nor a written one, which cannot share a buffer with the ones read.
+    no_cells: wgpu::Buffer,
 }
 
 impl SimPipelines {
@@ -271,6 +286,7 @@ impl SimPipelines {
                 buffer(4, storage(true)),
                 buffer(5, storage(true)),
                 buffer(6, storage(true)),
+                buffer(7, storage(false)),
             ],
         );
         let out_layout = layout(
@@ -305,8 +321,15 @@ impl SimPipelines {
                 })
             })
         };
-        let started = ["sim_move", "sim_scan", "sim_sums", "sim_place", "sim_birth"]
-            .map(|entry| compute(entry, &step_pl));
+        let started = [
+            "sim_move",
+            "sim_scan",
+            "sim_sums",
+            "sim_place",
+            "sim_birth",
+            "sim_flock_add",
+        ]
+        .map(|entry| compute(entry, &step_pl));
         let out = compute("sim_out", &out_pl);
         let no_picture = ctx
             .device
@@ -327,7 +350,13 @@ impl SimPipelines {
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
-        let [mover, scan, sums, place, birth] = started.map(|c| c.wait());
+        let no_cells = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("fx-particulate-sim-no-cells"),
+            size: 256,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+        let [mover, scan, sums, place, birth, flock_add] = started.map(|c| c.wait());
         Self {
             main,
             step,
@@ -337,9 +366,11 @@ impl SimPipelines {
             sums,
             place,
             birth,
+            flock_add,
             out: out.wait(),
             no_picture,
             nothing,
+            no_cells,
         }
     }
 }
@@ -377,6 +408,7 @@ impl FxEngine {
             state,
             moved,
             counts,
+            cells: std::sync::OnceLock::new(),
             cap,
         }
     }
@@ -514,6 +546,17 @@ impl FxEngine {
         let per_particle = work.cap.div_ceil(EVAL_WORKGROUP);
         let blocks = work.cap.div_ceil(SCAN_BLOCK);
         let wide = |v: u64| [v as u32, (v >> 32) as u32];
+        // 64 cells a side, seven words each.
+        let cells = steps.iter().any(|s| s.flock_radius > 0.0).then(|| {
+            work.cells.get_or_init(|| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("fx-particulate-sim-cells"),
+                    size: 64 * 64 * 64 * 7 * 4,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            })
+        });
         let mut enc = ctx.encoder("fx-particulate-sim");
         for s in steps {
             let uniform = StepUniform {
@@ -542,6 +585,10 @@ impl FxEngine {
                 field: s.field,
                 sphere: s.sphere,
                 curl: s.curl,
+                flock_radius: s.flock_radius,
+                apart: s.apart,
+                along: s.along,
+                together: s.together,
                 _pad: [0.0; 2],
             };
             let uniform = init(
@@ -560,8 +607,12 @@ impl FxEngine {
                     entry(4, colliders.as_ref().unwrap_or(&set.nothing)),
                     entry(5, edges.as_ref().unwrap_or(&set.nothing)),
                     entry(6, frame.distances.unwrap_or(&set.nothing)),
+                    entry(7, cells.unwrap_or(&set.no_cells)),
                 ],
             });
+            if let Some(cells) = cells {
+                enc.clear_buffer(cells, 0, None);
+            }
             let mut cp = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("fx-particulate-sim"),
                 timestamp_writes: None,
@@ -570,6 +621,10 @@ impl FxEngine {
             cp.set_bind_group(1, &empty, &[]);
             cp.set_bind_group(2, &empty, &[]);
             cp.set_bind_group(3, &group, &[]);
+            if s.flock_radius > 0.0 {
+                cp.set_pipeline(&set.flock_add);
+                cp.dispatch_workgroups(per_particle, 1, 1);
+            }
             cp.set_pipeline(&set.mover);
             cp.dispatch_workgroups(per_particle, 1, 1);
             cp.set_pipeline(&set.scan);

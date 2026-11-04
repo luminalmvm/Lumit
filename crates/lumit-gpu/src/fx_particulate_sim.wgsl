@@ -63,6 +63,13 @@ struct Step {
 
     sphere: f32,
     curl: f32,
+    // How far off another particle still counts as a neighbour, nought for no
+    // flock, and how strongly a particle steers each of the three ways.
+    flock_radius: f32,
+    apart: f32,
+
+    along: f32,
+    together: f32,
     _d: f32,
     _e: f32,
 };
@@ -103,6 +110,10 @@ struct Collider {
 @group(3) @binding(4) var<storage, read> colliders: array<Collider>;
 @group(3) @binding(5) var<storage, read> edges: array<vec4<f32>>;
 @group(3) @binding(6) var<storage, read> sdf: array<f32>;
+// A flock's cells: how many particles are in each, and the sum of where in the
+// cell they are and how fast they go, as whole numbers. Whole numbers add up the
+// same in any order, which floats would not.
+@group(3) @binding(7) var<storage, read_write> cells: array<atomic<i32>>;
 
 const F_HELD: u32 = 1u;
 const F_DEAD: u32 = 2u;
@@ -157,6 +168,103 @@ fn sim_curl(at: vec3<f32>) -> vec3<f32> {
     let b = sim_grad(TURB_Y, q + vec3<f32>(11.3, s, 0.0));
     let c = sim_grad(TURB_Z, q + vec3<f32>(0.0, 47.1, s));
     return vec3<f32>(c.y - b.z, a.z - c.x, b.x - a.y);
+}
+
+const CELLS_SIDE: i32 = 64;
+const CELL_WORDS: u32 = 7u;
+// What one unit of a cell's sums stands for: of its side, and px@comp a second.
+const CELL_PLACE: f32 = 1023.0;
+const CELL_SPEED: f32 = 0.5;
+
+fn sim_cell(c: vec3<i32>) -> u32 {
+    let m = ((c % CELLS_SIDE) + CELLS_SIDE) % CELLS_SIDE;
+    return (u32(m.x) + u32(m.y) * 64u + u32(m.z) * 4096u) * CELL_WORDS;
+}
+
+// Each free particle adds itself to the cell it is in.
+@compute @workgroup_size(64)
+fn sim_flock_add(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if (i >= sa.count) {
+        return;
+    }
+    let q = sa.parts[i];
+    if ((q.flags & F_HELD) != 0u) {
+        return;
+    }
+    let g = q.at.xyz / st.flock_radius;
+    let f = floor(g);
+    let c = sim_cell(vec3<i32>(f));
+    let place = vec3<i32>((g - f) * CELL_PLACE);
+    let speed = vec3<i32>(clamp(q.vel.xyz * CELL_SPEED, vec3<f32>(-1023.0), vec3<f32>(1023.0)));
+    atomicAdd(&cells[c], 1);
+    atomicAdd(&cells[c + 1u], place.x);
+    atomicAdd(&cells[c + 2u], place.y);
+    atomicAdd(&cells[c + 3u], place.z);
+    atomicAdd(&cells[c + 4u], speed.x);
+    atomicAdd(&cells[c + 5u], speed.y);
+    atomicAdd(&cells[c + 6u], speed.z);
+}
+
+// == the CPU's flock in stepped.rs, read from the cells around the particle
+// rather than from each neighbour. A particle's own cell leaves it out.
+fn sim_steer(at: vec3<f32>, vel: vec3<f32>) -> vec3<f32> {
+    let r = st.flock_radius;
+    let home = vec3<i32>(floor(at / r));
+    var push = vec3<f32>(0.0, 0.0, 0.0);
+    var speed = vec3<f32>(0.0, 0.0, 0.0);
+    var mid = vec3<f32>(0.0, 0.0, 0.0);
+    var total = 0.0;
+    for (var z = -1; z <= 1; z = z + 1) {
+        for (var y = -1; y <= 1; y = y + 1) {
+            for (var x = -1; x <= 1; x = x + 1) {
+                let c = home + vec3<i32>(x, y, z);
+                let w = sim_cell(c);
+                var n = f32(atomicLoad(&cells[w]));
+                var place = vec3<f32>(
+                    f32(atomicLoad(&cells[w + 1u])),
+                    f32(atomicLoad(&cells[w + 2u])),
+                    f32(atomicLoad(&cells[w + 3u])),
+                );
+                var moving = vec3<f32>(
+                    f32(atomicLoad(&cells[w + 4u])),
+                    f32(atomicLoad(&cells[w + 5u])),
+                    f32(atomicLoad(&cells[w + 6u])),
+                );
+                if (x == 0 && y == 0 && z == 0) {
+                    let g = at / r;
+                    let own = vec3<f32>(vec3<i32>((g - floor(g)) * CELL_PLACE));
+                    n = n - 1.0;
+                    place = place - own;
+                    moving = moving - vec3<f32>(vec3<i32>(clamp(vel * CELL_SPEED, vec3<f32>(-1023.0), vec3<f32>(1023.0))));
+                }
+                if (n <= 0.0) {
+                    continue;
+                }
+                let middle = (vec3<f32>(c) + place / (n * CELL_PLACE)) * r;
+                let d = at - middle;
+                let len = length(d);
+                if (len >= r * 1.5) {
+                    continue;
+                }
+                if (len > 1e-3) {
+                    push = push + d * n * max(1.0 - len / r, 0.0) / len;
+                }
+                speed = speed + moving / CELL_SPEED;
+                mid = mid + middle * n;
+                total = total + n;
+            }
+        }
+    }
+    if (total <= 0.0) {
+        return vec3<f32>(0.0, 0.0, 0.0);
+    }
+    // Away from close ones, towards their speed and towards their middle, each
+    // the mean, the pull to the middle gentle so a flock streams along.
+    const STEER: f32 = 4.0;
+    return st.apart * STEER * STEER * r / total * push
+        + st.along * 2.0 * STEER * (speed / total - vel)
+        + st.together * 0.1 * STEER * STEER * (mid / total - at);
 }
 
 // How the fields and the flow push a particle at `at` going at `vel`.
@@ -369,7 +477,16 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
             q.at.w = age;
         }
     } else {
-        let v0 = q.vel.xyz + sim_push(q.at.xyz, q.vel.xyz) * st.h;
+        var v0 = q.vel.xyz + sim_push(q.at.xyz, q.vel.xyz) * st.h;
+        if (st.flock_radius > 0.0) {
+            // A flock turns a particle and leaves its speed as it was.
+            let was = length(v0);
+            let turned = v0 + sim_steer(q.at.xyz, q.vel.xyz) * st.h;
+            let now = length(turned);
+            if (now > 1e-6) {
+                v0 = turned * (was / now);
+            }
+        }
         let m = pt_integrate(q.at.xyz, v0, st.h);
         var a = q.at.xyz;
         var b = m.pos;

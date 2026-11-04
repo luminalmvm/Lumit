@@ -1131,37 +1131,29 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         status.frames = baked.frames;
         status.clip_frames = baked.frames;
     }
-    // A simulation's bake.
-    let sim = || {
+    // A bake this instance may read, its frames and its span. Fewer frames than
+    // the span is one a budget stopped early.
+    let bake = || {
         let project = layer.project().ok()?;
         let doc = project.read().ok()?.store.snapshot();
-        lumit_render::sim::bake::status(&doc, layer.comp_id, layer.layer_id, effect)
-    };
-    if inst.effect.match_name == "particulate" {
-        if let Some((frames, span)) = sim() {
-            status.frames = frames;
-            status.clip_frames = span;
-            if status.stage == BridgeTrackStage::Idle {
-                status.stage = BridgeTrackStage::Done;
-            }
+        if inst.effect.match_name == "particulate" {
+            return lumit_render::sim::bake::status(&doc, layer.comp_id, layer.layer_id, effect);
         }
-    }
-    // A bake this instance may read. Fewer frames than the span is one a
-    // budget stopped early.
-    let bake = || {
         if inst.effect.match_name != bake_points::MATCH_NAME {
             return None;
         }
-        let project = layer.project().ok()?;
-        let doc = project.read().ok()?.store.snapshot();
-        bake_points::usable(&doc, doc.comp(layer.comp_id)?, &item, inst)
+        let baked = bake_points::usable(&doc, doc.comp(layer.comp_id)?, &item, inst)?;
+        Some((
+            u32::try_from(baked.frames.len()).unwrap_or(u32::MAX),
+            baked.span,
+        ))
     };
-    if let Some(baked) = bake() {
+    if let Some((frames, span)) = bake() {
         if status.stage == BridgeTrackStage::Idle {
             status.stage = BridgeTrackStage::Done;
         }
-        status.frames = u32::try_from(baked.frames.len()).unwrap_or(u32::MAX);
-        status.clip_frames = baked.span;
+        status.frames = frames;
+        status.clip_frames = span;
     }
     // Done with nothing to read: the rows have changed since, and the effect
     // is drawing without that answer. A Planar track always has its own.

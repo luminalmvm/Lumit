@@ -4801,9 +4801,7 @@ fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u3
 /// Particulate (docs/08 §3.86): evaluate, compact, draw.
 ///
 /// **The Sprite fallback is decided here** rather than in the kernel: an unset
-/// Sprite layer means the mode arrives as Disc, because a render mode must
-/// always draw something (particulate.md §2) and one branch resolved host-side
-/// cannot come to mean two things in two places.
+/// Sprite layer means the mode arrives as Disc (particulate.md §2).
 ///
 /// **The degradation rung is [`lumit_gpu::fx::particulate::ParticulateOp::cap`]**,
 /// and this pass always hands over the declared one.
@@ -6461,6 +6459,7 @@ mod tests {
             max_particles: cap,
             seed: 7,
             mix: 100.0,
+            ..P::read(Params::EMPTY)
         };
         let dt = 1.0 / 24.0;
         let t = 24.0 * dt;

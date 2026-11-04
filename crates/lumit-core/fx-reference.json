@@ -12516,6 +12516,18 @@
           "hard_max": 8.0
         },
         {
+          "id": "bake",
+          "label": "Bake",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
           "id": "field_x",
           "label": "Field x",
           "kind": "float",
@@ -13128,14 +13140,16 @@
           "params": [
             "simulate",
             "sub_steps",
-            "attractor",
-            "vortex",
-            "vortex_axis",
-            "sphere",
+            "bake",
+            "cancel",
             "field_x",
             "field_y",
             "field_z",
-            "field_radius"
+            "field_radius",
+            "attractor",
+            "vortex",
+            "vortex_axis",
+            "sphere"
           ],
           "collapsed": false
         },
@@ -13249,44 +13263,8 @@
           "value": 9
         },
         {
-          "param": "separation",
-          "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
-        },
-        {
-          "param": "alignment",
-          "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
-        },
-        {
-          "param": "cohesion",
-          "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
-        },
-        {
           "param": "persistence",
           "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
-        },
-        {
-          "param": "separation",
-          "on": "simulate",
-          "cond": "bool_is",
-          "value": false
-        },
-        {
-          "param": "alignment",
-          "on": "simulate",
-          "cond": "bool_is",
-          "value": false
-        },
-        {
-          "param": "cohesion",
-          "on": "simulate",
           "cond": "bool_is",
           "value": false
         },
@@ -13363,6 +13341,18 @@
           "value": true
         },
         {
+          "param": "bake",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "cancel",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
           "param": "ground_height",
           "on": "ground",
           "cond": "bool_is",
@@ -13399,26 +13389,6 @@
           "value": 1
         },
         {
-          "param": "particle_blend",
-          "on": "separation",
-          "cond": "nought"
-        },
-        {
-          "param": "particle_blend",
-          "on": "alignment",
-          "cond": "nought"
-        },
-        {
-          "param": "particle_blend",
-          "on": "cohesion",
-          "cond": "nought"
-        },
-        {
-          "param": "particle_blend",
-          "on": "sparks",
-          "cond": "nought"
-        },
-        {
           "param": "density_layer",
           "on": "separation",
           "cond": "nought"
@@ -13472,11 +13442,6 @@
           "param": "density_layer_placement",
           "on": "persistence",
           "cond": "nought"
-        },
-        {
-          "param": "particle_blend",
-          "on": "collide_with",
-          "cond": "layer_unset"
         },
         {
           "param": "density_layer",

@@ -27,21 +27,26 @@ pub(super) struct Distances {
     pub cell_to_model: Mat4,
 }
 
-static HOLD: Mutex<Option<HashMap<uuid::Uuid, Arc<Distances>>>> = Mutex::new(None);
+/// Held with the scene they came from, so a relinked file works them out again.
+type Held = (Arc<ModelScene>, Arc<Distances>);
+
+static HOLD: Mutex<Option<HashMap<uuid::Uuid, Held>>> = Mutex::new(None);
 
 /// `item`'s distances, worked out the first time they are asked for.
 pub(super) fn of(doc: &Document, item: uuid::Uuid) -> Option<Arc<Distances>> {
-    if let Some(found) = HOLD.lock().ok()?.as_ref().and_then(|h| h.get(&item)) {
-        return Some(Arc::clone(found));
-    }
     let scene = crate::model::scene(doc, item)?;
+    if let Some((from, found)) = HOLD.lock().ok()?.as_ref().and_then(|h| h.get(&item)) {
+        if Arc::ptr_eq(from, &scene) {
+            return Some(Arc::clone(found));
+        }
+    }
     let made = Arc::new(worked_out(&scene)?);
     let mut hold = HOLD.lock().ok()?;
     let held = hold.get_or_insert_with(HashMap::new);
     if held.len() >= HELD {
         held.clear();
     }
-    held.insert(item, Arc::clone(&made));
+    held.insert(item, (scene, Arc::clone(&made)));
     Some(made)
 }
 

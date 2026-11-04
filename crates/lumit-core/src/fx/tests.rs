@@ -6588,19 +6588,9 @@ fn every_parameter_declares_a_unit() {
     // cannot acquire a second unit. Stroke's Spacing is a per cent *of the
     // brush*, so it rides on Brush size and is not here.
     //
-    // The Controls family brings two more, and they are the first pair
-    // here that never *reaches* the rescale pass: a Point control draws
-    // nothing, so it resolves to no op at all. They are declared px@comp all
-    // the same, because that is what the numbers mean and because what
-    // reads them through an expression is going to put them in a picture.
-    //
-    // **Points sample's Position** is the last pair, and the second
-    // that never reaches the rescale: a driver resolves at px@comp always, so
-    // its query point and the stream it searches are in the same units by
-    // construction, whatever raster the preview is drawn at. Declared px@comp
-    // for the same reason as the Point control's — that is what the number
-    // means, and the distance it answers with lands in a picture. Measure's
-    // Padding is the same: px@comp, added to a box measured in px@comp.
+    // A Point control, Points sample's Position and Measure's Padding never
+    // reach the rescale pass, and are declared px@comp all the same, because
+    // that is what the numbers mean.
     assert_eq!(
         spatial,
         vec![
@@ -6783,6 +6773,13 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "size"),
             ("particulate", "speed_min"),
             ("particulate", "speed_max"),
+            ("particulate", "field_x"),
+            ("particulate", "field_y"),
+            ("particulate", "field_z"),
+            ("particulate", "field_radius"),
+            ("particulate", "attractor"),
+            ("particulate", "vortex"),
+            ("particulate", "sphere"),
             ("particulate", "gravity"),
             ("particulate", "wind_x"),
             ("particulate", "wind_y"),
@@ -6790,6 +6787,7 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
             ("particulate", "edge_margin"),
+            ("particulate", "ground_height"),
             ("particulate", "flock_radius"),
             ("particulate", "spark_speed"),
             // Grid: every length in a lattice — the gaps between

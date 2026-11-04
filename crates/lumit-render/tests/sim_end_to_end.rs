@@ -298,6 +298,30 @@ fn sparks_fly_from_where_particles_hit() {
     }
 }
 
+/// A flock pulls a cloud together, however the threads add it up: two walks of it
+/// come out the same.
+#[test]
+fn a_flock_steers_and_stays_the_same() {
+    let flock = |cohesion: f64| {
+        project(|e| {
+            float(e, "gravity", 0.0);
+            float(e, "turbulence_amount", 0.0);
+            float(e, "position_y", 135.0);
+            float(e, "initial_speed", 80.0);
+            float(e, "cohesion", cohesion);
+            float(e, "flock_radius", 80.0);
+        })
+    };
+    let (still, id) = flock(0.0);
+    let Some(apart) = pixels(&still, id, 30) else {
+        return;
+    };
+    let (doc, id) = flock(100.0);
+    let drawn = walked_alone(&doc, id, 30).unwrap();
+    assert!(drawn != apart, "the flock moved them");
+    assert!(pixels(&doc, id, 30).unwrap() == drawn, "the same each walk");
+}
+
 /// A frame nobody wants any more stops walking, and the walk carries on from
 /// where it stopped.
 #[test]

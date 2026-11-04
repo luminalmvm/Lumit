@@ -203,7 +203,7 @@ fn steps_of(then: &Inputs, steady: &Steady, frame: i64, h: f64, dt: f64) -> Vec<
                 steady_first: steady.first + u64::from(a),
                 steady_n: b - a,
                 off0: steady.off(a) as f32,
-                off_step: (dt / f64::from(steady.n.max(1))) as f32,
+                off_step: (steady.dt / f64::from(steady.n.max(1))) as f32,
                 end: end as f32,
                 burst_first: 0,
                 burst_n: 0,
@@ -220,12 +220,17 @@ fn steps_of(then: &Inputs, steady: &Steady, frame: i64, h: f64, dt: f64) -> Vec<
                 field: phys.field,
                 sphere: phys.sphere,
                 curl,
+                flock_radius: phys.flock_radius,
+                apart: phys.apart,
+                along: phys.along,
+                together: phys.together,
             }
         })
         .collect()
 }
 
 /// One lot of steps of `work`, from rows `then`.
+#[allow(clippy::too_many_arguments)]
 fn run_steps(
     fx: &FxEngine,
     ctx: &GpuContext,
@@ -247,7 +252,7 @@ fn run_steps(
         c.extend_from_slice(&look.opacity_curve);
         c
     };
-    let surface = crate::realise::scene::surface_of(src.doc, src.comp, src.layer);
+    let surface = models.surface(src);
     let poly = if packed.emitter.shape.is_outline() {
         lumit_core::fx::points::emitter::outline_polyline(&packed.emitter)
     } else {
@@ -438,7 +443,7 @@ fn walked(
     name: &[u8; 32],
     t: f64,
 ) -> Option<Arc<SimWork>> {
-    if !(t >= 0.0) {
+    if t.is_nan() || t < 0.0 {
         return None;
     }
     let dt = src.dt;
