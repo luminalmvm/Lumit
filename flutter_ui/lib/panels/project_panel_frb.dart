@@ -188,7 +188,8 @@ class ProjectPanelFrb extends StatefulWidget {
   State<ProjectPanelFrb> createState() => _ProjectPanelFrbState();
 }
 
-class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
+class _ProjectPanelFrbState extends State<ProjectPanelFrb>
+    with WidgetsBindingObserver {
   bool _missingOnly = false;
 
   /// The live search needle (docs/07 §3.1): lowercase, empty means "show all".
@@ -231,6 +232,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _changes = state.onChange.listen((event) {
       if (event.items) _documentChanged();
     });
+    WidgetsBinding.instance.addObserver(this);
     _searchController.addListener(() {
       final needle = _searchController.text.trim().toLowerCase();
       if (needle != _search) setState(() => _search = needle);
@@ -390,6 +392,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (ui.cutClaim == _cutClaim) ui.cutClaim = _priorCut;
       if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _priorPaste;
     }
+    WidgetsBinding.instance.removeObserver(this);
     _changes?.cancel();
     _blenderPoll?.cancel();
     _searchController.dispose();
@@ -848,6 +851,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   final Map<String, FootageReference> _watched = {};
   final Set<String> _reading = {};
   Timer? _blenderPoll;
+
+  /// Back in front, a 3D model may have been saved over elsewhere, so each is
+  /// checked again, and one being converted shows it.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    _missing.removeWhere((id, _) => _models[id] ?? false);
+    _bookRebuild();
+  }
 
   /// Look at each watched model's Blender state, and stop watching the ones
   /// with nothing left to happen.
