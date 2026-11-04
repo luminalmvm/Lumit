@@ -2100,7 +2100,7 @@ pub(crate) fn read_layer_info(
             K::Text { document } => document
                 .animators
                 .iter()
-                .map(|a| crate::api::assets::read_animator(a, layer.start_offset.0))
+                .map(|a| crate::api::assets::animators::read_animator(a, layer.start_offset.0))
                 .collect(),
             _ => Vec::new(),
         },
