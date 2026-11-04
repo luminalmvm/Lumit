@@ -50,6 +50,7 @@ import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_follow.dart';
+import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_gizmo_3d.dart'
     show
@@ -869,6 +870,7 @@ class ViewerStage extends StatelessWidget {
                   // The box picked on a node graph's canvas is what the Roto
                   // tools stroke on there.
                   uiState.compGraphNode,
+                  uiState.pickedPart,
                 ]),
                 builder: (context, _) {
                   final boxes = _boxes();
@@ -1022,6 +1024,16 @@ class ViewerStage extends StatelessWidget {
                         outline: t.surface0,
                         onChanged: onChanged,
                       ),
+                      // A picked part of a 3D model, over everything else that
+                      // takes the pointer, on its handles alone.
+                      if (uiState.pickedPart.value != null)
+                        ViewerPartGizmo(
+                          comp: comp,
+                          uiState: uiState,
+                          boxes: boxes,
+                          revision: uiState.model.heldRevision,
+                          onChanged: onChanged,
+                        ),
                     ],
                   );
                 },
