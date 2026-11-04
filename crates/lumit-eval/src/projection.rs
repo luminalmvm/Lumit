@@ -34,8 +34,17 @@ pub(super) fn feed_projections(
             }
         }
         if let Some((held, src)) = p.held.zip(find(p.picture)) {
+            // A layer holding itself, or two holding each other, would name
+            // themselves for ever.
+            if visited.contains(&src.id) {
+                h.update(b"held-again/");
+                continue;
+            }
+            visited.push(src.id);
             let slt = lumit_core::time::layer_time(held, src.start_offset.0);
-            feed_layer(h, doc, comp, src, held, slt, quality, stamper, visited)?;
+            let fed = feed_layer(h, doc, comp, src, held, slt, quality, stamper, visited);
+            visited.pop();
+            fed?;
         }
     }
     Some(())
@@ -56,6 +65,55 @@ mod tests {
         fn stamp(&self, item: Uuid, _lt: f64, _native: bool) -> Option<(String, u64)> {
             Some((item.to_string(), 0))
         }
+    }
+
+    /// A Model layer holding its own picture, or two holding each other's,
+    /// still has a name, rather than overflowing the stack looking for it.
+    #[test]
+    fn a_hold_loop_has_a_name() {
+        let mut doc = Document::new();
+        let (id, ops) = new_comp_ops(&doc, CompSettings::default(), None);
+        for op in &ops {
+            apply(&mut doc, op).unwrap();
+        }
+        let comp = doc.comp(id).unwrap().clone();
+        let camera = lumit_core::edits::fresh_camera(&comp, "Camera".into(), None);
+        let item = Uuid::now_v7();
+        let model = || {
+            lumit_core::edits::base_layer(
+                "model".into(),
+                LayerKind::Model {
+                    item,
+                    settings: Box::default(),
+                },
+                comp.duration.0,
+                Default::default(),
+            )
+        };
+        let (mut a, mut b) = (model(), model());
+        let (a_id, b_id, cam) = (a.id, b.id, camera.id);
+        let hold_on = |layer: &mut lumit_core::model::Layer, picture| {
+            let mut rows =
+                lumit_core::fx::builtins::instantiate(lumit_core::model_material::MATCH_NAME)
+                    .unwrap();
+            lumit_core::model_material::set_projection(&mut rows, picture, cam, Some(0));
+            if let LayerKind::Model { settings, .. } = &mut layer.kind {
+                settings.materials = vec![Some(rows)];
+            }
+        };
+        let named = |a: &lumit_core::model::Layer, b: &lumit_core::model::Layer| {
+            let mut doc = doc.clone();
+            let c = doc.comp_mut(id).unwrap();
+            c.layers = vec![camera.clone(), a.clone(), b.clone()];
+            let doc = Arc::new(doc);
+            let comp = doc.comp(id).unwrap().clone();
+            comp_frame_key(&doc, &comp, 0.0, Quality::default(), &Nothing)
+        };
+        hold_on(&mut a, a_id);
+        assert!(named(&a, &b).is_some(), "holding itself");
+        hold_on(&mut a, b_id);
+        hold_on(&mut b, a_id);
+        assert!(named(&a, &b).is_some(), "holding each other");
     }
 
     /// Moving a camera that isn't the comp's own moves what the model shows,
