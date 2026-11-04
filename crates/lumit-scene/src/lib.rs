@@ -27,6 +27,8 @@ mod settle;
 pub mod fixtures;
 
 pub mod blender;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod vdb;
 
 /// One model: its tree of nodes and everything they point at.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -386,12 +388,18 @@ pub enum SceneError {
 
 /// The extensions [`read`] opens itself, lower case. The rest of
 /// [`is_model`]'s go through Blender.
-pub const EXTENSIONS: [&str; 4] = ["gltf", "glb", "fbx", "obj"];
+pub const EXTENSIONS: [&str; 5] = ["gltf", "glb", "fbx", "obj", "vdb"];
 
 /// Whether the file at `path` is a 3D model [`read`] opens, by its name.
 pub fn is_model(path: impl AsRef<FilePath>) -> bool {
     let ext = extension(path.as_ref());
     EXTENSIONS.contains(&ext.as_str()) || blender::EXTENSIONS.contains(&ext.as_str())
+}
+
+/// Whether the file at `path` is an OpenVDB volume, which opens as a model with
+/// no faces and draws through the smoke marcher ([`vdb`]).
+pub fn is_volume(path: impl AsRef<FilePath>) -> bool {
+    extension(path.as_ref()) == "vdb"
 }
 
 /// Read the model at `path`, held to `limits` and stopped when `cancel` is
@@ -405,6 +413,10 @@ pub fn read(
     cancel: &AtomicBool,
 ) -> Result<ModelScene, SceneError> {
     let ext = extension(path);
+    #[cfg(not(target_arch = "wasm32"))]
+    if ext == "vdb" {
+        return vdb::scene(path);
+    }
     if blender::EXTENSIONS.contains(&ext.as_str()) {
         return read_native(&blender::to_glb(path, cache, cancel)?, limits, cancel);
     }
@@ -462,6 +474,11 @@ pub fn dependants(path: &FilePath) -> Vec<PathBuf> {
             "gltf" | "glb" => gltf_file::dependants(&mut r),
             #[cfg(not(target_arch = "wasm32"))]
             "fbx" | "obj" => fbx_file::dependants(&mut r),
+            #[cfg(not(target_arch = "wasm32"))]
+            "vdb" => vdb::frames(path)
+                .into_iter()
+                .filter(|p| p != path)
+                .collect(),
             _ => Vec::new(),
         }
     }));

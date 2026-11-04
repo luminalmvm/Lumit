@@ -20,9 +20,12 @@ lumit-ingress = { path = "../lumit-ingress" }
 serde_json = "1"
 thiserror = "2"
 
-# FBX and OBJ. Its C code has no C library to build against in the browser.
+# FBX and OBJ, and OpenVDB volumes. Their C code has no C library to build
+# against in the browser.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+half = "2"
 ufbx = "0.11"
+vdb-rs = "0.6"
 
 # Where Blender is installed, from the uninstall keys, Steam and the .blend
 # file type. Its windows-link, -result and -strings are already in the tree.
