@@ -437,6 +437,7 @@ fn shapes(
         camera: crate::export::camera_mat(frame.comp.0, frame.comp.1, frame.camera),
         model_to_comp: *unit,
         shutter: &[],
+        shutter_scenes: &[],
         lights: &frame.lights,
         material: lumit_gpu::fx::lighting::LightingMaterial {
             eye: [eye.0 as f32, eye.1 as f32, eye.2 as f32],

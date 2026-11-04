@@ -42,6 +42,7 @@ composites over it.
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 | **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100%. Its **Materials** rows change the file's materials on the layer |
 | **Depth points** | An effect that draws a shot as points in the comp's 3D space, each on its ray from a camera, placed by the depth from Analyse or a Depth layer |
+| **Geometry options** | A Text or Shape layer's Extrusion depth and bevel, which make its outline a solid in the comp's 3D space, with **Front**, **Bevel**, **Side** and **Back** materials |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the

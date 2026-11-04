@@ -390,6 +390,7 @@ fn material(m: &ufbx::Material, id: &dyn Fn(&ufbx::Element) -> usize) -> Materia
         },
         alpha_cutoff: defaults.alpha_cutoff,
         double_sided: m.features.double_sided.enabled,
+        soft_turns: false,
         unlit: m.features.unlit.enabled,
         transmission: real(&p.transmission_factor, 0.0),
         ior: real(&p.specular_ior, defaults.ior),

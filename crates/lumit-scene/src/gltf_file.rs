@@ -376,6 +376,7 @@ fn material(m: gltf::Material) -> Material {
         },
         alpha_cutoff: m.alpha_cutoff().unwrap_or(defaults.alpha_cutoff),
         double_sided: m.double_sided(),
+        soft_turns: false,
         unlit: m.unlit(),
         transmission: m.transmission().map_or(0.0, |t| t.transmission_factor()),
         ior: m.ior().unwrap_or(defaults.ior),

@@ -36,7 +36,7 @@ fn materials_of(scene: &ModelScene) -> Cow<'_, [Material]> {
 /// when it's the only one so named, else by its place, so a file whose
 /// materials move keeps each one's edits.
 fn kept_for<'a>(
-    settings: &'a ModelSettings,
+    kept: &'a [Option<EffectInstance>],
     file: &[Material],
     i: usize,
 ) -> Option<&'a EffectInstance> {
@@ -46,20 +46,20 @@ fn kept_for<'a>(
         .filter(|n| !n.is_empty());
     let unique = |n: &str| file.iter().filter(|m| m.name == n).count() == 1;
     if let Some(n) = name.filter(|n| unique(n)) {
-        let mut kept = settings.materials.iter().flatten();
-        if let Some(rows) = kept.find(|k| k.custom_name.as_deref() == Some(n)) {
+        let mut named = kept.iter().flatten();
+        if let Some(rows) = named.find(|k| k.custom_name.as_deref() == Some(n)) {
             return Some(rows);
         }
     }
     // Kept by place only for a material with no name of its own, so a named
     // one the file has dropped doesn't land on whatever sits there now.
-    let at = settings.materials.get(i)?.as_ref()?;
+    let at = kept.get(i)?.as_ref()?;
     (at.custom_name.is_none() || at.custom_name.as_deref() == name).then_some(at)
 }
 
 /// Material `index`'s rows on Model layer `layer` as `m` in its file has
 /// them.
-fn offered(layer: Uuid, index: usize, m: &Material) -> Option<EffectInstance> {
+pub(crate) fn offered(layer: Uuid, index: usize, m: &Material) -> Option<EffectInstance> {
     let mut rows = lumit_core::fx::builtins::instantiate(MATCH_NAME)?;
     rows.id = material_id(layer, index);
     rows.custom_name = (!m.name.is_empty()).then(|| m.name.clone());
@@ -104,7 +104,10 @@ fn fixed(v: f32) -> lumit_core::anim::Property {
 /// file hasn't been read, which this starts.
 pub fn rows(doc: &Document, layer: &Layer) -> Option<Vec<EffectInstance>> {
     let LayerKind::Model { item, settings } = &layer.kind else {
-        return Some(Vec::new());
+        return Some(match lumit_core::extrude::takes_geometry(layer) {
+            true => crate::extrude::rows(layer),
+            false => Vec::new(),
+        });
     };
     let scene = crate::model::scene_if_read(doc, *item)?;
     Some(scene.map_or_else(Vec::new, |s| rows_of(layer.id, settings, &s)))
@@ -114,7 +117,9 @@ pub fn rows(doc: &Document, layer: &Layer) -> Option<Vec<EffectInstance>> {
 /// a preset and a Reset start from.
 pub fn file_rows(doc: &Document, layer: &Layer, id: Uuid) -> Option<EffectInstance> {
     let LayerKind::Model { item, .. } = &layer.kind else {
-        return None;
+        return lumit_core::extrude::takes_geometry(layer)
+            .then(|| crate::extrude::faces(layer))
+            .and_then(|file| crate::extrude::file_rows(layer.id, index_of(layer.id, id)?, &file));
     };
     let scene = crate::model::scene_if_read(doc, *item)??;
     let i = index_of(layer.id, id)?;
@@ -122,17 +127,45 @@ pub fn file_rows(doc: &Document, layer: &Layer, id: Uuid) -> Option<EffectInstan
 }
 
 fn rows_of(layer: Uuid, settings: &ModelSettings, scene: &ModelScene) -> Vec<EffectInstance> {
-    let file = materials_of(scene);
+    rows_from(layer, &settings.materials, &materials_of(scene), 0)
+}
+
+/// The rows of each of `file`'s materials on layer `layer`, numbered on from
+/// `first`: what `kept` holds, or the material's own values.
+pub(crate) fn rows_from(
+    layer: Uuid,
+    kept: &[Option<EffectInstance>],
+    file: &[Material],
+    first: usize,
+) -> Vec<EffectInstance> {
     (file.iter().enumerate())
-        .filter_map(|(i, m)| match kept_for(settings, &file, i) {
+        .filter_map(|(i, m)| match kept_for(kept, file, i) {
             // Named for its layer and its file as they are now, whatever
             // layer it was first kept on.
-            Some(kept) => Some(EffectInstance {
-                id: material_id(layer, i),
+            Some(rows) => Some(EffectInstance {
+                id: material_id(layer, i + first),
                 custom_name: (!m.name.is_empty()).then(|| m.name.clone()),
-                ..kept.clone()
+                ..rows.clone()
             }),
-            None => offered(layer, i, m),
+            None => offered(layer, i + first, m),
+        })
+        .collect()
+}
+
+/// For each of `file`'s materials whether `kept` leaves its Base colour row
+/// as the material has it.
+pub(crate) fn plain_faces(
+    layer: Uuid,
+    kept: &[Option<EffectInstance>],
+    file: &[Material],
+) -> Vec<bool> {
+    (file.iter().enumerate())
+        .map(|(i, m)| {
+            let Some(rows) = kept_for(kept, file, i) else {
+                return true;
+            };
+            let base = |r: &EffectInstance| r.param("base_colour").cloned();
+            offered(layer, i, m).is_none_or(|own| base(rows) == base(&own))
         })
         .collect()
 }
@@ -147,7 +180,9 @@ pub fn kept(
     list: &[EffectInstance],
 ) -> Option<Vec<Option<EffectInstance>>> {
     let LayerKind::Model { item, .. } = &layer.kind else {
-        return None;
+        return lumit_core::extrude::takes_geometry(layer)
+            .then(|| crate::extrude::kept_of(layer, list))
+            .flatten();
     };
     let scene = crate::model::scene_if_read(doc, *item)??;
     kept_of(layer.id, &scene, list)
@@ -179,7 +214,7 @@ fn kept_of(
 /// Whether staged `list` is Model layer `layer`'s rows.
 #[must_use]
 pub fn owns(layer: &Layer, list: &[EffectInstance]) -> bool {
-    matches!(layer.kind, LayerKind::Model { .. })
+    (matches!(layer.kind, LayerKind::Model { .. }) || lumit_core::extrude::takes_geometry(layer))
         && list
             .first()
             .is_some_and(|rows| index_of(layer.id, rows.id).is_some())
@@ -190,6 +225,10 @@ pub fn owns(layer: &Layer, list: &[EffectInstance]) -> bool {
 pub fn stage(layer: &mut Layer, list: Vec<EffectInstance>) {
     if let LayerKind::Model { settings, .. } = &mut layer.kind {
         settings.materials = list.into_iter().map(Some).collect();
+    } else if lumit_core::extrude::takes_geometry(layer) {
+        layer.transform.material.geometry = list.into_iter().map(Some).collect();
+        // A depth being dragged up from nought shows as it will land.
+        layer.switches.three_d |= lumit_core::extrude::is_extruded(layer);
     }
 }
 
@@ -213,12 +252,28 @@ pub(crate) fn looks(
     context: &Arc<ExpressionContext>,
     picture: &dyn Fn(&EffectInstance, &str) -> Option<DofInputDraw>,
 ) -> Vec<Look> {
+    looks_of(
+        &settings.materials,
+        &materials_of(scene),
+        lt,
+        context,
+        picture,
+    )
+}
+
+/// [`looks`], of any list of `materials` and the rows `kept` for them.
+pub(crate) fn looks_of(
+    kept: &[Option<EffectInstance>],
+    materials: &[Material],
+    lt: f64,
+    context: &Arc<ExpressionContext>,
+    picture: &dyn Fn(&EffectInstance, &str) -> Option<DofInputDraw>,
+) -> Vec<Look> {
     let read =
         |p: &lumit_core::anim::Property| p.value_at_with_context(lt, Arc::clone(context)) as f32;
     let mut out = Vec::new();
-    let materials = materials_of(scene);
     for (index, file) in materials.iter().enumerate() {
-        let rows = kept_for(settings, &materials, index);
+        let rows = kept_for(kept, materials, index);
         let Some(rows) = rows.filter(|r| r.enabled) else {
             if file.transmission > 0.0 {
                 let material = file.clone();

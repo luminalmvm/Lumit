@@ -71,6 +71,7 @@ impl Realiser<'_> {
             camera: crate::export::camera_mat(width, height, pose),
             model_to_comp: to_comp(m),
             shutter: &shutter,
+            shutter_scenes: &m.shutter_scenes,
             lights: &l.lights,
             material: lumit_gpu::fx::lighting::LightingMaterial {
                 eye,

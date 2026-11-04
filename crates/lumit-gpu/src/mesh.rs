@@ -36,6 +36,11 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const INV_W: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
 /// The pipeline set that draws edges as lines.
 const WIRE: usize = 6;
+/// The card's slots each kept material holds, for its numbers and pictures.
+const MATERIAL_SLOTS: usize = 8;
+/// The most slots kept models hold between them: half of the million DirectX 12
+/// has, with the rest for what a frame binds.
+const KEPT_SLOTS: usize = 500_000;
 
 /// Why a model can't be drawn.
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +67,9 @@ pub struct ModelView<'a> {
     pub model_to_comp: Mat4,
     /// The same at each shutter sample when the model blurs, empty when not.
     pub shutter: &'a [Mat4],
+    /// The scene at each of those samples where its shape moves, empty when
+    /// it holds still. Each has the materials of the one drawn.
+    pub shutter_scenes: &'a [Arc<ModelScene>],
     /// The comp's lights as a 3D layer takes them, at most eight, and the
     /// eye and Accepts lights from the layer's Material options. Its numbers
     /// are left out, as a model's materials come from its file. No lights
@@ -416,58 +424,6 @@ impl MeshFx {
 }
 
 impl MeshFx {
-    /// Fill in `texture`'s smaller levels from its first, each halved from
-    /// the one above. An sRGB picture is read and written through its
-    /// encoding, so it is averaged in linear light.
-    fn mips(&self, ctx: &GpuContext, texture: &wgpu::Texture) {
-        let (layout, pipelines, sampler) = &self.down;
-        let pipeline = &pipelines[match texture.format() {
-            COLOUR => 2,
-            f => usize::from(f.is_srgb()),
-        }];
-        let level = |k| {
-            texture.create_view(&wgpu::TextureViewDescriptor {
-                label: Some("mesh-level"),
-                base_mip_level: k,
-                mip_level_count: Some(1),
-                ..Default::default()
-            })
-        };
-        let mut encoder = ctx.encoder("mesh-down");
-        for k in 1..texture.mip_level_count() {
-            let group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("mesh-down"),
-                layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&level(k - 1)),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: wgpu::BindingResource::Sampler(sampler),
-                    },
-                ],
-            });
-            let view = level(k);
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("mesh-down"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &group, &[]);
-            pass.draw(0..3, 0..1);
-        }
-    }
-
     /// The mesh pipeline of kind `set` at `samples`, made the first time it
     /// is asked for.
     fn pipeline(
@@ -567,12 +523,17 @@ impl MeshFx {
                     models.push(kept);
                     Some(model)
                 }
-                // Short of video memory, the older half goes before another
-                // comes.
+                // Short of video memory or binding slots, the older half goes
+                // before another comes.
                 None if ctx
                     .ledger()
                     .pressure(lumit_budget::Tier::Vram)
-                    .should_trim() =>
+                    .should_trim()
+                    || models
+                        .iter()
+                        .map(|(_, m)| m.materials.len() * MATERIAL_SLOTS)
+                        .sum::<usize>()
+                        >= KEPT_SLOTS =>
                 {
                     let half = models.len().div_ceil(2);
                     models.drain(..half);
@@ -595,9 +556,12 @@ impl MeshFx {
         &self,
         ctx: &GpuContext,
         lighting: &LightingFx,
-        model: &GpuModel,
+        models: &[Arc<GpuModel>],
         view: &ModelView<'_>,
     ) -> ModelPicture {
+        // Each shutter sample's model, the first for any it has none of.
+        let model = &*models[0];
+        let at_sample = |k: usize| models.get(k).unwrap_or(&models[0]);
         let (w, h) = view.comp;
         let (tw, th) = scaled_size(w, h, view.render_scale);
         let samples = ctx.cut_sample_count(view.samples).max(1);
@@ -702,17 +666,21 @@ impl MeshFx {
                 .get(p.material)
                 .map_or((false, false), |m| (m.1, m.2))
         };
-        let mut order: Vec<&Part> = model.parts.iter().collect();
-        order.sort_by(|a, b| {
-            let blends = look(a).0;
-            blends.cmp(&look(b).0).then_with(|| {
-                if blends {
-                    far(b).total_cmp(&far(a))
-                } else {
-                    a.material.cmp(&b.material)
-                }
-            })
-        });
+        let order_of = |model: &'_ GpuModel| {
+            let mut order: Vec<usize> = (0..model.parts.len()).collect();
+            order.sort_by(|&a, &b| {
+                let (a, b) = (&model.parts[a], &model.parts[b]);
+                let blends = look(a).0;
+                blends.cmp(&look(b).0).then_with(|| {
+                    if blends {
+                        far(b).total_cmp(&far(a))
+                    } else {
+                        a.material.cmp(&b.material)
+                    }
+                })
+            });
+            order
+        };
         let size = std::mem::size_of::<DrawUniform>();
         let stride = wgpu::util::align_to(
             size as u64,
@@ -724,13 +692,17 @@ impl MeshFx {
         } else {
             view.shutter
         };
-        let mut bytes =
-            vec![0u8; (stride * (order.len() * placements.len()).max(1) as u64) as usize];
+        let parts: usize = (0..placements.len())
+            .map(|k| at_sample(k).parts.len())
+            .sum();
+        let mut bytes = vec![0u8; (stride * parts.max(1) as u64) as usize];
         let mut next = 0;
         let mut draws = Vec::with_capacity(placements.len());
-        for placed in placements {
+        for (k, placed) in placements.iter().enumerate() {
+            let model = at_sample(k);
+            let order = order_of(model);
             let mut these = Vec::with_capacity(order.len());
-            for &p in &order {
+            for p in order.iter().filter_map(|&i| model.parts.get(i)) {
                 let at = *placed * p.node;
                 let m3 = Mat3::from_mat4(at);
                 let det = m3.determinant();
@@ -853,10 +825,12 @@ impl MeshFx {
                 .forget_lifetime()
         };
         let draw_parts = |pass: &mut wgpu::RenderPass<'_>,
+                          k: usize,
                           these: &[(&Part, u32, usize)],
                           depth: bool| {
-            pass.set_vertex_buffer(0, model.vertices.slice(..));
-            pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
+            let at = at_sample(k);
+            pass.set_vertex_buffer(0, at.vertices.slice(..));
+            pass.set_index_buffer(at.indices.slice(..), wgpu::IndexFormat::Uint32);
             for &(p, offset, set) in these.iter().filter(|_| view.display.draws_faces()) {
                 let Some((group, _, _, samplers)) = materials.get(p.material) else {
                     continue;
@@ -898,7 +872,7 @@ impl MeshFx {
         };
         let mut encoder = ctx.encoder("mesh");
         for (k, these) in draws.iter().enumerate() {
-            draw_parts(&mut mesh_pass(&mut encoder, "mesh"), these, false);
+            draw_parts(&mut mesh_pass(&mut encoder, "mesh"), k, these, false);
             if let Some(shutter) = &shutter {
                 shutter.add(self, &mut encoder, &colour_view, k);
             }
@@ -907,8 +881,8 @@ impl MeshFx {
             // The nearest depth of every sample, so where the model meets the
             // scene its smear isn't cut to the outline it has at rest.
             let mut pass = mesh_pass(&mut encoder, "mesh-shutter-depth");
-            for these in &draws {
-                draw_parts(&mut pass, these, true);
+            for (k, these) in draws.iter().enumerate() {
+                draw_parts(&mut pass, k, these, true);
             }
         }
         {
@@ -991,6 +965,16 @@ impl FxEngine {
                 let _ = model.edges.set(edges);
             }
         }
-        Ok(fx.draw(ctx, &self.lighting, &model, view))
+        // Lines stay on the frame's shape, as they belong to its model.
+        let mut models = vec![model];
+        if !view.display.draws_wires() {
+            for scene in view.shutter_scenes {
+                models.push(fx.model_for(ctx, scene)?);
+            }
+            if models.len() > 1 {
+                models.remove(0);
+            }
+        }
+        Ok(fx.draw(ctx, &self.lighting, &models, view))
     }
 }

@@ -119,6 +119,14 @@ fn run() -> Result<(), String> {
         );
     })?);
 
+    // One letter's mesh on an extruded layer (docs/13 §2 B39).
+    results.extend(lumit_bench::extruded::budgets(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
     // A million particles in the 3D scene (docs/13 §2 B31).
     results.extend(lumit_bench::scene_points::budgets(
         &mut |m: Measurement| {

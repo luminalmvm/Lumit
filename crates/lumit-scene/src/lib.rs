@@ -188,6 +188,9 @@ pub struct Material {
     pub alpha_cutoff: f32,
     pub double_sided: bool,
     pub unlit: bool,
+    /// Widen its highlights where the surface turns faster than a pixel can
+    /// show, as a thin bevel does, so a mirror finish doesn't sparkle.
+    pub soft_turns: bool,
     pub transmission: f32,
     pub ior: f32,
     pub clearcoat: f32,
@@ -214,6 +217,7 @@ impl Default for Material {
             alpha_cutoff: 0.5,
             double_sided: false,
             unlit: false,
+            soft_turns: false,
             transmission: 0.0,
             ior: 1.5,
             clearcoat: 0.0,

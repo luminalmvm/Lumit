@@ -29,6 +29,9 @@ pub struct ModelDraw {
     /// `placement` at each shutter sample when the layer blurs, empty when
     /// it doesn't.
     pub shutter: Vec<[[f32; 4]; 4]>,
+    /// The scene at each of those samples, where its shape moves across the
+    /// shutter. Empty when it holds still.
+    pub shutter_scenes: Vec<Arc<ModelScene>>,
     pub opacity: f32,
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
@@ -163,6 +166,7 @@ pub fn reading() -> bool {
 
 /// Count kept scenes against the governor's `ledger` from here on.
 pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
+    crate::extrude::account_against(ledger);
     if let Ok(mut slot) = KEPT.lock() {
         let mut kept = lumit_cache::ByteLru::new(KEPT_BYTES);
         kept.account_against(Arc::clone(ledger), lumit_budget::Tier::Ram);
@@ -199,13 +203,28 @@ pub(crate) fn draw(
     context: &Arc<ExpressionContext>,
     picture: &dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
 ) -> Option<ModelDraw> {
-    let LayerKind::Model { item, settings } = &layer.kind else {
-        return None;
-    };
-    let (item, settings) = (*item, &**settings);
-    let scene = scene(doc, item)?;
-    let material = &layer.transform.material;
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let mut tinted = None;
+    let (item, scene, model_to_comp, looks) = match &layer.kind {
+        LayerKind::Model { item, settings } => {
+            let scene = scene(doc, *item)?;
+            let to_comp = model_to_comp(
+                settings,
+                &scene.bounds,
+                (comp.width as f32, comp.height as f32),
+            );
+            let looks = crate::model_material::looks(settings, &scene, lt, context, picture);
+            (*item, scene, to_comp, looks)
+        }
+        // A solid's mesh is in the layer's own pixels already.
+        _ => {
+            let made = crate::extrude::made(layer, lt, context, picture)?;
+            tinted = Some(made.tinted);
+            let same = glam::Mat4::IDENTITY.to_cols_array_2d();
+            (layer.id, made.scene, same, made.looks)
+        }
+    };
+    let material = &layer.transform.material;
     let placed = |t: f64| {
         // Each shutter sample reads `time` at its own moment.
         let context = Arc::new(ExpressionContext {
@@ -224,20 +243,38 @@ pub(crate) fn draw(
         .iter()
         .map(|off| placed(t_comp + off * dt))
         .collect();
+    // A solid whose letters or outline move has a scene for each sample.
+    let mut shutter_scenes = Vec::new();
+    if let Some(tinted) =
+        tinted.filter(|_| !offsets.is_empty() && crate::extrude::may_change(layer, lt, context))
+    {
+        shutter_scenes = (offsets.iter())
+            .filter_map(|off| {
+                let t = t_comp + off * dt;
+                let context = Arc::new(ExpressionContext {
+                    comp_time: t,
+                    ..(**context).clone()
+                });
+                let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+                crate::extrude::scene_at(layer, lt, &context, tinted)
+            })
+            .collect();
+        if shutter_scenes.len() != offsets.len()
+            || shutter_scenes.iter().all(|s| Arc::ptr_eq(s, &scene))
+        {
+            shutter_scenes.clear();
+        }
+    }
     // A model that stays put over the shutter is drawn once.
-    if shutter.iter().all(|s| *s == placement) {
+    if shutter_scenes.is_empty() && shutter.iter().all(|s| *s == placement) {
         shutter.clear();
     }
-    let looks = crate::model_material::looks(settings, &scene, lt, context, picture);
     Some(ModelDraw {
         item,
         placement,
-        model_to_comp: model_to_comp(
-            settings,
-            &scene.bounds,
-            (comp.width as f32, comp.height as f32),
-        ),
+        model_to_comp,
         shutter,
+        shutter_scenes,
         scene,
         opacity: layer
             .transform
@@ -325,10 +362,21 @@ pub fn hit(
     origin: [f32; 3],
     direction: [f32; 3],
 ) -> Option<f32> {
-    use glam::{Mat4, Vec3};
-    let (origin, direction) = (Vec3::from(origin), Vec3::from(direction));
     let scene = kept(&key_of(doc, item)?)??;
-    let placed = Mat4::from_cols_array_2d(&model_to_comp(settings, &scene.bounds, comp));
+    let placed = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &scene.bounds, comp));
+    scene_hit(&scene, placed, origin, direction)
+}
+
+/// How far along the ray from `origin` by `direction` `scene` placed by
+/// `placed` is first met, in parts of `direction`.
+pub fn scene_hit(
+    scene: &ModelScene,
+    placed: glam::Mat4,
+    origin: [f32; 3],
+    direction: [f32; 3],
+) -> Option<f32> {
+    use glam::Vec3;
+    let (origin, direction) = (Vec3::from(origin), Vec3::from(direction));
     let mut nearest = None::<f32>;
     for (k, node) in scene.nodes.iter().enumerate() {
         let Some(mesh) = node.mesh.and_then(|m| scene.meshes.get(m)) else {

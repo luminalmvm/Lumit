@@ -70,6 +70,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
                     camera,
                     model_to_comp,
                     shutter: &[],
+                    shutter_scenes: &[],
                     lights,
                     material: LightingMaterial {
                         eye,
@@ -232,6 +233,7 @@ fn a_model_shades_a_layer_behind_it_and_not_its_own_lit_face() {
             camera,
             model_to_comp,
             shutter: &[],
+            shutter_scenes: &[],
             lights: &[key],
             material,
             instances: &[],
@@ -353,6 +355,7 @@ fn a_white_environment_lights_white_things_white() {
             * Mat4::from_scale(Vec3::splat(60.0))
             * Mat4::from_rotation_x(std::f32::consts::PI),
         shutter: &[],
+        shutter_scenes: &[],
         lights: &[],
         material: LightingMaterial {
             eye,
@@ -394,8 +397,8 @@ fn a_white_environment_lights_white_things_white() {
 }
 
 /// Models are kept while their scenes live, and however many that is the
-/// card keeps room to bind them. Each scene here has more materials than the
-/// last would fit if each held samplers of its own.
+/// card keeps room to bind them. There are more materials here than it has
+/// sampler slots, or binding slots for their pictures.
 #[test]
 fn any_number_of_kept_models_still_draw() {
     let Some(lease) = lumit_gpu::test_support::lease() else {
@@ -419,11 +422,11 @@ fn any_number_of_kept_models_still_draw() {
         roughness: 0.5,
         ..Material::default()
     };
-    let scenes: Vec<_> = (0..120)
+    let scenes: Vec<_> = (0..80)
         .map(|_| {
             Arc::new(fixtures::scene(
                 vec![(fixtures::cube(1.0, Some(0)), [0.0; 3])],
-                vec![material.clone(); 25],
+                vec![material.clone(); 2000],
                 Vec::new(),
             ))
         })
@@ -437,6 +440,7 @@ fn any_number_of_kept_models_still_draw() {
             camera,
             model_to_comp,
             shutter: &[],
+            shutter_scenes: &[],
             lights: &[],
             material: LightingMaterial {
                 eye,
