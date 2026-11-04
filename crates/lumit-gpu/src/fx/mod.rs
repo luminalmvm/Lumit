@@ -738,6 +738,25 @@ pub fn fit_at(
     out
 }
 
+/// A kernel's text for the project's colour depth. The kernels are written for
+/// sixteen bits, and the picture one hands on has to be declared in the format
+/// it is written in. What a kernel keeps for itself stays as it is.
+pub(crate) fn at_depth(working: wgpu::TextureFormat, wgsl: &str) -> String {
+    let format = match working {
+        wgpu::TextureFormat::Rgba8Unorm => "rgba8unorm",
+        wgpu::TextureFormat::Rgba32Float => "rgba32float",
+        _ => return wgsl.to_owned(),
+    };
+    ["dst", "dst_tex", "out_tex"]
+        .iter()
+        .fold(wgsl.to_owned(), |text, out| {
+            text.replace(
+                &format!("var {out}: texture_storage_2d<rgba16float,"),
+                &format!("var {out}: texture_storage_2d<{format},"),
+            )
+        })
+}
+
 /// A pass's output texture: one an earlier pass in this frame has finished
 /// with, or a new one.
 ///

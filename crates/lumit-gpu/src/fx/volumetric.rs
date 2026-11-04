@@ -166,13 +166,16 @@ impl HazeFx {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fx-haze"),
             source: wgpu::ShaderSource::Wgsl(
-                concat!(
-                    include_str!("../fx_noise_core.wgsl"),
-                    include_str!("../light_core.wgsl"),
-                    include_str!("../shadow_core.wgsl"),
-                    include_str!("../environment_core.wgsl"),
-                    include_str!("../fx_lighting.wgsl"),
-                    include_str!("../fx_volumetric.wgsl")
+                super::at_depth(
+                    working,
+                    concat!(
+                        include_str!("../fx_noise_core.wgsl"),
+                        include_str!("../light_core.wgsl"),
+                        include_str!("../shadow_core.wgsl"),
+                        include_str!("../environment_core.wgsl"),
+                        include_str!("../fx_lighting.wgsl"),
+                        include_str!("../fx_volumetric.wgsl")
+                    ),
                 )
                 .into(),
             ),

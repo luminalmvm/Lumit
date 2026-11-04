@@ -89,11 +89,11 @@ pub mod schedule;
 /// * 23: a blurred layer is drawn with more copies the faster it moves, its
 ///   parents and the camera move them too, a still one is drawn once, and the
 ///   inner layers of a collapsed Precomp blur.
-/// * 24: Corner pin and Bezier warp on a node graph box draw past the picture
-///   they are handed.
+/// * 24: Corner pin and Bezier warp on a node graph box draw past their picture.
 /// * 25: Model layers cast and take shadows.
 /// * 26: an OpenEXR packed with PIZ is read by Lumit's own reader.
 /// * 27: a 3D model's glass and clearcoat from its file are drawn.
+/// * 28: a project at 8 or 32 bits draws its effects.
 /// * 29: Particulate in the scene follows a collapsed precomp.
 pub const ALGO_VERSION: u32 = 29;
 

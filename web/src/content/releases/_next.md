@@ -4,6 +4,7 @@ section below, and when the release note is written the lines move into it.
 
 ## Before you update
 
+- A project set to 8 or 32 bits draws its effects, where most of them used to come out empty.
 - Particulate in the scene inside a collapsed 3D precomp now follows the precomp, where it used
   to stay behind when the precomp was moved.
 - Depth of field pro no longer leaves a fine grain over a wide blur, by either method.
