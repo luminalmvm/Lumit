@@ -199,7 +199,7 @@ pub fn number(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use crate::fx::builtins::instantiate;
@@ -231,5 +231,76 @@ mod tests {
             }
         }
         assert!(!untouched(&rows));
+    }
+
+    /// What somebody keyed on a part comes back from a saved project, finds its
+    /// part again and reads the same. Only a Model layer keeps any.
+    #[test]
+    fn a_parts_rows_survive_a_save() {
+        use crate::anim::{Animation, Keyframe, Property, SideInterp};
+        use crate::edits::{new_comp_ops, CompSettings};
+        use crate::model::{Document, FootageItem, MediaRef};
+
+        let mut doc = Document::new();
+        let (comp, ops) = new_comp_ops(&doc, CompSettings::default(), None);
+        for op in &ops {
+            crate::ops::apply(&mut doc, op).unwrap();
+        }
+        let comp = doc.comp(comp).unwrap();
+        let file = FootageItem {
+            id: Uuid::now_v7(),
+            name: "rig.glb".into(),
+            media: MediaRef {
+                relative_path: String::new(),
+                absolute_path: "rig.glb".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            colour_space: None,
+            sequence: None,
+            extra: serde_json::Map::new(),
+            source_layer: None,
+            interpretation: Default::default(),
+        };
+        let mut layer = crate::model_layer::model_layer(comp, &file);
+        assert!(stored(&layer).is_empty(), "a new layer keeps nothing");
+
+        let key = |secs: i64, value: f64| Keyframe {
+            time: crate::time::Rational::new(secs, 1).unwrap(),
+            value,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let mut moved = Property::zero();
+        moved.animation = Animation::Keyframed(vec![key(0, 0.0), key(1, 10.0)]);
+        let mut rows = instantiate(PART_NAME).unwrap();
+        rows.id = part_id(layer.id, 3);
+        for p in &mut rows.params {
+            if p.id == "position_x" {
+                p.value = EffectValue::Float(moved.clone());
+            }
+        }
+        let mut playback = instantiate(PLAYBACK_NAME).unwrap();
+        playback.id = playback_id(layer.id);
+        let LayerKind::Model { settings, .. } = &mut layer.kind else {
+            panic!("a Model layer");
+        };
+        settings.playback = Some(playback);
+        settings.parts = vec![rows];
+
+        let json = serde_json::to_string(&layer).unwrap();
+        let read: Layer = serde_json::from_str(&json).unwrap();
+        let kept = stored(&read);
+        assert_eq!(kept.len(), 2, "the playback rows, then the part's");
+        assert_eq!(node_of(read.id, kept[0].id), None);
+        assert_eq!(node_of(read.id, kept[1].id), Some(3));
+
+        let context = crate::model::timed_context(comp, 0.5);
+        assert!((number(&kept[1], "position_x", 0.5, &context, 0.0) - 5.0).abs() < 1e-9);
+        assert_eq!(number(&kept[1], "no_such_row", 0.5, &context, 7.0), 7.0);
+
+        let mut other = read;
+        other.kind = LayerKind::Null;
+        assert!(stored(&other).is_empty());
     }
 }

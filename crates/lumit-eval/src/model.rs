@@ -73,7 +73,7 @@ fn named(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
     use lumit_core::model_layer::UpAxis;
@@ -101,5 +101,129 @@ mod tests {
         };
         assert_eq!(name(&z), name(&z.clone()));
         assert_ne!(name(&z), name(&ModelSettings::default()));
+    }
+
+    /// What it reads as the stamper tells it, so a take's moment is in the name.
+    struct Clock;
+    impl SourceStamper for Clock {
+        fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
+            Some((item.to_string(), lt.to_bits()))
+        }
+    }
+
+    struct Unread;
+    impl SourceStamper for Unread {
+        fn stamp(&self, _item: Uuid, _lt: f64, _native: bool) -> Option<(String, u64)> {
+            None
+        }
+    }
+
+    /// A cached picture is only shown for the moment and the rows it was drawn
+    /// with. A playing take and a keyed row name each frame, a model at rest with
+    /// nothing keyed has one name for all of them, and a changed row or Offset
+    /// is a new picture. A file nobody can name is never cached.
+    #[test]
+    fn the_moment_and_the_rows_rename_the_frame() {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        use lumit_core::edits::{new_comp_ops, CompSettings};
+        use lumit_core::fx::builtins::instantiate;
+        use lumit_core::model::{EffectValue, FootageItem, MediaRef, ProjectItem};
+        use lumit_core::model_part::{part_id, playback_id, PART_NAME, PLAYBACK_NAME};
+        use lumit_core::ops::{apply, Op};
+
+        let mut doc = Document::new();
+        let (comp, ops) = new_comp_ops(&doc, CompSettings::default(), None);
+        for op in &ops {
+            apply(&mut doc, op).unwrap();
+        }
+        let file = FootageItem {
+            id: Uuid::now_v7(),
+            name: "rig.glb".into(),
+            media: MediaRef {
+                relative_path: String::new(),
+                absolute_path: "rig.glb".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            colour_space: None,
+            sequence: None,
+            extra: serde_json::Map::new(),
+            source_layer: None,
+            interpretation: Default::default(),
+        };
+        doc.items.push(ProjectItem::Footage(file.clone()));
+        let layer = lumit_core::model_layer::model_layer(doc.comp(comp).unwrap(), &file);
+        let id = layer.id;
+        apply(
+            &mut doc,
+            &Op::AddLayer {
+                comp,
+                index: 0,
+                layer: Box::new(layer),
+            },
+        )
+        .unwrap();
+
+        let name = |change: &dyn Fn(&mut ModelSettings), t: f64| {
+            let mut doc = doc.clone();
+            let c = doc.comp_mut(comp).unwrap();
+            let LayerKind::Model { settings, .. } = &mut c.layers[0].kind else {
+                panic!("a Model layer");
+            };
+            change(settings);
+            let doc = Arc::new(doc);
+            let c = doc.comp(comp).unwrap();
+            crate::comp_frame_key(&doc, c, t, Quality::default(), &Clock).unwrap()
+        };
+        let key = |secs: i64, value: f64| Keyframe {
+            time: lumit_core::time::Rational::new(secs, 1).unwrap(),
+            value,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let row = |rows: &mut lumit_core::model::EffectInstance, id: &str, p: Property| {
+            for r in &mut rows.params {
+                if r.id == id {
+                    r.value = EffectValue::Float(p.clone());
+                }
+            }
+        };
+        let plays = |_: &mut ModelSettings| {};
+        let rest = |s: &mut ModelSettings| s.take = Take::Rest;
+        assert_ne!(name(&plays, 0.5), name(&plays, 1.0), "the take plays");
+        assert_eq!(name(&rest, 0.5), name(&rest, 1.0), "at rest it doesn't");
+
+        let offset = |s: &mut ModelSettings| {
+            let mut rows = instantiate(PLAYBACK_NAME).unwrap();
+            rows.id = playback_id(id);
+            row(&mut rows, "offset", Property::fixed(0.25));
+            s.playback = Some(rows);
+        };
+        assert_ne!(name(&offset, 0.5), name(&plays, 0.5), "Offset");
+
+        let still = |s: &mut ModelSettings| {
+            s.take = Take::Rest;
+            let mut rows = instantiate(PART_NAME).unwrap();
+            rows.id = part_id(id, 1);
+            row(&mut rows, "position_x", Property::fixed(5.0));
+            s.parts = vec![rows];
+        };
+        assert_ne!(name(&still, 0.5), name(&rest, 0.5), "a changed row");
+        assert_eq!(name(&still, 0.5), name(&still, 1.0), "held, it stays");
+
+        let keyed = |s: &mut ModelSettings| {
+            s.take = Take::Rest;
+            let mut moved = Property::zero();
+            moved.animation = Animation::Keyframed(vec![key(0, 0.0), key(2, 20.0)]);
+            let mut rows = instantiate(PART_NAME).unwrap();
+            rows.id = part_id(id, 1);
+            row(&mut rows, "position_x", moved);
+            s.parts = vec![rows];
+        };
+        assert_ne!(name(&keyed, 0.5), name(&keyed, 1.0), "a keyed row");
+
+        let doc = Arc::new(doc);
+        let c = doc.comp(comp).unwrap();
+        assert!(crate::comp_frame_key(&doc, c, 0.5, Quality::default(), &Unread).is_none());
     }
 }
