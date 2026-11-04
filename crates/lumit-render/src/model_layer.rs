@@ -145,7 +145,7 @@ impl Realiser<'_> {
 
     /// A material's rows for the mesh pass, the layers they name made into
     /// pictures at their own size.
-    fn look(&self, look: &crate::model_material::Look) -> lumit_gpu::mesh::look::Look {
+    pub(crate) fn look(&self, look: &crate::model_material::Look) -> lumit_gpu::mesh::look::Look {
         let picture = |slot: &crate::draw::LayerInputDraw| {
             let [w, h] = slot.size()?;
             let px = |v: f32| ((v * self.render_scale).ceil() as u32).clamp(1, 8192);
@@ -245,7 +245,7 @@ pub(crate) fn glass(l: &CompLayerDraw) -> Option<&ModelDraw> {
 }
 
 /// A Model draw's metres to comp pixels, parents and all.
-fn to_comp(m: &ModelDraw) -> Mat4 {
+pub(crate) fn to_comp(m: &ModelDraw) -> Mat4 {
     Mat4::from_cols_array_2d(&m.placement) * Mat4::from_cols_array_2d(&m.model_to_comp)
 }
 

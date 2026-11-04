@@ -36,6 +36,16 @@ pub(super) fn below_picture(
         clone,
         None,
     );
+    picture_of(comp, draws, camera, t)
+}
+
+/// `draws` as a comp-sized picture.
+fn picture_of(
+    comp: &Composition,
+    draws: Vec<crate::draw::CompLayerDraw>,
+    camera: Option<lumit_core::model::CameraPose>,
+    t: f64,
+) -> DofInputDraw {
     DofInputDraw {
         rgba: Vec::new(),
         tex_w: comp.width,
@@ -54,7 +64,7 @@ pub(super) fn below_picture(
             camera,
             key: None,
             px_per_metre: comp.px_per_metre(t),
-            scene_depth: false,
+            read: None,
             trace_layers: false,
         })),
         colour_space: None,
@@ -86,6 +96,42 @@ pub(super) fn plain_input(
         graph_fx: Vec::new(),
         place: None,
     }
+}
+
+/// A scene pass of Model layer `layer` alone, seen through the comp's camera:
+/// the layer walked with none of its effects, so a pass read from its own
+/// stack can't come back round to itself.
+pub(super) fn model_pass(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &lumit_core::model::Layer,
+    (t, frame_t): (f64, f64),
+    frame_pixels: &HashMap<Uuid, &CompLayerPixels>,
+    (visited, clone): (&[Uuid], (u32, u32)),
+    read: lumit_core::fx::effects::scene_pass::SceneRead,
+) -> LayerInputDraw {
+    let mut bare = layer.clone();
+    bare.effects.clear();
+    // A matte layer is often hidden, and the row reads it all the same.
+    bare.switches.visible = true;
+    bare.switches.solo = false;
+    let (draws, camera) = below_draws_cloned(
+        doc,
+        comp,
+        std::slice::from_ref(&bare),
+        t,
+        frame_t,
+        None,
+        frame_pixels,
+        &mut visited.to_vec(),
+        clone,
+        None,
+    );
+    let mut input = picture_of(comp, draws, camera, t);
+    if let Some(n) = input.nested.as_mut() {
+        n.read = Some(read);
+    }
+    LayerInputDraw::Layer(input)
 }
 
 /// Effect `e` on layer `owner`'s pictures at the moments its stack names at

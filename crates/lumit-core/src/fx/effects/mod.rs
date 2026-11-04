@@ -119,6 +119,7 @@ pub mod roughen_edges;
 pub mod saturation;
 pub mod scanlines;
 pub mod scatter;
+pub mod scene_pass;
 pub mod scribble;
 pub mod set_channels;
 pub mod set_matte;

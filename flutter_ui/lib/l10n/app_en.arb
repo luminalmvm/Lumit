@@ -5334,6 +5334,30 @@
   "@fxFullOff": {
     "description": "Effect controls — an option on Set channels' four channel pickers: the channel is 0 everywhere."
   },
+  "fxScenePass": "Scene pass",
+  "@fxScenePass": {
+    "description": "Effect name in the Add effect menu: shows what a 3D precomp knows about its pixels, such as which way they face, in place of its picture."
+  },
+  "fxPartMatte": "Part matte",
+  "@fxPartMatte": {
+    "description": "Effect name in the Add effect menu: keeps only the parts of a 3D precomp that were picked."
+  },
+  "fxPass": "Pass",
+  "@fxPass": {
+    "description": "Effect controls: a control on Scene pass choosing what it shows."
+  },
+  "fxNormals": "Normals",
+  "@fxNormals": {
+    "description": "Effect controls: an option on Scene pass's Pass, which way each pixel faces."
+  },
+  "fxPartId": "Part id",
+  "@fxPartId": {
+    "description": "Effect controls: an option on Scene pass's Pass, each part of the 3D precomp in a flat colour of its own."
+  },
+  "fxParts": "Parts",
+  "@fxParts": {
+    "description": "Effect controls: a row on Part matte naming the parts it keeps."
+  },
   "fxSetMatte": "Set matte",
   "@fxSetMatte": {
     "description": "Effect name in the Add effect menu — takes another layer's channel as this layer's transparency."

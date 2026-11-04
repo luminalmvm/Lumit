@@ -207,6 +207,7 @@ impl MeshFx {
             environment: environment::Fallback::new(device),
             shadow: std::sync::OnceLock::new(),
             deform: std::sync::OnceLock::new(),
+            passes: std::sync::OnceLock::new(),
             depth_one,
             depth_many,
             down,

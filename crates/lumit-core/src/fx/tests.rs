@@ -7524,6 +7524,8 @@ fn every_effect_carries_a_matte_row() {
         //
         // **Remove background**: the Roto brush's answer.
         //
+        // **Scene pass** is a reading, as Depth is, and **Part matte** a coverage.
+        //
         // Anything else that wants to opt out is argued for here, in these
         // words, before it may.
         if matches!(
@@ -7534,6 +7536,8 @@ fn every_effect_carries_a_matte_row() {
                 | "depth"
                 | "remove_background"
                 | "depth_points"
+                | "scene_pass"
+                | "part_matte"
         ) {
             assert_eq!(
                 s.matte,
@@ -7550,7 +7554,7 @@ fn every_effect_carries_a_matte_row() {
             // and is the auxiliary layer the render threads to it.
             assert_eq!(
                 s.layer_input().is_some(),
-                matches!(s.match_name, "set_matte" | "depth_points"),
+                matches!(s.match_name, "set_matte" | "depth_points" | "scene_pass" | "part_matte"),
                 "{}: Set matte keeps its source on the layer-input carriage, as Depth points does its depth",
                 s.match_name
             );

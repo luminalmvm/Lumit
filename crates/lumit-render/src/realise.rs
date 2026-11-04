@@ -678,12 +678,19 @@ impl Realiser<'_> {
                 // A Precomp input realises its nested comp exactly as a
                 // Precomp layer's picture does; anything else is
                 // the uploaded source pixels.
-                let linear = if let Some(n) = d.nested.as_ref().filter(|n| n.scene_depth) {
+                let linear = if let Some(n) = d.nested.as_ref().filter(|n| n.reads_depth()) {
                     // Distance, not a picture, so the referenced layer's own
                     // stack below has nothing to work on.
                     let mut scene = None;
                     let depth = self.realise_scene_depth(n, n.trace_layers.then_some(&mut scene));
                     return LayerInput::Depth(set_down(&depth), scene.map(std::sync::Arc::new));
+                } else if let Some((n, read)) =
+                    d.nested.as_ref().and_then(|n| Some((n, n.read.as_ref()?)))
+                {
+                    return match self.realise_scene_pass(n, read) {
+                        Some(pass) => LayerInput::Texture(set_down(&pass)),
+                        None => LayerInput::Absent,
+                    };
                 } else if let Some(n) = &d.nested {
                     self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
                 } else {

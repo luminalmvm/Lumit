@@ -425,6 +425,8 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &MotionBlur,
     &MatteKey,
     &SetMatte,
+    &crate::passes::ScenePassFx,
+    &crate::passes::PartMatteFx,
     &SetChannels,
     &BroadcastSafe,
     &Invert,
