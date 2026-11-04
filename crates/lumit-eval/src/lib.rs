@@ -1719,8 +1719,9 @@ fn feed_layer(
         true,
     )?;
     let (m, l) = (lumit_core::model_material::stored(layer), Some(layer));
+    let named = lumit_core::model_material::unheld(&m, comp, lt);
     feed_effect_stack(
-        h, true, &m, l, comp, doc, t, lt, quality, stamper, visited, true,
+        h, true, &named, l, comp, doc, t, lt, quality, stamper, visited, true,
     )?;
     projection::feed_projections(h, doc, comp, &m, (t, lt), quality, stamper, visited)?;
 

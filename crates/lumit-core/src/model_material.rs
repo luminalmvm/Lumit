@@ -34,12 +34,20 @@ const GROUPS: &[ParamGroup] = &[ParamGroup {
     visible_when_lens_elements: None,
 }];
 
-/// With no camera there is nothing to hold.
-const ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
-    param: "projection_time",
-    on: "camera",
-    cond: EnabledCond::LayerSet,
-}];
+/// With no camera there is nothing to hold, and with no picture nothing to
+/// project.
+const ENABLED_WHEN: &[EnabledWhen] = &[
+    EnabledWhen {
+        param: "projection_time",
+        on: "camera",
+        cond: EnabledCond::LayerSet,
+    },
+    EnabledWhen {
+        param: "camera",
+        on: "base_colour_layer",
+        cond: EnabledCond::LayerSet,
+    },
+];
 
 /// One material's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -322,6 +330,54 @@ pub fn held_moments(layer: &Layer, comp: &Composition, lt: f64) -> Vec<(Uuid, f6
     kept.filter_map(|rows| projection(rows, comp, lt))
         .filter_map(|p| Some((p.picture, p.held?)))
         .collect()
+}
+
+/// `rows` as a frame's name reads them: a held row's picture isn't what its
+/// layer shows now, and [`held_moments`]' frame is what is named instead.
+#[must_use]
+pub fn unheld(rows: &[EffectInstance], comp: &Composition, lt: f64) -> Vec<EffectInstance> {
+    let mut rows = rows.to_vec();
+    for r in &mut rows {
+        if projection(r, comp, lt).is_some_and(|p| p.held.is_some()) {
+            let row = r.params.iter_mut().find(|p| p.id == "base_colour_layer");
+            if let Some(row) = row {
+                row.value = EffectValue::Layer(None);
+            }
+        }
+    }
+    rows
+}
+
+/// `times`, the comp time each layer of `comp` is fetched at for a frame at
+/// `t`, with a hidden layer that only held projections read moved to the frame
+/// they hold, so the one at the playhead isn't decoded for nothing.
+#[must_use]
+pub fn with_held_frames(comp: &Composition, mut times: Vec<f64>, t: f64) -> Vec<f64> {
+    let held = |l: &Layer| held_moments(l, comp, crate::time::layer_time(t, l.start_offset.0));
+    let all: Vec<(Uuid, f64)> = comp.layers.iter().flat_map(held).collect();
+    if all.is_empty() {
+        return times;
+    }
+    let reads = |id: Uuid, l: &Layer| {
+        let matte = usize::from(l.matte.as_ref().is_some_and(|m| m.layer == id));
+        let rows = and_effects(l).flat_map(|e| &e.params);
+        matte
+            + rows
+                .filter(|p| p.value == EffectValue::Layer(Some(id)))
+                .count()
+    };
+    for (slot, l) in times.iter_mut().zip(&comp.layers) {
+        let mut these = all.iter().filter(|(id, _)| *id == l.id).map(|(_, at)| *at);
+        let Some(at) = these.next().filter(|_| !l.switches.visible) else {
+            continue;
+        };
+        let count = 1 + these.clone().count();
+        let alone = comp.layers.iter().map(|o| reads(l.id, o)).sum::<usize>() == count;
+        if alone && these.all(|other| other.to_bits() == at.to_bits()) {
+            *slot = at;
+        }
+    }
+    times
 }
 
 /// Camera layer `layer`'s placement at comp time `t` as a picture is drawn

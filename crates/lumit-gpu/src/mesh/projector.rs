@@ -19,6 +19,14 @@ pub struct Projector {
     pub view: Mat4,
     /// The camera's frame, 0 to 1 across and down, to the picture's uvs.
     pub plate: Mat3,
+    /// Where the camera is, in comp pixels.
+    pub eye: Vec3,
+    /// The model's metres to comp pixels at the moment the camera is read.
+    pub surface: Mat4,
+    /// Whether that moment is a held one, so the picture stays on the model
+    /// wherever it has got to. Following, the picture is read where a point is
+    /// drawn, as a moving shot's plate has its own blur already.
+    pub held: bool,
     /// What the camera sees first, when there is anything.
     pub depth: Option<ProjectorDepth>,
 }
@@ -46,17 +54,38 @@ pub fn view_of(camera: Mat4, (w, h): (u32, u32), zoom: f32) -> Mat4 {
     .transpose()
 }
 
+/// What [`Projector::uniform`] answers.
+type Numbers = ([[f32; 4]; 4], [[f32; 4]; 3], [f32; 4], [f32; 4]);
+
 impl Projector {
-    /// The numbers the material's uniform carries: `view`, then `plate`, then
-    /// x = 1 to project, y and z the depth's range with z nought for no depth.
-    pub(super) fn uniform(p: Option<&Self>) -> ([[f32; 4]; 4], [[f32; 4]; 3], [f32; 4]) {
+    /// The numbers the material's uniform carries: `view`, `plate`, then x = 1
+    /// to project, y and z the depth's range with z nought for no depth, w = 1
+    /// when it holds, and last the eye.
+    pub(super) fn uniform(p: Option<&Self>) -> Numbers {
         let Some(p) = p else {
             return Default::default();
         };
         let plate = p.plate.to_cols_array_2d().map(|c| [c[0], c[1], c[2], 0.0]);
         let [near, range] = p.depth.as_ref().map_or([0.0; 2], |d| d.range);
-        (p.view.to_cols_array_2d(), plate, [1.0, near, range, 0.0])
+        (
+            p.view.to_cols_array_2d(),
+            plate,
+            [1.0, near, range, f32::from(u8::from(p.held))],
+            p.eye.extend(0.0).to_array(),
+        )
     }
+}
+
+/// What takes a point of a part in `material`, drawn by placement `placed`,
+/// to where it stood at the moment its camera is read. Nothing for a part on
+/// its uvs, or one that hasn't moved since.
+pub(super) fn rest_of(looks: &[super::look::Look], material: usize, placed: Mat4) -> [[f32; 4]; 4] {
+    let look = looks.iter().find(|l| l.index == material);
+    let surface = look.and_then(|l| l.projector.as_ref()).map(|p| p.surface);
+    surface
+        .filter(|s| *s != placed)
+        .map_or(Mat4::IDENTITY, |s| s * placed.inverse())
+        .to_cols_array_2d()
 }
 
 impl FxEngine {

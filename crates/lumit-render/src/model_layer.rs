@@ -59,13 +59,11 @@ impl Realiser<'_> {
         };
         // Lines show no material, so they make no layer's picture.
         let wire = display.shading == Shading::Wireframe;
-        let mut depths = Vec::new();
-        let looks: Vec<_> = m
-            .looks
-            .iter()
-            .filter(|_| !wire)
-            .map(|k| self.look(k, (width, height), &mut depths))
-            .collect();
+        let (mut depths, mut looks) = (Vec::new(), Vec::new());
+        for k in m.looks.iter().filter(|_| !wire) {
+            let made = self.look(k, (width, height), &mut depths, &looks);
+            looks.push(made);
+        }
         let projected = projects(m);
         let own_maps = m.own_maps.lock().ok().and_then(|own| own.clone());
         let maps = own_maps.as_ref().map_or(maps, Option::as_ref);
@@ -179,6 +177,7 @@ impl Realiser<'_> {
         look: &crate::model_material::Look,
         comp: (u32, u32),
         depths: &mut Vec<(Mat4, Option<ProjectorDepth>)>,
+        made: &[lumit_gpu::mesh::look::Look],
     ) -> lumit_gpu::mesh::look::Look {
         let picture = |slot: &crate::draw::LayerInputDraw| {
             let [w, h] = slot.size()?;
@@ -190,10 +189,15 @@ impl Realiser<'_> {
                 _ => None,
             }
         };
+        let shared = look
+            .plate_from
+            .and_then(|k| made.get(k)?.pictures[0].clone());
+        let mut pictures: [_; 4] = std::array::from_fn(|k| look.pictures.get(k).and_then(picture));
+        pictures[0] = pictures[0].take().or(shared);
         lumit_gpu::mesh::look::Look {
             index: look.index,
             material: look.material.clone(),
-            pictures: std::array::from_fn(|k| look.pictures.get(k).and_then(picture)),
+            pictures,
             textures: look.textures,
             projector: look
                 .projector
@@ -231,6 +235,9 @@ impl Realiser<'_> {
         Projector {
             view: p.view,
             plate: p.plate,
+            eye: p.eye,
+            surface: p.surface,
+            held: p.held,
             depth,
         }
     }

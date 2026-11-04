@@ -137,6 +137,7 @@ struct FrameUniform {
 struct DrawUniform {
     model: [[f32; 4]; 4],
     normal: [[f32; 4]; 3],
+    rest: [[f32; 4]; 4],
 }
 
 /// One primitive where one node puts it.
@@ -549,6 +550,7 @@ impl MeshFx {
                         n.y_axis.extend(0.0).to_array(),
                         n.z_axis.extend(0.0).to_array(),
                     ],
+                    rest: projector::rest_of(view.looks, p.material, *placed),
                 };
                 let offset = next * stride;
                 next += 1;

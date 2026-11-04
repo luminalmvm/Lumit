@@ -19,6 +19,7 @@ struct MaterialUniform {
     projector: [[f32; 4]; 4],
     plate: [[f32; 4]; 3],
     projection: [f32; 4],
+    projector_eye: [f32; 4],
 }
 
 /// One material as its layer's rows have it this frame.
@@ -92,7 +93,8 @@ impl Kept {
         }
         let e = m.emissive.map(|c| c * m.emissive_strength);
         let projector = projector.filter(|_| pictures[0].is_some());
-        let (from, plate, projection) = super::projector::Projector::uniform(projector);
+        let (from, plate, projection, projector_eye) =
+            super::projector::Projector::uniform(projector);
         let uniform = MaterialUniform {
             base_colour: m.base_colour,
             emissive: [e[0], e[1], e[2], 0.0],
@@ -117,6 +119,7 @@ impl Kept {
             projector: from,
             plate,
             projection,
+            projector_eye,
         };
         let buffer = ctx
             .device
@@ -182,13 +185,24 @@ impl MeshFx {
         let view = |t: &wgpu::Texture| t.create_view(&Default::default());
         let behind = behind.map(view);
         let mut out = model.materials.clone();
+        // Materials sharing a picture share its levels too.
+        let mut levels: Vec<(wgpu::Texture, wgpu::Texture)> = Vec::new();
         for look in looks {
             let (Some(kept), Some(slot)) = (model.kept.get(look.index), out.get_mut(look.index))
             else {
                 continue;
             };
-            let pictures = (look.pictures.each_ref())
-                .map(|p| p.as_ref().map(|t| view(&self.levelled(ctx, t))));
+            let pictures = (look.pictures.each_ref()).map(|p| {
+                p.as_ref().map(|t| {
+                    let known = levels.iter().find(|(from, _)| from == t);
+                    let made = known.map(|(_, to)| to.clone()).unwrap_or_else(|| {
+                        let to = self.levelled(ctx, t);
+                        levels.push((t.clone(), to.clone()));
+                        to
+                    });
+                    view(&made)
+                })
+            });
             let m = &look.material;
             let pictures = (pictures.each_ref().map(Option::as_ref), look.textures);
             let group = kept.group(

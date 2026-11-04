@@ -206,6 +206,30 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
     let (alone, _) = with_plate(&mut doc, &plate, true);
     let held = projected(&mut doc, &model, &plate, true);
     let follows = projected(&mut doc, &model, &plate, false);
+    let blurred = projected(&mut doc, &model, &plate, false);
+    let c = doc.comp_mut(blurred).unwrap();
+    c.motion_blur.enabled = true;
+    let moved = c
+        .layers
+        .iter_mut()
+        .find(|l| matches!(l.kind, LayerKind::Model { .. }));
+    let moved = moved.unwrap();
+    moved.switches.motion_blur = true;
+    let z = moved.transform.position_z.value_at(0.0);
+    let key = |f: i64, value: f64| Keyframe {
+        time: lumit_core::time::FrameRate::new(30, 1)
+            .unwrap()
+            .time_of_frame(f)
+            .unwrap()
+            .0,
+        value,
+        interp_in: SideInterp::Linear,
+        interp_out: SideInterp::Linear,
+    };
+    moved.transform.position_z = Property {
+        animation: Animation::Keyframed(vec![key(0, z), key(30, z + 600.0)]),
+        ..Property::fixed(z)
+    };
     let doc = Arc::new(doc);
     let mut frame = |comp, f| r.render_rgba(&doc, comp, f, 1.0).expect("the render").0;
     let picture = frame(alone, 0);
@@ -227,6 +251,10 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
     let followed = frame(follows, 10);
     assert!(off_by(&followed, &picture) <= 2);
     assert_eq!(reds(&followed), 0);
+
+    // A model moving under motion blur still tests against where it is at the
+    // frame, or each shutter sample finds itself hidden by its own depth.
+    assert_eq!(reds(&frame(blurred, 5)), 0);
 }
 
 /// A Precomp layer read as a picture brings its own effects, as it shows

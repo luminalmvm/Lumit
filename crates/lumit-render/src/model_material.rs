@@ -208,6 +208,8 @@ pub(crate) struct Look {
     pub textures: bool,
     /// Where its base colour is seen from, when it isn't on the model's uvs.
     pub projector: Option<crate::projection::Projector>,
+    /// The look whose picture it projects too, in place of one of its own.
+    pub plate_from: Option<usize>,
 }
 
 /// Every material of `scene` that a Model layer's `settings` change, or that
@@ -235,6 +237,7 @@ pub(crate) fn looks(
                     pictures: Vec::new(),
                     textures: true,
                     projector: None,
+                    plate_from: None,
                 });
             }
             continue;
@@ -282,6 +285,7 @@ pub(crate) fn looks(
             pictures,
             textures: !matches!(rows.param("textures"), Some(EffectValue::Bool(false))),
             projector: None,
+            plate_from: None,
         });
     }
     out

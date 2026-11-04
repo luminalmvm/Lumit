@@ -208,7 +208,7 @@ pub(crate) fn draw(
     layer: &Layer,
     t_comp: f64,
     context: &Arc<ExpressionContext>,
-    (picture, held): Pictures<'_>,
+    pictures: Pictures<'_>,
 ) -> Option<ModelDraw> {
     let LayerKind::Model { item, settings } = &layer.kind else {
         return None;
@@ -243,13 +243,17 @@ pub(crate) fn draw(
             .collect(),
         false => Vec::new(),
     };
-    let mut looks = crate::model_material::looks(settings, &scene, lt, context, picture);
+    let plates = crate::projection::Plates::new(comp, lt, pictures);
+    let fetch = |rows: &lumit_core::model::EffectInstance, row: &str| plates.fetch(rows, row);
+    let mut looks = crate::model_material::looks(settings, &scene, lt, context, &fetch);
     let at = crate::projection::Moment {
         t_comp,
         lt,
         context,
+        layer,
+        placement,
     };
-    crate::projection::aim(doc, comp, settings, &scene, at, &mut looks, held);
+    crate::projection::aim(doc, comp, settings, &scene, &at, &mut looks);
     // A model that stays put over the shutter is drawn once.
     if shutter.iter().all(|s| *s == placement)
         && poses.iter().all(|p| Some(p) == frame_pose.as_ref())

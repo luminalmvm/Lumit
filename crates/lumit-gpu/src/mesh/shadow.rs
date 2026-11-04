@@ -535,6 +535,7 @@ impl MeshFx {
             let draw = DrawUniform {
                 model: at.to_cols_array_2d(),
                 normal: [[0.0; 4]; 3],
+                rest: [[0.0; 4]; 4],
             };
             let offset = (stride(draw_size) * k as u64) as usize;
             draws[offset..][..draw_size].copy_from_slice(bytemuck::bytes_of(&draw));

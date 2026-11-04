@@ -590,12 +590,12 @@ pub fn collect_comp_jobs(
         }
     }
     // Posterize Time (docs/08 §3.25, FX-1): a layer covered by a live
-    // Posterize decodes its source at the held grid time, not the live
-    // playhead, so footage playback visibly steps — the decode twin of the
-    // held re-render the draw builder performs. `sample_times[idx]` is the
-    // held comp time for `comp.layers[idx]`; equal to `t` for every layer
-    // when no Posterize is live, so an ordinary comp is unchanged.
+    // Posterize decodes its source at the held grid time, the decode twin of
+    // the held re-render the draw builder performs, and one only a held
+    // projection reads at the frame it holds. `sample_times[idx]` is the comp
+    // time for `comp.layers[idx]`, `t` for every layer in an ordinary comp.
     let sample_times = lumit_core::fx::temporal::posterize_sample_times(&comp.layers, t);
+    let sample_times = lumit_core::model_material::with_held_frames(comp, sample_times, t);
     // Accumulation motion blur (docs/08 §3.26): the sub-frame moments each
     // layer's footage is wanted at by the adjustments above it, in comp
     // frames. Empty everywhere in an ordinary comp.

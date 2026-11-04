@@ -35,6 +35,9 @@ struct Draw {
     normal0: vec4<f32>,
     normal1: vec4<f32>,
     normal2: vec4<f32>,
+    // Comp pixels as drawn to where the point stood when a camera its colour
+    // is projected from was read: another moment under Hold or motion blur.
+    rest: mat4x4<f32>,
 };
 
 // A texture slot: the 2 by 3 transform of its uvs, which uv set it reads in
@@ -61,8 +64,11 @@ struct Material {
     // that lands on the picture (mesh/projector.rs).
     projector: mat4x4<f32>,
     plate: mat3x3<f32>,
-    // x = 1 when it projects, y and z its depth's range, z nought for none.
+    // x = 1 when it projects, y and z its depth's range, z nought for none,
+    // w = 1 when it holds.
     projection: vec4<f32>,
+    // Where that camera is.
+    projector_eye: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -160,19 +166,30 @@ fn slot_uv(s: Slot, in: VsOut) -> vec2<f32> {
 // isn't lost to what covers the rest, which would ring everything with the wrong
 // colour. The depth map is sized so that half a texel reaches past such a pixel.
 fn projected(at: vec3<f32>) -> vec3<f32> {
-    let q = mat.projector * vec4<f32>(at, 1.0);
-    let frame = q.xy / max(q.w, 1e-4);
-    let placed = mat.plate * vec3<f32>(frame, 1.0);
+    let still = (draw.rest * vec4<f32>(at, 1.0)).xyz;
+    let q = mat.projector * vec4<f32>(still, 1.0);
+    let spot = q.xy / max(q.w, 1e-4);
+    // Held, the picture stays on the surface. Following, it's read where the
+    // point is drawn, or a moving shot's plate would blur twice.
+    let r = select(mat.projector * vec4<f32>(at, 1.0), q, mat.projection.w > 0.5);
+    let seen_at = r.xy / max(r.w, 1e-4);
+    let placed = mat.plate * vec3<f32>(seen_at, 1.0);
     let uv = placed.xy / placed.z;
-    let edges = vec4<f32>(frame, uv);
+    let edges = vec4<f32>(seen_at, uv);
+    // How far this point's picture is stretched, against how square-on the
+    // face is to each: exactly 1 from the camera itself, whatever the face, so
+    // only a face the camera barely saw fades to Base colour.
+    let to_eye = abs(dot(normalise(cross(dpdx(at), dpdy(at))), normalise(frame.eye.xyz - at)));
+    let to_camera = abs(dot(normalise(cross(dpdx(still), dpdy(still))), normalise(mat.projector_eye.xyz - still)));
+    let keep = 1.0 - smoothstep(3.0, 8.0, to_eye / max(to_camera, 1e-4));
     // How fast depth changes across the camera's frame, on this face.
-    let fx = dpdx(frame);
-    let fy = dpdy(frame);
+    let fx = dpdx(spot);
+    let fy = dpdy(spot);
     let zx = dpdx(q.z);
     let zy = dpdy(q.z);
     let det = fx.x * fy.y - fx.y * fy.x;
     let slope = vec2<f32>(fy.y * zx - fy.x * zy, fx.x * zy - fx.y * zx) / max(abs(det), 1e-12);
-    var seen = q.w > 1e-4 && all(edges >= vec4<f32>(0.0)) && all(edges <= vec4<f32>(1.0));
+    var seen = r.w > 1e-4 && q.w > 1e-4 && all(edges >= vec4<f32>(0.0)) && all(edges <= vec4<f32>(1.0));
     if (seen && mat.projection.z > 0.0) {
         let texel = 1.0 / vec2<f32>(textureDimensions(projector_depth));
         let easier = 0.5 + dot(abs(slope), texel);
@@ -180,12 +197,12 @@ fn projected(at: vec3<f32>) -> vec3<f32> {
         seen = false;
         for (var i = 0u; i < 4u; i = i + 1u) {
             let side = vec2<f32>(f32(i & 1u), f32(i >> 1u)) - 0.5;
-            let at_side = frame + side * texel;
+            let at_side = spot + side * texel;
             let near = textureGatherCompare(projector_depth, map_sampler, at_side, here);
             seen = seen || any(near > vec4<f32>(0.5));
         }
     }
-    return vec3<f32>(uv, f32(seen));
+    return vec3<f32>(uv, f32(seen) * keep);
 }
 
 // What is left of light `l` at `pos` past the shadows in its way, as a 3D
@@ -271,10 +288,10 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     }
     let read = textureSample(base_tex, base_samp, seen.xy);
     var base = mat.base_colour * in.colour * read;
-    let plate = seen.z > 0.5;
+    let plate = seen.z > 0.0;
     if (projecting) {
         let own = mat.base_colour * in.colour;
-        base = select(own, vec4<f32>(read.rgb + own.rgb * (1.0 - read.a), own.a), plate);
+        base = vec4<f32>(read.rgb * seen.z + own.rgb * (1.0 - read.a * seen.z), own.a);
     }
     let mr = textureSample(mr_tex, mr_samp, slot_uv(mat.slots[1], in));
     var mapped = textureSample(normal_tex, normal_samp, normal_uv).xyz;
@@ -285,7 +302,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
     mapped = mapped * 2.0 - 1.0;
     let occlusion = textureSample(occlusion_tex, occlusion_samp, slot_uv(mat.slots[3], in)).r;
     let glow = textureSample(emissive_tex, emissive_samp, slot_uv(mat.slots[4], in)).rgb;
-    let shown = textureSample(opacity_tex, base_samp, base_uv).rgb;
+    let shown = textureSample(opacity_tex, base_samp, seen.xy).rgb;
     let dx = dpdx(in.at);
     let dy = dpdy(in.at);
     let uv_dx = dpdx(normal_uv);
