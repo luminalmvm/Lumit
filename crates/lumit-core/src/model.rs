@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod light;
+mod axis_modes;
 mod light_file;
 mod material;
 
@@ -817,29 +818,6 @@ impl Default for AxisModes {
             anchor: AxisMode::Combined,
             position: AxisMode::Combined,
             scale: AxisMode::Linked,
-        }
-    }
-}
-
-impl AxisModes {
-    /// Nothing to write: every pair is where a fresh layer leaves it.
-    pub fn is_default(&self) -> bool {
-        *self == Self::default()
-    }
-
-    pub fn get(&self, pair: TransformPair) -> AxisMode {
-        match pair {
-            TransformPair::Anchor => self.anchor,
-            TransformPair::Position => self.position,
-            TransformPair::Scale => self.scale,
-        }
-    }
-
-    pub fn set(&mut self, pair: TransformPair, mode: AxisMode) {
-        match pair {
-            TransformPair::Anchor => self.anchor = mode,
-            TransformPair::Position => self.position = mode,
-            TransformPair::Scale => self.scale = mode,
         }
     }
 }
