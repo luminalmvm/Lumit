@@ -2,7 +2,7 @@
 //! band (docs/impl/roto.md §2 and §4).
 
 use crate::gdt;
-use crate::guided::{box_mean, Guided};
+use crate::guided::{box_mean, BoxScratch, Guided};
 use crate::{check_plane, stroke::Seeds, FrameRgb, RotoError, RotoSettings};
 
 /// Solves frames, one at a time, reusing every buffer.
@@ -16,13 +16,14 @@ pub struct RotoSolver {
     len: usize,
     width: u32,
     height: u32,
+    steps: Vec<[f32; 4]>,
     d_f: Vec<f32>,
     d_b: Vec<f32>,
     alpha_raw: Vec<f32>,
     filtered: Vec<f32>,
     band: Vec<f32>,
     band_dilated: Vec<f32>,
-    tmp: Vec<f32>,
+    boxes: BoxScratch,
     guided: Guided,
 }
 
@@ -33,13 +34,14 @@ impl RotoSolver {
             len: 0,
             width: 0,
             height: 0,
+            steps: Vec::new(),
             d_f: Vec::new(),
             d_b: Vec::new(),
             alpha_raw: Vec::new(),
             filtered: Vec::new(),
             band: Vec::new(),
             band_dilated: Vec::new(),
-            tmp: Vec::new(),
+            boxes: BoxScratch::default(),
             guided: Guided::default(),
         }
     }
@@ -82,6 +84,7 @@ impl RotoSolver {
             frame,
             seeds,
             self.settings.gamma,
+            &mut self.steps,
             &mut self.d_f,
             &mut self.d_b,
             &mut self.alpha_raw,
@@ -105,14 +108,9 @@ impl RotoSolver {
             let a = self.alpha_raw.get(i).copied().unwrap_or(0.0);
             *slot = if (a - 0.5).abs() < half { 1.0 } else { 0.0 };
         }
-        box_mean(
-            &self.band,
-            w,
-            h,
-            radius,
-            &mut self.tmp,
-            &mut self.band_dilated,
-        );
+        box_mean(w, h, radius, &mut self.boxes, &mut self.band_dilated, |i| {
+            self.band[i]
+        });
         for i in 0..n {
             let raw = self.alpha_raw.get(i).copied().unwrap_or(0.0);
             let in_band = self.band_dilated.get(i).copied().unwrap_or(0.0) > 0.0;
@@ -145,11 +143,12 @@ impl RotoSolver {
             &mut self.filtered,
             &mut self.band,
             &mut self.band_dilated,
-            &mut self.tmp,
         ] {
             plane.clear();
             plane.resize(len, 0.0);
         }
+        self.steps.clear();
+        self.steps.resize(len, [0.0; 4]);
         self.guided.resize(len);
     }
 }
