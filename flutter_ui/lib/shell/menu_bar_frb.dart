@@ -1318,6 +1318,13 @@ List<MenuSection> lumitMenus(
               MenuEntry(
                   l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
                   action: 'layer.new.null'),
+              MenuEntry(
+                  l10n.menuCard,
+                  onComp((c) => ui.setSelection([
+                        c.addCardLayer(
+                            row: row(c), frame: ui.playheadFrame.value),
+                      ])),
+                  action: 'layer.new.card'),
               MenuEntry(l10n.menuSequence,
                   onComp((c) => c.addSequenceLayer(row: row(c))),
                   action: 'layer.new.sequence'),

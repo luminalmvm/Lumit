@@ -10,7 +10,7 @@ use std::time::SystemTime;
 
 use lumit_core::expression::ExpressionContext;
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, ShadowMode};
-use lumit_core::model_layer::{ModelSettings, UpAxis};
+use lumit_core::model_layer::{ModelSettings, UpAxis, CARD};
 use lumit_gpu::mesh::display::ModelDisplay;
 use lumit_scene::{Bounds, ModelScene};
 use uuid::Uuid;
@@ -180,6 +180,9 @@ pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
 /// The scene of model item `item`, read the first time it's asked for and
 /// kept after. `None` when the file is missing or won't open.
 pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
+    if item == CARD {
+        return Some(card());
+    }
     let key = key_of(doc, item)?;
     if let Some(scene) = kept(&key) {
         return scene;
@@ -288,6 +291,20 @@ pub(crate) fn draw(
     })
 }
 
+/// The scene every card draws, which is never read from anywhere.
+fn card() -> Arc<ModelScene> {
+    static SCENE: std::sync::OnceLock<Arc<ModelScene>> = std::sync::OnceLock::new();
+    Arc::clone(SCENE.get_or_init(|| Arc::new(lumit_scene::card())))
+}
+
+/// What reading model item `item` has come to so far, as [`kept`] answers.
+fn read_so_far(doc: &Document, item: Uuid) -> Option<Option<Arc<ModelScene>>> {
+    match item == CARD {
+        true => Some(Some(card())),
+        false => kept(&key_of(doc, item)?),
+    }
+}
+
 /// The key model item `item`'s file is kept under, as it is on disk now.
 fn key_of(doc: &Document, item: Uuid) -> Option<Key> {
     let Some(ProjectItem::Footage(f)) = doc.item(item) else {
@@ -320,6 +337,9 @@ fn last_read(key: &Key) -> Option<Arc<ModelScene>> {
 /// when it wouldn't open. `None` while it hasn't been, and a read beside
 /// starts, so a panel can ask as it draws.
 pub fn scene_if_read(doc: &Document, item: Uuid) -> Option<Option<Arc<ModelScene>>> {
+    if item == CARD {
+        return Some(Some(card()));
+    }
     let Some(key) = key_of(doc, item) else {
         return Some(None);
     };
@@ -341,7 +361,7 @@ pub fn layer_box(
     comp: (f32, f32),
     pose: Option<&lumit_scene::pose::Pose>,
 ) -> Option<[[f32; 3]; 8]> {
-    let rest = kept(&key_of(doc, item)?)??.bounds;
+    let rest = read_so_far(doc, item)??.bounds;
     let bounds = pose.map_or(rest, |p| p.bounds);
     // Placed by its box at rest, so a model doesn't drift as it moves.
     let m = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &rest, comp));
@@ -394,7 +414,7 @@ pub fn hit(
 ) -> Option<(f32, usize)> {
     use glam::{Mat4, Vec3};
     let (origin, direction) = (Vec3::from(origin), Vec3::from(direction));
-    let scene = kept(&key_of(doc, item)?)??;
+    let scene = read_so_far(doc, item)??;
     let placed = Mat4::from_cols_array_2d(&model_to_comp(settings, &scene.bounds, comp));
     let mut nearest = None::<(f32, usize)>;
     for (k, node) in scene.nodes.iter().enumerate() {
@@ -591,5 +611,5 @@ fn fitted(up: UpAxis, bounds: &Bounds, comp: (f32, f32)) -> Option<f32> {
 /// What [`fitted`] gives model item `item` turned by `up` in a comp `comp`
 /// pixels in size, once its file has been read, which this never does.
 pub fn fitted_units(doc: &Document, item: Uuid, up: UpAxis, comp: (f32, f32)) -> Option<f32> {
-    fitted(up, &kept(&key_of(doc, item)?)??.bounds, comp)
+    fitted(up, &read_so_far(doc, item)??.bounds, comp)
 }

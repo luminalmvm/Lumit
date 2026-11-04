@@ -60,7 +60,11 @@ fn named(
     } else {
         source_time
     };
-    let (identity, frame) = stamper.stamp(item, at, false)?;
+    // A card has no file to name, and is always the same scene.
+    let (identity, frame) = match item == lumit_core::model_layer::CARD {
+        true => (String::new(), 0),
+        false => stamper.stamp(item, at, false)?,
+    };
     h.update(b"model/");
     h.update(identity.as_bytes());
     if let Ok(json) = serde_json::to_vec(settings) {

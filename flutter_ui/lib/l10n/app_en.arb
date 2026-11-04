@@ -7503,6 +7503,10 @@
   "@menuBlendingMode": {
     "description": "Menu item."
   },
+  "menuCard": "Card",
+  "@menuCard": {
+    "description": "Layer > New menu item: a flat Model layer that needs no file."
+  },
   "menuCamera": "Camera",
   "@menuCamera": {
     "description": "Menu item."
@@ -13599,6 +13603,10 @@
   "trackCreateNull": "Create null",
   "@trackCreateNull": {
     "description": "Button over the Viewer's picture when solved points are selected: puts a Null layer at their average position."
+  },
+  "trackCreateCard": "Create card",
+  "@trackCreateCard": {
+    "description": "Button over the Viewer's picture when solved points are selected: puts a flat Model layer at their average position with the shot projected on it from the solved camera."
   },
   "trackCreateSolid": "Create solid",
   "@trackCreateSolid": {

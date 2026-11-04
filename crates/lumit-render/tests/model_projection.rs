@@ -280,3 +280,37 @@ fn a_precomp_picture_keeps_its_own_effects() {
     let (as_a_layer, as_a_picture) = (frame(shown), frame(seen));
     assert!(off_by(&as_a_picture, &as_a_layer) <= 2);
 }
+
+/// A card has no file behind it, so it has to come back from a saved project
+/// and draw with nothing to find.
+#[test]
+fn a_card_survives_a_save_with_no_file_behind_it() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut doc = Document::new();
+    let settings = CompSettings {
+        width: SIZE,
+        height: SIZE,
+        ..CompSettings::default()
+    };
+    let (comp, ops) = new_comp_ops(&doc, settings, None);
+    for op in &ops {
+        apply(&mut doc, op).unwrap();
+    }
+    let c = doc.comp(comp).unwrap().clone();
+    let t = lumit_core::edits::centred_transform(0.0, 0.0, c.width, c.height);
+    let card = lumit_core::model_layer::card_layer(&c, f64::from(c.width), t);
+    add(&mut doc, comp, card);
+    let path = dir.path().join("card.lum");
+    lumit_project::save(&doc, &path).unwrap();
+    let (opened, _) = lumit_project::open(&path).unwrap();
+    let opened = Arc::new(opened);
+    let (px, ..) = r.render_rgba(&opened, comp, 0, 1.0).expect("the render");
+    assert!(
+        px.chunks_exact(4).all(|p| p[0] > 100 && p[0] == p[1]),
+        "it fills the frame in its grey"
+    );
+}

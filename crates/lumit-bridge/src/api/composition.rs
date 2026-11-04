@@ -1785,7 +1785,7 @@ impl CompositionReference {
     /// Insert `layer` on `row`, soloed if the comp is showing only soloed
     /// layers ([`crate::edits::solo_on_arrival`]).
     #[frb(ignore)]
-    fn add_at(
+    pub(crate) fn add_at(
         &self,
         mut layer: lumit_core::model::Layer,
         row: Option<u32>,

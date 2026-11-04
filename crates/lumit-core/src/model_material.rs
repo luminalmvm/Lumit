@@ -438,3 +438,110 @@ pub fn set_projection(rows: &mut EffectInstance, picture: Uuid, camera: Uuid) {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use crate::edits::{base_layer, new_comp_ops, CompSettings};
+    use crate::model::Document;
+    use crate::ops::apply;
+
+    /// A comp holding a Model layer holding rows, over two pictures, with a
+    /// camera above them, each named as the test wants it.
+    fn set(hold: bool) -> (Composition, [Uuid; 4]) {
+        let mut doc = Document::new();
+        let (id, ops) = new_comp_ops(&doc, CompSettings::default(), None);
+        for op in &ops {
+            apply(&mut doc, op).unwrap();
+        }
+        let mut comp = doc.comp(id).unwrap().clone();
+        let layer = |kind| base_layer("x".into(), kind, comp.duration.0, Default::default());
+        let mut near = layer(LayerKind::Footage {
+            item: Uuid::now_v7(),
+        });
+        near.switches.visible = false;
+        let far = layer(LayerKind::Footage {
+            item: Uuid::now_v7(),
+        });
+        let camera = crate::edits::fresh_camera(&comp, "Camera".into(), None);
+        let mut rows = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();
+        set_projection(&mut rows, near.id, camera.id);
+        if hold {
+            for p in &mut rows.params {
+                match p.id.as_str() {
+                    "projection_time" => p.value = EffectValue::Choice(1),
+                    "hold_frame" => p.value = EffectValue::Float(crate::anim::Property::fixed(6.0)),
+                    _ => {}
+                }
+            }
+        }
+        let mut model = layer(LayerKind::Model {
+            item: Uuid::now_v7(),
+            settings: Box::new(crate::model_layer::ModelSettings {
+                materials: vec![Some(rows)],
+                ..Default::default()
+            }),
+        });
+        model.switches.three_d = true;
+        let ids = [camera.id, model.id, near.id, far.id];
+        comp.layers = vec![camera, model, near, far];
+        (comp, ids)
+    }
+
+    /// Project from camera takes a selected camera and picture over the comp's
+    /// own, and a solve's shot over either.
+    #[test]
+    fn project_from_camera_picks_what_it_should() {
+        let (mut comp, [camera, model, near, far]) = set(false);
+        let pick =
+            |comp: &Composition, selected: &[Uuid]| projection_source(comp, model, selected, 0.0);
+        assert_eq!(pick(&comp, &[]), Some((camera, near)));
+        assert_eq!(pick(&comp, &[far]), Some((camera, far)));
+        if let LayerKind::Camera { solve_link, .. } = &mut comp.layers[0].kind {
+            *solve_link = Some(far);
+        }
+        assert_eq!(pick(&comp, &[near]), Some((camera, far)));
+        comp.layers.remove(0);
+        assert_eq!(
+            pick(&comp, &[near]),
+            None,
+            "no camera, nothing to project from"
+        );
+    }
+
+    /// A hidden picture only a held projection reads is fetched at the frame
+    /// it holds, and named by that frame alone.
+    #[test]
+    fn a_held_picture_is_read_at_the_held_frame() {
+        let (comp, [_, _, near, far]) = set(true);
+        let rate = comp.frame_rate;
+        let held = rate.time_of_frame(6).unwrap().0.to_f64();
+        let rows = stored(&comp.layers[1]);
+        let p = projection(&rows[0], &comp, 1.0).unwrap();
+        assert_eq!(
+            (p.picture, p.held, p.time_at(1.0)),
+            (near, Some(held), held)
+        );
+        assert_eq!(
+            held_moments(&comp.layers[1], &comp, 1.0),
+            vec![(near, held)]
+        );
+        let times = with_held_frames(&comp, vec![1.0; 4], 1.0);
+        assert_eq!(times, vec![1.0, 1.0, held, 1.0]);
+        let named = unheld(&rows, &comp, 1.0);
+        assert_eq!(named[0].layer_ref("base_colour_layer"), None);
+        assert_eq!(named[0].layer_ref("camera"), rows[0].layer_ref("camera"));
+        assert_ne!(far, near);
+
+        // Read by anything else too, it's fetched at the playhead after all.
+        let mut read_twice = comp.clone();
+        let mut other = crate::fx::builtins::instantiate(MATCH_NAME).unwrap();
+        set_projection(&mut other, near, near);
+        read_twice.layers[3].effects.push(other);
+        assert_eq!(
+            with_held_frames(&read_twice, vec![1.0; 4], 1.0),
+            vec![1.0; 4]
+        );
+    }
+}

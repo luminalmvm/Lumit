@@ -33,6 +33,7 @@ import 'api/planes.dart';
 import 'api/presets.dart';
 import 'api/project.dart';
 import 'api/project_item.dart';
+import 'api/projection.dart';
 import 'api/retime.dart';
 import 'api/roto.dart';
 import 'api/routes.dart';

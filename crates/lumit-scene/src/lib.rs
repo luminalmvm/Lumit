@@ -47,6 +47,57 @@ pub struct ModelScene {
     pub missing: Vec<String>,
 }
 
+/// A card: one square metre facing the comp's default camera, seen from both
+/// sides, in place of a file for anything flat to be drawn as a model.
+#[must_use]
+pub fn card() -> ModelScene {
+    let positions = vec![
+        [-0.5, -0.5, 0.0],
+        [0.5, -0.5, 0.0],
+        [0.5, 0.5, 0.0],
+        [-0.5, 0.5, 0.0],
+    ];
+    let primitive = Primitive {
+        positions,
+        normals: vec![[0.0, 0.0, 1.0]; 4],
+        uv0: vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
+        indices: vec![0, 1, 2, 0, 2, 3],
+        material: Some(0),
+        ..Primitive::default()
+    };
+    ModelScene {
+        nodes: vec![Node {
+            name: "Card".into(),
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            scale: [1.0; 3],
+            mesh: Some(0),
+            ..Node::default()
+        }],
+        roots: vec![0],
+        meshes: vec![Mesh {
+            name: "Card".into(),
+            primitives: vec![primitive],
+            bounds: Bounds {
+                min: [-0.5, -0.5, 0.0],
+                max: [0.5, 0.5, 0.0],
+            },
+        }],
+        materials: vec![Material {
+            name: "Card".into(),
+            base_colour: [0.5, 0.5, 0.5, 1.0],
+            metallic: 0.0,
+            roughness: 0.9,
+            double_sided: true,
+            ..Material::default()
+        }],
+        bounds: Bounds {
+            min: [-0.5, -0.5, 0.0],
+            max: [0.5, 0.5, 0.0],
+        },
+        ..ModelScene::default()
+    }
+}
+
 impl ModelScene {
     /// Roughly the memory the scene holds: its vertices, indices and decoded
     /// pictures, which is all but a sliver of it.

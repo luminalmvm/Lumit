@@ -95,6 +95,37 @@ pub fn model_layer(
     layer
 }
 
+/// What a card's Model layer names in place of a 3D model: it has no file, and
+/// its scene is made in code. Never a project item, so nothing can go missing.
+pub const CARD: uuid::Uuid = uuid::Uuid::from_u128(0x6361_7264_6361_7264_6361_7264_6361_7264);
+
+/// A card as tall as `comp` is to wide, `wide` comp pixels across, on
+/// `transform`.
+#[must_use]
+pub fn card_layer(
+    comp: &crate::model::Composition,
+    wide: f64,
+    mut transform: crate::model::TransformGroup,
+) -> crate::model::Layer {
+    transform.scale_y =
+        crate::anim::Property::fixed(100.0 * f64::from(comp.height) / f64::from(comp.width.max(1)));
+    let mut layer = crate::edits::base_layer(
+        "Card".into(),
+        crate::model::LayerKind::Model {
+            item: CARD,
+            settings: Box::new(ModelSettings {
+                units: wide,
+                fit: false,
+                ..ModelSettings::default()
+            }),
+        },
+        comp.duration.0,
+        transform,
+    );
+    layer.switches.three_d = true;
+    layer
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
