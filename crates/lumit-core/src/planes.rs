@@ -34,6 +34,9 @@ pub const TIER_VERSION: u16 = 1;
 /// find it without importing the catalogue's type.
 pub const DEPTH: &str = "depth";
 
+/// Depth points' `match_name`: the same analysis, drawn another way.
+pub const DEPTH_POINTS: &str = "depth_points";
+
 /// The Remove background effect's, for the same reason.
 pub const REMOVE_BACKGROUND: &str = "remove_background";
 
@@ -117,7 +120,7 @@ impl PlaneTask {
 #[must_use]
 pub fn task_of_name(match_name: &str) -> Option<PlaneTask> {
     match match_name {
-        DEPTH => Some(PlaneTask::Depth),
+        DEPTH | DEPTH_POINTS => Some(PlaneTask::Depth),
         REMOVE_BACKGROUND => Some(PlaneTask::Matte),
         _ => None,
     }

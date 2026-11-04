@@ -6367,8 +6367,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 5,
-        "Scanlines, the two flares, Transform points and Energy line are the five today"
+        declaring, 6,
+        "Scanlines, the two flares, Transform points, Energy line and Depth points are the six today"
     );
 }
 
@@ -6909,6 +6909,7 @@ fn every_parameter_declares_a_unit() {
             ("planar_track", "point2_x"),
             ("planar_track", "point2_y"),
             ("planar_track", "region"),
+            ("depth_points", "point_size"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -7516,7 +7517,12 @@ fn every_effect_carries_a_matte_row() {
         // words, before it may.
         if matches!(
             s.match_name,
-            "matte_key" | "set_matte" | "roto_brush" | "depth" | "remove_background"
+            "matte_key"
+                | "set_matte"
+                | "roto_brush"
+                | "depth"
+                | "remove_background"
+                | "depth_points"
         ) {
             assert_eq!(
                 s.matte,
@@ -7533,8 +7539,8 @@ fn every_effect_carries_a_matte_row() {
             // and is the auxiliary layer the render threads to it.
             assert_eq!(
                 s.layer_input().is_some(),
-                s.match_name == "set_matte",
-                "{} — Set matte keeps its source on the layer-input carriage",
+                matches!(s.match_name, "set_matte" | "depth_points"),
+                "{}: Set matte keeps its source on the layer-input carriage, as Depth points does its depth",
                 s.match_name
             );
             assert_eq!(

@@ -769,6 +769,7 @@ impl FxEngine {
             lens_dirt: Default::default(),
             film: Default::default(),
             particulate_scene: Default::default(),
+            depth_points: Default::default(),
             sprite_flare: Default::default(),
             energy_line: super::energy_line::LazyEnergyLine::spawn(ctx),
             mesh: Default::default(),
