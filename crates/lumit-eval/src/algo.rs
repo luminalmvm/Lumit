@@ -60,4 +60,5 @@
 /// * 31: the 3D layers in a collapsed Precomp take the parent's lights.
 /// * 32: a layer that only shows shadows takes them with its back to a light.
 /// * 33: the camera's depth of field blurs a Model layer.
-pub const ALGO_VERSION: u32 = 33;
+/// * 34: a row reading a Precomp layer sees that layer's own paint and effects.
+pub const ALGO_VERSION: u32 = 34;

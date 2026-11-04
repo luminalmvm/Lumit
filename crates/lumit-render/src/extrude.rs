@@ -634,6 +634,8 @@ pub(crate) fn made(
                     },
                     pictures: Vec::new(),
                     textures: true,
+                    projector: None,
+                    plate_from: None,
                 });
             }
         }

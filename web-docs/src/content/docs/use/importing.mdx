@@ -123,6 +123,19 @@ on the layer, never in the file. **Textures** off leaves out the file's base col
 metal-rough pictures. **Base colour layer**, **Emission layer**, **Opacity layer** and
 **Normal layer** each take a layer of the comp as the picture on the model's own uvs. A
 Normal layer is read as a normal map saved to a PNG would be.
+**Projected from** names a Camera layer, and the Base colour layer is then read where that
+camera saw each point, not on the model's uvs. Where the camera can't see a point, behind it,
+outside its frame or hidden by another model on the same camera, the point keeps **Base
+colour**. **Projection time** is **Follow**, which moves with the playhead, or **Hold**, which
+stops the camera and the picture at **Hold frame**, and picking Hold starts it at the playhead.
+Under Hold the picture stays on a model that moves. A point its camera saw at a steep angle
+fades to Base colour once it is seen much more square-on. A projected point takes the shadows
+of other models and no light, with **Accepts shadows** Only or **Holdout** too.
+**Layer ▸ Project from camera** sets every material of the selected Model layers at once: the
+selected Camera layer or the comp's own, or a new one when the comp has none, and the shot that
+camera was solved from, the selected picture, or the nearest picture below. A still holds at
+the playhead and anything else follows it. A row on a 3D layer can't be projected. **Layer
+▸ New ▸ Card** makes a flat Model layer with no file, filling the frame, for any plane.
 Transmission bends the comp's picture behind the model, softened by Roughness and tinted by
 Base colour. Under an environment light, metal, glass and Coat reflect it. In a view's
 **Shaded** look glass shows what is behind it without bending it, and **Normals** draws it
@@ -179,6 +192,10 @@ the lens. They follow the model at the time, and don't change if it changes late
 this way take the place of the **Key light** the first model brought, if it hasn't been changed.
 
 :::note[Not built yet]
+A projected point has no row to take the comp's light, and what its camera didn't see can't be
+left clear for a second projection to fill. Under **Hold** a model's take plays on under the
+picture, which doesn't stick to what moves, and a projected model's take doesn't blur with
+motion.
 A faded model's shadow doesn't fade, and a holdout's outline doesn't blur with motion.
 Expressions can't name a part's rows. FBX in-between shapes use the final shape. An
 orthographic camera gets the default lens. A glTF file's lens doesn't animate. A particle

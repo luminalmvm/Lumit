@@ -292,6 +292,9 @@ pub struct NestedInputDraw {
     /// Also hand over the 3D layers themselves, for rays to meet: a Depth row
     /// naming its own layer's precomp, on an effect that traces rays.
     pub trace_layers: bool,
+    /// The strokes painted on the Precomp layer itself, and when to read them.
+    pub paint: Vec<lumit_core::paint::PaintStroke>,
+    pub paint_time: f64,
 }
 
 impl NestedInputDraw {

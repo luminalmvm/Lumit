@@ -19,6 +19,13 @@ pub(super) const PLAIN: Reading = (
     wgpu::FilterMode::Linear,
 );
 
+/// The reading of a projected picture, whose edges never wrap.
+pub(super) const PLATE: Reading = (
+    wgpu::AddressMode::ClampToEdge,
+    wgpu::AddressMode::ClampToEdge,
+    wgpu::FilterMode::Linear,
+);
+
 /// One sampler for each reading, one group for each set of five.
 pub(super) struct Samplers {
     pub(super) layout: wgpu::BindGroupLayout,

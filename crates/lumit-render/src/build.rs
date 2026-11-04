@@ -2205,6 +2205,8 @@ fn comp_walk(
                 px_per_metre: nested.px_per_metre(slt),
                 read: None,
                 trace_layers: false,
+                paint: src.paint.clone(),
+                paint_time: lumit_core::time::layer_time(t_comp, src.start_offset.0),
             }))
         };
     let nested_input_for = |src: &lumit_core::model::Layer| -> Option<DofInputDraw> {
@@ -2303,32 +2305,30 @@ fn comp_walk(
             if !in_span(src) {
                 return None;
             }
-            // A Precomp reference renders its comp — "a white circle
-            // in a precomp" is the natural way to author a flare source, and
-            // a depth pass authored as a comp is the same shape.
-            if let Some(nested) = nested_input_for(src) {
-                return Some(nested);
-            }
             let mode = e.layer_source(param);
-            // Layer source. None samples the layer's raw pixels —
-            // clear its masks so `pixels_for` skips them; Masks and Effects
-            // and masks keep them.
-            let (rgba, tex_w, tex_h, natural, format) = if mode.applies_masks() {
-                pixels_for(src)?
-            } else {
-                let mut bare = src.clone();
-                bare.masks.clear();
-                pixels_for(&bare)?
+            // A Precomp reference renders its comp, with its own paint and
+            // stack. Layer source None samples any other layer's raw pixels:
+            // clear its masks so `pixels_for` skips them.
+            let nested = nested_input_for(src);
+            let pixels = match &nested {
+                Some(_) => None,
+                None if mode.applies_masks() => Some(pixels_for(src)?),
+                None => {
+                    let mut bare = src.clone();
+                    bare.masks.clear();
+                    Some(pixels_for(&bare)?)
+                }
             };
-            // Effects and masks: resolve the referenced layer's own
-            // stack at its layer time so render_dof_inputs runs it on the
-            // texture before resampling. Uses that layer's decode scale (its
-            // px@comp radii stay honest), the same resolve export uses. Empty
-            // otherwise.
+            let (tex_w, natural_w) = match (&pixels, &nested) {
+                (Some(p), _) => (p.1, p.3 .0),
+                (None, n) => n.as_ref().map(|n| (n.tex_w, n.natural[0]))?,
+            };
+            // Effects and masks: the referenced layer's own stack at its layer
+            // time, at its decode scale so its px@comp radii stay honest.
             let (fx, colour_tables, flare_lens_files) = if mode.folds_effects() && src.switches.fx {
                 let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
                 let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-                let scale = tex_w as f32 / natural.0.max(1.0);
+                let scale = tex_w as f32 / natural_w.max(1.0);
                 let markers = lumit_core::fx::markers::MarkerContext::for_layer(comp, src);
                 // The referenced layer's own effects, so its own expressions
                 // resolve about it rather than about the layer that pointed
@@ -2363,10 +2363,8 @@ fn comp_walk(
             } else {
                 Default::default()
             };
-            // The referenced layer's own baked pictures, on the same two
-            // predicates and the same (instance, source frame) lookup its own draw
-            // uses. Empty when its stack is not being folded in, which is when
-            // there are no ops to carry them to.
+            // Its own baked pictures, on the lookup its own draw uses. Empty
+            // when its stack is not being folded in.
             let src_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
             let (roto_mattes, planes) = if fx.is_empty() {
                 (Vec::new(), Vec::new())
@@ -2376,6 +2374,17 @@ fn comp_walk(
                     planes_for(&src.effects, src_frame),
                 )
             };
+            if let Some(input) = nested {
+                return Some(DofInputDraw {
+                    fx,
+                    colour_tables,
+                    flare_lens_files,
+                    roto_mattes,
+                    planes,
+                    ..input
+                });
+            }
+            let (rgba, tex_w, tex_h, natural, format) = pixels?;
             Some(DofInputDraw {
                 rgba: rgba.to_vec(),
                 tex_w,
@@ -2798,36 +2807,18 @@ fn comp_walk(
                         return layer_slot(e, p.row)
                             .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer);
                     }
-                    let mut probe = Probe::Picture {
-                        effect: e,
-                        row: p.row,
-                        found: None,
-                    };
-                    // No keyer: a nested comp built for another moment holds its
-                    // footage a whole frame at a time, which is not always the
-                    // picture its name would claim. A copy with no number of
-                    // its own keeps the one this walk is already rendered as.
-                    comp_walk(
+                    // A copy with no number of its own keeps the one this walk
+                    // is already rendered as.
+                    moments::picture_at(
                         doc,
                         comp,
-                        p.time,
-                        frame_t,
+                        (p.time, frame_t),
                         frame_pixels,
-                        &mut visited_path.clone(),
-                        None,
-                        true,
-                        Walk {
-                            clone: p.clone.unwrap_or(clone_number),
-                            values: &[],
-                            rebuild: with.rebuild,
-                            seen_through: None,
-                        },
-                        Some(&mut probe),
-                    );
-                    match probe {
-                        Probe::Picture { found: Some(d), .. } => LayerInputDraw::Layer(d),
-                        _ => LayerInputDraw::Absent,
-                    }
+                        &visited_path,
+                        (p.clone.unwrap_or(clone_number), with.rebuild),
+                        (e, p.row),
+                    )
+                    .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
                 })
                 .collect(),
         )
@@ -4548,8 +4539,14 @@ fn comp_walk(
                 continue;
             }
             _ if lumit_core::extrude::draws_mesh(layer) => {
-                let Some(draw) =
-                    crate::model::draw(doc, comp, layer, t_comp, &context, &layer_slot)
+                let held = |e: &lumit_core::model::EffectInstance, row: &str, at: f64| {
+                    let by = (clone_number, with.rebuild);
+                    let times = (at, frame_t);
+                    let visited = &visited_path;
+                    moments::picture_at(doc, comp, times, frame_pixels, visited, by, (e, row))
+                };
+                let pictures: crate::model::Pictures<'_> = (&layer_slot, &held);
+                let Some(draw) = crate::model::draw(doc, comp, layer, t_comp, &context, pictures)
                 else {
                     continue;
                 };
@@ -5834,6 +5831,8 @@ impl GraphLower<'_> {
                 px_per_metre: nested.px_per_metre(self.t),
                 read: crate::passes::depth_read(),
                 trace_layers: false,
+                paint: Vec::new(),
+                paint_time: 0.0,
             },
         )));
         Some(plan.steps.len() - 1)

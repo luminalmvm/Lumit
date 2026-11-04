@@ -20,6 +20,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/projection.dart';
 import 'package:lumit_flutter/src/rust/api/track.dart';
 
 import '../l10n/strings.dart';
@@ -235,7 +236,7 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
           ? Rect.fromPoints(at, at)
           : box.expandToInclude(Rect.fromPoints(at, at));
     }
-    const width = 180.0;
+    const width = 260.0;
     const height = 28.0;
     return Offset(
       (box.center.dx - width / 2)
@@ -245,16 +246,25 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
     );
   }
 
-  void _create({required bool solid}) {
+  void _create({required bool solid, bool card = false}) {
     final tracked = widget.tracked;
     if (tracked == null || _picked.isEmpty) return;
+    final tracks = _picked.toList()..sort();
     try {
-      addLayerAtPoints(
-        tracked: tracked,
-        tracks: _picked.toList()..sort(),
-        frame: widget.playheadFrame,
-        solid: solid,
-      );
+      if (card) {
+        addCardAtPoints(
+          tracked: tracked,
+          tracks: tracks,
+          frame: widget.playheadFrame,
+        );
+      } else {
+        addLayerAtPoints(
+          tracked: tracked,
+          tracks: tracks,
+          frame: widget.playheadFrame,
+          solid: solid,
+        );
+      }
     } catch (_) {
       // Nothing solved at those points; nothing is added and the selection
       // stays, so the gesture can be tried somewhere else.
@@ -313,6 +323,7 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
               child: _CreateBar(
                 onNull: () => _create(solid: false),
                 onSolid: () => _create(solid: true),
+                onCard: () => _create(solid: false, card: true),
               ),
             ),
         ],
@@ -332,8 +343,13 @@ List<BridgeTrackPoint> _fromEngine(LayerReference layer, int frame) =>
 class _CreateBar extends StatelessWidget {
   final VoidCallback onNull;
   final VoidCallback onSolid;
+  final VoidCallback onCard;
 
-  const _CreateBar({required this.onNull, required this.onSolid});
+  const _CreateBar({
+    required this.onNull,
+    required this.onSolid,
+    required this.onCard,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -361,6 +377,14 @@ class _CreateBar extends StatelessWidget {
             frameless: true,
             onPressed: onSolid,
             child: Text(l10n.trackCreateSolid, style: t.small),
+          ),
+          const SizedBox(width: 4),
+          HouseButton(
+            key: const ValueKey('viewer-track-create-card'),
+            small: true,
+            frameless: true,
+            onPressed: onCard,
+            child: Text(l10n.trackCreateCard, style: t.small),
           ),
         ],
       ),

@@ -22,4 +22,5 @@ section below, and when the release note is written the lines move into it.
 - The 3D layers and models in a collapsed precomp take the lights of the composition it sits in, where they ignored them.
 - A collapsed precomp's own environment light no longer draws its picture flat in the parent.
 - A layer with Accepts shadows on Only, or with Accepts lights off, now takes shadows with its back to the light, where it showed none. A floor at X rotation +90 can gain a shadow.
+- An effect or material reading a Precomp layer now sees that layer's own paint and, with Effects and masks, its own effects, where it used to see the comp alone.
 - A Precomp layer on Flow, as one from After Effects with Pixel Motion comes in, now makes the frames between, and is no longer collapsed.
