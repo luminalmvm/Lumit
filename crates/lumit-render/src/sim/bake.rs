@@ -25,6 +25,9 @@ const HEAD: usize = 8 + 8 + 8 + 8 + 8;
 /// The most a baked state says it unpacks to: a million particles.
 const MOST: usize = 16 + 48 * 1_000_000;
 
+/// The most one bake writes, in bytes. Past it the bake stops where it got to.
+const MOST_ON_DISK: u64 = 64 << 30;
+
 /// The cache folders of the projects opened so far, latest first.
 static ROOTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
@@ -143,10 +146,11 @@ pub fn status(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Opt
     let span = rate
         .frame_at(l.out_point)
         .saturating_sub(rate.frame_at(l.in_point));
-    let last = *frames.last()?;
+    // A state every so often covers the frames up to the next.
+    let last = (*frames.last()? + KEEP_EVERY).min(span);
     Some((
-        u32::try_from(last + 1).unwrap_or(u32::MAX),
-        u32::try_from(span.max(last + 1)).unwrap_or(u32::MAX),
+        u32::try_from(last).unwrap_or(u32::MAX),
+        u32::try_from(span).unwrap_or(u32::MAX),
     ))
 }
 
@@ -220,6 +224,7 @@ fn walk(
         return Err(AnalysisError::NoFrames);
     }
     let total = span as usize;
+    report(Progress::Tracking { done: 0, total });
     let ctx = lumit_gpu::GpuContext::headless().map_err(|_| AnalysisError::Unreadable)?;
     let fx = lumit_gpu::fx::FxEngine::new(&ctx);
     let carriage = crate::trails::carriage(
@@ -245,6 +250,7 @@ fn walk(
     let mut live = fresh(&fx, &ctx, name, cap);
     start_from(&fx, &ctx, &src, &name, &mut live, 0, 0).ok_or(AnalysisError::Unreadable)?;
     let mut now = first;
+    let mut written = 0u64;
     // A bake stopped part of the way is the frames it got to.
     while live.ledger.frame < span {
         if cancel.load(Ordering::Relaxed) {
@@ -260,8 +266,12 @@ fn walk(
                 .sim_read(&ctx, &live.work)
                 .ok_or(AnalysisError::Unreadable)?;
             let file = dir.join(format!("{}.sim", live.ledger.frame));
-            lumit_ingress::files::write(&file, &pack(&live.ledger, &bytes))
-                .map_err(|_| AnalysisError::Unreadable)?;
+            let packed = pack(&live.ledger, &bytes);
+            lumit_ingress::files::write(&file, &packed).map_err(|_| AnalysisError::Unreadable)?;
+            written += packed.len() as u64;
+            if written > MOST_ON_DISK {
+                break;
+            }
         }
     }
     report(Progress::Tracking { done: total, total });

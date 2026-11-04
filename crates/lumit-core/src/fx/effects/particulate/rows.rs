@@ -16,6 +16,7 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
 /// since. None starts closed: every one of them holds a control someone
 /// reaches for on the first day.
 pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
+    group("Simulation", &["simulate", "sub_steps", "bake", "cancel"]),
     group(
         "Emitter",
         &[
@@ -74,12 +75,8 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         ],
     ),
     group(
-        "Simulation",
+        "Fields",
         &[
-            "simulate",
-            "sub_steps",
-            "bake",
-            "cancel",
             "field_x",
             "field_y",
             "field_z",

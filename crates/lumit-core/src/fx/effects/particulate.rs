@@ -64,6 +64,32 @@ const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
     enabled_when = rows::PARTICULATE_ENABLED_WHEN,
 )]
 pub struct Particulate {
+    /// Works each frame's particles out from the frame before on the graphics
+    /// card, up to Max particles ([`points::sim`]). Turbulence becomes a flow
+    /// the particles are pushed about by, and the rows below come alive.
+    #[toggle(label = "Simulate", default = false)]
+    pub simulate: bool,
+
+    /// How many times a frame the particles move. More keeps fast ones honest.
+    #[counter(
+        label = "Sub-steps",
+        min = 1,
+        max = 8,
+        default = 2,
+        hard_min = 1,
+        hard_max = 8,
+        unit = Raw
+    )]
+    pub sub_steps: i32,
+
+    /// Bake the simulation to the project's cache.
+    #[action(label = "Bake")]
+    pub bake: (),
+
+    /// Stop a running bake.
+    #[action(label = "Cancel")]
+    pub cancel: (),
+
     /// The particles live in the comp's 3D space, carried by the layer's
     /// placement and drawn through the camera, so 3D layers pass in front of
     /// and behind them.
@@ -355,32 +381,6 @@ pub struct Particulate {
         unit = Px
     )]
     pub speed_max: f32,
-
-    /// Works each frame's particles out from the frame before on the graphics
-    /// card, up to Max particles ([`points::sim`]). Turbulence becomes a flow
-    /// the particles are pushed about by, and the rows below come alive.
-    #[toggle(label = "Simulate", default = false)]
-    pub simulate: bool,
-
-    /// How many times a frame the particles move. More keeps fast ones honest.
-    #[counter(
-        label = "Sub-steps",
-        min = 1,
-        max = 8,
-        default = 2,
-        hard_min = 1,
-        hard_max = 8,
-        unit = Raw
-    )]
-    pub sub_steps: i32,
-
-    /// Bake the simulation to the project's cache.
-    #[action(label = "Bake")]
-    pub bake: (),
-
-    /// Stop a running bake.
-    #[action(label = "Cancel")]
-    pub cancel: (),
 
     /// Where the Attractor, Vortex and Sphere sit, px@comp.
     #[slider(label = "Field x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]

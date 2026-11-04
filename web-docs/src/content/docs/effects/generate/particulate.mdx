@@ -23,6 +23,10 @@ A particle system.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Simulate** | Checkbox | On or off | Off | - |
+| **Sub-steps** | Slider, whole numbers | 1 to 8 | 2 | - |
+| **Bake** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
 | **In the scene** | Checkbox | On or off | Off | - |
 | **Shape** | Dropdown | Point · Line · Ellipse · Rectangle · Mask path · Ellipse outline · Rectangle outline · Box · Sphere · Layer | Point | - |
 | **Position x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
@@ -65,10 +69,6 @@ A particle system.
 | **Colour by** | Dropdown | Age · Speed · Random | Age | - |
 | **Speed min** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
 | **Speed max** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
-| **Simulate** | Checkbox | On or off | Off | - |
-| **Sub-steps** | Slider, whole numbers | 1 to 8 | 2 | - |
-| **Bake** | Button | - | - | - |
-| **Cancel** | Button | - | - | - |
 | **Field x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Field y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Field z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -121,11 +121,12 @@ A particle system.
 
 In the Effect Controls panel:
 
+- **Simulation** groups **Simulate**, **Sub-steps**, **Bake**, **Cancel**.
 - **Emitter** groups **In the scene**, **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emitter layer**, **Density layer**, **Map placement**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
-- **Simulation** groups **Simulate**, **Sub-steps**, **Bake**, **Cancel**, **Attractor**, **Vortex**, **Vortex axis**, **Sphere**, **Field x**, **Field y**, **Field z**, **Field radius**.
+- **Fields** groups **Field x**, **Field y**, **Field z**, **Field radius**, **Attractor**, **Vortex**, **Vortex axis**, **Sphere**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Edges** groups **Edge**, **Edge margin**.
 - **Collide** groups **Collide with**, **All 3D layers**, **Ground**, **Ground height**, **On contact**, **Bounciness**, **Friction**.
@@ -138,13 +139,7 @@ In the Effect Controls panel:
 - **Streak length** is editable while **Mode** is set to Streak.
 - **Emitter layer** is editable while **Shape** is set to Layer.
 - **Density layer** is editable while **Shape** is anything but Layer.
-- **Separation** is editable while **In the scene** is off.
-- **Alignment** is editable while **In the scene** is off.
-- **Cohesion** is editable while **In the scene** is off.
 - **Persistence** is editable while **In the scene** is off.
-- **Separation** is editable while **Simulate** is off.
-- **Alignment** is editable while **Simulate** is off.
-- **Cohesion** is editable while **Simulate** is off.
 - **Persistence** is editable while **Simulate** is off.
 - **Density layer** is editable while **Simulate** is off.
 - **Map placement** is editable while **Simulate** is off.
@@ -165,9 +160,6 @@ In the Effect Controls panel:
 - **Trigger** is editable while **Burst** is set to On trigger.
 - **Edge margin** is editable while **Edge** is anything but None.
 - **Mask path** is editable while **Follow** is anything but Shape.
-- **Particle blend** is editable while **Separation** is 0.
-- **Particle blend** is editable while **Alignment** is 0.
-- **Particle blend** is editable while **Cohesion** is 0.
 - **Density layer** is editable while **Separation** is 0.
 - **Density layer** is editable while **Alignment** is 0.
 - **Density layer** is editable while **Cohesion** is 0.
@@ -189,6 +181,20 @@ In the Effect Controls panel:
 {/* END GENERATED */}
 
 ## What each control does
+
+The **Simulation** group, particles worked out step by step on the graphics card:
+
+- **Simulate**: each frame's particles are worked out from the frame before, up to Max
+  particles. **Turbulence amount**, **Turbulence scale** and **Turbulence speed** become a
+  flow that pushes particles about wherever they are. Density layer and Trails are not read,
+  and a Layer emitter gives birth only on a model's surface. A flock steers by the cells round
+  a particle, up to 64 cells a side, rather than by each neighbour.
+- **Sub-steps**: how many times a frame the particles move.
+- **Bake**: writes the simulation to the project's cache. A saved project keeps it in its
+  cache folder and Collect takes it along. An edit to anything it reads leaves it unread.
+- **Cancel**: stops a running bake. The frames it reached stay baked.
+In the scene, Collide with, a flock and Sparks turn this walk on by themselves. A simulation may differ
+slightly between graphics cards. On one machine a frame is the same however it is reached.
 
 The **Emitter** group, where particles come from and travel:
 
@@ -258,6 +264,16 @@ The **Variation** group, what runs those changes:
 - **Speed min** and **Speed max**: the speeds, in pixels per second, at the left and right
   ends of the curve or blend.
 
+The **Fields** group, read with Simulate on:
+
+- **Attractor**: how hard particles are pulled to the field's middle. Below nought it pushes
+  them away.
+- **Vortex**: how fast particles are swept round the field's middle.
+- **Vortex axis**: the line the Vortex turns about.
+- **Sphere**: how hard particles are thrown out of a ball of Field radius.
+- **Field x**, **Field y** and **Field z**: where the field's middle is.
+- **Field radius**: how far the three reach.
+
 The **Forces** group, what moves them:
 
 - **Gravity**: a constant pull.
@@ -325,28 +341,6 @@ With Separation, Alignment, Cohesion or Sparks above nought, each frame's partic
 worked out from the frame before, as with Collide with. Without Simulate, Density layer and
 Particle blend are not read. A row that is keyframed, has an expression or is wired counts as above
 nought.
-
-The **Simulation** group, particles worked out step by step on the graphics card:
-
-- **Simulate**: each frame's particles are worked out from the frame before, up to Max
-  particles. **Turbulence amount**, **Turbulence scale** and **Turbulence speed** become a
-  flow that pushes particles about wherever they are. Density layer and Trails are not read,
-  and a Layer emitter gives birth only on a model's surface. A flock steers by the cells round
-  a particle, up to 64 cells a side, rather than by each neighbour.
-- **Sub-steps**: how many times a frame the particles move.
-- **Bake**: writes the simulation to the project's cache. A saved project keeps it in its
-  cache folder and Collect takes it along. An edit to anything it reads leaves it unread.
-- **Cancel**: stops a running bake. The frames it reached stay baked.
-- **Attractor**: how hard particles are pulled to the field's middle. Below nought it pushes
-  them away.
-- **Vortex**: how fast particles are swept round the field's middle.
-- **Vortex axis**: the line the Vortex turns about.
-- **Sphere**: how hard particles are thrown out of a ball of Field radius.
-- **Field x**, **Field y** and **Field z**: where the field's middle is.
-- **Field radius**: how far the three reach.
-
-In the scene, Collide with, a flock and Sparks turn this walk on by themselves. A simulation may differ
-slightly between graphics cards. On one machine a frame is the same however it is reached.
 
 The **Trails** group, a picture kept from frame to frame:
 

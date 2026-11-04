@@ -638,6 +638,7 @@ Map<String, String> get _built => {
       "Spark life": l10n.fxSparkLife,
       "Spark size": l10n.fxSparkSize,
       "Simulation": l10n.fxSimulation,
+      "Fields": l10n.fxFields,
       "Simulate": l10n.fxSimulate,
       "Sub-steps": l10n.fxSubSteps,
       "Field x": l10n.fxFieldX,

@@ -251,7 +251,7 @@ fn a_baked_frame_is_the_walked_frame() {
     }
     assert_eq!(
         lumit_render::sim::bake::status(&doc, id, layer, effect),
-        Some((57, 60))
+        Some((60, 60))
     );
     let baked = walked_alone(&doc, id, 44).unwrap();
     assert!(baked.iter().step_by(4).any(|v| *v > 40), "particles drew");

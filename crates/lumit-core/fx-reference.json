@@ -12051,6 +12051,36 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "simulate",
+          "label": "Simulate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "sub_steps",
+          "label": "Sub-steps",
+          "kind": "int",
+          "unit": "raw",
+          "default": 2,
+          "slider_min": 1.0,
+          "slider_max": 8.0,
+          "hard_min": 1.0,
+          "hard_max": 8.0
+        },
+        {
+          "id": "bake",
+          "label": "Bake",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
           "id": "in_scene",
           "label": "In the scene",
           "kind": "bool",
@@ -12496,36 +12526,6 @@
           "slider_min": 0.0,
           "slider_max": 2000.0,
           "hard_min": 0.0
-        },
-        {
-          "id": "simulate",
-          "label": "Simulate",
-          "kind": "bool",
-          "unit": "raw",
-          "default": false
-        },
-        {
-          "id": "sub_steps",
-          "label": "Sub-steps",
-          "kind": "int",
-          "unit": "raw",
-          "default": 2,
-          "slider_min": 1.0,
-          "slider_max": 8.0,
-          "hard_min": 1.0,
-          "hard_max": 8.0
-        },
-        {
-          "id": "bake",
-          "label": "Bake",
-          "kind": "action",
-          "unit": "raw"
-        },
-        {
-          "id": "cancel",
-          "label": "Cancel",
-          "kind": "action",
-          "unit": "raw"
         },
         {
           "id": "field_x",
@@ -13070,6 +13070,16 @@
       ],
       "groups": [
         {
+          "label": "Simulation",
+          "params": [
+            "simulate",
+            "sub_steps",
+            "bake",
+            "cancel"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Emitter",
           "params": [
             "in_scene",
@@ -13136,12 +13146,8 @@
           "collapsed": false
         },
         {
-          "label": "Simulation",
+          "label": "Fields",
           "params": [
-            "simulate",
-            "sub_steps",
-            "bake",
-            "cancel",
             "field_x",
             "field_y",
             "field_z",

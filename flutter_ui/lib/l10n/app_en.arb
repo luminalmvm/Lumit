@@ -4077,6 +4077,10 @@
   "@fxSimulation": {
     "description": "Effect controls: a group of Particulate controls that work particles out step by step on the graphics card."
   },
+  "fxFields": "Fields",
+  "@fxFields": {
+    "description": "Effect controls: a group of Particulate controls: the Attractor, Vortex and Sphere and where they sit."
+  },
   "fxSimulate": "Simulate",
   "@fxSimulate": {
     "description": "Effect controls: a switch on Particulate that works each frame out from the frame before on the graphics card."
