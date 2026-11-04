@@ -56,7 +56,7 @@ pub(super) fn rays(
         eye: DVec3::new(source.eye.0, source.eye.1, source.eye.2),
         place,
         named: named.is_some(),
-        steady: crate::planes::steady(e.id, source_frame),
+        steady: crate::planes::steady::of(e.id, source_frame),
     })
 }
 
