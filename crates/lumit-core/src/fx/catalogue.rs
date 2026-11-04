@@ -179,6 +179,7 @@ use super::effects::{
     sharpen::{Sharpen, SharpenDef},
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
     slider_control::{SliderControl, SliderControlDef},
+    smoke::{Smoke, SmokeDef},
     spherize::{Spherize, SpherizeDef},
     split_channels::{SplitChannels, SplitChannelsDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
@@ -359,6 +360,8 @@ crate::catalogue![
     DepthDef => Depth,
     // The same analysis, drawn as points through a camera.
     DepthPointsDef => DepthPoints,
+    // Gas in a box, which the comp's volumetric walk draws.
+    SmokeDef => Smoke,
     // Remove background (docs/08 §3.105), beside Depth: the same tier, the
     // same shape and the other thing a model reads out of a shot. A matte
     // rather than a reading, so it draws its answer into the layer's own alpha

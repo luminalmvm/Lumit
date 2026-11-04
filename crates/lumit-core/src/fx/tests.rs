@@ -7485,7 +7485,7 @@ fn every_effect_carries_a_matte_row() {
             s.category,
             FxCategory::Controls | FxCategory::Audio | FxCategory::Compositing
         ) || s.category.is_driver()
-            || matches!(s.match_name, "camera_track" | "planar_track")
+            || matches!(s.match_name, "camera_track" | "planar_track" | "smoke")
         {
             assert_eq!(
                 s.matte,

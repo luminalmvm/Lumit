@@ -127,6 +127,7 @@ pub mod shake;
 pub mod sharpen;
 pub mod sharpen_simple;
 pub mod slider_control;
+pub mod smoke;
 pub mod spherize;
 pub mod split_channels;
 pub mod sprite_flare;

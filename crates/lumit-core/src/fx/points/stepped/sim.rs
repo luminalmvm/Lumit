@@ -82,7 +82,7 @@ pub fn hit_layers<'a>(
 
 /// Everything a layer's place is read from, and nothing else about it, so a
 /// rename or a label colour keeps the walk.
-fn feed_place(comp: &Composition, l: &Layer, h: &mut blake3::Hasher) {
+pub(crate) fn feed_place(comp: &Composition, l: &Layer, h: &mut blake3::Hasher) {
     h.update(&[u8::from(l.switches.three_d), u8::from(l.switches.visible)]);
     let _ = serde_json::to_writer(&mut *h, &l.transform);
     let _ = serde_json::to_writer(&mut *h, &l.start_offset);
@@ -105,7 +105,7 @@ fn feed_place(comp: &Composition, l: &Layer, h: &mut blake3::Hasher) {
 
 /// A layer's shape as a thing to hit or give birth on: its outlines, its size,
 /// and a model's content wherever it has been moved to.
-fn feed_shape(doc: &Document, l: &Layer, h: &mut blake3::Hasher) {
+pub(crate) fn feed_shape(doc: &Document, l: &Layer, h: &mut blake3::Hasher) {
     let _ = serde_json::to_writer(&mut *h, &l.masks);
     match &l.kind {
         LayerKind::Model { item, settings } => {

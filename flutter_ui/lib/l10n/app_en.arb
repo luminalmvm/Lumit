@@ -5944,7 +5944,7 @@
   },
   "fxTrail": "Trail",
   "@fxTrail": {
-    "description": "Effect controls — the name of the Trail effect, which draws where every point of a points stream has been, fading with age."
+    "description": "Effect controls — a switch on Smoke and fire that leaves the gas behind when the box moves. Also the name of the Trail effect, which draws where every point of a points stream has been, fading with age."
   },
   "fxTransform": "Transform",
   "@fxTransform": {
@@ -24110,6 +24110,110 @@
   "fxEmissive": "Emissive",
   "@fxEmissive": {
     "description": "Effect controls: a material preset in a material's Presets menu. A material that glows."
+  },
+  "fxCells64": "64",
+  "@fxCells64": {
+    "description": "Effect controls: an option of Resolution on Smoke and fire: 64 cells along the box's longest side."
+  },
+  "fxCells96": "96",
+  "@fxCells96": {
+    "description": "Effect controls: an option of Resolution on Smoke and fire: 96 cells along the box's longest side."
+  },
+  "fxCells128": "128",
+  "@fxCells128": {
+    "description": "Effect controls: an option of Resolution on Smoke and fire: 128 cells along the box's longest side."
+  },
+  "fxModelLayer": "Model layer",
+  "@fxModelLayer": {
+    "description": "Effect controls: an option of Emit from on Smoke and fire: gas comes from the surface of a Model layer."
+  },
+  "fxTurbulence": "Turbulence",
+  "@fxTurbulence": {
+    "description": "Effect controls: a control on Smoke and fire: how much the gas is broken up into small swirls."
+  },
+  "fxCollision": "Collision",
+  "@fxCollision": {
+    "description": "Effect controls: the heading on Smoke and fire over what the gas goes round."
+  },
+  "fxPresetCandle": "Candle",
+  "@fxPresetCandle": {
+    "description": "Effect controls: a preset of Smoke and fire: a small steady flame."
+  },
+  "fxPresetTorch": "Torch",
+  "@fxPresetTorch": {
+    "description": "Effect controls: a preset of Smoke and fire: a narrow hard flame."
+  },
+  "fxPresetExplosion": "Explosion",
+  "@fxPresetExplosion": {
+    "description": "Effect controls: a preset of Smoke and fire: a burst of fuel that rises as a fireball."
+  },
+  "fxSmokeAndFire": "Smoke and fire",
+  "@fxSmokeAndFire": {
+    "description": "Effect controls: the name of the effect that turns a 3D layer into a box of simulated smoke and fire."
+  },
+  "fxResolution": "Resolution",
+  "@fxResolution": {
+    "description": "Effect controls: a control on Smoke and fire: how many cells the box has along its longest side."
+  },
+  "fxEmitFrom": "Emit from",
+  "@fxEmitFrom": {
+    "description": "Effect controls: a control on Smoke and fire: what the gas comes from."
+  },
+  "fxLayersBox": "Layer's box",
+  "@fxLayersBox": {
+    "description": "Effect controls: an option of Emit from on Smoke and fire: gas comes from a patch on the floor of the layer's own box."
+  },
+  "fxParticlesFromALayer": "Particles from a layer",
+  "@fxParticlesFromALayer": {
+    "description": "Effect controls: an option of Emit from on Smoke and fire: gas comes from where another layer's particles are."
+  },
+  "fxEmitLayer": "Emit layer",
+  "@fxEmitLayer": {
+    "description": "Effect controls: a control on Smoke and fire: the Particulate layer or Model layer the gas comes from."
+  },
+  "fxEmitterSize": "Emitter size",
+  "@fxEmitterSize": {
+    "description": "Effect controls: a control on Smoke and fire: how wide the patch on the box's floor is."
+  },
+  "fxFuel": "Fuel",
+  "@fxFuel": {
+    "description": "Effect controls: a control on Smoke and fire: how much there is to burn where the gas starts."
+  },
+  "fxBuoyancy": "Buoyancy",
+  "@fxBuoyancy": {
+    "description": "Effect controls: a control on Smoke and fire: how hard heat pushes the gas up."
+  },
+  "fxVorticity": "Vorticity",
+  "@fxVorticity": {
+    "description": "Effect controls: a control on Smoke and fire: how much the curls in the gas are kept alive."
+  },
+  "fxDissipation": "Dissipation",
+  "@fxDissipation": {
+    "description": "Effect controls: a control on Smoke and fire: how fast smoke thins and heat fades."
+  },
+  "fxSmokeColour": "Smoke colour",
+  "@fxSmokeColour": {
+    "description": "Effect controls: a control on Smoke and fire: the smoke's colour, as light falling on it shows it."
+  },
+  "fxFireBrightness": "Fire brightness",
+  "@fxFireBrightness": {
+    "description": "Effect controls: a control on Smoke and fire: how much light hot gas gives."
+  },
+  "fxFireColour": "Fire colour",
+  "@fxFireColour": {
+    "description": "Effect controls: a control on Smoke and fire: the fire's colour at its coolest."
+  },
+  "fxFireCore": "Fire core",
+  "@fxFireCore": {
+    "description": "Effect controls: a control on Smoke and fire: the fire's colour at its hottest."
+  },
+  "fxShadowStrength": "Shadow strength",
+  "@fxShadowStrength": {
+    "description": "Effect controls: a control on Smoke and fire: how dark the smoke's shadows are, on itself and on what is under it."
+  },
+  "bakeTooBig": "Not enough video memory",
+  "@bakeTooBig": {
+    "description": "Bake status line on Smoke and fire when the grid at this Resolution does not fit on the graphics card, so no smoke is drawn."
   },
   "foldMaterials": "Materials",
   "@foldMaterials": {
