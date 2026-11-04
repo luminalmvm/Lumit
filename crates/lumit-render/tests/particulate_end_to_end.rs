@@ -379,3 +379,59 @@ fn a_3d_solid_hides_the_particles_in_the_scene_behind_it() {
         "the particles behind the solid are hidden ({behind} px against {front})"
     );
 }
+
+/// **A collapsed precomp takes its particles in the scene with it**, as it
+/// takes the layers beside them.
+#[test]
+fn a_collapsed_precomp_carries_its_particles_in_the_scene() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let mut fx = default_particulate();
+    for (id, v) in [
+        ("emit_rate", f(1000.0)),
+        ("initial_speed", f(0.0)),
+        ("turbulence_amount", f(0.0)),
+        ("life", f(10.0)),
+        ("size", f(12.0)),
+        ("in_scene", EffectValue::Bool(true)),
+    ] {
+        set(&mut fx, id, v);
+    }
+    // Where the bright pixels' middle is across the frame, with the precomp `by`
+    // pixels along.
+    let mut middle = |by: f64| {
+        let (doc, inner) = project(vec![fx.clone()]);
+        let mut doc = Arc::unwrap_or_clone(doc);
+        let mut outer = doc.comp(inner).expect("the comp").clone();
+        let c = doc.comp_mut(inner).expect("the comp");
+        c.layers[0].switches.three_d = true;
+        c.background = LinearColour([0.0, 0.0, 0.0, 0.0]);
+        outer.id = Uuid::now_v7();
+        let mut layer = solid_layer(Uuid::now_v7());
+        layer.kind = LayerKind::Precomp { comp: inner };
+        layer.transform.position_x = lumit_core::anim::Property::fixed(f64::from(W) * 0.5 + by);
+        layer.switches.three_d = true;
+        layer.switches.collapse = true;
+        outer.layers = vec![layer];
+        let id = outer.id;
+        doc.items.push(ProjectItem::Composition(outer));
+        let (px, w, _) = r
+            .render_rgba(&Arc::new(doc), id, 60, 1.0)
+            .expect("the comp renders");
+        let (mut sum, mut n) = (0_u64, 0_u64);
+        for y in 0..H {
+            for x in 0..W {
+                if px[((y * w + x) * 4) as usize] > 200 {
+                    sum += u64::from(x);
+                    n += 1;
+                }
+            }
+        }
+        assert!(n > 100, "the particles draw ({n} px)");
+        sum as f64 / n as f64
+    };
+    let moved = middle(100.0) - middle(0.0);
+    assert!((moved - 100.0).abs() < 5.0, "they moved {moved} px of 100");
+}

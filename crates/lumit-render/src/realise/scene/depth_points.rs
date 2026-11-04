@@ -60,28 +60,24 @@ pub(super) fn rays(
     })
 }
 
-/// `d`, spliced out of a collapsed precomp by `outer`, onto the comp it joined:
-/// its plane goes wherever the precomp went, and unless a camera inside the
-/// precomp is named, its rays start from that comp's camera.
-pub(crate) fn collapsed(
-    d: &mut crate::draw::CompLayerDraw,
-    doc: &Arc<Document>,
-    comp: &Composition,
-    layer: &Layer,
-    outer: [[f32; 4]; 4],
-    t: f64,
-) {
-    let Some(rays) = d.in_scene.as_mut().and_then(|c| c.rays.as_mut()) else {
-        return;
-    };
-    let outer = glam::Mat4::from_cols_array_2d(&outer).as_dmat4();
-    rays.place = outer * rays.place;
-    rays.eye = if rays.named {
-        outer.transform_point3(rays.eye)
-    } else {
-        let at = depth_points::source(doc, comp, layer, None, t).eye;
-        DVec3::new(at.0, at.1, at.2)
-    };
+impl Rays {
+    /// Spliced out of a collapsed precomp by `outer`, the eye goes with it if a
+    /// camera inside the precomp is named, and is `comp`'s camera's if not.
+    pub(super) fn spliced(
+        &mut self,
+        doc: &Arc<Document>,
+        comp: &Composition,
+        layer: &Layer,
+        outer: DMat4,
+        t: f64,
+    ) {
+        self.eye = if self.named {
+            outer.transform_point3(self.eye)
+        } else {
+            let at = depth_points::source(doc, comp, layer, None, t).eye;
+            DVec3::new(at.0, at.1, at.2)
+        };
+    }
 }
 
 /// The picture its Depth layer row gives Depth points, if any.
@@ -118,9 +114,13 @@ pub(crate) fn draw<'a>(
     let (wf, hf) = (f64::from(w), f64::from(h));
     // From the raster to the layer's own pixels and on to the comp, by the
     // picture's centre, which stays put however far an effect above grew it.
-    let across = rays.place.x_axis.truncate() / s;
-    let down = rays.place.y_axis.truncate() / s;
-    let corner = rays.place.transform_point3(DVec3::new(
+    let place = frame
+        .carried
+        .outer
+        .map_or(rays.place, |o| o.as_dmat4() * rays.place);
+    let across = place.x_axis.truncate() / s;
+    let down = place.y_axis.truncate() / s;
+    let corner = place.transform_point3(DVec3::new(
         (f64::from(frame.natural.0) - wf / s) / 2.0,
         (f64::from(frame.natural.1) - hf / s) / 2.0,
         0.0,

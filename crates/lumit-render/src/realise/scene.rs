@@ -55,6 +55,26 @@ thread_local! {
     static PENDING: RefCell<Option<Joined>> = const { RefCell::new(None) };
 }
 
+/// `d`, spliced out of a collapsed precomp by `outer`, keeps what it draws in the
+/// scene on the plane the precomp went to, seen from `comp`'s camera.
+pub(crate) fn collapsed(
+    d: &mut CompLayerDraw,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    outer: [[f32; 4]; 4],
+    t: f64,
+) {
+    let Some(carried) = d.in_scene.as_mut() else {
+        return;
+    };
+    let outer = glam::Mat4::from_cols_array_2d(&outer);
+    carried.outer = Some(outer * carried.outer.unwrap_or(glam::Mat4::IDENTITY));
+    if let Some(rays) = carried.rays.as_mut() {
+        rays.spliced(doc, comp, layer, outer.as_dmat4(), t);
+    }
+}
+
 /// What a layer whose Particulate is in the scene takes from the comp beyond
 /// its own rows.
 #[derive(Clone, Default)]
@@ -72,6 +92,9 @@ pub struct Carried {
     pub shape: Option<(Arc<lumit_scene::ModelScene>, glam::Mat4)>,
     /// Where Depth points' rays start and the layer they pass through.
     pub rays: Option<depth_points::Rays>,
+    /// The collapsed precomps' placements it was spliced out through, which its
+    /// own placement doesn't know about.
+    pub outer: Option<glam::Mat4>,
 }
 
 /// Whether `layer` is a 3D layer with an effect drawing in the scene.
@@ -100,6 +123,7 @@ pub(crate) fn carried(
         surface: surface(doc, comp, layer),
         shape: shape(doc, comp, layer),
         rays: depth_points::rays(doc, comp, layer, t_comp, source_frame),
+        outer: None,
     })
 }
 
@@ -263,6 +287,7 @@ pub(crate) fn draw(
     let z = [z[0] * s, z[1] * s, z[2] * s, z[3]];
     let cam = crate::export::camera_mat(cw, ch, frame.camera);
     let place = glam::Mat4::from_cols_array_2d(&[x, y, z, [0.0, 0.0, 0.0, 1.0]]).transpose();
+    let place = frame.carried.outer.unwrap_or(glam::Mat4::IDENTITY) * place;
     let raster_to_clip = cam * place * glam::Mat4::from_scale(glam::Vec3::splat(1.0 / s));
     let m = raster_to_clip.transpose().to_cols_array_2d();
     // Into the frame at the render scale, foreshortened so a particle's size
