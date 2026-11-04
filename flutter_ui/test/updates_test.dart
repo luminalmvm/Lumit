@@ -433,6 +433,44 @@ void main() {
       expect(h.relaunched, isEmpty);
       expect(h.site.unpacking.existsSync(), isFalse);
     });
+
+    test('an AppImage is replaced by the new AppImage, and restarts',
+        () async {
+      final image = File('${tmp.path}/Lumit.AppImage')
+        ..writeAsStringSync('0.1.0');
+      final site = InstallSite.detect(
+        executablePath: '/tmp/.mount_Lumit/lumit_flutter',
+        operatingSystem: 'linux',
+        isFlatpak: (_) => false,
+        appImage: image.path,
+      );
+      final relaunched = <File>[];
+      final body = utf8.encode('0.2.0');
+      final service = _service(
+        platform: 'linux',
+        site: site,
+        folder: () =>
+            Directory('${tmp.path}/downloads')..createSync(recursive: true),
+        // Renamed over the AppImage, the Flatpak would leave nothing that runs.
+        fetch: (_) async => _releaseJson(assets: [
+          _asset('lumit-0.2.0-linux-x64.flatpak', size: body.length),
+          _asset('lumit-0.2.0-linux-x64.AppImage', size: body.length),
+        ]),
+        download: (url, into,
+                {required onProgress, required cancelled}) async =>
+            into.writeAsBytesSync(body),
+        relaunch: (launcher) async => relaunched.add(launcher),
+      );
+      await service.check();
+      expect(service.release?.assetName, endsWith('.AppImage'));
+      expect(service.delivery, UpdateDelivery.inPlace);
+      await service.downloadUpdate();
+      await service.install();
+
+      expect(image.readAsStringSync(), '0.2.0');
+      expect(relaunched.single.path, image.path);
+      expect(File(site.staging.path).existsSync(), isFalse);
+    });
   });
 
   group('the windows', () {

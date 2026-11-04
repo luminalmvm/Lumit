@@ -492,8 +492,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Work out how far every layer's ends may be dragged.
   ///
   /// Two costs, kept apart. A **footage** length means opening the file, so it
-  /// is asked once per layer, off the build, and kept for the session — the
-  /// same bargain [_refreshPeaks] strikes. Everything else is a cheap read that
+  /// is asked once per layer, off the build, and kept until the project's
+  /// items change ([_onItemsChanged]). Everything else is a cheap read that
   /// an edit can change (a precomp lengthened in its comp settings, Retime
   /// switched on), so the whole table is rebuilt when — and only when — the
   /// document revision moves.
@@ -907,11 +907,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
   }
 
-  /// A relink can bring a missing clip's sound and picture back, so every
-  /// layer that had no sound is asked again.
+  /// A relink can bring a missing clip's sound and picture back, or change
+  /// how long its footage runs, so those are asked again.
   void _onItemsChanged(ScopedChange event) {
-    if (!event.items || !mounted || !_hasAudio.containsValue(false)) return;
-    setState(() => _hasAudio.removeWhere((_, has) => !has));
+    if (!event.items || !mounted) return;
+    setState(() {
+      _hasAudio.removeWhere((_, has) => !has);
+      _footageFrames.clear();
+      _boundsRevision = null;
+    });
   }
 
   String _search = '';

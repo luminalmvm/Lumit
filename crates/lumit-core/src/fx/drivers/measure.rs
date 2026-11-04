@@ -7,21 +7,23 @@
 //!
 //! **What counts as the content depends on the kind.** A Text layer is
 //! measured round its letters as they are set, not round the paragraph box
-//! they wrap in. A Shape layer is measured round its art. A solid and a precomp
-//! are their frame. Footage is the comp's frame, because the size of a file is
-//! not kept in the document; it is the same stand-in an expression's `width`
-//! reads. A Points stream wired into the socket is measured instead of the
-//! layer, round every live point.
+//! they wrap in. A Shape layer is measured round its art. A solid, a precomp
+//! and footage are their own frame, and a Sequence layer is the frame of the
+//! clip it shows. A file's size is not kept in the document, so footage the
+//! renderer has not opened yet reads as the comp's frame. A Points stream wired
+//! into the socket is measured instead of the layer, round every live point.
 //!
 //! **Two spaces.** *Layer* is the layer's own pixels, which is what
 //! `sourceRectAtTime` answers in. *Comp* runs the box through the layer's
 //! transform and its parents', so a scaled or moved layer measures where it
-//! is drawn. A turned layer measures the box round its turned corners.
+//! is drawn. A turned layer measures the box round its turned corners, and a
+//! 3D layer the box round its corners as the camera sees them.
 //!
 //! **Nothing to measure reads nought**: a Null, a camera, a light, an empty
 //! text or a shape with no art.
 
-use std::sync::Arc;
+use std::collections::BTreeMap;
+use std::sync::{Arc, RwLock};
 
 use crate::expression::ExpressionContext;
 use crate::fx::points::PointsStream;
@@ -30,6 +32,7 @@ use crate::fx::{
     registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use crate::model::{Composition, Document, Layer, LayerKind};
+use crate::sequence::{ClipSource, Shown};
 use crate::shape::geometry::Affine;
 use lumit_fx_macros::Effect;
 
@@ -173,6 +176,16 @@ fn stream_box(stream: &PointsStream) -> Option<[f64; 4]> {
     }))
 }
 
+/// The frame size of each footage item the renderer has opened.
+static FOOTAGE: RwLock<BTreeMap<uuid::Uuid, (u32, u32)>> = RwLock::new(BTreeMap::new());
+
+/// Tell Measure the frame size of a footage item, as the renderer reads it.
+pub fn note_footage_frame(item: uuid::Uuid, width: u32, height: u32) {
+    if let Ok(mut sizes) = FOOTAGE.write() {
+        sizes.insert(item, (width, height));
+    }
+}
+
 /// What `layer` shows at comp time `t`, as left, top, right and bottom in its
 /// own pixels, or `None` where it shows nothing. The one measuring both this
 /// driver and an expression's `sourceRectAtTime` read.
@@ -186,6 +199,11 @@ pub fn layer_rect(
 ) -> Option<[f64; 4]> {
     let lt = crate::time::layer_time(t, layer.start_offset.0);
     let frame = |w: u32, h: u32| Some([0.0, 0.0, f64::from(w), f64::from(h)]);
+    let footage = |item| {
+        let size = FOOTAGE.read().ok().and_then(|s| s.get(&item).copied());
+        let (w, h) = size.unwrap_or((comp.width, comp.height));
+        frame(w, h)
+    };
     match &layer.kind {
         LayerKind::Text { document } => {
             // A line on a path is drawn round the path, so the path's box,
@@ -218,20 +236,23 @@ pub fn layer_rect(
         LayerKind::Precomp { comp: inner } => {
             doc.comp(*inner).and_then(|c| frame(c.width, c.height))
         }
-        LayerKind::Footage { .. } | LayerKind::Sequence { .. } | LayerKind::Adjustment => {
-            frame(comp.width, comp.height)
-        }
+        LayerKind::Footage { item } => footage(*item),
+        // Across a dissolve the layer is the incoming clip's size.
+        LayerKind::Sequence { clips } => match crate::sequence::shown_at(clips, lt) {
+            Shown::Nothing => None,
+            Shown::One { clip, .. } | Shown::Two { incoming: clip, .. } => match clip.source {
+                ClipSource::Footage(item) => footage(item),
+                ClipSource::Comp(id) => doc.comp(id).and_then(|c| frame(c.width, c.height)),
+            },
+        },
+        LayerKind::Adjustment => frame(comp.width, comp.height),
         LayerKind::Null | LayerKind::Camera { .. } | LayerKind::Light { .. } => None,
     }
 }
 
-/// `rect` in `layer`'s pixels, run through its transform and its parents' at
-/// comp time `t`, as the box round the four placed corners.
-///
-/// ponytail: flat placement only (position, anchor, scale and Z rotation), the
-/// way `occlusion` reads it. A layer turned in X or Y, or pushed in Z, measures
-/// as if it lay flat; go through the compositor's own matrices if a 3D layer
-/// ever needs measuring through a camera.
+/// `rect` in `layer`'s pixels, placed where the picture has it at comp time
+/// `t`, as the box round its four corners. The walk `toComp` takes, so a 3D
+/// layer is seen through the active camera.
 fn to_comp(
     comp: &Composition,
     layer: &Layer,
@@ -239,18 +260,24 @@ fn to_comp(
     context: &ExpressionContext,
     rect: [f64; 4],
 ) -> [f64; 4] {
-    let world = world(comp, layer, t, context);
+    use crate::expression::space;
+    let read = space::reader(context, comp.id, t);
+    let space = space::space(&context.document, comp, layer, t, &read);
     let corners = [
         (rect[0], rect[1]),
         (rect[2], rect[1]),
         (rect[0], rect[3]),
         (rect[2], rect[3]),
     ];
-    bounds(corners.into_iter().map(|c| world.apply(c))).unwrap_or(rect)
+    let placed = corners.into_iter().map(|(x, y)| {
+        let p = space.to_comp((x, y, 0.0));
+        (p.0, p.1)
+    });
+    bounds(placed).unwrap_or(rect)
 }
 
 /// `layer`'s pixels to the comp's at comp time `t`, through its transform and
-/// its parents', flat as [`to_comp`] reads them.
+/// its parents', flat: position, anchor, scale and Z rotation.
 pub(crate) fn world(
     comp: &Composition,
     layer: &Layer,

@@ -263,6 +263,21 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
 
+  // Which card Flutter draws with, for the engine, which shares the Viewer's
+  // picture onto that card and checks it is the one it draws on. The LUID as
+  // 16 hex digits, high part first. Set long before the first Viewer frame.
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+  DXGI_ADAPTER_DESC adapter_desc;
+  if (flutter_controller_->engine()->GetGraphicsAdapter(
+          adapter.GetAddressOf()) &&
+      SUCCEEDED(adapter->GetDesc(&adapter_desc))) {
+    wchar_t luid[17];
+    swprintf_s(luid, L"%08lx%08lx",
+               static_cast<unsigned long>(adapter_desc.AdapterLuid.HighPart),
+               adapter_desc.AdapterLuid.LowPart);
+    ::SetEnvironmentVariableW(L"LUMIT_FLUTTER_ADAPTER", luid);
+  }
+
   // The zero-copy Viewer texture bridge: registers engine-created D3D
   // shared textures with Flutter over the 'lumit/viewer_texture' channel. Built
   // here, once the engine exists; a null registrar leaves the Viewer on the

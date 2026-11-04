@@ -17,8 +17,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math' show Random;
+import 'dart:typed_data' show Float64List;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -290,8 +292,10 @@ class _GtkPage extends StatefulWidget {
 /// Flutter on Linux cannot hold another toolkit's view among its widgets, so
 /// the page's view lies over the window and this keeps it where the panel
 /// is. That puts it over anything Flutter draws there too: a menu, a
-/// dialogue, a panel being dragged. So while something is over the panel the
-/// view is hidden and a picture of it stands in.
+/// dialogue, a panel being dragged. So whatever is over the panel is cut out
+/// of the view, and the page keeps running around it. Under a dialogue's
+/// wash, which the view cannot be seen through, a picture of the page stands
+/// in, taken again while it lasts.
 class _GtkPageState extends State<_GtkPage> {
   static const MethodChannel _channel = MethodChannel('lumit/extension_views');
   static final Map<int, _GtkPageState> _pages = {};
@@ -352,11 +356,13 @@ class _GtkPageState extends State<_GtkPage> {
   Rect _sentRect = Rect.zero;
   double _sentScale = 1;
   bool _sentShown = false;
+  List<double> _sentCuts = const [];
+  bool _sentInput = true;
 
-  /// Something Flutter draws is over the panel.
+  /// Something Flutter draws over the whole panel can be seen through.
   bool _covered = false;
 
-  /// The view is hidden for it, which waits for [_still] to be on screen.
+  /// The view is cut away for it, which waits for [_still] to be on screen.
   bool _hidden = false;
 
   /// A picture of the page as it was when it was covered.
@@ -414,12 +420,50 @@ class _GtkPageState extends State<_GtkPage> {
     return false;
   }
 
-  /// Whether anything Flutter draws is over the panel: a menu, a dialogue,
-  /// a tooltip, a floating panel or a dragged panel, which all go in the
-  /// shell's overlay in an entry above the one this page is in, or something
-  /// of the shell's own that takes the pointer where the panel is.
-  bool _coveredAt(RenderBox box, Rect rect) {
+  /// What Flutter draws over the panel: a menu, a dialogue, a tooltip, a
+  /// floating panel or a dragged panel, which all go in the shell's overlay
+  /// in an entry above the one this page is in. [cuts] are the boxes drawn
+  /// over it, in the window. [barrier] is a menu's click-away, which the page
+  /// must not take a click from. [all] is a wash over the whole window, or
+  /// something of the shell's own that takes the pointer where the panel is.
+  ({List<Rect> cuts, bool barrier, bool all}) _over(RenderBox box, Rect rect) {
     final theatre = Overlay.maybeOf(context)?.context.findRenderObject();
+    if (theatre is! RenderBox || !theatre.hasSize) {
+      return (cuts: const [], barrier: false, all: false);
+    }
+    final window = MatrixUtils.transformRect(
+        theatre.getTransformTo(null), Offset.zero & theatre.size);
+    final cuts = <Rect>[];
+    var barrier = false;
+    var all = false;
+    // A box clear of the page is passed over with all it holds. One smaller
+    // than the window is a menu or a panel, and is cut out whole. One the
+    // size of the window is a layer that places those, and is looked into.
+    void visit(RenderObject node) {
+      if (node is RenderOffstage && node.offstage) return;
+      if (node is RenderBox) {
+        if (!node.attached || !node.hasSize) return;
+        final at = MatrixUtils.transformRect(
+            node.getTransformTo(null), Offset.zero & node.size);
+        if (!at.overlaps(rect)) return;
+        if (at.width < window.width - 1 || at.height < window.height - 1) {
+          cuts.add(at.intersect(rect));
+          return;
+        }
+      }
+      var leaf = true;
+      node.visitChildren((child) {
+        leaf = false;
+        visit(child);
+      });
+      // Across the whole window, a listener alone draws nothing.
+      if (leaf && node is RenderPointerListener) {
+        barrier = true;
+      } else if (leaf) {
+        all = true;
+      }
+    }
+
     // The entry this page is in: the overlay's child it sits under. The
     // overlay lists its entries bottom first.
     RenderObject? mine = box;
@@ -427,36 +471,17 @@ class _GtkPageState extends State<_GtkPage> {
       mine = mine.parent;
     }
     var above = false;
-    var over = false;
-    theatre?.visitChildren((entry) {
-      if (above && !over) over = _drawsOver(entry, rect);
+    theatre.visitChildren((entry) {
+      if (above) visit(entry);
       if (identical(entry, mine)) above = true;
     });
-    if (over) return true;
-    final result = HitTestResult();
-    WidgetsBinding.instance
-        .hitTestInView(result, rect.center, View.of(context).viewId);
-    return !result.path.any((entry) => entry.target == box);
-  }
-
-  /// Whether [node], or anything in it, is drawn over [rect]. A box clear of
-  /// it is passed over with all it holds, so a floating panel beside the page
-  /// does not hide it, and a leaf that reaches it does.
-  static bool _drawsOver(RenderObject node, Rect rect) {
-    if (node is RenderOffstage && node.offstage) return false;
-    if (node is RenderBox) {
-      if (!node.attached || !node.hasSize) return false;
-      final at = MatrixUtils.transformRect(
-          node.getTransformTo(null), Offset.zero & node.size);
-      if (!at.overlaps(rect)) return false;
+    if (!barrier && !cuts.any((cut) => cut.contains(rect.center))) {
+      final result = HitTestResult();
+      WidgetsBinding.instance
+          .hitTestInView(result, rect.center, View.of(context).viewId);
+      all = all || !result.path.any((entry) => entry.target == box);
     }
-    var leaf = true;
-    var over = false;
-    node.visitChildren((child) {
-      leaf = false;
-      if (!over) over = _drawsOver(child, rect);
-    });
-    return leaf || over;
+    return (cuts: cuts, barrier: barrier, all: all);
   }
 
   /// Tell the runner where the view is now, if that has changed. Called
@@ -467,22 +492,42 @@ class _GtkPageState extends State<_GtkPage> {
     var rect = Rect.zero;
     var scale = 1.0;
     var shown = false;
+    var over = (cuts: const <Rect>[], barrier: false, all: false);
     if (box is RenderBox && box.attached && box.hasSize && !_offstage(box)) {
       rect = MatrixUtils.transformRect(
           box.getTransformTo(null), Offset.zero & box.size);
       shown = rect.width >= 1 && rect.height >= 1;
       // The interface is drawn at a scale of the person's choosing, and the
       // page is drawn at the same one.
-      if (shown) scale = rect.width / box.size.width;
-      _cover(shown && _coveredAt(box, rect));
+      if (shown) {
+        scale = rect.width / box.size.width;
+        over = _over(box, rect);
+      }
+      _cover(shown && over.all);
     }
-    shown = shown && !_hidden;
-    if (rect == _sentRect && scale == _sentScale && shown == _sentShown) {
+    // Under a wash nothing is cut until the picture is up, and then all of
+    // it is.
+    final cuts = Float64List.fromList([
+      for (final cut in _covered ? [if (_hidden) rect] : over.cuts) ...[
+        cut.left,
+        cut.top,
+        cut.width,
+        cut.height,
+      ],
+    ]);
+    final input = !_covered && !over.barrier;
+    if (rect == _sentRect &&
+        scale == _sentScale &&
+        shown == _sentShown &&
+        listEquals(cuts, _sentCuts) &&
+        input == _sentInput) {
       return;
     }
     _sentRect = rect;
     _sentScale = scale;
     _sentShown = shown;
+    _sentCuts = cuts;
+    _sentInput = input;
     final placed = _ask('place', <String, Object?>{
       'view': _view,
       'x': rect.left,
@@ -491,9 +536,11 @@ class _GtkPageState extends State<_GtkPage> {
       'height': rect.height,
       'scale': scale,
       'shown': shown,
+      'cuts': cuts,
+      'input': input,
     });
     // The picture goes once the view is back, and not a frame before.
-    if (shown && _still != null) {
+    if (!_covered && _still != null) {
       final turn = _turn;
       unawaited(placed.then((_) {
         if (mounted && turn == _turn) _setStill(null);
@@ -515,13 +562,20 @@ class _GtkPageState extends State<_GtkPage> {
       _hidden = false;
       return;
     }
-    unawaited(_picture().then((still) {
-      if (!mounted || turn != _turn) {
-        still?.dispose();
-        return;
-      }
-      if (still != null) _setStill(still);
-      // Hidden once the picture has been drawn, so the panel is never
+    unawaited(_retake(turn));
+  }
+
+  /// Stand a picture of the page in, and take it again while the wash is
+  /// up, since the page keeps running under it.
+  Future<void> _retake(int turn) async {
+    final still = await _picture();
+    if (!mounted || turn != _turn) {
+      still?.dispose();
+      return;
+    }
+    if (still != null) _setStill(still);
+    if (!_hidden) {
+      // Cut away once the picture has been drawn, so the panel is never
       // empty in between.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || turn != _turn) return;
@@ -529,7 +583,10 @@ class _GtkPageState extends State<_GtkPage> {
         WidgetsBinding.instance.scheduleFrame();
       });
       WidgetsBinding.instance.scheduleFrame();
-    }));
+    }
+    if (still == null) return;
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (mounted && turn == _turn) unawaited(_retake(turn));
   }
 
   /// A picture of the page as it is now, or null when the runner has none.
@@ -559,7 +616,7 @@ class _GtkPageState extends State<_GtkPage> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Takes the pointer itself, which is how [_coveredAt] tells the panel
+    // Takes the pointer itself, which is how [_over] tells the panel
     // from something lying over it.
     return Listener(
       behavior: HitTestBehavior.opaque,

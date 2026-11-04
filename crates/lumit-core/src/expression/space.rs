@@ -143,7 +143,7 @@ impl Space {
     /// `zoom · (1 − 1/z)` with `z` how far ahead of the eye along the view
     /// ([`camera::project_depth`]), and plain z with no camera. A 2D layer's
     /// is nought.
-    fn to_comp(&self, p: P3) -> P3 {
+    pub(crate) fn to_comp(&self, p: P3) -> P3 {
         let w = self.world.point(p);
         match &self.camera {
             Some((pose, width, height)) => camera::project_depth(pose, *width, *height, w),

@@ -23,24 +23,58 @@ const PASS_PAIRS: usize = 3;
 /// that could produce NaN has no business in a matte.
 const ALPHA_EPS: f32 = 1e-6;
 
+/// Where each of a pixel's four forward steps sits in its row of the step
+/// table: the side step right, the side step down, and the two diagonals down.
+/// Every step the scans take is one of these, read from one end or the other.
+const RIGHT: usize = 0;
+const DOWN: usize = 1;
+const DOWN_RIGHT: usize = 2;
+const DOWN_LEFT: usize = 3;
+
 /// `D_F`, `D_B` and then `α_raw = D_B / (D_F + D_B + ε)` into `out`.
 ///
-/// `d_f`, `d_b` and `out` are the solver's reused buffers and must already be
-/// `width × height` long; anything shorter is left alone rather than resized
-/// here, because the solver owns that decision.
+/// `steps`, `d_f`, `d_b` and `out` are the solver's reused buffers and must
+/// already be `width × height` long; anything else is left alone rather than
+/// resized here, because the solver owns that decision.
 pub(crate) fn alpha_raw(
     frame: FrameRgb<'_>,
     seeds: &Seeds,
     gamma: f32,
+    steps: &mut [[f32; 4]],
     d_f: &mut [f32],
     d_b: &mut [f32],
     out: &mut [f32],
 ) {
-    transform(frame, seeds, Seed::Foreground, gamma, d_f);
-    transform(frame, seeds, Seed::Background, gamma, d_b);
+    let w = frame.width() as usize;
+    let h = frame.height() as usize;
+    let n = out.len();
+    if w * h != n || steps.len() != n || d_f.len() != n || d_b.len() != n {
+        return;
+    }
+    step_prices(frame, gamma * gamma, steps);
+    for (i, (f, b)) in d_f.iter_mut().zip(d_b.iter_mut()).enumerate() {
+        let seed = seeds.at(i);
+        *f = if seed == Seed::Foreground {
+            0.0
+        } else {
+            f32::INFINITY
+        };
+        *b = if seed == Seed::Background {
+            0.0
+        } else {
+            f32::INFINITY
+        };
+    }
+    // Both distances ride the same scans: they never read each other, so
+    // walking them side by side changes neither, and each step's price is
+    // fetched once for the two of them.
+    for _ in 0..PASS_PAIRS {
+        forward(steps, w, h, d_f, d_b);
+        backward(steps, w, h, d_f, d_b);
+    }
     for (i, slot) in out.iter_mut().enumerate() {
-        let f = d_f.get(i).copied().unwrap_or(f32::INFINITY);
-        let b = d_b.get(i).copied().unwrap_or(f32::INFINITY);
+        let f = d_f[i];
+        let b = d_b[i];
         let denom = f + b + ALPHA_EPS;
         // Both unreachable means the picture is disconnected from every seed,
         // which 8-connectivity makes impossible; half is the honest answer if
@@ -53,7 +87,13 @@ pub(crate) fn alpha_raw(
     }
 }
 
-/// The geodesic distance to the nearest seed of one kind.
+/// The price of every step, `sqrt(geo + γ²·‖ΔI‖²)`, worked out once a frame.
+///
+/// It depends on the frame alone, and the twelve scans over the two distances
+/// would otherwise take the same square root twelve times over. `geo` is the
+/// squared geometric length of the step, 1 for a side and 2 for a diagonal,
+/// kept squared because the colour term is squared too and the one root
+/// covers both. A step off the frame is priced at infinity and never taken.
 ///
 /// ponytail: the ceiling here is **leaks through low-contrast gaps** — a
 /// subject touching a same-coloured wall costs nothing to walk into, so the
@@ -63,82 +103,102 @@ pub(crate) fn alpha_raw(
 /// term (graph cut, or a learned cost) on the seed seam of §9, not more passes.
 /// Observable trigger: a solve whose matte includes a region joined to the
 /// subject by a boundary with no colour step, as the dumbbell test pins.
-fn transform(frame: FrameRgb<'_>, seeds: &Seeds, target: Seed, gamma: f32, d: &mut [f32]) {
+fn step_prices(frame: FrameRgb<'_>, g2: f32, steps: &mut [[f32; 4]]) {
     let w = frame.width() as usize;
     let h = frame.height() as usize;
-    let g2 = gamma * gamma;
-    for (i, slot) in d.iter_mut().enumerate() {
-        *slot = if seeds.at(i) == target {
-            0.0
-        } else {
-            f32::INFINITY
-        };
-    }
-    for _ in 0..PASS_PAIRS {
-        // Forward: top-left to bottom-right, over the four causal neighbours
-        // above and to the left.
-        for y in 0..h {
-            for x in 0..w {
-                let i = y * w + x;
-                if y > 0 {
-                    let up = i - w;
-                    relax(d, &frame, i, up, 1.0, g2);
-                    if x > 0 {
-                        relax(d, &frame, i, up - 1, 2.0, g2);
-                    }
-                    if x + 1 < w {
-                        relax(d, &frame, i, up + 1, 2.0, g2);
-                    }
-                }
-                if x > 0 {
-                    relax(d, &frame, i, i - 1, 1.0, g2);
-                }
-            }
+    // Off the frame there is no neighbour to price.
+    let price = |on: bool, i: usize, j: usize, geo: f32| {
+        if !on {
+            return f32::INFINITY;
         }
-        // Backward: the mirror, over the four neighbours below and to the right.
-        for y in (0..h).rev() {
-            for x in (0..w).rev() {
-                let i = y * w + x;
-                if y + 1 < h {
-                    let down = i + w;
-                    relax(d, &frame, i, down, 1.0, g2);
-                    if x + 1 < w {
-                        relax(d, &frame, i, down + 1, 2.0, g2);
-                    }
-                    if x > 0 {
-                        relax(d, &frame, i, down - 1, 2.0, g2);
-                    }
-                }
-                if x + 1 < w {
-                    relax(d, &frame, i, i + 1, 1.0, g2);
-                }
-            }
+        let a = frame.px(i);
+        let b = frame.px(j);
+        let dr = a[0] - b[0];
+        let dg = a[1] - b[1];
+        let db = a[2] - b[2];
+        (geo + g2 * (dr * dr + dg * dg + db * db)).sqrt()
+    };
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            let (right, down) = (x + 1 < w, y + 1 < h);
+            steps[i] = [
+                price(right, i, i + 1, 1.0),
+                price(down, i, i + w, 1.0),
+                price(right && down, i, i + w + 1, 2.0),
+                price(x > 0 && down, i, i + w - 1, 2.0),
+            ];
         }
     }
 }
 
-/// Offer pixel `i` the price of reaching a seed through its neighbour `j`.
-///
-/// `geo` is the squared geometric length of the step — 1 for a side, 2 for a
-/// diagonal — kept squared because the colour term is squared too and the one
-/// square root covers both.
-#[inline]
-fn relax(d: &mut [f32], frame: &FrameRgb<'_>, i: usize, j: usize, geo: f32, g2: f32) {
-    let Some(&from) = d.get(j) else {
-        return;
-    };
-    if !from.is_finite() {
-        return;
-    }
-    let a = frame.px(i);
-    let b = frame.px(j);
-    let dr = a[0] - b[0];
-    let dg = a[1] - b[1];
-    let db = a[2] - b[2];
-    let cand = from + (geo + g2 * (dr * dr + dg * dg + db * db)).sqrt();
-    if let Some(slot) = d.get_mut(i) {
-        if cand < *slot {
-            *slot = cand;
+/// Top-left to bottom-right, each pixel relaxing over its four causal
+/// neighbours above and to the left.
+fn forward(steps: &[[f32; 4]], w: usize, h: usize, d_f: &mut [f32], d_b: &mut [f32]) {
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            let (mut f, mut b) = (d_f[i], d_b[i]);
+            if y > 0 {
+                let up = i - w;
+                relax(&mut f, &mut b, d_f[up], d_b[up], steps[up][DOWN]);
+                if x > 0 {
+                    let j = up - 1;
+                    relax(&mut f, &mut b, d_f[j], d_b[j], steps[j][DOWN_RIGHT]);
+                }
+                if x + 1 < w {
+                    let j = up + 1;
+                    relax(&mut f, &mut b, d_f[j], d_b[j], steps[j][DOWN_LEFT]);
+                }
+            }
+            if x > 0 {
+                let j = i - 1;
+                relax(&mut f, &mut b, d_f[j], d_b[j], steps[j][RIGHT]);
+            }
+            d_f[i] = f;
+            d_b[i] = b;
         }
+    }
+}
+
+/// The mirror of [`forward`], over the four neighbours below and to the right.
+fn backward(steps: &[[f32; 4]], w: usize, h: usize, d_f: &mut [f32], d_b: &mut [f32]) {
+    for y in (0..h).rev() {
+        for x in (0..w).rev() {
+            let i = y * w + x;
+            let (mut f, mut b) = (d_f[i], d_b[i]);
+            let step = steps[i];
+            if y + 1 < h {
+                let down = i + w;
+                relax(&mut f, &mut b, d_f[down], d_b[down], step[DOWN]);
+                if x + 1 < w {
+                    let j = down + 1;
+                    relax(&mut f, &mut b, d_f[j], d_b[j], step[DOWN_RIGHT]);
+                }
+                if x > 0 {
+                    let j = down - 1;
+                    relax(&mut f, &mut b, d_f[j], d_b[j], step[DOWN_LEFT]);
+                }
+            }
+            if x + 1 < w {
+                relax(&mut f, &mut b, d_f[i + 1], d_b[i + 1], step[RIGHT]);
+            }
+            d_f[i] = f;
+            d_b[i] = b;
+        }
+    }
+}
+
+/// Offer a pixel the price of reaching each kind of seed through one
+/// neighbour. An unreachable neighbour offers infinity, which never wins.
+#[inline]
+fn relax(f: &mut f32, b: &mut f32, from_f: f32, from_b: f32, step: f32) {
+    let via_f = from_f + step;
+    if via_f < *f {
+        *f = via_f;
+    }
+    let via_b = from_b + step;
+    if via_b < *b {
+        *b = via_b;
     }
 }

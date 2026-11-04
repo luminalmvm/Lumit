@@ -1861,7 +1861,13 @@ void main() {
       final beforeDolly = camera.getTransform();
       await drag(const Offset(150, 0));
       after = camera.getTransform();
-      expect(still(after.positionZ), greaterThan(still(beforeDolly.positionZ)));
+      final f = poseOf(beforeDolly).axes.forward;
+      final (e0, e1) = (poseOf(beforeDolly).position, poseOf(after).position);
+      expect(
+          (e1.$1 - e0.$1) * f.$1 +
+              (e1.$2 - e0.$2) * f.$2 +
+              (e1.$3 - e0.$3) * f.$3,
+          greaterThan(0));
 
       // A keyed camera moves too: the orbit keys what is keyed at the
       // playhead, leaves a still row still, and is one undo step.
