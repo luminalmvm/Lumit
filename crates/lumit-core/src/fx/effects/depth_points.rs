@@ -267,12 +267,18 @@ fn moved_by(animation: &crate::anim::Animation, by: f64) -> crate::anim::Animati
 /// The op that gives `layer` the effect stack `effects`, as
 /// [`super::particulate::set_effects`] makes it. Setting the Camera row also
 /// carries the layer on that camera, where it sat in the frame, and clearing it
-/// puts the layer back, all in one undo step.
+/// puts the layer back, all in one undo step. Switching the effect off leaves
+/// the layer riding the camera, which is how you compare it with the plate.
 #[must_use]
-pub fn set_effects(comp: &Composition, layer: &Layer, effects: Vec<EffectInstance>) -> Op {
+pub fn set_effects(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    effects: Vec<EffectInstance>,
+) -> Op {
     let camera = |list: &[EffectInstance]| {
         list.iter()
-            .find(|e| e.enabled && e.effect.match_name == crate::planes::DEPTH_POINTS)
+            .find(|e| e.effect.match_name == crate::planes::DEPTH_POINTS)
             .and_then(|e| e.layer_ref("camera"))
     };
     let (was, now) = (camera(&layer.effects), camera(&effects));
@@ -281,13 +287,10 @@ pub fn set_effects(comp: &Composition, layer: &Layer, effects: Vec<EffectInstanc
         return set;
     }
     let first = layer.in_point.0.to_f64();
+    // The zoom it is drawn with, as a solve can hold one far from the stored row.
     let zoom = |id: Option<uuid::Uuid>| {
         let camera = comp.layers.iter().find(|l| Some(l.id) == id)?;
-        let lt = crate::time::layer_time(first, camera.start_offset.0);
-        match &camera.kind {
-            LayerKind::Camera { zoom, .. } => Some(zoom.value_at(lt)),
-            _ => None,
-        }
+        pose_of(doc, comp, camera, first).map(|pose| pose.zoom)
     };
     // From the comp's frame into the camera's, where the origin is the eye and
     // the plane it sees 1:1 is its zoom ahead.

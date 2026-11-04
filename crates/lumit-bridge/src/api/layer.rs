@@ -7550,8 +7550,8 @@ impl LayerReference {
                         styles: list,
                     }
                 } else {
-                    let comp = self.composition()?;
-                    lumit_core::fx::effects::depth_points::set_effects(&comp, &layer, list)
+                    let (doc, comp) = (self.document()?, self.composition()?);
+                    lumit_core::fx::effects::depth_points::set_effects(&doc, &comp, &layer, list)
                 }
             }
             InstanceHome::Group(group) => {

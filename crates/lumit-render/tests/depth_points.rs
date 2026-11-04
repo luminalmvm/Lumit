@@ -397,7 +397,9 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
         before.effects = effects.clone();
         let fx = effects.last_mut().expect("Depth points");
         set(fx, "camera", EffectValue::Layer(Some(camera)));
-        let op = lumit_core::fx::effects::depth_points::set_effects(&comp, &before, effects);
+        let shared = Arc::new(doc.clone());
+        let op =
+            lumit_core::fx::effects::depth_points::set_effects(&shared, &comp, &before, effects);
         let c = doc.comp_mut(s.comp).expect("the comp");
         c.layers[2] = before;
         lumit_core::ops::apply(&mut doc, &op).expect("the ops apply");
@@ -417,6 +419,103 @@ fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
         }
     };
     let (points, flat) = (named(true), named(false));
+    let plate = frame(&mut r, &flat, 0);
+    for at in [0, 30, 59] {
+        lined_up(&frame(&mut r, &points, at), &plate, at as u32);
+    }
+
+    // A solved camera whose lens is nothing like the stored zoom, moving and
+    // turning. The row places the plate by the solve's zoom, so through it the
+    // points are the plate on every frame. Switching them off keeps it riding.
+    let solved = |enabled| {
+        let s = scene(&noise, true, 1.0, true, true, 0.0);
+        let mut doc = Arc::unwrap_or_clone(s.doc);
+        let media = Uuid::now_v7();
+        let c = doc.comp_mut(s.comp).expect("the comp");
+        let stored = lumit_core::camera::default_zoom(f64::from(W));
+        let focal = stored * 1.4;
+        let mut shot = lumit_core::edits::base_layer(
+            "Shot".into(),
+            lumit_core::model::LayerKind::Footage { item: media },
+            c.duration.0,
+            Default::default(),
+        );
+        shot.switches.visible = false;
+        if let lumit_core::model::LayerKind::Camera { solve_link, .. } = &mut c.layers[1].kind {
+            *solve_link = Some(shot.id);
+        }
+        c.layers[0].switches.visible = false;
+        let fx = c.layers[2].effects.last_mut().expect("Depth points");
+        set(fx, "camera", EffectValue::Layer(None));
+        c.layers.push(shot);
+        let poses = (0..60_i64)
+            .map(|n| {
+                let turn = (n as f64 * 0.2_f64).to_radians();
+                let (s, co) = turn.sin_cos();
+                lumit_track::solve::SolvedPose {
+                    frame: n,
+                    rotation: [[co, 0.0, -s], [0.0, 1.0, 0.0], [s, 0.0, co]],
+                    position: [n as f64 * 3.0, -20.0, -focal],
+                    segment: 0,
+                    focal_px: focal,
+                    mean_reprojection_px: 0.0,
+                    source: lumit_track::solve::PoseSource::Keyframe,
+                }
+            })
+            .collect();
+        lumit_render::track::publish(
+            media,
+            60.0,
+            60,
+            lumit_track::solve::CameraSolve {
+                poses,
+                segments: vec![lumit_track::solve::SolveSegment {
+                    first_frame: 0,
+                    last_frame: 59,
+                    focal_px: focal,
+                    ramp: false,
+                }],
+                points: Vec::new(),
+                keyframes: vec![0, 59],
+                mean_reprojection_px: 0.0,
+                notes: Vec::new(),
+            },
+        );
+        // The row, by the route the panel takes, and then the effect's switch.
+        let shared = Arc::new(doc.clone());
+        let comp = shared.comp(s.comp).expect("the comp").clone();
+        let camera = comp.layers[1].id;
+        let before = comp.layers[2].clone();
+        let mut effects = before.effects.clone();
+        let fx = effects.last_mut().expect("Depth points");
+        set(fx, "camera", EffectValue::Layer(Some(camera)));
+        let op =
+            lumit_core::fx::effects::depth_points::set_effects(&shared, &comp, &before, effects);
+        lumit_core::ops::apply(&mut doc, &op).expect("the ops apply");
+        let shared = Arc::new(doc.clone());
+        let comp = shared.comp(s.comp).expect("the comp").clone();
+        assert_eq!(comp.layers[2].parent, Some(camera), "the row parents");
+        let mut effects = comp.layers[2].effects.clone();
+        effects.last_mut().expect("Depth points").enabled = enabled;
+        let op = lumit_core::fx::effects::depth_points::set_effects(
+            &shared,
+            &comp,
+            &comp.layers[2],
+            effects,
+        );
+        lumit_core::ops::apply(&mut doc, &op).expect("the ops apply");
+        let c = doc.comp(s.comp).expect("the comp");
+        assert_eq!(
+            c.layers[2].parent,
+            Some(camera),
+            "the switch leaves it riding"
+        );
+        Scene {
+            doc: Arc::new(doc),
+            comp: s.comp,
+        }
+    };
+    let (points, flat) = (solved(true), solved(false));
     let plate = frame(&mut r, &flat, 0);
     for at in [0, 30, 59] {
         lined_up(&frame(&mut r, &points, at), &plate, at as u32);
