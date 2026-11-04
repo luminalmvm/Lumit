@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use glam::Mat4;
 use lumit_core::camera::Place;
-use lumit_core::expression::ExpressionContext;
 use lumit_core::fx::effects::particulate::Particulate;
 use lumit_core::fx::points::stepped::collider::Collider;
 use lumit_core::model::{EffectValue, Layer, LayerKind};
@@ -26,6 +25,9 @@ pub(super) struct Models {
     /// Each model's distances, and where they start in `buffer`.
     list: Vec<(uuid::Uuid, Arc<Distances>, u32)>,
     buffer: Option<wgpu::Buffer>,
+    /// What was hit at the last time asked, and when, which is where the next
+    /// frame's sweep starts.
+    last: Option<(f64, Vec<SimCollider>)>,
     /// The surface a Layer emitter gives birth on, gathered once a walk.
     surface: Option<Option<Arc<[[f32; 4]]>>>,
 }
@@ -98,19 +100,45 @@ impl Models {
         Some((d, at))
     }
 
-    /// Everything the particles hit at comp time `tc`, and every edge they read.
+    /// Everything the particles hit at comp time `tc`, and every edge they read,
+    /// each collider's pose at the frame's start the one the frame before ended on.
     pub(super) fn at(
         &mut self,
         ctx: &GpuContext,
         src: &Source<'_>,
+        start: f64,
         tc: f64,
-        context: &Arc<ExpressionContext>,
         rows_now: &Particulate,
-    ) -> (Vec<SimCollider>, Vec<[f32; 4]>) {
+    ) -> (Vec<SimCollider>, Vec<u32>) {
+        let (mut out, edges) = self.posed(ctx, src, tc, rows_now);
+        let was = match self.last.take() {
+            Some((at, poses)) if at == start => poses,
+            _ => self.posed(ctx, src, start, rows_now).0,
+        };
+        // A layer that comes or goes stands still for the frame.
+        if was.len() == out.len() {
+            for (c, w) in out.iter_mut().zip(&was) {
+                c.was_from = w.from;
+                c.was_to = w.to;
+            }
+        }
+        self.last = Some((tc, out.clone()));
+        (out, edges)
+    }
+
+    fn posed(
+        &mut self,
+        ctx: &GpuContext,
+        src: &Source<'_>,
+        tc: f64,
+        rows_now: &Particulate,
+    ) -> (Vec<SimCollider>, Vec<u32>) {
+        let context = &src.context(tc);
         let (doc, comp) = (src.doc.as_ref(), src.comp);
         let owner = space(src);
         let mut out = Vec::new();
-        let mut edges = Vec::new();
+        let mut edges: Vec<[f32; 4]> = Vec::new();
+        let mut grids: Vec<u32> = Vec::new();
         let hits = lumit_core::fx::points::stepped::sim::hit_layers(comp, src.inst, src.layer.id)
             .filter(|l| l.id != owner.id);
         for target in hits.take(MAX_COLLIDERS) {
@@ -131,39 +159,55 @@ impl Models {
                     ))
                     * d.cell_to_model;
                 let [nx, ny, nz] = d.cells;
+                let (from, to) = (mat_rows(&to_layer.inverse()), mat_rows(&to_layer));
                 out.push(SimCollider {
-                    from: mat_rows(&to_layer.inverse()),
-                    to: mat_rows(&to_layer),
+                    from,
+                    to,
+                    was_from: from,
+                    was_to: to,
                     lo: [0.0; 2],
                     hi: [0.0; 2],
                     kind: ColliderKind::Model as u32,
                     first: 0,
                     n: 0,
-                    _pad: 0,
+                    cell: 0.0,
                     grid: [first, nx, ny, nz],
                 });
                 continue;
             }
-            out.push(flat(&c, &mut edges));
+            out.push(flat(&c, &mut edges, &mut grids));
         }
         if rows_now.ground && rows_now.ground_height.is_finite() {
             let floor = f64::from(comp.height) * 0.5 - f64::from(rows_now.ground_height);
             let c = Collider::ground(comp, owner, tc, context, floor);
             out.push(SimCollider {
                 kind: ColliderKind::Floor as u32,
-                ..flat(&c, &mut edges)
+                ..flat(&c, &mut edges, &mut grids)
             });
         }
-        (out, edges)
+        // The grids come after every edge, and say where they are from there.
+        let base = edges.len() as u32 * 4;
+        for c in out
+            .iter_mut()
+            .filter(|c| c.kind == ColliderKind::Walls as u32)
+        {
+            c.grid[0] += base;
+            c.grid[1] += base;
+        }
+        let mut words: Vec<u32> = edges.iter().flatten().map(|v| v.to_bits()).collect();
+        words.append(&mut grids);
+        (out, words)
     }
 }
 
-/// A card or walls, its edges put with the rest.
-fn flat(c: &Collider, edges: &mut Vec<[f32; 4]>) -> SimCollider {
+/// A card or walls, its edges put with the rest, and walls' grid too.
+fn flat(c: &Collider, edges: &mut Vec<[f32; 4]>, grids: &mut Vec<u32>) -> SimCollider {
     let first = edges.len() as u32;
     let mut lo = [f32::INFINITY; 2];
     let mut hi = [f32::NEG_INFINITY; 2];
     let room = MAX_EDGES.saturating_sub(edges.len());
+    // An edge the room turned away must not stay in a grid.
+    let whole = c.edges().len() <= room;
     for [a, b] in c.edges().iter().take(room) {
         edges.push([a[0], a[1], b[0], b[1]]);
         for k in 0..2 {
@@ -181,15 +225,30 @@ fn flat(c: &Collider, edges: &mut Vec<[f32; 4]>) -> SimCollider {
         (true, true) => ColliderKind::Rect,
         (true, false) => ColliderKind::Shapes,
     };
-    SimCollider {
-        from: rows(c.from_layer()),
-        to: rows(c.to_layer()),
+    let (from, to) = (rows(c.from_layer()), rows(c.to_layer()));
+    let mut made = SimCollider {
+        from,
+        to,
+        was_from: from,
+        was_to: to,
         lo,
         hi,
         kind: kind as u32,
         first,
         n,
-        _pad: 0,
+        cell: 1.0,
         grid: [0; 4],
+    };
+    if kind == ColliderKind::Walls && whole {
+        let (origin, cell, size, starts, items) = c.grid();
+        made.lo = origin;
+        made.cell = cell;
+        let at = grids.len() as u32;
+        made.grid = [at, at + starts.len() as u32, size[0] as u32, size[1] as u32];
+        grids.extend_from_slice(starts);
+        grids.extend_from_slice(items);
+    } else if kind == ColliderKind::Walls {
+        made.n = 0;
     }
+    made
 }

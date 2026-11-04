@@ -213,6 +213,14 @@ impl Collider {
         self.surface
     }
 
+    /// The grid its edges are found through: its corner, the side of a cell,
+    /// its cells each way, where each cell's items start and the items.
+    #[must_use]
+    pub fn grid(&self) -> ([f32; 2], f32, [usize; 2], &[u32], &[u32]) {
+        let g = &self.grid;
+        (g.origin, g.cell, g.size, &g.starts, &g.items)
+    }
+
     /// Where a particle moving from `from` to `to` at `vel` ends up.
     pub(super) fn hit(
         &self,

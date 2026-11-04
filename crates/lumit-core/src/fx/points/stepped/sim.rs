@@ -284,6 +284,8 @@ pub struct Physics {
     pub sparks: f32,
     pub spark_speed: f32,
     pub spark_life: f32,
+    /// A share of the parent's speed a spark starts with.
+    pub spark_inherit: f32,
     /// 0 death, 1 bounce, 2 flight.
     pub sparks_from: u32,
     /// A spark's size, as a share of its parent's.
@@ -325,6 +327,7 @@ pub fn physics(rows: &Particulate) -> Physics {
         sparks: real(rows.sparks).clamp(0.0, 1000.0),
         spark_speed: real(rows.spark_speed).max(0.0),
         spark_life: real(rows.spark_life).max(0.0),
+        spark_inherit: (real(rows.spark_inherit) / 100.0).clamp(0.0, 1.0),
         sparks_from: rows.sparks_from.min(2),
         spark_size: (real(rows.spark_size) / 100.0).max(0.0),
         flock_radius: if apart + along + together > 0.0 {
@@ -478,6 +481,9 @@ mod tests {
         let mut moved = comp.clone();
         let mut other = layer.clone();
         other.id = uuid::Uuid::now_v7();
+        other.kind = LayerKind::Solid {
+            def: uuid::Uuid::now_v7(),
+        };
         other.switches.three_d = true;
         moved.layers.push(other);
         assert_ne!(

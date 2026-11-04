@@ -624,6 +624,18 @@ pub struct Particulate {
     )]
     pub spark_speed: f32,
 
+    /// How much of its parent's speed a spark starts with, per cent.
+    #[slider(
+        label = "Spark inherit",
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub spark_inherit: f32,
+
     /// How long a spark lasts, seconds.
     #[slider(
         label = "Spark life",

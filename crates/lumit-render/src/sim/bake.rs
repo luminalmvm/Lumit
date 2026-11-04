@@ -204,23 +204,33 @@ pub fn press(doc: Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Reque
     })
 }
 
-/// Working buffers for a walk nothing else will share.
+/// Working buffers for a walk, with none born, reserved before they are made.
+/// A card with no room lets its kept states go first, and a walk goes on after a
+/// refusal, since it only slows down and never changes what it makes.
 pub(super) fn fresh(
     fx: &lumit_gpu::fx::FxEngine,
     ctx: &lumit_gpu::GpuContext,
     name: [u8; 32],
     cap: u32,
 ) -> Live {
+    use lumit_budget::Tier;
+    let bytes = lumit_gpu::fx::particulate_sim::work_bytes(cap);
+    let held = ctx.ledger().reserve(Tier::Vram, bytes).ok().or_else(|| {
+        super::clear_kept();
+        ctx.ledger().reserve(Tier::Vram, bytes).ok()
+    });
+    let work = fx.sim_work(ctx, cap);
+    fx.sim_clear(ctx, &work);
     Live {
         name,
-        work: Arc::new(fx.sim_work(ctx, cap)),
+        work: Arc::new(work),
         ledger: Ledger {
             frame: i64::MAX,
             ..Ledger::default()
         },
         between: None,
         colliders: colliders::Models::default(),
-        _held: None,
+        _held: held,
     }
 }
 

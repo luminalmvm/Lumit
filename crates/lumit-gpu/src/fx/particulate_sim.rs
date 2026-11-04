@@ -24,6 +24,13 @@ pub fn state_bytes(cap: u32) -> u64 {
     HEAD_BYTES + u64::from(cap) * PART_BYTES
 }
 
+/// The bytes a walk of `cap` particles holds to step through.
+#[must_use]
+pub fn work_bytes(cap: u32) -> u64 {
+    let blocks = u64::from(cap.div_ceil(SCAN_BLOCK));
+    2 * state_bytes(cap) + (2 * u64::from(cap) + 2 * blocks + 4) * 4
+}
+
 /// What a kind of collider is, as the kernel reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -44,19 +51,25 @@ pub enum ColliderKind {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SimCollider {
-    /// This layer's pixels to the collider's own, by rows. For a model, to the
-    /// cells of its box of distances.
+    /// This layer's pixels to the collider's own, by rows, at the frame's end.
+    /// For a model, to the cells of its box of distances.
     pub from: [[f32; 4]; 3],
     /// And back.
     pub to: [[f32; 4]; 3],
+    /// The same at the frame's start.
+    pub was_from: [[f32; 4]; 3],
+    pub was_to: [[f32; 4]; 3],
     /// Its box, in the pixels its edges are in.
     pub lo: [f32; 2],
     pub hi: [f32; 2],
     pub kind: u32,
     pub first: u32,
     pub n: u32,
-    pub _pad: u32,
-    /// A model's distances: where they start, and its cells each way.
+    /// Walls: how wide a cell of their grid is.
+    pub cell: f32,
+    /// A model's distances: where they start, and its cells each way. For walls,
+    /// where their grid's cell starts and items are in the edges buffer, and its
+    /// cells across and down.
     pub grid: [u32; 4],
 }
 
@@ -67,8 +80,8 @@ pub struct SimFrame<'a> {
     /// The layer's picture size, px@comp, that the Edge row acts at.
     pub frame: (u32, u32),
     pub colliders: &'a [SimCollider],
-    /// Every collider's edges, `[x0, y0, x1, y1]`.
-    pub edges: &'a [[f32; 4]],
+    /// Every collider's edges, `[x0, y0, x1, y1]` as bits, then the walls' grids.
+    pub edges: &'a [u32],
     /// The distances the Model colliders read, kept between frames.
     pub distances: Option<&'a wgpu::Buffer>,
 }
@@ -110,6 +123,11 @@ pub struct SimStep {
     pub apart: f32,
     pub along: f32,
     pub together: f32,
+    /// How far through the frame this step starts and ends, for what moves.
+    pub pose0: f32,
+    pub pose1: f32,
+    /// How much of its parent's speed a spark starts with.
+    pub spark_inherit: f32,
 }
 
 #[repr(C)]
@@ -144,7 +162,10 @@ struct StepUniform {
     apart: f32,
     along: f32,
     together: f32,
-    _pad: [f32; 2],
+    pose0: f32,
+    pose1: f32,
+    spark_inherit: f32,
+    _pad: [f32; 3],
 }
 
 #[repr(C)]
@@ -589,7 +610,10 @@ impl FxEngine {
                 apart: s.apart,
                 along: s.along,
                 together: s.together,
-                _pad: [0.0; 2],
+                pose0: s.pose0,
+                pose1: s.pose1,
+                spark_inherit: s.spark_inherit,
+                _pad: [0.0; 3],
             };
             let uniform = init(
                 "fx-particulate-sim-step",

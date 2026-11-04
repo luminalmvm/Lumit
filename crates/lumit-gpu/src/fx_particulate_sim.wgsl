@@ -12,7 +12,8 @@ struct Part {
     // keeps its place in that surface's pixels in `.xyz` instead.
     vel: vec4<f32>,
     id: vec2<u32>,
-    // Bit 0: held, bit 1: dead, bits 8 up: the collider that holds it.
+    // Bit 0: held, bit 1: dead, bit 2: hit something this step, bits 8 up: the
+    // collider that holds it.
     flags: u32,
     // While it is being moved, how many sparks it throws.
     kids: u32,
@@ -70,8 +71,15 @@ struct Step {
 
     along: f32,
     together: f32,
+    // How far through the frame this step starts and ends, for what moves.
+    pose0: f32,
+    pose1: f32,
+
+    // How much of its parent's speed a spark starts with.
+    spark_inherit: f32,
     _d: f32,
     _e: f32,
+    _f: f32,
 };
 
 const K_WALLS: u32 = 0u;
@@ -81,8 +89,8 @@ const K_FLOOR: u32 = 3u;
 const K_MODEL: u32 = 4u;
 
 struct Collider {
-    // This layer's pixels to the collider's own, by rows. For a model, to the
-    // cells of its box of distances.
+    // This layer's pixels to the collider's own, by rows, at the frame's end.
+    // For a model, to the cells of its box of distances.
     from0: vec4<f32>,
     from1: vec4<f32>,
     from2: vec4<f32>,
@@ -90,14 +98,24 @@ struct Collider {
     to0: vec4<f32>,
     to1: vec4<f32>,
     to2: vec4<f32>,
+    // The same at the frame's start, so what moves sweeps through the frame.
+    was_from0: vec4<f32>,
+    was_from1: vec4<f32>,
+    was_from2: vec4<f32>,
+    was_to0: vec4<f32>,
+    was_to1: vec4<f32>,
+    was_to2: vec4<f32>,
     // Its box, in the pixels its edges are in.
     lo: vec2<f32>,
     hi: vec2<f32>,
     kind: u32,
     first: u32,
     n: u32,
-    _a: u32,
-    // A model's box of distances: where it starts in `sdf`, and its cells.
+    // Walls: how wide a cell of their grid is.
+    cell: f32,
+    // A model's box of distances: where it starts in `sdf`, and its cells. For
+    // walls, where their grid's cell starts and items are in `edges`, and its
+    // cells across and down.
     grid: vec4<u32>,
 };
 
@@ -108,7 +126,9 @@ struct Collider {
 // its place within its block, then each block's total for both, then the sums.
 @group(3) @binding(3) var<storage, read_write> counts: array<u32>;
 @group(3) @binding(4) var<storage, read> colliders: array<Collider>;
-@group(3) @binding(5) var<storage, read> edges: array<vec4<f32>>;
+// Each collider's edges, four numbers each, then the walls' grids as whole
+// numbers.
+@group(3) @binding(5) var<storage, read> edges: array<u32>;
 @group(3) @binding(6) var<storage, read> sdf: array<f32>;
 // A flock's cells: how many particles are in each, and the sum of where in the
 // cell they are and how fast they go, as whole numbers. Whole numbers add up the
@@ -117,6 +137,9 @@ struct Collider {
 
 const F_HELD: u32 = 1u;
 const F_DEAD: u32 = 2u;
+const F_HIT: u32 = 4u;
+// A die of its own for a spark's fraction, clear of the others.
+const A_SPARK: u32 = 18u;
 const SPARK_HI: u32 = 0x80000000u;
 const SIM_NUDGE: f32 = 1e-3;
 const SIM_HITS: u32 = 4u;
@@ -326,9 +349,22 @@ struct SimHit {
     // The normal on the side it came from.
     n: vec3<f32>,
     which: u32,
+    // Where it hit, on the collider where this step leaves it, and how fast the
+    // collider is going there.
+    at: vec3<f32>,
+    moving: vec3<f32>,
     // How far out to go, when it started inside.
     out: f32,
 };
+
+fn sim_edge(e: u32) -> vec4<f32> {
+    return vec4<f32>(
+        bitcast<f32>(edges[e * 4u]),
+        bitcast<f32>(edges[e * 4u + 1u]),
+        bitcast<f32>(edges[e * 4u + 2u]),
+        bitcast<f32>(edges[e * 4u + 3u]),
+    );
+}
 
 fn sim_inside(c: u32, x: f32, y: f32) -> bool {
     if (x < colliders[c].lo.x || x > colliders[c].hi.x || y < colliders[c].lo.y || y > colliders[c].hi.y) {
@@ -341,7 +377,7 @@ fn sim_inside(c: u32, x: f32, y: f32) -> bool {
     var odd = false;
     let first = colliders[c].first;
     for (var e = first; e < first + colliders[c].n; e = e + 1u) {
-        let v = edges[e];
+        let v = sim_edge(e);
         if ((v.y > y) != (v.w > y) && x < v.x + (y - v.y) / (v.w - v.y) * (v.z - v.x)) {
             odd = !odd;
         }
@@ -349,87 +385,159 @@ fn sim_inside(c: u32, x: f32, y: f32) -> bool {
     return odd;
 }
 
+// The collider's own place of a layer point, at `pose` through the frame.
+fn sim_own(c: u32, pose: f32, q: vec4<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        dot(mix(colliders[c].was_from0, colliders[c].from0, pose), q),
+        dot(mix(colliders[c].was_from1, colliders[c].from1, pose), q),
+        dot(mix(colliders[c].was_from2, colliders[c].from2, pose), q),
+    );
+}
+
+// And a place on the collider back in this layer's pixels.
+fn sim_back(c: u32, pose: f32, own: vec3<f32>) -> vec3<f32> {
+    let q = vec4<f32>(own, 1.0);
+    return vec3<f32>(
+        dot(mix(colliders[c].was_to0, colliders[c].to0, pose), q),
+        dot(mix(colliders[c].was_to1, colliders[c].to1, pose), q),
+        dot(mix(colliders[c].was_to2, colliders[c].to2, pose), q),
+    );
+}
+
+fn sim_moving(c: u32, own: vec3<f32>) -> vec3<f32> {
+    if (st.h <= 0.0) {
+        return vec3<f32>(0.0, 0.0, 0.0);
+    }
+    return (sim_back(c, st.pose1, own) - sim_back(c, st.pose0, own)) / st.h;
+}
+
+// The first thing a move meets from a surface: `pose_a` is where the collider
+// was as the move began, which a later bounce of one step takes from its end.
+fn sim_model(c: u32, pose_a: f32, a1: vec4<f32>, b1: vec4<f32>, best: ptr<function, SimHit>) {
+    let ga = sim_own(c, pose_a, a1);
+    let gb = sim_own(c, st.pose1, b1);
+    let seg = gb - ga;
+    let size = vec3<f32>(colliders[c].grid.yzw) - vec3<f32>(1.0, 1.0, 1.0);
+    // Only the part of the move inside its box.
+    var t0 = 0.0;
+    var t1 = 1.0;
+    for (var k = 0u; k < 3u; k = k + 1u) {
+        if (abs(seg[k]) < 1e-9) {
+            if (ga[k] < 0.0 || ga[k] >= size[k]) {
+                return;
+            }
+        } else {
+            let p = (0.0 - ga[k]) / seg[k];
+            let q = (size[k] - ga[k]) / seg[k];
+            t0 = max(t0, min(p, q));
+            t1 = min(t1, max(p, q));
+        }
+    }
+    if (t0 > t1) {
+        return;
+    }
+    // Each step as long as the distance says is safe, so a thin wall stops a
+    // fast particle.
+    let len = max(length(seg), 1e-6);
+    var t = t0;
+    var d = 1.0;
+    for (var k = 0u; k < 8u; k = k + 1u) {
+        d = sim_distance(c, ga + seg * t);
+        if (d <= 0.0 || t >= t1) {
+            break;
+        }
+        t = min(t + max(d, 0.5) / len, t1);
+    }
+    if (d > 0.0 || t >= (*best).s) {
+        return;
+    }
+    let at = ga + seg * t;
+    let e = 0.5;
+    let g = vec3<f32>(
+        sim_distance(c, at + vec3<f32>(e, 0.0, 0.0)) - sim_distance(c, at - vec3<f32>(e, 0.0, 0.0)),
+        sim_distance(c, at + vec3<f32>(0.0, e, 0.0)) - sim_distance(c, at - vec3<f32>(0.0, e, 0.0)),
+        sim_distance(c, at + vec3<f32>(0.0, 0.0, e)) - sim_distance(c, at - vec3<f32>(0.0, 0.0, e)),
+    );
+    // A gradient in cells comes back through the transpose.
+    let n = colliders[c].from0.xyz * g.x + colliders[c].from1.xyz * g.y + colliders[c].from2.xyz * g.z;
+    let n_len = length(n);
+    if (n_len <= 1e-9 || n_len >= 1e6) {
+        return;
+    }
+    (*best).s = t;
+    (*best).n = n / n_len;
+    (*best).which = c;
+    (*best).at = sim_back(c, st.pose1, at);
+    (*best).moving = sim_moving(c, at);
+    // Started inside: out by as far as it had gone in.
+    (*best).out = select(0.0, -d * length(colliders[c].to0.xyz), t <= t0 && t0 == 0.0);
+}
+
 // The first thing the move from `a` to `b` meets.
-fn sim_first(a: vec3<f32>, b: vec3<f32>) -> SimHit {
+fn sim_first(a: vec3<f32>, b: vec3<f32>, pose_a: f32) -> SimHit {
     var best: SimHit;
     best.s = 2.0;
     best.n = vec3<f32>(0.0, 0.0, 0.0);
     best.which = 0u;
+    best.at = b;
+    best.moving = vec3<f32>(0.0, 0.0, 0.0);
     best.out = 0.0;
     let a1 = vec4<f32>(a, 1.0);
     let b1 = vec4<f32>(b, 1.0);
     for (var c = 0u; c < st.colliders; c = c + 1u) {
         let kind = colliders[c].kind;
         if (kind == K_MODEL) {
-            let gb = vec3<f32>(dot(colliders[c].from0, b1), dot(colliders[c].from1, b1), dot(colliders[c].from2, b1));
-            let db = sim_distance(c, gb);
-            if (db >= 0.0) {
-                continue;
-            }
-            let ga = vec3<f32>(dot(colliders[c].from0, a1), dot(colliders[c].from1, a1), dot(colliders[c].from2, a1));
-            let da = sim_distance(c, ga);
-            var s = 0.0;
-            var out = 0.0;
-            if (da > 0.0) {
-                s = clamp(da / (da - min(db, -1e-6)), 0.0, 1.0);
-            } else {
-                out = -da * length(colliders[c].to0.xyz);
-            }
-            if (s < best.s) {
-                let at = mix(ga, gb, s);
-                let e = 0.5;
-                let g = vec3<f32>(
-                    sim_distance(c, at + vec3<f32>(e, 0.0, 0.0)) - sim_distance(c, at - vec3<f32>(e, 0.0, 0.0)),
-                    sim_distance(c, at + vec3<f32>(0.0, e, 0.0)) - sim_distance(c, at - vec3<f32>(0.0, e, 0.0)),
-                    sim_distance(c, at + vec3<f32>(0.0, 0.0, e)) - sim_distance(c, at - vec3<f32>(0.0, 0.0, e)),
-                );
-                // A gradient in cells comes back through the transpose.
-                let n = colliders[c].from0.xyz * g.x + colliders[c].from1.xyz * g.y + colliders[c].from2.xyz * g.z;
-                let len = length(n);
-                if (len > 1e-9 && len < 1e6) {
-                    best.s = s;
-                    best.n = n / len;
-                    best.which = c;
-                    best.out = out;
-                }
-            }
+            sim_model(c, pose_a, a1, b1, &best);
             continue;
         }
         if (kind == K_WALLS) {
-            // Walls are across and down only.
+            // Walls are across and down only, and found through their grid.
             let lo = min(a.xy, b.xy);
             let hi = max(a.xy, b.xy);
             if (hi.x < colliders[c].lo.x || lo.x > colliders[c].hi.x || hi.y < colliders[c].lo.y || lo.y > colliders[c].hi.y) {
                 continue;
             }
             let r = b.xy - a.xy;
-            let first = colliders[c].first;
-            for (var e = first; e < first + colliders[c].n; e = e + 1u) {
-                let v = edges[e];
-                let w = v.zw - v.xy;
-                let den = r.x * w.y - r.y * w.x;
-                if (abs(den) < 1e-12) {
-                    continue;
-                }
-                let qp = v.xy - a.xy;
-                let s = (qp.x * w.y - qp.y * w.x) / den;
-                let u = (qp.x * r.y - qp.y * r.x) / den;
-                if (s >= 0.0 && s <= 1.0 && u >= 0.0 && u <= 1.0 && s < best.s) {
-                    var n = normalize(vec2<f32>(-w.y, w.x));
-                    if (dot(a.xy - v.xy, n) < 0.0) {
-                        n = -n;
+            let g = colliders[c].grid;
+            let last = vec2<i32>(i32(g.z) - 1, i32(g.w) - 1);
+            let from_cell = clamp(vec2<i32>(floor((lo - colliders[c].lo) / colliders[c].cell)), vec2<i32>(0, 0), last);
+            let to_cell = clamp(vec2<i32>(floor((hi - colliders[c].lo) / colliders[c].cell)), vec2<i32>(0, 0), last);
+            for (var cy = from_cell.y; cy <= to_cell.y; cy = cy + 1) {
+                for (var cx = from_cell.x; cx <= to_cell.x; cx = cx + 1) {
+                    let cell = u32(cy) * g.z + u32(cx);
+                    let end = edges[g.x + cell + 1u];
+                    for (var it = edges[g.x + cell]; it < end; it = it + 1u) {
+                        let v = sim_edge(colliders[c].first + edges[g.y + it]);
+                        let w = v.zw - v.xy;
+                        let den = r.x * w.y - r.y * w.x;
+                        if (abs(den) < 1e-12) {
+                            continue;
+                        }
+                        let qp = v.xy - a.xy;
+                        let s = (qp.x * w.y - qp.y * w.x) / den;
+                        let u = (qp.x * r.y - qp.y * r.x) / den;
+                        if (s >= 0.0 && s <= 1.0 && u >= 0.0 && u <= 1.0 && s < best.s) {
+                            var n = normalize(vec2<f32>(-w.y, w.x));
+                            if (dot(a.xy - v.xy, n) < 0.0) {
+                                n = -n;
+                            }
+                            best.s = s;
+                            best.n = vec3<f32>(n, 0.0);
+                            best.which = c;
+                            best.at = a + (b - a) * s;
+                            best.moving = vec3<f32>(0.0, 0.0, 0.0);
+                            best.out = 0.0;
+                        }
                     }
-                    best.s = s;
-                    best.n = vec3<f32>(n, 0.0);
-                    best.which = c;
-                    best.out = 0.0;
                 }
             }
             continue;
         }
-        // A surface: its card is where its own z is nought.
-        let pz = dot(colliders[c].from2, a1);
-        let qz = dot(colliders[c].from2, b1);
+        // A surface: its card is where its own z is nought. The move starts
+        // where the card was and ends where the card is, so it can't step past
+        // one rising through it.
+        let pz = dot(mix(colliders[c].was_from2, colliders[c].from2, pose_a), a1);
+        let qz = dot(mix(colliders[c].was_from2, colliders[c].from2, st.pose1), b1);
         if (!((pz > 0.0 && qz <= 0.0) || (pz < 0.0 && qz >= 0.0))) {
             continue;
         }
@@ -437,17 +545,17 @@ fn sim_first(a: vec3<f32>, b: vec3<f32>) -> SimHit {
         if (s >= best.s) {
             continue;
         }
-        if (kind != K_FLOOR) {
-            let x = mix(dot(colliders[c].from0, a1), dot(colliders[c].from0, b1), s);
-            let y = mix(dot(colliders[c].from1, a1), dot(colliders[c].from1, b1), s);
-            if (!sim_inside(c, x, y)) {
-                continue;
-            }
+        let own = mix(sim_own(c, pose_a, a1), sim_own(c, st.pose1, b1), s);
+        if (kind != K_FLOOR && !sim_inside(c, own.x, own.y)) {
+            continue;
         }
-        let z = colliders[c].from2.xyz;
+        let z = mix(colliders[c].was_from2, colliders[c].from2, st.pose1).xyz;
+        let on = vec3<f32>(own.xy, 0.0);
         best.s = s;
         best.n = z / (length(z) * sign(pz));
         best.which = c;
+        best.at = sim_back(c, st.pose1, on);
+        best.moving = sim_moving(c, on);
         best.out = 0.0;
     }
     return best;
@@ -471,8 +579,7 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
         // A particle that stuck goes where the surface goes.
         let c = q.flags >> 8u;
         if (c < st.colliders) {
-            let v = vec4<f32>(q.vel.xyz, 1.0);
-            q.at = vec4<f32>(dot(colliders[c].to0, v), dot(colliders[c].to1, v), dot(colliders[c].to2, v), age);
+            q.at = vec4<f32>(sim_back(c, st.pose1, q.vel.xyz), age);
         } else {
             q.at.w = age;
         }
@@ -493,15 +600,22 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
         var vel = m.vel;
         if (st.colliders > 0u) {
             for (var k = 0u; k < SIM_HITS; k = k + 1u) {
-                let hit = sim_first(a, b);
+                // After a bounce the move goes on from the end of the step.
+                let hit = sim_first(a, b, select(st.pose1, st.pose0, k == 0u));
                 if (hit.s > 1.0) {
                     break;
                 }
                 hits = hits + 1u;
                 let n = hit.n;
-                let at = a + (b - a) * hit.s + n * max(SIM_NUDGE, hit.out);
+                let at = hit.at + n * max(SIM_NUDGE, hit.out);
+                // Everything is worked out as the collider sees it, so a card
+                // coming up throws what it meets.
+                let meets = vel - hit.moving;
+                let vn = dot(meets, n);
                 if (st.contact == 3u) {
                     q.flags = q.flags | F_DEAD;
+                    // Its sparks leave the way it would have bounced.
+                    vel = hit.moving + meets - n * vn * 2.0;
                     b = at;
                     break;
                 }
@@ -509,7 +623,7 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
                     // Its place in the collider's own pixels stays with it.
                     let v = vec4<f32>(at, 1.0);
                     q.flags = (q.flags & 0xffu) | F_HELD | (hit.which << 8u);
-                    vel = vec3<f32>(dot(colliders[hit.which].from0, v), dot(colliders[hit.which].from1, v), dot(colliders[hit.which].from2, v));
+                    vel = sim_own(hit.which, st.pose1, v);
                     b = at;
                     break;
                 }
@@ -519,11 +633,11 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
                 }
                 // Along the surface it keeps all but the friction, and off it
                 // the bounciness, turned round.
-                let vn = dot(vel, n);
-                vel = (vel - n * vn) * st.slip - n * vn * keep;
-                let rest = b - (a + (b - a) * hit.s);
+                vel = hit.moving + (meets - n * vn) * st.slip - n * vn * keep;
+                let left = (1.0 - hit.s) * st.h;
+                let rest = b - (a + (b - a) * hit.s) - hit.moving * left;
                 let rn = dot(rest, n);
-                let turned = (rest - n * rn) * st.slip - n * rn * keep;
+                let turned = (rest - n * rn) * st.slip - n * rn * keep + hit.moving * left;
                 a = at;
                 b = at + turned;
             }
@@ -540,12 +654,17 @@ fn sim_move(@builtin(global_invocation_id) gid: vec3<u32>) {
         q.vel = vec4<f32>(vel, life);
     }
     let dead = (q.flags & F_DEAD) != 0u;
-    // Sparks throw out none.
+    if (hits > 0u) {
+        q.flags = q.flags | F_HIT;
+    }
+    // Sparks throw out none. A fraction of a spark is settled by a die, named by
+    // the moment, so each death and each hit has its own.
     if (!spark && st.sparks > 0.0) {
+        let some = u32(st.sparks + pt_die(q.id.x, q.id.y ^ u32(age * 1024.0), A_SPARK));
         if (st.sparks_from == 0u && dead) {
-            q.kids = u32(st.sparks);
+            q.kids = some;
         } else if (st.sparks_from == 1u && hits > 0u) {
-            q.kids = u32(st.sparks);
+            q.kids = some;
         } else if (st.sparks_from == 2u && !dead) {
             q.kids = u32(floor(age * st.sparks) - floor((age - st.h) * st.sparks));
         }
@@ -603,12 +722,21 @@ fn sim_spark(q: Part, j: u32) -> Part {
     var s: Part;
     let burst = q.id.y & BURST_HI;
     s.id = vec2<u32>(q.id.x, SPARK_HI | burst | ((j & 0x3ffu) << 20u) | (q.id.y & 0xfffffu));
-    // Evenly over a sphere.
+    // Evenly over a sphere, or off the side it came from when it hit something.
     let z = 2.0 * pt_die(s.id.x, s.id.y, A_DIRECTION_Z) - 1.0;
     let a = pt_die(s.id.x, s.id.y, A_DIRECTION) * 6.28318530717958647692;
     let r = sqrt(max(1.0 - z * z, 0.0));
+    var way = vec3<f32>(r * cos(a), r * sin(a), z);
+    let held = (q.flags & F_HELD) != 0u;
+    var parent = q.vel.xyz;
+    if (held) {
+        parent = vec3<f32>(0.0, 0.0, 0.0);
+    }
+    if ((q.flags & F_HIT) != 0u && dot(way, parent) < 0.0) {
+        way = -way;
+    }
     s.at = vec4<f32>(q.at.xyz, 0.0);
-    s.vel = vec4<f32>(st.spark_speed * r * cos(a), st.spark_speed * r * sin(a), st.spark_speed * z, st.spark_life);
+    s.vel = vec4<f32>(way * st.spark_speed + parent * st.spark_inherit, st.spark_life);
     s.flags = 0u;
     s.kids = 0u;
     return s;
@@ -626,17 +754,17 @@ fn sim_place(@builtin(global_invocation_id) gid: vec3<u32>) {
     if ((q.flags & F_DEAD) == 0u) {
         let slot = counts[i] + counts[c_keep_sums() + i / SCAN_BLOCK];
         if (slot >= drop) {
-            sa.parts[slot - drop] = q;
+            var kept = q;
+            kept.flags = kept.flags & ~F_HIT;
+            sa.parts[slot - drop] = kept;
         }
     }
     if (q.kids > 0u) {
         let start = counts[c_ctl() + CTL_KEPT] + st.steady_n + st.burst_n
             + counts[c_kids() + i] + counts[c_kid_sums() + i / SCAN_BLOCK];
-        // In flight, the numbering runs on through its life.
-        var base = 0u;
-        if (st.sparks_from == 2u) {
-            base = u32(max(q.at.w * st.sparks, 0.0));
-        }
+        // The numbering runs on through its life, so a second hit doesn't throw
+        // the first one's sparks again.
+        let base = u32(max(q.at.w * 1024.0, 0.0));
         for (var k = 0u; k < q.kids; k = k + 1u) {
             let slot = start + k;
             if (slot >= drop) {

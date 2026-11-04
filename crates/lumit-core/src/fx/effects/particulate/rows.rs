@@ -123,6 +123,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "sparks",
             "sparks_from",
             "spark_speed",
+            "spark_inherit",
             "spark_life",
             "spark_size",
         ],
@@ -294,6 +295,11 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
     },
     EnabledWhen {
         param: "sparks_from",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "spark_inherit",
         on: "simulate",
         cond: EnabledCond::BoolIs(true),
     },

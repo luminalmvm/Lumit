@@ -153,6 +153,77 @@ fn a_frame_is_the_same_however_it_is_reached() {
     let _ = pixels(&doc, id, 57);
     assert!(pixels(&doc, id, 44).unwrap() == walked, "scrubbed back");
     assert!(pixels(&doc, id, 33).unwrap() != walked, "another frame");
+    // A comp that changes size moves the floor, so nothing kept before it serves.
+    let (doc, id) = project(|e| {
+        set(e, "ground", EffectValue::Bool(true));
+        float(e, "ground_height", 0.0);
+    });
+    let _ = pixels(&doc, id, 50);
+    let mut taller = Document::clone(&doc);
+    taller.comp_mut(id).unwrap().height = H + 60;
+    let taller = Arc::new(taller);
+    assert!(
+        pixels(&taller, id, 51).unwrap() == walked_alone(&taller, id, 51).unwrap(),
+        "kept before the resize"
+    );
+}
+
+/// A change to how particles look draws again, and walks nothing. The picture
+/// is what a walk from nothing with the new row makes.
+#[test]
+fn a_look_row_draws_again_without_walking() {
+    use lumit_render::sim::walked_here;
+    // The same project, as only a look row differs.
+    let (doc, id) = project(|_| {});
+    let Some(before) = pixels(&doc, id, 60) else {
+        return;
+    };
+    let mut bigger = Document::clone(&doc);
+    let c = bigger.comp_mut(id).unwrap();
+    float(&mut c.layers[0].effects[0], "size", 9.0);
+    let bigger = Arc::new(bigger);
+    let walked = walked_here();
+    let after = pixels(&bigger, id, 60).unwrap();
+    assert_eq!(walked_here(), walked, "no frame was walked");
+    assert!(after != before, "it drew with the new size");
+    assert!(
+        after == walked_alone(&bigger, id, 60).unwrap(),
+        "as a walk would"
+    );
+}
+
+/// A 2D layer is walls along its outline, found through the walls' grid.
+#[test]
+fn walls_stop_what_falls() {
+    let row =
+        |pixels: &[u8], y: usize| (200..280usize).any(|x| pixels[(y * W as usize + x) * 4] > 40);
+    let wall = Uuid::now_v7();
+    let (doc, id) = project(|e| {
+        float(e, "turbulence_amount", 0.0);
+        set(e, "collide_with", EffectValue::Layer(Some(wall)));
+    });
+    let mut walled = Document::clone(&doc);
+    let def = Uuid::now_v7();
+    walled.items.push(ProjectItem::Solid(SolidDef {
+        id: def,
+        name: "Wall".into(),
+        colour: LinearColour([0.0, 0.0, 0.0, 0.0]),
+        width: 400,
+        height: 20,
+        extra: serde_json::Map::new(),
+    }));
+    let mut layer = solid_layer(def);
+    layer.id = wall;
+    layer.transform.anchor_x = Property::fixed(200.0);
+    layer.transform.anchor_y = Property::fixed(10.0);
+    layer.transform.position_y = Property::fixed(180.0);
+    walled.comp_mut(id).unwrap().layers.push(layer);
+    let walled = Arc::new(walled);
+    let Some(landed) = pixels(&walled, id, 45) else {
+        return;
+    };
+    assert!(!row(&landed, 250), "the wall at 170 holds them");
+    assert!(row(&landed, 160), "and they land on it");
 }
 
 /// The floor stops what falls on it: below it nothing lands.
@@ -225,6 +296,32 @@ fn a_3d_card_stops_what_falls() {
     let landed = pixels(&shut, id, 45).unwrap();
     assert!(!row(&landed, 250, 200, 280), "the card at 180 holds them");
     assert!(row(&landed, 170, 200, 280), "and they land on it");
+    // A card coming up through falling particles lifts them, rather than
+    // leaving them below it.
+    let (rising, id) = with_card(carded(true));
+    let mut rising = Document::clone(&rising);
+    let c = rising.comp_mut(id).unwrap();
+    let card = c.layers.last_mut().unwrap();
+    let key = |time: Rational, value: f64| lumit_core::anim::Keyframe {
+        time,
+        value,
+        interp_in: lumit_core::anim::SideInterp::Linear,
+        interp_out: lumit_core::anim::SideInterp::Linear,
+    };
+    card.transform.position_y = Property {
+        animation: lumit_core::anim::Animation::Keyframed(vec![
+            key(Rational::ZERO, 260.0),
+            key(Rational::new(3, 2).unwrap(), 100.0),
+        ]),
+        extra: serde_json::Map::new(),
+    };
+    let rising = Arc::new(rising);
+    let lifted = pixels(&rising, id, 45).unwrap();
+    assert!(
+        !row(&lifted, 150, 200, 280),
+        "nothing is left under the card"
+    );
+    assert!(row(&lifted, 90, 200, 280), "they are riding on it");
 }
 
 /// A frame read from a bake is the frame walked from the in point.

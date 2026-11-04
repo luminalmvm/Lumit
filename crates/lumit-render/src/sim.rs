@@ -10,7 +10,7 @@ pub mod bake;
 mod colliders;
 mod distances;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use lumit_budget::{Reservation, Tier};
 use lumit_core::expression::ExpressionContext;
@@ -33,11 +33,13 @@ type Tex = wgpu::Texture;
 /// How often a walk keeps where it got to, in frames.
 pub(crate) const KEEP_EVERY: i64 = 8;
 
-/// The most bytes kept states hold between them. The governor may say less.
-const KEPT_BYTES: usize = 4 << 30;
+/// The most bytes kept states hold between them, and at most a quarter of what
+/// the governor gives the card. Under pressure no more are kept at all.
+const KEPT_BYTES: u64 = 4 << 30;
 
-/// How many walks hold their working buffers at once.
-const WALKS: usize = 4;
+/// The most bytes walks hold in working buffers between them. The walk in hand
+/// always has its own.
+const WALK_BYTES: u64 = 1 << 30;
 
 /// A state kept for the frames after it.
 struct Kept {
@@ -56,8 +58,9 @@ struct Live {
     name: [u8; 32],
     work: Arc<SimWork>,
     ledger: Ledger,
-    /// The frame's own state, while `work` holds a time between frames.
-    between: Option<wgpu::Buffer>,
+    /// The frame's own state, while `work` holds a time between frames, and what
+    /// the ledger has granted for it.
+    between: Option<(wgpu::Buffer, Option<Reservation>)>,
     colliders: colliders::Models,
     /// What the ledger has granted for `work`.
     _held: Option<Reservation>,
@@ -65,30 +68,31 @@ struct Live {
 
 /// Kept states and working buffers, for the one card they are on.
 struct Store {
-    ledger: Arc<lumit_budget::Ledger>,
+    ledger: Weak<lumit_budget::Ledger>,
     kept: lumit_cache::ByteLru<u128, Kept>,
     /// Latest used first.
     live: Vec<Live>,
 }
 
-static STORE: Mutex<Option<Store>> = Mutex::new(None);
+/// One store a card, so a Viewer and an export don't take each other's walks.
+static STORES: Mutex<Vec<Store>> = Mutex::new(Vec::new());
 
-/// Runs `f` on the store for `ctx`'s card. Another card starts it afresh.
+/// Runs `f` on the store for `ctx`'s card, and lets go of a card that has gone.
 fn with_store<R>(ctx: &GpuContext, f: impl FnOnce(&mut Store) -> R) -> Option<R> {
-    let mut slot = STORE.lock().ok()?;
-    if !slot
-        .as_ref()
-        .is_some_and(|s| Arc::ptr_eq(&s.ledger, ctx.ledger()))
-    {
-        let mut kept = lumit_cache::ByteLru::new(KEPT_BYTES);
+    let mut stores = STORES.lock().ok()?;
+    stores.retain(|s| s.ledger.strong_count() > 0);
+    let at = Arc::as_ptr(ctx.ledger());
+    if !stores.iter().any(|s| s.ledger.as_ptr() == at) {
+        let budget = ctx.ledger().budget(Tier::Vram) / 4;
+        let mut kept = lumit_cache::ByteLru::new(KEPT_BYTES.min(budget) as usize);
         kept.account_against(Arc::clone(ctx.ledger()), Tier::Vram);
-        *slot = Some(Store {
-            ledger: Arc::clone(ctx.ledger()),
+        stores.push(Store {
+            ledger: Arc::downgrade(ctx.ledger()),
             kept,
             live: Vec::new(),
         });
     }
-    slot.as_mut().map(f)
+    stores.iter_mut().find(|s| s.ledger.as_ptr() == at).map(f)
 }
 
 fn state_name(walk: &[u8; 32], frame: i64) -> u128 {
@@ -224,6 +228,9 @@ fn steps_of(then: &Inputs, steady: &Steady, frame: i64, h: f64, dt: f64) -> Vec<
                 apart: phys.apart,
                 along: phys.along,
                 together: phys.together,
+                pose0: (f64::from(k) / f64::from(count)) as f32,
+                pose1: (f64::from(k + 1) / f64::from(count)) as f32,
+                spark_inherit: phys.spark_inherit,
             }
         })
         .collect()
@@ -238,7 +245,7 @@ fn run_steps(
     work: &SimWork,
     models: &mut colliders::Models,
     then: &Inputs,
-    lt: f64,
+    (from_lt, lt): (f64, f64),
     steps: &[SimStep],
 ) {
     let packed = then.rows.points();
@@ -285,8 +292,8 @@ fn run_steps(
         ..op
     };
     let frame = then.frame();
-    let tc = lt + src.layer.start_offset.0.to_f64();
-    let (rows, edges) = models.at(ctx, src, tc, &src.context(tc), &then.rows);
+    let offset = src.layer.start_offset.0.to_f64();
+    let (rows, edges) = models.at(ctx, src, from_lt + offset, lt + offset, &then.rows);
     fx.sim_steps(
         ctx,
         work,
@@ -311,7 +318,7 @@ fn start_from(
     target: i64,
     from: i64,
 ) -> Option<()> {
-    if let Some(state) = live.between.take() {
+    if let Some((state, _held)) = live.between.take() {
         fx.sim_restore(ctx, &live.work, &state);
     }
     let here = Some(live.ledger.frame).filter(|f| *f <= target && *f >= from);
@@ -351,7 +358,16 @@ fn start_from(
                 s.burst_n = n.min(live.work.cap);
             }
             let (work, lt) = (Arc::clone(&live.work), from as f64 * src.dt);
-            run_steps(fx, ctx, src, &work, &mut live.colliders, &now, lt, &steps);
+            run_steps(
+                fx,
+                ctx,
+                src,
+                &work,
+                &mut live.colliders,
+                &now,
+                (lt, lt),
+                &steps,
+            );
         }
     }
     Some(())
@@ -360,6 +376,19 @@ fn start_from(
 fn kept_frame(here: Option<i64>, live: &Live, target: i64) -> Option<i64> {
     let f = live.ledger.frame;
     (here.is_some() || f <= target && f > 0).then_some(f)
+}
+
+#[cfg(feature = "test-fixtures")]
+thread_local! {
+    static WALKED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many frames this thread has walked, for a test to see a change draw again
+/// rather than walk again.
+#[cfg(feature = "test-fixtures")]
+#[must_use]
+pub fn walked_here() -> u64 {
+    WALKED.with(std::cell::Cell::get)
 }
 
 /// One whole frame on from `live`'s, whose rows at the frame's start are `now`.
@@ -371,6 +400,8 @@ fn frame_on(
     live: &mut Live,
     now: &Inputs,
 ) -> Option<Inputs> {
+    #[cfg(feature = "test-fixtures")]
+    WALKED.with(|w| w.set(w.get() + 1));
     let f = live.ledger.frame;
     let lt = (f + 1) as f64 * src.dt;
     let then = src.inputs(lt)?;
@@ -384,7 +415,17 @@ fn frame_on(
         last.burst_n = n.min(live.work.cap);
     }
     let work = Arc::clone(&live.work);
-    run_steps(fx, ctx, src, &work, &mut live.colliders, &then, lt, &steps);
+    let from = f as f64 * src.dt;
+    run_steps(
+        fx,
+        ctx,
+        src,
+        &work,
+        &mut live.colliders,
+        &then,
+        (from, lt),
+        &steps,
+    );
     Some(then)
 }
 
@@ -403,8 +444,12 @@ pub(crate) fn hand_over(ctx: &GpuContext, work: &mut u64, more: u64) {
     }
 }
 
-/// Keeps where `live` has got to, for the frames after it.
+/// Keeps where `live` has got to, for the frames after it, unless the card is
+/// short: a walk then only goes slower, and its frames are the same.
 fn keep(fx: &FxEngine, ctx: &GpuContext, name: &[u8; 32], live: &Live) {
+    if !matches!(ctx.vram_pressure(), lumit_budget::Pressure::Easy) {
+        return;
+    }
     let buffer = fx.sim_keep(ctx, &live.work);
     let at = state_name(name, live.ledger.frame);
     let ledger = live.ledger;
@@ -422,34 +467,22 @@ fn take_live(fx: &FxEngine, ctx: &GpuContext, name: &[u8; 32], cap: u32) -> Opti
     if found.is_some() {
         return found;
     }
-    let work = fx.sim_work(ctx, cap);
-    let bytes = work.bytes();
-    // A card that has no room lets the states kept and the oldest walks go first.
-    let held = ctx.ledger().reserve(Tier::Vram, bytes).ok().or_else(|| {
-        with_store(ctx, |s| {
-            s.live.clear();
-            s.kept.clear();
-        });
-        ctx.ledger().reserve(Tier::Vram, bytes).ok()
-    });
-    fx.sim_clear(ctx, &work);
-    Some(Live {
-        name: *name,
-        work: Arc::new(work),
-        ledger: Ledger {
-            frame: i64::MAX,
-            ..Ledger::default()
-        },
-        between: None,
-        colliders: colliders::Models::default(),
-        _held: held,
-    })
+    Some(bake::fresh(fx, ctx, *name, cap))
 }
 
+/// `live` back in the store, with the walks used longest ago let go once they
+/// hold too much.
 fn give_back(ctx: &GpuContext, live: Live) {
     let _ = with_store(ctx, |s| {
         s.live.insert(0, live);
-        s.live.truncate(WALKS);
+        let mut bytes = 0;
+        let mut first = true;
+        s.live.retain(|l| {
+            bytes += l.work.bytes();
+            let stays = first || bytes <= WALK_BYTES;
+            first = false;
+            stays
+        });
     });
 }
 
@@ -510,7 +543,11 @@ fn walked(
     // frame it is past it, with the frame's own state kept to the side.
     let h = t - target as f64 * dt;
     if h > 1e-9 {
-        live.between = Some(fx.sim_keep(ctx, &live.work));
+        let held = ctx
+            .ledger()
+            .reserve(Tier::Vram, live.work.state.size())
+            .ok();
+        live.between = Some((fx.sim_keep(ctx, &live.work), held));
         let then = src.inputs(t)?;
         let steady = live.ledger.steady(now.rows.emit_rate, dt, cap);
         let (a, b) = steady.between(0.0, h);
@@ -522,7 +559,17 @@ fn walked(
         };
         let steps = steps_of(&then, &part, target, h, dt);
         let work = Arc::clone(&live.work);
-        run_steps(fx, ctx, src, &work, &mut live.colliders, &then, t, &steps);
+        let from = target as f64 * dt;
+        run_steps(
+            fx,
+            ctx,
+            src,
+            &work,
+            &mut live.colliders,
+            &then,
+            (from, t),
+            &steps,
+        );
     }
     let work = Arc::clone(&live.work);
     give_back(ctx, live);
@@ -531,8 +578,18 @@ fn walked(
 
 /// Lets go of every walk and kept state, on a project going away.
 pub fn let_go() {
-    if let Ok(mut store) = STORE.lock() {
-        *store = None;
+    if let Ok(mut stores) = STORES.lock() {
+        stores.clear();
+    }
+}
+
+/// Lets go of the kept states, with the rest of the card's caches. A walk then
+/// starts from where it is, or from the start.
+pub fn clear_kept() {
+    if let Ok(mut stores) = STORES.lock() {
+        for s in stores.iter_mut() {
+            s.kept.clear();
+        }
     }
 }
 
