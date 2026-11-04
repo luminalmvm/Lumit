@@ -194,7 +194,8 @@ left alone. The first 3D model dropped into a composition with no lights brings 
 **Ambient light** and a **Key light** with it.
 
 A light is placed by its ordinary transform, so it animates and parents like anything
-else. Which layers it shades is per layer: **Accepts lights**, on by default, in a 3D
+else. A layer takes light on its front, so a floor lies flat at X rotation -90. Which layers
+it shades is per layer: **Accepts lights**, on by default, in a 3D
 layer's **Material options** and on the layer's right-click menu in the Timeline.
 
 A light adds to the picture, so a layer no light reaches is left as it is. **Like After
@@ -257,8 +258,10 @@ The 3D layers and models in a collapsed precomp take the lights of the compositi
 - **Casts shadows**: **Off**, **On**, or **Only**, which casts the shadow without drawing
   the layer.
 - **Accepts shadows**: **Off**, **On**, or **Only**, which draws nothing but the shadows that
-  fall on it, in the colour of any light a layer lets through. In **Normal** they multiply
-  what is under the layer, so a coloured shadow tints footage exactly.
+  fall on it, on either face, in the colour of any light a layer lets through. In **Normal**
+  they multiply what is under the layer, so a coloured shadow tints footage exactly. Where
+  lights add, a shadow removes only that light's share, so a white layer shows none: use
+  **Only** or a darker Solid.
 - **Light transmission**, while it casts: how much of the light passing through the layer
   takes its colour rather than stopping.
 - **Holdout**, on a Model layer: draws what is under its run of 3D layers in its place, with

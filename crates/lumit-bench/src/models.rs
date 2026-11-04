@@ -1,5 +1,5 @@
-//! **B30 — a Model layer of a million triangles**, and **B33 — the same with
-//! shadows** (docs/13 §2).
+//! **B30, a Model layer of a million triangles**, **B33, the same with
+//! shadows**, and **B36, a character on bones** (docs/13 §2).
 //!
 //! # In plain terms
 //!
@@ -25,7 +25,7 @@ const WARMUP: u32 = 4;
 /// The fastest of these is kept, as for Particulate's three.
 const REPEATS: u32 = 3;
 
-/// Measure B30, B33, B34 and B35. `Err` when there is no graphics adapter.
+/// Measure B30, B33, B34, B35 and B36. `Err` when there is no graphics adapter.
 pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
     let ctx = lumit_gpu::GpuContext::headless().map_err(|e| format!("no GPU adapter: {e}"))?;
     let fx = lumit_gpu::fx::FxEngine::new(&ctx);
@@ -91,6 +91,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
         environment: None,
         looks: &[],
         behind: None,
+        poses: &[],
     };
     let time = |run: &dyn Fn() -> Result<(), String>| -> Result<f64, String> {
         for _ in 0..WARMUP {
@@ -132,6 +133,7 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
     let caster = lumit_gpu::mesh::shadow::MapCaster {
         scene: &scene,
         model_to_comp: view.model_to_comp,
+        pose: None,
     };
     let b33 = time(&|| {
         let maps = fx.shadow_maps(&ctx, std::slice::from_ref(&caster), &casting, 2048);
@@ -179,8 +181,28 @@ pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>
             .map(drop)
             .map_err(|e| e.to_string())
     })?;
+    // A character's worth: 100,000 vertices on 64 bones, swelling as it bends,
+    // posed afresh on the processor and on the card each frame.
+    let rig = Arc::new(fixtures::bending(316, 316, 64));
+    let take = rig.clips.first().map(|clip| (clip, 0.7));
+    let b36 = time(&|| {
+        let pose = [lumit_scene::pose::pose(&rig, take, &[])];
+        let view = lumit_gpu::mesh::ModelView {
+            poses: &pose,
+            ..view
+        };
+        fx.model(&ctx, &rig, &view)
+            .map(drop)
+            .map_err(|e| e.to_string())
+    })?;
     let mut out = Vec::new();
-    for (budget, value_ms) in [("B30", b30), ("B33", b33), ("B34", b34), ("B35", b35)] {
+    for (budget, value_ms) in [
+        ("B30", b30),
+        ("B33", b33),
+        ("B34", b34),
+        ("B35", b35),
+        ("B36", b36),
+    ] {
         let m = Measurement {
             budget,
             value_ms,

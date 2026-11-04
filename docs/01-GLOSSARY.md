@@ -41,6 +41,8 @@ composites over it.
 | **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 | **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100%. Its **Materials** rows change the file's materials on the layer |
+| **Take** | One embedded animation in a 3D model's file. A Model layer's **Take** row picks it by name |
+| **Part** | One node of a 3D model's file, listed under its Model layer. Only a part with a changed row is saved |
 | **Depth points** | An effect that draws a shot as points in the comp's 3D space, each on its ray from a camera, placed by the depth from Analyse or a Depth layer |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never

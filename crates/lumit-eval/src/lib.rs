@@ -18,8 +18,7 @@
 //!   keys.
 //! - **Evaluated values, not keyframe data**: a property animated elsewhere
 //!   but constant here hashes the same across the constant span.
-//! - **Algorithm version** (`ALGO_VERSION`) is bumped whenever rendering
-//!   output changes, invalidating every old entry by construction.
+//! - **Algorithm version** (`ALGO_VERSION`) is bumped when rendering output changes.
 
 use std::sync::Arc;
 
@@ -1730,9 +1729,8 @@ fn feed_layer(
     // two comp times sharing the current frame — a held/frozen leading frame —
     // can differ in their neighbours, so their echoes differ. Key the stamped
     // neighbour frames, exactly the ones the render decodes (same window, same
-    // retime mapping, same comp frame step). Footage layers only, matching the
-    // render's neighbour decode; empty otherwise, so a plain layer's key is
-    // untouched.
+    // retime mapping, same comp frame step). Footage layers only, as the render
+    // decodes; a plain layer's key is untouched.
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, layer.switches.fx) {
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -2358,14 +2356,15 @@ fn feed_source(
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
         }
         LayerKind::Light { light } => {
-            // A light draws nothing, but the Lens flare's Lights mode reads what it
-            // *is*, so its properties are in the name. Where it is comes with the layer's.
+            // Nothing drawn, but the Lens flare's Lights mode reads what it *is*.
             h.update(b"light");
             if let Ok(json) = serde_json::to_vec(light) {
                 h.update(&json);
             }
         }
-        LayerKind::Model { item, settings } => model::feed(h, *item, settings, stamper)?,
+        LayerKind::Model { .. } => {
+            model::feed(h, doc, owner, layer, comp_time, quality, stamper, visited)?;
+        }
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a
@@ -4754,12 +4753,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 31, which renamed every frame.
+        // Pinned under ALGO_VERSION 32, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                128_289_967_660_377_301_895_040_216_191_865_692_207,
-                15_537_038_217_396_671_194_944_687_530_628_085_491
+                242_697_789_024_780_177_051_360_864_976_626_392_869,
+                337_561_387_740_218_213_199_485_657_473_987_713_466
             )
         );
 

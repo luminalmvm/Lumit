@@ -20,3 +20,4 @@ section below, and when the release note is written the lines move into it.
 - An environment light's Intensity stops at 0, where below it wrote negative pixels into a float export.
 - The 3D layers and models in a collapsed precomp take the lights of the composition it sits in, where they ignored them.
 - A collapsed precomp's own environment light no longer draws its picture flat in the parent.
+- A layer with Accepts shadows on Only, or with Accepts lights off, now takes shadows with its back to the light, where it showed none. A floor at X rotation +90 can gain a shadow.

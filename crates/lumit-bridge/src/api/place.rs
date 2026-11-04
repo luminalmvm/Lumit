@@ -15,6 +15,9 @@ use crate::api::{
     BridgeError,
 };
 
+/// What marks the Key light a first 3D model brought.
+pub(crate) const AUTO_KEY: &str = "auto_key_light";
+
 /// How long a still lasts in a run of dropped files, in seconds: what Cut's
 /// drop gives one.
 const STILL_SECONDS: i64 = 5;
@@ -120,24 +123,13 @@ impl CompositionReference {
             // Ambient (4) and Parallel (3), as Layer > New > Light makes them,
             // so a lone model isn't drawn as a flat silhouette.
             let mut ambient = Self::light_layer(&comp, 4);
-            let mut key = Self::light_layer(&comp, 3);
-            key.name = "Key light".into();
+            let mut key = Self::key_light(&comp);
             if let Some([a, k]) = light_names.as_deref() {
                 ambient.name.clone_from(a);
                 key.name.clone_from(k);
             }
-            // Up and to the left, about 45 degrees each way from the lens,
-            // so the model shows its shape.
-            let w = f64::from(comp.width);
-            key.transform.position_x = Property::fixed(w * 0.15);
-            key.transform.position_y = Property::fixed(f64::from(comp.height) * 0.5 - w * 0.35);
-            key.transform.position_z = Property::fixed(-w * 0.5);
             if let LayerKind::Light { light } = &mut ambient.kind {
                 light.intensity = Property::fixed(25.0);
-            }
-            if let LayerKind::Light { light } = &mut key.kind {
-                light.casts_shadows = true;
-                light.shadow_diffusion = Property::fixed(f64::from(comp.width) * 0.01);
             }
             for mut light in [key, ambient] {
                 crate::edits::solo_on_arrival(&mut light, comp.layers.iter());
@@ -164,6 +156,26 @@ impl CompositionReference {
             .commit(Op::Batch { ops })
             .map_err(BridgeError::OpError)?;
         Ok(placed)
+    }
+
+    /// The Key light the first 3D model in a comp brings, marked so that lights
+    /// made from a model's file can take its place if nobody has touched it.
+    #[frb(ignore)]
+    pub(crate) fn key_light(comp: &lumit_core::model::Composition) -> Layer {
+        let mut key = Self::light_layer(comp, 3);
+        key.name = "Key light".into();
+        // Up and to the left, about 45 degrees each way from the lens, so the
+        // model shows its shape.
+        let w = f64::from(comp.width);
+        key.transform.position_x = Property::fixed(w * 0.15);
+        key.transform.position_y = Property::fixed(f64::from(comp.height) * 0.5 - w * 0.35);
+        key.transform.position_z = Property::fixed(-w * 0.5);
+        if let LayerKind::Light { light } = &mut key.kind {
+            light.casts_shadows = true;
+            light.shadow_diffusion = Property::fixed(f64::from(comp.width) * 0.01);
+        }
+        key.extra.insert(AUTO_KEY.into(), true.into());
+        key
     }
 
     /// The Light layer [`Self::add_light_layer`] makes in `comp`.

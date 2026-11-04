@@ -1957,6 +1957,11 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
+  /// The part of a 3D model the Timeline has picked, by its layer and its rows'
+  /// id, which the Viewer draws handles on.
+  final ValueNotifier<({UuidValue layer, String part})?> pickedPart =
+      ValueNotifier(null);
+
   /// The whole selection, primary first.
   ///
   /// Kept beside [selectedLayer] rather than replacing it, because almost

@@ -58,4 +58,5 @@
 /// * 30: a mirrored model's normal map turns the right way, what's hidden in
 ///   Blender is left out, and Shaded is a little darker.
 /// * 31: the 3D layers in a collapsed Precomp take the parent's lights.
-pub const ALGO_VERSION: u32 = 31;
+/// * 32: a layer that only shows shadows takes them with its back to a light.
+pub const ALGO_VERSION: u32 = 32;
