@@ -4735,7 +4735,7 @@ fn comp_walk(
             temporal_below: None,
             accumulation_below: None,
             flow_below,
-            in_scene: crate::realise::scene::carried(doc, comp, layer, t_comp),
+            in_scene: crate::realise::scene::carried(doc, comp, layer, t_comp, source_frame),
         }));
     }
     // A live span reaching the top of the stack closes with the walk itself.

@@ -22,10 +22,18 @@ pub struct Rays {
     place: DMat4,
     /// Whether its Camera row names a camera.
     named: bool,
+    /// What steadies its analysis at this frame.
+    steady: [f32; 2],
 }
 
 /// `layer`'s rays at comp time `t`, `None` with no Depth points on it.
-pub(super) fn rays(doc: &Arc<Document>, comp: &Composition, layer: &Layer, t: f64) -> Option<Rays> {
+pub(super) fn rays(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    source_frame: i64,
+) -> Option<Rays> {
     let e = layer
         .effects
         .iter()
@@ -48,6 +56,7 @@ pub(super) fn rays(doc: &Arc<Document>, comp: &Composition, layer: &Layer, t: f6
         eye: DVec3::new(source.eye.0, source.eye.1, source.eye.2),
         place,
         named: named.is_some(),
+        steady: crate::planes::steady(e.id, source_frame),
     })
 }
 
@@ -126,7 +135,14 @@ pub(crate) fn draw<'a>(
         |v: DVec3, w: f64| rows.map(|r| (r[0] * v.x + r[1] * v.y + r[2] * v.z + r[3] * w) as f32);
     let middle = corner + across * wf / 2.0 + down * hf / 2.0;
     let w_middle = seen(middle, 1.0)[2];
-    let depth = picked(input, tex)
+    // Only its own analysis wants steadying: a picture is what it is.
+    let map = picked(input, tex);
+    let steady = if map.is_some() {
+        [1.0, 0.0]
+    } else {
+        rays.steady
+    };
+    let depth = map
         .or(plane.and_then(|(_, slot)| slot))
         .map(|d| lumit_gpu::fx::fit_centred(ctx, d.clone(), w, h));
     let r = frame.render_scale.max(1e-6);
@@ -145,6 +161,7 @@ pub(crate) fn draw<'a>(
             amount: p.amount / 100.0,
             density: p.density / 100.0,
             invert: p.invert,
+            steady,
             fallback: if w_middle > 0.0 { 1.0 / w_middle } else { 0.0 },
         },
     );

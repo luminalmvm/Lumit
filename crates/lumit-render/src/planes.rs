@@ -55,6 +55,8 @@ use uuid::Uuid;
 use crate::frames::RotoFrames;
 use crate::sidecar;
 
+mod steady;
+
 // ---------------------------------------------------------------------------
 // What an analysis is asked for
 // ---------------------------------------------------------------------------
@@ -585,6 +587,8 @@ pub struct PlaneRun {
     pub content: u64,
     /// Ascending by frame, so a lookup is a binary search.
     records: Vec<FrameRecord>,
+    /// Each record's scale and offset onto the frames before it (`steady`).
+    steady: Vec<[f32; 2]>,
     /// The last few planes decompressed, so scrubbing one region does not
     /// re-inflate a plane per repaint. A four-entry ring walked linearly, which
     /// is an LRU at this size; the lock is held for a `Vec` scan and never
@@ -765,6 +769,7 @@ pub(crate) fn record_to_run(record: Record) -> Option<PlaneRun> {
         made_with: record.made_with,
         records: record.frames,
         warm: Mutex::new(Vec::new()),
+        steady: Vec::new(),
     })
 }
 
@@ -967,6 +972,17 @@ pub fn plane(instance: Uuid, frame: i64) -> Option<PlaneRead> {
     Some((width, height, kind, data, run.content))
 }
 
+/// What steadies `instance`'s plane at `frame`, as a scale and an offset.
+#[must_use]
+pub fn steady(instance: Uuid, frame: i64) -> [f32; 2] {
+    let Ok(held) = runs().read() else {
+        return [1.0, 0.0];
+    };
+    let run = held.get(&instance);
+    run.and_then(|run| run.steady.get(run.index(frame)?).copied())
+        .unwrap_or([1.0, 0.0])
+}
+
 /// What `instance`'s analysis holds, as one number, or `None` when there is no
 /// run for it at all.
 ///
@@ -1016,7 +1032,8 @@ pub fn progress(instance: Uuid) -> Option<Progress> {
 /// Put a run in the store. Public because this is how one gets in and there is
 /// exactly one way - an analysis finishing, a sidecar being read back - and the
 /// bridge's own tests need one without a model to make it with.
-pub fn publish(instance: Uuid, run: PlaneRun) {
+pub fn publish(instance: Uuid, mut run: PlaneRun) {
+    run.steady = steady::fit(&run.records);
     if let Ok(mut held) = runs().write() {
         held.insert(instance, Arc::new(run));
     }
@@ -1097,6 +1114,7 @@ pub fn run_from_planes(
         content: content_of(&records, made_with),
         records,
         warm: Mutex::new(Vec::new()),
+        steady: Vec::new(),
     })
 }
 
@@ -1417,6 +1435,7 @@ pub fn analyse(
             made_with,
             records,
             warm: Mutex::new(Vec::new()),
+            steady: Vec::new(),
         },
         cancelled,
     ))

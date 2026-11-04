@@ -29,6 +29,8 @@ pub struct DepthPointsOp {
     pub amount: f32,
     pub density: f32,
     pub invert: bool,
+    /// The scale and offset that steady the depth.
+    pub steady: [f32; 2],
     /// One over clip w for whatever lands where no point does.
     pub fallback: f32,
 }
@@ -42,6 +44,7 @@ struct View {
     down: [f32; 4],
     frame: [f32; 4],
     look: [f32; 4],
+    steady: [f32; 4],
     grid: [u32; 4],
 }
 
@@ -203,6 +206,7 @@ impl FxEngine {
                         f32::from(u8::from(depth.is_some())),
                         f32::from(u8::from(op.invert)),
                     ],
+                    steady: [op.steady[0], op.steady[1], 0.0, 0.0],
                     grid: [columns, step, 0, 0],
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,

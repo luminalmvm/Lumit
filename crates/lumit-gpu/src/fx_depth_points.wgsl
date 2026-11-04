@@ -15,6 +15,8 @@ struct View {
     frame: vec4<f32>,
     // x: Depth, y: Density, z: 1 when there is a depth to read, w: 1 to invert it.
     look: vec4<f32>,
+    // x and y: the scale and offset that steady the depth.
+    steady: vec4<f32>,
     // x: columns, y: the step between them, raster pixels.
     grid: vec4<u32>,
 };
@@ -60,6 +62,7 @@ fn dp_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) i: u32) -> Vs 
     var d = 0.5;
     if (view.look.z > 0.5) {
         d = dot(textureLoad(depth, at, 0).rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+        d = clamp(view.steady.x * d + view.steady.y, 0.0, 1.0);
         if (view.look.w > 0.5) {
             d = 1.0 - d;
         }

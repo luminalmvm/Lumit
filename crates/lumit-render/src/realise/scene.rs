@@ -86,6 +86,7 @@ pub(crate) fn carried(
     comp: &Composition,
     layer: &Layer,
     t_comp: f64,
+    source_frame: i64,
 ) -> Option<Carried> {
     if !in_scene(layer) {
         return None;
@@ -98,7 +99,7 @@ pub(crate) fn carried(
         opens: (comp.motion_blur.shutter_phase / 360.0 * frame) as f32,
         surface: surface(doc, comp, layer),
         shape: shape(doc, comp, layer),
-        rays: depth_points::rays(doc, comp, layer, t_comp),
+        rays: depth_points::rays(doc, comp, layer, t_comp, source_frame),
     })
 }
 
