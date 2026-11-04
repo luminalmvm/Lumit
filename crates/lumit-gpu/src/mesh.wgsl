@@ -329,7 +329,7 @@ fn shade(in: VsOut, front: bool) -> vec4<f32> {
         // Glass keeps a film of its colour and its highlight, and lets the
         // rest through without bending it, as a view has no picture to bend.
         let film = alpha * (1.0 - 0.8 * clear);
-        let matte = albedo * (sky + 0.75 * max(dot(n, key), 0.0)) * ao;
+        let matte = albedo * (sky + 0.55 * max(dot(n, key), 0.0)) * ao;
         return vec4<f32>(matte * film + (shine + emissive) * alpha, film);
     }
     let diffuse_colour = albedo * (1.0 - metallic);
