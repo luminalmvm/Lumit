@@ -15,3 +15,4 @@ section below, and when the release note is written the lines move into it.
 - An OpenEXR packed with PIZ is read by Lumit's own reader, as FFmpeg drew some with broken blocks, so those pictures can look different.
 - A 3D model mirrored by a negative Scale has its normal map the right way round, so its bumps can look different.
 - Objects hidden in Blender no longer come through from a `.blend`, which converts again.
+- An environment light's Intensity stops at 0, where below it wrote negative pixels into a float export.

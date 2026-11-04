@@ -215,7 +215,8 @@ linearised.
   the background, and switches the view it was added from to **Final**.
 - **Show in background**, on an environment light: draws the picture behind everything, as
   the camera sees it. **Background blur** softens it there.
-- **Intensity**: how bright the light is, as a percentage. Below 0 it takes light away.
+- **Intensity**: how bright the light is, as a percentage. Below 0 it takes light away,
+  except an environment light, which stops at 0.
 - **Colour**: the colour of the light.
 - **Cone angle** and **Cone feather**, on a spot: the cone's full angle, and how much of its
   edge fades.
@@ -267,7 +268,7 @@ and its eye does nothing.
 - **Specular shininess**: how small and hard that highlight is.
 - **Metal**: how much the highlight takes the layer's own colour rather than the light's.
 - **Reflection**: how much of an environment light it reflects, tinted by the layer, as sharp
-  as **Specular shininess**.
+  as **Specular shininess**. At the default shininess a full reflection is nearly matte.
 
 Under an environment light, **Ambient** is how much of its light the layer takes.
 
