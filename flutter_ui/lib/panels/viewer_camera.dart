@@ -1323,6 +1323,26 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       child: Stack(
         children: [
           Positioned.fill(child: widget.active ? _tools() : _navigation()),
+          // Asked of the engine once per comp and revision, and frames ask too.
+          ListenableBuilder(
+            listenable: ui,
+            builder: (context, _) {
+              final models = ui.holdsModels(widget.viewId);
+              final display = ui.displayOf(widget.viewId);
+              return Positioned(
+                top: viewLookInset,
+                left: viewLookInset,
+                child: ViewLookTag(
+                  look: [
+                    if (models && display != BridgeModelDisplay.final_)
+                      display.title,
+                    if (models && ui.facesShown(widget.viewId))
+                      l10n.viewerDisplayFaces,
+                  ].join(' · '),
+                ),
+              );
+            },
+          ),
           if (seen != null)
             Positioned(
               top: viewCubeInset,
