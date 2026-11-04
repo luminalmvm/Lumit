@@ -131,7 +131,9 @@ impl Composition {
     ) -> Option<ResolvedEnvironment> {
         let (l, light, source) = self.environment_light(t)?;
         let lt = crate::time::layer_time(t, l.start_offset.0);
-        let gain = (light.intensity.value_at(lt) / 100.0) as f32;
+        // A surround can't take light away, or a float export would hold
+        // negative pixels behind everything.
+        let gain = (light.intensity.value_at(lt) / 100.0).max(0.0) as f32;
         // Its own turn and its parents', never an aim, which would tilt the
         // picture by where the light happens to stand.
         let own = l.transform.placement_at(lt, false, &|p| read(l, p));

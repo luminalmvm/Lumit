@@ -13,6 +13,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -170,14 +171,19 @@ Future<void> newLightFrb({
         shadowDarkness: 100,
         shadowDiffusion: 0,
       );
-  // An environment starts from the selected layer, when it has a picture.
-  final selected =
-      Provider.of<LumitUiState>(context, listen: false).selectedLayer.value;
-  if (start.settings.source == null && selected != null && selected.hasPicture()) {
-    start.settings =
-        lightSettingsWith(start.settings, source: (selected.internallayerId,));
-  }
+  final ui = Provider.of<LumitUiState>(context, listen: false);
   final layers = comp.getModel().layers;
+  // An environment starts from the selected layer, when that's footage or a
+  // precomp. Anything else selected is more likely to be there to be lit.
+  final selected = ui.selectedLayer.value?.internallayerId;
+  final picture = layers.where((l) =>
+      l.layer.internallayerId == selected &&
+      (l.info.kind == BridgeLayerKind.footage ||
+          l.info.kind == BridgeLayerKind.precomp) &&
+      canSurround(l));
+  if (start.settings.source == null && picture.isNotEmpty) {
+    start.settings = lightSettingsWith(start.settings, source: (selected,));
+  }
   final picked = await showLumitModal<(_LightValues, String)>(
     context: context,
     id: 'light-settings',
@@ -197,6 +203,10 @@ Future<void> newLightFrb({
     layer.setTransforms(props: props, values: scalars);
     if (name.isNotEmpty) layer.rename(name: name);
   });
+  // A view on Shaded ignores the comp's lights, and this one is there to see.
+  if (values.settings.kind == BridgeLightKind.environment) {
+    ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.final_);
+  }
   onDone?.call();
 }
 
@@ -334,7 +344,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                   value: _s.source,
                   empty: l10n.none,
                   missing: l10n.missingLayer,
-                  offered: (l) => l.layer.hasPicture(),
+                  offered: canSurround,
                   onChanged: (id) => setState(() =>
                       _v.settings = lightSettingsWith(_s, source: (id,))),
                 )),

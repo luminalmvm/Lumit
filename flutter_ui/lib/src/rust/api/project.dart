@@ -1413,6 +1413,12 @@ class ProjectReference {
         that: this,
       );
 
+  /// Stop Blender on any file no item of this project names any more.
+  void stopUnusedBlenders() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceStopUnusedBlenders(
+        that: this,
+      );
+
   /// How the interface was arranged when this project was last saved, as the
   /// JSON the frontend itself wrote, or `None` for a project that has
   /// never carried one.

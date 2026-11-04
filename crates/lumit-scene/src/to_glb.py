@@ -41,6 +41,7 @@ wanted = {
     "export_lights": True,
     "export_extras": True,
     "export_yup": True,
+    "use_visible": True,
     "export_draco_mesh_compression_enable": False,
     "export_meshopt_compression_enable": False,
 }

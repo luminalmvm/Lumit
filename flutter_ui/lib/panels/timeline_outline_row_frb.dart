@@ -29,6 +29,7 @@ import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
 import 'audio_streams_menu_frb.dart';
+import 'light_rows_frb.dart' show feedsEnvironment;
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
 import 'stagger_panel_frb.dart' show showStaggerPanel;
@@ -548,6 +549,7 @@ class _OutlineRowState extends State<OutlineRow> {
                     BridgeLayerSwitch.visible,
                     mark: LumitIcons.visible,
                     offMark: LumitIcons.hidden,
+                    dim: feedsEnvironment(widget.stack, layer.internallayerId),
                     tip: switches.visible
                         ? l10n.switchVisible
                         : l10n.switchHidden)
@@ -928,11 +930,20 @@ class _OutlineRowState extends State<OutlineRow> {
           // The chosen layer's name is the one thing on its row read at full
           // strength — the mockup brightens the name, and only the name, on
           // the selected row; every other row keeps `body`.
-          child: Text(info.name,
-              style: widget.selected ? t.bodyPrimary : t.body,
-              textDirection: nameDirection(info.name),
-              textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis),
+          child: Row(children: [
+            Flexible(
+              child: Text(info.name,
+                  style: widget.selected ? t.bodyPrimary : t.body,
+                  textDirection: nameDirection(info.name),
+                  textAlign: TextAlign.left,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            // Its eye does nothing, as a light reads it whether it's on or off.
+            if (feedsEnvironment(widget.stack, layer.internallayerId)) ...[
+              const SizedBox(width: identityGap),
+              Text(l10n.layerRowEnvironmentSource, style: t.caption),
+            ],
+          ]),
         ),
       ),
     );
@@ -1026,6 +1037,7 @@ class _OutlineRowState extends State<OutlineRow> {
     String? offMark,
     String? tip,
     ValueChanged<bool>? onSet,
+    bool dim = false,
   }) {
     final t = ThemeScope.of(context).theme;
     final project = Provider.of<LumitState>(context, listen: false).project;
@@ -1083,11 +1095,13 @@ class _OutlineRowState extends State<OutlineRow> {
     // and their struck glyph at rest too. A hidden or silenced layer has to
     // be obvious.
     final loud = name == 'visible' || name == 'audible';
-    final ink = on
-        ? t.textPrimary
-        : loud || !_resting
-            ? t.textMuted
-            : t.textDisabled;
+    final ink = dim
+        ? t.textDisabled
+        : on
+            ? t.textPrimary
+            : loud || !_resting
+                ? t.textMuted
+                : t.textDisabled;
     // The one switch the pointer is on comes up a step further than its
     // row, so which of the twelve a click would take is plain.
     Widget face(double lit) {

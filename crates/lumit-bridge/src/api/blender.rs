@@ -7,7 +7,7 @@ use flutter_rust_bridge::frb;
 use lumit_core::model::ProjectItem;
 use lumit_scene::blender::{self, State};
 
-use crate::api::{footage::FootageReference, BridgeError};
+use crate::api::{footage::FootageReference, project::ProjectReference, BridgeError};
 
 /// The Blender 3D models open with.
 #[frb(non_opaque)]
@@ -24,10 +24,14 @@ pub struct BridgeBlender {
 pub enum BridgeBlenderState {
     Converting,
     NoBlender,
-    /// The last lines Blender printed.
+    /// What Blender printed about it.
     Failed {
         reason: String,
     },
+    /// This Blender has no importer for the file's type.
+    NoImporter,
+    /// Stopped by hand.
+    Stopped,
 }
 
 /// Try the program at `path` before any Blender on the machine, or none when
@@ -44,6 +48,41 @@ pub fn find_blender() -> Option<BridgeBlender> {
         path: found.exe.to_string_lossy().into_owned(),
         version: found.version,
     })
+}
+
+/// Stop every Blender running and wait for them to go, as the app quits. Sync,
+/// so quitting never waits on a reply: with none running it returns at once.
+#[frb(sync)]
+pub fn stop_blenders() {
+    blender::stop_where(&|_| true);
+    blender::wait_for_stopped();
+}
+
+impl ProjectReference {
+    /// Stop Blender on any file no item of this project names any more.
+    #[frb(sync)]
+    pub fn stop_unused_blenders(&self) {
+        self.stop_blenders_where(false);
+    }
+
+    /// Stop Blender on the files this project names, or on all the others.
+    #[frb(ignore)]
+    pub(crate) fn stop_blenders_where(&self, named: bool) {
+        let Ok(state) = self.state() else {
+            return;
+        };
+        let Ok(state) = state.read() else {
+            return;
+        };
+        let doc = state.store.snapshot();
+        blender::stop_where(&|path| {
+            let names = |item: &ProjectItem| match item {
+                ProjectItem::Footage(f) => std::path::Path::new(f.media.on_disk()) == path,
+                _ => false,
+            };
+            doc.items.iter().any(names) == named
+        });
+    }
 }
 
 impl FootageReference {
@@ -65,7 +104,23 @@ impl FootageReference {
             State::Converting => BridgeBlenderState::Converting,
             State::NoBlender => BridgeBlenderState::NoBlender,
             State::Failed(reason) => BridgeBlenderState::Failed { reason },
+            State::NoImporter => BridgeBlenderState::NoImporter,
+            State::Stopped => BridgeBlenderState::Stopped,
         }))
+    }
+
+    /// Stop this file's conversion.
+    #[frb(sync)]
+    pub fn stop_blender(&self) -> Result<(), BridgeError> {
+        blender::stop(&self.file()?);
+        Ok(())
+    }
+
+    /// Convert this file again after it was stopped.
+    #[frb(sync)]
+    pub fn convert_again(&self) -> Result<(), BridgeError> {
+        blender::convert_again(&self.file()?);
+        Ok(())
     }
 
     /// Open this file in Blender's own window. False when no Blender was

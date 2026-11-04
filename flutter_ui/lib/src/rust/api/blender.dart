@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'blender.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `file`
+// These functions are ignored because they are not marked as `pub`: `file`, `stop_blenders_where`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
 
 /// Try the program at `path` before any Blender on the machine, or none when
@@ -20,6 +20,10 @@ void chooseBlender({required String path}) =>
 /// time, as each one found is asked its version.
 Future<BridgeBlender?> findBlender() =>
     BridgeLib.instance.api.crateApiBlenderFindBlender();
+
+/// Stop every Blender running and wait for them to go, as the app quits. Sync,
+/// so quitting never waits on a reply: with none running it returns at once.
+void stopBlenders() => BridgeLib.instance.api.crateApiBlenderStopBlenders();
 
 /// The Blender 3D models open with.
 class BridgeBlender {
@@ -52,8 +56,14 @@ sealed class BridgeBlenderState with _$BridgeBlenderState {
   const factory BridgeBlenderState.converting() = BridgeBlenderState_Converting;
   const factory BridgeBlenderState.noBlender() = BridgeBlenderState_NoBlender;
 
-  /// The last lines Blender printed.
+  /// What Blender printed about it.
   const factory BridgeBlenderState.failed({
     required String reason,
   }) = BridgeBlenderState_Failed;
+
+  /// This Blender has no importer for the file's type.
+  const factory BridgeBlenderState.noImporter() = BridgeBlenderState_NoImporter;
+
+  /// Stopped by hand.
+  const factory BridgeBlenderState.stopped() = BridgeBlenderState_Stopped;
 }

@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -40,8 +40,12 @@ pub struct Blender {
 pub enum State {
     Converting,
     NoBlender,
-    /// The last lines Blender printed.
+    /// What Blender printed about it.
     Failed(String),
+    /// This Blender has no importer for the file's type.
+    NoImporter,
+    /// Stopped by hand, and left until it's asked for again.
+    Stopped,
 }
 
 /// The program picked in Settings, tried before anything on the machine.
@@ -51,8 +55,13 @@ static FOUND: Mutex<Option<Blender>> = Mutex::new(None);
 /// Each source being converted, or whose last conversion failed.
 static STATES: Mutex<Option<HashMap<PathBuf, State>>> = Mutex::new(None);
 
-/// Moves each time [`choose`] is called.
+/// Moves each time [`choose`] or [`convert_again`] is called.
 static CHOICES: AtomicU64 = AtomicU64::new(0);
+
+/// The most Blenders run at once: each is a whole program, so ten files
+/// dropped together wait their turn.
+const AT_ONCE: usize = 2;
+static RUNNING: AtomicUsize = AtomicUsize::new(0);
 
 /// Use `exe` before any Blender found on the machine, or stop when `None`.
 pub fn choose(exe: Option<PathBuf>) {
@@ -110,6 +119,77 @@ fn set_state(source: &Path, state: Option<State>) {
     }
 }
 
+/// Stop `source`'s conversion. Blender is killed by its own handle, and the
+/// file isn't tried again until it's saved or [`convert_again`] is called.
+pub fn stop(source: &Path) {
+    stop_where(&|path| path == source);
+}
+
+/// Stop every conversion of a file `which` picks.
+pub fn stop_where(which: &dyn Fn(&Path) -> bool) {
+    if let Ok(mut states) = STATES.lock() {
+        for (path, state) in states.get_or_insert_with(HashMap::new) {
+            if *state == State::Converting && which(path) {
+                *state = State::Stopped;
+            }
+        }
+    }
+}
+
+/// Wait a moment for the Blenders stopped to be gone, as the app quits.
+pub fn wait_for_stopped() {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while RUNNING.load(Ordering::Relaxed) > 0 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Try `source` again after it was stopped. Moves [`choices`], as that's what
+/// names a read and its frames, so a frame drawn without it isn't served.
+pub fn convert_again(source: &Path) {
+    set_state(source, None);
+    CHOICES.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Wait for room among the Blenders running and take it. False when `stopped`
+/// comes first.
+fn take_room(stopped: &dyn Fn() -> bool) -> bool {
+    loop {
+        if stopped() {
+            return false;
+        }
+        let room = |n: usize| (n < AT_ONCE).then_some(n + 1);
+        if RUNNING
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, room)
+            .is_ok()
+        {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// A GLB from an earlier conversion of `place`'s file, as long as the file
+/// hasn't been saved since.
+fn converted_before(cache_dir: &Path, place: u64, source: &std::fs::Metadata) -> Option<PathBuf> {
+    let prefix = format!("{place:016x}-");
+    let saved = source.modified().ok()?;
+    std::fs::read_dir(cache_dir)
+        .ok()?
+        .flatten()
+        .find(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.starts_with(&prefix)
+                && name.ends_with(".glb")
+                && is_glb(&entry.path())
+                && entry
+                    .metadata()
+                    .and_then(|glb| glb.modified())
+                    .is_ok_and(|made| made >= saved)
+        })
+        .map(|entry| entry.path())
+}
+
 /// Turn `source` into a GLB in `cache_dir` and give its path, once Blender has
 /// finished, whose first launch can take a while. A source already being
 /// converted is waited for rather than converted twice. Setting `cancel`
@@ -128,18 +208,23 @@ pub fn to_glb(source: &Path, cache_dir: &Path, cancel: &AtomicBool) -> Result<Pa
         path: source.to_path_buf(),
         reason: e.to_string(),
     })?;
+    let mut hash = DefaultHasher::new();
+    source.hash(&mut hash);
+    let place = hash.finish();
     let Some(blender) = find() else {
+        if let Some(glb) = converted_before(cache_dir, place, &meta) {
+            set_state(source, None);
+            return Ok(glb);
+        }
         set_state(source, Some(State::NoBlender));
         return Err(SceneError::NoBlender {
             path: source.to_path_buf(),
         });
     };
 
-    let mut hash = DefaultHasher::new();
-    source.hash(&mut hash);
-    let place = hash.finish();
     (meta.len(), meta.modified().ok(), &blender.version, SCRIPT).hash(&mut hash);
     let glb = cache_dir.join(format!("{place:016x}-{:016x}.glb", hash.finish()));
+    let mut waited = false;
     loop {
         if is_glb(&glb) {
             return Ok(glb);
@@ -147,33 +232,59 @@ pub fn to_glb(source: &Path, cache_dir: &Path, cancel: &AtomicBool) -> Result<Pa
         if cancel.load(Ordering::Relaxed) {
             return Err(SceneError::Cancelled);
         }
-        // Another thread converting this source is waited for.
-        let theirs = STATES.lock().is_ok_and(|mut states| {
+        // Another thread converting this source is waited for, and what stops
+        // it stops this one too.
+        let state = STATES.lock().map(|mut states| {
             let states = states.get_or_insert_with(HashMap::new);
-            let theirs = states.get(source) == Some(&State::Converting);
-            if !theirs {
+            let state = states.get(source).cloned();
+            if state != Some(State::Converting) && !(waited && state.is_some()) {
                 states.insert(source.to_path_buf(), State::Converting);
+                return None;
             }
-            theirs
+            state
         });
-        if !theirs {
-            break;
+        match state {
+            Ok(Some(State::Converting)) => waited = true,
+            Ok(Some(_)) => {
+                return Err(SceneError::Read {
+                    path: source.to_path_buf(),
+                    reason: "its conversion didn't finish".into(),
+                })
+            }
+            _ => break,
         }
         std::thread::sleep(Duration::from_millis(100));
     }
 
-    let done = convert(source, &ext, &blender.exe, cache_dir, place, cancel).and_then(|part| {
-        std::fs::rename(&part, &glb).map_err(|e| SceneError::Read {
+    let stopped = || cancel.load(Ordering::Relaxed) || state(source) == Some(State::Stopped);
+    let done = if take_room(&stopped) {
+        let done =
+            convert(source, &ext, &blender.exe, cache_dir, place, &stopped).and_then(|part| {
+                std::fs::rename(&part, &glb).map_err(|e| SceneError::Read {
+                    path: source.to_path_buf(),
+                    reason: e.to_string(),
+                })?;
+                forget_older(cache_dir, place, &glb);
+                Ok(glb)
+            });
+        RUNNING.fetch_sub(1, Ordering::Relaxed);
+        done
+    } else {
+        Err(SceneError::Cancelled)
+    };
+    // Stopped by hand counts as a read that failed, so it's kept as one and
+    // nothing starts Blender again on the next frame.
+    if state(source) == Some(State::Stopped) && done.is_err() {
+        return Err(SceneError::Read {
             path: source.to_path_buf(),
-            reason: e.to_string(),
-        })?;
-        forget_older(cache_dir, place, &glb);
-        Ok(glb)
-    });
+            reason: "stopped".into(),
+        });
+    }
     set_state(
         source,
         match &done {
             Err(SceneError::Read { reason, .. }) => Some(State::Failed(reason.clone())),
+            Err(SceneError::Unsupported { .. }) => Some(State::NoImporter),
             _ => None,
         },
     );
@@ -188,7 +299,7 @@ fn convert(
     exe: &Path,
     cache_dir: &Path,
     place: u64,
-    cancel: &AtomicBool,
+    stopped: &dyn Fn() -> bool,
 ) -> Result<PathBuf, SceneError> {
     let failed = |reason: String| SceneError::Read {
         path: source.to_path_buf(),
@@ -208,7 +319,7 @@ fn convert(
         .args(["--python-exit-code", "1", "--python-expr", SCRIPT, "--"])
         .arg(source)
         .arg(&part);
-    let status = run(&mut command, &log, cancel, None);
+    let status = run(&mut command, &log, stopped, None);
     let text = String::from_utf8_lossy(&std::fs::read(&log).unwrap_or_default()).into_owned();
     let _ = std::fs::remove_file(&log);
     match status.map_err(|e| failed(e.to_string()))? {
@@ -262,13 +373,22 @@ fn forget_older(cache_dir: &Path, place: u64, keep: &Path) {
     }
 }
 
-/// The last lines Blender printed, which say why it failed.
+/// What Blender printed that says why it failed: its error lines less their
+/// timestamps, or with none its last lines.
 fn tail(text: &str) -> String {
     let lines: Vec<&str> = text
         .lines()
         .map(str::trim_end)
         .filter(|line| !line.is_empty())
+        .filter(|line| !line.starts_with("Blender "))
         .collect();
+    let mut errors: Vec<&str> = lines
+        .iter()
+        .filter(|line| line.contains("Error:") || line.contains("ERROR"))
+        .map(|line| line.rsplit_once("| ").map_or(*line, |(_, rest)| rest))
+        .collect();
+    errors.dedup();
+    let lines = if errors.is_empty() { lines } else { errors };
     lines[lines.len().saturating_sub(6)..].join("\n")
 }
 
@@ -290,7 +410,7 @@ fn version(exe: &Path) -> Option<String> {
     let ran = run(
         Command::new(exe).arg("--version"),
         &log,
-        &AtomicBool::new(false),
+        &|| false,
         Some(deadline),
     );
     let text = String::from_utf8_lossy(&std::fs::read(&log).unwrap_or_default()).into_owned();
@@ -308,12 +428,12 @@ fn version(exe: &Path) -> Option<String> {
 }
 
 /// Run `command` to the end with everything it prints going to `log`. `None`
-/// when `cancel` or `deadline` stopped it first, which kills it by its own
+/// when `stopped` or `deadline` stopped it first, which kills it by its own
 /// handle.
 fn run(
     command: &mut Command,
     log: &Path,
-    cancel: &AtomicBool,
+    stopped: &dyn Fn() -> bool,
     deadline: Option<Instant>,
 ) -> std::io::Result<Option<ExitStatus>> {
     let out = std::fs::File::create(log)?;
@@ -327,7 +447,7 @@ fn run(
         if let Some(status) = child.try_wait()? {
             return Ok(Some(status));
         }
-        if cancel.load(Ordering::Relaxed) || deadline.is_some_and(|at| Instant::now() >= at) {
+        if stopped() || deadline.is_some_and(|at| Instant::now() >= at) {
             let _ = child.kill();
             let _ = child.wait();
             return Ok(None);
@@ -392,20 +512,22 @@ fn candidates() -> Vec<PathBuf> {
         use windows_registry::{CLASSES_ROOT, CURRENT_USER, LOCAL_MACHINE};
         // Blender's installer leaves its folder in the uninstall list.
         let uninstall = r"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+        let mut installed = Vec::new();
         for list in [LOCAL_MACHINE, CURRENT_USER]
             .into_iter()
             .filter_map(|root| root.open(uninstall).ok())
         {
-            out.extend(list.keys().into_iter().flatten().filter_map(|name| {
+            installed.extend(list.keys().into_iter().flatten().filter_map(|name| {
                 let entry = list.open(name).ok()?;
                 let ours = entry.get_string("Publisher").ok()? == "Blender Foundation";
                 ours.then(|| entry.get_string("InstallLocation").ok().map(PathBuf::from))?
             }));
         }
+        out.extend(newest_first(installed));
         if let Some(programs) = std::env::var_os("ProgramFiles") {
-            out.extend(newest_first(
-                &Path::new(&programs).join("Blender Foundation"),
-            ));
+            let dir = Path::new(&programs).join("Blender Foundation");
+            let folders = std::fs::read_dir(dir).into_iter().flatten().flatten();
+            out.extend(newest_first(folders.map(|entry| entry.path()).collect()));
         }
         let steam = CURRENT_USER
             .open(r"Software\Valve\Steam")
@@ -449,18 +571,17 @@ fn candidates() -> Vec<PathBuf> {
     out
 }
 
-/// `Blender 5.2`, `Blender 4.5` and so on under `dir`, highest version first.
+/// The folders named `Blender 5.2`, `Blender 4.5` and so on in `folders`,
+/// highest version first.
 #[cfg(windows)]
-fn newest_first(dir: &Path) -> Vec<PathBuf> {
-    let mut found: Vec<(Vec<u32>, PathBuf)> = std::fs::read_dir(dir)
+fn newest_first(folders: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut found: Vec<(Vec<u32>, PathBuf)> = folders
         .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| {
-            let name = entry.file_name().to_string_lossy().into_owned();
+        .filter_map(|path| {
+            let name = path.file_name()?.to_string_lossy().into_owned();
             let version = name.strip_prefix("Blender ")?;
             let version = version.split('.').map(|n| n.parse().unwrap_or(0)).collect();
-            Some((version, entry.path()))
+            Some((version, path))
         })
         .collect();
     found.sort_by(|a, b| b.0.cmp(&a.0));

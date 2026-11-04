@@ -2895,7 +2895,7 @@ List<LayerFoldRow> layerFoldRows({
         rows.add(FoldGroupRow(
           path: path,
           // A material its file gives no name is numbered.
-          label: material.customName ?? '${effectLabelOf(material.name)} ${i + 1}',
+          label: material.customName ?? l10n.modelMaterialNumbered(i + 1),
           open: materialOpen,
           depth: 2,
         ));
