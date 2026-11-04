@@ -4257,6 +4257,13 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSavePreset(
           that: this, name: name, only: only);
 
+  /// The parts of this Model layer or 3D precomp, `None` for any other layer.
+  /// Not sync, as a model not read yet is read now.
+  Future<List<BridgeScenePart>?> sceneParts() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSceneParts(
+        that: this,
+      );
+
   /// The adjustment switch: set this layer's own picture aside and
   /// run its effect stack on the composite beneath it, or give it back.
   ///

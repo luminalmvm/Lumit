@@ -120,6 +120,8 @@ Not interchangeable.
 | **Blend mode** | How a layer composites over what's below |
 | **Effect** | One operation in a layer's **effect stack**, or one box in a node graph |
 | **Source layer** | Another layer an effect reads as an input, such as the one Emit from image takes its points from |
+| **Scene pass** | What a 3D precomp knows about its pixels, handed to effects: **Normals**, **Position**, **Part id** and **Depth** |
+| **Part** | A node of a 3D model, each material of a node with more than one, or a whole 3D layer, as a scene pass counts them. Its number comes from its layer and its names. **Part matte** keeps the parts picked |
 | **Driver** | A node that makes a value rather than a picture and drives a parameter through a wire |
 | **Read**, **Input**, **Output** nodes | Bring an item in, take a value or picture from outside, the one picture the graph shows |
 | **Merge**, **Switch**, **Time offset** nodes | A over B, pick one input, show the input at another time |

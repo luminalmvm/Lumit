@@ -5344,9 +5344,8 @@ impl LayerReference {
         if let Some(retime) = head.retime.as_mut().filter(|_| retimed) {
             // Layer time, not comp time: keyframes live in the layer's own
             // clock, measured from its start offset.
-            // A subtraction that cannot overflow is still a subtraction that
-            // can: an unrepresentable time leaves the map alone rather than
-            // taking the cut down with it.
+            // An unrepresentable time leaves the map alone rather than taking
+            // the cut down with it.
             if let Ok(local) = t.0.checked_sub(head.start_offset.0) {
                 retime.insert_key_preserving_shape(local);
             }
@@ -5359,6 +5358,7 @@ impl LayerReference {
             effect.id = Uuid::now_v7();
         }
         tail.in_point = t;
+        lumit_render::passes::follow_copy(&*self.document()?, &layer, &mut tail);
 
         let mut ops = vec![lumit_core::ops::Op::SetLayerSpan {
             comp: self.comp_id,
@@ -6053,9 +6053,9 @@ impl LayerReference {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
-        // A duplicate of a layer that was somebody's matte or parent must not
-        // inherit being pointed *at* — but it keeps what it points at itself.
+        // It isn't pointed *at* as its original was, but keeps what that points at.
         let new_id = copy.id;
+        lumit_render::passes::follow_copy(&*self.document()?, &self.item()?, &mut copy);
 
         self.commit(lumit_core::ops::Op::AddLayer {
             comp: self.comp_id,

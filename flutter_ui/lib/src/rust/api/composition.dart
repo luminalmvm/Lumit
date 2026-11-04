@@ -2292,12 +2292,10 @@ class CompositionReference {
   /// the window it already holds and asks again only when the pointer nears
   /// the window's edge, the frame changes, or an edit lands.
   ///
-  /// `layer` reads that layer **alone** rather than the composite — what a
-  /// depth pick does, since a depth pass is usually hidden and so never
-  /// appears in the composite at all. The answer arrives as
-  /// `WorkerResponse::Sampled`, on the stream the frames and traces already
-  /// ride; a frame with nothing to read publishes nothing, and the magnifier
-  /// keeps what it had.
+  /// `layer` reads that layer **alone** rather than the composite, for a depth
+  /// pass that is usually hidden, and `part_ids` its parts as their numbers.
+  /// The answer arrives as `WorkerResponse::Sampled`; a frame with nothing to
+  /// read publishes nothing, and the magnifier keeps what it had.
   void samplePixels(
           {required int frame,
           required double u,
@@ -2305,6 +2303,7 @@ class CompositionReference {
           required int window,
           required double scale,
           LayerReference? layer,
+          required bool partIds,
           required int view}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSamplePixels(
@@ -2315,6 +2314,7 @@ class CompositionReference {
               window: window,
               scale: scale,
               layer: layer,
+              partIds: partIds,
               view: view);
 
   /// The JSON text of a **graph group** gathered from `nodes`, the node

@@ -580,6 +580,15 @@ pub trait EffectDef: Sync + Send + 'static {
         false
     }
 
+    /// What this instance's layer row reads from a 3D precomp in place of its
+    /// picture: a pass of the scene. `None` for every effect but those.
+    fn scene_read(
+        &self,
+        _inst: &crate::model::EffectInstance,
+    ) -> Option<super::effects::scene_pass::SceneRead> {
+        None
+    }
+
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it
     /// declares. Every image effect pushes nothing, which is the default.
     ///

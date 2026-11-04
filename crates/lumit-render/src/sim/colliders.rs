@@ -7,6 +7,7 @@ use lumit_core::camera::Place;
 use lumit_core::fx::effects::particulate::Particulate;
 use lumit_core::fx::points::stepped::collider::Collider;
 use lumit_core::model::{EffectValue, Layer, LayerKind};
+use lumit_core::model_layer::ModelSettings;
 use lumit_gpu::fx::particulate_sim::{ColliderKind, SimCollider};
 use lumit_gpu::GpuContext;
 
@@ -22,8 +23,8 @@ const MAX_EDGES: usize = 1 << 14;
 /// The models a walk hits, with their distances once on the card.
 #[derive(Default)]
 pub(super) struct Models {
-    /// Each model's distances, and where they start in `buffer`.
-    list: Vec<(uuid::Uuid, Arc<Distances>, u32)>,
+    /// Each model and take's distances, and where they start in `buffer`.
+    list: Vec<(uuid::Uuid, Option<String>, Arc<Distances>, u32)>,
     buffer: Option<wgpu::Buffer>,
     /// What was hit at the last time asked, and when, which is where the next
     /// frame's sweep starts.
@@ -81,20 +82,23 @@ impl Models {
         ctx: &GpuContext,
         doc: &lumit_core::model::Document,
         item: uuid::Uuid,
+        settings: &ModelSettings,
+        scene: &lumit_scene::ModelScene,
     ) -> Option<(Arc<Distances>, u32)> {
-        if let Some((_, d, at)) = self.list.iter().find(|m| m.0 == item) {
+        let take = crate::model_motion::clip_of(settings, scene).map(|clip| clip.name.clone());
+        if let Some((.., d, at)) = self.list.iter().find(|m| m.0 == item && m.1 == take) {
             return Some((Arc::clone(d), *at));
         }
-        let d = distances::of(doc, item)?;
+        let d = distances::of(doc, item, settings)?;
         let at = self
             .list
             .last()
-            .map_or(0, |(_, d, at)| at + d.values.len() as u32);
-        self.list.push((item, Arc::clone(&d), at));
+            .map_or(0, |(.., d, at)| at + d.values.len() as u32);
+        self.list.push((item, take, Arc::clone(&d), at));
         let all: Vec<f32> = self
             .list
             .iter()
-            .flat_map(|(_, d, _)| d.values.iter().copied())
+            .flat_map(|(.., d, _)| d.values.iter().copied())
             .collect();
         self.buffer = Some(lumit_gpu::fx::particulate_sim::distances_buffer(ctx, &all));
         Some((d, at))
@@ -153,7 +157,7 @@ impl Models {
                 let Some(scene) = crate::model::scene(doc, *item) else {
                     continue;
                 };
-                let Some((d, first)) = self.add(ctx, doc, *item) else {
+                let Some((d, first)) = self.add(ctx, doc, *item, settings, &scene) else {
                     continue;
                 };
                 let size = (comp.width as f32, comp.height as f32);
