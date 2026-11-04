@@ -1459,11 +1459,16 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final playhead = ui.playheadFrame.value;
     final fx = style ? info.styles[index] : info.effects[index];
     final graphName = _graphNameOf(context, fx);
+    // A Clone deformer reads the Clone to points above it, which is in the
+    // stack rather than on its card.
+    final vectorReason = !style && fx.name == 'clone_deformer'
+        ? cloneVectorReason(info.effects, index, ui.model.layers)
+        : null;
     final open = _isOpen('fx-${fx.id}');
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
-    final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
+    final params = instanceParameters(fx);
     // An LFX effect with a page of its own, which the heading opens.
     final interface =
         !style && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
@@ -1489,6 +1494,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         ],
         fx.nodeGraphComp,
         info.trackCorrected,
+        vectorReason,
         graphName,
         open,
         renaming,
@@ -1515,6 +1521,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       ],
       card: () => _EffectSection(
         info: fx,
+        vectorReason: vectorReason,
         graphName: graphName,
         style: style,
         open: open,
@@ -2085,6 +2092,11 @@ class _EffectSection extends StatelessWidget {
   final UuidValue? clip;
   final LayerReference layer;
 
+  /// For a Clone deformer, why its Vector mode cannot be picked here, or null
+  /// where it can ([cloneVectorReason]). Read by the panel, which holds the
+  /// stack.
+  final ({String tip, String why})? vectorReason;
+
   /// Every layer in the comp, from the read model — what a layer-valued
   /// parameter picks from.
   final List<BridgeLayerEntry> allLayers;
@@ -2171,6 +2183,7 @@ class _EffectSection extends StatelessWidget {
     this.clip,
     required this.layer,
     required this.allLayers,
+    this.vectorReason,
     required this.comp,
     required this.playheadFrame,
     required this.onSeek,
@@ -2314,7 +2327,7 @@ class _EffectSection extends StatelessWidget {
   /// read model beside the values, because it is a fact about the instance and
   /// a fetch per card per rebuild is the traffic the budget test forbids.
   List<BridgeParamInfo> get _rows => relistedRows(
-        [...cachedListParameters(info.name), ...info.derivedParams],
+        instanceParameters(info),
         info.rowOptions,
       );
 
@@ -2496,7 +2509,17 @@ class _EffectSection extends StatelessWidget {
         // not doing anything (docs/12 §1, §2.3). An effect that is behaving
         // draws none of this.
         if (effectBadgeRow(context,
-                id: '$id', reason: info.badgeReason, detail: info.badgeDetail)
+                id: '$id',
+                // A Clone deformer set to Vector that cannot read outlines here
+                // says so, and why, as the effects that cannot run do.
+                reason: info.badgeReason ??
+                    (vectorReason != null &&
+                            info.values.any((v) =>
+                                v.id == 'mode' &&
+                                v.value == const BridgeEffectValue.choice(1))
+                        ? 'clone_vector_reads_picture'
+                        : null),
+                detail: info.badgeDetail ?? vectorReason?.why)
             case final badge?)
           badge,
         if (displayAt(playheadFrame) != null)
@@ -2647,6 +2670,7 @@ class _EffectSection extends StatelessWidget {
       ...disabledParams(info.name, shown),
       ...info.disabledRows,
     };
+    final whyDisabled = disabledReasons(info.name, shown);
 
     // The uniform Matte row and the Mix row: a Layer picker carries its Channel
     // and Invert beside it, a Mix slider its Blend, and no rider gets a row of
@@ -2690,6 +2714,11 @@ class _EffectSection extends StatelessWidget {
         onLive: onLive,
         twoColumn: true,
         enabled: !disabled.contains(param.id),
+        disabledReason: whyDisabled[param.id],
+        optionNote: (i) => optionNoteOf(info.name, param.id, i),
+        optionReason: info.name == 'clone_deformer' && param.id == 'mode'
+            ? (i) => i == 1 ? vectorReason?.tip : null
+            : null,
         // The effect's other values, for a control whose behaviour
         // depends on a sibling (the depth-of-field dropper reads the
         // effect's own `depth` layer).

@@ -155,6 +155,9 @@ void main() {
         gradientEndOpacity: const BridgeScalar.static_(100),
         gradientStops: const [],
         combine: 0,
+        hidden: false,
+        fillHidden: false,
+        strokeHidden: false,
         pathKeys: const [],
         taper: null,
       );

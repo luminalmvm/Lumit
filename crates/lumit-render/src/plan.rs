@@ -289,6 +289,13 @@ fn clone_moments_of(
     lt: f64,
 ) -> Vec<(Uuid, f64)> {
     use lumit_core::fx::effects::clone_to_points::CloneToPoints;
+    // Time loop's Source layer, at the moments the loop shows.
+    if e.effect.match_name == "time_loop" {
+        return lumit_core::fx::effects::time_loop::TimeLoop::planned(e, comp, t, lt)
+            .into_iter()
+            .filter(|(_, at)| at.to_bits() != t.to_bits())
+            .collect();
+    }
     if e.effect.match_name != "clone_to_points" {
         return Vec::new();
     }
@@ -2181,6 +2188,7 @@ mod tests {
         let graph = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -2217,6 +2225,7 @@ mod tests {
         let reader = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![
@@ -2286,6 +2295,7 @@ mod tests {
         let outer = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
@@ -2361,6 +2371,7 @@ mod tests {
             let comp = comp_of(
                 Vec::new(),
                 Some(CompGraph {
+                    widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
                     nodes,

@@ -943,6 +943,44 @@ impl BridgeExpressionRow {
     }
 }
 
+/// What a wire into `row` on `layer` carries at comp time `time`, or `None`
+/// when no wire drives it. The engine reads this in the row's place, so the
+/// interface shows it too (as copy 0, for a driver that reads the copy).
+fn driven_value(
+    layer: &LayerReference,
+    time: &BridgeRational,
+    row: Option<&BridgeExpressionRow>,
+) -> Option<f64> {
+    let Some(BridgeExpressionRow::Effect { effect, param }) = row else {
+        return None;
+    };
+    use lumit_core::graph::{InputRef, NodeRef};
+    let node = NodeRef::Effect(*effect);
+    let doc = document_for(layer)?;
+    let comp = doc.comp(layer.comp_id)?;
+    let owner = comp.layers.iter().find(|l| l.id == layer.layer_id)?;
+    owner.graph.wire_into(&InputRef::Param {
+        node: node.clone(),
+        port: param.clone(),
+    })?;
+    let t = Rational::new(time.num, time.den).unwrap_or(Rational::ZERO);
+    let lt = lumit_core::time::layer_time(t.to_f64(), owner.start_offset.0);
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(layer.comp_id),
+        layer: Some(layer.layer_id),
+        comp_time: t.to_f64(),
+        current_depth: 0,
+        inputs: None,
+    });
+    let resolved = lumit_core::fx::drivers::resolve_drivers(&owner.graph, lt, context, None);
+    match resolved.param(node, lumit_core::fx::params::ParamId::new(param))? {
+        lumit_core::fx::params::Value::Float(v) => Some(f64::from(v)),
+        lumit_core::fx::params::Value::Int(v) => Some(f64::from(v)),
+        _ => None,
+    }
+}
+
 #[frb(sync)]
 pub fn sample_scalar_with_context(
     scalar: BridgeScalar,
@@ -951,6 +989,10 @@ pub fn sample_scalar_with_context(
     held: Option<BridgeScalar>,
     row: Option<BridgeExpressionRow>,
 ) -> f64 {
+    // A wire wins over whatever the row holds, as it does in the render.
+    if let Some(v) = driven_value(&layer, &time, row.as_ref()) {
+        return v;
+    }
     let seconds = seconds_of(time);
     match scalar {
         BridgeScalar::Static(value) => value,
@@ -2361,6 +2403,8 @@ pub struct BridgeEffectInstanceInfo {
     /// The choice rows whose list a plugin has replaced, with the list to
     /// draw in place of the schema's.
     pub row_options: Vec<BridgeRowOptions>,
+    /// The rows drawn under another name right now, with that name.
+    pub row_labels: Vec<BridgeRowLabel>,
     /// The node graph this instance applies (docs/impl/node-graph-comp.md
     /// §4.4), and `None` for every other effect.
     ///
@@ -2863,6 +2907,14 @@ pub(crate) fn read_instance_info(
                 options,
             })
             .collect(),
+        row_labels: rows
+            .labels
+            .into_iter()
+            .map(|(id, label)| BridgeRowLabel {
+                id: id.to_owned(),
+                label: label.to_owned(),
+            })
+            .collect(),
         node_graph_comp: lumit_core::fx::effects::node_graph::comp_of(effect),
     }
 }
@@ -2873,6 +2925,15 @@ pub(crate) fn read_instance_info(
 pub struct BridgeRowOptions {
     pub id: String,
     pub options: Vec<String>,
+}
+
+/// A row drawn under another name (`RowState::labels`): Type fill's rows
+/// when its Direction is Columns.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeRowLabel {
+    pub id: String,
+    pub label: String,
 }
 
 impl BridgeEffectInstance {

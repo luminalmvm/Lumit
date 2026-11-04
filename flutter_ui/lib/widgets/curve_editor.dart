@@ -152,6 +152,11 @@ class CurveEditor extends StatefulWidget {
   /// own colour so a Red tab draws red (owner, desk test).
   final Color? line;
 
+  /// What the row does to x before the curve reads it, when it does
+  /// something: Stagger's Ease out and Ease in. The plot then also draws the
+  /// shape that comes out, in the accent colour, over the curve's own.
+  final double Function(double x)? warp;
+
   const CurveEditor({
     super.key,
     required this.points,
@@ -159,6 +164,7 @@ class CurveEditor extends StatefulWidget {
     required this.onCommit,
     this.size = 150,
     this.line,
+    this.warp,
   });
 
   @override
@@ -330,6 +336,7 @@ class _CurveEditorState extends State<CurveEditor> {
             diagonal: t.hairlineStrong,
             line: widget.line ?? t.textPrimary,
             knob: t.accent,
+            warp: widget.warp,
           ),
         ),
       ),
@@ -340,6 +347,7 @@ class _CurveEditorState extends State<CurveEditor> {
 class _CurvePainter extends CustomPainter {
   final List<List<double>> points;
   final Color plot, grid, diagonal, line, knob;
+  final double Function(double x)? warp;
 
   const _CurvePainter({
     required this.points,
@@ -348,6 +356,7 @@ class _CurvePainter extends CustomPainter {
     required this.diagonal,
     required this.line,
     required this.knob,
+    this.warp,
   });
 
   @override
@@ -391,6 +400,25 @@ class _CurvePainter extends CustomPainter {
         ..strokeWidth = 1.5,
     );
 
+    // The shape the eases make of it, the one the copies follow.
+    final warp = this.warp;
+    if (warp != null) {
+      final eased = Path();
+      for (var i = 0; i <= steps; i++) {
+        final x = i / steps;
+        final y = curveSample(points, warp(x));
+        final at = Offset(x * size.width, (1 - y) * size.height);
+        i == 0 ? eased.moveTo(at.dx, at.dy) : eased.lineTo(at.dx, at.dy);
+      }
+      canvas.drawPath(
+        eased,
+        Paint()
+          ..color = knob
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
+
     final fill = Paint()..color = knob;
     for (final p in points) {
       final at = Offset(p[0] * size.width, (1 - p[1]) * size.height);
@@ -400,7 +428,10 @@ class _CurvePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CurvePainter old) =>
-      old.line != line || old.knob != knob || !_same(old.points, points);
+      old.line != line ||
+      old.knob != knob ||
+      old.warp != warp ||
+      !_same(old.points, points);
 
   static bool _same(List<List<double>> a, List<List<double>> b) {
     if (a.length != b.length) return false;
@@ -739,4 +770,32 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
       ),
     );
   }
+}
+
+/// Stagger's ease, the engine's `siceliot::ease` to the bit's intent: `x`
+/// through the cubic Bézier from (0, 0) to (1, 1) whose handles lie flat, out
+/// of the start by [out] of the way across and into the end by [inn] (both
+/// 0 to 1). Both nought is a straight line, `x` itself.
+double staggerEase(double x, double out, double inn) {
+  out = out.clamp(0.0, 1.0);
+  inn = inn.clamp(0.0, 1.0);
+  if (out == 0 && inn == 0) return x;
+  final x1 = out;
+  final x2 = 1 - inn;
+  double bez(double a, double b, double s) {
+    final r = 1 - s;
+    return 3 * r * r * s * a + 3 * r * s * s * b + s * s * s;
+  }
+
+  // x rises with s, so halving finds the s whose x is the one asked for.
+  var lo = 0.0, hi = 1.0;
+  for (var i = 0; i < 32; i++) {
+    final mid = 0.5 * (lo + hi);
+    if (bez(x1, x2, mid) < x) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return bez(0, 1, 0.5 * (lo + hi));
 }

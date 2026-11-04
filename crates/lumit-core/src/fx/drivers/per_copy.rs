@@ -10,6 +10,14 @@ use crate::fx::points::{self, PointsStream};
 pub const COPY_SCALE: &str = "copy:scale";
 pub const COPY_ROTATION: &str = "copy:rotation";
 pub const COPY_OPACITY: &str = "copy:opacity";
+/// Scale x / y, Offset x / y (px@comp) and Tint per stamp.
+pub const COPY_SCALE_X: &str = "copy:scale_x";
+pub const COPY_SCALE_Y: &str = "copy:scale_y";
+pub const COPY_OFFSET_X: &str = "copy:offset_x";
+pub const COPY_OFFSET_Y: &str = "copy:offset_y";
+pub const COPY_TINT: &str = "copy:tint";
+/// Clone to points' Layer index per stamp.
+pub const COPY_LAYER_INDEX: &str = "copy:layer_index";
 
 /// The rows a driver can give each stamp its own value for, with the column
 /// each is written into.
@@ -17,6 +25,12 @@ pub const COPY_ROWS: &[(&str, &str)] = &[
     ("scale", COPY_SCALE),
     ("rotation", COPY_ROTATION),
     ("opacity", COPY_OPACITY),
+    ("scale_x", COPY_SCALE_X),
+    ("scale_y", COPY_SCALE_Y),
+    ("offset_x", COPY_OFFSET_X),
+    ("offset_y", COPY_OFFSET_Y),
+    ("tint", COPY_TINT),
+    ("layer_index", COPY_LAYER_INDEX),
 ];
 
 /// The named column `name` of `stream`, one value per point, or `row` for

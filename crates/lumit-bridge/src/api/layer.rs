@@ -41,6 +41,10 @@ pub(crate) enum InstanceHome {
     /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
     /// instance rather than a list, held in `Layer::graph_inputs`.
     GraphInputs,
+    /// The drivers on this layer's graph (`Layer::graph.nodes`), so a
+    /// driver's keys move, and its rows write, from the Timeline as an
+    /// effect's do.
+    Drivers,
 }
 
 /// The node graph `layer` places, when it places one.
@@ -222,6 +226,11 @@ pub struct BridgeShapeItem {
     /// them covers. The run that makes is drawn once, with the paint and the
     /// modifiers of the item that starts it.
     pub combine: u32,
+    /// The eyes: the item's own, and its fill's and outline's. Off leaves
+    /// that part out of the picture and keeps it.
+    pub hidden: bool,
+    pub fill_hidden: bool,
+    pub stroke_hidden: bool,
     /// This item's **shape** keys — empty when its path does not animate.
     /// Composition time, carried out by the layer's start offset
     /// exactly as a mask's path keys cross.
@@ -288,6 +297,9 @@ impl BridgeShapeItem {
             name: item.name.clone(),
             vertices: item.path.vertices.iter().map(BridgeVertex::read).collect(),
             closed: item.path.closed,
+            hidden: item.hidden,
+            fill_hidden: item.fill_hidden,
+            stroke_hidden: item.stroke_hidden,
             fill: crate::shape_paint::read(item.fill.as_ref(), offset),
             stroke: crate::shape_paint::read(item.stroke.as_ref(), offset),
             stroke_width: BridgeScalar::read_at(&item.stroke_width, offset),
@@ -368,6 +380,9 @@ impl BridgeShapeItem {
                 None => self.sent_path(),
             },
             primitive,
+            hidden: self.hidden,
+            fill_hidden: self.fill_hidden,
+            stroke_hidden: self.stroke_hidden,
             fill: crate::shape_paint::write(self.fill.as_ref(), offset)?,
             stroke: crate::shape_paint::write(self.stroke.as_ref(), offset)?,
             stroke_width: clamped_property(&self.stroke_width, offset, 0.0, 10_000.0)?,
@@ -1723,6 +1738,11 @@ pub struct BridgeLayerInfo {
     /// paste would land. Empty on nearly every layer, which is what makes
     /// carrying it here free.
     pub styles: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// The drivers on the layer's Node graph, the same shape as
+    /// [`Self::effects`], for the Timeline's Drivers heading: read with the
+    /// rest of the drawing data rather than asked for per redraw. Empty on
+    /// nearly every layer.
+    pub drivers: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
     /// A placed node graph's **Inputs** (docs/impl/node-graph-comp.md §5.3):
     /// the `node_graph` instance bound to the comp this Precomp layer places,
     /// with its Inputs copy refreshed from the live graph as every clone's is.
@@ -2095,6 +2115,15 @@ pub(crate) fn read_layer_info(
                     layer.start_offset.0,
                     !layer.is_adjustment(),
                 )
+            })
+            .collect(),
+        drivers: layer
+            .graph
+            .nodes
+            .iter()
+            .map(|d| {
+                crate::api::effect::BridgeEffectInstance::new(d.clone(), layer.start_offset.0)
+                    .get_info()
             })
             .collect(),
         graph_inputs: layer.graph_inputs.as_ref().map(|inputs| {
@@ -4422,10 +4451,24 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Shape { .. } = self.item()?.kind else {
             return Err(BridgeError::NotShape);
         };
-        contents.push(crate::api::shape::BridgeShapeEntry {
-            depth: 0,
-            kind: crate::api::shape::BridgeShapeEntryKind::Item(item),
-        });
+        // Above the global modifiers at the end, so they act on it too.
+        let at = contents.len()
+            - contents
+                .iter()
+                .rev()
+                .take_while(|e| {
+                    e.depth == 0
+                        && matches!(&e.kind,
+                            crate::api::shape::BridgeShapeEntryKind::Modifier(m) if !m.own)
+                })
+                .count();
+        contents.insert(
+            at,
+            crate::api::shape::BridgeShapeEntry {
+                depth: 0,
+                kind: crate::api::shape::BridgeShapeEntryKind::Item(item),
+            },
+        );
         self.set_shape_contents(contents, None)
     }
 
@@ -7660,6 +7703,17 @@ impl LayerReference {
             // closure is the same closure the other three homes take. An edit
             // that empties the list clears the Inputs, which is what removing
             // them means.
+            // The whole graph rewritten with only its nodes changed, as
+            // `set_graph` commits it: one op, one undo step.
+            InstanceHome::Drivers => {
+                let mut graph = self.item()?.graph;
+                edit(&mut graph.nodes)?;
+                lumit_core::ops::Op::SetLayerGraph {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    graph: Box::new(graph),
+                }
+            }
             InstanceHome::GraphInputs => {
                 let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
                 edit(&mut list)?;
@@ -7705,6 +7759,9 @@ impl LayerReference {
         }
         if layer.styles.iter().any(|s| s.id == id) {
             return Ok(InstanceHome::Styles);
+        }
+        if layer.graph.nodes.iter().any(|d| d.id == id) {
+            return Ok(InstanceHome::Drivers);
         }
         if let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind {
             if let Some(clip) = clips.iter().find(|c| c.effects.iter().any(|e| e.id == id)) {
@@ -8512,10 +8569,13 @@ impl LayerReference {
 
         // An effect qualifies when a parameter of it is keyframed; for
         // Modified, its mere presence qualifies it — a layer with an effect on
-        // it has been modified, whatever the parameters say.
+        // it has been modified, whatever the parameters say. The drivers on
+        // the layer's graph count the same way, so a keyed Stagger reveals
+        // its layer; the panel tells their ids from the stack's.
         let effects: Vec<String> = layer
             .effects
             .iter()
+            .chain(&layer.graph.nodes)
             .filter(|fx| match kind {
                 BridgeRevealKind::Modified => true,
                 BridgeRevealKind::Animated => fx.params.iter().any(|p| match &p.value {

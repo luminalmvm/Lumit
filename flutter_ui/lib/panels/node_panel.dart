@@ -738,8 +738,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // nested Node graph box's Input rows arrive that way, as they do in
     // Effect controls.
     final params = [
-      ...cachedListParameters(picked.info.name),
-      ...picked.info.derivedParams,
+      ...instanceParameters(picked.info),
     ];
 
     // **A point is one row, here as everywhere**. An `_x`/`_y` pair of

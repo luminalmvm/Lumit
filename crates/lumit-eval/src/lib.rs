@@ -1230,6 +1230,40 @@ fn feed_effect_stack(
                 }
             }
         }
+        // Time loop shows its Source layer at the loop's moments, which the
+        // row values alone do not name: the source at those moments joins.
+        if allow_after_effects_refs && e.effect.match_name == "time_loop" {
+            h.update(b"time-loop/");
+            for (layer, at) in
+                lumit_core::fx::effects::time_loop::TimeLoop::planned(e, comp, t, lt)
+            {
+                feed_f64(h, at);
+                let Some(src) = comp.layers.iter().find(|l| l.id == layer) else {
+                    continue;
+                };
+                if at < src.in_point.0.to_f64() || at >= src.out_point.0.to_f64() {
+                    h.update(&[0]);
+                    continue;
+                }
+                h.update(&[1]);
+                let slt = lumit_core::time::layer_time(at, src.start_offset.0);
+                feed_source(h, doc, comp, src, slt, at, quality, stamper, visited)?;
+                feed_effect_stack(
+                    h,
+                    src.switches.fx,
+                    &src.effects,
+                    Some(src),
+                    comp,
+                    doc,
+                    at,
+                    slt,
+                    quality,
+                    stamper,
+                    visited,
+                    false,
+                )?;
+            }
+        }
         // An expression is read about its layer at this moment, as the builder
         // reads it. Without that it ran detached, so `time` and anything naming
         // a layer gave the same number on every frame, and the stale frame was
@@ -3105,6 +3139,7 @@ mod tests {
         let wiggle_id = wiggle.id;
 
         let wired = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             out_unwired: false,
@@ -3573,6 +3608,8 @@ mod tests {
                     id: Uuid::now_v7(),
                     name: kind.label().into(),
                     kind,
+                    hidden: false,
+                    own: false,
                 })
             }));
             layer.kind = LayerKind::Shape { contents };
@@ -4917,6 +4954,7 @@ mod tests {
         let fx_id = fx.id;
         let mut comp = comp_with(Vec::new());
         comp.graph = Some(CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             nodes: vec![

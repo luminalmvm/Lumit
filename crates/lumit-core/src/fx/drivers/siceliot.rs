@@ -75,6 +75,32 @@ pub struct Stagger {
     #[curve(label = "Curve", default = [[0.0, 0.0], [1.0, 1.0]])]
     pub curve: CurvePoints,
 
+    /// How slowly the run leaves the first copy, per cent: the curve's
+    /// handle out of its start, laid flat. Keyframe it to animate the shape.
+    #[slider(
+        label = "Ease out",
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub ease_out: f32,
+
+    /// How slowly the run reaches the last copy, per cent: the handle into
+    /// its end.
+    #[slider(
+        label = "Ease in",
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub ease_in: f32,
+
     /// Moves the run along the copies, as a share of them. Keyframe it to
     /// send a wave through the copies.
     #[slider(label = "Offset", min = -100.0, max = 100.0, default = 0.0, unit = Percent)]
@@ -125,8 +151,36 @@ pub fn stagger(p: &Stagger, norm: f32) -> f32 {
     } else {
         t.clamp(0.0, 1.0)
     };
+    let t = ease(t, p.ease_out / 100.0, p.ease_in / 100.0);
     let shaped = cpu::curve_at(t, &cpu::curve_table(&p.curve));
     between(p.minimum, p.maximum, shaped)
+}
+
+/// `t` through the cubic Bézier from (0, 0) to (1, 1) whose handles lie flat:
+/// out of the start by `out` of the way across, into the end by `inn`. Both
+/// nought is a straight line, `t` itself.
+#[must_use]
+pub fn ease(t: f32, out: f32, inn: f32) -> f32 {
+    let (out, inn) = (out.clamp(0.0, 1.0), inn.clamp(0.0, 1.0));
+    if out == 0.0 && inn == 0.0 {
+        return t;
+    }
+    let (x1, x2) = (out, 1.0 - inn);
+    let bez = |a: f32, b: f32, s: f32| {
+        let r = 1.0 - s;
+        3.0 * r * r * s * a + 3.0 * r * s * s * b + s * s * s
+    };
+    // x rises with s, so halving finds the s whose x is t.
+    let (mut lo, mut hi) = (0.0f32, 1.0f32);
+    for _ in 0..32 {
+        let mid = 0.5 * (lo + hi);
+        if bez(x1, x2, mid) < t {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    bez(0.0, 1.0, 0.5 * (lo + hi))
 }
 
 // ----------------------------------------------------------------- Random
@@ -512,6 +566,120 @@ pub fn value_noise(p: &ValueNoise, index: u32, point: Option<[f32; 2]>, lt: f64)
     between(p.minimum, p.maximum, 0.5 * (sum / weight + 1.0))
 }
 
+// ------------------------------------------------------------------ Value
+
+/// Value's control.
+#[derive(Debug, Clone, Copy, PartialEq, Effect)]
+#[effect(
+    match_name = "value",
+    label = "Value",
+    version = 1,
+    category = SiceliotDrivers,
+    cost = Trivial,
+    roi = Exact,
+    matte = false,
+)]
+pub struct ValueNode {
+    /// The number it hands out. Keyframe it once and wire it into as many
+    /// parameters as should move together.
+    #[slider(label = "Value", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
+    pub value: f32,
+}
+
+/// Value's behaviour.
+pub struct ValueNodeDef;
+
+impl EffectDef for ValueNodeDef {
+    fn schema(&self) -> &'static EffectSchema {
+        &<ValueNode as EffectMetadata>::SCHEMA
+    }
+
+    fn is_image_op(&self) -> bool {
+        false
+    }
+
+    fn signature(&self) -> Signature {
+        Signature::Data {
+            inputs: &[],
+            outputs: VALUE_OUT,
+        }
+    }
+
+    fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
+        push(VALUE_PORT, Value::Float(ValueNode::read(cx.params).value));
+    }
+}
+
+// ------------------------------------------------------------------- Time
+
+/// Time's controls.
+#[derive(Debug, Clone, Copy, PartialEq, Effect)]
+#[effect(
+    match_name = "time",
+    label = "Time",
+    version = 1,
+    category = SiceliotDrivers,
+    cost = Trivial,
+    roi = Exact,
+    matte = false,
+)]
+pub struct TimeNode {
+    /// Whether it counts in seconds or in the comp's frames.
+    #[choice(label = "Units", options = TIME_UNITS, default = 0)]
+    pub units: u32,
+
+    /// How fast it counts: 2 is twice as fast, a negative number counts down.
+    #[slider(label = "Speed", min = -10.0, max = 10.0, default = 1.0, unit = Raw)]
+    pub speed: f32,
+
+    /// Added after Speed, in the chosen units.
+    #[slider(label = "Offset", min = -1000.0, max = 1000.0, default = 0.0, unit = Raw)]
+    pub offset: f32,
+}
+
+/// What Time counts in.
+pub const TIME_UNITS: &[&str] = &["Seconds", "Frames"];
+
+/// Time's behaviour.
+pub struct TimeNodeDef;
+
+impl EffectDef for TimeNodeDef {
+    fn schema(&self) -> &'static EffectSchema {
+        &<TimeNode as EffectMetadata>::SCHEMA
+    }
+
+    fn is_image_op(&self) -> bool {
+        false
+    }
+
+    fn signature(&self) -> Signature {
+        Signature::Data {
+            inputs: &[],
+            outputs: VALUE_OUT,
+        }
+    }
+
+    fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
+        let ctx = cx.context;
+        let fps = ctx
+            .comp
+            .and_then(|id| ctx.document.comp(id))
+            .map_or(0.0, |c| c.frame_rate.fps());
+        push(
+            VALUE_PORT,
+            Value::Float(time_value(&TimeNode::read(cx.params), cx.lt, fps)),
+        );
+    }
+}
+
+/// The layer time `lt` counted in Time's units (frames at `fps`), times
+/// Speed, plus Offset. Without a comp, frames read as seconds.
+#[must_use]
+pub fn time_value(p: &TimeNode, lt: f64, fps: f64) -> f32 {
+    let count = if p.units == 1 && fps > 0.0 { lt * fps } else { lt };
+    (count * f64::from(p.speed) + f64::from(p.offset)) as f32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -521,6 +689,8 @@ mod tests {
             minimum: 10.0,
             maximum: 50.0,
             curve: CurvePoints::sanitised(&curve),
+            ease_out: 0.0,
+            ease_in: 0.0,
             offset: 0.0,
             looped: false,
             reverse: false,
@@ -538,6 +708,12 @@ mod tests {
         assert!((stagger(&s, 0.0) - 10.0).abs() < 1e-3);
         assert!((stagger(&s, 0.5) - 30.0).abs() < 0.5);
         assert!((stagger(&s, 1.0) - 50.0).abs() < 1e-3);
+        let mut e = s;
+        (e.ease_out, e.ease_in) = (100.0, 100.0);
+        assert!((stagger(&e, 0.5) - 30.0).abs() < 0.5, "a symmetric ease keeps the middle");
+        assert!(stagger(&e, 0.2) < 15.0, "eased out of the first copy");
+        assert!(stagger(&e, 0.8) > 45.0, "eased into the last copy");
+        assert!((stagger(&e, 1.0) - 50.0).abs() < 1e-3);
         let mut r = s;
         r.reverse = true;
         assert!((stagger(&r, 0.0) - 50.0).abs() < 1e-3);
@@ -672,5 +848,18 @@ mod tests {
             .fold(0.0f32, f32::max);
         assert!(near < 0.05, "neighbours differ by {near}");
         assert!(far > 0.1, "far points differ by at most {far}");
+    }
+
+    #[test]
+    fn time_counts_seconds_or_frames_with_speed_and_offset() {
+        let p = TimeNode {
+            units: 0,
+            speed: 2.0,
+            offset: 1.0,
+        };
+        assert!((time_value(&p, 1.5, 24.0) - 4.0).abs() < 1e-6);
+        let frames = TimeNode { units: 1, ..p };
+        assert!((time_value(&frames, 1.5, 24.0) - 73.0).abs() < 1e-4);
+        assert!((time_value(&frames, 1.5, 0.0) - 4.0).abs() < 1e-6, "no comp: seconds");
     }
 }

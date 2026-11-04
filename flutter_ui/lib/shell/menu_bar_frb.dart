@@ -1522,6 +1522,7 @@ List<MenuSection> lumitMenus(
           ]
     ),
     (title: l10n.menuEffect, items: () => _effectMenu(app, ui, layers)),
+    (title: l10n.fxDrivers, items: () => _driverMenu(app, ui, layers)),
     (
       title: l10n.menuAnimation,
       items: () => [
@@ -1928,6 +1929,40 @@ Map<String, List<BridgeEffectInfo>> _effectGroups() =>
     }();
 
 Map<String, List<BridgeEffectInfo>>? _effectGroupsCache;
+
+/// The Drivers menu: every driver, under its own heading (Siceliot's among
+/// them), added to the first selected layer's Node graph unwired, as the
+/// Graph panel's search adds one.
+List<MenuEntry> _driverMenu(
+        LumitState app, LumitUiState ui, List<LayerReference> layers) =>
+    [
+      for (final group in _driverGroups().entries)
+        MenuEntry.submenu(engineLabel(group.key), [
+          for (final driver in group.value)
+            MenuEntry(
+              engineLabel(driver.label),
+              layers.isEmpty
+                  ? null
+                  : () {
+                      ui.addEffect(layers.first, driver.name);
+                      app.notifyDocumentChanged();
+                    },
+            ),
+        ]),
+    ];
+
+/// Every driver, grouped by its heading, each group sorted by name. Read
+/// once, for [_effectGroups]' reason.
+Map<String, List<BridgeEffectInfo>> _driverGroups() =>
+    _driverGroupsCache ??= () {
+      final groups = <String, List<BridgeEffectInfo>>{};
+      for (final driver in listDrivers()) {
+        groups.putIfAbsent(driver.categoryLabel, () => []).add(driver);
+      }
+      return groups..forEach((_, drivers) => drivers.sort(byEffectLabel));
+    }();
+
+Map<String, List<BridgeEffectInfo>>? _driverGroupsCache;
 
 /// Whether this layer is a row of clips: a Sequence layer, or an audio row,
 /// which answers Audio because audio_only is looked at before the kind is

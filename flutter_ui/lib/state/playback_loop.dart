@@ -37,7 +37,11 @@
   required int lastFrame,
 }) {
   final start = workStart ?? 0;
-  final end = workEnd ?? lastFrame;
+  // A work area that ends on the comp's own end (the out point is a time, so
+  // the frame it names is one past the last) ends on the last frame: the
+  // playhead never reaches a frame the comp does not have, so the loop never
+  // turned and playback stopped at the end instead.
+  final end = workEnd == null || workEnd > lastFrame ? lastFrame : workEnd;
   // A span with no room in it is not a loop — it would restart on every frame.
   if (end <= start) return null;
   // Parked past the end: preview from there, do not snap back inside.

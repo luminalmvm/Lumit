@@ -317,6 +317,7 @@ impl OfxEffectDef {
                 .iter()
                 .filter_map(|route| Some((route.row, controls.options.get(&route.name)?.clone())))
                 .collect(),
+            labels: Vec::new(),
         }
     }
 

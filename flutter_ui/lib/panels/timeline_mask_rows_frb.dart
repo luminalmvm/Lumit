@@ -632,6 +632,14 @@ class ItemOpacityRow extends StatefulWidget {
   /// Delete — a shape item's Add and Remove. Handed the menu's close.
   final List<Widget> Function(VoidCallback close)? menuRows;
 
+  /// The rows an **Add** button beside the name opens, After Effects' "Add ▸"
+  /// on a shape's own entry rather than only on Contents. Null draws none.
+  final List<Widget> Function(VoidCallback close)? addRows;
+
+  /// Draws a **Remove** button beside the name, which runs [onDelete]: a
+  /// shape modifier's. False draws none.
+  final bool removeButton;
+
   /// A twirl before the icon, for an item with rows of its own under it — a
   /// shape item. Null draws none.
   final bool open;
@@ -659,6 +667,8 @@ class ItemOpacityRow extends StatefulWidget {
     required this.deleteLabel,
     this.extra,
     this.menuRows,
+    this.addRows,
+    this.removeButton = false,
     this.open = false,
     this.onToggle,
     this.renameRequest,
@@ -767,6 +777,29 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
             widget.extra!,
             const SizedBox(width: 6),
           ],
+          if (widget.addRows case final rows?) ...[
+            RowButton(
+              key: ValueKey<String>('${widget.keyPrefix}-add-button-${widget.id}'),
+              label: l10n.shapeOpAdd,
+              arrow: true,
+              onTap: (at) => showMenuAt<void>(
+                context: context,
+                position: at,
+                width: 150,
+                rows: (close) => rows(() => close(null)),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          if (widget.removeButton) ...[
+            RowButton(
+              key: ValueKey<String>(
+                  '${widget.keyPrefix}-remove-button-${widget.id}'),
+              label: l10n.shapeOpRemove,
+              onTap: (_) => widget.onDelete(),
+            ),
+            const SizedBox(width: 6),
+          ],
           SizedBox(
             width: widget.valueColumn.width,
             child: Row(
@@ -833,6 +866,46 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
           child: Text(widget.deleteLabel),
         ),
       ],
+    );
+  }
+}
+
+/// A small word-button on an item row, in the accent: Add, with the arrow
+/// After Effects draws after it, or Remove.
+class RowButton extends StatelessWidget {
+  final String label;
+  final bool arrow;
+  final void Function(Offset at) onTap;
+
+  const RowButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.arrow = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return HoverMark(
+      builder: (context, lit) {
+        final colour = Color.lerp(t.accent, t.accentHover, lit)!;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: (details) => onTap(details.globalPosition),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: t.small.copyWith(color: colour)),
+              if (arrow) ...[
+                const SizedBox(width: 2),
+                glyph.LumitIcon(LumitIcons.expand,
+                    size: iconSize, colour: colour),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

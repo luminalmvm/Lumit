@@ -50,6 +50,7 @@ import '../theme/motion.dart';
 import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../widgets/controls.dart';
 import 'window_frame.dart';
 
@@ -640,6 +641,11 @@ class _ToolOptions extends StatelessWidget {
           label: l10n.toolFill,
           colour: tools.fill,
           onPicked: (colour) => tools.fill = colour,
+          // None is for shapes: text and paint always lay a colour down.
+          on: shows != ToolOptions.shape || tools.fillOn,
+          onToggle: shows == ToolOptions.shape
+              ? (on) => tools.fillOn = on
+              : null,
         ),
         const SizedBox(width: 6),
         if (shows == ToolOptions.paint) ...[
@@ -727,6 +733,10 @@ class _ToolOptions extends StatelessWidget {
             label: l10n.toolStroke,
             colour: tools.stroke,
             onPicked: (colour) => tools.stroke = colour,
+            on: shows != ToolOptions.shape || tools.strokeOn,
+            onToggle: shows == ToolOptions.shape
+                ? (on) => tools.strokeOn = on
+                : null,
           ),
           const SizedBox(width: 6),
           _Number(
@@ -793,39 +803,88 @@ class _Number extends StatelessWidget {
 }
 
 /// A colour well that opens the picker. [onPicked] null draws it inert.
+///
+/// With [onToggle] the label is a control of its own, in the accent: a click
+/// on it picks Solid colour or None, as After Effects' Fill and Stroke labels
+/// do, and a well that is off wears the None slash.
 class _Swatch extends StatelessWidget {
   final String label;
   final ToolColour colour;
   final ValueChanged<ToolColour>? onPicked;
+  final bool on;
+  final ValueChanged<bool>? onToggle;
 
   const _Swatch({
     required this.label,
     required this.colour,
     required this.onPicked,
+    this.on = true,
+    this.onToggle,
   });
+
+  Widget _label(LumitTheme t) {
+    final toggle = onToggle;
+    if (toggle == null) {
+      return Text(label, style: t.small.copyWith(color: t.textSecondary));
+    }
+    Widget row(String key, String text, bool value, void Function(void) close) =>
+        MenuRow(
+          key: ValueKey<String>('tool-swatch-$key'),
+          selected: on == value,
+          onPressed: () {
+            close(null);
+            toggle(value);
+          },
+          child: Text(text),
+        );
+    return LumitTooltip(
+      message: l10n.tipSwatchKind(label),
+      child: HoverMark(
+        builder: (context, lit) => GestureDetector(
+          onTapUp: (details) => showMenuAt<void>(
+            context: context,
+            position: details.globalPosition,
+            rows: (close) => [
+              row('solid', l10n.toolSolidColour, true, close),
+              row('none', l10n.none, false, close),
+            ],
+          ),
+          child: Text(label,
+              style: t.small.copyWith(
+                  color: Color.lerp(t.accent, t.accentHover, lit))),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    Widget well(double lit) => Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            color: on
+                ? PickedColour(colour.r, colour.g, colour.b).clipped
+                : t.surface1,
+            border: Border.all(
+                color:
+                    Color.lerp(t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: on ? null : CustomPaint(painter: _NoneSlash(t.error)),
+        );
+    // With a label of its own to click, the well alone opens the picker.
+    final split = onToggle != null;
     Widget row(double lit) => Row(
           children: [
-            Text(label, style: t.small.copyWith(color: t.textSecondary)),
+            _label(t),
             const SizedBox(width: 5),
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: PickedColour(colour.r, colour.g, colour.b).clipped,
-                border: Border.all(
-                    color:
-                        Color.lerp(t.hairlineStrong, t.textPrimary, 0.7 * lit)!),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
+            well(lit),
           ],
         );
     if (onPicked == null) return row(0);
-    return LumitTooltip(
+    final picker = LumitTooltip(
       message: l10n.tipSwatchColour(label),
       child: HoverMark(
         builder: (context, lit) => GestureDetector(
@@ -834,15 +893,43 @@ class _Swatch extends StatelessWidget {
             position: details.globalPosition,
             initial: PickedColour(colour.r, colour.g, colour.b),
             scale: ColourScale.bytes,
-            onCommit: (picked) => onPicked!(
-              ToolColour(picked.r, picked.g, picked.b),
-            ),
+            onCommit: (picked) {
+              onPicked!(ToolColour(picked.r, picked.g, picked.b));
+              // Picking a colour is asking for one.
+              onToggle?.call(true);
+            },
           ),
-          child: row(lit),
+          child: split ? well(lit) : row(lit),
         ),
       ),
     );
+    if (!split) return picker;
+    return Row(
+      children: [
+        _label(t),
+        const SizedBox(width: 5),
+        picker,
+      ],
+    );
   }
+}
+
+/// The red diagonal a None well wears, as in After Effects.
+class _NoneSlash extends CustomPainter {
+  final Color colour;
+  const _NoneSlash(this.colour);
+
+  @override
+  void paint(Canvas canvas, Size size) => canvas.drawLine(
+        Offset(size.width - 2, 2),
+        Offset(2, size.height - 2),
+        Paint()
+          ..color = colour
+          ..strokeWidth = 1.5,
+      );
+
+  @override
+  bool shouldRepaint(_NoneSlash old) => old.colour != colour;
 }
 
 /// A hairline seam on the strip, turned on its side for the rail.

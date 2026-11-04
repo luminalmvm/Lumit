@@ -16,6 +16,10 @@ struct Params {
     spread: u32,
     /// @choice("Inside layer", "Whole frame") @default("Inside layer") Paint
     paint: u32,
+    /// @slider(0, 100) @default(0) Scatter
+    scatter: f32,
+    /// @seed Seed
+    seed: u32,
     /// @choice("Linear", "Smooth", "Constant") @default("Linear") Interpolation
     interpolation: u32,
     /// @counter(2, 5) @default(3) Stops
@@ -97,6 +101,24 @@ fn sc_paint(uv: vec2<f32>, c: vec4<f32>) -> vec4<f32> {
     return c;
 }
 
+// Scatter jiggles t by a hair per pixel, per cent of the ramp: grain, and
+// the cure for the bands a long, shallow ramp shows on an 8-bit display.
+fn sc_scatter(t: f32, q: vec2<f32>) -> f32 {
+    if (p.scatter <= 0.0) {
+        return t;
+    }
+    let c = vec2<i32>(floor(q));
+    var h = (bitcast<u32>(c.x) * 0x8da6b343u) ^ (bitcast<u32>(c.y) * 0xd8163841u);
+    h ^= (p.seed * 0x9e3779b9u) ^ lumit.seed;
+    h ^= h >> 16u;
+    h *= 0x7feb352du;
+    h ^= h >> 15u;
+    h *= 0x846ca68bu;
+    h ^= h >> 16u;
+    let r = f32(h >> 8u) / 16777216.0;
+    return t + (r - 0.5) * p.scatter / 100.0;
+}
+
 // ---- The SICELIOT ramp: the same text in every SICELIOT gradient ----
 
 // The first Stops colours, sorted by Position, read at t (0 to 1).
@@ -144,6 +166,6 @@ fn sc_ramp(t: f32) -> vec4<f32> {
 
 fn shade(uv: vec2<f32>) -> vec4<f32> {
     let hit = cg_cone(lumit_px(uv));
-    let c = select(vec4<f32>(0.0), sc_ramp(sc_spread(hit.x)), hit.y > 0.5);
+    let c = select(vec4<f32>(0.0), sc_ramp(sc_spread(sc_scatter(hit.x, lumit_px(uv)))), hit.y > 0.5);
     return sc_paint(uv, c);
 }

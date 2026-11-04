@@ -132,12 +132,20 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// (`LayerReference.getClipEffects`), and that its keys are in clip time, so
   /// the lane draws them a clip's start along.
   final UuidValue? clip;
+
+  /// Whether this row is one of the layer's **drivers** (the Node graph's
+  /// boxes) rather than an effect: the styles bit's pattern again. What
+  /// differs is the path prefix ([driversPath]) and that a write reads the
+  /// layer's graph nodes; the commit routes to the graph by the engine's
+  /// shared instance lookup.
+  final bool driver;
   const FoldEffectParamRow(this.info, this.param, this.value,
       {required int depth,
       this.driven,
       this.style = false,
       this.group,
-      this.clip})
+      this.clip,
+      this.driver = false})
       : super(depth);
 }
 
@@ -815,6 +823,23 @@ final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
 }
 
+/// The keys of the first keyed channel of a multi-channel effect value, or
+/// none.
+List<BridgeKeyframe> firstKeys(List<BridgeScalar> channels) {
+  for (final c in channels) {
+    if (c case BridgeScalar_Keyframed(:final field0)) return field0;
+  }
+  return const [];
+}
+
+/// The channel a multi-channel effect value is read by: the first keyed one,
+/// else the first with an expression, else the first.
+BridgeScalar leadScalar(List<BridgeScalar> channels) =>
+    channels.firstWhere((c) => c is BridgeScalar_Keyframed,
+        orElse: () => channels.firstWhere(
+            (c) => c is BridgeScalar_Expression,
+            orElse: () => channels.first));
+
 /// The keyframes a fold row shows as diamonds on its lane (docs/07 §4.3), or
 /// empty for rows with nothing keyed. A multi-axis transform row reads its
 /// lead axis: the axes key together, so one axis's times are the row's.
@@ -846,6 +871,12 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
             field0: BridgeScalar_Keyframed(:final field0)
           ) =>
             field0,
+          // A Colour's and a Point's channels key together, from one
+          // stopwatch, so the first keyed channel's times are the row's.
+          BridgeEffectValue_Colour(:final field0) =>
+            firstKeys([field0.r, field0.g, field0.b, field0.a]),
+          BridgeEffectValue_Point(:final field0) =>
+            firstKeys([field0.x, field0.y]),
           _ => const [],
         },
       // A mask's numbers key like any other scalar; its **shape** keys as whole
@@ -1057,6 +1088,10 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
       FoldFlowRow(:final rate) => rate,
       FoldEffectParamRow(value: BridgeEffectValue_Float(:final field0)) =>
         field0,
+      FoldEffectParamRow(value: BridgeEffectValue_Colour(:final field0)) =>
+        leadScalar([field0.r, field0.g, field0.b, field0.a]),
+      FoldEffectParamRow(value: BridgeEffectValue_Point(:final field0)) =>
+        leadScalar([field0.x, field0.y]),
       FoldMaskValueRow(:final mask, :final value, :final vertex) =>
         value == MaskValue.path ? null : maskScalarOf(mask, value, vertex),
       FoldStrokeValueRow(:final stroke, :final value) =>
@@ -1571,6 +1606,9 @@ BridgeShapeItem shapeItemWith(
   bool removeTaper = false,
   bool removeFill = false,
   bool removeStroke = false,
+  bool? hidden,
+  bool? fillHidden,
+  bool? strokeHidden,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
@@ -1633,6 +1671,9 @@ BridgeShapeItem shapeItemWith(
           _ => item.gradientStops,
         },
     combine: combine ?? item.combine,
+    hidden: hidden ?? item.hidden,
+    fillHidden: fillHidden ?? item.fillHidden,
+    strokeHidden: strokeHidden ?? item.strokeHidden,
     pathKeys: item.pathKeys,
     // Writing a dash or a gap into an item that has neither makes the pair:
     // there is no separate "add dashes" gesture, and a list of one would only
@@ -1769,7 +1810,7 @@ BridgeScalar modifierScalarOf(BridgeShapeModifier modifier, ShapeValue value) =>
 /// [modifier] with the one number [value] names replaced by [to], or with
 /// its deform reading set to [deformMode].
 BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
-    {ShapeValue? value, BridgeScalar? to, int? deformMode}) {
+    {ShapeValue? value, BridgeScalar? to, int? deformMode, bool? hidden}) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
   final kind = switch (modifier.kind) {
@@ -1814,7 +1855,12 @@ BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
         endOpacity: at(ShapeValue.repeatEndOpacity, field0.endOpacity),
       )),
   };
-  return BridgeShapeModifier(id: modifier.id, name: modifier.name, kind: kind);
+  return BridgeShapeModifier(
+      id: modifier.id,
+      name: modifier.name,
+      kind: kind,
+      hidden: hidden ?? modifier.hidden,
+      own: modifier.own);
 }
 
 /// The whole list with the one number [row] names replaced by [to]: on its
@@ -1949,6 +1995,7 @@ bool moveLaneKeys({
         :final param,
         :final style,
         :final group,
+        :final driver,
         clip: final clipId
       ):
       // Whichever list holds it — a style's keys move exactly as an effect's
@@ -1961,12 +2008,43 @@ bool moveLaneKeys({
       } else if (group != null) {
         if (comp == null) return false;
         stack = comp.getGroupEffects(group: group);
+      } else if (driver) {
+        stack = entry.layer.getGraphDrivers();
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
+      // Every keyed channel of a Colour or a Point moves, or none.
+      BridgeScalar? movedChannel(BridgeScalar s) => switch (s) {
+            BridgeScalar_Keyframed(:final field0) => switch (moved(field0)) {
+                final next? => BridgeScalar.keyframed(next),
+                null => null,
+              },
+            _ => s,
+          };
       for (final instance in stack) {
         if (instance.id() != info.id) continue;
         final value = instance.getValue(id: param.id);
+        if (value case BridgeEffectValue_Colour(field0: final c)) {
+          final ch = [c.r, c.g, c.b, c.a].map(movedChannel).toList();
+          if (ch.any((s) => s == null)) return false;
+          instance.setValue(
+            id: param.id,
+            value: BridgeEffectValue.colour(
+                BridgeColour(r: ch[0]!, g: ch[1]!, b: ch[2]!, a: ch[3]!)),
+          );
+          entry.layer.setEffects(effects: stack);
+          return true;
+        }
+        if (value case BridgeEffectValue_Point(field0: final p)) {
+          final ch = [p.x, p.y].map(movedChannel).toList();
+          if (ch.any((s) => s == null)) return false;
+          instance.setValue(
+            id: param.id,
+            value: BridgeEffectValue.point(BridgePoint(x: ch[0]!, y: ch[1]!)),
+          );
+          entry.layer.setEffects(effects: stack);
+          return true;
+        }
         if (value is! BridgeEffectValue_Float) return false;
         final scalar = value.field0;
         if (scalar is! BridgeScalar_Keyframed) return false;
@@ -2132,6 +2210,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${effectPath(clipFoldPrefix(c), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, group: final g?) =>
         '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, driver: true) =>
+        '${driverPath(layerId, info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
@@ -2244,8 +2324,7 @@ List<LayerFoldRow> groupHeaderFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...cachedListParameters(fx.name),
-        ...fx.derivedParams,
+        ...instanceParameters(fx),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 2, group: group.id));
@@ -2296,8 +2375,7 @@ List<LayerFoldRow> clipFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...cachedListParameters(fx.name),
-        ...fx.derivedParams,
+        ...instanceParameters(fx),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 3, clip: clip.id));
@@ -2316,6 +2394,14 @@ String stylesPath(String layerId) => '$layerId/styles';
 /// else.
 String stylePath(String layerId, String styleId) =>
     '${stylesPath(layerId)}/$styleId';
+
+/// The path of a layer's **Drivers** group: the Node graph's driver boxes,
+/// whose rows key and drag as an effect's do.
+String driversPath(String layerId) => '$layerId/drivers';
+
+/// The path of one driver within it.
+String driverPath(String layerId, String driverId) =>
+    '${driversPath(layerId)}/$driverId';
 
 /// The effect instance a fold path names, or null when the path is not one
 /// effect's heading (it is the Effects group itself, one parameter under an
@@ -2364,6 +2450,9 @@ String masksPath(String layerId) => '$layerId/masks';
 
 /// The path of a shape layer's Contents group.
 String contentsPath(String layerId) => '$layerId/contents';
+
+/// The path of the heading over a shape layer's global modifiers.
+String globalModifiersPath(String layerId) => '${contentsPath(layerId)}/global';
 
 /// The path of a layer's Paint group.
 String paintPath(String layerId) => '$layerId/paint';
@@ -2535,9 +2624,27 @@ List<LayerFoldRow> layerFoldRows({
     ));
     if (contentsOpen) {
       final entries = info.shapeContents;
+      // The modifiers at the end that act on every shape go under a heading
+      // of their own, below all the art.
+      final globalFrom = entries.globalStart;
+      // A modifier's row and, open, its numbers under it.
+      void modifierRows(BridgeShapeModifier modifier, int depth, bool open) {
+        rows.add(FoldShapeModifierRow(modifier, open: open, depth: depth));
+        if (!open) return;
+        for (final value in modifierValues(modifier)) {
+          // Displace or Scale heads the deform's numbers, which it
+          // decides the meaning of.
+          if (value == ShapeValue.deformAmount) {
+            rows.add(FoldShapePaintRow(null, ShapePaint.deformMode,
+                modifier: modifier, depth: depth + 1));
+          }
+          rows.add(FoldShapeValueRow(null, value,
+              modifier: modifier, depth: depth + 1));
+        }
+      }
       // The depth of a shut group whose entries are being passed over.
       int? shutUnder;
-      for (final (index, entry) in entries.indexed) {
+      for (final (index, entry) in entries.indexed.take(globalFrom)) {
         if (shutUnder != null && entry.depth > shutUnder) continue;
         shutUnder = null;
         // Each entry has its own twirl, shut until opened, like an animator:
@@ -2551,19 +2658,8 @@ List<LayerFoldRow> layerFoldRows({
             rows.add(FoldShapeGroupRow(field0, open: entryOpen, depth: depth));
             if (!entryOpen) shutUnder = entry.depth;
           case BridgeShapeEntryKind_Modifier(:final field0):
-            rows.add(
-                FoldShapeModifierRow(field0, open: entryOpen, depth: depth));
-            if (!entryOpen) continue;
-            for (final value in modifierValues(field0)) {
-              // Displace or Scale heads the deform's numbers, which it
-              // decides the meaning of.
-              if (value == ShapeValue.deformAmount) {
-                rows.add(FoldShapePaintRow(null, ShapePaint.deformMode,
-                    modifier: field0, depth: depth + 1));
-              }
-              rows.add(FoldShapeValueRow(null, value,
-                  modifier: field0, depth: depth + 1));
-            }
+            // One that is its shape's own sits a little in, under it.
+            modifierRows(field0, field0.own ? depth + 1 : depth, entryOpen);
           case BridgeShapeEntryKind_Item(field0: final item):
             rows.add(FoldShapeRow(item, open: entryOpen, depth: depth));
             if (!entryOpen) continue;
@@ -2653,6 +2749,24 @@ List<LayerFoldRow> layerFoldRows({
               }
               rows.add(FoldShapeValueRow(item, value, depth: depth + 1));
             }
+        }
+      }
+      if (globalFrom < entries.length) {
+        final path = globalModifiersPath(id);
+        final globalOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          label: l10n.shapeGlobalModifiers,
+          open: globalOpen,
+          depth: 2,
+        ));
+        if (globalOpen) {
+          for (final entry in entries.sublist(globalFrom)) {
+            if (entry.kind case BridgeShapeEntryKind_Modifier(:final field0)) {
+              modifierRows(field0, 3,
+                  open.contains('${contentsPath(id)}/${field0.id}'));
+            }
+          }
         }
       }
     }
@@ -2801,8 +2915,7 @@ List<LayerFoldRow> layerFoldRows({
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
           for (final param in [
-            ...cachedListParameters(fx.name),
-            ...fx.derivedParams,
+            ...instanceParameters(fx),
           ]) {
             rows.add(FoldEffectParamRow(fx, param, values[param.id],
                 depth: 3, driven: driven['${fx.id}/${param.id}']));
@@ -2851,6 +2964,43 @@ List<LayerFoldRow> layerFoldRows({
                 depth: 3,
                 style: true,
                 driven: driven['${style.id}/${param.id}']));
+          }
+        }
+      }
+    }
+  }
+
+  // The drivers on the layer's Node graph, after Styles and only once there
+  // are some, so a Stagger's keyed Maximum has diamonds to see and drag.
+  // Off the entry, read with the rest of the layer: a redraw that changes
+  // nothing (a column seam dragged) asks the engine nothing.
+  final drivers = info.drivers;
+  if (drivers.isNotEmpty) {
+    final driversOpen = open.contains(driversPath(id));
+    rows.add(FoldGroupRow(
+      path: driversPath(id),
+      label: l10n.fxDrivers,
+      open: driversOpen,
+      depth: 1,
+    ));
+    if (driversOpen) {
+      for (final d in drivers) {
+        final path = driverPath(id, d.id.toString());
+        final driverOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          label: d.customName ?? effectLabelOf(d.name),
+          open: driverOpen,
+          depth: 2,
+          named: d.customName != null,
+        ));
+        if (driverOpen) {
+          final values = {for (final v in d.values) v.id: v.value};
+          for (final param in cachedListParameters(d.name)) {
+            rows.add(FoldEffectParamRow(d, param, values[param.id],
+                depth: 3,
+                driver: true,
+                driven: driven['${d.id}/${param.id}']));
           }
         }
       }

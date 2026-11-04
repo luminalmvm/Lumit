@@ -129,6 +129,10 @@ class BridgeCompFlowLink {
 class BridgeCompModel {
   final PlatformInt64 durationFrames;
 
+  /// The frame the comp's clock reads at its first frame: its Start
+  /// timecode at its own rate. Every clock face adds it; nothing else does.
+  final PlatformInt64 startFrame;
+
   /// The comp's rate as a plain number, for panels that map seconds to
   /// pixels (the waveform lane) without a bridge call per paint.
   final double fps;
@@ -175,6 +179,7 @@ class BridgeCompModel {
 
   const BridgeCompModel({
     required this.durationFrames,
+    required this.startFrame,
     required this.fps,
     required this.fpsNum,
     required this.fpsDen,
@@ -189,6 +194,7 @@ class BridgeCompModel {
   @override
   int get hashCode =>
       durationFrames.hashCode ^
+      startFrame.hashCode ^
       fps.hashCode ^
       fpsNum.hashCode ^
       fpsDen.hashCode ^
@@ -205,6 +211,7 @@ class BridgeCompModel {
       other is BridgeCompModel &&
           runtimeType == other.runtimeType &&
           durationFrames == other.durationFrames &&
+          startFrame == other.startFrame &&
           fps == other.fps &&
           fpsNum == other.fpsNum &&
           fpsDen == other.fpsDen &&
@@ -1555,6 +1562,13 @@ class CompositionReference {
         that: this,
       );
 
+  /// The comp's **Start timecode**: the time its first frame reads, as
+  /// exact rational seconds. Zero unless set.
+  BridgeRational getStartTimecode() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetStartTimecode(
+        that: this,
+      );
+
   /// The comp's work area — the span the Viewer previews and the export
   /// writes — or `None` for the whole comp.
   BridgeSpan? getWorkArea() =>
@@ -2438,6 +2452,13 @@ class CompositionReference {
   void setSoundMix({required bool mixed}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetSoundMix(
           that: this, mixed: mixed);
+
+  /// Set the Start timecode, one undo step. Only the clock moves: nothing
+  /// in the comp is retimed.
+  void setStartTimecode({required BridgeRational start}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetStartTimecode(
+              that: this, start: start);
 
   /// Set one switch on **every given layer**, as one undo step —
   /// what a switch cell clicked on a multi-selection commits. Every

@@ -986,9 +986,12 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
         // fresh **scale** starts chained, as the layer's own Scale does,
         // because a size dragged one axis at a time squashes the picture and
         // that is the rarer thing to want.
+        // Unless a plain `scale` sits beside them: then the pair is there to
+        // stretch one axis, and the uniform size has a row of its own.
         linked_pairs: s
             .pairs()
             .filter(|pair| pair.stem == SCALE_PAIR)
+            .filter(|_| !s.params.iter().any(|p| p.id == SCALE_PAIR))
             .map(|pair| pair.stem.to_owned())
             .collect(),
         // A fresh audio plugin has no memory of itself yet; it is the plugin's

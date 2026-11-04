@@ -112,7 +112,7 @@ impl TrailStyle {
     match_name = "trail",
     label = "Trail",
     version = 1,
-    category = Generate,
+    category = Points,
     // Heavier than its siblings, and honestly so: every sample is another whole
     // evaluation of the producer's stream. Samples is the dial that says how
     // many, and it is the budget.

@@ -668,6 +668,9 @@ void main() {
             gradientEndOpacity: const BridgeScalar.static_(100),
             gradientStops: const [],
             combine: 0,
+            hidden: false,
+            fillHidden: false,
+            strokeHidden: false,
             pathKeys: const [],
           ),
         ],
@@ -702,6 +705,28 @@ void main() {
       await tester.pumpAndSettle();
       expect(item().opacity, const BridgeScalar.static_(30));
 
+      // The item and its fill each have an eye in the layer's switch
+      // column, which leaves that part out and keeps it.
+      Finder eye(bool Function(String path) which) =>
+          find.byWidgetPredicate((w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith('tl-shape-eye-') &&
+              which((w.key! as ValueKey<String>).value));
+      final itemEye = eye((k) => k.endsWith('$itemId'));
+      expect(itemEye, findsOneWidget);
+      await tester.tap(itemEye);
+      await tester.pumpAndSettle();
+      expect(item().hidden, isTrue);
+      await tester.tap(itemEye);
+      await tester.pumpAndSettle();
+      expect(item().hidden, isFalse);
+      final fillEye = eye((k) => k.contains('$itemId') && k.contains('fill'));
+      expect(fillEye, findsOneWidget);
+      await tester.tap(fillEye);
+      await tester.pumpAndSettle();
+      expect(item().fillHidden, isTrue);
+      expect(item().hidden, isFalse, reason: 'the fill alone');
+
       // A trim is an entry of its own, added from the item's menu, with its
       // three rows under its own twirl.
       Future<void> addFromMenu(String add) async {
@@ -725,6 +750,10 @@ void main() {
       expect(find.text('Trim start'), findsOneWidget);
       expect(find.text('Trim end'), findsOneWidget);
       expect(find.text('Trim offset'), findsOneWidget);
+      // A modifier's eye switches off what it does.
+      await tester.tap(eye((k) => k.endsWith('${trim.id}')));
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().modifiers.single.hidden, isTrue);
       BridgeScalar trimEnd() => switch (
               layer.getShapeContents().modifiers.first.kind) {
             BridgeShapeModifierKind_Trim(:final field0) => field0.end,

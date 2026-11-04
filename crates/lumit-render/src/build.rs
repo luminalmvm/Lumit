@@ -335,6 +335,23 @@ fn world_placement(
     }
 }
 
+/// The longest side a shape layer's art is rasterised to, px: a shape scaled
+/// past it is drawn at this size and stretched, rather than asking the card
+/// for a texture it cannot hold.
+const SHAPE_RASTER_MAX: f64 = 8192.0;
+
+/// How many comp pixels one of the layer's own pixels covers at most, read
+/// off its world placement: the longest of the two axes' lengths, whichever
+/// way round the matrix is laid out, so a turned or skewed layer is never
+/// drawn short.
+fn shape_raster_scale(m: [[f32; 4]; 4]) -> f32 {
+    let len = |a: f32, b: f32| a.hypot(b);
+    len(m[0][0], m[1][0])
+        .max(len(m[0][1], m[1][1]))
+        .max(len(m[0][0], m[0][1]))
+        .max(len(m[1][0], m[1][1]))
+}
+
 /// `layer`'s own placement at comp time `t_comp`, before any parent's.
 fn own_placement(
     layer: &lumit_core::model::Layer,
@@ -367,9 +384,11 @@ fn drawn(
         .transform
         .placement_at(lt, !layer.switches.three_d, &read);
     let at = p.flat_position();
+    // A Shape layer's art moving under keys moves its picture too.
+    let (dx, dy) = lumit_core::model::art_shift(layer, lt);
     lumit_gpu::composite::MbSample {
         position: (at.0 as f32, at.1 as f32),
-        anchor: (p.anchor.0 as f32, p.anchor.1 as f32),
+        anchor: ((p.anchor.0 - dx) as f32, (p.anchor.1 - dy) as f32),
         scale: (p.scale.0 as f32, p.scale.1 as f32),
         rotation_deg: p.rotation_deg.2 as f32,
         z: at.2 as f32,
@@ -1083,6 +1102,195 @@ fn points_input_for(
     )
 }
 
+/// What a Clone deformer at `at` in `layer`'s stack reads beside its picture:
+/// the copies the Clone to points right above it stamped, as outlines, and its
+/// Boolean layer's outline. The copies come only for a Vector deformer right
+/// under a Clone to points whose pictures are all Shape layers, and only when
+/// its points can be made here. `lt` is the layer's time, `projection` the
+/// camera this op draws through.
+#[allow(clippy::too_many_arguments)]
+fn clone_deformer_carriage(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    at: usize,
+    lt: f64,
+    t_comp: f64,
+    projection: lumit_core::fx::points::Projection,
+    audio: &dyn lumit_core::fx::registry::AudioTap,
+    clone: (u32, u32),
+) -> (
+    Option<Arc<lumit_core::fx::effects::clone_deformer::CloneShapes>>,
+    Option<Arc<lumit_core::fx::effects::clone_deformer::BooleanShape>>,
+) {
+    use lumit_core::fx::effects::clone_deformer as d;
+    use lumit_core::fx::effects::clone_to_points::{CloneToPoints, DIST_LAYOUT};
+    use lumit_core::fx::registry::EffectMetadata;
+    use lumit_core::model::{EffectValue, LayerKind};
+    let effects = &layer.effects;
+    let Some(e) = effects.get(at) else {
+        return (None, None);
+    };
+    let context_of = |l: &lumit_core::model::Layer| {
+        Arc::new(ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp.id),
+            layer: Some(l.id),
+            comp_time: t_comp,
+            current_depth: 0,
+            inputs: None,
+        })
+    };
+    let context = context_of(layer);
+    // A layer's outline in its own px at comp time `t`, a Shape layer's art
+    // or another layer's first mask, with the size of its picture.
+    let outline = |l: &lumit_core::model::Layer, t: f64| -> Option<(d::Outline, [f32; 2])> {
+        let llt = lumit_core::time::layer_time(t, l.start_offset.0);
+        let (line, size) = match &l.kind {
+            LayerKind::Shape { contents } => {
+                let contents = lumit_core::shape::contents_at(contents, llt, &context_of(l));
+                let (x0, y0, x1, y1) = lumit_core::shape::contents_bounds(&contents, llt)?;
+                (
+                    lumit_core::shape::outline_at(&contents, llt),
+                    [(x1 - x0).max(1.0) as f32, (y1 - y0).max(1.0) as f32],
+                )
+            }
+            _ => {
+                let (w, h) = lumit_core::fx::builtins::picture_size(doc, comp, l);
+                (
+                    lumit_core::mask::mask_path_at(&l.masks, None, true, llt),
+                    [w as f32, h as f32],
+                )
+            }
+        };
+        let contours = d::contours_of(&line);
+        (!contours.is_empty()).then_some((contours, size))
+    };
+    let boolean_of = |e: &lumit_core::model::EffectInstance| {
+        e.layer_ref(d::BOOLEAN_LAYER)
+            .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+            .and_then(|target| {
+                let (own, size) = outline(target, t_comp)?;
+                let placed = lumit_core::fx::points::layer_path(comp, layer, target, t_comp, &context);
+                Some(Arc::new(d::BooleanShape {
+                    own,
+                    size,
+                    placed: d::contours_of(&placed),
+                }))
+            })
+    };
+    let boolean = boolean_of(e);
+    let is_vector = |x: &lumit_core::model::EffectInstance| {
+        x.effect.match_name == d::MATCH_NAME
+            && matches!(x.param("mode"), Some(EffectValue::Choice(d::MODE_VECTOR)))
+    };
+    let vector = is_vector(e);
+    // The Vector deformers between this one and the Clone to points above,
+    // top first, with nothing else switched on between.
+    let mut chain = Vec::new();
+    let mut above = None;
+    for x in effects[..at].iter().rev().filter(|x| x.enabled) {
+        if is_vector(x) {
+            chain.push(x);
+            continue;
+        }
+        above = Some(x);
+        break;
+    }
+    chain.reverse();
+    let markers = lumit_core::fx::markers::MarkerContext::for_comp(comp);
+    let diag = (comp.width as f32).hypot(comp.height as f32);
+    let drivers = lumit_core::fx::drivers::ResolvedDrivers::default();
+    // An effect's rows at this moment, px rows in px@comp.
+    let rows_of = |x: &lumit_core::model::EffectInstance| {
+        lumit_core::fx::resolved::resolve_instance(x, &drivers, lt, diag, 1.0, &markers, context.clone())
+    };
+    let copies = above
+        .filter(|_| vector)
+        .filter(|x| x.effect.match_name == "clone_to_points")
+        .and_then(|x| {
+            let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&x.effect.match_name)?;
+            let mut stream = points_input_for(
+                layer,
+                x,
+                def,
+                lt,
+                0.0,
+                projection,
+                &context,
+                audio,
+                clone,
+            )
+            .streams
+            .into_iter()
+            .next()
+            .filter(|s| !s.is_empty())?;
+            stream.projection = projection;
+            // Every picture the copies show, each a Shape layer's outline.
+            let planned = CloneToPoints::planned(x, doc, comp, t_comp, lt, Some(stream.len()));
+            let pictures: Vec<(d::Outline, [f32; 2])> = planned
+                .iter()
+                .map(|p| {
+                    let p = p.as_ref().filter(|p| p.layer != layer.id)?;
+                    let l = comp.layers.iter().find(|l| l.id == p.layer)?;
+                    matches!(l.kind, LayerKind::Shape { .. })
+                        .then(|| outline(l, p.time))
+                        .flatten()
+                })
+                .collect::<Option<_>>()?;
+            let rows = rows_of(x);
+            let p = rows.iter().next()?.params;
+            let inst = CloneToPoints {
+                time_step: p.float(CloneToPoints::DERIVED_TIME_STEP, CloneToPoints::read(p).time_step),
+                ..CloneToPoints::read(p)
+            };
+            let of = CloneToPoints::handed(p, pictures.len());
+            let mut stamps = inst.stamps(&stream, of);
+            if inst.distribution == DIST_LAYOUT {
+                let units: Vec<[f32; 2]> = (0..stamps.len())
+                    .map(|i| {
+                        let size = pictures
+                            .get(stamps.index_of(i) as usize)
+                            .map_or([1.0; 2], |(_, size)| *size);
+                        inst.fit(size, 1.0).unit
+                    })
+                    .collect();
+                inst.laid_out(&mut stamps, |i| units.get(i).copied().unwrap_or([1.0; 2]));
+            }
+            Some(d::shape_copies(inst, &stamps, &pictures))
+        });
+    let Some(copies) = copies else {
+        return (None, boolean);
+    };
+    let (fw, fh) = lumit_core::fx::builtins::picture_size(doc, comp, layer);
+    let frame = [fw as f32, fh as f32];
+    let deformer = |x: &lumit_core::model::EffectInstance| {
+        let rows = rows_of(x);
+        let read = rows.iter().next().map(|r| d::CloneDeformer::read(r.params));
+        read
+    };
+    // Worked out on the paths, deformer by deformer, while every copy is
+    // opaque, so the outline can stand for the picture.
+    let mut outline: Option<d::Outline> = copies
+        .iter()
+        .all(|c| c.opacity >= 0.999)
+        .then(|| copies.iter().flat_map(|c| c.contours.clone()).collect());
+    for x in &chain {
+        outline = outline.and_then(|o| deformer(x)?.on_paths(&o, boolean_of(x).as_deref(), frame));
+    }
+    // Under another Vector deformer the copies are what that one left.
+    let copies = match (chain.is_empty(), &outline) {
+        (true, _) => copies,
+        (false, Some(o)) => vec![d::ShapeCopy {
+            contours: o.clone(),
+            opacity: 1.0,
+        }],
+        (false, None) => return (None, boolean),
+    };
+    let result = outline.and_then(|o| deformer(e)?.on_paths(&o, boolean.as_deref(), frame));
+    (Some(Arc::new(d::CloneShapes { copies, result })), boolean)
+}
+
 /// [`points_input_for`] over any wiring: a layer's graph and stack, or a node
 /// graph's own wires and boxes, which the driver walk then finds the producer
 /// among. `layer` is the layer the consumer is on, which a node graph has none of.
@@ -1124,6 +1332,24 @@ fn points_input_in(
                 .stream(projection)
             });
         if let Some(stream) = read {
+            found.streams.push(stream);
+            found.from.push(None);
+            return found;
+        }
+    }
+    // A Clone to points whose Distribution is not Points input makes its
+    // own points, in place of the wire.
+    if let Some(layer) = layer
+        .filter(|_| consumer.effect.match_name == "clone_to_points")
+    {
+        use lumit_core::fx::effects::clone_to_points::CloneToPoints;
+        let made = context
+            .comp
+            .and_then(|id| context.document.comp(id))
+            .and_then(|comp| {
+                CloneToPoints::distributed(consumer, comp, layer, t, context, projection)
+            });
+        if let Some(stream) = made {
             found.streams.push(stream);
             found.from.push(None);
             return found;
@@ -1207,8 +1433,9 @@ fn points_input_in(
         let Some(mut stream) = now else {
             break;
         };
-        // Drivers wired into Clone to points' Scale, Rotation or
-        // Opacity give each stamp its own value, and into Label points'
+        // Drivers wired into Clone to points' Scale, Scale x / y, Rotation,
+        // Offset x / y, Opacity, Tint or Layer index give each stamp its own
+        // value, and into Label points'
         // Change or Label scale each label its own.
         if let Some(rows) = driven_rows(consumer) {
             lumit_core::fx::drivers::per_copy::drive_rows(
@@ -2203,8 +2430,22 @@ fn comp_walk(
                     // The same reduced-resolution rule the other rasterised
                     // kinds follow: draw at the working scale, and let the
                     // placement matrix carry the natural size.
-                    let w = natural_w.round().max(1.0) as u32;
-                    let h = natural_h.round().max(1.0) as u32;
+                    //
+                    // **Continuously rasterised**, as After Effects draws a
+                    // shape layer: the art is drawn as large as the layer and
+                    // its parents show it, so scaling it up never blurs it.
+                    // The effects read the raster factor off the texture, so
+                    // they keep their size.
+                    let shown = shape_raster_scale(world_placement(
+                        comp,
+                        layer,
+                        t_comp,
+                        context.clone(),
+                    ));
+                    let most = (SHAPE_RASTER_MAX / natural_w.max(natural_h)).max(1.0);
+                    let k = f64::from(shown).clamp(1.0, most);
+                    let w = (natural_w * k).round().max(1.0) as u32;
+                    let h = (natural_h * k).round().max(1.0) as u32;
                     Some((
                         Arc::new(lumit_core::shape::rasterise_contents(
                             &contents, w, h, x0, y0, x1, y1, lt,
@@ -3071,6 +3312,59 @@ fn comp_walk(
         )
     };
 
+    // **Time loop's pictures**: its Source layer at each moment the loop
+    // shows, one or two, each as the layer is at that moment and placed by
+    // its transform then. `TimeLoop::planned` says which, as the planner and
+    // the frame key ask it too.
+    let time_loop_pictures = |owner: uuid::Uuid,
+                              e: &lumit_core::model::EffectInstance|
+     -> LayerInputDraw {
+        use lumit_core::fx::effects::time_loop::TimeLoop;
+        let lt = comp
+            .layers
+            .iter()
+            .find(|l| l.id == owner)
+            .map_or(t_comp, |l| lumit_core::time::layer_time(t_comp, l.start_offset.0));
+        let whole = doc.comp(comp.id).unwrap_or(comp);
+        LayerInputDraw::Several(
+            TimeLoop::planned(e, whole, t_comp, lt)
+                .into_iter()
+                .map(|(_, at)| {
+                    if at.to_bits() == t_comp.to_bits() {
+                        return layer_slot(e, "source")
+                            .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer);
+                    }
+                    let mut probe = Probe::Picture {
+                        effect: e,
+                        row: "source",
+                        found: None,
+                    };
+                    comp_walk(
+                        doc,
+                        comp,
+                        at,
+                        frame_t,
+                        frame_pixels,
+                        &mut visited_path.clone(),
+                        None,
+                        true,
+                        Walk {
+                            clone: clone_number,
+                            values: &[],
+                            rebuild: with.rebuild,
+                            seen_through: None,
+                        },
+                        Some(&mut probe),
+                    );
+                    match probe {
+                        Probe::Picture { found: Some(d), .. } => LayerInputDraw::Layer(d),
+                        _ => LayerInputDraw::Absent,
+                    }
+                })
+                .collect(),
+        )
+    };
+
     // A probe wants one thing made at this walk's time and nothing else.
     match probe {
         Some(Probe::Picture { effect, row, found }) => {
@@ -3181,6 +3475,10 @@ fn comp_walk(
                     // Clone to points lays its own list out.
                     if e.effect.match_name == "clone_to_points" {
                         return clone_pictures(owner, e, None);
+                    }
+                    // Time loop's are its Source layer at other moments.
+                    if e.effect.match_name == "time_loop" {
+                        return time_loop_pictures(owner, e);
                     }
                     // An effect with several layer rows hands them over as one
                     // list in row order, so it is still one slot for one op.
@@ -3411,7 +3709,8 @@ fn comp_walk(
         carried
             .iter()
             .enumerate()
-            .map(|(k, &(_, e, def))| {
+            .map(|(k, &(at, e, def))| {
+                let made = (|| {
                 // A pinned effect is evaluated at the true playhead, so
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
@@ -3532,6 +3831,8 @@ fn comp_walk(
                         grow,
                         stepped: None,
                         trails: None,
+                        clone_shapes: None,
+                        boolean_shape: None,
                     };
                 }
                 // **A Particulate with Trails on** draws every frame from the
@@ -3561,6 +3862,8 @@ fn comp_walk(
                             clone_number,
                             inset,
                         )),
+                        clone_shapes: None,
+                        boolean_shape: None,
                     };
                 }
                 // **A Particulate that walks does it on the host**, through
@@ -3596,6 +3899,8 @@ fn comp_walk(
                         grow,
                         stepped: walked,
                         trails: None,
+                        clone_shapes: None,
+                        boolean_shape: None,
                     };
                 }
                 let schedule = birth_schedule(e, t, dt, &context, owner.map(|l| &l.graph), &audio);
@@ -3613,7 +3918,27 @@ fn comp_walk(
                     grow,
                     stepped: None,
                     trails: None,
+                    clone_shapes: None,
+                    boolean_shape: None,
                 }
+                })();
+                // A Clone deformer's outlines ride beside the stream.
+                let mut made = made;
+                if let Some(layer) = owner.filter(|_| def.reads_clone_shapes()) {
+                    (made.clone_shapes, made.boolean_shape) = clone_deformer_carriage(
+                        expr_doc,
+                        comp,
+                        layer,
+                        at,
+                        made.t,
+                        t_comp,
+                        made.projection
+                            .unwrap_or(lumit_core::fx::points::Projection::FLAT),
+                        &audio,
+                        clone_number,
+                    );
+                }
+                made
             })
             .collect()
     };
@@ -9231,6 +9556,7 @@ mod render_below_at_tests {
         let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
         let mut graph = comp_with(10, Vec::new());
         graph.graph = Some(CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             nodes: vec![

@@ -355,6 +355,7 @@ pub fn fx_category_key(cat: lumit_core::fx::schema::FxCategory) -> &'static str 
         FxCategory::Colour => "colour",
         FxCategory::Distortion => "distortion",
         FxCategory::Generate => "generate",
+        FxCategory::Points => "points",
         FxCategory::Stylise => "stylise",
         FxCategory::Temporal => "temporal",
         FxCategory::Transition => "transition",

@@ -3200,6 +3200,9 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_end_opacity: BridgeScalar::Static(100.0),
         gradient_stops: Vec::new(),
         combine: 0,
+        hidden: false,
+        fill_hidden: false,
+        stroke_hidden: false,
         path_keys: Vec::new(),
         taper: None,
         primitive: None,
@@ -3291,6 +3294,8 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
             id: Uuid::now_v7(),
             name: "Trim paths".into(),
+            hidden: false,
+            own: false,
             kind: BridgeShapeModifierKind::Trim(BridgeShapeTrim {
                 start: BridgeScalar::Static(-40.0),
                 offset: BridgeScalar::Static(180.0),
@@ -3523,6 +3528,8 @@ fn expanding_a_repeater_makes_its_copies_real() {
         kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
             id: repeater,
             name: "Repeater".into(),
+            hidden: false,
+            own: false,
             kind: BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
                 copies: BridgeScalar::Static(3.0),
                 offset: BridgeScalar::Static(0.0),
@@ -7457,6 +7464,7 @@ fn wiggle_into_blur(layer: &LayerReference) -> (Uuid, Uuid) {
                     },
                 }],
                 layout: vec![BridgeNodePosition {
+                    width: None,
                     node: BridgeNodeRef::Driver(wiggle_id),
                     x: -120.0,
                     y: 40.0,
@@ -9553,6 +9561,7 @@ fn a_read_is_added_wired_and_undone_in_one_step() {
         to_port: "input".into(),
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: read,
         x: -240.0,
         y: 20.0,
@@ -9796,11 +9805,13 @@ fn a_graph_group_saves_its_boxes_and_inserts_them_fresh() {
         to_port: "input".into(),
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: blur_id,
         x: -400.0,
         y: 0.0,
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: glow_id,
         x: -200.0,
         y: 0.0,

@@ -190,7 +190,7 @@ impl Between {
     match_name = "connect_points",
     label = "Connect points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be anywhere, and a line reaches from one to another.
     roi = FullFrame,

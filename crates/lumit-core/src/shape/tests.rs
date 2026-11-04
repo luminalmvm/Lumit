@@ -22,6 +22,8 @@ pub(super) fn modifier(kind: ModifierKind) -> ShapeEntry {
         id: Uuid::now_v7(),
         name: kind.label().into(),
         kind,
+        hidden: false,
+        own: false,
     })
 }
 
@@ -622,6 +624,7 @@ fn modifiers_act_on_the_art_above_them_and_stack() {
             id: Uuid::now_v7(),
             name: "Group".into(),
             entries: vec![ShapeEntry::Item(b.clone()), step()],
+            hidden: false,
             extra: serde_json::Map::new(),
         }),
     ];
@@ -846,4 +849,103 @@ fn a_parametric_rectangle_draws_its_numbers_and_a_keyed_width_moves_it() {
             Mask::rectangle(30.0, 30.0, 40.0, 40.0).path
         )]))
     );
+}
+
+/// An eye switched off leaves its part out of the picture and keeps it: an
+/// item, its fill, its outline, a modifier and a group.
+#[test]
+fn an_eye_switched_off_leaves_its_part_out() {
+    let draw = |contents: &[ShapeEntry]| {
+        rasterise_contents(contents, 40, 20, 0.0, 0.0, 40.0, 20.0, 0.0)
+    };
+    let mut over = item(square(0.0, 0.0, 20.0));
+    over.fill = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
+    let mut hidden = over.clone();
+    hidden.hidden = true;
+    let under = item(square(0.0, 0.0, 20.0));
+    let rgba = draw(&entries(vec![under.clone(), hidden.clone()]));
+    assert_eq!(rgb_at(&rgba, 40, 10, 10), [255, 0, 0], "the hidden item is not drawn");
+    assert_eq!(
+        modifier::items(&entries(vec![under.clone(), hidden])).len(),
+        2,
+        "but it is still there to edit"
+    );
+
+    let mut outlined = item(square(4.0, 4.0, 12.0));
+    outlined.stroke = Some(colour::still(LinearColour([0.0, 1.0, 0.0, 1.0])));
+    outlined.stroke_width = Property::fixed(3.0);
+    outlined.fill_hidden = true;
+    let rgba = draw(&entries(vec![outlined.clone()]));
+    assert_eq!(alpha_at(&rgba, 40, 10, 10), 0, "no fill inside");
+    assert_eq!(rgb_at(&rgba, 40, 4, 10), [0, 255, 0], "the outline still there");
+    outlined.fill_hidden = false;
+    outlined.stroke_hidden = true;
+    let rgba = draw(&entries(vec![outlined]));
+    assert_eq!(rgb_at(&rgba, 40, 10, 10), [255, 0, 0], "the fill back");
+    assert_eq!(rgb_at(&rgba, 40, 4, 10), [255, 0, 0], "the outline gone");
+
+    let mut contents = with(
+        item(square(0.0, 0.0, 6.0)),
+        vec![ModifierKind::Repeat(repeater(3.0, 10.0))],
+    );
+    if let ShapeEntry::Modifier(m) = &mut contents[1] {
+        m.hidden = true;
+    }
+    let rgba = draw(&contents);
+    assert_eq!(alpha_at(&rgba, 40, 3, 3), 255, "the original");
+    assert_eq!(alpha_at(&rgba, 40, 13, 3), 0, "no copy from a hidden repeater");
+
+    let mut group = modifier::ShapeGroup::new("Group", entries(vec![under]));
+    group.hidden = true;
+    assert!(draw(&[ShapeEntry::Group(group)]).iter().all(|&b| b == 0), "a hidden group draws nothing");
+}
+
+#[test]
+fn an_items_own_modifier_acts_on_it_alone_and_a_global_one_on_every_item() {
+    let own = |kind| match modifier(kind) {
+        ShapeEntry::Modifier(m) => ShapeEntry::Modifier(ShapeModifier { own: true, ..m }),
+        e => e,
+    };
+    let a = item(square(0.0, 0.0, 10.0));
+    let b = item(square(50.0, 0.0, 10.0));
+    let contents = vec![
+        ShapeEntry::Item(a),
+        own(ModifierKind::Repeat(repeater(3.0, 12.0))),
+        ShapeEntry::Item(b),
+        own(offset(2.0)),
+        modifier(trim(0.0, 50.0)),
+    ];
+    let kinds = |n: usize| {
+        modifier::lowered(&contents)[n]
+            .mods
+            .iter()
+            .map(|m| m.kind.label())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(kinds(0), ["Repeater", "Trim paths"], "its own, then the global one");
+    assert_eq!(kinds(1), ["Offset paths", "Trim paths"], "not the first item's repeater");
+}
+
+/// A Shape layer whose path is keyed to move sets its picture down where the
+/// art has gone: the anchor is read less by how far the art's box has moved
+/// from where it is at the head of the layer.
+#[test]
+fn a_keyed_path_moves_the_layers_picture_with_it() {
+    let (from, to) = (square(20.0, 20.0, 100.0), square(250.0, 250.0, 50.0));
+    let mut it = item(from.clone());
+    it.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
+    let layer = crate::edits::base_layer(
+        "Box".to_owned(),
+        crate::model::LayerKind::Shape { contents: entries(vec![it]) },
+        crate::time::Rational::new(2, 1).expect("two seconds"),
+        crate::model::TransformGroup::default(),
+    );
+    assert_eq!(crate::model::art_shift(&layer, 0.0), (0.0, 0.0));
+    assert_eq!(crate::model::art_shift(&layer, 2.0), (230.0, 230.0));
+    let read = |l: &crate::model::Layer, p: &crate::anim::Property| {
+        let _ = l;
+        p.value_at(2.0)
+    };
+    let placed = crate::model::placement(&layer, 2.0, &read);
+    assert_eq!((placed.anchor.0, placed.anchor.1), (-230.0, -230.0));
 }

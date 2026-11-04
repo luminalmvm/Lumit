@@ -187,6 +187,16 @@ pub struct ShapeItem {
     /// shape at the head of the layer for a Lumit that reads no primitive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primitive: Option<primitive::ShapePrimitive>,
+    /// **Switched off** by its eye in the Timeline: the item is not drawn,
+    /// and its paint and modifiers wait, unchanged, for the eye to come back.
+    #[serde(default, skip_serializing_if = "is_shown")]
+    pub hidden: bool,
+    /// The fill's and the outline's own eyes: each paint is left out of the
+    /// picture while its colour and the rest stay as they were.
+    #[serde(default, skip_serializing_if = "is_shown")]
+    pub fill_hidden: bool,
+    #[serde(default, skip_serializing_if = "is_shown")]
+    pub stroke_hidden: bool,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -246,6 +256,12 @@ pub(super) fn is_flat(kind: &u32) -> bool {
     *kind == 0
 }
 
+/// True for an eye that is on, which is how everything starts and so is not
+/// written to the file.
+pub(super) fn is_shown(hidden: &bool) -> bool {
+    !*hidden
+}
+
 impl ShapeItem {
     /// A filled item with no outline — what a shape tool makes.
     pub fn filled(name: impl Into<String>, path: BezierPath, fill: LinearColour) -> Self {
@@ -272,8 +288,22 @@ impl ShapeItem {
             combine: 0,
             taper: None,
             primitive: None,
+            hidden: false,
+            fill_hidden: false,
+            stroke_hidden: false,
             extra: serde_json::Map::new(),
         }
+    }
+
+    /// The fill as it is drawn: `None` when there is none or its eye is off.
+    pub fn fill_shown(&self) -> Option<&[Property; 4]> {
+        self.fill.as_ref().filter(|_| !self.fill_hidden)
+    }
+
+    /// The outline's colour as it is drawn: `None` when there is none or its
+    /// eye is off.
+    pub fn stroke_shown(&self) -> Option<&[Property; 4]> {
+        self.stroke.as_ref().filter(|_| !self.stroke_hidden)
     }
 
     /// The shape this item has at `t` — its still [`path`](Self::path) where
@@ -345,7 +375,7 @@ impl ShapeItem {
         // Inflating **before** the copies are placed is what makes a scaled
         // copy's outline fit too: the copy's transform grows the margin with
         // the art.
-        let half = if self.stroke.is_some() {
+        let half = if self.stroke_shown().is_some() {
             self.stroke_width.value_at(t).max(0.0) / 2.0
         } else {
             0.0
@@ -574,7 +604,7 @@ pub fn rasterise_contents(
             let to_box = copy.then(&Affine::translation(-min_x, -min_y));
             let placed = art.placed(&to_box);
 
-            if let Some(fill) = item.fill.as_ref().map(|c| colour::at(c, t)) {
+            if let Some(fill) = item.fill_shown().map(|c| colour::at(c, t)) {
                 // All the contours at once, so a boolean's hole is a hole: the
                 // crossings have to be counted across the whole shape, not one
                 // ring at a time. An open path fills as if a straight line
@@ -637,7 +667,7 @@ pub fn rasterise_contents(
 
             let width = item.stroke_width.value_at(t);
             if let (Some(stroke), true) =
-                (item.stroke.as_ref().map(|c| colour::at(c, t)), width > 0.0)
+                (item.stroke_shown().map(|c| colour::at(c, t)), width > 0.0)
             {
                 // A stroke is a brush run along the path, which is exactly what the
                 // paint rasteriser already does — one widened-path implementation

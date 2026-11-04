@@ -38,6 +38,8 @@ import 'transform_rows_frb.dart';
 import 'timeline_mask_rows_frb.dart';
 import 'timeline_puppet_rows_frb.dart';
 import 'timeline_shape_rows_frb.dart';
+import 'shape_entries.dart';
+import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'timeline_retime_row_frb.dart';
 
 /// The Timeline with no composition open: the placeholder, and a drop target
@@ -112,6 +114,10 @@ class FoldRow extends StatelessWidget {
   /// rather than at the row's far left.
   final double baseIndent;
 
+  /// Where the layer's eye sits, so a shape layer's entries, fills and
+  /// outlines put theirs under it. Null where a panel draws no eyes.
+  final double? eyeX;
+
   /// This row's path, and the selected properties' — the row draws itself
   /// selected when it is among them, and highlighted when a selection sits
   /// *under* it (an effect's heading while one of its parameters is picked).
@@ -167,6 +173,7 @@ class FoldRow extends StatelessWidget {
     required this.valueColumn,
     required this.timingsColumn,
     required this.baseIndent,
+    this.eyeX,
     required this.path,
     required this.selectedProperties,
     required this.graphColours,
@@ -205,6 +212,33 @@ class FoldRow extends StatelessWidget {
     // modified press is left to the label's own Ctrl/Shift semantics, and a
     // group heading keeps its pick-and-twirl click.
     final picks = row is! FoldGroupRow && row is! FoldWaveformRow;
+    // A locked layer's rows are read-only, not hidden: the numbers
+    // are still the document's and the curves still draw, but nothing on the
+    // row can be touched. The engine refuses the edit anyway, this is what
+    // stops the interface offering a gesture that would only be refused.
+    //
+    // A *group* row is exempt: twirling one open is navigation, not editing,
+    // and a locked layer that could not be looked inside would be worse than
+    // one that can.
+    final body = locked && row is! FoldGroupRow && row is! FoldWaveformRow
+        ? AbsorbPointer(
+            child: Opacity(opacity: 0.5, child: _control(context)),
+          )
+        // A property row is held for whoever else in a shared project
+        // is changing its value.
+        : picks
+            ? HeldFor(
+                names: [path],
+                child: keysPickedOn == null
+                    ? _control(context)
+                    : ValueEditScope(
+                        run: (typed, edit) =>
+                            editPickedKeys(keysPickedOn!(path), typed, edit),
+                        child: _control(context),
+                      ),
+              )
+            : _control(context);
+    final eye = eyeX == null ? null : _shapeEye(context, t);
     // **And the row must WIN that press, not merely see it**. The
     // ground under the outline clears the selection on tap, and its comment
     // has always said "a switch or a property still wins its own tap in the
@@ -269,33 +303,22 @@ class FoldRow extends StatelessWidget {
           // the layer rows' padding before the redesign made it 8 and before the
           // header's inset added the 2 on top; the effect headings' milliseconds
           // stood 6px right of the layer totals they add up to.
-          padding: EdgeInsets.only(left: indent, right: outlineRowTrailing),
-          // A locked layer's rows are read-only, not hidden: the numbers
-          // are still the document's and the curves still draw, but nothing on the
-          // row can be touched. The engine refuses the edit anyway, this is what
-          // stops the interface offering a gesture that would only be refused.
-          //
-          // A *group* row is exempt: twirling one open is navigation, not editing,
-          // and a locked layer that could not be looked inside would be worse than
-          // one that can.
-          child: locked && row is! FoldGroupRow && row is! FoldWaveformRow
-              ? AbsorbPointer(
-                  child: Opacity(opacity: 0.5, child: _control(context)),
-                )
-              // A property row is held for whoever else in a shared project
-              // is changing its value.
-              : picks
-                  ? HeldFor(
-                      names: [path],
-                      child: keysPickedOn == null
-                          ? _control(context)
-                          : ValueEditScope(
-                              run: (typed, edit) => editPickedKeys(
-                                  keysPickedOn!(path), typed, edit),
-                              child: _control(context),
-                            ),
-                    )
-                  : _control(context),
+          padding: EdgeInsets.only(
+              left: eye == null ? indent : 0, right: outlineRowTrailing),
+          child: eye == null
+              ? body
+              // The eye in the layer's switch column, the row indented as
+              // any other beside it. Expanded, so the row keeps the full height
+              // and centres as the rows without an eye do.
+              : Stack(fit: StackFit.expand, children: [
+                  Padding(padding: EdgeInsets.only(left: indent), child: body),
+                  Positioned(
+                      left: eyeX,
+                      top: 0,
+                      bottom: 0,
+                      width: switchCellWidth,
+                      child: eye),
+                ]),
         ),
       ),
     );
@@ -306,6 +329,56 @@ class FoldRow extends StatelessWidget {
             child: row_,
           )
         : row_;
+  }
+
+  /// The eye of a shape layer's entry, or of an item's fill or outline: off
+  /// leaves that part out of the picture and keeps it. Null for every other
+  /// row, and on a locked layer, which takes no edits.
+  Widget? _shapeEye(BuildContext context, LumitTheme t) {
+    final (bool, List<BridgeShapeEntry> Function(List<BridgeShapeEntry>))?
+        eye = switch (row) {
+      FoldShapeRow(:final item) => (
+          !item.hidden,
+          (e) => e.withItem(
+              item.id, (i) => shapeItemWith(i, hidden: !i.hidden)),
+        ),
+      FoldShapeModifierRow(:final modifier) => (
+          !modifier.hidden,
+          (e) => e.withModifier(
+              modifier.id, (m) => modifierWith(m, hidden: !m.hidden)),
+        ),
+      FoldShapeGroupRow(:final group) => (
+          !group.hidden,
+          (e) => e.withGroup(group.id, hidden: !group.hidden),
+        ),
+      FoldShapeValueRow(:final item?, value: ShapeValue.fillColour) => (
+          !item.fillHidden,
+          (e) => e.withItem(
+              item.id, (i) => shapeItemWith(i, fillHidden: !i.fillHidden)),
+        ),
+      FoldShapeValueRow(:final item?, value: ShapeValue.strokeColour) => (
+          !item.strokeHidden,
+          (e) => e.withItem(item.id,
+              (i) => shapeItemWith(i, strokeHidden: !i.strokeHidden)),
+        ),
+      _ => null,
+    };
+    if (eye == null || locked) return null;
+    final (shown, flip) = eye;
+    return LumitTooltip(
+      message: shown ? l10n.switchVisible : l10n.switchHidden,
+      child: GestureDetector(
+        key: ValueKey<String>('tl-shape-eye-$path'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => writeShapeEntries(layer, onChanged, flip),
+        child: Center(
+          child: glyph.LumitIcon(
+              shown ? LumitIcons.visible : LumitIcons.hidden,
+              size: iconSize,
+              colour: shown ? t.textPrimary : t.textMuted),
+        ),
+      ),
+    );
   }
 
   /// Copy the effect this heading names — or, when it is one of
@@ -506,6 +579,31 @@ class FoldRow extends StatelessWidget {
                       child: TimingsCell(effectId: effectId),
                     ),
                   ),
+                ] else if (!locked &&
+                    path == contentsPath(layer.internallayerId.toString())) ...[
+                  // A shape layer's Contents heading: Global add, in the
+                  // place the Add on the rows under it has.
+                  Expanded(
+                    child: Text(t.propertyCase(label),
+                        style: t.body.copyWith(
+                            color:
+                                Color.lerp(t.body.color, t.textPrimary, lit)),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  RowButton(
+                    key: ValueKey<String>('tl-shape-global-add-button-$path'),
+                    label: l10n.shapeGlobalAdd,
+                    arrow: true,
+                    onTap: (at) => showMenuAt<void>(
+                      context: context,
+                      position: at,
+                      width: 150,
+                      rows: (close) =>
+                          globalAddRows(() => close(null), layer, onChanged),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(width: valueColumn.width),
                 ] else
                   Flexible(
                     child: Text(named ? label : t.propertyCase(label),
@@ -782,6 +880,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     };
     // A clip's row: the fourth place a stack can be read from, and the commit
     // routes to the clip's own list by the same shared lookup.
+    _editor.drivers = row.driver;
     _editor.clipStack = switch (row.clip) {
       final c? => () =>
           widget.layer.getClipEffects(clip: c, onCompClock: false),
@@ -838,7 +937,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
   /// stack, so it has no point on the picture to pick.
   void _pick(LumitUiState ui, String param) {
     final row = widget.row;
-    if (!row.style && row.group == null && row.clip == null) {
+    if (!row.style && !row.driver && row.group == null && row.clip == null) {
       pickForPoint(ui, widget.layer, row.info, param);
     }
   }

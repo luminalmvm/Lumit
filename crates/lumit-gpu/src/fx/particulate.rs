@@ -160,7 +160,7 @@ pub struct ParticulateOp<'a> {
 
 /// [`ParticulateOp::blend`]'s Add, the one mode besides Normal the card's own
 /// blending draws exactly.
-const BLEND_ADD: u32 = 6;
+pub(super) const BLEND_ADD: u32 = 6;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -265,7 +265,7 @@ pub(super) struct ParticulateParams {
 }
 
 /// One render pass drawing into `view`, the picture kept or cleared.
-fn draw_pass<'e>(
+pub(super) fn draw_pass<'e>(
     enc: &'e mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     load: wgpu::LoadOp<wgpu::Color>,
@@ -297,7 +297,7 @@ const TILE: u32 = 16;
 /// at the most, which is sixteen megabytes each way and a dispatch of 8 192
 /// blocks. Past it the oldest particles are left off the layer, the cap rule
 /// again.
-fn pair_max(cap: u32) -> u32 {
+pub(super) fn pair_max(cap: u32) -> u32 {
     cap.saturating_mul(16)
         .clamp(1 << 20, 1 << 21)
         .next_multiple_of(SCAN_BLOCK)
@@ -308,7 +308,7 @@ const SCAN_HEAD: u32 = 16;
 
 /// How many 16 px steps a tile's side is, so a frame has fewer tiles than
 /// the sort's sixteen bits can name.
-fn tile_scale(w: u32, h: u32) -> u32 {
+pub(super) fn tile_scale(w: u32, h: u32) -> u32 {
     let mut m = 1;
     while m < 64 && w.div_ceil(TILE * m) * h.div_ceil(TILE * m) >= 0xffff {
         m *= 2;
@@ -318,7 +318,7 @@ fn tile_scale(w: u32, h: u32) -> u32 {
 
 /// How many numbers the tiles' `scan` holds: a particle's count each, the
 /// sort's digit counts, or two words a tile, whichever is most.
-fn scan_len(cap: u32, w: u32, h: u32) -> u32 {
+pub(super) fn scan_len(cap: u32, w: u32, h: u32) -> u32 {
     let side = TILE * tile_scale(w, h);
     let tiles = w.div_ceil(side) * h.div_ceil(side);
     cap.max(pair_max(cap)).max(tiles * 2)
@@ -407,7 +407,16 @@ impl FxEngine {
             drop(rp);
             layer
         } else {
-            self.particulate_tiles(ctx, &mut enc, &pass, w, h, op.cap)
+            self.particulate_tiles(
+                ctx,
+                &mut enc,
+                [&pass.empty, &pass.draw_bind],
+                &pass.args,
+                w,
+                h,
+                op.cap,
+                None,
+            )
         };
         let finish_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-particulate-finish-bind"),
@@ -436,14 +445,21 @@ impl FxEngine {
     /// Every mode but Normal and Add reads the colour already there, which
     /// the card's blending cannot, so the tiles work it out (the kernel's
     /// Particle blend section), into a layer of the particles' own.
-    fn particulate_tiles(
+    ///
+    /// `groups` are the empty group and the draw's, `args` the indirect
+    /// draw's arguments, and `base` what the layer starts from (clear when
+    /// `None`).
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn particulate_tiles(
         &self,
         ctx: &GpuContext,
         enc: &mut wgpu::CommandEncoder,
-        pass: &ParticulatePass,
+        groups: [&wgpu::BindGroup; 2],
+        args: &wgpu::Buffer,
         w: u32,
         h: u32,
         cap: u32,
+        base: Option<&wgpu::Texture>,
     ) -> wgpu::Texture {
         let blend = &self.particulate_blend;
         // ponytail: the layer and the sort's scratch are made fresh each
@@ -484,6 +500,30 @@ impl FxEngine {
             (u64::from(SCAN_HEAD) + u64::from(len) + u64::from(len.div_ceil(SCAN_BLOCK))) * 4,
         );
         let tiles_view = tiles.create_view(&Default::default());
+        // No base is one clear pixel, which the kernel reads only at the
+        // corner: a new texture reads as nought.
+        let clear;
+        let base = match base {
+            Some(base) => base,
+            None => {
+                clear = ctx.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("fx-particulate-tiles-clear"),
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba16Float,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                });
+                &clear
+            }
+        };
+        let base_view = base.create_view(&Default::default());
         let bind = |src: &wgpu::Buffer, dst: &wgpu::Buffer| {
             ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("fx-particulate-tiles-bind"),
@@ -491,7 +531,7 @@ impl FxEngine {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: pass.args.as_entire_binding(),
+                        resource: args.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -512,6 +552,12 @@ impl FxEngine {
                     wgpu::BindGroupEntry {
                         binding: 5,
                         resource: scan.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 7,
+                        resource: wgpu::BindingResource::TextureView(
+                            &base_view,
+                        ),
                     },
                 ],
             })
@@ -547,8 +593,8 @@ impl FxEngine {
             label: Some("fx-particulate-tiles"),
             timestamp_writes: None,
         });
-        cp.set_bind_group(0, &pass.empty, &[]);
-        cp.set_bind_group(1, &pass.draw_bind, &[]);
+        cp.set_bind_group(0, groups[0], &[]);
+        cp.set_bind_group(1, groups[1], &[]);
         for (group, pipeline, x, y) in steps {
             cp.set_bind_group(2, group, &[]);
             cp.set_pipeline(pipeline);
@@ -1169,6 +1215,16 @@ impl ParticulateBlendPipelines {
                     buffer(3, false),
                     buffer(4, false),
                     buffer(5, false),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 7,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
         let finish_layout = ctx

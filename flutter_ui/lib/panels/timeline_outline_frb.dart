@@ -988,6 +988,7 @@ class Outline extends StatelessWidget {
     final valueColumn = valueColumnFor(groupOrder, widths);
     final timingsColumn = timingsColumnFor(groupOrder, widths);
     final baseIndent = identityStart(groupOrder, widths);
+    final eyeX = switchesStart(groupOrder, widths);
     // The rows on screen, which is what a drag and a multi-row command act
     // on.
     final layers = [for (final row in rows) row.entry];
@@ -1055,6 +1056,7 @@ class Outline extends StatelessWidget {
                     valueColumn: valueColumn,
                     timingsColumn: timingsColumn,
                     baseIndent: baseIndent,
+                    eyeX: eyeX,
                     path: foldRowPath(rows[i].id, row),
                     others: mine.otherProperties[
                             foldRowPath(rows[i].id, row)] ??
@@ -1131,6 +1133,7 @@ class Outline extends StatelessWidget {
                       valueColumn: valueColumn,
                       timingsColumn: timingsColumn,
                       baseIndent: baseIndent,
+                      eyeX: eyeX,
                       path: foldRowPath(rows[i].id, row),
                       others: mine.otherProperties[
                               foldRowPath(rows[i].id, row)] ??

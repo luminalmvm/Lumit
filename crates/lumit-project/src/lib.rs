@@ -2938,6 +2938,7 @@ mod tests {
         wiggle.custom_name = Some("The wobble".into());
         let wiggle_id = wiggle.id;
         layer.graph = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             out_unwired: false,
@@ -3096,6 +3097,7 @@ mod tests {
         let out = GraphNode::Output { id: Uuid::now_v7() };
         let (read_id, input_id, out_id) = (read.id(), input.id(), out.id());
         let wanted = CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             nodes: vec![read, input, GraphNode::Fx(blur), GraphNode::Fx(wiggle), out],
