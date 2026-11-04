@@ -177,85 +177,66 @@ class ViewerBar extends StatelessWidget {
             tier: tier,
             shownScale: shownScale,
           );
-          final row = Row(
-            // **The two gaps are the same gap, and they are what gives way
-            // first** (§12A.6). The drawing sets the transport and the
-            // reading each with a `margin-left: auto`, which in a flex row
-            // splits whatever is left over equally between them — so the
-            // reading is at its own natural width and the gaps take the rest.
-            // `spaceBetween` over three groups is exactly that, and it is why
-            // the reading is a plain child of the last group rather than one
-            // of three equal flex shares: sharing the free space three ways
-            // gave the reading a third of it and elided a line that fitted.
-            mainAxisAlignment: loose
-                ? MainAxisAlignment.spaceBetween
-                : MainAxisAlignment.start,
-            children: [
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                ...leading,
-                if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
-                if (keepsLooking)
-                  ..._looking(context, t)
-                else
-                  // **Step 4 of the ladder**: a run of buttons that no longer
-                  // fits collapses into one overflow mark at the end of its
-                  // run rather than shrinking or clipping. The very same
-                  // widgets stand inside it, so nothing here has a second
-                  // implementation that can drift from the first.
-                  _LookingOverflow(marks: () => _looking(context, t)),
-              ]),
-              if (!loose && transport) const SizedBox(width: 24),
-              if (transport)
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  ...viewerTransportMarks(
-                    t,
-                    playing: playing,
-                    playhead: playhead,
-                    settings: settings,
-                    comp: comp,
-                    onPlayPause: onPlayPause,
-                    onSeek: onSeek,
-                    detached: detached,
-                    clock: keepsClock,
-                  ),
-                  // The loop mode, beside the clock. The first of the controls
-                  // to leave a narrowing bar. One edge to allow for: the clock
-                  // before it is text.
-                  if (keepsLoop) ...[
-                    SizedBox(width: viewerTransportGap - viewerMarkEdge),
-                    viewerLoopMark(t, loop: loop, onLoop: onLoop),
-                  ],
-                ]),
-              if (!loose && keepsReading) const SizedBox(width: 24),
-              // The reading takes the room the two gaps are not using, and
-              // sheds parts of itself before it elides — the ladder is in
-              // [_Readout]. Flexible only where the bar is spread; where it
-              // scrolls there is no width to be flexible against.
-              if (loose)
-                Flexible(
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    // Before the reading, so the reading stays put at the
-                    // bar's right-hand end while a frame is waited on.
-                    ViewerProgressBar(
-                      tracker: Provider.of<LumitUiState>(context, listen: false)
-                          .previewProgress,
-                    ),
-                    Flexible(child: reading),
-                  ]),
-                )
-              else if (keepsReading) ...[
-                ViewerProgressBar(
-                  tracker: Provider.of<LumitUiState>(context, listen: false)
-                      .previewProgress,
-                ),
+          final looking = Row(mainAxisSize: MainAxisSize.min, children: [
+            ...leading,
+            if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
+            if (keepsLooking)
+              ..._looking(context, t)
+            else
+              // **Step 4 of the ladder**: a run of buttons that no longer
+              // fits collapses into one overflow mark at the end of its
+              // run rather than shrinking or clipping. The very same
+              // widgets stand inside it, so nothing here has a second
+              // implementation that can drift from the first.
+              _LookingOverflow(marks: () => _looking(context, t)),
+          ]);
+          final marks = Row(mainAxisSize: MainAxisSize.min, children: [
+            ...viewerTransportMarks(
+              t,
+              playing: playing,
+              playhead: playhead,
+              settings: settings,
+              comp: comp,
+              onPlayPause: onPlayPause,
+              onSeek: onSeek,
+              detached: detached,
+              clock: keepsClock,
+            ),
+            // The loop mode, beside the clock. The first of the controls
+            // to leave a narrowing bar. One edge to allow for: the clock
+            // before it is text.
+            if (keepsLoop) ...[
+              SizedBox(width: viewerTransportGap - viewerMarkEdge),
+              viewerLoopMark(t, loop: loop, onLoop: onLoop),
+            ],
+          ]);
+          final progress = ViewerProgressBar(
+            tracker: Provider.of<LumitUiState>(context, listen: false)
+                .previewProgress,
+          );
+          if (loose) {
+            return CustomMultiChildLayout(
+              delegate: _SpreadBar(Directionality.of(context)),
+              children: [
+                LayoutId(id: _BarPart.looking, child: looking),
+                if (transport) LayoutId(id: _BarPart.transport, child: marks),
+                LayoutId(id: _BarPart.progress, child: progress),
+                LayoutId(id: _BarPart.reading, child: reading),
+              ],
+            );
+          }
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              looking,
+              if (transport) ...[const SizedBox(width: 24), marks],
+              if (keepsReading) ...[
+                const SizedBox(width: 24),
+                progress,
                 reading,
               ],
-            ],
+            ]),
           );
-          return loose
-              ? row
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal, child: row);
         },
       ),
     );
@@ -550,6 +531,63 @@ const double viewerPlayCapsuleWidth = 34;
 /// The numbers are the widths at which the pieces below them stop fitting,
 /// rounded outward, and `viewer_metrics_test` walks the whole ladder.
 const double _barMinimum = 560;
+
+enum _BarPart { looking, transport, progress, reading }
+
+/// The bar while it is spread.
+///
+/// **The two gaps are the same gap, and they are what gives way first**
+/// (§12A.6). The drawing sets the transport and the reading each with a
+/// `margin-left: auto`, which in a flex row splits whatever is left over equally
+/// between them, so the reading is at its own natural width and the gaps take
+/// the rest. A share of the free space would have elided a line that fitted.
+///
+/// The progress bar is no part of that sum. It has what the gap before the
+/// reading has, so its coming and going moves nothing.
+class _SpreadBar extends MultiChildLayoutDelegate {
+  final TextDirection direction;
+
+  _SpreadBar(this.direction);
+
+  @override
+  void performLayout(Size size) {
+    Size laid(_BarPart part, double room) => hasChild(part)
+        ? layoutChild(
+            part,
+            BoxConstraints(
+              maxWidth: room < 0 ? 0 : room,
+              maxHeight: size.height,
+            ),
+          )
+        : Size.zero;
+    void place(_BarPart part, Size own, double x) {
+      if (!hasChild(part)) return;
+      positionChild(
+        part,
+        Offset(
+          direction == TextDirection.rtl ? size.width - x - own.width : x,
+          (size.height - own.height) / 2,
+        ),
+      );
+    }
+
+    final looking = laid(_BarPart.looking, size.width);
+    final marks = laid(_BarPart.transport, size.width - looking.width);
+    final reading =
+        laid(_BarPart.reading, size.width - looking.width - marks.width);
+    final free = size.width - looking.width - marks.width - reading.width;
+    final gap = hasChild(_BarPart.transport) ? free / 2 : free;
+    final readingAt = size.width - reading.width;
+    final progress = laid(_BarPart.progress, gap);
+    place(_BarPart.looking, looking, 0);
+    place(_BarPart.transport, marks, looking.width + gap);
+    place(_BarPart.progress, progress, readingAt - progress.width);
+    place(_BarPart.reading, reading, readingAt);
+  }
+
+  @override
+  bool shouldRelayout(_SpreadBar old) => old.direction != direction;
+}
 
 /// Below this the bar drops the reading and keeps the controls.
 const double _barKeepsReading = 460;

@@ -9,8 +9,9 @@
 // picture. Over the picture it covered the bottom of the composition — the one
 // thing the Viewer exists to show — and it did so exactly while a frame was
 // being waited on, which is when people are looking hardest. On the bar it has
-// a place of its own: the controls take the space that is left, so the bar
-// arriving and leaving moves none of them.
+// a place of its own: the gap before the reading, whatever that has, so the bar
+// arriving and leaving moves none of the controls. A narrower gap shortens its
+// word, then drops the word, and then the bar.
 //
 // **What it is not.** It is not a playback indicator — nothing appears while
 // the transport is running (the engine sends no reports then), because a bar
@@ -49,6 +50,12 @@ const double _trackWidth = 64;
 /// composition") is longer than this and is shortened with an ellipsis rather
 /// than being allowed to push the bar about.
 const double _labelWidth = 110;
+
+/// The least room the stage name is worth showing in.
+const double _labelLeast = 40;
+
+/// What it keeps clear of the transport on its left.
+const double _clearOfTransport = 12;
 
 class ViewerProgressBar extends StatefulWidget {
   final PreviewProgressTracker tracker;
@@ -126,66 +133,75 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
     // Viewer's own hit testing is untouched while no frame is being waited on.
     if (!tracker.visible) return const SizedBox.shrink();
     final motion = scope.motion;
+    final figure = monoSlotWidth(t.small, 4);
+    final track = _trackWidth + 6 + figure + 12;
 
-    return IgnorePointer(
-      child: Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: _labelWidth,
-              child: Text(
-                tracker.label,
-                style: t.small,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-                textAlign: TextAlign.right,
-              ),
-            ),
-            const SizedBox(width: 6),
-            // Its own layer, so the sheen repaints the track and not the
-            // transport round it.
-            RepaintBoundary(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                child: SizedBox(
-                  width: _trackWidth,
-                  height: _trackHeight,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: ColoredBox(color: t.surface2),
-                      ),
-                      Positioned.fill(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: _fill(t, motion, tracker.fraction),
+    return LayoutBuilder(builder: (context, room) {
+      final spare = room.maxWidth - track - _clearOfTransport;
+      if (spare < 0) return const SizedBox.shrink();
+      final word = (spare - 6).clamp(0.0, _labelWidth);
+      return IgnorePointer(
+        child: Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (word >= _labelLeast) ...[
+                SizedBox(
+                  width: word,
+                  child: Text(
+                    tracker.label,
+                    style: t.small,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              // Its own layer, so the sheen repaints the track and not the
+              // transport round it.
+              RepaintBoundary(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  child: SizedBox(
+                    width: _trackWidth,
+                    height: _trackHeight,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: ColoredBox(color: t.surface2),
                         ),
-                      ),
-                    ],
+                        Positioned.fill(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: _fill(t, motion, tracker.fraction),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-            // A fixed slot for the percentage: it counts up while the frame is
-            // being waited for, and a number that resized itself as it counted
-            // would jog the whole bar (the same rule the clock readouts keep).
-            SizedBox(
-              width: monoSlotWidth(t.small, 4),
-              child: Text(
-                '${(tracker.fraction * 100).round()}%',
-                style: t.small,
-                maxLines: 1,
-                textAlign: TextAlign.right,
+              const SizedBox(width: 6),
+              // A fixed slot for the percentage: it counts up while the frame is
+              // being waited for, and a number that resized itself as it counted
+              // would jog the whole bar (the same rule the clock readouts keep).
+              SizedBox(
+                width: figure,
+                child: Text(
+                  '${(tracker.fraction * 100).round()}%',
+                  style: t.small,
+                  maxLines: 1,
+                  textAlign: TextAlign.right,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   /// The filled part, with the sheen travelling along it.
