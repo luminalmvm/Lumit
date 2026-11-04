@@ -1261,8 +1261,12 @@ class LumitUiState extends ChangeNotifier {
     }
     // Drawn as lines only: nothing to ask the engine for.
     if (linesOnly(view.engineId)) return;
-    // One picture in flight at a time beside the view being worked in.
-    final beside = view.id != views.activeId && _followsPlayhead(view);
+    // One picture in flight at a time beside the view being worked in, and in
+    // a view being moved: a newer picture stops the one being made, so moves
+    // that come faster than a picture is drawn would land almost none.
+    final beside = (view.id != views.activeId && _followsPlayhead(view)) ||
+        cameraDragging ||
+        cameraFlying;
     if (beside) {
       final asked = _viewportAsked[view.engineId];
       if (asked != null &&
@@ -1793,6 +1797,7 @@ class LumitUiState extends ChangeNotifier {
       _viewportWaiting.remove(engineId);
       _askedAt.remove(engineId);
       _pictureTook.remove(engineId);
+      _slowMove.remove(engineId);
       viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
@@ -1951,6 +1956,11 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
     return true;
   }
+
+  /// The part of a 3D model the Timeline has picked, by its layer and its rows'
+  /// id, which the Viewer draws handles on.
+  final ValueNotifier<({UuidValue layer, String part})?> pickedPart =
+      ValueNotifier(null);
 
   /// The whole selection, primary first.
   ///
@@ -2732,6 +2742,7 @@ class LumitUiState extends ChangeNotifier {
         // The endpoint's file goes with it, so nothing names a Lumit that
         // has gone.
         if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
+        stopBlenders();
         return AppExitResponse.exit;
       },
     );
@@ -2805,11 +2816,11 @@ class LumitUiState extends ChangeNotifier {
       // up, and the card goes on it.
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when field0.done) {
-        _viewportLanded(field0.view);
         final asked = _askedAt.remove(field0.view);
         if (asked != null) {
           _pictureTook[field0.view] = DateTime.now().difference(asked);
         }
+        _viewportLanded(field0.view);
       }
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when !field0.done) {
@@ -2970,7 +2981,6 @@ class LumitUiState extends ChangeNotifier {
   /// letting one drive the transport would make a locked view's first frame
   /// drag the playhead somewhere nobody asked for.
   void _followFrame(int frame, int engineId, int tier) {
-    _viewportLanded(engineId);
     if (engineId != activeViewId) return;
     _arrived(frame);
     _playAlong(tier);
@@ -4178,6 +4188,14 @@ class LumitUiState extends ChangeNotifier {
   final Map<int, Duration> _pictureTook = {};
   static const _slowPicture = Duration(milliseconds: 50);
 
+  /// What each view was showing when a picture of a move last came out slow,
+  /// so moving the same thing again starts as a draft.
+  final Map<int, (String?, int?, BridgeModelDisplay)> _slowMove = {};
+
+  /// Why a 3D model isn't drawing, as the Project panel's badge says it, so a
+  /// view with no model to draw can say it too. Null when nothing's wrong.
+  final ValueNotifier<String?> modelTrouble = ValueNotifier(null);
+
   /// A drag or a flight started or ended. Each move is timed afresh, and
   /// ending one puts a view drawn as a draft back to its full scale.
   void _moved() {
@@ -4204,7 +4222,13 @@ class LumitUiState extends ChangeNotifier {
       _ => false,
     };
     final took = _pictureTook[view.engineId] ?? Duration.zero;
-    if (draftView.value == null && !lines && took > _slowPicture) {
+    final showing = (
+      compFor(view)?.internalid.toString(),
+      model.heldRevision,
+      displayOf(view.engineId),
+    );
+    if (took > _slowPicture) _slowMove[view.engineId] = showing;
+    if (draftView.value == null && !lines && _slowMove[view.engineId] == showing) {
       draftView.value = view.engineId;
     }
     return draftView.value == view.engineId;

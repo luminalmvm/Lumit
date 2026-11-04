@@ -478,6 +478,10 @@ fn scene_of(pieces: &[Piece], profile: &Profile, tinted: [bool; 4]) -> Arc<Model
         if low[0] > high[0] {
             (low, high) = ([0.0; 3], [0.0; 3]);
         }
+        let bounds = Bounds {
+            min: low,
+            max: high,
+        };
         ModelScene {
             nodes: vec![Node {
                 rotation: [0.0, 0.0, 0.0, 1.0],
@@ -489,6 +493,7 @@ fn scene_of(pieces: &[Piece], profile: &Profile, tinted: [bool; 4]) -> Arc<Model
             meshes: vec![lumit_scene::Mesh {
                 name: String::new(),
                 primitives,
+                bounds,
             }],
             // White, as a vertex or a look gives each face its colour.
             materials: std::array::from_fn::<_, 4, _>(|k| Material {
@@ -499,10 +504,7 @@ fn scene_of(pieces: &[Piece], profile: &Profile, tinted: [bool; 4]) -> Arc<Model
                 ..Material::default()
             })
             .to_vec(),
-            bounds: Bounds {
-                min: low,
-                max: high,
-            },
+            bounds,
             ..ModelScene::default()
         }
     })
@@ -648,7 +650,8 @@ pub fn layer_box(layer: Uuid) -> Option<[[f32; 3]; 8]> {
 #[must_use]
 pub fn hit(layer: Uuid, origin: [f32; 3], direction: [f32; 3]) -> Option<f32> {
     let scene = last_scene(layer)?;
-    crate::model::scene_hit(&scene, glam::Mat4::IDENTITY, origin, direction)
+    crate::model::scene_hit(&scene, glam::Mat4::IDENTITY, None, origin, direction)
+        .map(|(along, _)| along)
 }
 
 /// Layer `layer`'s rows: its options, then, once it has a depth or a bevel,

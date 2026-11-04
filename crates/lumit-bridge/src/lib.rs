@@ -77,12 +77,15 @@ mod frb_generated;
 // module below it — see [`note`] for why no module may `println!`.
 #[macro_use]
 mod note;
+mod enabled_rules;
+mod project_cache;
 
 #[cfg(feature = "media")]
 mod audio;
 mod autosave;
 mod beats;
 mod claim;
+mod closing;
 // The command line, which the browser build has none of.
 #[cfg(not(target_arch = "wasm32"))]
 mod cli;

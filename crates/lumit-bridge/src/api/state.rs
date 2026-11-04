@@ -1249,8 +1249,7 @@ pub(crate) fn adopt(
     // one's are read back off the sidecar — in that order, so the clear
     // cannot empty what the warm has just filled. Outside the registry lock,
     // like everything else below it.
-    lumit_render::track::clear();
-    lumit_render::track::warm(solves);
+    crate::project_cache::project_changed(id, solves);
     lumit_render::roto::clear();
     lumit_render::roto::warm(mattes);
     lumit_render::planes::clear();

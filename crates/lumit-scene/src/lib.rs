@@ -19,6 +19,8 @@ use lumit_ingress::{Budget, Limits};
 mod fbx_file;
 mod files;
 mod gltf_file;
+pub mod pose;
+mod settle;
 
 /// Models built in code, for other crates' tests and the bench.
 #[cfg(any(test, feature = "test-fixtures"))]
@@ -121,12 +123,16 @@ pub struct Node {
     pub skin: Option<usize>,
     /// Morph target weights at rest, one per target of its mesh.
     pub weights: Vec<f32>,
+    /// Where it is from its root by name, which a layer's rows find it by.
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Mesh {
     pub name: String,
     pub primitives: Vec<Primitive>,
+    /// The box round its vertices at rest, in its own space.
+    pub bounds: Bounds,
 }
 
 /// Triangles that share one material. Every attribute list is either empty or
@@ -155,6 +161,8 @@ pub struct MorphTarget {
     pub positions: Vec<[f32; 3]>,
     pub normals: Vec<[f32; 3]>,
     pub tangents: Vec<[f32; 3]>,
+    /// The box round what it adds to each vertex.
+    pub reach: Bounds,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -315,6 +323,8 @@ pub struct Skin {
     pub joints: Vec<usize>,
     /// Column-major, one per joint.
     pub inverse_bind: Vec<[[f32; 4]; 4]>,
+    /// The box round the vertices each joint moves, as they are at rest.
+    pub boxes: Vec<Bounds>,
 }
 
 /// One embedded animation, a take.
@@ -332,6 +342,10 @@ pub enum Path {
     Rotation,
     Scale,
     Weights,
+    /// One morph target's weight alone, one number a key.
+    Weight(u16),
+    /// A camera's vertical field of view in radians, one number a key.
+    YFov,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -430,6 +444,8 @@ fn read_native(
         link(&mut scene).map_err(|reason| r.fail(reason))?;
         tangents(&mut scene);
         scene.bounds = bounds(&scene);
+        let broken = settle::settle(&mut scene);
+        r.missing.extend(broken);
         Ok(scene)
     }));
     let mut scene = read.unwrap_or_else(|_| Err(r.fail("the file is damaged")))?;

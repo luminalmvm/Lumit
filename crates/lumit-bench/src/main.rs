@@ -137,6 +137,14 @@ fn run() -> Result<(), String> {
         },
     )?);
 
+    // One step of a million simulated particles (docs/13 §2 B37).
+    results.extend(lumit_bench::sim_step::budgets(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
     let out = out_path();
     let banked = Baseline::from_results(&results);
     let text =

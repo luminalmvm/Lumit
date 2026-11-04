@@ -41,6 +41,8 @@ composites over it.
 | **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
 | **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100%. Its **Materials** rows change the file's materials on the layer |
+| **Take** | One embedded animation in a 3D model's file. A Model layer's **Take** row picks it by name |
+| **Part** | One node of a 3D model's file, listed under its Model layer. Only a part with a changed row is saved |
 | **Depth points** | An effect that draws a shot as points in the comp's 3D space, each on its ray from a camera, placed by the depth from Analyse or a Depth layer |
 | **Geometry options** | A Text or Shape layer's Extrusion depth and bevel, which make its outline a solid in the comp's 3D space, with **Front**, **Bevel**, **Side** and **Back** materials |
 
@@ -128,7 +130,8 @@ Not interchangeable.
 | **Shapes** | Paths on a wire: a Read box hands out the paths of the shape layers in the comp it reads |
 | **Collide with** | A layer whose shapes and masks Particulate's particles hit. With one set, each frame's particles are worked out from the frame before |
 | **Flock** | Particulate's particles steering by their neighbours: apart, the same way, together. Worked out from the frame before, as Collide with is |
-| **Sparks** | Small particles Particulate throws out where one of its particles dies. Worked out from the frame before |
+| **Sparks** | Small particles Particulate throws out as one of its particles dies, hits something or flies. Worked out from the frame before |
+| **Simulate** | Particulate worked out step by step on the graphics card, up to its Max particles, under fields and what it hits. Saved as kept states, or baked to the project's cache |
 | **Trails** | Particulate drawing each frame's particles over the picture it kept from the frame before, faded, zoomed and turned, so they leave smears |
 | **Volumetric light** | A light seen in the air it shines through: its beam, the shafts 3D layers cut in it, its glow |
 | **Environment light** | A light from a picture of everything round the scene, an HDRI, that lights 3D layers and models and can show behind them. Its picture is its **Source** layer |

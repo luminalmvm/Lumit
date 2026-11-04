@@ -196,7 +196,7 @@ pub struct Emitter {
 /// `u` of the way along? — answered by the same arc-length walk.
 ///
 /// `frame` is the picture's width and height, which a Layer emitter fills.
-pub(crate) fn birth_point(
+pub fn birth_point(
     e: &Emitter,
     path: &MaskPolyline,
     frame: [f32; 2],

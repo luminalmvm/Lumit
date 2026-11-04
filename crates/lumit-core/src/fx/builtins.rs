@@ -92,19 +92,19 @@ pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
 /// lookup**.
 ///
 /// The catalogue is asked first, then the layer styles
-/// ([`STYLE_DEFS`](super::styles::STYLE_DEFS)), then a Model layer's materials. They
+/// ([`STYLE_DEFS`](super::styles::STYLE_DEFS)), then a Model layer's rows. They
 /// are separate lists on purpose: the catalogue is what the Add-effect menu, the
 /// command palette and the preset browser walk, and none of those should offer a
 /// style or a material as an effect. But both are read through the machinery an
 /// effect is, and every one of those places asks here rather than picking a list.
 ///
-/// `None` for a name this build does not know, which stays an inert placeholder
-/// rendering as identity.
+/// `None` for a name this build doesn't know: an inert placeholder, as identity.
 pub fn def(match_name: &str) -> Option<&'static dyn super::registry::EffectDef> {
     super::catalogue::BUILTIN_DEFS
         .get(match_name)
         .or_else(|| super::styles::STYLE_DEFS.get(match_name))
         .or_else(|| crate::model_material::MATERIAL_DEFS.get(match_name))
+        .or_else(|| crate::model_part::PART_DEFS.get(match_name))
 }
 
 /// What every OFX plugin's `match_name` begins with — the host mints
@@ -917,42 +917,6 @@ pub fn param_visible(inst: &EffectInstance, id: &str) -> bool {
             _ => true,
         }
     })
-}
-
-pub fn param_enabled(inst: &EffectInstance, id: &str) -> bool {
-    let Some(s) = schema(&inst.effect.match_name) else {
-        // No built-in schema (an OFX or placeholder instance) means no rules,
-        // so nothing is greyed.
-        return true;
-    };
-    s.enabled_when
-        .iter()
-        .filter(|rule| rule.param == id)
-        .all(|rule| {
-            // A rule naming a parameter the instance does not carry cannot be
-            // judged, so it does not grey anything: an older instance that
-            // predates the deciding parameter stays fully editable rather than
-            // locking a row it can never unlock (the `fill_missing_params`
-            // trap, from the other side).
-            let Some(value) = inst.param(rule.on) else {
-                return true;
-            };
-            match (rule.cond, value) {
-                (EnabledCond::BoolIs(want), EffectValue::Bool(got)) => *got == want,
-                (EnabledCond::ChoiceIs(want), EffectValue::Choice(got)) => *got == want,
-                (EnabledCond::ChoiceIsNot(no), EffectValue::Choice(got)) => *got != no,
-                (EnabledCond::LayerSet, EffectValue::Layer(layer)) => layer.is_some(),
-                (EnabledCond::LayerUnset, EffectValue::Layer(layer)) => layer.is_none(),
-                (EnabledCond::Nought, EffectValue::Float(p)) => {
-                    matches!(p.animation, crate::anim::Animation::Static(v) if v == 0.0)
-                }
-                // A rule pointed at the wrong kind of parameter is a schema
-                // mistake, not a reason to grey a row the owner can then never
-                // reach. `every_enablement_rule_names_a_parameter_of_its_kind`
-                // fails the build for it instead.
-                _ => true,
-            }
-        })
 }
 
 /// The stem of the one kind of pair a fresh instance starts with chained: a

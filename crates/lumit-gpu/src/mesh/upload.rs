@@ -7,6 +7,7 @@ use crate::GpuContext;
 use glam::Vec3;
 use lumit_scene::{AlphaMode, Image, ModelScene, TextureRef, Wrap};
 use std::collections::HashMap;
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 /// One level of a picture: its width, its height and its pixels.
@@ -103,7 +104,7 @@ impl GpuModel {
     pub(super) fn upload(
         ctx: &GpuContext,
         fx: &MeshFx,
-        scene: &ModelScene,
+        scene: &Arc<ModelScene>,
     ) -> Result<Self, MeshError> {
         let too_large = |_| MeshError::TooLarge;
         // Every primitive of every mesh once, whichever nodes draw it.
@@ -141,13 +142,20 @@ impl GpuModel {
             ranges.push(each);
         }
         let fallback = scene.materials.len();
+        let plan = super::deform::Plan::new(scene, |m, i| {
+            let range = ranges.get(m)?.get(i)?.as_ref()?;
+            Some(range.2)
+        });
         let mut parts = Vec::new();
         for (k, node) in scene.nodes.iter().enumerate() {
             let Some(each) = node.mesh.and_then(|m| ranges.get(m)) else {
                 continue;
             };
             let at = scene.node_world(k);
-            for &(first, count, base_vertex, centre, material) in each.iter().flatten() {
+            for (i, range) in each.iter().enumerate() {
+                let Some((first, count, base_vertex, centre, material)) = *range else {
+                    continue;
+                };
                 parts.push(Part {
                     first,
                     count,
@@ -155,6 +163,8 @@ impl GpuModel {
                     material: material.filter(|&m| m < fallback).unwrap_or(fallback),
                     node: at,
                     centre,
+                    index: k,
+                    deform: plan.slot(k, i),
                 });
             }
         }
@@ -193,7 +203,7 @@ impl GpuModel {
             .sum();
         let held = ctx.ledger().reserve(
             lumit_budget::Tier::Vram,
-            vertex_bytes + index_bytes + texture_bytes,
+            vertex_bytes + index_bytes + texture_bytes + plan.bytes(),
         )?;
 
         // Never an empty buffer, which the card won't make.
@@ -211,10 +221,12 @@ impl GpuModel {
                     usage,
                 })
         };
+        // The pass that moves parts reads them too.
+        let moving = plan.any().then_some(wgpu::BufferUsages::STORAGE);
         let vertices = buffer(
             "mesh-vertices",
             bytemuck::cast_slice(&vertices),
-            wgpu::BufferUsages::VERTEX,
+            wgpu::BufferUsages::VERTEX | moving.unwrap_or(wgpu::BufferUsages::empty()),
         );
         let indices = buffer(
             "mesh-indices",
@@ -297,6 +309,7 @@ impl GpuModel {
             materials,
             edges: std::sync::OnceLock::new(),
             kept,
+            deforms: plan.upload(ctx, scene, vertex_bytes),
             _held: held,
         })
     }

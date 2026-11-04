@@ -32,6 +32,9 @@ pub struct ModelDraw {
     /// The scene at each of those samples, where its shape moves across the
     /// shutter. Empty when it holds still.
     pub shutter_scenes: Vec<Arc<ModelScene>>,
+    /// Where its nodes are, one for each of `shutter` or one for the frame.
+    /// Empty when it draws as its file has it.
+    pub poses: Vec<lumit_scene::pose::Pose>,
     pub opacity: f32,
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
@@ -183,14 +186,11 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
     }
     if ASIDE.with(Cell::get) {
         LEFT_OUT.fetch_add(1, Ordering::Relaxed);
-        let last = LAST
-            .lock()
-            .ok()
-            .and_then(|last| last.as_ref()?.get(&key.0)?.upgrade());
+        let last = last_read(&key);
         read_beside(key);
         return last;
     }
-    read_and_keep(key)
+    read_and_keep(key.clone()).or_else(|| last_read(&key))
 }
 
 /// Model layer `layer` as the mesh pass draws it at comp time `t_comp`,
@@ -265,9 +265,28 @@ pub(crate) fn draw(
             shutter_scenes.clear();
         }
     }
+    // A Model layer's moving parts have a pose for each.
+    let settings = match &layer.kind {
+        LayerKind::Model { settings, .. } => Some(settings),
+        _ => None,
+    };
+    let pose_at = |t| crate::model_motion::pose_at(comp, layer, settings?, &scene, t, context);
+    let frame_pose = pose_at(t_comp);
+    let mut poses: Vec<_> = match frame_pose.is_some() {
+        true => (offsets.iter())
+            .filter_map(|off| pose_at(t_comp + off * dt))
+            .collect(),
+        false => Vec::new(),
+    };
     // A model that stays put over the shutter is drawn once.
-    if shutter_scenes.is_empty() && shutter.iter().all(|s| *s == placement) {
+    if shutter_scenes.is_empty()
+        && shutter.iter().all(|s| *s == placement)
+        && poses.iter().all(|p| Some(p) == frame_pose.as_ref())
+    {
         shutter.clear();
+    }
+    if shutter.is_empty() {
+        poses = frame_pose.into_iter().collect();
     }
     Some(ModelDraw {
         item,
@@ -275,6 +294,7 @@ pub(crate) fn draw(
         model_to_comp,
         shutter,
         shutter_scenes,
+        poses,
         scene,
         opacity: layer
             .transform
@@ -301,11 +321,20 @@ fn key_of(doc: &Document, item: Uuid) -> Option<Key> {
     Some((path, len, Some(at), lumit_scene::blender::choices()))
 }
 
-/// What reading `key` came to, `None` when it hasn't been read.
+/// What reading `key` came to, `None` when it hasn't been read. A file saved
+/// over with something that won't open keeps its last good scene.
 fn kept(key: &Key) -> Option<Option<Arc<ModelScene>>> {
-    let mut slot = KEPT.lock().ok()?;
-    let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
-    kept.get(key).map(|Kept(scene)| scene.clone())
+    let scene = {
+        let mut slot = KEPT.lock().ok()?;
+        let kept = slot.get_or_insert_with(|| lumit_cache::ByteLru::new(KEPT_BYTES));
+        kept.get(key)?.0.clone()
+    };
+    Some(scene.or_else(|| last_read(key)))
+}
+
+/// The last scene read from `key`'s file, while it lives.
+fn last_read(key: &Key) -> Option<Arc<ModelScene>> {
+    LAST.lock().ok()?.as_ref()?.get(&key.0)?.upgrade()
 }
 
 /// The scene of model item `item` once its file has been read, `None` inside
@@ -331,9 +360,12 @@ pub fn layer_box(
     item: Uuid,
     settings: &ModelSettings,
     comp: (f32, f32),
+    pose: Option<&lumit_scene::pose::Pose>,
 ) -> Option<[[f32; 3]; 8]> {
-    let bounds = kept(&key_of(doc, item)?)??.bounds;
-    let m = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &bounds, comp));
+    let rest = kept(&key_of(doc, item)?)??.bounds;
+    let bounds = pose.map_or(rest, |p| p.bounds);
+    // Placed by its box at rest, so a model doesn't drift as it moves.
+    let m = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &rest, comp));
     Some(std::array::from_fn(|i| {
         let corner = std::array::from_fn(|k| match i >> k & 1 {
             0 => bounds.min[k],
@@ -347,50 +379,82 @@ pub fn layer_box(
 /// it names them. Reads the file if nothing has yet.
 pub fn missing(doc: &Document, item: Uuid) -> Vec<String> {
     let known = key_of(doc, item).and_then(|key| MISSING.lock().ok()?.as_ref()?.get(&key).cloned());
-    known.unwrap_or_else(|| scene(doc, item).map_or_else(Vec::new, |s| s.missing.clone()))
+    let mut names =
+        known.unwrap_or_else(|| scene(doc, item).map_or_else(Vec::new, |s| s.missing.clone()));
+    let read = key_of(doc, item).and_then(|key| kept(&key)).flatten();
+    if read.is_some_and(|s| lumit_gpu::mesh::deform::left_at_rest(&s)) {
+        names.push(TOO_LARGE_TO_MOVE.to_owned());
+    }
+    names
+}
+
+/// What the missing list says of a model too large for this card to move.
+pub const TOO_LARGE_TO_MOVE: &str = "Skins and morph targets, too large for this graphics card";
+
+/// Whether model item `item` has been read and holds no takes.
+pub fn known_still(doc: &Document, item: Uuid) -> bool {
+    key_of(doc, item)
+        .and_then(|key| kept(&key))
+        .flatten()
+        .is_some_and(|scene| scene.clips.is_empty())
 }
 
 /// How far along the ray from `origin` by `direction`, in its layer's pixels,
 /// model item `item` placed by `settings` in a comp `comp` pixels in size is
-/// first met, in parts of `direction`. `None` where it misses and before the
-/// file has been read, which this never does.
+/// first met as `pose` has it, in parts of `direction`, and which node's part
+/// it met. `None` where it misses and before the file has been read, which
+/// this never does.
 pub fn hit(
     doc: &Document,
     item: Uuid,
     settings: &ModelSettings,
     comp: (f32, f32),
+    pose: Option<&lumit_scene::pose::Pose>,
     origin: [f32; 3],
     direction: [f32; 3],
-) -> Option<f32> {
+) -> Option<(f32, usize)> {
     let scene = kept(&key_of(doc, item)?)??;
     let placed = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &scene.bounds, comp));
-    scene_hit(&scene, placed, origin, direction)
+    scene_hit(&scene, placed, pose, origin, direction)
 }
 
 /// How far along the ray from `origin` by `direction` `scene` placed by
-/// `placed` is first met, in parts of `direction`.
+/// `placed` is first met as `pose` has it, in parts of `direction`, and which
+/// node's part it met.
 pub fn scene_hit(
     scene: &ModelScene,
     placed: glam::Mat4,
+    pose: Option<&lumit_scene::pose::Pose>,
     origin: [f32; 3],
     direction: [f32; 3],
-) -> Option<f32> {
-    use glam::Vec3;
+) -> Option<(f32, usize)> {
+    use glam::{Mat4, Vec3};
     let (origin, direction) = (Vec3::from(origin), Vec3::from(direction));
-    let mut nearest = None::<f32>;
+    let mut nearest = None::<(f32, usize)>;
     for (k, node) in scene.nodes.iter().enumerate() {
         let Some(mesh) = node.mesh.and_then(|m| scene.meshes.get(m)) else {
             continue;
         };
+        if pose.is_some_and(|p| p.hidden.get(k).copied().unwrap_or(false)) {
+            continue;
+        }
+        // A pose gives vertices in model space, and with none they're in the
+        // node's own, so the ray goes there.
+        let world = match pose {
+            Some(_) => Mat4::IDENTITY,
+            None => scene.node_world(k),
+        };
+        let mover = pose.map(|p| p.mover(scene, k));
         // The ray in the node's own space, which keeps its parts of direction.
-        let back = (placed * scene.node_world(k)).inverse();
+        let back = (placed * world).inverse();
         let (o, d) = (
             back.transform_point3(origin),
             back.transform_vector3(direction),
         );
         // ponytail: a layer mirrored by a negative Scale isn't seen here, so
         // its single-sided parts are culled from the wrong side.
-        let mirrored = (placed * scene.node_world(k)).determinant() < 0.0;
+        let whole = pose.map_or(world, |p| p.worlds.get(k).copied().unwrap_or(world));
+        let mirrored = (placed * whole).determinant() < 0.0;
         for p in &mesh.primitives {
             // Parts the pass leaves out: cut out or see-through all over.
             let m = p.material.and_then(|m| scene.materials.get(m));
@@ -404,13 +468,23 @@ pub fn scene_hit(
             }
             // glTF's default is one-sided.
             let culled = !mirrored && !m.is_some_and(|m| m.double_sided);
-            let corner = |i: u32| p.positions.get(i as usize).copied().map(Vec3::from);
+            let corner = |i: u32| match &mover {
+                Some(mover) => mover.vertex(p, i as usize),
+                None => p.positions.get(i as usize).copied().map(Vec3::from),
+            };
             let count = if p.indices.is_empty() {
                 p.positions.len()
             } else {
                 p.indices.len()
             };
             let index = |i: usize| p.indices.get(i).copied().unwrap_or(i as u32);
+            // On a skin the part met is the bone that moves what was met most.
+            let bone = |i: u32| {
+                let skin = scene.skins.get(node.skin?)?;
+                let (joints, shares) = (p.joints.get(i as usize)?, p.weights.get(i as usize)?);
+                let most = (0..4).max_by(|&a, &b| shares[a].total_cmp(&shares[b]))?;
+                skin.joints.get(usize::from(joints[most])).copied()
+            };
             for t in 0..count / 3 {
                 let (Some(a), Some(b), Some(c)) = (
                     corner(index(t * 3)),
@@ -432,8 +506,9 @@ pub fn scene_hit(
                 let r = s.cross(e1);
                 let v = d.dot(r) / det;
                 let along = e2.dot(r) / det;
-                if u >= 0.0 && v >= 0.0 && u + v <= 1.0 && along > 0.0 {
-                    nearest = Some(nearest.map_or(along, |n| n.min(along)));
+                let inside = u >= 0.0 && v >= 0.0 && u + v <= 1.0 && along > 0.0;
+                if inside && nearest.is_none_or(|(n, _)| along < n) {
+                    nearest = Some((along, bone(index(t * 3)).unwrap_or(k)));
                 }
             }
         }
@@ -519,6 +594,12 @@ pub fn model_to_comp(settings: &ModelSettings, bounds: &Bounds, comp: (f32, f32)
         * up_turn(settings.up_axis)
         * Mat4::from_translation(-centre))
     .to_cols_array_2d()
+}
+
+/// The turn `model_to_comp` gives a model, without its size.
+pub(crate) fn up_right(up: UpAxis) -> glam::Quat {
+    let flip = glam::Mat4::from_rotation_x(std::f32::consts::PI);
+    glam::Quat::from_mat4(&(flip * up_turn(up)))
 }
 
 /// A Z-up file turned so its Z is our Y.

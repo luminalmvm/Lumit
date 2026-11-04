@@ -2786,22 +2786,38 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
         // Centres are raster pixels (px@comp, resolved to this raster): the
         // middle of the 32x24 corpus, and a point three tenths across and
         // seven tenths down it.
-        for (centre, amount, spin, mix) in [
-            ([16.0f32, 12.0f32], 6.0f32, true, 1.0f32),
-            ([16.0, 12.0], 6.0, false, 1.0),
-            ([9.6, 16.8], 9.5, true, 0.6),
-            ([9.6, 16.8], 9.5, false, 0.6),
-            ([16.0, 12.0], 0.0, true, 1.0),
+        for (centre, amount, kind, mix) in [
+            ([16.0f32, 12.0f32], 6.0f32, 1u32, 1.0f32),
+            ([16.0, 12.0], 6.0, 0, 1.0),
+            ([9.6, 16.8], 9.5, 1, 0.6),
+            ([9.6, 16.8], 9.5, 0, 0.6),
+            ([16.0, 12.0], 0.0, 1, 1.0),
+            ([9.6, 16.8], 9.5, 2, 0.6),
+            ([16.0, 12.0], 40.0, 2, 1.0),
         ] {
             let mut cpu = img.clone();
-            lumit_core::fx::cpu::blur_radial(&mut cpu, w, h, centre, amount, spin, edge, mix);
+            match kind {
+                2 => lumit_core::fx::effects::radial_blur::rays(
+                    &mut cpu, w, h, centre, amount, edge, mix,
+                ),
+                _ => lumit_core::fx::cpu::blur_radial(
+                    &mut cpu,
+                    w,
+                    h,
+                    centre,
+                    amount,
+                    kind == 1,
+                    edge,
+                    mix,
+                ),
+            }
 
             let tex = upload_linear_f32(&ctx, &img, w, h);
             let op = RadialBlurOp {
                 centre_px: centre,
                 amount_px: amount,
                 taps: lumit_core::fx::cpu::radial_blur_taps(amount),
-                spin,
+                kind,
                 edge,
                 mix,
             };
@@ -2810,11 +2826,11 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
 
             let worst = worst_f16_ulp(&cpu, &gpu);
             eprintln!(
-                "radial blur e={edge} c={centre:?} a={amount} spin={spin}: worst {worst} ulp"
+                "radial blur e={edge} c={centre:?} a={amount} kind={kind}: worst {worst} ulp"
             );
             assert!(
                 worst <= 2,
-                "edge {edge} centre {centre:?} amount {amount} spin {spin} mix {mix}: \
+                "edge {edge} centre {centre:?} amount {amount} kind {kind} mix {mix}: \
                      worst {worst} fp16 ULP"
             );
             if amount == 0.0 && mix == 1.0 {
@@ -6762,6 +6778,10 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         accepts_shadows: ShadowMode::Only,
         ..takes
     };
+    let back = ShadingSurface {
+        normal: floor.normal.map(|n| -n),
+        ..floor
+    };
     let adds = ShadingMaterial { base: 1.0, ..takes };
     let very_wide = ShadingLight {
         shadow_diffusion: SPREAD,
@@ -6783,7 +6803,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         encoded: true,
         ..takes
     };
-    let encoded_only = ShadingMaterial {
+    let enc_only = ShadingMaterial {
         accepts_shadows: ShadowMode::Only,
         ..encoded
     };
@@ -6795,17 +6815,12 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         ("half", floor, takes, vec![half], None),
         ("sun", floor, takes, vec![spot, sun], None),
         ("only", floor, only, vec![diffused, sun], None),
+        ("only, from behind", back, only, vec![diffused, sun], None),
         ("adds", floor, adds, vec![spot], None),
         ("unlit", floor, unlit, vec![diffused, sun], None),
         ("unlit only", floor, unlit_only, vec![spot], None),
         ("encoded", floor, encoded, vec![diffused], None),
-        (
-            "encoded only",
-            floor,
-            encoded_only,
-            vec![diffused, sun],
-            None,
-        ),
+        ("encoded only", floor, enc_only, vec![diffused, sun], None),
         ("far reaching only", floor, only, vec![wide], None),
         ("own", card_surface, takes, vec![spot, sun], Some(0)),
     ] {
@@ -13379,7 +13394,7 @@ fn the_matte_scales_the_radial_blur_amount() {
             centre_px: centre,
             amount_px: amount,
             taps: lumit_core::fx::cpu::radial_blur_taps(amount),
-            spin,
+            kind: u32::from(spin),
             edge,
             mix,
         };

@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'camera_track_display_frb.dart';
 import 'status_poller.dart';
+import 'effect_param_row_frb.dart';
 
 /// The sentence for one reading of a planar track.
 ///
@@ -150,10 +151,27 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
       was?.stage != BridgeTrackStage.done &&
       next.stage == BridgeTrackStage.done;
 
+  /// Tell a Cancel beside Bake whether there is anything to stop.
+  void _sayIfRunning(bool running) {
+    final effect = widget.effectId;
+    final was = bakesRunning.value;
+    if (was.contains(effect) == running) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      bakesRunning.value = running ? {...was, effect} : ({...was}..remove(effect));
+    });
+  }
+
+  @override
+  void dispose() {
+    if (widget.bake) _sayIfRunning(false);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final status = this.status;
+    if (widget.bake) _sayIfRunning(isMoving(status));
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
@@ -162,18 +180,24 @@ class _PlanarTrackDisplayFrbState extends State<PlanarTrackDisplayFrb>
         children: [
           // The same bar the Camera track draws, measuring the same thing: how
           // far the answer reaches, once the work is over.
-          if (status != null && status.clipFrames > 0)
+          // A bake always keeps the bar's place, so its rows don't move when
+          // its first state lands.
+          if (widget.bake || (status != null && status.clipFrames > 0))
             TrackSpanBar(
               key: const ValueKey('fx-planar-track-span'),
-              analysed: status.frames,
-              total: status.clipFrames,
+              analysed: status?.frames ?? 0,
+              total: status?.clipFrames ?? 0,
             ),
           Text(
             widget.bake
                 ? bakeStatusSentence(status)
                 : planarStatusSentence(status),
             key: const ValueKey('fx-planar-track-status'),
-            style: t.small.copyWith(color: t.textMuted),
+            // A count going up stays put as its digits change.
+            style: t.small.copyWith(
+              color: t.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
             overflow: TextOverflow.ellipsis,
           ),
           // A re-anchored track carries a little accumulated error at its far

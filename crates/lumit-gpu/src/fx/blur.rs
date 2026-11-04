@@ -115,8 +115,8 @@ pub struct RadialBlurOp {
     pub amount_px: f32,
     /// Evenly spaced taps along the ray (Zoom) or its perpendicular (Spin).
     pub taps: i32,
-    /// True = Spin (tangent direction), false = Zoom (radial direction).
-    pub spin: bool,
+    /// 1 = Spin (tangent direction), 0 = Zoom (radial direction), 2 = Rays.
+    pub kind: u32,
     /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
@@ -129,7 +129,7 @@ struct RadialBlurParams {
     centre: [f32; 2],
     amount: f32,
     taps: i32,
-    spin: u32,
+    kind: u32,
     edge: u32,
     mix_amt: f32,
     /// 1 = scale Amount by the matte.
@@ -608,7 +608,7 @@ impl FxEngine {
                 centre: op.centre_px,
                 amount: op.amount_px,
                 taps: op.taps,
-                spin: u32::from(op.spin),
+                kind: op.kind,
                 edge: op.edge,
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),

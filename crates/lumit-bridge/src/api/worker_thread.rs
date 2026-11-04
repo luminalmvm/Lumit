@@ -648,42 +648,9 @@ fn disk_root(
     state: &WorkerState,
     location: &crate::framecache::disk::Location,
 ) -> Option<std::path::PathBuf> {
-    use crate::framecache::disk::Location;
-    let (doc_id, own, path) = {
-        let project = state.project.state().ok()?;
-        let project = project.read().ok()?;
-        let document = project.store.snapshot();
-        (
-            document.id,
-            document.cache_location.clone(),
-            project.path.clone(),
-        )
-    };
-    // The project's own answer wins where it has one: a project told to cache on
-    // a scratch drive, or beside itself, should do that whatever the application
-    // is set to (docs/06 §5.4).
-    let location = match own {
-        Some(lumit_core::model::CacheLocation::AppData) => Location::AppData,
-        Some(lumit_core::model::CacheLocation::BesideProject) => Location::BesideProject,
-        Some(lumit_core::model::CacheLocation::Custom { folder }) if !folder.is_empty() => {
-            Location::Custom(std::path::PathBuf::from(folder))
-        }
-        // A custom location with no folder in it is not a location.
-        Some(lumit_core::model::CacheLocation::Custom { .. }) => Location::AppData,
-        None => location.clone(),
-    };
-    match location {
-        Location::AppData => lumit_project::frame_cache_dir(doc_id),
-        Location::BesideProject => match path.as_deref() {
-            Some(path) => lumit_cache::disk::sidecar_root(path),
-            // Nowhere to sit beside yet.
-            None => lumit_project::frame_cache_dir(doc_id),
-        },
-        Location::Custom(root) => match path.as_deref() {
-            Some(path) => lumit_cache::disk::cache_root_for(path, Some(&root)),
-            None => Some(root.join(format!("{doc_id}-cache"))),
-        },
-    }
+    let project = state.project.state().ok()?;
+    let project = project.read().ok()?;
+    crate::project_cache::root(&project, location)
 }
 
 /// Collect the frames the graphics card has finished handing back, and put them
@@ -4900,10 +4867,7 @@ fn render_comp_with_preview(
 
     if let Some(effects) = req.effects {
         // **Which list this is, read off the ids** (docs/impl/layer-styles.md
-        // §5). A style's or a material's row is dragged through the staging
-        // path an effect's is, so what arrives is the whole effect stack, style
-        // list or material rows, and the layer says which. Without this a drag
-        // on a shadow's Distance would preview the stack replaced by styles.
+        // §5). What is dragged arrives as one whole list, and the layer says which.
         let layer = &mut comp.layers[index];
         if staged_graph_inputs {
             // A placed graph's Inputs are one instance, staged as a list of
@@ -4916,6 +4880,8 @@ fn render_comp_with_preview(
             layer.styles = effects;
         } else if lumit_render::model_material::owns(layer, &effects) {
             crate::api::place::stage_rows(comp, index, effects);
+        } else if lumit_render::model_motion::owns(layer, &effects) {
+            lumit_render::model_motion::stage(&*layer_ref.snapshot()?, layer, &effects);
         } else if let Some(clip) = staged_clip(layer, &effects) {
             clip.effects = effects;
         } else {

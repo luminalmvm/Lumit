@@ -373,6 +373,7 @@ class LayerBoundsCache extends ChangeNotifier {
 
   /// Model boxes by layer id, the same. Only kept once the model is read.
   final Map<UuidValue, List<double>> _boxes = {};
+  final Map<UuidValue, int> _boxFrames = {};
 
   /// Probed media sizes by footage item id. Kept for the session: a file's
   /// dimensions do not change under us, and a relink refreshes through the
@@ -411,17 +412,22 @@ class LayerBoundsCache extends ChangeNotifier {
     _boxes.clear();
   }
 
-  /// [entry]'s model box at document [revision] (`LayerBox.cube`), or null
-  /// on any other layer and until the model's file has been read.
+  /// [entry]'s model box at document [revision] and comp [frame]
+  /// (`LayerBox.cube`), or null on any other layer and until the model's file
+  /// has been read. Held for the revision, and asked again each frame only on
+  /// an [outlined] layer whose shape moves with the playhead, as a mask's keyed
+  /// path is. A click meets the model where it is, whatever the box says.
   List<double>? modelBoxOf(BridgeLayerEntry entry,
-      {required int? revision}) {
+      {required int? revision, required int frame, required bool outlined}) {
     if (meshKindOf(entry.info) != BridgeLayerKind.model) return null;
     _atRevision(revision);
     final id = entry.layer.internallayerId;
+    final moves = outlined && (entry.info.modelRows?.moves ?? false);
     final held = _boxes[id];
-    if (held != null) return held;
+    if (held != null && (!moves || _boxFrames[id] == frame)) return held;
     try {
-      final box = entry.layer.getModelBox();
+      final box = entry.layer.getModelBox(atFrame: frame);
+      _boxFrames[id] = frame;
       if (box.length == 24) return _boxes[id] = box;
     } catch (_) {
       // The layer went away between the model being read and this call.

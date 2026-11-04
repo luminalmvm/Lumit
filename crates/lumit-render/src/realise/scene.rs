@@ -6,7 +6,8 @@
 
 use super::Realiser;
 use crate::draw::CompLayerDraw;
-use lumit_core::fx::effects::particulate::{is_scene, Particulate};
+use lumit_core::fx::effects::particulate::rows::is_scene;
+use lumit_core::fx::effects::particulate::Particulate;
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_core::model::{CameraPose, Composition, Document, EffectInstance, EffectValue, Layer};
@@ -125,6 +126,15 @@ pub(crate) fn carried(
         rays: depth_points::rays(doc, comp, layer, t_comp, source_frame),
         outer: None,
     })
+}
+
+/// The surface `layer`'s Particulate in the scene gives birth on, in px@comp.
+pub(crate) fn surface_of(
+    doc: &Document,
+    comp: &Composition,
+    layer: &Layer,
+) -> Option<Arc<[[f32; 4]]>> {
+    in_scene(layer).then(|| surface(doc, comp, layer)).flatten()
 }
 
 /// The most triangles a surface gives birth on.
@@ -436,6 +446,7 @@ fn shapes(
         samples: frame.samples,
         camera: crate::export::camera_mat(frame.comp.0, frame.comp.1, frame.camera),
         model_to_comp: *unit,
+        poses: &[],
         shutter: &[],
         shutter_scenes: &[],
         lights: &frame.lights,

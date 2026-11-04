@@ -59,6 +59,8 @@ pub enum RenderStage {
     Compositing,
     /// Display-encoding and handing the finished frame over.
     Presenting,
+    /// Walking a simulation up to the frame, inside compositing.
+    Simulating,
 }
 
 impl RenderStage {
@@ -72,6 +74,7 @@ impl RenderStage {
             RenderStage::Building => 2,
             RenderStage::Compositing => 3,
             RenderStage::Presenting => 4,
+            RenderStage::Simulating => 5,
         }
     }
 }
@@ -108,6 +111,29 @@ fn span_fraction(from: f32, to: f32, done: u32, total: u32) -> f32 {
     }
     let through = done as f32 / total as f32;
     (from + (to - from) * through.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+}
+
+thread_local! {
+    /// Where the frame being drawn on this thread reports, for a simulation deep
+    /// in an effect, which no profiler is handed to.
+    static WALK_SINK: RefCell<Option<(ProgressSink, Uuid, u64)>> = const { RefCell::new(None) };
+}
+
+/// A simulation has walked `through` of the way to the frame being drawn. Silent
+/// when nobody is waiting on the frame, as in playback and export.
+pub(crate) fn report_walk(through: f32) {
+    WALK_SINK.with(|slot| {
+        if let Some((sink, comp, frame)) = slot.borrow().as_ref() {
+            sink(FrameProgress {
+                comp: *comp,
+                frame: *frame,
+                stage: RenderStage::Simulating,
+                fraction: (COMPOSITE_FROM
+                    + (COMPOSITE_TO - COMPOSITE_FROM) * through.clamp(0.0, 1.0))
+                .clamp(0.0, 1.0),
+            });
+        }
+    });
 }
 
 /// One effect's measured cost within its layer.
@@ -198,6 +224,7 @@ impl FrameProfiler {
     #[must_use]
     pub fn new(comp: Uuid, frame: u64, progress: Option<ProgressSink>, timing: bool) -> Self {
         let now = web_time::Instant::now();
+        WALK_SINK.with(|slot| *slot.borrow_mut() = progress.clone().map(|s| (s, comp, frame)));
         Self {
             comp,
             frame,

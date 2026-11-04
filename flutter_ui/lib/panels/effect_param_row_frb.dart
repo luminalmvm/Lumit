@@ -191,12 +191,18 @@ class EffectParamRowFrb extends StatelessWidget {
   /// what is in charge.
   final bool enabled;
 
+  /// What a greyed row says for itself when hovered, if it can.
+  final String? offBecause;
+
   /// Clicking the parameter's *name* selects it for the graph editor
   /// (docs/07 §4.3) — the name, not the whole row.
   final VoidCallback? onLabelTap;
 
   /// The parameter's graph line colour while it is selected.
   final Color? graphColour;
+
+  /// An Int row of nought or one drawn as a tick until it is keyed.
+  final bool asTick;
 
   /// What the reset arrow does in place of writing the declared default: a
   /// 3D model's material row goes back to its file's value.
@@ -275,9 +281,11 @@ class EffectParamRowFrb extends StatelessWidget {
     this.onLabelTap,
     this.graphColour,
     this.onReset,
+    this.asTick = false,
     this.twoColumn = false,
     this.siblings = const {},
     this.enabled = true,
+    this.offBecause,
     this.riders = const [],
     this.onAction,
     this.driven,
@@ -378,8 +386,11 @@ class EffectParamRowFrb extends StatelessWidget {
     // The unit goes on the control itself, inside the riders: `100 %` then the
     // Blend dropdown, never `100` then Blend then `%`. The reset arrow comes
     // last, after everything the row writes.
+    // An Angle prints its own degrees, and with no dial its rider would repeat them.
+    final drawn = _control(context, t, id, value, frame);
+    final noRider = param.kind is BridgeParamKind_Angle && !sliderTrack;
     final control = _greyed(_withReset(t, id, _withRiders(t, id,
-        withUnitRider(t, param.unit, _control(context, t, id, value, frame)))));
+        noRider ? drawn : withUnitRider(t, param.unit, drawn))));
 
     // **An Action is a button, and a button says its own name**. Drawn
     // in the value column with the name column left empty, rather than as a
@@ -464,7 +475,12 @@ class EffectParamRowFrb extends StatelessWidget {
   /// value, so the field draws what the row holds and answers nothing.
   bool get _off => !enabled || driven != null;
 
-  Widget _greyed(Widget child) => _off ? IgnorePointer(child: child) : child;
+  Widget _greyed(Widget child) {
+    if (!_off) return child;
+    final why = enabled ? null : offBecause;
+    final deaf = IgnorePointer(child: child);
+    return why == null ? deaf : LumitTooltip(message: why, child: deaf);
+  }
 
   /// What a driven row shows **in the stopwatch's column**: a hollow
   /// ring in the wire's own colour with the word *driven* beside it, and the
@@ -687,6 +703,14 @@ class EffectParamRowFrb extends StatelessWidget {
           :final hardMax
         ):
         if (value case BridgeEffectValue_Float(:final field0)) {
+          if (field0 case BridgeScalar_Static(field0: final on) when asTick) {
+            return fxEnableSwitch(
+              id: '$effectId-${param.id}',
+              on: on >= 0.5,
+              onChanged: (next) => _set(BridgeEffectValue.float(
+                  BridgeScalar.static_(next ? 1.0 : 0.0))),
+            );
+          }
           return _scalarField(
             context,
             scalar: field0,
@@ -1342,23 +1366,27 @@ class EffectParamRowFrb extends StatelessWidget {
               : () => _set(BridgeEffectValue.float(BridgeScalar.expression(
                   shown.toString(), newExpressionLanguage(context)))),
         ),
-        const SizedBox(width: 6),
-        AngleDial(
-          key: ValueKey<String>('fx-dial-$keyName'),
-          // Row height, not the standalone 34: it is a grip beside a number.
-          size: fxRowHeight(ThemeScope.of(context).theme),
-          degrees: shown,
-          step: step,
-          enabled: !_off,
-          // A dial drag is a drag like any other: preview each tick, commit
-          // the release. On a curve there is no live preview, for the same
-          // reason the numbers have none — the value being previewed is not
-          // the one that will be stored.
-          onChanged: (v) => animated
-              ? null
-              : _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
-          onChangeEnd: write,
-        ),
+        // The Timeline's value cell is one number wide, as a layer's own
+        // Rotation row is.
+        if (sliderTrack) ...[
+          const SizedBox(width: 6),
+          AngleDial(
+            key: ValueKey<String>('fx-dial-$keyName'),
+            // Row height, not the standalone 34: it is a grip beside a number.
+            size: fxRowHeight(ThemeScope.of(context).theme),
+            degrees: shown,
+            step: step,
+            enabled: !_off,
+            // A dial drag is a drag like any other: preview each tick, commit
+            // the release. On a curve there is no live preview, for the same
+            // reason the numbers have none — the value being previewed is not
+            // the one that will be stored.
+            onChanged: (v) => animated
+                ? null
+                : _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
+            onChangeEnd: write,
+          ),
+        ],
       ],
     );
   }
@@ -1752,6 +1780,26 @@ class EffectParamRowFrb extends StatelessWidget {
   List<Widget> _rider(
       LumitTheme t, UuidValue id, BridgeParamInfo p, BridgeEffectValue? v,
       {double? wordCeiling, double? choiceCeiling}) {
+    if (p.kind is BridgeParamKind_Action) {
+      return [
+        ValueListenableBuilder<Set<UuidValue>>(
+          valueListenable: bakesRunning,
+          builder: (context, running, _) => HouseButton(
+            key: ValueKey<String>('fx-action-$id-${p.id}'),
+            small: true,
+            onPressed: onAction == null || !running.contains(id)
+                ? null
+                : () => onAction!(id, p.id),
+            child: Text(
+              engineLabel(p.label),
+              style: running.contains(id)
+                  ? t.body
+                  : t.body.copyWith(color: t.textDisabled),
+            ),
+          ),
+        ),
+      ];
+    }
     // The key a row of its own would have drawn under: the control moved
     // house, it did not become a different control.
     switch (p.kind) {
@@ -2462,6 +2510,8 @@ List<BridgeParamInfo> paramRidersFor(
   final names = switch (host.kind) {
     BridgeParamKind_Layer() => {'${host.id}_invert', '${host.id}_channel'},
     BridgeParamKind_Float() when host.id == 'mix' => {'blend'},
+    // A bake's two buttons sit on the one row, by the line that says how it goes.
+    BridgeParamKind_Action() when host.id == 'bake' => {'cancel'},
     _ => const <String>{},
   };
   final out = <BridgeParamInfo>[];
@@ -2475,6 +2525,10 @@ List<BridgeParamInfo> paramRidersFor(
       (b.kind is BridgeParamKind_Bool ? 1 : 0));
   return out;
 }
+
+/// The effects with a bake running, which their status line keeps up to date, so
+/// a Cancel beside Bake takes presses only while there is something to stop.
+final ValueNotifier<Set<UuidValue>> bakesRunning = ValueNotifier(const {});
 
 final Map<String, List<BridgeEnabledWhen>> _enabledWhenSchema = {};
 
@@ -2556,7 +2610,42 @@ Set<String> disabledParams(
   for (final rule in cachedListEnabledWhen(effect)) {
     final on = values[rule.on_];
     if (on == null) continue;
-    final ok = switch ((rule.cond, on)) {
+    if (!_ruleHolds(rule.cond, on, values)) out.add(rule.param);
+  }
+  return out;
+}
+
+/// Whether [param] of [effect] only comes alive with its Simulate row on, and
+/// that row is off, which is what a greyed row can say for itself.
+bool waitsForSimulate(
+  String effect,
+  String param,
+  Map<String, BridgeEffectValue> values,
+) {
+  final on = values['simulate'];
+  if (on is! BridgeEffectValue_Bool || on.field0) return false;
+  for (final rule in cachedListEnabledWhen(effect)) {
+    if (rule.param != param) continue;
+    final cond = rule.cond;
+    if (rule.on_ == 'simulate' && cond is BridgeEnabledCond_BoolIs) {
+      if (cond.field0) return true;
+    }
+    if (cond is BridgeEnabledCond_Or && cond.field0 == 'simulate') return true;
+  }
+  return false;
+}
+
+bool _isOn(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Bool && value.field0;
+
+bool _ruleHolds(
+  BridgeEnabledCond cond,
+  BridgeEffectValue on,
+  Map<String, BridgeEffectValue> values,
+) =>
+    switch ((cond, on)) {
+      (BridgeEnabledCond_Or(:final field0, :final field1), _) =>
+        _isOn(values[field0]) || _ruleHolds(field1, on, values),
       (
         BridgeEnabledCond_BoolIs(:final field0),
         BridgeEffectValue_Bool(field0: final v)
@@ -2589,10 +2678,6 @@ Set<String> disabledParams(
       // than locking one the owner can never reach.
       _ => true,
     };
-    if (!ok) out.add(rule.param);
-  }
-  return out;
-}
 
 /// An effect's display label from the schema, falling back to its match name
 /// for an effect this build does not know.
@@ -2604,6 +2689,8 @@ Set<String> disabledParams(
 /// heading reading `style_drop_shadow` is what leaving them out looks like.
 /// The engine makes the same join in `fx::def`, and for the same reason.
 String effectLabelOf(String name) {
+  // A material's row is nothing anyone adds, so no list of effects has it.
+  if (name == 'model_material') return l10n.fxMaterial;
   for (final info in effectSchema.effectsFor(name)) {
     if (info.name == name) return engineLabel(info.label);
   }
@@ -2769,6 +2856,7 @@ class EffectStackEditor {
           ? styles
           : ((groupStack ?? clipStack)?.call() ??
               _materials(layer) ??
+              _modelRows(layer) ??
               graphInputsOf(layer));
     }
     for (final instance in stack) {
@@ -2787,6 +2875,13 @@ class EffectStackEditor {
     final materials = layer.getMaterials();
     final ids = {for (final m in materials) m.id()};
     return _staged.keys.every((key) => ids.contains(key.$1)) ? materials : null;
+  }
+
+  /// A Model layer's rows when they hold what is staged.
+  List<BridgeEffectInstance>? _modelRows(LayerReference layer) {
+    final rows = layer.getModelRows();
+    final ids = {for (final m in rows) m.id()};
+    return _staged.keys.every((key) => ids.contains(key.$1)) ? rows : null;
   }
 
   /// A drag tick: stage the value and render it, throttled. Nothing is

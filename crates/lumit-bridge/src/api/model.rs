@@ -11,6 +11,7 @@ use crate::api::{
     BridgeError,
 };
 use lumit_core::model::{EffectInstance, EffectValue};
+use uuid::Uuid;
 
 /// Which of a 3D model file's axes points up.
 #[frb(non_opaque)]
@@ -69,21 +70,66 @@ impl CompositionReference {
             let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             proj.store.snapshot()
         };
-        let mut seen = vec![self.id];
-        let mut i = 0;
-        // Each comp once, so a comp nested twice or in a loop is walked once.
-        while let Some(&id) = seen.get(i) {
-            i += 1;
-            for layer in doc.comp(id).map_or(&[][..], |c| &c.layers) {
-                match &layer.kind {
-                    LayerKind::Precomp { comp } if !seen.contains(comp) => seen.push(*comp),
-                    _ if lumit_core::extrude::draws_mesh(layer) => return Ok(true),
-                    _ => {}
-                }
+        Ok(drawn_layers(&doc, self.id)
+            .into_iter()
+            .any(lumit_core::extrude::draws_mesh))
+    }
+
+    /// The names of the 3D models this comp draws, precomps included, that
+    /// can't be read right now. An export leaves them out, or draws the last
+    /// version read. Reads any not read yet beside the caller, so never from a
+    /// build.
+    #[frb(sync)]
+    pub fn unread_models(&self) -> Result<Vec<String>, BridgeError> {
+        let doc = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        let mut names = Vec::new();
+        for item in model_items(&doc, self.id) {
+            let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+                continue;
+            };
+            let state = lumit_scene::blender::state(std::path::Path::new(f.media.on_disk()));
+            let trouble = !matches!(state, None | Some(lumit_scene::blender::State::Converting));
+            let scene = lumit_render::model::scene_if_read(&doc, item);
+            if (trouble || matches!(scene, Some(None))) && !names.contains(&f.name) {
+                names.push(f.name.clone());
             }
         }
-        Ok(false)
+        Ok(names)
     }
+}
+
+/// The layers comp `comp` draws, precomps' included.
+fn drawn_layers(doc: &lumit_core::model::Document, comp: Uuid) -> Vec<&lumit_core::model::Layer> {
+    let mut seen = vec![comp];
+    let mut layers = Vec::new();
+    let mut i = 0;
+    // Each comp once, so a comp nested twice or in a loop is walked once.
+    while let Some(&id) = seen.get(i) {
+        i += 1;
+        for layer in doc.comp(id).map_or(&[][..], |c| &c.layers) {
+            match &layer.kind {
+                LayerKind::Precomp { comp } if !seen.contains(comp) => seen.push(*comp),
+                _ => layers.push(layer),
+            }
+        }
+    }
+    layers
+}
+
+/// The 3D models comp `comp` draws, precomps included.
+fn model_items(doc: &lumit_core::model::Document, comp: Uuid) -> Vec<Uuid> {
+    let mut items = Vec::new();
+    for layer in drawn_layers(doc, comp) {
+        match &layer.kind {
+            LayerKind::Model { item, .. } if !items.contains(item) => items.push(*item),
+            _ => {}
+        }
+    }
+    items
 }
 
 /// How a 3D model sits in its Model layer, so its Scale stays at 100%.
@@ -122,6 +168,18 @@ impl FootageReference {
     }
 }
 
+/// A layer's pose at comp frame `frame`, `None` when it has none.
+#[frb(ignore)]
+pub(crate) fn pose_at_frame(
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    frame: i64,
+) -> Option<lumit_scene::pose::Pose> {
+    let t = comp.frame_rate.time_of_frame(frame.max(0)).ok()?.0.to_f64();
+    lumit_render::model_motion::layer_pose(doc, comp, layer, t)
+}
+
 impl LayerReference {
     /// A Model layer's settings, or `None` on any other kind of layer.
     #[frb(sync)]
@@ -139,13 +197,14 @@ impl LayerReference {
         })
     }
 
-    /// The corners of a Model layer's box in its own pixels, three numbers
-    /// each, once its file has been read, or a solid Text or Shape layer's
-    /// once it has been drawn. Empty before that and on any other kind of
-    /// layer.
+    /// The corners of a Model layer's box in its own pixels at comp frame
+    /// `at_frame`, three numbers each, once its file has been read, or a solid
+    /// Text or Shape layer's once it has been drawn. Empty before that and on
+    /// any other kind of layer.
     #[frb(sync)]
-    pub fn get_model_box(&self) -> Result<Vec<f64>, BridgeError> {
-        let LayerKind::Model { item, settings } = self.item()?.kind else {
+    pub fn get_model_box(&self, at_frame: i64) -> Result<Vec<f64>, BridgeError> {
+        let layer = self.item()?;
+        let LayerKind::Model { item, settings } = &layer.kind else {
             let corners = lumit_render::extrude::layer_box(self.layer_id);
             return Ok(corners
                 .iter()
@@ -157,7 +216,8 @@ impl LayerReference {
         let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
         let size = (comp.width as f32, comp.height as f32);
-        let corners = lumit_render::model::layer_box(&doc, item, &settings, size);
+        let pose = pose_at_frame(&doc, comp, &layer, at_frame);
+        let corners = lumit_render::model::layer_box(&doc, *item, settings, size, pose.as_ref());
         Ok(corners
             .iter()
             .flatten()
@@ -191,12 +251,15 @@ impl LayerReference {
     /// each in the layer's own pixels, it first meets a Model layer's model,
     /// in parts of `direction`. `None` where it misses, before the file has
     /// been read and on any other kind of layer. A solid Text or Shape layer
-    /// answers the same, of what it was last drawn as. Asked once a click.
+    /// answers the same, of what it was last drawn as. Asked once a click, and
+    /// when the pointer rests for a moment, as the model is at comp frame
+    /// `at_frame`.
     #[frb(sync)]
     pub fn get_model_hit(
         &self,
         origin: Vec<f64>,
         direction: Vec<f64>,
+        at_frame: i64,
     ) -> Result<Option<f64>, BridgeError> {
         let (Ok([ox, oy, oz]), Ok([dx, dy, dz])) = (
             <[f64; 3]>::try_from(origin),
@@ -204,7 +267,8 @@ impl LayerReference {
         ) else {
             return Ok(None);
         };
-        let LayerKind::Model { item, settings } = self.item()?.kind else {
+        let layer = self.item()?;
+        let LayerKind::Model { item, settings } = &layer.kind else {
             let hit = lumit_render::extrude::hit(
                 self.layer_id,
                 [ox, oy, oz].map(|v| v as f32),
@@ -214,20 +278,24 @@ impl LayerReference {
         };
         let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        let pose = pose_at_frame(&doc, comp, &layer, at_frame);
         Ok(lumit_render::model::hit(
             &doc,
-            item,
-            &settings,
+            *item,
+            settings,
             (comp.width as f32, comp.height as f32),
+            pose.as_ref(),
             [ox, oy, oz].map(|v| v as f32),
             [dx, dy, dz].map(|v| v as f32),
         )
-        .map(f64::from))
+        .map(|(along, _)| f64::from(along)))
     }
 
     /// The document as it is now.
     #[frb(ignore)]
-    fn snapshot(&self) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
+    pub(crate) fn snapshot(
+        &self,
+    ) -> Result<std::sync::Arc<lumit_core::model::Document>, BridgeError> {
         let proj = self.project()?;
         let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
         Ok(proj.store.snapshot())
@@ -245,6 +313,9 @@ impl LayerReference {
             return Err(BridgeError::InvalidLayer);
         };
         let settings = ModelSettings {
+            take: kept.take,
+            playback: kept.playback,
+            parts: kept.parts,
             up_axis: match settings.up_axis {
                 BridgeUpAxis::Y => UpAxis::Y,
                 BridgeUpAxis::Z => UpAxis::Z,
@@ -406,6 +477,7 @@ impl LayerReference {
                 edit(&mut clips[index].effects)?;
                 return self.commit_clips(clips);
             }
+            InstanceHome::ModelRows => self.model_rows_op(edit)?,
             // One instance, carried as a list of at most one so the edit
             // closure is the same closure the other three homes take. An edit
             // that empties the list clears the Inputs, which is what removing

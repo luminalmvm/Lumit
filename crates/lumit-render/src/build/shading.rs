@@ -80,6 +80,23 @@ pub fn shading_lights(
     lights.iter().map(|l| lighting_light(l, encoded)).collect()
 }
 
+/// A 3D layer from a collapsed precomp taking `lights` beside its own, up to
+/// the slots there are. Unlit, it takes only their shadows, as any layer does.
+pub(crate) fn add_lights(
+    d: &mut crate::draw::CompLayerDraw,
+    lights: &[lumit_core::model::ResolvedLight],
+) {
+    let room = lumit_gpu::fx::lighting::MAX_LIT_LIGHTS.saturating_sub(d.lights.len());
+    let (unlit, encoded) = (d.material.unlit, d.material.encoded);
+    d.lights.extend(
+        lights
+            .iter()
+            .filter(|l| !unlit || l.shadow_darkness > 0.0)
+            .take(room)
+            .map(|l| lighting_light(l, encoded)),
+    );
+}
+
 /// One resolved light as the lighting kernel reads it, for a picture lit in
 /// display encoding when `encoded`.
 pub(crate) fn lighting_light(

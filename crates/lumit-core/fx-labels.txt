@@ -31,6 +31,7 @@ Align to motion
 Align to path
 Alignment
 All
+All 3D layers
 All at once
 All edges
 All frames
@@ -58,6 +59,7 @@ Angle control
 Angle offset
 Angular
 Animate
+Animation
 Anticlockwise
 Anywhere
 Aperture
@@ -72,6 +74,7 @@ Aspect
 Aspect ratio
 Asymmetric
 Attack
+Attractor
 Audio
 Audio level
 Auto
@@ -323,6 +326,7 @@ Darken
 Darker
 Darker colour
 Datamosh
+Death
 Decay
 Decimals
 Deep blue
@@ -476,6 +480,11 @@ Features
 Feedback
 Field
 Field of view
+Field radius
+Field x
+Field y
+Field z
+Fields
 File
 Fill
 Fill cell
@@ -496,6 +505,7 @@ Flash
 Flash colour
 Flicker
 Flicker speed
+Flight
 Flip axis
 Flip direction
 Flip order
@@ -526,6 +536,7 @@ Frame mix
 Frame rate
 Frames
 Free
+Freeze
 Frequency
 Friction
 From
@@ -587,6 +598,8 @@ Grid size
 Grid size x
 Grid size y
 Grit
+Ground
+Ground height
 Group
 Group name
 Grow
@@ -933,6 +946,7 @@ Padding x
 Padding y
 Paint style
 Parametric EQ
+Part
 Particle
 Particle blend
 Particulate
@@ -1112,6 +1126,9 @@ Rotation jitter
 Rotation wave
 Rotation wave frequency
 Rotation wave phase
+Rotation x
+Rotation y
+Rotation z
 Roto brush
 Roughen
 Roughen edges
@@ -1188,6 +1205,8 @@ Shutter phase
 Siceliot
 Side
 Sides
+Simulate
+Simulation
 Sine
 Single
 Single layer, straw
@@ -1233,10 +1252,12 @@ Spacing x
 Spacing y
 Spacing z
 Span mode
+Spark inherit
 Spark life
 Spark size
 Spark speed
 Sparks
+Sparks from
 Speed
 Speed jitter
 Speed max
@@ -1302,6 +1323,7 @@ Stylise
 Sub influence
 Sub scaling
 Sub settings
+Sub-steps
 Subtract
 Super 16
 Super 35
@@ -1312,6 +1334,7 @@ Swing
 Switch
 Symmetric
 Sync
+Take
 Taper
 Technique
 Tele lens width
@@ -1443,6 +1466,7 @@ Vibrato
 View
 Vignette
 Violet
+Visible
 Vision 2383
 Vision Premier 2393
 Vision3 200T
@@ -1453,6 +1477,7 @@ Vivid light
 Voices
 Volume
 Vortex
+Vortex axis
 Wah
 Warming filter (81)
 Warming filter (85)
@@ -1506,6 +1531,7 @@ Y wave frequency
 Y wave phase
 Yellow
 Yellows
+Z
 Z amount
 Z dist
 Z frequency

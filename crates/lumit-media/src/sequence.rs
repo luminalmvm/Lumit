@@ -280,19 +280,32 @@ pub struct MediaSource {
     /// index and the decoder all answer in interpreted frames, so a source
     /// with fields separated has twice the frames at twice the rate.
     pub interpret: crate::interpret::Interpretation,
-    /// The file's length and modification time when this was made, or `None`
-    /// when nobody asked ([`Self::stamped`]). A file saved over in place is
-    /// then a different source, so nothing opened on or read from the old one
-    /// is taken for the new one.
+    /// [`Self::stamp_now`] when this was made, or `None` when nobody asked
+    /// ([`Self::stamped`]). A file saved over in place is then a different
+    /// source, so nothing opened on or read from the old one is taken for the
+    /// new one.
     pub stamp: Option<(u64, SystemTime)>,
 }
 
 impl MediaSource {
-    /// This source with the file's length and modification time.
+    /// This source with [`Self::stamp_now`].
     #[must_use]
     pub fn stamped(mut self) -> Self {
-        self.stamp = file_stamp(&self.path);
+        self.stamp = self.stamp_now();
         self
+    }
+
+    /// The file's length and modification time. A run counts its files
+    /// instead, with the later time of its first and last, because a run
+    /// still being exported grows without its first file changing.
+    #[must_use]
+    pub fn stamp_now(&self) -> Option<(u64, SystemTime)> {
+        let first = file_stamp(&self.path)?;
+        let Some(run) = self.sequence_fps.and_then(|_| run_of(&self.path)) else {
+            return Some(first);
+        };
+        let last = file_stamp(&run.file_at(usize::MAX)).map_or(first.1, |(_, at)| at);
+        Some((u64::from(run.count), first.1.max(last)))
     }
 
     /// A plain single file.

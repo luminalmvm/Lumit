@@ -726,7 +726,14 @@ impl CompositionReference {
                     let size = (w as f32, h as f32);
                     let c = match &layer.kind {
                         K::Model { item, settings } => {
-                            lumit_render::model::layer_box(&doc, *item, settings, size)
+                            let pose = lumit_render::model_motion::layer_pose(&doc, comp, layer, t);
+                            lumit_render::model::layer_box(
+                                &doc,
+                                *item,
+                                settings,
+                                size,
+                                pose.as_ref(),
+                            )
                         }
                         _ => solid,
                     };

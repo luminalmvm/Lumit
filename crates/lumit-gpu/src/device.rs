@@ -15,13 +15,15 @@ pub(crate) fn descriptor(adapter: &wgpu::Adapter) -> wgpu::DeviceDescriptor<'sta
     }
 }
 
-/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes and
-/// a buffer big enough to read one back.
+/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes, a
+/// buffer big enough to read one back, and a binding as large as it allows for
+/// the posing of large models.
 pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
     let card = adapter.limits();
     wgpu::Limits {
         max_texture_dimension_2d: card.max_texture_dimension_2d,
         max_buffer_size: card.max_buffer_size,
+        max_storage_buffer_binding_size: card.max_storage_buffer_binding_size,
         ..Default::default()
     }
 }
