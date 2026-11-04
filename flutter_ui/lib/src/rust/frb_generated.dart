@@ -24983,6 +24983,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeEnabledCond dco_decode_box_bridge_enabled_cond(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_enabled_cond(raw);
+  }
+
+  @protected
   BridgeAddon dco_decode_bridge_addon(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -26012,6 +26018,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeEnabledCond_LayerUnset();
       case 5:
         return BridgeEnabledCond_Nought();
+      case 6:
+        return BridgeEnabledCond_Or(
+          dco_decode_String(raw[1]),
+          dco_decode_box_bridge_enabled_cond(raw[2]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -32512,6 +32523,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeEnabledCond sse_decode_box_bridge_enabled_cond(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_enabled_cond(deserializer));
+  }
+
+  @protected
   BridgeAddon sse_decode_bridge_addon(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
@@ -33550,6 +33568,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeEnabledCond_LayerUnset();
       case 5:
         return BridgeEnabledCond_Nought();
+      case 6:
+        var var_field0 = sse_decode_String(deserializer);
+        var var_field1 = sse_decode_box_bridge_enabled_cond(deserializer);
+        return BridgeEnabledCond_Or(var_field0, var_field1);
       default:
         throw UnimplementedError('');
     }
@@ -41521,6 +41543,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_box_bridge_enabled_cond(
+      BridgeEnabledCond self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_enabled_cond(self, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_addon(BridgeAddon self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
@@ -42317,6 +42346,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_i_32(4, serializer);
       case BridgeEnabledCond_Nought():
         sse_encode_i_32(5, serializer);
+      case BridgeEnabledCond_Or(field0: final field0, field1: final field1):
+        sse_encode_i_32(6, serializer);
+        sse_encode_String(field0, serializer);
+        sse_encode_box_bridge_enabled_cond(field1, serializer);
     }
   }
 

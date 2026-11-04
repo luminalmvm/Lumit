@@ -127,7 +127,8 @@ Not interchangeable.
 | **Shapes** | Paths on a wire: a Read box hands out the paths of the shape layers in the comp it reads |
 | **Collide with** | A layer whose shapes and masks Particulate's particles hit. With one set, each frame's particles are worked out from the frame before |
 | **Flock** | Particulate's particles steering by their neighbours: apart, the same way, together. Worked out from the frame before, as Collide with is |
-| **Sparks** | Small particles Particulate throws out where one of its particles dies. Worked out from the frame before |
+| **Sparks** | Small particles Particulate throws out as one of its particles dies, hits something or flies. Worked out from the frame before |
+| **Simulate** | Particulate worked out step by step on the graphics card, up to its Max particles, under fields and what it hits. Saved as kept states, or baked to the project's cache |
 | **Trails** | Particulate drawing each frame's particles over the picture it kept from the frame before, faded, zoomed and turned, so they leave smears |
 | **Volumetric light** | A light seen in the air it shines through: its beam, the shafts 3D layers cut in it, its glow |
 | **Environment light** | A light from a picture of everything round the scene, an HDRI, that lights 3D layers and models and can show behind them. Its picture is its **Source** layer |

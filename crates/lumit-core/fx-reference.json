@@ -12052,6 +12052,36 @@
       "category_slug": "generate",
       "params": [
         {
+          "id": "simulate",
+          "label": "Simulate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "sub_steps",
+          "label": "Sub-steps",
+          "kind": "int",
+          "unit": "raw",
+          "default": 2,
+          "slider_min": 1.0,
+          "slider_max": 8.0,
+          "hard_min": 1.0,
+          "hard_max": 8.0
+        },
+        {
+          "id": "bake",
+          "label": "Bake",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
           "id": "in_scene",
           "label": "In the scene",
           "kind": "bool",
@@ -12499,6 +12529,84 @@
           "hard_min": 0.0
         },
         {
+          "id": "field_x",
+          "label": "Field x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "field_y",
+          "label": "Field y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "field_z",
+          "label": "Field z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "field_radius",
+          "label": "Field radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 1.0,
+          "slider_max": 2000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "attractor",
+          "label": "Attractor",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -5000.0,
+          "slider_max": 5000.0
+        },
+        {
+          "id": "vortex",
+          "label": "Vortex",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "vortex_axis",
+          "label": "Vortex axis",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "X",
+            "Y",
+            "Z"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "sphere",
+          "label": "Sphere",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20000.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "gravity",
           "label": "Gravity",
           "kind": "float",
@@ -12605,6 +12713,29 @@
           "self_default": false
         },
         {
+          "id": "collide_all",
+          "label": "All 3D layers",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ground",
+          "label": "Ground",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ground_height",
+          "label": "Ground height",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
           "id": "on_contact",
           "label": "On contact",
           "kind": "choice",
@@ -12695,6 +12826,19 @@
           "hard_max": 50.0
         },
         {
+          "id": "sparks_from",
+          "label": "Sparks from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Death",
+            "Bounce",
+            "Flight"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "spark_speed",
           "label": "Spark speed",
           "kind": "float",
@@ -12703,6 +12847,17 @@
           "slider_min": 0.0,
           "slider_max": 2000.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "spark_inherit",
+          "label": "Spark inherit",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
         },
         {
           "id": "spark_life",
@@ -12927,6 +13082,16 @@
       ],
       "groups": [
         {
+          "label": "Simulation",
+          "params": [
+            "simulate",
+            "sub_steps",
+            "bake",
+            "cancel"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Emitter",
           "params": [
             "in_scene",
@@ -12993,6 +13158,20 @@
           "collapsed": false
         },
         {
+          "label": "Fields",
+          "params": [
+            "field_x",
+            "field_y",
+            "field_z",
+            "field_radius",
+            "attractor",
+            "vortex",
+            "vortex_axis",
+            "sphere"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Forces",
           "params": [
             "gravity",
@@ -13018,6 +13197,9 @@
           "label": "Collide",
           "params": [
             "collide_with",
+            "collide_all",
+            "ground",
+            "ground_height",
             "on_contact",
             "bounciness",
             "friction"
@@ -13038,7 +13220,9 @@
           "label": "Sparks",
           "params": [
             "sparks",
+            "sparks_from",
             "spark_speed",
+            "spark_inherit",
             "spark_life",
             "spark_size"
           ],
@@ -13100,38 +13284,178 @@
         {
           "param": "collide_with",
           "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
         },
         {
           "param": "separation",
           "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
         },
         {
           "param": "alignment",
           "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
         },
         {
           "param": "cohesion",
           "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
         },
         {
           "param": "sparks",
           "on": "in_scene",
-          "cond": "bool_is",
-          "value": false
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
         },
         {
           "param": "persistence",
           "on": "in_scene",
           "cond": "bool_is",
           "value": false
+        },
+        {
+          "param": "persistence",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "density_layer",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "sub_steps",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "attractor",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "vortex",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "vortex_axis",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "sphere",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_x",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_y",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_z",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_radius",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bake",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "cancel",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "collide_all",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground_height",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "sparks_from",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "spark_inherit",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground_height",
+          "on": "ground",
+          "cond": "bool_is",
+          "value": true
         },
         {
           "param": "burst_count",
@@ -13166,82 +13490,112 @@
         {
           "param": "particle_blend",
           "on": "separation",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "alignment",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "cohesion",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "sparks",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "separation",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "alignment",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "cohesion",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "sparks",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "separation",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "alignment",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "cohesion",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "sparks",
-          "cond": "nought"
-        },
-        {
-          "param": "particle_blend",
-          "on": "persistence",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "persistence",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "persistence",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "collide_with",
-          "cond": "layer_unset"
+          "cond": "or",
+          "value": {
+            "cond": "layer_unset",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "density_layer",
+          "on": "separation",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "alignment",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "cohesion",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "sparks",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "separation",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "alignment",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "cohesion",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "sparks",
+          "cond": "nought"
+        },
+        {
+          "param": "particle_blend",
+          "on": "persistence",
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "density_layer",
+          "on": "persistence",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "persistence",
+          "cond": "nought"
         },
         {
           "param": "density_layer",
@@ -13256,23 +13610,50 @@
         {
           "param": "on_contact",
           "on": "collide_with",
-          "cond": "layer_set"
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
         },
         {
           "param": "bounciness",
           "on": "collide_with",
-          "cond": "layer_set"
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
+        },
+        {
+          "param": "friction",
+          "on": "collide_with",
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
         },
         {
           "param": "bounciness",
           "on": "on_contact",
           "cond": "choice_is",
           "value": 0
-        },
-        {
-          "param": "friction",
-          "on": "collide_with",
-          "cond": "layer_set"
         },
         {
           "param": "friction",

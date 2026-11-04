@@ -22,11 +22,13 @@ pub mod builtins;
 pub mod catalogue;
 /// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
+pub mod colour_name;
 /// The drivers and the driver-graph evaluation: one module per driver,
 /// plus the demand-driven walk that works out what every wire carries.
 pub mod drivers;
 /// One module per migrated built-in: its declaration and its behaviour (§2.1).
 pub mod effects;
+pub mod enabled;
 /// The in-house FFT / fractional Fourier transform the Lens flare bakes use.
 pub mod fft;
 /// Film's model: stocks, their spectra, and the passes they make.

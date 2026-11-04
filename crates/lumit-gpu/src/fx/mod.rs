@@ -33,7 +33,9 @@ pub mod lens_dirt;
 pub mod lens_flare;
 pub mod lighting;
 pub mod particulate;
+pub mod particulate_params;
 pub mod particulate_scene;
+pub mod particulate_sim;
 pub mod points_draw;
 pub mod points_field;
 pub mod split;
@@ -397,6 +399,8 @@ pub struct FxEngine {
     particulate_blend: particulate::ParticulateBlendPipelines,
     /// Particles in the 3D scene, built the first time some are.
     particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
+    /// Particles worked out step by step, built the first time some are.
+    particulate_sim: std::sync::OnceLock<particulate_sim::SimPipelines>,
     /// Depth points, built the first time a shot is drawn as them.
     depth_points: std::sync::OnceLock<depth_points::Pipeline>,
     /// Points field: the nearest point to every pixel, found by jump

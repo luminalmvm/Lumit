@@ -987,8 +987,8 @@ fn feed_effect_stack(
         // under the name its kept walks go by. Trails draw every frame from
         // the in point too.
         if let Some(layer) = marker_layer.filter(|_| {
-            use lumit_core::fx::points::stepped::{trails, wanted};
-            wanted(comp, e) || trails(comp, e)
+            use lumit_core::fx::points::stepped::{carried, wanted};
+            wanted(comp, e) || carried(comp, e)
         }) {
             use lumit_core::fx::points::stepped::{definition, target};
             h.update(b"stepped/");

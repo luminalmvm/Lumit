@@ -3039,7 +3039,7 @@ fn comp_walk(
                 // picture the kernel ignores. One rule, every effect — the
                 // flare's own named gate, generalised.
                 if !lumit_core::fx::builtins::param_visible(e, param)
-                    || !lumit_core::fx::builtins::param_enabled(e, param)
+                    || !lumit_core::fx::enabled::param_enabled(e, param)
                 {
                     return LayerInputDraw::Absent;
                 }
@@ -3351,7 +3351,7 @@ fn comp_walk(
                 // in point on the card, each from the driver walk at its own
                 // time, so there is nothing to scan here.
                 if let Some(layer) =
-                    owner.filter(|_| lumit_core::fx::points::stepped::trails(comp, e))
+                    owner.filter(|_| lumit_core::fx::points::stepped::carried(comp, e))
                 {
                     return lumit_core::fx::points::PointsSchedule {
                         schedule: lumit_core::fx::points::Schedule::default(),

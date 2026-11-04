@@ -26535,6 +26535,15 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for Box<crate::api::effect::BridgeEnabledCond> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        return Box::new(<crate::api::effect::BridgeEnabledCond>::sse_decode(
+            deserializer,
+        ));
+    }
+}
+
 impl SseDecode for crate::api::addons::BridgeAddon {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -27865,6 +27874,12 @@ impl SseDecode for crate::api::effect::BridgeEnabledCond {
             }
             5 => {
                 return crate::api::effect::BridgeEnabledCond::Nought;
+            }
+            6 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                let mut var_field1 =
+                    <Box<crate::api::effect::BridgeEnabledCond>>::sse_decode(deserializer);
+                return crate::api::effect::BridgeEnabledCond::Or(var_field0, var_field1);
             }
             _ => {
                 unimplemented!("");
@@ -39123,6 +39138,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEnabledCond {
             crate::api::effect::BridgeEnabledCond::LayerSet => [3.into_dart()].into_dart(),
             crate::api::effect::BridgeEnabledCond::LayerUnset => [4.into_dart()].into_dart(),
             crate::api::effect::BridgeEnabledCond::Nought => [5.into_dart()].into_dart(),
+            crate::api::effect::BridgeEnabledCond::Or(field0, field1) => [
+                6.into_dart(),
+                field0.into_into_dart().into_dart(),
+                field1.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -46339,6 +46360,13 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for Box<crate::api::effect::BridgeEnabledCond> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::effect::BridgeEnabledCond>::sse_encode(*self, serializer);
+    }
+}
+
 impl SseEncode for crate::api::addons::BridgeAddon {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -47297,6 +47325,11 @@ impl SseEncode for crate::api::effect::BridgeEnabledCond {
             }
             crate::api::effect::BridgeEnabledCond::Nought => {
                 <i32>::sse_encode(5, serializer);
+            }
+            crate::api::effect::BridgeEnabledCond::Or(field0, field1) => {
+                <i32>::sse_encode(6, serializer);
+                <String>::sse_encode(field0, serializer);
+                <Box<crate::api::effect::BridgeEnabledCond>>::sse_encode(field1, serializer);
             }
             _ => {
                 unimplemented!("");
