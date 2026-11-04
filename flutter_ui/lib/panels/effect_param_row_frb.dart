@@ -1514,10 +1514,13 @@ class EffectParamRowFrb extends StatelessWidget {
         // whole point on an **adjustment layer** — which has no picture
         // of its own, and whose input is the composite of everything
         // below it. A Lens flare added to one starts here.
-        offered: (l) =>
-            sound ||
-            l.layer.internallayerId == ownerLayerId ||
-            l.layer.hasPicture(),
+        //
+        // Depth points' Camera row is the other way about: only cameras.
+        offered: (l) => param.id == 'camera'
+            ? l.info.kind == BridgeLayerKind.camera
+            : sound ||
+                l.layer.internallayerId == ownerLayerId ||
+                l.layer.hasPicture(),
         onChanged: (picked) => _set(BridgeEffectValue.layer(picked)),
       ),
     );

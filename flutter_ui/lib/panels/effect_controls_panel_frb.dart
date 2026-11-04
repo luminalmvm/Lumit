@@ -3512,6 +3512,9 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
 /// a shape for a value. Its five channel curves are five declared parameters
 /// that fold into one tabbed editor, exactly as an `_x`/`_y` pair folds into one
 /// point row — a fold, not a display, and `_paramRows` is where folds live.
+bool _namesALayer(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Layer && value.field0 != null;
+
 Widget? customEffectDisplay(
   String matchName, {
   required UuidValue effectId,
@@ -3589,6 +3592,16 @@ Widget? customEffectDisplay(
       // models are two answers, not one.
       'depth' => PlaneDisplayFrb(
           key: ValueKey<String>('fx-depth-display-$effectId'),
+          card: PlaneCard.depth,
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+        ),
+      // Depth points asks for the same reading, unless a Depth layer has taken
+      // over from it.
+      'depth_points' when !_namesALayer(values['depth_layer']) => PlaneDisplayFrb(
+          key: ValueKey<String>('fx-depth-points-display-$effectId'),
           card: PlaneCard.depth,
           layer: layer,
           effectId: effectId,
