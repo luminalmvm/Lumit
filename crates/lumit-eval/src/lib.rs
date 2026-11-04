@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 use lumit_core::{
     expression::ExpressionContext,
+    fx::effects::depth_points::stamp as points_stamp,
     model::{CameraPose, Composition, Document, LayerKind, MatteChannel},
 };
 use uuid::Uuid;
@@ -1329,14 +1330,14 @@ fn feed_effect_stack(
                     // anywhere in the comp can move the number the picture
                     // follows, and folding the named layer's own file says
                     // nothing about it. The mix's fingerprint is the term that
-                    // does. It is asked for this one row alone, so no other
-                    // reference pays for a job list. Beat trigger's Audio row
-                    // reads the same mix.
+                    // does. Asked for this one row alone, and Beat trigger's. Depth
+                    // points' Camera row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
                         && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
-                        .flatten();
+                        .flatten()
+                        .or_else(|| points_stamp(doc, comp, marker_layer, e, &p.id, t));
                     if let Some(sig) = mix {
                         h.update(&sig.to_le_bytes());
                     }

@@ -172,7 +172,7 @@ pub(crate) fn solve_store() -> Option<&'static dyn CameraSolveStore> {
 }
 
 /// Nothing solved yet: a link with nothing to follow reads the stored pose.
-struct Unsolved;
+pub(crate) struct Unsolved;
 
 impl CameraSolveStore for Unsolved {
     fn solved_range(&self, _media: Uuid) -> Option<SolvedRange> {

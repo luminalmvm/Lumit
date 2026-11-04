@@ -8,7 +8,7 @@ use super::{viewed, ViewLatch, WorkerState};
 
 /// The id the Viewer's view camera is inserted under.
 #[frb(ignore)]
-pub(super) const VIEW_CAMERA_ID: Uuid = lumit_core::fx::effects::depth_points::VIEW_CAMERA_ID;
+pub(super) const VIEW_CAMERA_ID: Uuid = lumit_core::view_camera::ID;
 
 /// [`viewed_through`], kept between frames.
 ///

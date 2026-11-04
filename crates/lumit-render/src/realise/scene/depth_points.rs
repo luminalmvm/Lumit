@@ -7,10 +7,10 @@
 use super::{Joined, FRAMES, PENDING};
 use crate::fxops::LayerInput;
 use glam::{DMat4, DVec3};
-use lumit_core::fx::effects::depth_points::{DepthPoints, VIEW_CAMERA_ID};
+use lumit_core::fx::effects::depth_points::{self, DepthPoints};
 use lumit_core::fx::params::ResolvedFx;
 use lumit_core::fx::registry::EffectMetadata;
-use lumit_core::model::{Composition, Document, EffectInstance, Layer, LayerKind};
+use lumit_core::model::{Composition, Document, Layer};
 use lumit_core::planes::{PlaneTask, DEPTH_POINTS};
 use std::sync::Arc;
 
@@ -20,48 +20,8 @@ pub struct Rays {
     eye: DVec3,
     /// The layer's own pixels to comp pixels.
     place: DMat4,
-}
-
-/// The eye of the Camera row's layer where it names a camera, or of the comp's
-/// own camera. A 3D view is drawn through a Camera layer it puts on top of a
-/// copy of the comp, which isn't the comp's own, or the points would line up
-/// from wherever they are looked at.
-fn eye(doc: &Arc<Document>, comp: &Composition, e: &EffectInstance, t: f64) -> DVec3 {
-    let camera = |l: &&Layer| matches!(l.kind, LayerKind::Camera { .. });
-    let named = e
-        .layer_ref("camera")
-        .and_then(|id| comp.layers.iter().find(|l| l.id == id))
-        .filter(camera);
-    let own = comp.layers.iter().filter(camera).find(|l| {
-        l.id != VIEW_CAMERA_ID
-            && l.switches.visible
-            && t >= l.in_point.0.to_f64()
-            && t < l.out_point.0.to_f64()
-    });
-    let pose = named.or(own).and_then(|l| {
-        lumit_core::track::camera_pose_of(doc, comp, l, t, &crate::track::Store)
-            .map(|linked| linked.pose)
-    });
-    let at = pose.map_or_else(
-        || {
-            // The view's camera was made for the comp before a viewport widened
-            // it, so its point of interest is still the true middle.
-            let middle = comp.layers.iter().find_map(|l| match &l.kind {
-                LayerKind::Camera { options, .. } if l.id == VIEW_CAMERA_ID => Some((
-                    options.point_of_interest[0].value_at(0.0),
-                    options.point_of_interest[1].value_at(0.0),
-                )),
-                _ => None,
-            });
-            let (w, h) = middle
-                .map_or((f64::from(comp.width), f64::from(comp.height)), |(x, y)| {
-                    (x * 2.0, y * 2.0)
-                });
-            lumit_core::camera::default_pose(w, h).position
-        },
-        |pose| pose.position,
-    );
-    DVec3::new(at.0, at.1, at.2)
+    /// Whether its Camera row names a camera.
+    named: bool,
 }
 
 /// `layer`'s rays at comp time `t`, `None` with no Depth points on it.
@@ -79,24 +39,48 @@ pub(super) fn rays(doc: &Arc<Document>, comp: &Composition, layer: &Layer, t: f6
         inputs: None,
     });
     let place = crate::placement::world_placement(comp, layer, t, context);
+    let mut place = glam::Mat4::from_cols_array_2d(&place).as_dmat4();
+    let named = e.layer_ref("camera");
+    let source = depth_points::source(doc, comp, layer, named, t);
+    let slide = source.slide;
+    place.w_axis += glam::DVec4::new(slide.0, slide.1, slide.2, 0.0);
     Some(Rays {
-        eye: eye(doc, comp, e, t),
-        place: glam::Mat4::from_cols_array_2d(&place).as_dmat4(),
+        eye: DVec3::new(source.eye.0, source.eye.1, source.eye.2),
+        place,
+        named: named.is_some(),
     })
 }
 
-/// The picture Depth points read for depth: its Depth layer's, else its own
-/// analysis's.
-fn depth_of<'a>(
-    input: Option<&'a LayerInput>,
-    own: &'a wgpu::Texture,
-    plane: Option<&'a wgpu::Texture>,
-) -> Option<&'a wgpu::Texture> {
-    let picked = match input {
+/// `d`, spliced out of a collapsed precomp by `outer`, onto the comp it joined:
+/// its plane goes wherever the precomp went, and unless a camera inside the
+/// precomp is named, its rays start from that comp's camera.
+pub(crate) fn collapsed(
+    d: &mut crate::draw::CompLayerDraw,
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    outer: [[f32; 4]; 4],
+    t: f64,
+) {
+    let Some(rays) = d.in_scene.as_mut().and_then(|c| c.rays.as_mut()) else {
+        return;
+    };
+    let outer = glam::Mat4::from_cols_array_2d(&outer).as_dmat4();
+    rays.place = outer * rays.place;
+    rays.eye = if rays.named {
+        outer.transform_point3(rays.eye)
+    } else {
+        let at = depth_points::source(doc, comp, layer, None, t).eye;
+        DVec3::new(at.0, at.1, at.2)
+    };
+}
+
+/// The picture its Depth layer row gives Depth points, if any.
+fn picked<'a>(input: Option<&'a LayerInput>, own: &'a wgpu::Texture) -> Option<&'a wgpu::Texture> {
+    match input {
         Some(LayerInput::Several(list)) => list.first().and_then(|(l, _)| l.texture(own)),
         _ => None,
-    };
-    picked.or(plane)
+    }
 }
 
 /// Draw `op` if it is Depth points in a frame that can see it, leaving the
@@ -142,8 +126,10 @@ pub(crate) fn draw<'a>(
         |v: DVec3, w: f64| rows.map(|r| (r[0] * v.x + r[1] * v.y + r[2] * v.z + r[3] * w) as f32);
     let middle = corner + across * wf / 2.0 + down * hf / 2.0;
     let w_middle = seen(middle, 1.0)[2];
-    let depth = depth_of(input, tex, plane.and_then(|(_, slot)| slot))
+    let depth = picked(input, tex)
+        .or(plane.and_then(|(_, slot)| slot))
         .map(|d| lumit_gpu::fx::fit_centred(ctx, d.clone(), w, h));
+    let r = frame.render_scale.max(1e-6);
     let (colour, inv_w) = fx.depth_points(
         ctx,
         tex,
@@ -153,8 +139,8 @@ pub(crate) fn draw<'a>(
             along: seen(corner - rays.eye, 0.0),
             across: seen(across, 0.0),
             down: seen(down, 0.0),
-            target: lumit_gpu::composite::scaled_size(cw, ch, frame.render_scale.max(1e-6)),
-            render_scale: frame.render_scale.max(1e-6),
+            target: lumit_gpu::composite::scaled_size(cw, ch, r),
+            render_scale: r,
             half: half as f32,
             amount: p.amount / 100.0,
             density: p.density / 100.0,

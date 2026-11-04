@@ -4070,9 +4070,10 @@ fn comp_walk(
                             d.rotation_x_deg = 0.0;
                             d.rotation_y_deg = 0.0;
                         }
+                        let at = crate::realise::scene::depth_points::collapsed;
+                        at(d, doc, comp, layer, parent, t_comp);
                         d.pre = Some(match d.pre {
-                            // A collapsed chain: this parent wraps the child's
-                            // own parent placement.
+                            // A collapsed chain wraps the child's own parent.
                             Some(p) => lumit_gpu::composite::concat_place(parent, p),
                             None => parent,
                         });

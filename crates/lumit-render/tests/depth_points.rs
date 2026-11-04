@@ -5,7 +5,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use lumit_core::anim::Property;
-use lumit_core::fx::effects::depth_points::VIEW_CAMERA_ID;
 use lumit_core::model::{
     Composition, Document, EffectInstance, EffectParam, EffectValue, LinearColour, ProjectItem,
     SolidDef,
@@ -252,7 +251,7 @@ fn points_line_up_with_the_footage_from_their_camera_and_not_from_elsewhere() {
     let s = scene(&noise, true, 1.0, true, false, 12.0);
     let mut doc = Arc::unwrap_or_clone(s.doc);
     let comp = doc.comp_mut(s.comp).expect("the comp");
-    comp.layers[0].id = VIEW_CAMERA_ID;
+    comp.layers[0].id = lumit_core::view_camera::ID;
     let fx = comp.layers[2].effects.last_mut().expect("Depth points");
     set(fx, "camera", EffectValue::Layer(None));
     let viewed = Scene {
@@ -294,4 +293,199 @@ fn points_line_up_with_the_footage_from_their_camera_and_not_from_elsewhere() {
         let deep = (f32::from(*sixteen) / 65_535.0 * 255.0).round() as i32;
         assert!((i32::from(*eight) - deep).abs() <= 1);
     }
+}
+
+/// Two keys on a property, across the comp's one second.
+fn keyed(from: f64, to: f64) -> Property {
+    let side = lumit_core::anim::SideInterp::Linear;
+    let key = |s: i64, value: f64| lumit_core::anim::Keyframe {
+        time: Rational::new(s, 1).unwrap(),
+        value,
+        interp_in: side,
+        interp_out: side,
+    };
+    Property {
+        animation: lumit_core::anim::Animation::Keyframed(vec![key(0, from), key(1, to)]),
+        extra: serde_json::Map::new(),
+    }
+}
+
+/// `s` with its comp's top camera out of the way and its second changed by `set`.
+fn staged(s: Scene, set: impl FnOnce(&mut lumit_core::model::Layer)) -> Scene {
+    let mut doc = Arc::unwrap_or_clone(s.doc);
+    let comp = doc.comp_mut(s.comp).expect("the comp");
+    comp.layers[0].switches.visible = false;
+    set(&mut comp.layers[1]);
+    Scene {
+        doc: Arc::new(doc),
+        comp: s.comp,
+    }
+}
+
+/// Whether every tile is within a pixel of `flat` at frame `frame`.
+fn lined_up(points: &[u8], flat: &[u8], frame: u32) {
+    for y0 in (60..H as i32 - 60).step_by(40) {
+        for x0 in (60..W as i32 - 60).step_by(40) {
+            let (dx, dy) = best_shift(points, flat, (x0, y0));
+            assert!(
+                dx.abs() <= 1 && dy.abs() <= 1,
+                "at frame {frame} the tile at {x0}, {y0} is {dx}, {dy} out"
+            );
+        }
+    }
+}
+
+struct Stub;
+impl lumit_eval::SourceStamper for Stub {
+    fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
+        Some((format!("stub:{item}"), (lt * 60.0).round().max(0.0) as u64))
+    }
+}
+
+#[test]
+fn a_moving_camera_shows_the_depth_or_carries_the_shot() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let mut noise = lumit_core::fx::builtins::instantiate("fractal_noise").expect("a built-in");
+    set(&mut noise, "scale", float(12.0));
+    set(&mut noise, "contrast", float(150.0));
+    set(&mut noise, "seed", EffectValue::Seed(7));
+    let mid = f64::from(W) * 0.5;
+    let frame = |r: &mut HeadlessRenderer, s: &Scene, at: u64| {
+        r.render_rgba(&s.doc, s.comp, at, 1.0).expect("a frame").0
+    };
+    let moving =
+        |c: &mut lumit_core::model::Layer| c.transform.position_x = keyed(mid, mid + 300.0);
+
+    // The comp's own camera, keyed, with the row unset: lined up on the layer's
+    // first frame, and the depth shows once it has moved.
+    let unset = |analysed| {
+        let s = scene(&noise, true, 1.0, analysed, true, 0.0);
+        let mut doc = Arc::unwrap_or_clone(s.doc);
+        let comp = doc.comp_mut(s.comp).expect("the comp");
+        let fx = comp.layers[2].effects.last_mut().expect("Depth points");
+        set(fx, "camera", EffectValue::Layer(None));
+        staged(
+            Scene {
+                doc: Arc::new(doc),
+                comp: s.comp,
+            },
+            moving,
+        )
+    };
+    let (points, flat) = (unset(true), unset(false));
+    lined_up(&frame(&mut r, &points, 0), &frame(&mut r, &flat, 0), 0);
+    assert!(
+        moved(&frame(&mut r, &points, 30), &frame(&mut r, &flat, 30)) > 3,
+        "no parallax from a moved comp camera"
+    );
+
+    // Named, keyed and zooming, by the row's own route: through it the points
+    // are the plate on every frame.
+    let named = |enabled| {
+        let s = scene(&noise, true, 1.0, true, true, 0.0);
+        let s = staged(s, moving);
+        let mut doc = Arc::unwrap_or_clone(s.doc);
+        let comp = doc.comp(s.comp).expect("the comp").clone();
+        let camera = comp.layers[1].id;
+        let mut effects = comp.layers[2].effects.clone();
+        let fx = effects.last_mut().expect("Depth points");
+        set(fx, "camera", EffectValue::Layer(None));
+        let mut before = comp.layers[2].clone();
+        before.effects = effects.clone();
+        let fx = effects.last_mut().expect("Depth points");
+        set(fx, "camera", EffectValue::Layer(Some(camera)));
+        let op = lumit_core::fx::effects::depth_points::set_effects(&comp, &before, effects);
+        let c = doc.comp_mut(s.comp).expect("the comp");
+        c.layers[2] = before;
+        lumit_core::ops::apply(&mut doc, &op).expect("the ops apply");
+        let c = doc.comp_mut(s.comp).expect("the comp");
+        if let lumit_core::model::LayerKind::Camera { zoom, .. } = &mut c.layers[1].kind {
+            let first = zoom.value_at(0.0);
+            *zoom = keyed(first, first * 1.5);
+        }
+        c.layers[2]
+            .effects
+            .last_mut()
+            .expect("Depth points")
+            .enabled = enabled;
+        Scene {
+            doc: Arc::new(doc),
+            comp: s.comp,
+        }
+    };
+    let (points, flat) = (named(true), named(false));
+    let plate = frame(&mut r, &flat, 0);
+    for at in [0, 30, 59] {
+        lined_up(&frame(&mut r, &points, at), &plate, at as u32);
+    }
+
+    // A collapsed precomp moved and turned takes its points with it.
+    let collapsed = |enabled| {
+        let s = scene(&noise, true, 1.0, true, true, 0.0);
+        let mut doc = Arc::unwrap_or_clone(s.doc);
+        let inner = doc.comp_mut(s.comp).expect("the comp");
+        let fx = inner.layers[2].effects.last_mut().expect("Depth points");
+        set(fx, "camera", EffectValue::Layer(None));
+        fx.enabled = enabled;
+        let mut outer = doc.comp(s.comp).expect("the comp").clone();
+        outer.id = Uuid::now_v7();
+        let mut layer = lumit_core::edits::base_layer(
+            "Inside".into(),
+            lumit_core::model::LayerKind::Precomp { comp: s.comp },
+            outer.duration.0,
+            lumit_core::model::TransformGroup {
+                anchor_x: Property::fixed(f64::from(W) * 0.5),
+                anchor_y: Property::fixed(f64::from(H) * 0.5),
+                position_x: Property::fixed(f64::from(W) * 0.5 + 60.0),
+                position_y: Property::fixed(f64::from(H) * 0.5),
+                rotation_y: Property::fixed(14.0),
+                ..Default::default()
+            },
+        );
+        layer.switches.three_d = true;
+        layer.switches.collapse = true;
+        outer.layers = vec![layer];
+        let id = outer.id;
+        doc.items.push(ProjectItem::Composition(outer));
+        Scene {
+            doc: Arc::new(doc),
+            comp: id,
+        }
+    };
+    let (points, flat) = (collapsed(true), collapsed(false));
+    let (points, flat) = (frame(&mut r, &points, 0), frame(&mut r, &flat, 0));
+    for y0 in (80..H as i32 - 80).step_by(40) {
+        for x0 in (120..W as i32 - 120).step_by(40) {
+            let (dx, dy) = best_shift(&points, &flat, (x0, y0));
+            assert!(
+                dx.abs() <= 1 && dy.abs() <= 1,
+                "{x0}, {y0} is {dx}, {dy} out"
+            );
+        }
+    }
+
+    // A hidden parent moving the named camera renames the frame.
+    let key = |x: f64| {
+        let s = scene(&noise, true, 1.0, true, false, 0.0);
+        let mut doc = Arc::unwrap_or_clone(s.doc);
+        let comp = doc.comp_mut(s.comp).expect("the comp");
+        let mut null = lumit_core::edits::null_layer(comp);
+        null.transform.position_x = Property::fixed(x);
+        null.switches.visible = false;
+        comp.layers[1].parent = Some(null.id);
+        comp.layers[1].switches.visible = false;
+        comp.layers.push(null);
+        let doc = Arc::new(doc);
+        let comp = doc.comp(s.comp).expect("the comp");
+        lumit_eval::comp_frame_key(&doc, comp, 0.0, lumit_eval::Quality::default(), &Stub)
+            .expect("keyable")
+    };
+    assert_ne!(
+        key(10.0),
+        key(500.0),
+        "the named camera's parent is in the name"
+    );
 }
