@@ -801,6 +801,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetLightSettings { comp, layer, .. }
         | Op::SetMaterialSettings { comp, layer, .. }
+        | Op::SetLayerGeometry { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }

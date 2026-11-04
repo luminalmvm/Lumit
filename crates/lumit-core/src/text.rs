@@ -293,6 +293,9 @@ pub struct GlyphXform {
     pub opacity: f32,
     /// Added to the layer's fill, scene-linear.
     pub fill: [f32; 3],
+    /// px@comp away from the eye, and degrees about x and y. A solid's alone.
+    pub depth: f32,
+    pub turn: [f32; 2],
 }
 
 impl Default for GlyphXform {
@@ -303,6 +306,8 @@ impl Default for GlyphXform {
             scale: [1.0, 1.0],
             opacity: 1.0,
             fill: [0.0, 0.0, 0.0],
+            depth: 0.0,
+            turn: [0.0, 0.0],
         }
     }
 }

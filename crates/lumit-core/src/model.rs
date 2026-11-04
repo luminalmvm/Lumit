@@ -12,8 +12,8 @@ use crate::time::{CompTime, Duration, FrameRate, Rational};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-mod light;
 mod axis_modes;
+mod light;
 mod light_file;
 mod material;
 
@@ -761,6 +761,10 @@ pub struct Material {
     /// behind it.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub holdout: bool,
+    /// A Text or Shape layer's Geometry options ([`crate::extrude`]) and its
+    /// faces' rows, each `None` for rows left as they were. Empty on any other.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub geometry: Vec<Option<EffectInstance>>,
 }
 
 /// After Effects' three answers to Casts shadows and Accepts shadows: no,

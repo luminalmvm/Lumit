@@ -605,6 +605,12 @@ pub enum Op {
         layer: Uuid,
         settings: crate::model::MaterialSettings,
     },
+    /// Replace a Text or Shape layer's Geometry options, as one undo step.
+    SetLayerGeometry {
+        comp: Uuid,
+        layer: Uuid,
+        geometry: Vec<Option<crate::model::EffectInstance>>,
+    },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (docs/03 §5.6).
     ///
@@ -966,6 +972,7 @@ impl Op {
             Op::SetCameraSettings { .. } => "Set camera settings",
             Op::SetLightSettings { .. } => "Set light settings",
             Op::SetMaterialSettings { .. } => "Set material settings",
+            Op::SetLayerGeometry { .. } => "Edit geometry options",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
@@ -1064,6 +1071,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetLightSettings { comp, layer, .. }
         | Op::SetMaterialSettings { comp, layer, .. }
+        | Op::SetLayerGeometry { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
@@ -2344,6 +2352,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 settings: previous,
+            })
+        }
+        Op::SetLayerGeometry {
+            comp,
+            layer,
+            geometry,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.transform.material.geometry, geometry.clone());
+            Ok(Op::SetLayerGeometry {
+                comp: *comp,
+                layer: *layer,
+                geometry: previous,
             })
         }
         Op::SetCameraSolveLink {

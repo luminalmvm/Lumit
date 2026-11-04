@@ -83,6 +83,7 @@ impl Default for Material {
             light_transmission: Property::zero(),
             reflection: Property::zero(),
             holdout: false,
+            geometry: Vec::new(),
         }
     }
 }

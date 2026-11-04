@@ -460,6 +460,7 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
             ShadowMode::On,
         ),
         holdout: false,
+        geometry: Vec::new(),
     }
 }
 
