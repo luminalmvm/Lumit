@@ -2203,7 +2203,7 @@ fn comp_walk(
                     .filter(|_| !driven_inputs(src))
                     .and_then(|k| k.nested_key_with(nested, slt, src.graph_inputs.as_ref())),
                 px_per_metre: nested.px_per_metre(slt),
-                scene_depth: false,
+                read: None,
                 trace_layers: false,
                 paint: src.paint.clone(),
                 paint_time: lumit_core::time::layer_time(t_comp, src.start_offset.0),
@@ -2659,25 +2659,7 @@ fn comp_walk(
         let mut input = match (below, nested_input_for(src)) {
             (Some(below), _) => below,
             (None, Some(nested)) => nested,
-            (None, None) => {
-                let (rgba, tex_w, tex_h, natural, format) = pixels_for(src)?;
-                DofInputDraw {
-                    rgba: rgba.to_vec(),
-                    tex_w,
-                    tex_h,
-                    format,
-                    fx: Default::default(),
-                    colour_tables: Default::default(),
-                    flare_lens_files: Vec::new(),
-                    roto_mattes: Vec::new(),
-                    planes: Vec::new(),
-                    nested: None,
-                    colour_space: crate::colour::footage_colour_space(doc, &src.kind),
-                    natural: [natural.0, natural.1],
-                    graph_fx: Vec::new(),
-                    place: None,
-                }
-            }
+            (None, None) => moments::plain_input(doc, src, pixels_for(src)?),
         };
         input.place = place;
         if src.switches.fx {
@@ -2935,14 +2917,29 @@ fn comp_walk(
                         // reads their distance rather than its picture. A flat
                         // precomp is a picture, a depth pass made as a comp.
                         let depth = def.depth_inputs().contains(&param);
-                        let three_d = e
+                        let named = e
                             .layer_ref(param)
-                            .and_then(|id| comp.layers.iter().find(|l| l.id == id))
-                            .and_then(|l| match l.kind {
-                                LayerKind::Precomp { comp } => doc.comp(comp),
-                                _ => None,
-                            })
-                            .is_some_and(|c| c.layers.iter().any(|l| l.switches.three_d));
+                            .and_then(|id| comp.layers.iter().find(|l| l.id == id));
+                        let three_d = named.is_some_and(|l| crate::passes::is_3d_precomp(doc, l));
+                        let read = def.scene_read(e);
+                        let model = named
+                            .filter(|l| matches!(l.kind, LayerKind::Model { .. }) && in_span(l));
+                        if let (Some(model), Some(read)) =
+                            (model, read.clone().filter(|r| !r.is_empty()))
+                        {
+                            return moments::model_pass(
+                                doc,
+                                comp,
+                                model,
+                                (t_comp, frame_t),
+                                frame_pixels,
+                                (&visited_path, clone_number),
+                                read,
+                            );
+                        }
+                        if read.as_ref().is_some_and(|r| !three_d || r.is_empty()) {
+                            return LayerInputDraw::Absent;
+                        }
                         let own = e.layer_ref(param) == Some(owner);
                         if let Some(ppm) = below.filter(|_| own && depth) {
                             return LayerInputDraw::Below(ppm);
@@ -2952,17 +2949,17 @@ fn comp_walk(
                         // input, which `run_ops` already holds. Except a Depth
                         // row on a 3D precomp, which wants that precomp's
                         // distance rather than its picture.
-                        if own && !(depth && three_d) {
+                        if own && !((depth || read.is_some()) && three_d) {
                             return LayerInputDraw::ThisLayer;
                         }
                         let Some(mut d) = layer_slot(e, param) else {
                             return LayerInputDraw::Absent;
                         };
-                        if depth && three_d {
-                            if let Some(n) = d.nested.as_mut() {
-                                n.scene_depth = true;
-                                n.trace_layers = own && def.traces_scene(e);
-                            }
+                        if let (Some(n), true) = (d.nested.as_mut(), read.is_some()) {
+                            n.read = read;
+                        } else if let Some(n) = d.nested.as_mut().filter(|_| depth && three_d) {
+                            n.read = crate::passes::depth_read();
+                            n.trace_layers = own && def.traces_scene(e);
                         }
                         LayerInputDraw::Layer(d)
                     };
@@ -3534,6 +3531,7 @@ fn comp_walk(
                     key: None,
                     paint: Vec::new(),
                     paint_time: t_comp,
+                    flow: None,
                 },
                 natural_size: (w, h),
                 // Identity placement: comp-sized, drawn where the members
@@ -3935,6 +3933,7 @@ fn comp_walk(
                             key: keys.and_then(|k| k.nested_key_with(nested, st, None)),
                             paint: Vec::new(),
                             paint_time: lt,
+                            flow: None,
                         },
                         (nested.width as f32, nested.height as f32),
                     ))
@@ -3992,6 +3991,7 @@ fn comp_walk(
                             key: None,
                             paint: Vec::new(),
                             paint_time: lt,
+                            flow: None,
                         };
                         (mixed, natural)
                     }
@@ -4017,8 +4017,19 @@ fn comp_walk(
                 // `st`; the layer's own opacity, paint and collapse keep `lt`,
                 // because they are not remapped (docs/04 §11.6). Equal to `lt`
                 // for a layer with no map, which is byte for byte what it was.
-                let st = lumit_core::model::nested_source_time(layer, nested, lt);
-                let frame_st = lumit_core::model::nested_source_time(layer, nested, frame_lt);
+                let mut st = lumit_core::model::nested_source_time(layer, nested, lt);
+                let mut frame_st = lumit_core::model::nested_source_time(layer, nested, frame_lt);
+                // On Flow between two frames, the frame before is built here
+                // and the frame after below. Not in a rebuild or a held
+                // render, which the planner fetched no second frame for.
+                let pair = (!with.rebuild && lt.to_bits() == frame_lt.to_bits())
+                    .then(|| {
+                        lumit_core::precomp_flow::pair(layer, nested, lt, comp.frame_rate.fps())
+                    })
+                    .flatten();
+                if let Some((a, _, _)) = pair {
+                    (st, frame_st) = (a, a);
+                }
                 // Collapse (docs/06 §1.4): splice the inner layers straight
                 // into this list with the Precomp layer's placement multiplied
                 // in front — no intermediate raster, no clipping to the nested
@@ -4203,6 +4214,45 @@ fn comp_walk(
                         )
                     })
                     .collect();
+                // The frame after, built as a moment of the frame before, as
+                // the neighbours above are, so its footage is the frame the
+                // planner fetched there.
+                // ponytail: unnamed, so it is built again on every frame that
+                // needs it. Naming it wants a walk at its own time.
+                let flow = pair.zip(match &layer.interpolation {
+                    lumit_core::retime::Interpolation::Flow(p) => Some(p),
+                    _ => None,
+                });
+                let flow = flow.map(|((_, b, phase), params)| {
+                    let values = nested
+                        .graph
+                        .as_ref()
+                        .filter(|_| layer.graph_inputs.is_some())
+                        .map_or_else(Vec::new, |graph| graph_values(layer, graph, b));
+                    let mut draws = comp_walk(
+                        doc,
+                        nested,
+                        b,
+                        st,
+                        pixels_by_layer,
+                        visited,
+                        None,
+                        false,
+                        Walk {
+                            rebuild: true,
+                            values: &values,
+                            ..inner
+                        },
+                        None,
+                    );
+                    strip_temporal_inputs(&mut draws);
+                    Box::new(crate::draw::NestedFlow {
+                        draws,
+                        camera: Some(crate::track::camera_pose(doc, nested, b)),
+                        phase,
+                        params: params.clone(),
+                    })
+                });
                 visited.pop();
                 (
                     DrawSource::Nested {
@@ -4235,6 +4285,7 @@ fn comp_walk(
                         // Precomp's paint reads where every other keyed value
                         // on that layer reads.
                         paint_time: lt,
+                        flow,
                     },
                     (nested.width as f32, nested.height as f32),
                 )
@@ -4487,7 +4538,7 @@ fn comp_walk(
                 }));
                 continue;
             }
-            LayerKind::Model { .. } => {
+            _ if lumit_core::extrude::draws_mesh(layer) => {
                 let held = |e: &lumit_core::model::EffectInstance, row: &str, at: f64| {
                     let by = (clone_number, with.rebuild);
                     let times = (at, frame_t);
@@ -4584,7 +4635,9 @@ fn comp_walk(
             DrawSource::Pixels { tex_w, tex_h, .. } => {
                 fx_key::fx_input_key(doc, layer, pixels_by_layer, lt, *tex_w, *tex_h)
             }
-            DrawSource::Nested { key, .. } => *key,
+            // On Flow the stack runs on the picture between two frames,
+            // which is neither frame's.
+            DrawSource::Nested { key, flow, .. } => key.filter(|_| flow.is_none()),
             DrawSource::Adjust
             | DrawSource::Graph(_)
             | DrawSource::Haze(_)
@@ -5704,6 +5757,7 @@ impl GraphLower<'_> {
                         key: self.keys.and_then(|k| k.nested_key(nested, self.t)),
                         paint: Vec::new(),
                         paint_time: self.t,
+                        flow: None,
                     },
                     (nested.width as f32, nested.height as f32),
                 )
@@ -5775,7 +5829,7 @@ impl GraphLower<'_> {
                 camera: Some(crate::track::camera_pose(self.doc, nested, self.t)),
                 key: None,
                 px_per_metre: nested.px_per_metre(self.t),
-                scene_depth: true,
+                read: crate::passes::depth_read(),
                 trace_layers: false,
                 paint: Vec::new(),
                 paint_time: 0.0,
@@ -6718,17 +6772,20 @@ fn rebuilt_as_itself(
             // cull, which is another set of questions than these.
             LayerKind::Precomp { comp: id } => doc.comp(*id).is_some_and(|nested| {
                 let frame_lt = lumit_core::time::layer_time(frame_t, layer.start_offset.0);
-                !matches!(
-                    lumit_core::model::collapse_state(doc, comp, layer, lt),
-                    lumit_core::model::CollapseState::Active
-                ) && rebuilt_as_itself(
-                    doc,
-                    nested,
-                    lumit_core::model::nested_source_time(layer, nested, lt),
-                    lumit_core::model::nested_source_time(layer, nested, frame_lt),
-                    pixels_by_layer,
-                    depth + 1,
-                )
+                let fps = comp.frame_rate.fps();
+                lumit_core::precomp_flow::pair(layer, nested, lt, fps).is_none()
+                    && !matches!(
+                        lumit_core::model::collapse_state(doc, comp, layer, lt),
+                        lumit_core::model::CollapseState::Active
+                    )
+                    && rebuilt_as_itself(
+                        doc,
+                        nested,
+                        lumit_core::model::nested_source_time(layer, nested, lt),
+                        lumit_core::model::nested_source_time(layer, nested, frame_lt),
+                        pixels_by_layer,
+                        depth + 1,
+                    )
             }),
             LayerKind::Solid { .. }
             | LayerKind::Text { .. }

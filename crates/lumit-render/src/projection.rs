@@ -8,15 +8,14 @@ use std::sync::Arc;
 use glam::{Mat3, Mat4, Vec3};
 use lumit_core::expression::ExpressionContext;
 use lumit_core::model::{Composition, Document, EffectInstance, Layer, LayerKind};
-use lumit_core::model_layer::ModelSettings;
-use lumit_core::model_material::{camera_at, projection, Projection};
+use lumit_core::model_material::{camera_at, projection, stored, Projection};
 use lumit_gpu::mesh::projector::view_of;
 use lumit_scene::pose::Pose;
-use lumit_scene::ModelScene;
+use lumit_scene::{Material, ModelScene};
 
 use crate::draw::{DofInputDraw, LayerInputDraw};
 use crate::model::Pictures;
-use crate::model_material::{kept_for, materials_of, Look};
+use crate::model_material::{kept_for, Look};
 
 /// The row a projection reads its picture from.
 const PICTURE_ROW: &str = "base_colour_layer";
@@ -95,24 +94,25 @@ impl<'a> Plates<'a> {
     }
 }
 
-/// Fill in `looks` for the materials `settings` project: each one's camera,
-/// and which earlier material made its picture. Nothing is asked of a layer
-/// with no rows kept, so an ordinary model pays nothing.
+/// Fill in `looks` for the materials of `file` that the rows `kept` project,
+/// on a layer whose mesh `model` puts in its own pixels: each one's camera, and
+/// which earlier material made its picture. Nothing is asked of a layer with no
+/// rows kept, so an ordinary model pays nothing.
 pub(crate) fn aim(
     doc: &Arc<Document>,
     comp: &Composition,
-    settings: &ModelSettings,
-    scene: &ModelScene,
+    kept: &[Option<EffectInstance>],
+    file: &[Material],
+    model: [[f32; 4]; 4],
     at: &Moment<'_>,
     looks: &mut [Look],
 ) {
-    if settings.materials.is_empty() {
+    if kept.is_empty() {
         return;
     }
-    let materials = materials_of(scene);
     let mut made: Vec<(PlateKey, usize, [f32; 2])> = Vec::new();
     for (k, look) in looks.iter_mut().enumerate() {
-        let rows = kept_for(settings, &materials, look.index);
+        let rows = kept_for(kept, file, look.index);
         let Some(p) = rows.and_then(|rows| projection(rows, comp, at.lt)) else {
             continue;
         };
@@ -128,15 +128,14 @@ pub(crate) fn aim(
             }),
         };
         // No picture at this moment leaves the file's own colour as it is.
-        look.projector = natural.and_then(|n| projector(doc, comp, settings, scene, &p, n, at));
+        look.projector = natural.and_then(|n| projector(doc, comp, model, &p, n, at));
     }
 }
 
 fn projector(
     doc: &Arc<Document>,
     comp: &Composition,
-    settings: &ModelSettings,
-    scene: &ModelScene,
+    model: [[f32; 4]; 4],
     p: &Projection,
     natural: [f32; 2],
     at: &Moment<'_>,
@@ -145,9 +144,6 @@ fn projector(
     let find = |id| comp.layers.iter().find(|l| l.id == id);
     let pose = camera_at(doc, comp, find(p.camera)?, time)?;
     let camera = crate::export::camera_mat(comp.width, comp.height, pose);
-    let size = (comp.width as f32, comp.height as f32);
-    let model =
-        Mat4::from_cols_array_2d(&crate::model::model_to_comp(settings, &scene.bounds, size));
     let placed = match p.held {
         Some(_) => placed_at(comp, at.layer, time, at.context),
         None => at.placement,
@@ -157,7 +153,7 @@ fn projector(
         view: view_of(camera, (comp.width, comp.height), pose.zoom as f32),
         plate: plate(comp, find(p.picture)?, natural, time, at.context)?,
         eye: Vec3::new(x as f32, y as f32, z as f32),
-        surface: Mat4::from_cols_array_2d(&placed) * model,
+        surface: Mat4::from_cols_array_2d(&placed) * Mat4::from_cols_array_2d(&model),
         held: p.held.is_some(),
         stand_ins: stand_ins(doc, comp, p.camera, time, at),
     })
@@ -208,9 +204,9 @@ fn plate(
     Some(stretch(1.0 / nw, 1.0 / nh) * comp_to_layer * frame_to_comp)
 }
 
-/// The Model layers on `camera` that show at comp time `time`, each where it
-/// is at that moment, as that is what the camera saw. Each is in the pose it
-/// has at the playhead, the one the points tested against it are in.
+/// The Model layers and solids on `camera` that show at comp time `time`, each
+/// where it is at that moment, as that is what the camera saw. Each is in the
+/// pose it has at the playhead, the one the points tested against it are in.
 fn stand_ins(
     doc: &Arc<Document>,
     comp: &Composition,
@@ -225,20 +221,33 @@ fn stand_ins(
         .iter()
         .filter(shows)
         .filter_map(|l| {
-            let LayerKind::Model { item, settings } = &l.kind else {
-                return None;
-            };
             let lt = lumit_core::time::layer_time(at.t_comp, l.start_offset.0);
-            let mut kept = settings.materials.iter().flatten();
-            kept.find(|rows| projection(rows, comp, lt).is_some_and(|p| p.camera == camera))?;
-            let scene = crate::model::scene(doc, *item)?;
-            let size = (comp.width as f32, comp.height as f32);
-            let model = crate::model::model_to_comp(settings, &scene.bounds, size);
+            let rows = stored(l);
+            let mut rows = rows.iter();
+            rows.find(|rows| projection(rows, comp, lt).is_some_and(|p| p.camera == camera))?;
+            let (scene, model, pose) = match &l.kind {
+                LayerKind::Model { item, settings } => {
+                    let scene = crate::model::scene(doc, *item)?;
+                    let size = (comp.width as f32, comp.height as f32);
+                    let model = crate::model::model_to_comp(settings, &scene.bounds, size);
+                    let pose = crate::model_motion::pose_at(
+                        comp, l, settings, &scene, at.t_comp, at.context,
+                    );
+                    (scene, Mat4::from_cols_array_2d(&model), pose)
+                }
+                _ if lumit_core::extrude::draws_mesh(l) => {
+                    let context = Arc::new(ExpressionContext {
+                        comp_time: at.t_comp,
+                        layer: Some(l.id),
+                        ..(**at.context).clone()
+                    });
+                    let scene = crate::extrude::scene_at(l, lt, &context, [true; 4])?;
+                    (scene, Mat4::IDENTITY, None)
+                }
+                _ => return None,
+            };
             let placed = placed_at(comp, l, time, at.context);
-            let to_comp = Mat4::from_cols_array_2d(&placed) * Mat4::from_cols_array_2d(&model);
-            let pose =
-                crate::model_motion::pose_at(comp, l, settings, &scene, at.t_comp, at.context);
-            Some((scene, to_comp, pose))
+            Some((scene, Mat4::from_cols_array_2d(&placed) * model, pose))
         })
         .collect()
 }

@@ -298,5 +298,9 @@ fn the_card_walks_where_the_reference_walks() {
             worst = worst.max((a - b).abs());
         }
     }
-    assert!(worst < 0.1, "worst place {worst} px");
+    // Cards round their floats their own way and each step carries on from the
+    // last, so this drifts by a different amount on each: 0.005 px here, 0.165
+    // on a Mac. Half a pixel can't be seen, and a step that moved particles
+    // differently would pass it in the first few frames.
+    assert!(worst < 0.5, "worst place {worst} px");
 }

@@ -33,6 +33,7 @@
 //! - [`scene_points`] times a million particles in the 3D scene, B31, and a
 //!   1080p shot's Depth points, B38.
 //! - [`sim_step`] times one step of a million simulated particles: B37.
+//! - [`extruded`] times one letter's mesh on an extruded layer: B39.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.
@@ -49,6 +50,7 @@
 
 pub mod baseline;
 pub mod comp;
+pub mod extruded;
 pub mod long;
 pub mod long_comp;
 pub mod long_sound;

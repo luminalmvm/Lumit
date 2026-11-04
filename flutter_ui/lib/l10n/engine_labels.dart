@@ -1012,6 +1012,7 @@ Map<String, String> get _built => {
       "Falloff": l10n.fxFalloff,
       "Far blur": l10n.fxFarBlur,
       "Feature density": l10n.fxFeatureDensity,
+      "Focal length": l10n.fxFocalLength,
       "Feather": l10n.fxFeather,
       "Field of view": l10n.fxFieldOfView,
       "File": l10n.fxFile,
@@ -1327,6 +1328,12 @@ Map<String, String> get _built => {
       "Sepia": l10n.fxSepia,
       "Set channels": l10n.fxSetChannels,
       "Set matte": l10n.fxSetMatte,
+      "Scene pass": l10n.fxScenePass,
+      "Part matte": l10n.fxPartMatte,
+      "Pass": l10n.fxPass,
+      "Normals": l10n.fxNormals,
+      "Part id": l10n.fxPartId,
+      "Parts": l10n.fxParts,
       "Shadow amount": l10n.fxShadowAmount,
       "Shadow colour": l10n.fxShadowColour,
       "Shade colour": l10n.fxShadeColour,
@@ -1705,6 +1712,15 @@ Map<String, String> get _built => {
       "Zoom": l10n.fxZoom,
       // A Model layer's material rows, and their presets.
       "Material": l10n.fxMaterial,
+      "Geometry options": l10n.fxGeometryOptions,
+      "Extrusion depth": l10n.fxExtrusionDepth,
+      "Bevel depth": l10n.fxBevelDepth,
+      "Bevel segments": l10n.fxBevelSegments,
+      "Hole bevel depth": l10n.fxHoleBevelDepth,
+      "Angular": l10n.fxBevelAngular,
+      "Convex": l10n.fxBevelConvex,
+      "Concave": l10n.fxBevelConcave,
+      "Bevel": l10n.fxFaceBevel,
       "Base colour": l10n.fxBaseColour,
       "Base colour layer": l10n.fxBaseColourLayer,
       "Projected from": l10n.fxProjectedFrom,
@@ -2067,6 +2083,7 @@ Map<String, String> get _built => {
       "Set camera settings": l10n.histSetCameraSettings,
       "Set light settings": l10n.histSetLightSettings,
       "Set material settings": l10n.histSetMaterialSettings,
+      "Edit geometry options": l10n.histEditGeometryOptions,
       "Set lighting": l10n.histSetLighting,
       "Link camera to solve": l10n.histLinkCameraToSolve,
       "Edit volume": l10n.histEditVolume,
@@ -2200,6 +2217,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeLightKindApproximated(a('ae_kind'));
     case 'shadow_switch_keyed':
       return l10n.aeShadowSwitchKeyed;
+    case 'geometry_options_carried':
+      return l10n.aeGeometryOptionsCarried;
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':

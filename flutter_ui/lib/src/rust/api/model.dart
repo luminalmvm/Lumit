@@ -8,8 +8,8 @@ import '../frb_generated.dart';
 import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `engine`, `materials_op`, `model_items`, `pose_at_frame`, `snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `drawn_layers`, `engine`, `geometry_op`, `materials_op`, `model_items`, `pose_at_frame`, `snapshot`, `with_instances_naming`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The user's saved material presets, sorted by name.
 List<BridgePresetInfo> listMaterialPresets() =>
@@ -86,6 +86,29 @@ class BridgeModelSettings {
           upAxis == other.upAxis &&
           units == other.units &&
           fit == other.fit;
+}
+
+/// One part of a 3D precomp's scene: the number a matte keeps, and the name to
+/// show.
+class BridgeScenePart {
+  final int id;
+  final String name;
+
+  const BridgeScenePart({
+    required this.id,
+    required this.name,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeScenePart &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name;
 }
 
 /// Which of a 3D model file's axes points up.

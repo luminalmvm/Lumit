@@ -12,6 +12,7 @@ use crate::time::{CompTime, Duration, FrameRate, Rational};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod axis_modes;
 mod light;
 mod light_file;
 mod material;
@@ -760,6 +761,10 @@ pub struct Material {
     /// behind it.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub holdout: bool,
+    /// A Text or Shape layer's Geometry options ([`crate::extrude`]) and its
+    /// faces' rows, each `None` for rows left as they were. Empty on any other.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub geometry: Vec<Option<EffectInstance>>,
 }
 
 /// After Effects' three answers to Casts shadows and Accepts shadows: no,
@@ -817,29 +822,6 @@ impl Default for AxisModes {
             anchor: AxisMode::Combined,
             position: AxisMode::Combined,
             scale: AxisMode::Linked,
-        }
-    }
-}
-
-impl AxisModes {
-    /// Nothing to write: every pair is where a fresh layer leaves it.
-    pub fn is_default(&self) -> bool {
-        *self == Self::default()
-    }
-
-    pub fn get(&self, pair: TransformPair) -> AxisMode {
-        match pair {
-            TransformPair::Anchor => self.anchor,
-            TransformPair::Position => self.position,
-            TransformPair::Scale => self.scale,
-        }
-    }
-
-    pub fn set(&mut self, pair: TransformPair, mode: AxisMode) {
-        match pair {
-            TransformPair::Anchor => self.anchor = mode,
-            TransformPair::Position => self.position = mode,
-            TransformPair::Scale => self.scale = mode,
         }
     }
 }
@@ -2353,6 +2335,8 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
         // §1.4: any live effect on the Precomp layer itself — its stack runs
         // on the nested comp's raster, which splicing never produces.
         || (layer.switches.fx && layer.effects.iter().any(|e| e.enabled))
+        // Flow makes its frame from two nested pictures.
+        || matches!(layer.interpolation, crate::retime::Interpolation::Flow(_))
         || layer.blend != BlendMode::Normal
         || layer.transform.opacity.value_at(lt) < 99.999
         || inner_forces

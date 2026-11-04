@@ -1271,6 +1271,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScanStage dco_decode_bridge_scan_stage(dynamic raw);
 
   @protected
+  BridgeScenePart dco_decode_bridge_scene_part(dynamic raw);
+
+  @protected
   BridgeScopeTrace dco_decode_bridge_scope_trace(dynamic raw);
 
   @protected
@@ -1819,6 +1822,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeScalar> dco_decode_list_bridge_scalar(dynamic raw);
 
   @protected
+  List<BridgeScenePart> dco_decode_list_bridge_scene_part(dynamic raw);
+
+  @protected
   List<BridgeSend> dco_decode_list_bridge_send(dynamic raw);
 
   @protected
@@ -2249,6 +2255,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFileComp>? dco_decode_opt_list_bridge_file_comp(dynamic raw);
+
+  @protected
+  List<BridgeScenePart>? dco_decode_opt_list_bridge_scene_part(dynamic raw);
 
   @protected
   List<CompositionReference>? dco_decode_opt_list_composition_reference(
@@ -3684,6 +3693,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScanStage sse_decode_bridge_scan_stage(SseDeserializer deserializer);
 
   @protected
+  BridgeScenePart sse_decode_bridge_scene_part(SseDeserializer deserializer);
+
+  @protected
   BridgeScopeTrace sse_decode_bridge_scope_trace(SseDeserializer deserializer);
 
   @protected
@@ -4344,6 +4356,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeScenePart> sse_decode_list_bridge_scene_part(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeSend> sse_decode_list_bridge_send(SseDeserializer deserializer);
 
   @protected
@@ -4845,6 +4861,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeFileComp>? sse_decode_opt_list_bridge_file_comp(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeScenePart>? sse_decode_opt_list_bridge_scene_part(
       SseDeserializer deserializer);
 
   @protected
@@ -6397,6 +6417,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeScanStage self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_scene_part(
+      BridgeScenePart self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_scope_trace(
       BridgeScopeTrace self, SseSerializer serializer);
 
@@ -7095,6 +7119,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeScalar> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_scene_part(
+      List<BridgeScenePart> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_send(
       List<BridgeSend> self, SseSerializer serializer);
 
@@ -7600,6 +7628,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_list_bridge_file_comp(
       List<BridgeFileComp>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_bridge_scene_part(
+      List<BridgeScenePart>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_composition_reference(

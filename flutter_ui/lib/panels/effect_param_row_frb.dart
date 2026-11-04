@@ -16,6 +16,7 @@
 // Getting this wrong is what stopped effect parameters being draggable at all:
 // the first preview tick killed the handles and the rest of the gesture threw.
 
+import '../shell/model_settings_dialog.dart' show modelLightNames;
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -29,13 +30,14 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show HardwareKeyboard, rootBundle;
 
 import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../state/comp_model.dart';
 import '../state/comp_time.dart';
 import '../state/dropper.dart';
 import '../state/expression_language.dart';
@@ -903,6 +905,10 @@ class EffectParamRowFrb extends StatelessWidget {
         return Text('—', style: t.small);
 
       case BridgeParamKind_Text():
+        if (value case BridgeEffectValue_Text(:final field0)
+            when param.id == 'parts') {
+          return _partsPicker(context, id, field0);
+        }
         if (value case BridgeEffectValue_Text(:final field0)) {
           return SizedBox(
             width: effectCellWidth + 60,
@@ -1173,6 +1179,28 @@ class EffectParamRowFrb extends StatelessWidget {
         onChangeEnd: (v) => write(BridgeScalar.static_(snap(v))),
         setExpression: setExpression,
       ),
+    );
+  }
+
+  /// A Part matte's Parts row: the names of the parts it keeps and the dropper
+  /// that picks them. Its Source row says whose parts they are.
+  Widget _partsPicker(BuildContext context, UuidValue id, String text) {
+    final source = siblings['source'];
+    final entry = source is BridgeEffectValue_Layer
+        ? ownerLayers
+            .where((l) => l.layer.internallayerId == source.field0)
+            .firstOrNull
+        : null;
+    if (entry == null) return Text('—', style: ThemeScope.of(context).theme.small);
+    return _PartsField(
+      key: ValueKey<String>('fx-parts-$id-${entry.layer.internallayerId}'),
+      arm: 'fx-$id-${param.id}',
+      label: engineLabel(param.label),
+      layer: entry.layer,
+      layerName: entry.info.name,
+      text: text,
+      onLive: (parts) => _setLive(BridgeEffectValue.text(parts)),
+      onCommit: (parts) => _set(BridgeEffectValue.text(parts)),
     );
   }
 
@@ -2972,7 +3000,7 @@ class EffectStackEditor {
       _staged[(effect, entry.key)] = entry.value;
     }
     try {
-      layer.setEffects(effects: stackWith(layer));
+      layer.setEffects(effects: stackWith(layer), lightNames: modelLightNames());
     } catch (_) {
       // Someone else edited the stack mid-drag. Drop ours and re-read.
     }
@@ -3045,6 +3073,239 @@ class _DropperButton extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// A Part matte's parts, by name: a list to tick them in, for the parts a pointer
+/// can't reach, and the dropper that picks them. A pick replaces what it keeps,
+/// Shift adds to it or takes a part back out, and a pick of nothing lets them
+/// all go. The names come from the engine when the row appears and after an
+/// edit, never in a rebuild of its own.
+class _PartsField extends StatefulWidget {
+  final String arm;
+  final String label;
+  final LayerReference layer;
+  final String layerName;
+  final String text;
+  final ValueChanged<String> onLive;
+  final ValueChanged<String> onCommit;
+
+  const _PartsField({
+    super.key,
+    required this.arm,
+    required this.label,
+    required this.layer,
+    required this.layerName,
+    required this.text,
+    required this.onLive,
+    required this.onCommit,
+  });
+
+  @override
+  State<_PartsField> createState() => _PartsFieldState();
+}
+
+class _PartsFieldState extends State<_PartsField> {
+  /// Each part's name by its number, null until the engine answers, or when
+  /// the source can't hand any over.
+  Map<int, String>? _names;
+
+  /// The document's revision the names were read at.
+  int? _readAt;
+
+  /// The newest read asked for, so an older answer can't land over it.
+  int _asked = 0;
+
+  /// The last value a pick previewed, so a slide across one part sends it once.
+  String? _previewed;
+
+  /// The comp's model, which says when the document moves. A relink changes
+  /// nothing this row is built from, so it isn't rebuilt for one and has to
+  /// listen for itself.
+  late final CompModel _model =
+      Provider.of<LumitUiState>(context, listen: false).model;
+
+  @override
+  void initState() {
+    super.initState();
+    _model.addListener(_readIfEdited);
+    _readAt = _model.heldRevision;
+    _read();
+  }
+
+  @override
+  void dispose() {
+    _model.removeListener(_readIfEdited);
+    super.dispose();
+  }
+
+  /// A source's model can change under this row, so its names are read again
+  /// once per edit.
+  void _readIfEdited() {
+    final revision = _model.heldRevision;
+    if (_readAt == revision) return;
+    _readAt = revision;
+    _read();
+  }
+
+  Future<void> _read() async {
+    final asked = ++_asked;
+    final parts = await widget.layer.sceneParts();
+    if (!mounted || asked != _asked) return;
+    setState(() => _names =
+        parts == null ? null : {for (final p in parts) p.id: p.name});
+  }
+
+  List<int> _kept(String text) => [
+        for (final word in text.split(' '))
+          if (int.tryParse(word) case final id?) id
+      ];
+
+  /// What a pick of `part` leaves kept, from `from`.
+  String _picked(int part, String from) {
+    final known = _names?.containsKey(part) ?? false;
+    if (!HardwareKeyboard.instance.isShiftPressed) {
+      return known ? '$part' : '';
+    }
+    return known ? _toggled(part, from) : from;
+  }
+
+  String _toggled(int part, String from) {
+    final kept = _kept(from);
+    if (!kept.remove(part)) kept.add(part);
+    return kept.join(' ');
+  }
+
+  void _arm(LumitUiState ui) {
+    var before = widget.text;
+    _previewed = null;
+    ui.armDropper(DropperArm(
+      id: widget.arm,
+      reads: DropperReads.part,
+      label: widget.label,
+      sampleLayer: widget.layer,
+      sampleLayerName: widget.layerName,
+      partName: (part) => _names?[part],
+      onPreview: (sample) {
+        final next = _picked(sample.part, before);
+        if (next == _previewed) return;
+        _previewed = next;
+        widget.onLive(next);
+      },
+      onPick: (sample) {
+        before = _picked(sample.part, before);
+        _previewed = before;
+        widget.onCommit(before);
+      },
+      onRevert: () {
+        _previewed = null;
+        widget.onLive(before);
+      },
+    ));
+  }
+
+  /// The tick list, under the row: every part the source has. It stays up, as
+  /// each tick shows in the Viewer at once.
+  void _openList(BuildContext context, Map<int, String> names) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    var kept = widget.text;
+    showLumitPopup<void>(
+      context: context,
+      position: box.localToGlobal(Offset(0, box.size.height)),
+      builder: (close) => FloatSurface(
+        width: 240,
+        onLeaveAfterOption: () => close(null),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 360),
+          child: SingleChildScrollView(
+            child: StatefulBuilder(
+              builder: (context, setList) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final part in names.entries)
+                    MenuRow.option(
+                      key: ValueKey<String>('fx-part-${part.key}'),
+                      onPressed: () {
+                        setList(() => kept = _toggled(part.key, kept));
+                        widget.onCommit(kept);
+                      },
+                      child: Row(
+                        children: [
+                          menuTick(_kept(kept).contains(part.key)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(part.value,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final names = _names;
+    if (names == null) return Text('—', style: t.small);
+    final kept = _kept(widget.text);
+    final shown = [
+      for (final id in kept)
+        if (names[id] case final name?) name
+    ];
+    final lost = kept.length - shown.length;
+    final face = switch ((shown.isEmpty, lost)) {
+      (true, 0) => l10n.none,
+      (true, _) => l10n.fxPartsMissing,
+      (false, 0) => shown.join(', '),
+      _ => l10n.fxPartsSomeMissing(shown.join(', '), lost),
+    };
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: effectCellWidth + 60,
+          child: Builder(
+            builder: (context) => dropdownButton(
+              t: t,
+              dense: true,
+              onPressed: () => _openList(context, names),
+              face: dropdownFace(
+                t,
+                face,
+                face: Flexible(
+                  child: Text(
+                    face,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: lost > 0
+                            ? t.warning
+                            : kept.isEmpty
+                                ? t.textMuted
+                                : null),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: effectRiderGap),
+        _DropperButton(
+          id: widget.arm,
+          tip: l10n.tipPickParts,
+          arm: _arm,
+        ),
+      ],
     );
   }
 }

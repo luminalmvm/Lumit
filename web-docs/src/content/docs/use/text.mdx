@@ -122,6 +122,32 @@ on the baseline, and everything an animator does happens inside the letter's own
 Several animators on one layer **compose**: pushes, turns and tints add, scales and
 opacities multiply.
 
+## Give it depth
+
+**Geometry options** in a Text or Shape layer's fold-out and in **Effect controls** make its
+outline a solid in the comp's 3D space. A row above nought turns the layer's **3D** switch on,
+has it cast shadows and, in a comp with no lights, adds an Ambient light and a Key light, in one
+undo step.
+
+- **Extrusion depth**: how far back the outline reaches, in pixels. The front stays on the
+  layer's plane.
+- **Bevel style**: **Angular**, **Convex** or **Concave**.
+- **Bevel depth**: how far in and how far back the bevel goes, in pixels, front and back. The
+  outline keeps its size and the front face is cut in from it.
+- **Bevel segments**: how many steps a Convex or Concave bevel is made of.
+- **Hole bevel depth**: a hole's bevel as a share of Bevel depth.
+
+Once there's a depth or a bevel, **Front**, **Bevel**, **Side** and **Back** each have the rows
+of a [3D model's material](/use/importing/#3d-models), with its presets. Front and Back start at
+the fill's colour, and Bevel and Side at the outline's or, with none, the fill's. A row at nought
+all the way through draws the flat layer. Keyed or driven, a layer stays a solid at nought too.
+
+Each letter is meshed once for each outline it has. On a solid, an animator also has **Position
+z**, **Rotation x** and **Rotation y**, and moves, turns and scales each letter about its own
+middle on the baseline. Letters on a path move in the picture's axes. Opacity hides letters, and a letter part way through it blends. With motion blur on, the
+letters blur as they move. An outline widens the solid. Masks and layer styles don't change a
+solid, and a shape's gradient fill draws as its flat colour.
+
 ## Convert it
 
 **Layer ▸ Create**, also on a layer's right-click, turns a selected text layer into

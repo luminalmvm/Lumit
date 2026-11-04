@@ -60,6 +60,7 @@ mod environment;
 pub mod export;
 pub mod export_defaults;
 pub mod export_presets;
+pub mod extrude;
 /// How a baked per-frame analysis reads a clip, shared by the tiers that do.
 pub mod frames;
 pub mod fxops;
@@ -81,6 +82,7 @@ pub mod model_extract;
 pub mod model_layer;
 pub mod model_material;
 pub mod model_motion;
+pub mod passes;
 pub mod placement;
 pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame

@@ -209,6 +209,8 @@ pub enum Reason {
     /// Casts Shadows or Accepts Shadows keyframed. Lumit keeps one setting,
     /// the first key's.
     ShadowSwitchKeyed,
+    /// A Text or Shape layer's depth and bevel came across as Geometry options.
+    GeometryOptionsCarried,
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -377,6 +379,7 @@ impl std::fmt::Display for Reason {
                 write!(f, "{ae_kind} light imported as the nearest kind")
             }
             Self::ShadowSwitchKeyed => write!(f, "The shadow setting kept its first key"),
+            Self::GeometryOptionsCarried => write!(f, "The geometry options were imported"),
             Self::SpatialTangentsFlattened => {
                 write!(f, "The motion path's curves were not carried")
             }

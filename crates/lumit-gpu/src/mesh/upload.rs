@@ -2,7 +2,7 @@
 //! pictures, their smaller levels made on the card, and a bind group per
 //! material.
 
-use super::{look::Kept, GpuModel, MeshError, MeshFx, Part, Vertex};
+use super::{look::Kept, GpuModel, MeshError, MeshFx, Part, Vertex, COLOUR};
 use crate::GpuContext;
 use glam::Vec3;
 use lumit_scene::{AlphaMode, Image, ModelScene, TextureRef, Wrap};
@@ -361,4 +361,58 @@ fn upload_levels(ctx: &GpuContext, fx: &MeshFx, top: &Level, srgb: bool) -> wgpu
     );
     fx.mips(ctx, &texture);
     texture.create_view(&Default::default())
+}
+
+impl MeshFx {
+    /// Fill in `texture`'s smaller levels from its first, each halved from
+    /// the one above. An sRGB picture is read and written through its
+    /// encoding, so it is averaged in linear light.
+    pub(super) fn mips(&self, ctx: &GpuContext, texture: &wgpu::Texture) {
+        let (layout, pipelines, sampler) = &self.down;
+        let pipeline = &pipelines[match texture.format() {
+            COLOUR => 2,
+            f => usize::from(f.is_srgb()),
+        }];
+        let level = |k| {
+            texture.create_view(&wgpu::TextureViewDescriptor {
+                label: Some("mesh-level"),
+                base_mip_level: k,
+                mip_level_count: Some(1),
+                ..Default::default()
+            })
+        };
+        let mut encoder = ctx.encoder("mesh-down");
+        for k in 1..texture.mip_level_count() {
+            let group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("mesh-down"),
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&level(k - 1)),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                ],
+            });
+            let view = level(k);
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("mesh-down"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &group, &[]);
+            pass.draw(0..3, 0..1);
+        }
+    }
 }

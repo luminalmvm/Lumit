@@ -851,13 +851,23 @@ pub fn collect_comp_jobs(
                     // moment of the nested comp this layer shows, which is the
                     // moment the builder evaluates and names. Equal to `lt`
                     // for a layer with no map.
-                    let st = lumit_core::model::nested_source_time(layer, nested, lt);
+                    let mut st = lumit_core::model::nested_source_time(layer, nested, lt);
                     // A held nested frame wants no decodes. Asked only
                     // where the builder will ask by the same name: at the live
                     // time (a Posterize-held layer is built at another time,
                     // by a walk with no keyer) and for a Precomp that is not
                     // collapsed (a collapsed one is spliced in, never named).
                     let live = sample_times[idx] == t;
+                    // On Flow between two frames, the frame before is built
+                    // and the frame after is one more moment of it.
+                    let pair = live
+                        .then(|| {
+                            lumit_core::precomp_flow::pair(layer, nested, lt, comp.frame_rate.fps())
+                        })
+                        .flatten();
+                    if let Some((a, _, _)) = pair {
+                        st = a;
+                    }
                     let collapsed = matches!(
                         lumit_core::model::collapse_state(doc, comp, layer, lt),
                         lumit_core::model::CollapseState::Active
@@ -892,6 +902,7 @@ pub fn collect_comp_jobs(
                             );
                         }
                     }
+                    nested_moments.extend(pair.map(|(_, b, _)| b));
                     // A rebuild at another moment is made from pixels, so a
                     // held frame only saves the decodes when there is none.
                     if live

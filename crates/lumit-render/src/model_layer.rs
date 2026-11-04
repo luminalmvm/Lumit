@@ -74,6 +74,7 @@ impl Realiser<'_> {
             camera: crate::export::camera_mat(width, height, pose),
             model_to_comp: to_comp(m),
             shutter: &shutter,
+            shutter_scenes: &m.shutter_scenes,
             lights: &l.lights,
             material: lumit_gpu::fx::lighting::LightingMaterial {
                 eye,
@@ -97,6 +98,15 @@ impl Realiser<'_> {
             poses: &m.poses,
         };
         let picture = self.fx.model(&self.ctx, &m.scene, &view).ok()?;
+        // A holdout stands in for something in the footage, sharp or not.
+        let lens = camera.filter(|_| !m.holds_out()).and_then(|cam| {
+            let (bounds, placed) = (&m.scene.bounds, to_comp(m));
+            crate::realise::dof::model_lens(cam, bounds, placed, (width, height), self.render_scale)
+        });
+        let picture = match lens {
+            Some(lens) => self.fx.model_lens(&self.ctx, &picture, &lens),
+            None => picture,
+        };
         Some(ModelPicture {
             holdout: m.holds_out(),
             ..picture
@@ -179,30 +189,49 @@ impl Realiser<'_> {
         depths: &mut Vec<(Mat4, Option<ProjectorDepth>)>,
         made: &[lumit_gpu::mesh::look::Look],
     ) -> lumit_gpu::mesh::look::Look {
-        let picture = |slot: &crate::draw::LayerInputDraw| {
-            let [w, h] = slot.size()?;
-            let px = |v: f32| ((v * self.render_scale).ceil() as u32).clamp(1, 8192);
-            let made =
-                self.render_layer_inputs(std::slice::from_ref(slot), px(w), px(h), (w, h), None);
-            match made.into_iter().next()? {
-                crate::fxops::LayerInput::Texture(t) => Some(t),
-                _ => None,
-            }
-        };
-        let shared = look
-            .plate_from
-            .and_then(|k| made.get(k)?.pictures[0].clone());
-        let mut pictures: [_; 4] = std::array::from_fn(|k| look.pictures.get(k).and_then(picture));
-        pictures[0] = pictures[0].take().or(shared);
+        let mut out = self.look_without_camera(look);
+        if let Some(p) = &look.projector {
+            let shared = look
+                .plate_from
+                .and_then(|k| made.get(k)?.pictures[0].clone());
+            out.pictures[0] = look
+                .pictures
+                .first()
+                .and_then(|slot| self.look_picture(slot))
+                .or(shared);
+            out.projector = Some(self.projector(p, comp, depths));
+        }
+        out
+    }
+
+    /// A material's rows as a scene pass wants them, where only its shape
+    /// counts: a projected picture says nothing about that, so it's left out.
+    pub(crate) fn look_without_camera(
+        &self,
+        look: &crate::model_material::Look,
+    ) -> lumit_gpu::mesh::look::Look {
+        let wanted = |k: usize| k > 0 || look.projector.is_none();
+        let pictures = std::array::from_fn(|k| {
+            let slot = look.pictures.get(k).filter(|_| wanted(k))?;
+            self.look_picture(slot)
+        });
         lumit_gpu::mesh::look::Look {
             index: look.index,
             material: look.material.clone(),
             pictures,
             textures: look.textures,
-            projector: look
-                .projector
-                .as_ref()
-                .map(|p| self.projector(p, comp, depths)),
+            projector: None,
+        }
+    }
+
+    /// A layer a material reads, made into a picture at its own size.
+    fn look_picture(&self, slot: &crate::draw::LayerInputDraw) -> Option<wgpu::Texture> {
+        let [w, h] = slot.size()?;
+        let px = |v: f32| ((v * self.render_scale).ceil() as u32).clamp(1, 8192);
+        let made = self.render_layer_inputs(std::slice::from_ref(slot), px(w), px(h), (w, h), None);
+        match made.into_iter().next()? {
+            crate::fxops::LayerInput::Texture(t) => Some(t),
+            _ => None,
         }
     }
 
@@ -328,7 +357,7 @@ fn projects(m: &ModelDraw) -> bool {
 }
 
 /// A Model draw's metres to comp pixels, parents and all.
-fn to_comp(m: &ModelDraw) -> Mat4 {
+pub(crate) fn to_comp(m: &ModelDraw) -> Mat4 {
     Mat4::from_cols_array_2d(&m.placement) * Mat4::from_cols_array_2d(&m.model_to_comp)
 }
 

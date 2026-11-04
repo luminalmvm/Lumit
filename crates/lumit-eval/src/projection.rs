@@ -4,8 +4,8 @@
 
 use super::{feed_depth, feed_f64, feed_layer, feed_parents, Quality, SourceStamper};
 use lumit_core::expression::ExpressionContext;
-use lumit_core::model::{Composition, Document, EffectInstance, Layer, LayerKind};
-use lumit_core::model_material::{camera_at, projection};
+use lumit_core::model::{Composition, Document, EffectInstance, Layer};
+use lumit_core::model_material::{camera_at, projection, stored};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -38,13 +38,11 @@ pub(super) fn feed_projections(
         // own name only has where they are at the playhead.
         if let Some(held) = p.held {
             let on_camera = |l: &&Layer| {
-                let LayerKind::Model { settings, .. } = &l.kind else {
-                    return false;
-                };
                 let lt = lumit_core::time::layer_time(t, l.start_offset.0);
-                let mut kept = settings.materials.iter().flatten();
+                let kept = stored(l);
                 l.switches.visible
-                    && kept.any(|r| projection(r, comp, lt).is_some_and(|q| q.camera == p.camera))
+                    && (kept.iter())
+                        .any(|r| projection(r, comp, lt).is_some_and(|q| q.camera == p.camera))
             };
             for l in comp.layers.iter().filter(on_camera) {
                 feed_placed(h, doc, comp, l, held, stamper);

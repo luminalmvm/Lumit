@@ -16,10 +16,11 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::{
-    animation_json, bad, commit, expressed, find_comp, find_layer, keyed, present, underneath,
-    Ease, Interp, KeyArgs, LayerArgs, Named, Side, Values,
+use super::keys::{
+    animation_json, expressed, keyed, underneath, Ease, Interp, KeyArgs, Named, Side, Values,
 };
+use super::layers::LayerArgs;
+use super::{bad, commit, find_comp, find_layer, present};
 use crate::{Host, ScriptError};
 
 /// The name an effect shows: its own, or its effect's.

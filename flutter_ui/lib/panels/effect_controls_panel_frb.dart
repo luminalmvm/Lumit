@@ -61,6 +61,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
+import '../state/layer_bounds.dart' show geometryOptionsName, isGeometryOptions, meshKindOf;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
 import '../l10n/strings.dart';
@@ -121,6 +122,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// moment after applying one.
   late final Set<String> _shut =
       Provider.of<LumitUiState>(context, listen: false).folds.effectsShut;
+
+  /// The cards that start closed and have been opened since, which keep their
+  /// rows from then on.
+  final Set<UuidValue> _everOpen = {};
 
   /// The last layer this panel drew. Deselecting does not empty the panel: the
   /// stack you were just editing stays up, because clicking away in the
@@ -1211,7 +1216,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         // holds, not by asking the engine per rebuild.
                         threeD: info.switches.threeD ||
                             info.kind == BridgeLayerKind.camera,
-                        kind: info.kind,
+                        kind: meshKindOf(info),
                         twoNode: info.camera?.twoNode ?? false,
                         light: info.light,
                         acceptsLights: info.switches.acceptsLights,
@@ -1238,6 +1243,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       key: ValueKey<String>(
                           'anim-card-${layer.internallayerId}'),
                       layer: layer,
+                      solid: meshKindOf(info) == BridgeLayerKind.model,
                       onChanged: ui.model.refresh,
                       comp: comp,
                       playheadFrame: playhead,
@@ -1254,9 +1260,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // on the picture they make.
                     if (info.materials case final materials?
                         when materials.isNotEmpty) ...[
-                      _groupHeading(
-                          context, 'materials-group', l10n.foldMaterials),
-                      if (_isOpen('materials-group'))
+                      if (!isGeometryOptions(materials.first))
+                        _groupHeading(
+                            context, 'materials-group', l10n.foldMaterials),
+                      if (isGeometryOptions(materials.first) ||
+                          _isOpen('materials-group'))
                         for (var i = 0; i < materials.length; i++)
                           _effectCard(context, ui, comp, layer, info, i,
                               layersRead: layersRead,
@@ -1501,10 +1509,16 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // Neither a style nor the Inputs takes part in the effect selection.
     final fixed = style || inputs;
     // A model with many materials starts with each closed, so its first
-    // look is a list of names rather than a wall of rows.
-    final open = material && info.materials!.length > 3
-        ? _shut.contains('fx-${fx.id}')
-        : _isOpen('fx-${fx.id}');
+    // look is a list of names rather than a wall of rows. Geometry options
+    // start closed on every Text and Shape layer, so selecting a layer never
+    // asks the engine for their rows. A card closed from the start draws none
+    // until it's first opened, then keeps them for the twirl to close over.
+    final startsClosed = material &&
+        (info.materials!.length > 3 || isGeometryOptions(fx));
+    final open =
+        startsClosed ? _shut.contains('fx-${fx.id}') : _isOpen('fx-${fx.id}');
+    if (open) _everOpen.add(fx.id);
+    final drawsRows = !startsClosed || _everOpen.contains(fx.id);
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
@@ -1537,6 +1551,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         info.trackCorrected,
         graphName,
         open,
+        drawsRows,
         renaming,
         style,
         inputs,
@@ -1568,6 +1583,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         inputs: inputs,
         material: material,
         open: open,
+        drawsRows: drawsRows,
         onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
         // The selection this heading follows, rather than an answer read here
         // and handed down: a pick recolours the heading and rebuilds nothing
@@ -2129,6 +2145,10 @@ class _EffectSection extends StatelessWidget {
   /// switch says, so the card is its rows, Reset and nothing else.
   final bool inputs;
 
+  /// Whether its rows are built at all, which a closed card that has never
+  /// been opened skips.
+  final bool drawsRows;
+
   /// This card is one of a Model layer's materials, which also sets [style]:
   /// fixed in place and taking no part in the selection.
   final bool material;
@@ -2222,6 +2242,7 @@ class _EffectSection extends StatelessWidget {
     required this.info,
     this.graphName,
     required this.open,
+    this.drawsRows = true,
     required this.onToggle,
     this.pick,
     required this.onSelect,
@@ -2513,7 +2534,11 @@ class _EffectSection extends StatelessWidget {
     return FxSection(
       // The user's own name where one is set, then the graph a Node graph
       // effect applies, then the effect's label.
-      title: info.customName ?? graphName ?? effectLabelOf(info.name),
+      title: (material && info.customName != null
+              ? engineLabel(info.customName!)
+              : info.customName) ??
+          graphName ??
+          effectLabelOf(info.name),
       open: open,
       onToggle: onToggle,
       pick: pick,
@@ -2647,7 +2672,7 @@ class _EffectSection extends StatelessWidget {
           if (input.key.startsWith('$id/'))
             _pointsRow(context, input.key.substring('$id/'.length),
                 input.value.label, input.value.from),
-        ..._paramRows(named, base, id, values),
+        if (drawsRows) ..._paramRows(named, base, id, values),
       ],
     );
   }
@@ -3267,7 +3292,9 @@ class _EffectSection extends StatelessWidget {
               ),
             // This one effect as a preset, settings and keyframes and all.
             // A group header's stack is not a layer's to save from.
-            if ((!style || material) && group == null)
+            if ((!style || material) &&
+                group == null &&
+                info.name != geometryOptionsName)
               MenuRow(
                 key: ValueKey<String>('fx-menu-save-preset-$id'),
                 onPressed: () {

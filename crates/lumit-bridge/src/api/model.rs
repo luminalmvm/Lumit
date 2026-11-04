@@ -13,6 +13,32 @@ use crate::api::{
 use lumit_core::model::{EffectInstance, EffectValue};
 use uuid::Uuid;
 
+/// One part of a 3D precomp's scene: the number a matte keeps, and the name to
+/// show.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeScenePart {
+    pub id: u32,
+    pub name: String,
+}
+
+impl LayerReference {
+    /// The parts of this Model layer or 3D precomp, `None` for any other layer.
+    /// Not sync, as a model not read yet is read now.
+    pub fn scene_parts(&self) -> Result<Option<Vec<BridgeScenePart>>, BridgeError> {
+        let doc = self.document()?;
+        let layer = self.item()?;
+        Ok(
+            lumit_render::passes::scene_parts(&doc, &layer).map(|parts| {
+                parts
+                    .into_iter()
+                    .map(|(id, name)| BridgeScenePart { id, name })
+                    .collect()
+            }),
+        )
+    }
+}
+
 /// Which of a 3D model file's axes points up.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,7 +96,9 @@ impl CompositionReference {
             let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             proj.store.snapshot()
         };
-        Ok(!model_items(&doc, self.id).is_empty())
+        Ok(drawn_layers(&doc, self.id)
+            .into_iter()
+            .any(lumit_core::extrude::draws_mesh))
     }
 
     /// The names of the 3D models this comp draws, precomps included, that
@@ -100,20 +128,31 @@ impl CompositionReference {
     }
 }
 
-/// The 3D models comp `comp` draws, precomps included.
-fn model_items(doc: &lumit_core::model::Document, comp: Uuid) -> Vec<Uuid> {
+/// The layers comp `comp` draws, precomps' included.
+fn drawn_layers(doc: &lumit_core::model::Document, comp: Uuid) -> Vec<&lumit_core::model::Layer> {
     let mut seen = vec![comp];
-    let mut items = Vec::new();
+    let mut layers = Vec::new();
     let mut i = 0;
     // Each comp once, so a comp nested twice or in a loop is walked once.
     while let Some(&id) = seen.get(i) {
         i += 1;
         for layer in doc.comp(id).map_or(&[][..], |c| &c.layers) {
             match &layer.kind {
-                LayerKind::Model { item, .. } if !items.contains(item) => items.push(*item),
                 LayerKind::Precomp { comp } if !seen.contains(comp) => seen.push(*comp),
-                _ => {}
+                _ => layers.push(layer),
             }
+        }
+    }
+    layers
+}
+
+/// The 3D models comp `comp` draws, precomps included.
+fn model_items(doc: &lumit_core::model::Document, comp: Uuid) -> Vec<Uuid> {
+    let mut items = Vec::new();
+    for layer in drawn_layers(doc, comp) {
+        match &layer.kind {
+            LayerKind::Model { item, .. } if !items.contains(item) => items.push(*item),
+            _ => {}
         }
     }
     items
@@ -185,13 +224,20 @@ impl LayerReference {
     }
 
     /// The corners of a Model layer's box in its own pixels at comp frame
-    /// `at_frame`, three numbers each, once its file has been read. Empty
-    /// before that and on any other kind of layer.
+    /// `at_frame`, three numbers each, once its file has been read, or a solid
+    /// Text or Shape layer's once it has been drawn. Empty before that and on
+    /// any other kind of layer.
     #[frb(sync)]
     pub fn get_model_box(&self, at_frame: i64) -> Result<Vec<f64>, BridgeError> {
         let layer = self.item()?;
         let LayerKind::Model { item, settings } = &layer.kind else {
-            return Ok(Vec::new());
+            let corners = lumit_render::extrude::layer_box(self.layer_id);
+            return Ok(corners
+                .iter()
+                .flatten()
+                .flatten()
+                .map(|v| f64::from(*v))
+                .collect());
         };
         let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
@@ -230,8 +276,10 @@ impl LayerReference {
     /// How far along the ray from `origin` by `direction`, three numbers
     /// each in the layer's own pixels, it first meets a Model layer's model,
     /// in parts of `direction`. `None` where it misses, before the file has
-    /// been read and on any other kind of layer. Asked once a click, and when
-    /// the pointer rests for a moment, as the model is at comp frame `at_frame`.
+    /// been read and on any other kind of layer. A solid Text or Shape layer
+    /// answers the same, of what it was last drawn as. Asked once a click, and
+    /// when the pointer rests for a moment, as the model is at comp frame
+    /// `at_frame`.
     #[frb(sync)]
     pub fn get_model_hit(
         &self,
@@ -239,15 +287,20 @@ impl LayerReference {
         direction: Vec<f64>,
         at_frame: i64,
     ) -> Result<Option<f64>, BridgeError> {
-        let layer = self.item()?;
-        let LayerKind::Model { item, settings } = &layer.kind else {
-            return Ok(None);
-        };
         let (Ok([ox, oy, oz]), Ok([dx, dy, dz])) = (
             <[f64; 3]>::try_from(origin),
             <[f64; 3]>::try_from(direction),
         ) else {
             return Ok(None);
+        };
+        let layer = self.item()?;
+        let LayerKind::Model { item, settings } = &layer.kind else {
+            let hit = lumit_render::extrude::hit(
+                self.layer_id,
+                [ox, oy, oz].map(|v| v as f32),
+                [dx, dy, dz].map(|v| v as f32),
+            );
+            return Ok(hit.map(f64::from));
         };
         let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
@@ -389,12 +442,96 @@ impl LayerReference {
         })
     }
 
+    /// [`Self::with_instances`], with what the first lights a row's edit
+    /// brings are called.
+    #[frb(ignore)]
+    pub(crate) fn with_instances_naming(
+        &self,
+        home: InstanceHome,
+        edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
+        light_names: Option<&[String]>,
+    ) -> Result<(), BridgeError> {
+        // A plugin on the list answers the edit in the same undo step.
+        let edit = |list: &mut Vec<EffectInstance>| {
+            let before = list.clone();
+            edit(list)?;
+            crate::api::track::settle(&before, list);
+            Ok(())
+        };
+        let op = match home {
+            InstanceHome::Effects | InstanceHome::Styles => {
+                let layer = self.item()?;
+                let mut list = if home == InstanceHome::Styles {
+                    layer.styles.clone()
+                } else {
+                    layer.effects.clone()
+                };
+                edit(&mut list)?;
+                if home == InstanceHome::Styles {
+                    lumit_core::ops::Op::SetLayerStyles {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                        styles: list,
+                    }
+                } else {
+                    let (doc, comp) = (self.document()?, self.composition()?);
+                    lumit_core::fx::effects::depth_points::set_effects(&doc, &comp, &layer, list)
+                }
+            }
+            InstanceHome::Group(group) => {
+                let comp = self.composition()?;
+                let mut list = comp
+                    .groups
+                    .iter()
+                    .find(|g| g.id == group)
+                    .map(|g| g.effects.clone())
+                    .ok_or(BridgeError::InvalidEffect)?;
+                edit(&mut list)?;
+                lumit_core::ops::Op::SetGroupEffects {
+                    comp: self.comp_id,
+                    group,
+                    effects: list,
+                }
+            }
+            // Through `commit_clips`, like every other clip write, so the
+            // whole-list replace and the row's bar stay one undo step. The
+            // op's inverse clones every clip's stack, plugin state and all;
+            // ponytail: that is the ceiling, and reusing the untouched clips
+            // is the upgrade if an edit ever breaks the docs/13 budget.
+            InstanceHome::Clip(clip) => {
+                let (mut clips, index) = self.clips_and_index(clip)?;
+                edit(&mut clips[index].effects)?;
+                return self.commit_clips(clips);
+            }
+            InstanceHome::ModelRows => self.model_rows_op(edit)?,
+            // One instance, carried as a list of at most one so the edit
+            // closure is the same closure the other three homes take. An edit
+            // that empties the list clears the Inputs, which is what removing
+            // them means.
+            InstanceHome::GraphInputs => {
+                let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
+                edit(&mut list)?;
+                lumit_core::ops::Op::SetLayerGraphInputs {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    inputs: list.into_iter().next().map(Box::new),
+                }
+            }
+            InstanceHome::Materials => self.materials_op(edit, light_names)?,
+        };
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store.commit(op).map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// The op that keeps a Model layer's material rows once `edit` has
     /// changed them: only the materials that differ from the file.
     #[frb(ignore)]
     pub(crate) fn materials_op(
         &self,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
+        light_names: Option<&[String]>,
     ) -> Result<lumit_core::ops::Op, BridgeError> {
         let (doc, layer) = (self.snapshot()?, self.item()?);
         let mut list =
@@ -403,7 +540,7 @@ impl LayerReference {
         let materials = lumit_render::model_material::kept(&doc, &layer, &list)
             .ok_or(BridgeError::StaleEffectStack)?;
         let LayerKind::Model { item, settings } = layer.kind else {
-            return Err(BridgeError::InvalidLayer);
+            return self.geometry_op(&layer, materials, light_names);
         };
         let settings = Box::new(ModelSettings {
             materials,
@@ -414,6 +551,33 @@ impl LayerReference {
             layer: self.layer_id,
             kind: Box::new(LayerKind::Model { item, settings }),
         })
+    }
+
+    /// The op that keeps a Text or Shape layer's rows `geometry`. The first
+    /// solid layer in a comp with no lights brings them with it.
+    #[frb(ignore)]
+    fn geometry_op(
+        &self,
+        layer: &lumit_core::model::Layer,
+        geometry: Vec<Option<EffectInstance>>,
+        light_names: Option<&[String]>,
+    ) -> Result<lumit_core::ops::Op, BridgeError> {
+        use lumit_core::ops::Op;
+        let arrives = !lumit_core::extrude::is_extruded(layer)
+            && lumit_core::extrude::is_solid(geometry.first().and_then(Option::as_ref));
+        let set = lumit_core::extrude::set_geometry(self.comp_id, layer, geometry);
+        if !arrives {
+            return Ok(set);
+        }
+        let comp = self.composition()?;
+        let lights = CompositionReference::first_lights(&comp, light_names);
+        let mut ops = vec![set];
+        ops.extend(lights.into_iter().map(|light| Op::AddLayer {
+            comp: self.comp_id,
+            index: 0,
+            layer: Box::new(light),
+        }));
+        Ok(Op::Batch { ops })
     }
 }
 

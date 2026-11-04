@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/layer_bounds.dart' show isGeometryOptions, meshKindOf;
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -843,6 +844,11 @@ enum FlowRowKind {
         always => l10n.flowAlwaysOn,
       };
 }
+
+/// Whether a layer of [kind] has a Flow switch: footage, and a Precomp, which
+/// is built at the frames either side and flowed between.
+bool hasFlow(BridgeLayerKind kind) =>
+    kind == BridgeLayerKind.footage || kind == BridgeLayerKind.precomp;
 
 /// The waveform lane: the outline names it, the lane side draws the
 /// layer's source peaks through its live in/out/offset.
@@ -2497,7 +2503,7 @@ List<LayerFoldRow> layerFoldRows({
   final groups = transformGroups(
     threeD: info.switches.threeD,
     modes: info.axisModes,
-    kind: info.kind,
+    kind: meshKindOf(info),
     twoNode: info.camera?.twoNode ?? false,
     light: info.light,
     material: info.material,
@@ -2527,7 +2533,10 @@ List<LayerFoldRow> layerFoldRows({
       depth: 1,
     ));
     if (flowOpen) {
+      final footage = info.kind == BridgeLayerKind.footage;
       for (final kind in FlowRowKind.values) {
+        // A Precomp's in-between is made by the built-in engine alone.
+        if (!footage && kind == FlowRowKind.engine) continue;
         rows.add(FoldFlowRow(
           kind,
           rate: kind == FlowRowKind.inputRate ? info.flowInputRate : null,
@@ -2556,7 +2565,7 @@ List<LayerFoldRow> layerFoldRows({
   // about the lens or the light rather than about where the layer stands. A
   // light's choice rows head its list.
   final settings = layerSettings(
-      kind: info.kind, light: info.light, threeD: info.switches.threeD);
+      kind: meshKindOf(info), light: info.light, threeD: info.switches.threeD);
   for (final (section, path, label) in [
     (TransformSection.camera, cameraOptionsPath(id), l10n.cameraOptions),
     (TransformSection.light, lightOptionsPath(id), l10n.lightOptions),
@@ -2807,7 +2816,9 @@ List<LayerFoldRow> layerFoldRows({
           named: true,
         ));
         if (!animatorOpen) continue;
+        final solid = meshKindOf(info) == BridgeLayerKind.model;
         for (final value in TextAnimatorValue.values) {
+          if (!solid && solidAnimatorValues.contains(value)) continue;
           rows.add(FoldAnimatorValueRow(i, animator, value, depth: 3));
         }
       }
@@ -2897,23 +2908,37 @@ List<LayerFoldRow> layerFoldRows({
   }
 
   // A Model layer's materials, a group of rows for each in its file, before
-  // the effects that run on the picture they make.
+  // the effects that run on the picture they make. A Text or Shape layer's
+  // Geometry options read the same, with their own rows first.
   if (info.materials case final materials? when materials.isNotEmpty) {
+    final geometry = isGeometryOptions(materials.first);
     final materialsOpen = open.contains(materialsPath(id));
     rows.add(FoldGroupRow(
       path: materialsPath(id),
-      label: l10n.foldMaterials,
+      label: geometry ? l10n.fxGeometryOptions : l10n.foldMaterials,
       open: materialsOpen,
       depth: 1,
     ));
     if (materialsOpen) {
       for (final (i, material) in materials.indexed) {
+        if (geometry && i == 0) {
+          final values = {for (final v in material.values) v.id: v.value};
+          for (final param in cachedListParameters(material.name)) {
+            rows.add(FoldEffectParamRow(material, param, values[param.id],
+                depth: 2,
+                material: true,
+                driven: driven['${material.id}/${param.id}']));
+          }
+          continue;
+        }
         final path = modelMaterialPath(id, material.id.toString());
         final materialOpen = open.contains(path);
         rows.add(FoldGroupRow(
           path: path,
           // A material its file gives no name is numbered.
-          label: material.customName ?? l10n.modelMaterialNumbered(i + 1),
+          label: geometry
+              ? engineLabel(material.customName ?? '')
+              : material.customName ?? l10n.modelMaterialNumbered(i + 1),
           open: materialOpen,
           depth: 2,
         ));

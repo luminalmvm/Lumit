@@ -124,6 +124,9 @@ pub struct Conv<'a> {
     /// a layer with no source of its own (text, a shape, a null) draws at the
     /// composition's size, which is what it falls back to.
     pub(crate) size: (f64, f64),
+    /// Whether the comp's renderer draws Geometry options. Classic 3D ignores
+    /// them, however they're set.
+    pub(crate) solids: bool,
     /// The current layer's own span, in its own timebase.
     pub(crate) span: (Rational, Rational),
     /// AE stacking index → Lumit layer id, so an effect parameter naming a
@@ -187,6 +190,7 @@ pub fn map_preset(
         tb: TimeBase::fallback(),
         offset: Rational::ZERO,
         size: (size.0.max(1.0), size.1.max(1.0)),
+        solids: false,
         span: (Rational::ZERO, Rational::ZERO),
         layer_ids: BTreeMap::new(),
         masks: Vec::new(),
@@ -762,6 +766,10 @@ fn composition(
             f64::from(ae.width.unwrap_or(1920).max(1)),
             f64::from(ae.height.unwrap_or(1080).max(1)),
         ),
+        solids: ae
+            .renderer
+            .as_deref()
+            .is_some_and(|r| !matches!(r, "ADBE Advanced 3d" | "ADBE Standard 3d")),
         span: (Rational::ZERO, Rational::ZERO),
         layer_ids: ids.clone(),
         masks: Vec::new(),

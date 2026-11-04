@@ -86,12 +86,13 @@ impl LayerReference {
                 id
             }
         };
-        ops.push(self.materials_op(move |list| {
+        let set = move |list: &mut Vec<_>| {
             for rows in list {
                 lumit_core::model_material::set_projection(rows, picture, camera, hold);
             }
             Ok(())
-        })?);
+        };
+        ops.push(self.materials_op(set, None)?);
         self.commit(lumit_core::ops::Op::Batch { ops })
     }
 }
