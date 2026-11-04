@@ -69,6 +69,7 @@ import 'viewer_region.dart';
 import 'viewer_rotate.dart';
 import 'viewer_roto.dart';
 import 'viewer_rulers.dart';
+import 'viewer_shape3d.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
 import 'viewer_tool_cursor.dart';
@@ -914,6 +915,19 @@ class ViewerStage extends StatelessWidget {
                           compSize.height.toDouble(),
                         ),
                         accent: t.accent,
+                        onChanged: onChanged,
+                      ),
+                      // The 3D shape tools: a click puts the shape there.
+                      ViewerShape3dLayer(
+                        active: uiState.tools.tool.group == ToolGroup.shape3d,
+                        tool: uiState.tools.tool,
+                        comp: comp,
+                        uiState: uiState,
+                        fitted: fitted,
+                        compSize: Size(
+                          compSize.width.toDouble(),
+                          compSize.height.toDouble(),
+                        ),
                         onChanged: onChanged,
                       ),
                       // The Type tool: a click makes or edits a text layer,

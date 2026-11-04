@@ -687,6 +687,7 @@ bool altNavigates(LumitUiState ui, {bool viewport = false}) {
           ToolGroup.rotate ||
           ToolGroup.anchor ||
           ToolGroup.razor ||
+          ToolGroup.shape3d ||
           ToolGroup.type:
       return viewport ||
           ui.model.heldLayers.any((e) =>

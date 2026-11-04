@@ -6237,6 +6237,10 @@
   "@keyCameraTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "key3dShapeTool": "3D shape tool",
+  "@key3dShapeTool": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The toolbar tool that puts a cube, sphere and so on in the comp."
+  },
   "keyCompositionSettings": "Composition settings",
   "@keyCompositionSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7325,6 +7329,10 @@
   "menuAdjustment": "Adjustment",
   "@menuAdjustment": {
     "description": "Menu item."
+  },
+  "menuShape3d": "3D shape",
+  "@menuShape3d": {
+    "description": "Layer > New submenu: cubes, spheres and other solid shapes the app makes itself, drawn in the comp’s 3D space."
   },
   "menuAnimateText": "Animate text",
   "@menuAnimateText": {
@@ -10916,6 +10924,34 @@
   "toolShapeStar": "Star",
   "@toolShapeStar": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
+  },
+  "shape3dCube": "Cube",
+  "@shape3dCube": {
+    "description": "A 3D shape: a box. Names the toolbar tool, the Layer > New > 3D shape row and nothing else."
+  },
+  "shape3dSphere": "Sphere",
+  "@shape3dSphere": {
+    "description": "A 3D shape: a ball. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCylinder": "Cylinder",
+  "@shape3dCylinder": {
+    "description": "A 3D shape: a round can. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCone": "Cone",
+  "@shape3dCone": {
+    "description": "A 3D shape: a cone. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dTorus": "Torus",
+  "@shape3dTorus": {
+    "description": "A 3D shape: a ring like a doughnut. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPlane": "Plane",
+  "@shape3dPlane": {
+    "description": "A 3D shape: a flat card. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPyramid": "Pyramid",
+  "@shape3dPyramid": {
+    "description": "A 3D shape: a four-sided pyramid. Toolbar tool and Layer > New > 3D shape row."
   },
   "toolSize": "Size",
   "@toolSize": {

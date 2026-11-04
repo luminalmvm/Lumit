@@ -1824,6 +1824,7 @@ Map<String, String> get _built => {
       "Roto brush tool": l10n.keyRotoBrushTool,
       "Puppet tool": l10n.keyPuppetTool,
       "Camera tool": l10n.keyCameraTool,
+      "3D shape tool": l10n.key3dShapeTool,
       "Reveal Position": l10n.keyRevealPosition,
       "Reveal Scale": l10n.keyRevealScale,
       "Reveal Rotation": l10n.keyRevealRotation,
