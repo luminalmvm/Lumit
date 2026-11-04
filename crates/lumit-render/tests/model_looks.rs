@@ -110,3 +110,43 @@ fn a_shaded_precomp_never_reaches_a_final_frame() {
     assert!(shaded != clean, "a Shaded view draws its own picture");
     assert!(after == clean, "Final after Shaded is a clean Final");
 }
+
+/// A model in a collapsed precomp is lit by the parent's lights, exactly as if
+/// it sat in the parent.
+#[test]
+fn a_collapsed_model_takes_its_parents_light() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let (doc, parent) = project(&triangle(dir.path()));
+    let mut doc = (*doc).clone();
+    let LayerKind::Precomp { comp } = doc.comp(parent).unwrap().layers[0].kind else {
+        panic!("project() places a precomp first");
+    };
+    let inner = doc.comp(comp).unwrap().clone();
+    let mut tf = lumit_core::edits::centred_transform(64.0, 64.0, 64, 64);
+    tf.position_z = lumit_core::anim::Property::fixed(-40.0);
+    let light = lumit_core::edits::base_layer(
+        "light".into(),
+        LayerKind::Light {
+            light: Box::new(lumit_core::model::LightDef::default()),
+        },
+        inner.duration.0,
+        tf,
+    );
+    let place = doc.comp_mut(parent).unwrap();
+    place.layers[0].switches.three_d = true;
+    place.layers[0].switches.collapse = true;
+    place.layers.insert(0, light);
+    let collapsed = r
+        .render_rgba(&Arc::new(doc.clone()), parent, 0, 1.0)
+        .unwrap()
+        .0;
+    let place = doc.comp_mut(parent).unwrap();
+    place.layers[1] = inner.layers[0].clone();
+    let direct = r.render_rgba(&Arc::new(doc), parent, 0, 1.0).unwrap().0;
+    assert!(direct.iter().any(|&v| v > 8), "the light reaches the model");
+    assert!(collapsed == direct);
+}

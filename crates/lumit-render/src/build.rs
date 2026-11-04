@@ -4062,7 +4062,14 @@ fn comp_walk(
                         Some(pw) => lumit_gpu::composite::concat_place(pw, own),
                         None => own,
                     };
+                    let read = lumit_core::model::context_reader(&context, t_comp);
+                    let lights = comp.lights_at(t_comp, &read, crate::track::solves_for(doc));
                     for d in &mut spliced_in {
+                        // Its 3D layers are in this comp's scene, so this comp
+                        // lights them too.
+                        if d.three_d {
+                            shading::add_lights(d, &lights);
+                        }
                         // A 2D layer inside a collapsed 3D precomp lies flat on
                         // the precomp's plane, so the camera sees it there,
                         // and it still ends a run of 3D layers.

@@ -56,4 +56,5 @@
 /// * 28: a project at 8 or 32 bits draws its effects.
 /// * 29: a mirrored model's normal map turns the right way, what's hidden in
 ///   Blender is left out, and Shaded is a little darker.
-pub const ALGO_VERSION: u32 = 29;
+/// * 30: the 3D layers in a collapsed Precomp take the parent's lights.
+pub const ALGO_VERSION: u32 = 30;
