@@ -253,6 +253,8 @@ void main() {
         'viewer': [
           'settings-smooth-zoomed-viewer',
           'settings-show-tone-map',
+          'settings-invert-orbit-across',
+          'settings-invert-orbit-up-down',
         ],
         // The runtime row's own buttons are left out: which of Install, Load
         // and Remove is drawn depends on what the machine running the suite has
