@@ -623,6 +623,7 @@ Highlight threshold
 Highlight tonal width
 Highlights
 Hold
+Hold frame
 Hold off
 Horizontal
 Horizontal amount
@@ -1018,6 +1019,8 @@ Print
 Print stock
 Producer x
 Producer y
+Projected from
+Projection time
 Propagate
 Provia 100F
 Pull

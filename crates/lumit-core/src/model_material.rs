@@ -7,9 +7,12 @@
 
 use crate::fx::presets::{EffectPreset, PresetValue};
 use crate::fx::registry::{Catalogue, EffectDef, EffectMetadata};
-use crate::fx::schema::EffectSchema;
-use crate::model::{EffectInstance, Layer, LayerKind};
+use crate::fx::schema::{EffectSchema, EnabledCond, EnabledWhen, ParamGroup};
+use crate::model::{
+    CameraPose, Composition, Document, EffectInstance, EffectValue, Layer, LayerKind,
+};
 use lumit_fx_macros::Effect;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// What [`ModelMaterial`] is known by.
@@ -18,6 +21,25 @@ pub const MATCH_NAME: &str = "model_material";
 /// The file extension a saved material preset uses, so the effect presets
 /// never list one.
 pub const PRESET_EXTENSION: &str = "lummat";
+
+/// Whether a projection follows the playhead or stops at its Hold frame.
+const PROJECTION_TIME: &[&str] = &["Follow", "Hold"];
+
+/// Hold frame only shows while the projection holds.
+const GROUPS: &[ParamGroup] = &[ParamGroup {
+    label: "",
+    params: &["hold_frame"],
+    collapsed: false,
+    visible_when: Some(("projection_time", &[1])),
+    visible_when_lens_elements: None,
+}];
+
+/// With no camera there is nothing to hold.
+const ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "projection_time",
+    on: "camera",
+    cond: EnabledCond::LayerSet,
+}];
 
 /// One material's rows.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -29,13 +51,25 @@ pub const PRESET_EXTENSION: &str = "lummat";
     cost = Trivial,
     roi = Exact,
     matte = false,
+    groups = GROUPS,
+    enabled_when = ENABLED_WHEN,
 )]
 pub struct ModelMaterial {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub base_colour: [f32; 4],
-    /// A layer's picture in place of the file's, on the model's own uvs.
+    /// A layer's picture in place of the file's, on the model's own uvs or
+    /// seen from the camera in Projected from.
     #[layer(self_default = false, label = "Base colour layer")]
     pub base_colour_layer: bool,
+    /// The Camera layer the base colour layer is projected from. Left empty,
+    /// it goes on through the model's uvs.
+    #[layer(self_default = false, label = "Projected from")]
+    pub camera: bool,
+    #[choice(label = "Projection time", options = *PROJECTION_TIME, default = 0)]
+    pub projection_time: u32,
+    /// The comp frame the camera and its picture stop at.
+    #[counter(min = 0, max = 300, default = 0, hard_min = 0, unit = Frames, label = "Hold frame")]
+    pub hold_frame: i32,
     #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub metallic: f32,
     #[slider(min = 0.0, max = 100.0, default = 50.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
@@ -78,6 +112,11 @@ pub struct ModelMaterialDef;
 impl EffectDef for ModelMaterialDef {
     fn schema(&self) -> &'static EffectSchema {
         &<ModelMaterial as EffectMetadata>::SCHEMA
+    }
+
+    /// Projected from is read for where the camera is, never for a picture.
+    fn shape_inputs(&self) -> &'static [&'static str] {
+        &["camera"]
     }
 
     fn is_image_op(&self) -> bool {
@@ -223,4 +262,77 @@ pub fn stored(layer: &Layer) -> Vec<EffectInstance> {
         LayerKind::Model { settings, .. } => settings.materials.iter().flatten().cloned().collect(),
         _ => Vec::new(),
     }
+}
+
+/// Where a material's base colour layer is projected from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Projection {
+    /// The Camera layer.
+    pub camera: Uuid,
+    /// The layer it projects.
+    pub picture: Uuid,
+    /// The comp time it holds at, `None` when it follows the playhead.
+    pub held: Option<f64>,
+}
+
+impl Projection {
+    /// The comp time the camera and its picture are read at, for a frame at `t`.
+    #[must_use]
+    pub fn time_at(&self, t: f64) -> f64 {
+        self.held.unwrap_or(t)
+    }
+}
+
+/// What rows `rows` of a material in `comp` project at layer time `lt`. `None`
+/// for rows that read through the model's uvs, and for a row naming anything
+/// but one of `comp`'s Camera layers.
+#[must_use]
+pub fn projection(rows: &EffectInstance, comp: &Composition, lt: f64) -> Option<Projection> {
+    if !rows.enabled {
+        return None;
+    }
+    let camera = rows.layer_ref("camera")?;
+    let picture = rows.layer_ref("base_colour_layer")?;
+    let is_camera = |l: &Layer| l.id == camera && matches!(l.kind, LayerKind::Camera { .. });
+    comp.layers.iter().find(|l| is_camera(l))?;
+    let holds = matches!(rows.param("projection_time"), Some(EffectValue::Choice(1)));
+    let frame = match rows.param("hold_frame") {
+        Some(EffectValue::Float(f)) if holds => f.value_at(lt).round().max(0.0) as i64,
+        _ => 0,
+    };
+    let held = holds
+        .then(|| comp.frame_rate.time_of_frame(frame).ok())
+        .flatten()
+        .map(|t| t.0.to_f64());
+    Some(Projection {
+        camera,
+        picture,
+        held,
+    })
+}
+
+/// Each layer Model layer `layer` holds a projection of and the comp time it
+/// holds at, so that frame of it is fetched. Empty on any other layer.
+#[must_use]
+pub fn held_moments(layer: &Layer, comp: &Composition, lt: f64) -> Vec<(Uuid, f64)> {
+    let LayerKind::Model { settings, .. } = &layer.kind else {
+        return Vec::new();
+    };
+    let kept = settings.materials.iter().flatten();
+    kept.filter_map(|rows| projection(rows, comp, lt))
+        .filter_map(|p| Some((p.picture, p.held?)))
+        .collect()
+}
+
+/// Camera layer `layer`'s placement at comp time `t` as a picture is drawn
+/// with it, its solve and parents followed.
+#[must_use]
+pub fn camera_at(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+) -> Option<CameraPose> {
+    let store = crate::track::solve_store().unwrap_or(&crate::track::Unsolved);
+    crate::track::camera_pose_of(doc, comp, layer, t, store).map(|linked| linked.pose)
 }

@@ -24039,6 +24039,18 @@
   "@fxBaseColourLayer": {
     "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture stands in for the base colour."
   },
+  "fxProjectedFrom": "Projected from",
+  "@fxProjectedFrom": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The Camera layer its base colour layer is projected from, rather than read on the model's own uvs. None leaves it on the uvs."
+  },
+  "fxProjectionTime": "Projection time",
+  "@fxProjectionTime": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Whether the projecting camera and its picture follow the playhead (Follow) or stop at one frame (Hold)."
+  },
+  "fxHoldFrame": "Hold frame",
+  "@fxHoldFrame": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The comp frame the projecting camera and its picture stop at."
+  },
   "fxMetallic": "Metallic",
   "@fxMetallic": {
     "description": "Effect controls and the Timeline: a row on a Model layer's material."

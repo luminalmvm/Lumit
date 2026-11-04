@@ -1548,7 +1548,7 @@ class EffectParamRowFrb extends StatelessWidget {
         // of its own, and whose input is the composite of everything
         // below it. A Lens flare added to one starts here.
         //
-        // Depth points' Camera row is the other way about: only cameras.
+        // A row called camera is the other way about: only cameras.
         offered: (l) => param.id == 'camera'
             ? l.info.kind == BridgeLayerKind.camera
             : sound ||

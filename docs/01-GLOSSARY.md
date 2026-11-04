@@ -44,6 +44,7 @@ composites over it.
 | **Take** | One embedded animation in a 3D model's file. A Model layer's **Take** row picks it by name |
 | **Part** | One node of a 3D model's file, listed under its Model layer. Only a part with a changed row is saved |
 | **Depth points** | An effect that draws a shot as points in the comp's 3D space, each on its ray from a camera, placed by the depth from Analyse or a Depth layer |
+| **Projected from** | A material row naming the Camera layer whose view lays its Base colour layer on a Model layer, in place of the model's uvs. Never *camera mapping* |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
