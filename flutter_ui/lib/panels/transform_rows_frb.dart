@@ -989,7 +989,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       return TurnsAndDegreesField(
         keyName: '${widget.keyPrefix}-${axis.prop.name}',
         degrees: sampled,
-        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partners),
+        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partners,
+            _keyMates(group, axis)),
       );
     }
     return SizedBox(
@@ -1002,9 +1003,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         speed: axis.speed,
         decimals: axis.decimals,
         suffix: axis.suffix,
-        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partners),
+        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partners,
+            _keyMates(group, axis)),
         onLive: (v) => _liveKeyed(axis.prop, scalar, v, frame, partners),
-        onStart: () => _keyOnDragStart(axis.prop, scalar, sampled, frame),
+        onStart: () => _keyOnDragStart(
+            axis.prop, scalar, sampled, frame, _keyMates(group, axis)),
       ),
     );
   }
@@ -1065,19 +1068,57 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// it is the same value — and the drag then has a key to carry, which is what
   /// makes it visible in the graph as it goes rather than only on release.
   /// Returns whether it planted one.
-  bool _keyOnDragStart(
-      BridgeTransformProp prop, BridgeScalar scalar, double value, int frame) {
+  bool _keyOnDragStart(BridgeTransformProp prop, BridgeScalar scalar,
+      double value, int frame, List<BridgeTransformProp> mates) {
     if (scalar is! BridgeScalar_Keyframed) return false;
-    if (scalar.field0
+    final props = <BridgeTransformProp>[];
+    final values = <BridgeScalar>[];
+    if (!scalar.field0
         .any((k) => widget.comp.frameAtTime(time: k.time) == frame)) {
-      return false;
+      props.add(prop);
+      values.add(scalarWithValueAt(scalar, value, widget.comp, frame));
     }
-    widget.layer.setTransform(
-      prop: prop,
-      value: scalarWithValueAt(scalar, value, widget.comp, frame),
-    );
+    final (mateProps, mateValues) = _mateKeys(mates, frame);
+    props.addAll(mateProps);
+    values.addAll(mateValues);
+    if (props.isEmpty) return false;
+    widget.layer.setTransforms(props: props, values: values);
     widget.onChanged();
     return true;
+  }
+
+  /// The other axes of a row whose axes are shown together but move on their
+  /// own (Position with Separate dimensions off): a key planted on one is
+  /// planted on all, or the row, which shows and toggles its first axis's
+  /// keys, would not show a key set by dragging only Y. None for a linked
+  /// row, whose partners are written anyway, or a one-axis row.
+  List<BridgeTransformProp> _keyMates(
+          TransformGroup group, TransformAxis axis) =>
+      [
+        if (!group.isLinked)
+          for (final other in group.axes)
+            if (other.prop != axis.prop) other.prop
+      ];
+
+  /// For each keyed mate with no key at [frame], a key there holding the
+  /// value it already shows: nothing moves, the row's axes stay keyed at the
+  /// same times.
+  (List<BridgeTransformProp>, List<BridgeScalar>) _mateKeys(
+      List<BridgeTransformProp> mates, int frame) {
+    final props = <BridgeTransformProp>[];
+    final values = <BridgeScalar>[];
+    final time = timeOfFrame(widget.comp, frame);
+    for (final mate in mates) {
+      final s = read(widget.transform, mate);
+      if (s is! BridgeScalar_Keyframed) continue;
+      if (s.field0.any((k) => widget.comp.frameAtTime(time: k.time) == frame)) {
+        continue;
+      }
+      props.add(mate);
+      values.add(
+          scalarWithValueAt(s, sampledScalar(s, time), widget.comp, frame));
+    }
+    return (props, values);
   }
 
   /// A tick of a drag on an *animated* property: render the curve the release
@@ -1124,14 +1165,19 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// axis in the same breath, and `setTransforms` batches the pair so it stays
   /// one step.
   void _commitKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
-      int frame, List<BridgeTransformProp> partners) {
+      int frame, List<BridgeTransformProp> partners,
+      [List<BridgeTransformProp> mates = const []]) {
     // The write is the last word: a held preview tick after it would put the
     // provisional picture back, and the graph reads the document again.
     _throttle.cancel();
     _clearLive();
     rowValueDrag.value = null;
     final written = scalarWithValueAt(scalar, value, widget.comp, frame);
-    if (partners.isEmpty) {
+    final (mateProps, mateValues) = _mateKeys(mates, frame);
+    if (mateProps.isNotEmpty) {
+      widget.layer.setTransforms(
+          props: [prop, ...mateProps], values: [written, ...mateValues]);
+    } else if (partners.isEmpty) {
       widget.layer.setTransform(prop: prop, value: written);
     } else {
       widget.layer.setTransforms(props: [

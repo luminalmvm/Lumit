@@ -288,6 +288,26 @@ impl DocumentStore {
         self.revision.load(std::sync::atomic::Ordering::Acquire)
     }
 
+    /// The current snapshot with the [`revision`](Self::revision) it is
+    /// filed under, never an older document than that number.
+    ///
+    /// A snapshot is stored before its number moves on, so reading the
+    /// snapshot and then the number could pair the document before an edit
+    /// with the number after it: whatever was named from that pair (the
+    /// frame names the bridge keeps per revision) then stood for the new
+    /// revision, and the Viewer kept an old picture until the next edit.
+    /// Read the number first and take the snapshot after it; if the number
+    /// moved meanwhile, take both again.
+    pub fn snapshot_and_revision(&self) -> (Arc<Document>, u64) {
+        loop {
+            let before = self.revision();
+            let doc = self.snapshot();
+            if self.revision() == before {
+                return (doc, before);
+            }
+        }
+    }
+
     /// A snapshot is about to be published: move the number on.
     fn bump_revision(&self) {
         self.revision
@@ -1779,6 +1799,27 @@ mod tests {
         }
         assert!(before.items.is_empty(), "old snapshot unchanged");
         assert_eq!(store.snapshot().items.len(), 2);
+    }
+
+    /// The paired read gives the published snapshot with its number, edit
+    /// after edit, and never a document from before the number it carries:
+    /// a reader racing a commit sees at worst the newer document with the
+    /// older number, which the next number clears. Guards a frame named from
+    /// the document before an edit and kept for the revision after it.
+    #[test]
+    fn snapshot_and_revision_pairs_the_snapshot_with_its_number() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, _) = scripted_ops(&store.snapshot());
+        for op in ops {
+            store.commit(op).unwrap();
+            let (doc, revision) = store.snapshot_and_revision();
+            assert_eq!(revision, store.revision());
+            assert!(std::sync::Arc::ptr_eq(&doc, &store.snapshot()));
+        }
+        store.undo().unwrap();
+        let (doc, revision) = store.snapshot_and_revision();
+        assert_eq!(revision, store.revision());
+        assert!(std::sync::Arc::ptr_eq(&doc, &store.snapshot()));
     }
 
     #[test]

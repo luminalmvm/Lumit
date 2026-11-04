@@ -147,6 +147,10 @@ class GraphChannel {
   final ShapeValue? shapeValue;
   final int shapeStop;
 
+  /// Which channel of a Colour (r, g, b, a) or a Point (x, y) effect value
+  /// this is; `-1` for a value that is one number.
+  final int component;
+
   /// True for a mask's **shape**. A path has no value to plot, so what
   /// this channel carries is the interpolation parameter — counted up, one per
   /// key — and both lenses draw its *slope*: the rate the shape is changing
@@ -193,6 +197,7 @@ class GraphChannel {
     this.shapeModifier,
     this.shapeValue,
     this.shapeStop = 0,
+    this.component = -1,
   });
 
   /// The hard bounds the engine will clamp a written value to, where this
@@ -389,10 +394,41 @@ List<GraphChannel> graphChannels({
           // keyed is a curve (docs/08 §1.2). So the test is on the value, not
           // the kind. Naming kinds here dropped Slider once and Angle after it.
           BridgeScalar? scalar;
+          List<BridgeScalar>? parts;
           for (final v in fx.values) {
-            if (v.id == param.id && v.value is BridgeEffectValue_Float) {
-              scalar = (v.value as BridgeEffectValue_Float).field0;
+            if (v.id != param.id) continue;
+            switch (v.value) {
+              case BridgeEffectValue_Float(:final field0):
+                scalar = field0;
+              case BridgeEffectValue_Colour(:final field0):
+                parts = [field0.r, field0.g, field0.b, field0.a];
+              case BridgeEffectValue_Point(:final field0):
+                parts = [field0.x, field0.y];
+              default:
+                break;
             }
+          }
+          // A Colour or a Point: one curve per channel, as a two-axis
+          // transform row has one per axis.
+          if (parts != null) {
+            final names = parts.length == 4
+                ? const ['R', 'G', 'B', 'A']
+                : const ['X', 'Y'];
+            for (var i = 0; i < parts.length; i++) {
+              out.add(GraphChannel(
+                path: path,
+                id: '$channelId#$i',
+                label: '${entry.info.name} · ${effectLabelOf(fx.name)} · '
+                    '${param.label} ${names[i]}',
+                colourIndex: out.length,
+                scalar: parts[i],
+                entry: entry,
+                effect: fx,
+                param: param,
+                component: i,
+              ));
+            }
+            continue;
           }
           if (scalar == null) continue;
           out.add(GraphChannel(

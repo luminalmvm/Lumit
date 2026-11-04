@@ -913,7 +913,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
         let Ok(project) = project.read() else {
             return;
         };
-        (project.store.snapshot(), project.store.revision())
+        project.store.snapshot_and_revision()
     };
     // The bar shows what the active view will be served, so its frames are
     // named the way that view's are, under its look.
@@ -1733,7 +1733,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             state.fill_exhausted = true;
             return;
         };
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The fill banks what the Viewer will ask for, and while the chip is on
     // that is the cut picture — a fill under the other name would be work
@@ -3594,7 +3594,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let Ok(document) = document.read() else {
                 return;
             };
-            (document.store.snapshot(), document.store.revision())
+            document.store.snapshot_and_revision()
         };
         // An edit landed while the run was going. The frames banked ahead
         // were made from the document as it was, so all but the one about to
@@ -4065,7 +4065,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The pre-roll names the frames it is about to ask the disk for, so it has
     // to name them under the picture the run will actually play.
@@ -5315,7 +5315,7 @@ fn trace_scope(
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The picture that view shows: through its own 3D view, and the chip.
     // The kept copy, which playback has usually made already.
@@ -5460,7 +5460,7 @@ fn sample_pixels(
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
 
     let layer_alone = req.layer.is_some();
@@ -6411,7 +6411,7 @@ mod tests {
         let (document, revision) = {
             let document = state.project.state().expect("state");
             let document = document.read().expect("read");
-            (document.store.snapshot(), document.store.revision())
+            document.store.snapshot_and_revision()
         };
         state.renderer.sync_colour(&document);
         let quality = super::still_quality(1.0);

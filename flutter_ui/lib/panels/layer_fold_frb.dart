@@ -823,6 +823,23 @@ final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
 }
 
+/// The keys of the first keyed channel of a multi-channel effect value, or
+/// none.
+List<BridgeKeyframe> firstKeys(List<BridgeScalar> channels) {
+  for (final c in channels) {
+    if (c case BridgeScalar_Keyframed(:final field0)) return field0;
+  }
+  return const [];
+}
+
+/// The channel a multi-channel effect value is read by: the first keyed one,
+/// else the first with an expression, else the first.
+BridgeScalar leadScalar(List<BridgeScalar> channels) =>
+    channels.firstWhere((c) => c is BridgeScalar_Keyframed,
+        orElse: () => channels.firstWhere(
+            (c) => c is BridgeScalar_Expression,
+            orElse: () => channels.first));
+
 /// The keyframes a fold row shows as diamonds on its lane (docs/07 §4.3), or
 /// empty for rows with nothing keyed. A multi-axis transform row reads its
 /// lead axis: the axes key together, so one axis's times are the row's.
@@ -854,6 +871,12 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
             field0: BridgeScalar_Keyframed(:final field0)
           ) =>
             field0,
+          // A Colour's and a Point's channels key together, from one
+          // stopwatch, so the first keyed channel's times are the row's.
+          BridgeEffectValue_Colour(:final field0) =>
+            firstKeys([field0.r, field0.g, field0.b, field0.a]),
+          BridgeEffectValue_Point(:final field0) =>
+            firstKeys([field0.x, field0.y]),
           _ => const [],
         },
       // A mask's numbers key like any other scalar; its **shape** keys as whole
@@ -1065,6 +1088,10 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
       FoldFlowRow(:final rate) => rate,
       FoldEffectParamRow(value: BridgeEffectValue_Float(:final field0)) =>
         field0,
+      FoldEffectParamRow(value: BridgeEffectValue_Colour(:final field0)) =>
+        leadScalar([field0.r, field0.g, field0.b, field0.a]),
+      FoldEffectParamRow(value: BridgeEffectValue_Point(:final field0)) =>
+        leadScalar([field0.x, field0.y]),
       FoldMaskValueRow(:final mask, :final value, :final vertex) =>
         value == MaskValue.path ? null : maskScalarOf(mask, value, vertex),
       FoldStrokeValueRow(:final stroke, :final value) =>
@@ -1985,9 +2012,38 @@ bool moveLaneKeys({
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
+      // Every keyed channel of a Colour or a Point moves, or none.
+      BridgeScalar? movedChannel(BridgeScalar s) => switch (s) {
+            BridgeScalar_Keyframed(:final field0) => switch (moved(field0)) {
+                final next? => BridgeScalar.keyframed(next),
+                null => null,
+              },
+            _ => s,
+          };
       for (final instance in stack) {
         if (instance.id() != info.id) continue;
         final value = instance.getValue(id: param.id);
+        if (value case BridgeEffectValue_Colour(field0: final c)) {
+          final ch = [c.r, c.g, c.b, c.a].map(movedChannel).toList();
+          if (ch.any((s) => s == null)) return false;
+          instance.setValue(
+            id: param.id,
+            value: BridgeEffectValue.colour(
+                BridgeColour(r: ch[0]!, g: ch[1]!, b: ch[2]!, a: ch[3]!)),
+          );
+          entry.layer.setEffects(effects: stack);
+          return true;
+        }
+        if (value case BridgeEffectValue_Point(field0: final p)) {
+          final ch = [p.x, p.y].map(movedChannel).toList();
+          if (ch.any((s) => s == null)) return false;
+          instance.setValue(
+            id: param.id,
+            value: BridgeEffectValue.point(BridgePoint(x: ch[0]!, y: ch[1]!)),
+          );
+          entry.layer.setEffects(effects: stack);
+          return true;
+        }
         if (value is! BridgeEffectValue_Float) return false;
         final scalar = value.field0;
         if (scalar is! BridgeScalar_Keyframed) return false;

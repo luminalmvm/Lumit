@@ -99,6 +99,35 @@ BridgeScalar linkedPartnerScalar(
 /// `setTransforms` batch per layer for its transform channels (one undo step),
 /// one staged `setEffects` per layer for its effect channels. A linked lead's
 /// partner is written in the same batch ([withLinkedPartners]).
+/// Writes one curve to [instance]: `param` alone is a one-number value,
+/// `param#i` is channel `i` of a Colour (r, g, b, a) or a Point (x, y), the
+/// other channels kept as they are.
+void setChannelValue(
+    BridgeEffectInstance instance, String key, BridgeScalar scalar) {
+  final hash = key.indexOf('#');
+  if (hash < 0) {
+    instance.setValue(id: key, value: BridgeEffectValue.float(scalar));
+    return;
+  }
+  final id = key.substring(0, hash);
+  final i = int.parse(key.substring(hash + 1));
+  final held = instance.getValue(id: id);
+  final BridgeEffectValue? next = switch (held) {
+    BridgeEffectValue_Colour(field0: final c) => BridgeEffectValue.colour(
+        BridgeColour(
+          r: i == 0 ? scalar : c.r,
+          g: i == 1 ? scalar : c.g,
+          b: i == 2 ? scalar : c.b,
+          a: i == 3 ? scalar : c.a,
+        ),
+      ),
+    BridgeEffectValue_Point(field0: final p) => BridgeEffectValue.point(
+        BridgePoint(x: i == 0 ? scalar : p.x, y: i == 1 ? scalar : p.y)),
+    _ => null,
+  };
+  if (next != null) instance.setValue(id: id, value: next);
+}
+
 void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
   // Transform channels, grouped by layer.
   final transforms = <String,
@@ -123,7 +152,9 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       channel.entry.layer.setVolumeDb(value: next);
     } else if (channel.effect != null && channel.param != null) {
       final slot = effects[layerId] ??= (channel.entry.layer, {});
-      (slot.$2[channel.effect!.id.toString()] ??= {})[channel.param!.id] = next;
+      (slot.$2[channel.effect!.id.toString()] ??= {})[channel.component < 0
+          ? channel.param!.id
+          : '${channel.param!.id}#${channel.component}'] = next;
     } else if (channel.animatorValue case final value?) {
       // One number of one animator, written through the whole document —
       // which is the op, so two curves on one animator are two writes
@@ -177,10 +208,8 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
         final wanted = byEffect[instance.id().toString()];
         if (wanted == null) continue;
         touched = true;
-        wanted.forEach((paramId, scalar) {
-          instance.setValue(
-              id: paramId, value: BridgeEffectValue.float(scalar));
-        });
+        wanted.forEach(
+            (paramId, scalar) => setChannelValue(instance, paramId, scalar));
       }
       if (touched) layer.setEffects(effects: staged);
     }
@@ -272,8 +301,12 @@ void previewChannelEdits({
         return;
       }
       if (channel.effect!.id.toString() != instance.id().toString()) return;
-      instance.setValue(
-          id: channel.param!.id, value: BridgeEffectValue.float(next));
+      setChannelValue(
+          instance,
+          channel.component < 0
+              ? channel.param!.id
+              : '${channel.param!.id}#${channel.component}',
+          next);
     });
   }
   if (driver) {
