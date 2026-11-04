@@ -47,6 +47,7 @@ composites over it.
 | **Geometry options** | A Text or Shape layer's Extrusion depth and bevel, which make its outline a solid in the comp's 3D space, with **Front**, **Bevel**, **Side** and **Back** materials |
 | **Card** | A flat Model layer with no 3D model behind it, made by **Layer ▸ New ▸ Card** or **Create card** |
 | **Projected from** | A material row naming the Camera layer whose view lays its Base colour layer on a Model layer, in place of the model's uvs. Never *camera mapping* |
+| **3D shape** | A cube, sphere, cylinder, cone, torus, plane or pyramid Lumit makes itself, in the comp's 3D space. Its **Geometry options** are its size and key like any row, and its **Surface** is a material. `LayerKind::Mesh` in code |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the

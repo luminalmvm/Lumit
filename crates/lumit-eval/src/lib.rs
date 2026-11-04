@@ -2382,6 +2382,7 @@ fn feed_source(
         LayerKind::Model { .. } => {
             model::feed(h, doc, owner, layer, comp_time, quality, stamper, visited)?;
         }
+        LayerKind::Mesh { shape } => model::feed_shape(h, *shape),
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a

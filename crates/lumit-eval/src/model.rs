@@ -46,6 +46,13 @@ pub(crate) fn feed(
     )
 }
 
+/// A 3D shape's part of the name: its shape, as its rows go in with the
+/// materials'.
+pub(crate) fn feed_shape(h: &mut blake3::Hasher, shape: lumit_core::mesh_shape::MeshShape) {
+    h.update(b"mesh/");
+    h.update(shape.options().as_bytes());
+}
+
 /// The model's own part of the name: its file, how it sits, and when it plays a
 /// take, the moment as the stamper tells it, which is nothing for a still file.
 fn named(

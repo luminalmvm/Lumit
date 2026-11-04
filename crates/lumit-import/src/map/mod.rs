@@ -43,6 +43,7 @@ mod fx_luma_fade;
 mod fx_timewarp;
 mod layers;
 mod masks;
+mod mesh_shapes;
 mod props;
 mod shape_paths;
 mod shapes;

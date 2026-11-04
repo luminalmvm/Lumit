@@ -6426,6 +6426,10 @@
   "@keyCameraTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "key3dShapeTool": "3D shape tool",
+  "@key3dShapeTool": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The toolbar tool that puts a cube, sphere and so on in the comp."
+  },
   "keyCompositionSettings": "Composition settings",
   "@keyCompositionSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7514,6 +7518,10 @@
   "menuAdjustment": "Adjustment",
   "@menuAdjustment": {
     "description": "Menu item."
+  },
+  "menuShape3d": "3D shape",
+  "@menuShape3d": {
+    "description": "Layer > New submenu: cubes, spheres and other solid shapes the app makes itself, drawn in the comp’s 3D space."
   },
   "menuAnimateText": "Animate text",
   "@menuAnimateText": {
@@ -11142,6 +11150,34 @@
   "toolShapeStar": "Star",
   "@toolShapeStar": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
+  },
+  "shape3dCube": "Cube",
+  "@shape3dCube": {
+    "description": "A 3D shape: a box. Names the toolbar tool, the Layer > New > 3D shape row and nothing else."
+  },
+  "shape3dSphere": "Sphere",
+  "@shape3dSphere": {
+    "description": "A 3D shape: a ball. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCylinder": "Cylinder",
+  "@shape3dCylinder": {
+    "description": "A 3D shape: a round can. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCone": "Cone",
+  "@shape3dCone": {
+    "description": "A 3D shape: a cone. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dTorus": "Torus",
+  "@shape3dTorus": {
+    "description": "A 3D shape: a ring like a doughnut. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPlane": "Plane",
+  "@shape3dPlane": {
+    "description": "A 3D shape: a flat card. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPyramid": "Pyramid",
+  "@shape3dPyramid": {
+    "description": "A 3D shape: a four-sided pyramid. Toolbar tool and Layer > New > 3D shape row."
   },
   "toolSize": "Size",
   "@toolSize": {
@@ -24206,6 +24242,34 @@
   "fxBevelSegments": "Bevel segments",
   "@fxBevelSegments": {
     "description": "Row in a Text or Shape layer's Geometry options: how many steps a rounded bevel is made of."
+  },
+  "fxSliceStart": "Slice start",
+  "@fxSliceStart": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape starts, so part of it can be cut away."
+  },
+  "fxSliceEnd": "Slice end",
+  "@fxSliceEnd": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape ends."
+  },
+  "fxTopRadius": "Top radius",
+  "@fxTopRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its top is. Nought makes a point."
+  },
+  "fxBottomRadius": "Bottom radius",
+  "@fxBottomRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its base is."
+  },
+  "fxPipeRadius": "Pipe radius",
+  "@fxPipeRadius": {
+    "description": "Row in a torus’s Geometry options: how thick the ring is."
+  },
+  "fxPipeSegments": "Pipe segments",
+  "@fxPipeSegments": {
+    "description": "Row in a torus’s Geometry options: how many steps make the round of its ring’s thickness."
+  },
+  "fxCornerSegments": "Corner segments",
+  "@fxCornerSegments": {
+    "description": "Row in a 3D plane’s Geometry options: how many steps make each rounded corner."
   },
   "fxHoleBevelDepth": "Hole bevel depth",
   "@fxHoleBevelDepth": {

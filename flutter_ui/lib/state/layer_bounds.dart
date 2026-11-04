@@ -34,12 +34,21 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
 import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:uuid/uuid.dart';
 
-/// What a Text or Shape layer's Geometry options are known by.
-const geometryOptionsName = 'geometry_options';
+/// What Geometry options are known by: a Text or Shape layer's, then each
+/// 3D shape's.
+const geometryOptionsNames = {
+  'geometry_options',
+  'cube_geometry',
+  'sphere_geometry',
+  'cylinder_geometry',
+  'cone_geometry',
+  'torus_geometry',
+  'plane_geometry',
+};
 
 /// Whether [fx] is those rows rather than a material's.
 bool isGeometryOptions(BridgeEffectInstanceInfo fx) =>
-    fx.name == geometryOptionsName;
+    geometryOptionsNames.contains(fx.name);
 
 /// The kind of layer [info] draws as. A Text or Shape layer in 3D with a depth
 /// or a bevel to show draws as a Model layer does.
@@ -472,7 +481,8 @@ class LayerBoundsCache extends ChangeNotifier {
     // anything read from the document. A Model layer borrows it until its box
     // comes from the model's own bounds.
     if (entry.info.kind == BridgeLayerKind.nullLayer ||
-        entry.info.kind == BridgeLayerKind.model) {
+        entry.info.kind == BridgeLayerKind.model ||
+        entry.info.kind == BridgeLayerKind.mesh) {
       return nullLayerBounds;
     }
 

@@ -1282,6 +1282,8 @@ pub enum BridgeLayerKind {
     Bus,
     /// A Model layer: a 3D model file drawn in the comp's 3D space.
     Model,
+    /// A 3D shape Lumit makes itself: a cube, a sphere and so on.
+    Mesh,
 }
 
 /// How the frontend should draw this layer: the model's kind, except
@@ -1310,6 +1312,7 @@ pub(crate) fn bridge_kind(layer: &lumit_core::model::Layer) -> BridgeLayerKind {
         K::Null => BridgeLayerKind::NullLayer,
         K::Light { .. } => BridgeLayerKind::Light,
         K::Model { .. } => BridgeLayerKind::Model,
+        K::Mesh { .. } => BridgeLayerKind::Mesh,
     }
 }
 
@@ -5701,6 +5704,7 @@ impl LayerReference {
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
+            | LayerKind::Mesh { .. }
             | LayerKind::Sequence { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => return Ok(None),

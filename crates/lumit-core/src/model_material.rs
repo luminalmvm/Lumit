@@ -138,8 +138,16 @@ impl EffectDef for ModelMaterialDef {
 
 /// Kept apart from the effect catalogue, so no menu offers it as an effect.
 /// [`crate::fx::builtins::def`] finds it here.
-pub static MATERIAL_DEFS: Catalogue =
-    Catalogue::new(&[&ModelMaterialDef, &crate::extrude::GeometryOptionsDef]);
+pub static MATERIAL_DEFS: Catalogue = Catalogue::new(&[
+    &ModelMaterialDef,
+    &crate::extrude::GeometryOptionsDef,
+    &crate::mesh_shape::CubeGeometryDef,
+    &crate::mesh_shape::SphereGeometryDef,
+    &crate::mesh_shape::CylinderGeometryDef,
+    &crate::mesh_shape::ConeGeometryDef,
+    &crate::mesh_shape::TorusGeometryDef,
+    &crate::mesh_shape::PlaneGeometryDef,
+]);
 
 use PresetValue::{Bool, Colour, Float};
 

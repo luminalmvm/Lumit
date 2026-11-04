@@ -31,6 +31,7 @@ the top layer composites over everything below it.
 | **Null layer** | Invisible and transform-only. Used to drive other layers. |
 | **[Camera layer](/use/camera/)** | A 3D viewpoint. Affects layers with the 3D switch on. |
 | **Light layer** | A source of light: **Point**, **Spot** or **Area**. Shades layers with Accepts lights on. |
+| **[3D shape](#3d-shapes)** | A cube, sphere, cylinder, cone, torus, plane or pyramid, drawn in the comp's 3D space. |
 | **[Audio layer](/use/audio/)** | Sound with no picture. Made by placing an audio file, or by **Add audio only** on an item that has a picture too. |
 
 ## Order and selection
@@ -289,6 +290,29 @@ Motion blur on a moving layer's shadow. A track matte or a precomp's masks in th
 casts. Shadows from an environment light. An environment light on particles in the 3D scene,
 or inside a collapsed precomp.
 :::
+
+## 3D shapes
+
+**Layer ▸ New ▸ 3D shape** adds a **Cube**, **Sphere**, **Cylinder**, **Cone**, **Torus**,
+**Plane** or **Pyramid** at the composition's centre. The **3D shape** tool (`Shift+D`) on the
+toolbar adds the one in hand where the Viewer is clicked. A 3D shape is always 3D, casts
+shadows and, in a composition with no lights, brings an **Ambient light** and a **Key light**.
+
+Its **Geometry options** are its size, in pixels, and key like any row:
+
+| Shape | Rows |
+| --- | --- |
+| Cube | **Width**, **Height**, **Depth**, **Bevel**, **Bevel segments** |
+| Sphere | **Radius**, **Segments**, **Slice start**, **Slice end** |
+| Cylinder | **Radius**, **Height**, **Segments**, **Bevel**, **Bevel segments**, **Slice start**, **Slice end** |
+| Cone | **Top radius**, **Bottom radius**, **Height**, **Segments**, **Bevel**, **Bevel segments**, **Slice start**, **Slice end** |
+| Torus | **Radius**, **Pipe radius**, **Segments**, **Pipe segments**, **Slice start**, **Slice end** |
+| Plane | **Width**, **Height**, **Corner radius**, **Corner segments** |
+
+**Slice start** and **Slice end** are angles round the shape's upright axis, and the cut faces
+are filled. Below 12 segments the sides are flat, so a cone with 4 is a pyramid. **Surface**
+has the rows of a [3D model's material](/use/importing/#3d-models), with its presets. A
+parametric mesh imported from After Effects becomes a 3D shape.
 
 ## Parenting
 

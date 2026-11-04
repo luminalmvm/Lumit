@@ -202,6 +202,7 @@ impl ActionId {
             "tool.roto" => "Roto brush tool",
             "tool.puppet" => "Puppet tool",
             "tool.camera" => "Camera tool",
+            "tool.shape3d" => "3D shape tool",
             // Timeline reveals and edits.
             "reveal.position" => "Reveal Position",
             "reveal.scale" => "Reveal Scale",

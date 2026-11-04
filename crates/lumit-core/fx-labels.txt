@@ -158,6 +158,7 @@ Bottom edge
 Bottom left
 Bottom left tangent x
 Bottom left tangent y
+Bottom radius
 Bottom right
 Bottom right tangent x
 Bottom right tangent y
@@ -295,6 +296,7 @@ Core softness
 Corner pin
 Corner point
 Corner radius
+Corner segments
 Corner x
 Corner y
 Corners
@@ -985,6 +987,8 @@ Pin to
 Ping-pong
 Pinned
 Pinning
+Pipe radius
+Pipe segments
 Pixel motion
 Pixel sort
 Pixels
@@ -1229,7 +1233,9 @@ Size over life
 Size with distance
 Skew
 Skew axis
+Slice end
 Slice repeat
+Slice start
 Slide
 Slider
 Slider control
@@ -1391,6 +1397,7 @@ Top edge
 Top left
 Top left tangent x
 Top left tangent y
+Top radius
 Top right
 Top right tangent x
 Top right tangent y

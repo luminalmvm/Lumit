@@ -178,6 +178,14 @@ enum LumitIcon {
   roundedRectangle,
   polygon,
 
+  /// The 3D shapes the toolbar and Layer > New make. A cube wears [cube3d].
+  sphere,
+  cylinder,
+  cone,
+  torus,
+  plane,
+  pyramid,
+
   /// The pen group's vertex tools: one curve with a vertex on it, and then a
   /// plus, a minus, or the pair of tangent handles the convert puts there.
   vertexAdd,
@@ -363,6 +371,12 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.rectangle => LumitIcons.rectangle,
       LumitIcon.ellipse => LumitIcons.ellipse,
       LumitIcon.polygon => LumitIcons.polygon,
+      LumitIcon.sphere => LumitIcons.sphere,
+      LumitIcon.cylinder => LumitIcons.cylinder,
+      LumitIcon.cone => LumitIcons.cone,
+      LumitIcon.torus => LumitIcons.torus,
+      LumitIcon.plane => LumitIcons.plane,
+      LumitIcon.pyramid => LumitIcons.pyramid,
       LumitIcon.pen => LumitIcons.pen,
       LumitIcon.text => LumitIcons.text,
       LumitIcon.razor => LumitIcons.razor,

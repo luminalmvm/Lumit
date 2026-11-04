@@ -115,10 +115,14 @@ impl Profile {
     }
 }
 
-/// Whether `layer` is a kind that can have Geometry options.
+/// Whether `layer` is a kind that can have Geometry options: a Text or Shape
+/// layer, or a 3D shape, whose options are its size.
 #[must_use]
 pub fn takes_geometry(layer: &Layer) -> bool {
-    matches!(layer.kind, LayerKind::Text { .. } | LayerKind::Shape { .. })
+    matches!(
+        layer.kind,
+        LayerKind::Text { .. } | LayerKind::Shape { .. } | LayerKind::Mesh { .. }
+    )
 }
 
 /// The rows `layer` keeps: its options, then its faces', each `None` for rows
@@ -152,15 +156,17 @@ pub fn is_solid(rows: Option<&EffectInstance>) -> bool {
 #[must_use]
 pub fn draws_mesh(layer: &Layer) -> bool {
     match layer.kind {
-        LayerKind::Model { .. } => true,
+        LayerKind::Model { .. } | LayerKind::Mesh { .. } => true,
         _ => layer.switches.three_d && is_extruded(layer),
     }
 }
 
-/// Whether `layer`'s Geometry options give it any depth.
+/// Whether `layer`'s Geometry options give it any depth. A 3D shape always
+/// has its own.
 #[must_use]
 pub fn is_extruded(layer: &Layer) -> bool {
-    is_solid(kept(layer).first().and_then(Option::as_ref))
+    matches!(layer.kind, LayerKind::Mesh { .. })
+        || is_solid(kept(layer).first().and_then(Option::as_ref))
 }
 
 /// The op that gives `layer` in comp `comp` the kept rows `geometry`. Depth

@@ -14,6 +14,7 @@ use lumit_cache::{ByteLru, ByteSized};
 use lumit_core::expression::ExpressionContext;
 use lumit_core::extrude::mesh::{self, Mesh};
 use lumit_core::extrude::Profile;
+use lumit_core::mesh_shape::MeshShape;
 use lumit_core::model::{EffectInstance, Layer, LayerKind};
 use lumit_core::shape::modifier::ShapeEntry;
 use lumit_core::text::GlyphXform;
@@ -248,23 +249,38 @@ fn text_colours(document: &lumit_core::model::TextDocument) -> [[f32; 4]; 2] {
 
 /// `layer`'s faces, Front, Bevel, Side and Back, each its default material:
 /// the first colours it paints with at its start, so turning up the depth
-/// shows the user's own colour, lit, as a matte plastic.
+/// shows the user's own colour, lit, as a matte plastic. A 3D shape has one,
+/// its Surface, a light grey.
 #[must_use]
-pub(crate) fn faces(layer: &Layer) -> [Material; 4] {
+pub(crate) fn faces(layer: &Layer) -> Vec<Material> {
+    if let LayerKind::Mesh { shape } = layer.kind {
+        return vec![Material {
+            name: "Surface".to_owned(),
+            base_colour: [0.8, 0.8, 0.8, 1.0],
+            metallic: 0.0,
+            roughness: 0.5,
+            // A plane is seen from either side.
+            double_sided: shape == MeshShape::Plane,
+            soft_turns: true,
+            ..Material::default()
+        }];
+    }
     let [fill, edge] = match &layer.kind {
         LayerKind::Text { document } => text_colours(document),
         LayerKind::Shape { contents } => shape_colours(contents),
         _ => [[1.0; 4]; 2],
     };
     let tinted = [fill, edge, edge, fill];
-    std::array::from_fn(|k| Material {
-        name: lumit_core::extrude::FACES[k].to_owned(),
-        base_colour: [tinted[k][0], tinted[k][1], tinted[k][2], 1.0],
-        metallic: 0.0,
-        roughness: 0.5,
-        soft_turns: true,
-        ..Material::default()
-    })
+    (0..4)
+        .map(|k| Material {
+            name: lumit_core::extrude::FACES[k].to_owned(),
+            base_colour: [tinted[k][0], tinted[k][1], tinted[k][2], 1.0],
+            metallic: 0.0,
+            roughness: 0.5,
+            soft_turns: true,
+            ..Material::default()
+        })
+        .collect()
 }
 
 fn shape_colours(contents: &[ShapeEntry]) -> [[f32; 4]; 2] {
@@ -543,6 +559,9 @@ pub(crate) fn scene_at(
     context: &Arc<ExpressionContext>,
     tinted: [bool; 4],
 ) -> Option<Arc<ModelScene>> {
+    if let LayerKind::Mesh { shape } = layer.kind {
+        return Some(shape_scene(layer, shape, lt, context));
+    }
     let options = lumit_core::extrude::kept(layer).first()?.as_ref()?;
     let read = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, Arc::clone(context));
     let profile = Profile::of(options, &read);
@@ -566,6 +585,17 @@ pub(crate) fn made(
     picture: &dyn Fn(&EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
 ) -> Option<Made> {
     let kept_rows = lumit_core::extrude::kept(layer);
+    if let LayerKind::Mesh { shape } = layer.kind {
+        let scene = shape_scene(layer, shape, lt, context);
+        let rows = kept_rows.get(1..).unwrap_or(&[]);
+        let looks = crate::model_material::looks_of(rows, &faces(layer), lt, context, picture);
+        remember(layer.id, &scene);
+        return Some(Made {
+            scene,
+            looks,
+            tinted: [false; 4],
+        });
+    }
     let options = kept_rows.first()?.as_ref()?;
     let read = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, Arc::clone(context));
     let profile = Profile::of(options, &read);
@@ -614,17 +644,89 @@ pub(crate) fn made(
         }
     }
     let scene = scene_of(&pieces, &profile, tinted);
+    remember(layer.id, &scene);
+    Some(Made {
+        scene,
+        looks,
+        tinted,
+    })
+}
+
+/// Keep `scene` as what layer `layer` was last drawn as, for picking and its
+/// box.
+fn remember(layer: Uuid, scene: &Arc<ModelScene>) {
     if let Ok(mut last) = LAST.lock() {
         let last = last.get_or_insert_with(HashMap::new);
         if last.len() > 4096 {
             last.retain(|_, s| s.strong_count() > 0);
         }
-        last.insert(layer.id, Arc::downgrade(&scene));
+        last.insert(layer, Arc::downgrade(scene));
     }
-    Some(Made {
-        scene,
-        looks,
-        tinted,
+}
+
+/// 3D shape `layer` of `shape` at layer time `lt`, kept by the values its rows
+/// come to, so a shape that holds still is meshed once.
+fn shape_scene(
+    layer: &Layer,
+    shape: MeshShape,
+    lt: f64,
+    context: &Arc<ExpressionContext>,
+) -> Arc<ModelScene> {
+    let kept_rows = lumit_core::extrude::kept(layer)
+        .first()
+        .and_then(Option::as_ref);
+    let options = lumit_core::mesh_shape::options_of(shape, kept_rows);
+    let read = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, Arc::clone(context));
+    let mut h = blake3::Hasher::new();
+    h.update(b"mesh-shape/");
+    h.update(shape.options().as_bytes());
+    for p in options.iter().flat_map(|o| &o.params) {
+        if let lumit_core::model::EffectValue::Float(v) = &p.value {
+            h.update(p.id.as_bytes());
+            h.update(&read(v).to_le_bytes());
+        }
+    }
+    kept(&SCENES, SCENE_BYTES, name_of(&h), || {
+        let face = lumit_core::mesh_shape::build::mesh(shape, options.as_ref(), &read);
+        let (mut low, mut high) = ([f32::MAX; 3], [f32::MIN; 3]);
+        for p in &face.positions {
+            for a in 0..3 {
+                low[a] = low[a].min(p[a]);
+                high[a] = high[a].max(p[a]);
+            }
+        }
+        if low[0] > high[0] {
+            (low, high) = ([0.0; 3], [0.0; 3]);
+        }
+        let bounds = Bounds {
+            min: low,
+            max: high,
+        };
+        ModelScene {
+            nodes: vec![Node {
+                rotation: [0.0, 0.0, 0.0, 1.0],
+                scale: [1.0; 3],
+                mesh: Some(0),
+                ..Node::default()
+            }],
+            roots: vec![0],
+            meshes: vec![lumit_scene::Mesh {
+                name: String::new(),
+                bounds,
+                primitives: vec![Primitive {
+                    positions: face.positions,
+                    normals: face.normals,
+                    tangents: face.tangents,
+                    uv0: face.uv0,
+                    indices: face.indices,
+                    material: Some(0),
+                    ..Primitive::default()
+                }],
+            }],
+            materials: faces(layer),
+            bounds,
+            ..ModelScene::default()
+        }
     })
 }
 
@@ -638,13 +740,26 @@ pub fn last_scene(layer: Uuid) -> Option<Arc<ModelScene>> {
 /// pixels, numbered by the bits of x, y and z.
 #[must_use]
 pub fn layer_box(layer: Uuid) -> Option<[[f32; 3]; 8]> {
-    let bounds = last_scene(layer)?.bounds;
-    Some(std::array::from_fn(|i| {
+    Some(corners(last_scene(layer)?.bounds))
+}
+
+/// The box 3D shape `layer` makes at its start, for before it's drawn.
+#[must_use]
+pub fn shape_box(layer: &Layer) -> Option<[[f32; 3]; 8]> {
+    let LayerKind::Mesh { shape } = layer.kind else {
+        return None;
+    };
+    let context = Arc::new(ExpressionContext::detached());
+    Some(corners(shape_scene(layer, shape, 0.0, &context).bounds))
+}
+
+fn corners(bounds: Bounds) -> [[f32; 3]; 8] {
+    std::array::from_fn(|i| {
         std::array::from_fn(|k| match i >> k & 1 {
             0 => bounds.min[k],
             _ => bounds.max[k],
         })
-    }))
+    })
 }
 
 /// How far along the ray from `origin` by `direction`, in its own pixels,
@@ -661,11 +776,10 @@ pub fn hit(layer: Uuid, origin: [f32; 3], direction: [f32; 3]) -> Option<f32> {
 #[must_use]
 pub fn rows(layer: &Layer) -> Vec<EffectInstance> {
     let kept_rows = lumit_core::extrude::kept(layer);
-    let mut rows: Vec<EffectInstance> =
-        lumit_core::fx::builtins::instantiate(lumit_core::extrude::MATCH_NAME)
-            .map(|rows| options_named(layer.id, kept_rows.first().and_then(Option::as_ref), rows))
-            .into_iter()
-            .collect();
+    let mut rows: Vec<EffectInstance> = lumit_core::fx::builtins::instantiate(options_match(layer))
+        .map(|rows| options_named(layer.id, kept_rows.first().and_then(Option::as_ref), rows))
+        .into_iter()
+        .collect();
     if lumit_core::extrude::is_extruded(layer) {
         let tail = kept_rows.get(1..).unwrap_or(&[]);
         rows.extend(crate::model_material::rows_from(
@@ -698,10 +812,10 @@ pub(crate) fn options_named(
 #[must_use]
 pub fn kept_of(layer: &Layer, list: &[EffectInstance]) -> Option<Vec<Option<EffectInstance>>> {
     let file = faces(layer);
-    let mut out: Vec<Option<EffectInstance>> = vec![None; 5];
+    let mut out: Vec<Option<EffectInstance>> = vec![None; 1 + file.len()];
     for rows in list {
         let i = lumit_core::model_material::index_of(layer.id, rows.id)?;
-        let baseline = file_rows(layer.id, i, &file)?;
+        let baseline = file_rows(layer, i, &file)?;
         let slot = out.get_mut(i)?;
         if rows.params != baseline.params || !rows.enabled {
             *slot = Some(rows.clone());
@@ -726,10 +840,19 @@ fn list_holds(list: &[EffectInstance], layer: Uuid, i: usize) -> bool {
 
 /// Row `index` of layer `layer` as it starts: the options' defaults or a
 /// face's own colours.
-pub(crate) fn file_rows(layer: Uuid, index: usize, file: &[Material; 4]) -> Option<EffectInstance> {
+pub(crate) fn file_rows(layer: &Layer, index: usize, file: &[Material]) -> Option<EffectInstance> {
     match index.checked_sub(1) {
-        None => lumit_core::fx::builtins::instantiate(lumit_core::extrude::MATCH_NAME)
-            .map(|rows| options_named(layer, None, rows)),
-        Some(face) => crate::model_material::offered(layer, index, file.get(face)?),
+        None => lumit_core::fx::builtins::instantiate(options_match(layer))
+            .map(|rows| options_named(layer.id, None, rows)),
+        Some(face) => crate::model_material::offered(layer.id, index, file.get(face)?),
+    }
+}
+
+/// What `layer`'s Geometry options are known by: a 3D shape's own, else the
+/// depth and bevel a Text or Shape layer takes.
+fn options_match(layer: &Layer) -> &'static str {
+    match layer.kind {
+        LayerKind::Mesh { shape } => shape.options(),
+        _ => lumit_core::extrude::MATCH_NAME,
     }
 }

@@ -61,7 +61,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
-import '../state/layer_bounds.dart' show geometryOptionsName, isGeometryOptions, meshKindOf;
+import '../state/layer_bounds.dart' show geometryOptionsNames, isGeometryOptions, meshKindOf;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
 import '../l10n/strings.dart';
@@ -1513,8 +1513,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // start closed on every Text and Shape layer, so selecting a layer never
     // asks the engine for their rows. A card closed from the start draws none
     // until it's first opened, then keeps them for the twirl to close over.
+    // A 3D shape's are what it is, so they start open.
     final startsClosed = material &&
-        (info.materials!.length > 3 || isGeometryOptions(fx));
+        (info.materials!.length > 3 || fx.name == 'geometry_options');
     final open =
         startsClosed ? _shut.contains('fx-${fx.id}') : _isOpen('fx-${fx.id}');
     if (open) _everOpen.add(fx.id);
@@ -3294,7 +3295,7 @@ class _EffectSection extends StatelessWidget {
             // A group header's stack is not a layer's to save from.
             if ((!style || material) &&
                 group == null &&
-                info.name != geometryOptionsName)
+                !geometryOptionsNames.contains(info.name))
               MenuRow(
                 key: ValueKey<String>('fx-menu-save-preset-$id'),
                 onPressed: () {
