@@ -310,7 +310,6 @@ class FlowRowsFrb extends StatelessWidget {
       control: FlowRateControl(
         shown: shown,
         fieldWidth: _cellWidth,
-        presetWidth: 92,
         onRate: writeRate,
       ),
     );
@@ -389,10 +388,6 @@ class FlowChoice extends StatelessWidget {
 class FlowRateControl extends StatelessWidget {
   final double shown;
   final double fieldWidth;
-
-  /// A fixed width for the preset dropdown, or null to give it the row's
-  /// remaining room.
-  final double? presetWidth;
   final double gap;
   final ValueChanged<double> onRate;
 
@@ -400,7 +395,6 @@ class FlowRateControl extends StatelessWidget {
     super.key,
     required this.shown,
     required this.fieldWidth,
-    this.presetWidth,
     this.gap = 6,
     required this.onRate,
   });
@@ -439,10 +433,7 @@ class FlowRateControl extends StatelessWidget {
           ),
         ),
         SizedBox(width: gap),
-        if (presetWidth case final width?)
-          SizedBox(width: width, child: preset)
-        else
-          Expanded(child: preset),
+        Expanded(child: preset),
       ],
     );
   }
