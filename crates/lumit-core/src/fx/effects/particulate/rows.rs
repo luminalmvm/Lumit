@@ -343,3 +343,53 @@ pub fn on_its_layer(inst: &crate::model::EffectInstance) -> bool {
             Some(crate::model::EffectValue::Bool(true))
         )
 }
+
+/// Whether `e` is a Particulate with its particles in the scene.
+#[must_use]
+pub fn is_scene(e: &crate::model::EffectInstance) -> bool {
+    e.enabled
+        && e.effect.match_name == "particulate"
+        && matches!(
+            e.param("in_scene"),
+            Some(crate::model::EffectValue::Bool(true))
+        )
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use crate::model::{EffectValue, LayerKind};
+    use crate::ops::Op;
+
+    /// In the scene arriving by any route turns a 2D layer's 3D switch on, once.
+    #[test]
+    fn in_the_scene_puts_a_2d_layer_in_3d() {
+        let layer = crate::edits::base_layer(
+            "Particles".into(),
+            LayerKind::Null,
+            crate::time::Rational::new(1, 1).unwrap(),
+            Default::default(),
+        );
+        let mut fx = crate::fx::builtins::instantiate("particulate").unwrap();
+        let comp = uuid::Uuid::now_v7();
+        assert!(matches!(
+            crate::fx::effects::particulate::set_effects(comp, &layer, vec![fx.clone()]),
+            Op::SetLayerEffects { .. }
+        ));
+        let on = fx.params.iter_mut().find(|p| p.id == "in_scene").unwrap();
+        on.value = EffectValue::Bool(true);
+        let Op::Batch { ops } =
+            crate::fx::effects::particulate::set_effects(comp, &layer, vec![fx.clone()])
+        else {
+            panic!("a 2D layer was left flat");
+        };
+        assert!(matches!(ops[1], Op::SetLayerThreeD { three_d: true, .. }));
+        // Already on the layer, it doesn't turn 3D back on.
+        let mut had = layer.clone();
+        had.effects = vec![fx.clone()];
+        assert!(matches!(
+            crate::fx::effects::particulate::set_effects(comp, &had, vec![fx]),
+            Op::SetLayerEffects { .. }
+        ));
+    }
+}

@@ -32,6 +32,7 @@ pub mod lens_dirt;
 pub mod lens_flare;
 pub mod lighting;
 pub mod particulate;
+pub mod particulate_params;
 pub mod particulate_scene;
 pub mod points_draw;
 pub mod points_field;

@@ -10903,7 +10903,8 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
 /// place too.
 #[test]
 fn a_stepped_frame_is_the_walk_from_the_start() {
-    use crate::fx::points::stepped::{stop_when, stream_at, Collider, Inputs, SAME, SPARK_ID};
+    use crate::fx::points::collider::Collider;
+    use crate::fx::points::stepped::{stop_when, stream_at, Inputs, SAME, SPARK_ID};
     use std::sync::atomic::{AtomicU32, Ordering};
     let e = particulate(&[
         ("gravity", fixed(900.0)),
@@ -11000,7 +11001,8 @@ fn a_stepped_frame_is_the_walk_from_the_start() {
 #[test]
 fn a_collider_turned_in_3d_is_a_surface() {
     use crate::anim::Property;
-    use crate::fx::points::stepped::{stream_at, Collider, Inputs};
+    use crate::fx::points::collider::Collider;
+    use crate::fx::points::stepped::{stream_at, Inputs};
     use crate::model::*;
     use crate::time::{Duration, FrameRate, Rational};
 

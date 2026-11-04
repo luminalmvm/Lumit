@@ -6,7 +6,8 @@
 
 use super::Realiser;
 use crate::draw::CompLayerDraw;
-use lumit_core::fx::effects::particulate::{is_scene, Particulate};
+use lumit_core::fx::effects::particulate::rows::is_scene;
+use lumit_core::fx::effects::particulate::Particulate;
 use lumit_core::fx::params::Params;
 use lumit_core::fx::registry::EffectMetadata;
 use lumit_core::model::{CameraPose, Composition, Document, EffectInstance, EffectValue, Layer};
