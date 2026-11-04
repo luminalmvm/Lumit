@@ -841,6 +841,17 @@ Map<String, String> get _built => {
       "Pulse": l10n.fxPulse,
       "Envelope": l10n.fxEnvelope,
       "Time since last": l10n.fxTimeSinceLast,
+      // A Model layer's Animation and parts' rows.
+      "Animation": l10n.fxAnimation,
+      "Freeze": l10n.fxFreeze,
+      "Part": l10n.fxPart,
+      "Rotation x": l10n.fxRotationX,
+      "Rotation y": l10n.fxRotationY,
+      "Rotation z": l10n.fxRotationZ,
+      "Visible": l10n.fxVisible,
+      "Take": l10n.fxTake,
+      "Skins and morph targets, too large for this graphics card":
+          l10n.modelTooLargeToMove,
       "Off": l10n.fxOff,
       "Auto": l10n.fxAuto,
       "Time step": l10n.fxTimeStep,

@@ -29,6 +29,7 @@ import 'effect_param_row_frb.dart';
 import 'viewer_effect_points.dart' show pickForPoint;
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart' show setModelPartShown;
 import 'light_rows_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
@@ -412,7 +413,8 @@ class FoldRow extends StatelessWidget {
         :final label,
         :final open,
         :final enabled,
-        :final named
+        :final named,
+        :final shown
       ) =>
         HoverMark(
           builder: (_, lit) => GestureDetector(
@@ -456,6 +458,18 @@ class FoldRow extends StatelessWidget {
                     id: path,
                     on: enabled,
                     onChanged: (on) => onSetEnabled!(path, on),
+                  ),
+                  const SizedBox(width: 2),
+                ],
+                if (shown != null) ...[
+                  fxEnableSwitch(
+                    id: path,
+                    on: shown,
+                    onChanged: (on) {
+                      final part = path.split('/').last;
+                      setModelPartShown(layer, part, on);
+                      onChanged();
+                    },
                   ),
                   const SizedBox(width: 2),
                 ],
@@ -829,6 +843,8 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     };
     return EffectParamRowFrb(
       key: ValueKey<String>('tl-fx-${row.info.id}-${row.param.id}'),
+      // A part's Visible row, which reads as a tick until it is keyed.
+      asTick: row.model && row.param.id == 'visible',
       // A material row goes back to its file's value.
       onReset: row.material ? () => _resetMaterialRow(row) : null,
       effectId: row.info.id,

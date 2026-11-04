@@ -197,6 +197,9 @@ class EffectParamRowFrb extends StatelessWidget {
   /// The parameter's graph line colour while it is selected.
   final Color? graphColour;
 
+  /// An Int row of nought or one drawn as a tick until it is keyed.
+  final bool asTick;
+
   /// What the reset arrow does in place of writing the declared default: a
   /// 3D model's material row goes back to its file's value.
   final VoidCallback? onReset;
@@ -274,6 +277,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.onLabelTap,
     this.graphColour,
     this.onReset,
+    this.asTick = false,
     this.twoColumn = false,
     this.siblings = const {},
     this.enabled = true,
@@ -377,8 +381,11 @@ class EffectParamRowFrb extends StatelessWidget {
     // The unit goes on the control itself, inside the riders: `100 %` then the
     // Blend dropdown, never `100` then Blend then `%`. The reset arrow comes
     // last, after everything the row writes.
+    // An Angle prints its own degrees, and with no dial its rider would repeat them.
+    final drawn = _control(context, t, id, value, frame);
+    final noRider = param.kind is BridgeParamKind_Angle && !sliderTrack;
     final control = _greyed(_withReset(t, id, _withRiders(t, id,
-        withUnitRider(t, param.unit, _control(context, t, id, value, frame)))));
+        noRider ? drawn : withUnitRider(t, param.unit, drawn))));
 
     // **An Action is a button, and a button says its own name**. Drawn
     // in the value column with the name column left empty, rather than as a
@@ -681,6 +688,14 @@ class EffectParamRowFrb extends StatelessWidget {
           :final hardMax
         ):
         if (value case BridgeEffectValue_Float(:final field0)) {
+          if (field0 case BridgeScalar_Static(field0: final on) when asTick) {
+            return fxEnableSwitch(
+              id: '$effectId-${param.id}',
+              on: on >= 0.5,
+              onChanged: (next) => _set(BridgeEffectValue.float(
+                  BridgeScalar.static_(next ? 1.0 : 0.0))),
+            );
+          }
           return _scalarField(
             context,
             scalar: field0,
@@ -1336,23 +1351,27 @@ class EffectParamRowFrb extends StatelessWidget {
               : () => _set(BridgeEffectValue.float(BridgeScalar.expression(
                   shown.toString(), newExpressionLanguage(context)))),
         ),
-        const SizedBox(width: 6),
-        AngleDial(
-          key: ValueKey<String>('fx-dial-$keyName'),
-          // Row height, not the standalone 34: it is a grip beside a number.
-          size: fxRowHeight(ThemeScope.of(context).theme),
-          degrees: shown,
-          step: step,
-          enabled: !_off,
-          // A dial drag is a drag like any other: preview each tick, commit
-          // the release. On a curve there is no live preview, for the same
-          // reason the numbers have none — the value being previewed is not
-          // the one that will be stored.
-          onChanged: (v) => animated
-              ? null
-              : _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
-          onChangeEnd: write,
-        ),
+        // The Timeline's value cell is one number wide, as a layer's own
+        // Rotation row is.
+        if (sliderTrack) ...[
+          const SizedBox(width: 6),
+          AngleDial(
+            key: ValueKey<String>('fx-dial-$keyName'),
+            // Row height, not the standalone 34: it is a grip beside a number.
+            size: fxRowHeight(ThemeScope.of(context).theme),
+            degrees: shown,
+            step: step,
+            enabled: !_off,
+            // A dial drag is a drag like any other: preview each tick, commit
+            // the release. On a curve there is no live preview, for the same
+            // reason the numbers have none — the value being previewed is not
+            // the one that will be stored.
+            onChanged: (v) => animated
+                ? null
+                : _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
+            onChangeEnd: write,
+          ),
+        ],
       ],
     );
   }
@@ -2760,6 +2779,7 @@ class EffectStackEditor {
           ? styles
           : ((groupStack ?? clipStack)?.call() ??
               _materials(layer) ??
+              _modelRows(layer) ??
               graphInputsOf(layer));
     }
     for (final instance in stack) {
@@ -2778,6 +2798,13 @@ class EffectStackEditor {
     final materials = layer.getMaterials();
     final ids = {for (final m in materials) m.id()};
     return _staged.keys.every((key) => ids.contains(key.$1)) ? materials : null;
+  }
+
+  /// A Model layer's rows when they hold what is staged.
+  List<BridgeEffectInstance>? _modelRows(LayerReference layer) {
+    final rows = layer.getModelRows();
+    final ids = {for (final m in rows) m.id()};
+    return _staged.keys.every((key) => ids.contains(key.$1)) ? rows : null;
   }
 
   /// A drag tick: stage the value and render it, throttled. Nothing is

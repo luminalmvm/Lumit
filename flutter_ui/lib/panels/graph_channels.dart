@@ -12,6 +12,7 @@ import '../l10n/strings.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
@@ -342,32 +343,46 @@ List<GraphChannel> graphChannels({
     // a style is an effect instance in a second list, so its curve is drawn,
     // edited and coloured by this branch rather than by a copy of it.
     // A placed graph's Inputs too, whose one instance has no id in the path,
-    // and a Model layer's materials.
+    // a Model layer's materials, and its Animation and parts, the Animation's
+    // one instance having no id in the path either.
     final styles = path.startsWith('${stylesPath(layerId)}/');
+    final animation = path.startsWith('${modelAnimationPath(layerId)}/');
+    final parts = path.startsWith('${modelPartsPath(layerId)}/');
     final inputs = path.startsWith('${inputsPath(layerId)}/');
     final materials = path.startsWith('${materialsPath(layerId)}/');
     if (inputs ||
+        animation ||
+        parts ||
         styles ||
         materials ||
         path.startsWith('${effectsPath(layerId)}/')) {
       final head = inputs
           ? inputsPath(layerId)
-          : materials
-              ? materialsPath(layerId)
-              : styles
-                  ? stylesPath(layerId)
-                  : effectsPath(layerId);
+          : animation
+              ? modelAnimationPath(layerId)
+              : parts
+                  ? modelPartsPath(layerId)
+                  : materials
+                      ? materialsPath(layerId)
+                      : styles
+                          ? stylesPath(layerId)
+                          : effectsPath(layerId);
+      final single = inputs || animation;
       final rest = path.substring(head.length + 1);
-      final slash = inputs ? -1 : rest.indexOf('/');
-      if (!inputs && slash <= 0) continue;
-      final graphInputs = entry.info.graphInputs;
+      final slash = single ? -1 : rest.indexOf('/');
+      if (!single && slash <= 0) continue;
+      final model = entry.info.modelRows;
+      final graphInputs = animation ? model?.playback : entry.info.graphInputs;
       final effectId =
-          inputs ? '${graphInputs?.id}' : rest.substring(0, slash);
+          single ? '${graphInputs?.id}' : rest.substring(0, slash);
       final paramId = rest.substring(slash + 1);
-      for (final fx in inputs
+      final part = parts && model != null ? modelRowsById(model, effectId) : null;
+      for (final fx in single
           ? [if (graphInputs != null) graphInputs]
-          : materials
-              ? entry.info.materials ?? const <BridgeEffectInstanceInfo>[]
+          : parts
+              ? [if (part != null) part]
+              : materials
+                  ? entry.info.materials ?? const <BridgeEffectInstanceInfo>[]
               : styles
                   ? entry.info.styles
                   : entry.info.effects) {
@@ -390,7 +405,7 @@ List<GraphChannel> graphChannels({
         }
         final channelId = leadId == paramId
             ? path
-            : inputs
+            : single
                 ? '$head/$leadId'
                 : '$head/$effectId/$leadId';
         if (out.any((c) => c.id == channelId)) continue;
