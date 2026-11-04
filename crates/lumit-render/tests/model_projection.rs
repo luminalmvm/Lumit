@@ -257,6 +257,123 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
     assert_eq!(reds(&frame(blurred, 5)), 0);
 }
 
+/// A strip with a skin that leans its top edge away from the camera over a
+/// second, past the box it has at rest.
+fn leaning(dir: &std::path::Path) -> std::path::PathBuf {
+    let corners = [
+        [-9.0f32, -0.7],
+        [9.0, -0.7],
+        [9.0, 0.0],
+        [-9.0, -0.7],
+        [9.0, 0.0],
+        [-9.0, 0.0],
+        [-9.0, 0.0],
+        [9.0, 0.0],
+        [9.0, 0.7],
+        [-9.0, 0.0],
+        [9.0, 0.7],
+        [-9.0, 0.7],
+    ];
+    let mut bytes: Vec<u8> = Vec::new();
+    for [x, y] in corners {
+        for f in [x, y, 0.0] {
+            bytes.extend(f.to_le_bytes());
+        }
+    }
+    for [_, y] in corners {
+        bytes.extend([u8::from(y > 0.5), 0, 0, 0]);
+    }
+    for _ in corners {
+        for f in [1.0f32, 0.0, 0.0, 0.0] {
+            bytes.extend(f.to_le_bytes());
+        }
+    }
+    for f in [0.0f32, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -6.0] {
+        bytes.extend(f.to_le_bytes());
+    }
+    std::fs::write(dir.join("leaning.bin"), &bytes).unwrap();
+    let json = format!(
+        r#"{{"asset":{{"version":"2.0"}},"scenes":[{{"nodes":[0,1]}}],
+        "nodes":[{{"mesh":0,"skin":0}},{{"name":"Root","children":[2]}},{{"name":"Lean"}}],
+        "skins":[{{"joints":[1,2]}}],
+        "materials":[{{"name":"Strip"}}],
+        "meshes":[{{"primitives":[{{"material":0,
+            "attributes":{{"POSITION":0,"JOINTS_0":1,"WEIGHTS_0":2}}}}]}}],
+        "animations":[{{"name":"Lean","samplers":[{{"input":3,"output":4}}],
+            "channels":[{{"sampler":0,"target":{{"node":2,"path":"translation"}}}}]}}],
+        "accessors":[
+            {{"bufferView":0,"componentType":5126,"count":12,"type":"VEC3",
+              "min":[-9,-0.9,0],"max":[9,0.9,0]}},
+            {{"bufferView":1,"componentType":5121,"count":12,"type":"VEC4"}},
+            {{"bufferView":2,"componentType":5126,"count":12,"type":"VEC4"}},
+            {{"bufferView":3,"componentType":5126,"count":2,"type":"SCALAR",
+              "min":[0],"max":[1]}},
+            {{"bufferView":4,"componentType":5126,"count":2,"type":"VEC3"}}],
+        "bufferViews":[{{"buffer":0,"byteLength":144}},
+            {{"buffer":0,"byteOffset":144,"byteLength":48}},
+            {{"buffer":0,"byteOffset":192,"byteLength":192}},
+            {{"buffer":0,"byteOffset":384,"byteLength":8}},
+            {{"buffer":0,"byteOffset":392,"byteLength":24}}],
+        "buffers":[{{"byteLength":{},"uri":"leaning.bin"}}]}}"#,
+        bytes.len()
+    );
+    let path = dir.join("leaning.gltf");
+    std::fs::write(&path, json).unwrap();
+    path
+}
+
+/// A projected model playing a take is the picture from its camera, following
+/// or held at the playhead, with motion blur on or off. A depth drawn at rest,
+/// or a shutter sample tested against the frame's depth, brings Base colour
+/// back on what has moved.
+#[test]
+fn a_projection_stays_on_a_model_in_its_pose() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    // Early in the take, when it moves far over a shutter but hasn't leaned far
+    // yet, and the camera hasn't slid off the small card.
+    const PLAYHEAD: u64 = 3;
+    let dir = tempfile::tempdir().unwrap();
+    let mut doc = Document::new();
+    let plate = footage(&mut doc, &picture(dir.path()));
+    let model = footage(&mut doc, &leaning(dir.path()));
+    let (alone, _) = with_plate(&mut doc, &plate, true);
+    let mut cases = Vec::new();
+    for (held, blur) in [(false, false), (false, true), (true, false), (true, true)] {
+        let comp = projected(&mut doc, &model, &plate, held);
+        let c = doc.comp_mut(comp).unwrap();
+        c.motion_blur.enabled = blur;
+        let posed = c
+            .layers
+            .iter_mut()
+            .find(|l| matches!(l.kind, LayerKind::Model { .. }))
+            .unwrap();
+        posed.switches.motion_blur = blur;
+        if let LayerKind::Model { settings, .. } = &mut posed.kind {
+            settings.take = lumit_core::model_layer::Take::First;
+            let rows = settings.materials[0].as_mut().unwrap();
+            let frame = rows.params.iter_mut().find(|p| p.id == "hold_frame");
+            frame.unwrap().value = EffectValue::Float(Property::fixed(PLAYHEAD as f64));
+        }
+        cases.push((comp, held, blur));
+    }
+    let doc = Arc::new(doc);
+    let quality = lumit_render::plan::Quality::default();
+    let mut frame = |comp, f| {
+        let shown = r.render_preview(&doc, comp, f, quality, 1.0);
+        shown.expect("the frame").0
+    };
+    let picture = frame(alone, 0);
+    for (comp, held, blur) in cases {
+        let px = frame(comp, PLAYHEAD);
+        let case = format!("held {held}, blur {blur}");
+        assert!(off_by(&px, &picture) <= 2, "{case}");
+        assert_eq!(reds(&px), 0, "{case}");
+    }
+}
+
 /// A Precomp layer read as a picture brings its own effects, as it shows
 /// them itself.
 #[test]

@@ -221,10 +221,10 @@ impl Realiser<'_> {
             None => {
                 let size = lumit_gpu::composite::scaled_size(comp.0, comp.1, self.render_scale);
                 let stand_ins: Vec<MapCaster> = (p.stand_ins.iter())
-                    .map(|(scene, model_to_comp)| MapCaster {
+                    .map(|(scene, model_to_comp, pose)| MapCaster {
                         scene,
                         model_to_comp: *model_to_comp,
-                        pose: None,
+                        pose: pose.as_ref(),
                     })
                     .collect();
                 let depth = (self.fx).projector_depth(&self.ctx, &stand_ins, p.view, size);

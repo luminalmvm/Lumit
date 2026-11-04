@@ -11,6 +11,7 @@ use lumit_core::model::{Composition, Document, EffectInstance, Layer, LayerKind}
 use lumit_core::model_layer::ModelSettings;
 use lumit_core::model_material::{camera_at, projection, Projection};
 use lumit_gpu::mesh::projector::view_of;
+use lumit_scene::pose::Pose;
 use lumit_scene::ModelScene;
 
 use crate::draw::{DofInputDraw, LayerInputDraw};
@@ -35,7 +36,7 @@ pub(crate) struct Projector {
     /// The models on this camera, each with its metres to comp pixels. What
     /// the nearest of them hides from the camera it never reaches what's
     /// behind, so a picture doesn't land twice.
-    pub stand_ins: Vec<(Arc<ModelScene>, Mat4)>,
+    pub stand_ins: Vec<(Arc<ModelScene>, Mat4, Option<Pose>)>,
 }
 
 /// The moment a Model layer is being drawn at.
@@ -208,14 +209,15 @@ fn plate(
 }
 
 /// The Model layers on `camera` that show at comp time `time`, each where it
-/// is at that moment, as that is what the camera saw.
+/// is at that moment, as that is what the camera saw. Each is in the pose it
+/// has at the playhead, the one the points tested against it are in.
 fn stand_ins(
     doc: &Arc<Document>,
     comp: &Composition,
     camera: uuid::Uuid,
     time: f64,
     at: &Moment<'_>,
-) -> Vec<(Arc<ModelScene>, Mat4)> {
+) -> Vec<(Arc<ModelScene>, Mat4, Option<Pose>)> {
     let shows = |l: &&Layer| {
         l.switches.visible && time >= l.in_point.0.to_f64() && time < l.out_point.0.to_f64()
     };
@@ -234,7 +236,9 @@ fn stand_ins(
             let model = crate::model::model_to_comp(settings, &scene.bounds, size);
             let placed = placed_at(comp, l, time, at.context);
             let to_comp = Mat4::from_cols_array_2d(&placed) * Mat4::from_cols_array_2d(&model);
-            Some((scene, to_comp))
+            let pose =
+                crate::model_motion::pose_at(comp, l, settings, &scene, at.t_comp, at.context);
+            Some((scene, to_comp, pose))
         })
         .collect()
 }

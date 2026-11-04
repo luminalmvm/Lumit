@@ -257,6 +257,11 @@ pub(crate) fn draw(
         placement,
     };
     crate::projection::aim(doc, comp, settings, &scene, &at, &mut looks);
+    // A projection is tested against one depth, in the frame's pose, so a
+    // projected model's take doesn't blur. Its placement still can.
+    if looks.iter().any(|l| l.projector.is_some()) {
+        poses = frame_pose.iter().cloned().collect();
+    }
     // A model that stays put over the shutter is drawn once.
     if shutter.iter().all(|s| *s == placement)
         && poses.iter().all(|p| Some(p) == frame_pose.as_ref())
