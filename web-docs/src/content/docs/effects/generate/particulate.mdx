@@ -259,9 +259,16 @@ The **Collide** group, what particles hit:
   ends it.
 - **Bounciness**: how much of its speed a particle keeps as it bounces.
 - **Friction**: how much a particle slows along the surface.
+- **All 3D layers**: particles hit every 3D layer that is showing, up to 32. It turns
+  Simulate's walk on.
+- **Ground**: particles hit the floor the 3D views draw. It turns Simulate's walk on.
+- **Ground height**: how far above that floor they hit it.
 
 A layer facing the same way as this one is hit across and down, at every depth. One turned
 against it in 3D is hit where particles pass through its shapes.
+
+With Simulate on, any 3D layer in Collide with is hit where particles pass through it,
+whichever way it faces. A Model layer is hit all over its surface, as its file first draws it.
 
 The **Flock** group, particles steering by their neighbours:
 
@@ -277,6 +284,9 @@ The **Sparks** group, small particles thrown out where one dies:
 
 - **Sparks**: how many sparks a particle throws out when its life ends, Edge kills it or
   it is killed on contact. Sparks throw out none.
+- **Sparks from**: **Death** throws them as a particle dies. **Bounce** throws them each time
+  it hits something. **Flight** throws that many each second. Anything but Death turns
+  Simulate's walk on.
 - **Spark speed**: how fast they fly out, every way at once.
 - **Spark life**: how long a spark lasts.
 - **Spark size**: how big a spark is, against the particle it came from.
@@ -287,6 +297,27 @@ With Separation, Alignment, Cohesion or Sparks above nought, each frame's partic
 worked out from the frame before, as with Collide with, and Density layer and Particle
 blend are not read. A row that is keyframed, has an expression or is wired counts as above
 nought.
+
+The **Simulation** group, particles worked out step by step on the graphics card:
+
+- **Simulate**: each frame's particles are worked out from the frame before, up to Max
+  particles. **Turbulence amount**, **Turbulence scale** and **Turbulence speed** become a
+  flow that pushes particles about wherever they are. Density layer, Flock and Trails are not
+  read, and a Layer emitter gives birth only on a model's surface.
+- **Sub-steps**: how many times a frame the particles move.
+- **Bake**: writes the simulation to the project's cache. A saved project keeps it in its
+  cache folder and Collect takes it along. An edit to anything it reads leaves it unread.
+- **Cancel**: stops a running bake. The frames it reached stay baked.
+- **Attractor**: how hard particles are pulled to the field's middle. Below nought it pushes
+  them away.
+- **Vortex**: how fast particles are swept round the field's middle.
+- **Vortex axis**: the line the Vortex turns about.
+- **Sphere**: how hard particles are thrown out of a ball of Field radius.
+- **Field x**, **Field y** and **Field z**: where the field's middle is.
+- **Field radius**: how far the three reach.
+
+In the scene, Collide with and Sparks turn this walk on by themselves. A simulation may differ
+slightly between graphics cards. On one machine a frame is the same however it is reached.
 
 The **Trails** group, a picture kept from frame to frame:
 
