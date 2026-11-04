@@ -1,0 +1,151 @@
+---
+title: Smoke and fire
+description: "Turns a 3D layer into a box of simulated smoke and fire, lit by the comp's lights."
+---
+
+Smoke and fire is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns a 3D layer into a box of gas. The layer's transform is the box, as wide and tall as its
+picture and as deep as the shorter of the two, or the comp's size for a layer with no picture.
+The layer's own picture does not show.
+
+Adding it turns the layer's 3D switch on. The gas is drawn with the comp's volumetric light, in
+every 3D view. It is lit by the comp's lights, cut by the shadows of 3D layers and models, stops
+at whatever is in front of it, and shadows what is under it where a light reaches. With no lights
+in the comp it is lit from above.
+
+Each frame is worked out from the frame before, from the layer's in point. Moving the box or
+changing the **Look** rows draws again without working it out again. The box's floor is solid. Gas
+fades out at its other faces.
+
+Moving the box carries the gas with it. With **Trail** on the gas stays where it is in the comp
+and the box moves through it. Rotating the box tilts up with it. Flames light their own smoke
+and no other layer, which wants a Point light.
+
+**Bake** writes the walk to the project's cache. The Bake line says **Not enough video memory**
+and no smoke is drawn when the grid does not fit on the graphics card.
+
+A `.vdb` file imports as a Model layer with no faces and this effect with **Simulate** off, and
+draws its own density and heat through the **Look** rows, with **Density** thickening it. A
+numbered file reads the numbered files after it as its next frames. Its **Up axis** starts on Z,
+and it and **Units** are set in Model settings. On a Model layer with faces the effect draws
+nothing.
+
+**Fire**, **Candle**, **Torch**, **Explosion** and **Smoke** are in the effect's presets. The effect starts as a small fire.
+
+:::note[Not built yet]
+Motion blur and camera depth of field on the gas. A Retime reads the nearest whole frame. VDB
+files in the browser build, and writing them.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Simulate** | Checkbox | On or off | On | - |
+| **Sub-steps** | Slider, whole numbers | 1 to 8 | 1 | - |
+| **Bake** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **Resolution** | Dropdown | 64 · 96 · 128 | 128 | - |
+| **Emit from** | Dropdown | Layer's box · Particles from a layer · Model layer | Layer's box | - |
+| **Emit layer** | Layer | Any layer in the composition | None | - |
+| **Emitter size** | Slider | 0 to 100 | 40 | Per cent |
+| **Density** | Slider | 0 to 200; higher | 4 | Per cent |
+| **Temperature** | Slider | 0 to 100; higher | 70 | Per cent |
+| **Fuel** | Slider | 0 to 100; higher | 60 | Per cent |
+| **Expansion** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Buoyancy** | Slider | -100 to 200; any value by typing | 100 | Per cent |
+| **Turbulence** | Slider | 0 to 100; higher | 30 | Per cent |
+| **Vorticity** | Slider | 0 to 100; higher | 30 | Per cent |
+| **Dissipation** | Slider | 0 to 100; higher | 35 | Per cent |
+| **Wind x** | Slider | -1000 to 1000; any value by typing | 0 | - |
+| **Wind y** | Slider | -1000 to 1000; any value by typing | 0 | - |
+| **Wind z** | Slider | -1000 to 1000; any value by typing | 0 | - |
+| **Trail** | Checkbox | On or off | Off | - |
+| **Collide with** | Layer | Any layer in the composition | None | - |
+| **All 3D layers** | Checkbox | On or off | Off | - |
+| **Smoke colour** | Colour | Each channel 0 to 4, scene-linear | 0.18, 0.18, 0.19, 1 | - |
+| **Fire brightness** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Fire colour** | Colour | Each channel 0 to 16, scene-linear | 1, 0.15, 0.008, 1 | - |
+| **Fire core** | Colour | Each channel 0 to 16, scene-linear | 3, 1.3, 0.12, 1 | - |
+| **Shadow strength** | Slider | 0 to 100 | 100 | Per cent |
+
+In the Effect Controls panel:
+
+- **Simulation** groups **Simulate**, **Sub-steps**, **Bake**, **Cancel**, **Resolution**.
+- **Emitter** groups **Emit from**, **Emit layer**, **Emitter size**, **Density**, **Temperature**, **Fuel**, **Expansion**.
+- **Motion** groups **Buoyancy**, **Turbulence**, **Vorticity**, **Dissipation**, **Wind x**, **Wind y**, **Wind z**, **Trail**.
+- **Collision** groups **Collide with**, **All 3D layers**, and starts closed.
+- **Look** groups **Smoke colour**, **Fire brightness**, **Fire colour**, **Fire core**, **Shadow strength**.
+- **Emit layer** is editable while **Emit from** is anything but Layer's box.
+- **Emitter size** is editable while **Emit from** is set to Layer's box.
+- **Sub-steps** is editable while **Simulate** is on.
+- **Resolution** is editable while **Simulate** is on.
+- **Emit from** is editable while **Simulate** is on.
+- **Emit layer** is editable while **Simulate** is on.
+- **Emitter size** is editable while **Simulate** is on.
+- **Temperature** is editable while **Simulate** is on.
+- **Fuel** is editable while **Simulate** is on.
+- **Expansion** is editable while **Simulate** is on.
+- **Buoyancy** is editable while **Simulate** is on.
+- **Vorticity** is editable while **Simulate** is on.
+- **Turbulence** is editable while **Simulate** is on.
+- **Dissipation** is editable while **Simulate** is on.
+- **Wind x** is editable while **Simulate** is on.
+- **Wind y** is editable while **Simulate** is on.
+- **Wind z** is editable while **Simulate** is on.
+- **Trail** is editable while **Simulate** is on.
+- **Collide with** is editable while **Simulate** is on.
+- **All 3D layers** is editable while **Simulate** is on.
+- **Bake** is editable while **Simulate** is on.
+- **Cancel** is editable while **Simulate** is on.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Simulate**: work each frame out from the frame before. Off, only what a bake or the card
+  already holds is shown.
+- **Sub-steps**: how many times a frame the gas moves.
+- **Bake**: write the simulation to the project's cache.
+- **Cancel**: stop a bake and keep the frames written.
+- **Resolution**: cells along the box's longest side.
+- **Emit from**: a patch on the box's floor, the particles of the Particulate on **Emit layer**,
+  or the surface of the Model layer on **Emit layer**.
+- **Emit layer**: the layer the gas comes from.
+- **Emitter size**: how wide the patch is, as a share of the floor.
+- **Density**: how much smoke it gives off.
+- **Temperature**: how hot the gas is where it starts. Hot gas rises, and glows past a third.
+- **Fuel**: how much there is to burn where the gas starts. Fuel that is hot burns, which heats
+  the gas, swells it and gives off smoke.
+- **Expansion**: how hard burning swells the gas.
+- **Buoyancy**: how hard heat pushes the gas up. Below nought it sinks.
+- **Turbulence**: how much the gas is broken up into small swirls.
+- **Vorticity**: how much curls are kept alive.
+- **Dissipation**: how fast smoke thins and heat fades.
+- **Wind x**, **Wind y** and **Wind z**: the speed the air moves at along the box's sides, in
+  comp pixels a second.
+- **Trail**: moving the box leaves the gas behind in the comp.
+- **Collide with**: a layer the gas goes round.
+- **All 3D layers**: the gas goes round every 3D layer and Model layer in the comp too.
+- **Smoke colour**: the smoke's colour, as light falling on it shows it.
+- **Fire brightness**: how much light hot gas gives.
+- **Fire colour**: the fire at its coolest.
+- **Fire core**: the fire at its hottest.
+- **Shadow strength**: how dark the smoke's shadows are, on itself and on what is under it.
+
+## Related
+
+- [Particulate](/effects/generate/particulate/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)
