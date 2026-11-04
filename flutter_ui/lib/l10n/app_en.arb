@@ -187,6 +187,10 @@
   "@lightEnvironment": {
     "description": "Light type: light from a picture of everything round the scene, such as an HDRI."
   },
+  "layerRowEnvironmentSource": "source",
+  "@layerRowEnvironmentSource": {
+    "description": "Timeline layer row, small word after the name: an Environment light reads this layer's picture, so the layer itself is never drawn and its eye switch does nothing. Lower case, one word."
+  },
   "lightSource": "Source",
   "@lightSource": {
     "description": "Environment light row: the layer whose picture surrounds the scene and lights it."

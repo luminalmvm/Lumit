@@ -119,6 +119,11 @@ bool canSurround(BridgeLayerEntry l) => switch (l.info.kind) {
       _ => false,
     };
 
+/// Whether layer [id] is an Environment light's picture, and so never drawn.
+bool feedsEnvironment(List<BridgeLayerEntry> stack, UuidValue id) =>
+    stack.any((e) =>
+        e.info.light?.kind == BridgeLightKind.environment &&
+        e.info.light?.source == id);
 
 /// Whether a light of this kind weakens with distance.
 bool lightFallsOff(BridgeLightKind kind) =>
