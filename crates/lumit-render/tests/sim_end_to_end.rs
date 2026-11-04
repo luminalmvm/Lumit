@@ -85,6 +85,7 @@ fn project(rows: impl FnOnce(&mut EffectInstance)) -> (Arc<Document>, Uuid) {
     }));
     let mut e = instantiate("particulate").unwrap();
     set(&mut e, "simulate", EffectValue::Bool(true));
+    set(&mut e, "seed", EffectValue::Seed(7));
     float(&mut e, "emit_rate", 3000.0);
     float(&mut e, "life", 3.0);
     float(&mut e, "gravity", 400.0);
@@ -166,6 +167,40 @@ fn a_frame_is_the_same_however_it_is_reached() {
         pixels(&taller, id, 51).unwrap() == walked_alone(&taller, id, 51).unwrap(),
         "kept before the resize"
     );
+}
+
+/// Without Simulate, none of what it brought changes a pixel, so what was saved
+/// before it looks as it did: not the floor, not All 3D layers, and not a
+/// collider or sparks left set in the scene.
+#[test]
+fn only_simulate_changes_anything() {
+    let off = |rows: &dyn Fn(&mut EffectInstance)| {
+        project(|e| {
+            set(e, "simulate", EffectValue::Bool(false));
+            rows(e);
+        })
+    };
+    let (plain, id) = off(&|_| {});
+    let Some(before) = pixels(&plain, id, 40) else {
+        return;
+    };
+    let (floor, id) = off(&|e| {
+        set(e, "ground", EffectValue::Bool(true));
+        set(e, "collide_all", EffectValue::Bool(true));
+        set(e, "sparks_from", EffectValue::Choice(2));
+        float(e, "attractor", 500.0);
+    });
+    assert!(pixels(&floor, id, 40).unwrap() == before, "rows left set");
+    let in_scene = |e: &mut EffectInstance| set(e, "in_scene", EffectValue::Bool(true));
+    let (scene, id) = off(&in_scene);
+    let before = pixels(&scene, id, 40).unwrap();
+    let (scene, id) = off(&|e| {
+        in_scene(e);
+        float(e, "sparks", 5.0);
+        float(e, "separation", 50.0);
+        set(e, "collide_with", EffectValue::Layer(Some(Uuid::now_v7())));
+    });
+    assert!(pixels(&scene, id, 40).unwrap() == before, "in the scene");
 }
 
 /// A change to how particles look draws again, and walks nothing. The picture
@@ -363,7 +398,42 @@ fn a_baked_frame_is_the_walked_frame() {
     std::fs::remove_dir_all(folder.path().join("sim")).unwrap();
     assert!(lumit_render::sim::bake::status(&doc, id, layer, effect).is_none());
     assert!(walked_alone(&doc, id, 44).unwrap() == baked, "walked again");
+    // A layer shown late is baked for the frames it shows, and none before.
+    let mut late = Document::clone(&doc);
+    let shown = &mut late.comp_mut(id).unwrap().layers[0];
+    shown.in_point = CompTime(Rational::new(4, 1).unwrap());
+    shown.out_point = CompTime(Rational::new(6, 1).unwrap());
+    let late = Arc::new(late);
+    let asked = lumit_render::sim::bake::press(Arc::clone(&late), id, layer, effect);
+    assert!(matches!(asked, lumit_render::track::Requested::Started));
+    loop {
+        match progress(effect) {
+            Some(Progress::Done) => break,
+            Some(Progress::Failed(why)) => panic!("the bake failed: {why:?}"),
+            _ => std::thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    }
+    assert_eq!(
+        lumit_render::sim::bake::status(&late, id, layer, effect),
+        Some((60, 60))
+    );
+    let files = |dir: &std::path::Path| walkdir_frames(dir);
+    let frames = files(&folder.path().join("sim"));
+    assert!(frames.iter().all(|f| *f >= 112 && *f <= 180), "{frames:?}");
     lumit_render::sim::bake::set_root(None);
+}
+
+/// Every frame baked under `dir`.
+fn walkdir_frames(dir: &std::path::Path) -> Vec<i64> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        if entry.path().is_dir() {
+            out.extend(walkdir_frames(&entry.path()));
+        } else if let Some(f) = entry.file_name().to_string_lossy().strip_suffix(".sim") {
+            out.push(f.parse().unwrap());
+        }
+    }
+    out
 }
 
 /// Sparks are thrown from what dies on a floor and from what bounces off it, out

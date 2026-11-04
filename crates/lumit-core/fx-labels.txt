@@ -1231,6 +1231,7 @@ Spacing x
 Spacing y
 Spacing z
 Span mode
+Spark inherit
 Spark life
 Spark size
 Spark speed

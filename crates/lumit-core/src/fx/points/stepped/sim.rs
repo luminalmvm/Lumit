@@ -509,6 +509,43 @@ mod tests {
         assert!(wanted(&e));
     }
 
+    /// What needs the card greys until Simulate is on, and an old walk's rows grey
+    /// in the scene and Particle blend beside them only without it.
+    #[test]
+    fn rows_wait_for_simulate() {
+        use crate::fx::enabled::param_enabled;
+        let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
+        let set = |e: &mut EffectInstance, id: &str, v: EffectValue| {
+            e.params.iter_mut().find(|p| p.id == id).unwrap().value = v;
+        };
+        for id in ["ground", "collide_all", "sparks_from", "attractor", "bake"] {
+            assert!(!param_enabled(&e, id), "{id} waits");
+        }
+        assert!(param_enabled(&e, "collide_with"));
+        assert!(!param_enabled(&e, "on_contact"), "nothing to hit");
+        set(&mut e, "in_scene", EffectValue::Bool(true));
+        assert!(
+            !param_enabled(&e, "collide_with"),
+            "the old walk's in the scene"
+        );
+        set(
+            &mut e,
+            "sparks",
+            EffectValue::Float(crate::anim::Property::fixed(3.0)),
+        );
+        assert!(
+            !param_enabled(&e, "particle_blend"),
+            "the old walk reads none"
+        );
+        set(&mut e, "simulate", EffectValue::Bool(true));
+        for id in ["ground", "collide_all", "collide_with", "particle_blend"] {
+            assert!(param_enabled(&e, id), "{id} is live");
+        }
+        assert!(!param_enabled(&e, "on_contact"), "still nothing to hit");
+        set(&mut e, "ground", EffectValue::Bool(true));
+        assert!(param_enabled(&e, "on_contact"));
+    }
+
     /// A row in the list is a row, and the walk's name follows what it reads and
     /// not how it looks.
     #[test]

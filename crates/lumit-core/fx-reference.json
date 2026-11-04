@@ -12848,6 +12848,17 @@
           "hard_min": 0.0
         },
         {
+          "id": "spark_inherit",
+          "label": "Spark inherit",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
           "id": "spark_life",
           "label": "Spark life",
           "kind": "float",
@@ -13210,6 +13221,7 @@
             "sparks",
             "sparks_from",
             "spark_speed",
+            "spark_inherit",
             "spark_life",
             "spark_size"
           ],
@@ -13428,6 +13440,12 @@
         },
         {
           "param": "sparks_from",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "spark_inherit",
           "on": "simulate",
           "cond": "bool_is",
           "value": true

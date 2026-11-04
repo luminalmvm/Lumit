@@ -2602,6 +2602,9 @@ bool waitsForSimulate(
   return false;
 }
 
+bool _isOn(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Bool && value.field0;
+
 bool _ruleHolds(
   BridgeEnabledCond cond,
   BridgeEffectValue on,
@@ -2609,8 +2612,7 @@ bool _ruleHolds(
 ) =>
     switch ((cond, on)) {
       (BridgeEnabledCond_Or(:final field0, :final field1), _) =>
-        (values[field0] case BridgeEffectValue_Bool(field0: true)) ||
-            _ruleHolds(field1, on, values),
+        _isOn(values[field0]) || _ruleHolds(field1, on, values),
       (
         BridgeEnabledCond_BoolIs(:final field0),
         BridgeEffectValue_Bool(field0: final v)

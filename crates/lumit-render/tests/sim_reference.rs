@@ -298,5 +298,5 @@ fn the_card_walks_where_the_reference_walks() {
             worst = worst.max((state[k] - q.at[k]).abs());
         }
     }
-    assert!(worst < 2.0, "worst place {worst} px");
+    assert!(worst < 0.1, "worst place {worst} px");
 }
