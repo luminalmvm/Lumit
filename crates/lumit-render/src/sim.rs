@@ -6,7 +6,7 @@
 //! one is the frame walked from the start, which is what lets an export match
 //! the Viewer.
 
-pub(crate) mod bake;
+pub mod bake;
 mod colliders;
 mod distances;
 
@@ -192,7 +192,7 @@ fn steps_of(then: &Inputs, steady: &Steady, frame: i64, h: f64, dt: f64) -> Vec<
     let count = if whole { phys.steps.max(1) } else { 1 };
     let each = h / f64::from(count);
     // The flow's push is sized so its top speed at this Drag is about the row.
-    let curl = then.rows.turbulence_amount.max(0.0) * (then.rows.drag.max(0.0) + 1.0) * 2.0;
+    let curl = then.rows.turbulence_amount.max(0.0) * then.rows.drag.max(0.5) * 2.0;
     (0..count)
         .map(|k| {
             let end = f64::from(k + 1) * each;
@@ -317,7 +317,7 @@ fn start_from(
         live.ledger = kept.ledger;
     }
     let reached = kept_frame(here, live, target);
-    if let Some(baked) = bake::nearest(src.doc, name, target, reached) {
+    if let Some(baked) = bake::nearest(src.inst.id, name, target, reached) {
         if fx.sim_write(ctx, &live.work, &baked.bytes) {
             live.ledger = baked.ledger;
             return Some(());
@@ -503,6 +503,74 @@ fn walked(
     Some(work)
 }
 
+/// Lets go of every walk and kept state, on a project going away.
+pub fn let_go() {
+    if let Ok(mut store) = STORE.lock() {
+        *store = None;
+    }
+}
+
+/// How long one step of `effect`'s walk takes on the card, in milliseconds, the
+/// fastest of `runs` frames after `warm` to fill it. `None` with no card.
+#[must_use]
+pub fn timed_steps(
+    doc: &Arc<Document>,
+    comp: uuid::Uuid,
+    layer: uuid::Uuid,
+    effect: uuid::Uuid,
+    warm: i64,
+    runs: i64,
+) -> Option<f64> {
+    let src = Source::find(doc, comp, layer, effect, lumit_core::fx::drivers::NO_CLONE)?;
+    let ctx = GpuContext::headless().ok()?;
+    let fx = FxEngine::new(&ctx);
+    let mut now = src.inputs(0.0)?;
+    let cap = now.rows.points().cap;
+    let steps = f64::from(physics(&now.rows).steps);
+    let mut live = bake::fresh(&fx, &ctx, [0; 32], cap);
+    fx.sim_clear(&ctx, &live.work);
+    live.ledger.frame = 0;
+    let mut best = f64::INFINITY;
+    for k in 0..warm + runs {
+        let begun = std::time::Instant::now();
+        now = frame_on(&fx, &ctx, &src, &mut live, &now)?;
+        ctx.device.poll(wgpu::Maintain::Wait);
+        if k >= warm {
+            best = best.min(begun.elapsed().as_secs_f64() * 1e3 / steps);
+        }
+    }
+    Some(best)
+}
+
+/// The particles a simulation's op got to, for a wire to read. `None` for any
+/// other op, and when the frame is no longer wanted.
+pub(crate) fn for_stream(
+    fx: &FxEngine,
+    ctx: &GpuContext,
+    aux: AuxSlot<'_>,
+) -> Option<Arc<SimWork>> {
+    let sched = aux.schedule()?;
+    let carried = sched.trails.as_ref().filter(|t| t.sim)?;
+    let (effect, _) = aux.op();
+    let src = Source::find(
+        &carried.doc,
+        carried.comp,
+        carried.layer,
+        effect,
+        carried.clone,
+    )?;
+    walked(fx, ctx, &src, &walk_name(carried), sched.t)
+}
+
+/// How `work`'s particles are drawn with the rows `p`.
+pub(crate) fn view<'a>(work: &'a SimWork, p: Params<'_>) -> SimView<'a> {
+    SimView {
+        state: &work.state,
+        px: P::px_scale_of(p),
+        spark_size: physics(&P::read(p)).spark_size,
+    }
+}
+
 /// A simulated Particulate over `input`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw(
@@ -528,14 +596,9 @@ pub(crate) fn draw(
     let Some(work) = work else {
         return input.clone();
     };
-    let view = SimView {
-        state: &work.state,
-        px: P::px_scale_of(p),
-        spark_size: physics(&P::read(p)).spark_size,
-    };
     crate::gpufx::Particulate::with_op(p, aux, |op, sprite| {
         let op = ParticulateOp {
-            sim: Some(view),
+            sim: Some(view(&work, p)),
             ..*op
         };
         crate::realise::scene::draw(fx, ctx, input, (w, h), sprite, &op, p)

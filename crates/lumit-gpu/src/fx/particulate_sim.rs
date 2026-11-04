@@ -578,7 +578,7 @@ impl FxEngine {
             cp.dispatch_workgroups(1, 1, 1);
             cp.set_pipeline(&set.place);
             cp.dispatch_workgroups(per_particle, 1, 1);
-            let born = (s.steady_n + s.burst_n).min(work.cap);
+            let born = s.steady_n + s.burst_n;
             if born > 0 {
                 cp.set_pipeline(&set.birth);
                 cp.dispatch_workgroups(born.div_ceil(EVAL_WORKGROUP), 1, 1);

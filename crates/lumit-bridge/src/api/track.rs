@@ -466,8 +466,9 @@ pub fn fire_effect_action(
             _ => Err(BridgeError::InvalidParam),
         };
     }
-    // Bake points' two. The bake reads the document as it stands now.
-    if fx.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+    // Bake points' two, and a simulation's. The bake reads the document as it
+    // stands now.
+    if matches!(fx.effect.match_name.as_str(), "bake_points" | "particulate") {
         return match param.as_str() {
             CANCEL => {
                 lumit_render::track::cancel(effect);
@@ -1091,7 +1092,8 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         e.id == effect
             && (e.effect.match_name == lumit_core::track::PLANAR_TRACK
                 || e.effect.match_name == track_points::MATCH_NAME
-                || e.effect.match_name == bake_points::MATCH_NAME)
+                || e.effect.match_name == bake_points::MATCH_NAME
+                || e.effect.match_name == "particulate")
     }) else {
         return status;
     };
@@ -1128,6 +1130,21 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         }
         status.frames = baked.frames;
         status.clip_frames = baked.frames;
+    }
+    // A simulation's bake.
+    let sim = || {
+        let project = layer.project().ok()?;
+        let doc = project.read().ok()?.store.snapshot();
+        lumit_render::sim::bake::status(&doc, layer.comp_id, layer.layer_id, effect)
+    };
+    if inst.effect.match_name == "particulate" {
+        if let Some((frames, span)) = sim() {
+            status.frames = frames;
+            status.clip_frames = span;
+            if status.stage == BridgeTrackStage::Idle {
+                status.stage = BridgeTrackStage::Done;
+            }
+        }
     }
     // A bake this instance may read. Fewer frames than the span is one a
     // budget stopped early.

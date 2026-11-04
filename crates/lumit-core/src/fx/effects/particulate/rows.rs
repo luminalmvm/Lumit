@@ -78,6 +78,8 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         &[
             "simulate",
             "sub_steps",
+            "bake",
+            "cancel",
             "attractor",
             "vortex",
             "vortex_axis",
@@ -270,6 +272,16 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
     },
     EnabledWhen {
         param: "field_radius",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "bake",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "cancel",
         on: "simulate",
         cond: EnabledCond::BoolIs(true),
     },

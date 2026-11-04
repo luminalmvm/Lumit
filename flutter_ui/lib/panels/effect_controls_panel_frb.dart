@@ -3499,6 +3499,11 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
       _ => null,
     };
 
+bool _simulating(Map<String, BridgeEffectValue> values) {
+  final on = values['simulate'];
+  return on is BridgeEffectValue_Bool && on.field0;
+}
+
 /// The display an effect draws *above* its rows, or null for the effects that
 /// draw none — which is nearly all of them.
 ///
@@ -3562,8 +3567,17 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // Bake points' bake is filed and reported the same way, in its own words.
+      // Bake points' bake is filed and reported the same way, in its own words,
+      // and so is a simulation's.
       'bake_points' => PlanarTrackDisplayFrb(
+          key: ValueKey<String>('fx-planar-track-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+          bake: true,
+        ),
+      'particulate' when _simulating(values) => PlanarTrackDisplayFrb(
           key: ValueKey<String>('fx-planar-track-display-$effectId'),
           layer: layer,
           effectId: effectId,

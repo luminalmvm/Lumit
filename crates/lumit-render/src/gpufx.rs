@@ -4805,11 +4805,8 @@ fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u3
 /// always draw something (particulate.md §2) and one branch resolved host-side
 /// cannot come to mean two things in two places.
 ///
-/// **The degradation rung is [`lumit_gpu::fx::particulate::ParticulateOp::cap`]**:
-/// halve it and the newest half is what draws, by the same rule the cap itself
-/// applies. This pass always hands over the *declared* cap, which is why the
-/// rung is never on the export path — there is nothing on this path that could
-/// turn it on.
+/// **The degradation rung is [`lumit_gpu::fx::particulate::ParticulateOp::cap`]**,
+/// and this pass always hands over the declared one.
 pub(crate) struct Particulate;
 impl Particulate {
     /// The GPU op this frame's Particulate draws, handed to `f` with the
@@ -4971,16 +4968,19 @@ impl GpuEffect for Particulate {
     ) -> Option<lumit_core::fx::points::PointsStream> {
         use lumit_core::fx::effects::particulate::Particulate as P;
         // A walked stream was made before the render, by the driver walk, and
-        // Trails draw from that walk too.
+        // Trails draw from that walk too. A simulation's is only on the card.
+        let walked = crate::sim::for_stream(fx, ctx, aux);
         if aux
             .schedule()
-            .is_some_and(|s| s.stepped.is_some() || s.trails.is_some())
+            .is_some_and(|s| s.stepped.is_some() || (s.trails.is_some() && walked.is_none()))
         {
             return None;
         }
         let px_scale = P::px_scale_of(p);
         let (count, words, projection) = Particulate::with_op(p, aux, |op, _| {
-            op.density?;
+            let sim = walked.as_ref().map(|w| crate::sim::view(w, p));
+            let op = &lumit_gpu::fx::particulate::ParticulateOp { sim, ..*op };
+            sim.is_some().then_some(()).or(op.density.map(|_| ()))?;
             let (count, words) = fx.particulate_stream(ctx, tex, w, h, op)?;
             Some((count, words, op.projection))
         })?;

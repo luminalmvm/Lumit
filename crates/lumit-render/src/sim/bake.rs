@@ -1,10 +1,78 @@
-//! A simulation baked to disk: the state every few frames, in files named by
-//! the walk, so a heavy sim opens without simulating and travels with Collect.
+//! A simulation baked to disk: the state every [`KEEP_EVERY`](super::KEEP_EVERY)
+//! frames, in files named by the walk, in the project's cache folder beside it
+//! once it has been saved, so a heavy sim opens without simulating and travels
+//! with Collect. A baked state is only ever a shortcut, like a kept one.
 
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use lumit_core::fx::points::sim::Ledger;
+use lumit_core::fx::points::stepped::carried;
 use lumit_core::model::Document;
+use uuid::Uuid;
+
+use super::{colliders, frame_on, start_from, walk_name, Live, Source, KEEP_EVERY};
+use crate::track::{AnalysisError, Progress, Requested};
+
+/// The folder under a cache root that bakes live in.
+const FOLDER: &str = "sim";
+
+/// The first bytes of a baked state, and how its header is laid out.
+const MAGIC: &[u8; 8] = b"LUMSIM01";
+const HEAD: usize = 8 + 8 + 8 + 8 + 8;
+
+/// The most a baked state says it unpacks to: a million particles.
+const MOST: usize = 16 + 48 * 1_000_000;
+
+/// The cache folders of the projects open in this session, latest first.
+static ROOTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+/// Look for bakes beside `project`, in its cache folder and where Collect puts
+/// them, and bake into its cache folder from now on.
+pub fn project_opened(project: &Path) {
+    let beside = lumit_cache::disk::sidecar_root(project).map(|r| r.join(FOLDER));
+    let collected = project.parent().map(|d| d.join(FOLDER));
+    if let Ok(mut roots) = ROOTS.lock() {
+        for root in collected.into_iter().chain(beside) {
+            roots.retain(|r| *r != root);
+            roots.insert(0, root);
+        }
+    }
+}
+
+/// The machine's own cache, for a project with no folder yet.
+fn machine_root() -> Option<PathBuf> {
+    Some(lumit_project::cache_dir()?.join(FOLDER))
+}
+
+fn roots() -> Vec<PathBuf> {
+    let mut all = ROOTS.lock().map(|r| r.clone()).unwrap_or_default();
+    all.extend(machine_root());
+    all
+}
+
+fn hex(name: &[u8; 32]) -> String {
+    name.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn walk_dir(root: &Path, effect: Uuid, name: &[u8; 32]) -> PathBuf {
+    root.join(effect.to_string()).join(hex(name))
+}
+
+/// The frames baked for this walk, in whichever folder has them, and that folder.
+fn baked_frames(effect: Uuid, name: &[u8; 32]) -> Option<(PathBuf, Vec<i64>)> {
+    roots().into_iter().find_map(|root| {
+        let dir = walk_dir(&root, effect, name);
+        let listed = lumit_ingress::files::list(&dir).ok()?;
+        let mut frames: Vec<i64> = listed
+            .iter()
+            .filter_map(|(file, _)| file.strip_suffix(".sim")?.parse().ok())
+            .collect();
+        frames.sort_unstable();
+        (!frames.is_empty()).then_some((dir, frames))
+    })
+}
 
 /// A state read back from disk.
 pub(super) struct Baked {
@@ -12,12 +80,216 @@ pub(super) struct Baked {
     pub bytes: Vec<u8>,
 }
 
-/// The furthest state baked of `walk` past `after` and up to `frame`.
+fn pack(ledger: &Ledger, bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(HEAD + bytes.len() / 2);
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&ledger.frame.to_le_bytes());
+    out.extend_from_slice(&ledger.carry.to_le_bytes());
+    out.extend_from_slice(&ledger.births.to_le_bytes());
+    out.extend_from_slice(&u64::from(ledger.high).to_le_bytes());
+    out.extend_from_slice(&lz4_flex::compress_prepend_size(bytes));
+    out
+}
+
+/// The inverse. The size the file announces is checked before anything is
+/// allocated for it, since the file's number is not this program's.
+fn unpack(file: &[u8]) -> Option<Baked> {
+    let word = |at: usize| -> Option<[u8; 8]> { file.get(at..at + 8)?.try_into().ok() };
+    if file.get(..8)? != MAGIC {
+        return None;
+    }
+    let body = file.get(HEAD..)?;
+    let announced = u32::from_le_bytes(body.get(..4)?.try_into().ok()?);
+    if announced as usize > MOST {
+        return None;
+    }
+    Some(Baked {
+        ledger: Ledger {
+            frame: i64::from_le_bytes(word(8)?),
+            carry: f64::from_le_bytes(word(16)?),
+            births: u64::from_le_bytes(word(24)?),
+            high: u64::from_le_bytes(word(32)?) != 0,
+        },
+        bytes: lz4_flex::decompress_size_prepended(body).ok()?,
+    })
+}
+
+/// The furthest state baked of `name` past `after` and up to `frame`.
 pub(super) fn nearest(
-    _doc: &Arc<Document>,
-    _walk: &[u8; 32],
-    _frame: i64,
-    _after: Option<i64>,
+    effect: Uuid,
+    name: &[u8; 32],
+    frame: i64,
+    after: Option<i64>,
 ) -> Option<Baked> {
-    None
+    let (dir, frames) = baked_frames(effect, name)?;
+    let at = frames
+        .iter()
+        .rev()
+        .find(|f| **f <= frame && after.is_none_or(|a| **f > a))?;
+    unpack(&lumit_ingress::files::read(&dir.join(format!("{at}.sim"))).ok()?)
+}
+
+/// What `effect` on `layer` is baked to, as frames from its in point and the
+/// frames its span holds. `None` when nothing matches its rows as they stand.
+#[must_use]
+pub fn status(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Option<(u32, u32)> {
+    let c = doc.comp(comp)?;
+    let l = c.layers.iter().find(|l| l.id == layer)?;
+    let e = l.effects.iter().find(|e| e.id == effect)?;
+    let carriage =
+        crate::trails::carriage(doc, c, l, e, lumit_core::fx::drivers::NO_CLONE, [0.0; 2]);
+    let (_, frames) = baked_frames(effect, &walk_name(&carriage))?;
+    let rate = c.frame_rate;
+    let span = rate
+        .frame_at(l.out_point)
+        .saturating_sub(rate.frame_at(l.in_point));
+    let last = *frames.last()?;
+    Some((
+        u32::try_from(last + 1).unwrap_or(u32::MAX),
+        u32::try_from(span.max(last + 1)).unwrap_or(u32::MAX),
+    ))
+}
+
+/// Whether Bake on `effect` should bake its simulation.
+#[must_use]
+pub fn wanted(doc: &Document, comp: Uuid, layer: Uuid, effect: Uuid) -> bool {
+    doc.comp(comp).is_some_and(|c| {
+        c.layers
+            .iter()
+            .filter(|l| l.id == layer)
+            .flat_map(|l| &l.effects)
+            .any(|e| e.id == effect && lumit_core::fx::points::sim::wanted(c, e))
+    })
+}
+
+/// Bakes `effect` on its own thread, on a device of its own, with its progress
+/// filed under the effect. A new bake replaces the last.
+pub fn request(doc: Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Requested {
+    crate::track::start(effect, move |cancel| {
+        let step = |step| crate::track::report(effect, step);
+        let outcome = match walk(&doc, comp, layer, effect, cancel, &step) {
+            Ok(()) => Progress::Done,
+            Err(AnalysisError::Cancelled) => Progress::Cancelled,
+            Err(e) => Progress::Failed(e),
+        };
+        crate::track::finish(effect, Some(outcome));
+    })
+}
+
+/// Working buffers for a walk nothing else will share.
+pub(super) fn fresh(
+    fx: &lumit_gpu::fx::FxEngine,
+    ctx: &lumit_gpu::GpuContext,
+    name: [u8; 32],
+    cap: u32,
+) -> Live {
+    Live {
+        name,
+        work: Arc::new(fx.sim_work(ctx, cap)),
+        ledger: Ledger {
+            frame: i64::MAX,
+            ..Ledger::default()
+        },
+        between: None,
+        colliders: colliders::Models::default(),
+        _held: None,
+    }
+}
+
+/// The whole of one bake: every frame of the layer's span, walked from the in
+/// point, with a state written every so often.
+fn walk(
+    doc: &Arc<Document>,
+    comp: Uuid,
+    layer: Uuid,
+    effect: Uuid,
+    cancel: &AtomicBool,
+    report: &dyn Fn(Progress),
+) -> Result<(), AnalysisError> {
+    let src = Source::find(doc, comp, layer, effect, lumit_core::fx::drivers::NO_CLONE)
+        .ok_or(AnalysisError::Unreadable)?;
+    if !carried(src.comp, src.inst) {
+        return Err(AnalysisError::Unreadable);
+    }
+    let rate = src.comp.frame_rate;
+    let span = rate
+        .frame_at(src.layer.out_point)
+        .saturating_sub(rate.frame_at(src.layer.in_point))
+        .max(0);
+    if span == 0 {
+        return Err(AnalysisError::NoFrames);
+    }
+    let total = span as usize;
+    let ctx = lumit_gpu::GpuContext::headless().map_err(|_| AnalysisError::Unreadable)?;
+    let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+    let carriage = crate::trails::carriage(
+        doc,
+        src.comp,
+        src.layer,
+        src.inst,
+        lumit_core::fx::drivers::NO_CLONE,
+        [0.0; 2],
+    );
+    let name = walk_name(&carriage);
+    let root = roots()
+        .into_iter()
+        .next()
+        .ok_or(AnalysisError::Unreadable)?;
+    // One effect has one bake, so the last one goes.
+    let _ = lumit_ingress::files::remove_dir_all(&root.join(effect.to_string()));
+    let dir = walk_dir(&root, effect, &name);
+    lumit_ingress::files::create_dir_all(&dir).map_err(|_| AnalysisError::Unreadable)?;
+
+    let first = src.inputs(0.0).ok_or(AnalysisError::Unreadable)?;
+    let cap = first.rows.points().cap;
+    let mut live = fresh(&fx, &ctx, name, cap);
+    start_from(&fx, &ctx, &src, &name, &mut live, 0, 0).ok_or(AnalysisError::Unreadable)?;
+    let mut now = first;
+    // A bake stopped part of the way is the frames it got to.
+    while live.ledger.frame < span {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(AnalysisError::Cancelled);
+        }
+        report(Progress::Tracking {
+            done: live.ledger.frame as usize,
+            total,
+        });
+        now = frame_on(&fx, &ctx, &src, &mut live, &now).ok_or(AnalysisError::Unreadable)?;
+        if live.ledger.frame % KEEP_EVERY == 0 {
+            let bytes = fx
+                .sim_read(&ctx, &live.work)
+                .ok_or(AnalysisError::Unreadable)?;
+            let file = dir.join(format!("{}.sim", live.ledger.frame));
+            lumit_ingress::files::write(&file, &pack(&live.ledger, &bytes))
+                .map_err(|_| AnalysisError::Unreadable)?;
+        }
+    }
+    report(Progress::Tracking { done: total, total });
+    Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// What a bake writes reads back whole, and a file saying more than a bake
+    /// can hold is no bake.
+    #[test]
+    fn a_baked_state_reads_back() {
+        let ledger = Ledger {
+            frame: 16,
+            carry: 0.25,
+            births: 4096,
+            high: true,
+        };
+        let bytes: Vec<u8> = (0..4096u32).flat_map(|v| v.to_le_bytes()).collect();
+        let file = pack(&ledger, &bytes);
+        let back = unpack(&file).unwrap();
+        assert_eq!(back.ledger, ledger);
+        assert_eq!(back.bytes, bytes);
+        let mut lying = file;
+        lying[HEAD..HEAD + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(unpack(&lying).is_none());
+    }
 }

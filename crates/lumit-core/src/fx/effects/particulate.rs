@@ -374,6 +374,14 @@ pub struct Particulate {
     )]
     pub sub_steps: i32,
 
+    /// Bake the simulation to the project's cache.
+    #[action(label = "Bake")]
+    pub bake: (),
+
+    /// Stop a running bake.
+    #[action(label = "Cancel")]
+    pub cancel: (),
+
     /// Where the Attractor, Vortex and Sphere sit, px@comp.
     #[slider(label = "Field x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub field_x: f32,

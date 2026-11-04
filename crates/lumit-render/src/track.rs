@@ -1222,7 +1222,7 @@ pub fn request(job: Job) -> Requested {
 
 /// Claim the one analysis slot for `media` and run `work` on a thread of its
 /// own, handed the flag Cancel raises.
-fn start(media: Uuid, work: impl FnOnce(&AtomicBool) + Send + 'static) -> Requested {
+pub(crate) fn start(media: Uuid, work: impl FnOnce(&AtomicBool) + Send + 'static) -> Requested {
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let Ok(mut held) = jobs().lock() else {
@@ -1383,7 +1383,7 @@ pub fn cancel(media: Uuid) {
 }
 
 /// Publish one step of a running analysis.
-fn report(media: Uuid, step: Progress) {
+pub(crate) fn report(media: Uuid, step: Progress) {
     if let Ok(mut held) = jobs().lock() {
         held.progress.insert(media, step);
     }
@@ -1394,7 +1394,7 @@ fn report(media: Uuid, step: Progress) {
 /// `None` **forgets** the media instead: a warm pass that found nothing, or a
 /// spawn that never happened, has nothing to say about it, and leaving `Queued`
 /// standing would have the interface waiting on a job that will never run.
-fn finish(media: Uuid, outcome: Option<Progress>) {
+pub(crate) fn finish(media: Uuid, outcome: Option<Progress>) {
     if let Ok(mut held) = jobs().lock() {
         if held.running.as_ref().is_some_and(|(m, _)| *m == media) {
             held.running = None;
@@ -1615,6 +1615,9 @@ fn is_bake_points(fx: &&EffectInstance) -> bool {
 /// since what it was made from may have changed in a way the fingerprint
 /// cannot see.
 pub fn request_bake(doc: Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Requested {
+    if crate::sim::bake::wanted(&doc, comp, layer, effect) {
+        return crate::sim::bake::request(doc, comp, layer, effect);
+    }
     start(effect, move |cancel| {
         let step = |step| report(effect, step);
         let outcome = match bake(&doc, comp, layer, effect, cancel, &step) {

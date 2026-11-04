@@ -43,8 +43,11 @@ pub(super) fn feed_colliders(
 ) {
     let mut feed = |l: &crate::model::Layer| {
         let _ = serde_json::to_writer(&mut *h, l);
+        // A file's content, wherever it has been collected to.
         if let LayerKind::Model { item, .. } = l.kind {
-            let _ = serde_json::to_writer(&mut *h, &doc.item(item));
+            if let Some(crate::model::ProjectItem::Footage(f)) = doc.item(item) {
+                let _ = serde_json::to_writer(&mut *h, &f.media.fingerprint);
+            }
         }
     };
     if on(inst, "collide_all") {
@@ -204,6 +207,30 @@ pub fn physics(rows: &Particulate) -> Physics {
 mod tests {
     use super::*;
 
+    fn comp() -> Composition {
+        use crate::time::{Duration, FrameRate, Rational};
+        Composition {
+            graph: None,
+            master_volume_db: 0.0,
+            lighting: Default::default(),
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: uuid::Uuid::now_v7(),
+            name: "Sim".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(30, 1).unwrap()),
+            background: crate::model::LinearColour::BLACK,
+            work_area: None,
+            layers: Vec::new(),
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        }
+    }
+
     /// Births never repeat or get lost, however a frame is cut into steps.
     #[test]
     fn a_frame_of_births_is_cut_into_steps_without_a_gap() {
@@ -240,31 +267,96 @@ mod tests {
         assert!(s.off(1) > s.off(0));
     }
 
+    /// Rows reach the kernel reduced, and a row that is not a number is nought.
+    #[test]
+    fn rows_are_reduced_for_a_step() {
+        use crate::fx::params::Params;
+        let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
+        let mut set = |id: &str, v: EffectValue| {
+            e.params.iter_mut().find(|p| p.id == id).unwrap().value = v;
+        };
+        let fixed = |v: f64| EffectValue::Float(crate::anim::Property::fixed(v));
+        set("simulate", EffectValue::Bool(true));
+        set("sub_steps", fixed(40.0));
+        set("attractor", fixed(50.0));
+        set("bounciness", fixed(250.0));
+        set("spark_size", fixed(25.0));
+        let bag = crate::fx::tests::resolve_bag(
+            std::slice::from_ref(&e),
+            0.0,
+            1000.0,
+            1.0,
+            &crate::fx::markers::MarkerContext::NONE,
+        );
+        let mut rows =
+            <Particulate as crate::fx::registry::EffectMetadata>::read(Params::new(&bag));
+        let p = physics(&rows);
+        assert_eq!(p.steps, 8);
+        assert_eq!(p.attractor, 50.0);
+        assert_eq!(p.keep, 1.0);
+        assert_eq!(p.spark_size, 0.25);
+        rows.attractor = f32::NAN;
+        rows.simulate = false;
+        assert_eq!(physics(&rows).attractor, 0.0);
+    }
+
+    /// The floor is where its own z is nought, and up is its z.
+    #[test]
+    fn the_floor_is_a_surface_seen_from_the_layer() {
+        use crate::fx::points::collider::Collider;
+        use crate::model::{Document, LayerKind};
+        use crate::time::Rational;
+        let layer = crate::edits::base_layer(
+            "Particles".into(),
+            LayerKind::Null,
+            Rational::new(1, 1).unwrap(),
+            Default::default(),
+        );
+        let mut comp = comp();
+        comp.layers = vec![layer.clone()];
+        let id = comp.id;
+        let mut doc = Document::new();
+        doc.items
+            .push(crate::model::ProjectItem::Composition(comp.clone()));
+        let context = crate::expression::ExpressionContext {
+            document: std::sync::Arc::new(doc.clone()),
+            comp: Some(id),
+            layer: Some(layer.id),
+            comp_time: 0.0,
+            current_depth: 0,
+            inputs: None,
+        };
+        let floor = Collider::ground(&comp, &layer, 0.0, &context, 700.0);
+        assert!(floor.is_surface() && floor.edges().is_empty());
+        let back = floor.from_layer();
+        let above = back.point((0.0, 600.0, 0.0));
+        let below = back.point((0.0, 800.0, 0.0));
+        assert!(above.2 > 0.0 && below.2 < 0.0, "{above:?} {below:?}");
+        let there = floor.to_layer().point(above);
+        assert!((there.1 - 600.0).abs() < 1e-6);
+        // Named layers feed a walk's name.
+        let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
+        e.params
+            .iter_mut()
+            .find(|p| p.id == "collide_all")
+            .unwrap()
+            .value = EffectValue::Bool(true);
+        let named = super::super::stepped::definition(&doc, &comp, &layer, &e, None);
+        let mut moved = comp.clone();
+        let mut other = layer.clone();
+        other.switches.three_d = true;
+        moved.layers.push(other);
+        assert_ne!(
+            named,
+            super::super::stepped::definition(&doc, &moved, &layer, &e, None)
+        );
+    }
+
     /// Anything only the card can do turns the card on, and a saved project
     /// with none of it stays on the old walk.
     #[test]
     fn what_turns_the_card_on() {
-        use crate::time::{Duration, FrameRate, Rational};
-        let comp = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            lighting: Default::default(),
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: uuid::Uuid::now_v7(),
-            name: "Sim".into(),
-            width: 1920,
-            height: 1080,
-            frame_rate: FrameRate::new(30, 1).unwrap(),
-            duration: Duration(Rational::new(30, 1).unwrap()),
-            background: crate::model::LinearColour::BLACK,
-            work_area: None,
-            layers: Vec::new(),
-            markers: Vec::new(),
-            motion_blur: Default::default(),
-            extra: serde_json::Map::new(),
-        };
+        let comp = comp();
         let mut e = crate::fx::builtins::instantiate("particulate").unwrap();
         assert!(!wanted(&comp, &e));
         let set = |e: &mut EffectInstance, id: &str, v: EffectValue| {

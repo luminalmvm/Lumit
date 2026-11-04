@@ -91,7 +91,7 @@ pub mod realise;
 pub mod roto;
 pub mod sent;
 mod sidecar;
-mod sim;
+pub mod sim;
 pub mod source;
 pub mod standin;
 pub mod track;

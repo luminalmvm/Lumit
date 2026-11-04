@@ -105,7 +105,7 @@ fn resolve_migrated<T: EffectMetadata>(
 /// The resolved bag of a one-effect migrated stack, in push order — for the
 /// assertions that are about the *bag* rather than about the declared struct: a
 /// derived value, or how many entries an effect resolves to at all.
-fn resolve_bag(
+pub(crate) fn resolve_bag(
     effects: &[EffectInstance],
     lt: f64,
     diag_px: f32,
