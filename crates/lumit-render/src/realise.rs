@@ -2692,49 +2692,6 @@ impl Realiser<'_> {
         )
     }
 
-    /// How far the 3D in `layers` is from the camera `cam` at each pixel, as
-    /// clip w counted from the returned near. The near sits just short of the
-    /// nearest corner, so a view from far off (an orthographic one is a
-    /// hundred comps away) keeps a pixel's worth of precision where the
-    /// layers are.
-    pub(crate) fn view_depth(
-        &self,
-        layers: &[lumit_gpu::composite::CompositeLayer<'_>],
-        models: &[lumit_gpu::mesh::ModelPicture],
-        cam: glam::Mat4,
-        (width, height): (u32, u32),
-    ) -> (wgpu::Texture, f32) {
-        let mut near = f32::INFINITY;
-        // A model's quad is the whole frame, not where the model is.
-        let model = |l: &&lumit_gpu::composite::CompositeLayer<'_>| {
-            models.iter().any(|m| &m.colour == l.texture)
-        };
-        for l in layers.iter().filter(|l| l.three_d && !model(l)) {
-            let m = cam * l.world();
-            for (u, v) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
-                near = near.min(m.col(0).w * u + m.col(1).w * v + m.col(3).w);
-            }
-        }
-        let near = if near.is_finite() && near > 0.0 {
-            near * 0.999
-        } else {
-            0.0
-        };
-        let depth = self.compositor.composite_depth_joined(
-            &self.ctx,
-            width,
-            height,
-            &[layers],
-            cam,
-            1.0,
-            near,
-            self.render_scale,
-            None,
-            models,
-        );
-        (depth, near)
-    }
-
     /// A 3D viewport's ground laid over `frame`, hidden wherever one of
     /// `layers` is nearer the eye.
     #[allow(clippy::too_many_arguments)]
@@ -2748,7 +2705,7 @@ impl Realiser<'_> {
         (width, height): (u32, u32),
         ground: ViewGround,
     ) -> wgpu::Texture {
-        let (depth, near) = self.view_depth(layers, models, cam, (width, height));
+        let (depth, near) = self.view_depth(layers, models, cam, (width, height), false);
         let [right, up, forward] = lumit_core::camera::axes(pose.rotation_deg);
         let v = |p: (f64, f64, f64)| [p.0 as f32, p.1 as f32, p.2 as f32];
         let (tw, th) = (frame.width(), frame.height());

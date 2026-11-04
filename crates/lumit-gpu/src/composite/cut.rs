@@ -70,6 +70,41 @@ impl Compositor {
         under: Option<&wgpu::Texture>,
         models: &[ModelPicture],
     ) -> wgpu::Texture {
+        let format = ctx.working();
+        let (run, view) = ((width, height, runs), (camera, metres_per_w, near));
+        self.depth_as(ctx, format, run, view, render_scale, under, models)
+    }
+
+    /// As [`Self::composite_depth_joined`] over nothing, in half floats whatever
+    /// the project's depth: at 8 bits a depth past one would read as one.
+    #[allow(clippy::too_many_arguments)]
+    pub fn composite_depth_wide(
+        &self,
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        runs: &[&[CompositeLayer<'_>]],
+        camera: Mat4,
+        near: f32,
+        render_scale: f32,
+        models: &[ModelPicture],
+    ) -> wgpu::Texture {
+        let format = wgpu::TextureFormat::Rgba16Float;
+        let (run, view) = ((width, height, runs), (camera, 1.0, near));
+        self.depth_as(ctx, format, run, view, render_scale, None, models)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn depth_as(
+        &self,
+        ctx: &GpuContext,
+        format: wgpu::TextureFormat,
+        (width, height, runs): (u32, u32, &[&[CompositeLayer<'_>]]),
+        (camera, metres_per_w, near): (Mat4, f32, f32),
+        render_scale: f32,
+        under: Option<&wgpu::Texture>,
+        models: &[ModelPicture],
+    ) -> wgpu::Texture {
         let (tw, th) = scaled_size(width, height, render_scale);
         let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("comp-depth"),
@@ -81,7 +116,7 @@ impl Compositor {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: ctx.working(),
+            format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC
@@ -89,8 +124,23 @@ impl Compositor {
             view_formats: &[],
         });
         let under = under.filter(|u| (u.width(), u.height()) == (tw, th));
-        let pipelines = self.pipelines(ctx, 1, None);
-        let joins = (!models.is_empty()).then(|| self.join_set(ctx, 1));
+        let build = || {
+            std::sync::Arc::new(Self::build_set(
+                &ctx.device,
+                &self.shader,
+                &self.pipeline_layout,
+                1,
+                format,
+                None,
+            ))
+        };
+        let pipelines = match self.pipelines.lock() {
+            Ok(mut map) => {
+                std::sync::Arc::clone(map.entry((1, format, None)).or_insert_with(build))
+            }
+            Err(_) => build(),
+        };
+        let joins = (!models.is_empty()).then(|| self.join_set_as(ctx, 1, format));
         let bind = |layer: &CompositeLayer<'_>, clear: bool| {
             if let Some(model) = models.iter().find(|m| &m.colour == layer.texture) {
                 let params = [

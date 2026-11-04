@@ -98,6 +98,16 @@ impl Compositor {
         ctx: &GpuContext,
         samples: u32,
     ) -> Arc<[wgpu::RenderPipeline; 7]> {
+        self.join_set_as(ctx, samples, ctx.working())
+    }
+
+    /// As [`Self::join_set`], drawing into `format`.
+    pub(super) fn join_set_as(
+        &self,
+        ctx: &GpuContext,
+        samples: u32,
+        format: wgpu::TextureFormat,
+    ) -> Arc<[wgpu::RenderPipeline; 7]> {
         let (shader, _, layout) = self.join_shader(ctx);
         let build = || {
             let make = |entry: &str,
@@ -118,7 +128,7 @@ impl Compositor {
                             module: shader,
                             entry_point: Some(entry),
                             targets: &[Some(wgpu::ColorTargetState {
-                                format: ctx.working(),
+                                format,
                                 blend,
                                 write_mask,
                             })],
@@ -175,7 +185,7 @@ impl Compositor {
             ])
         };
         match self.joins.sets.lock() {
-            Ok(mut sets) => Arc::clone(sets.entry((samples, ctx.working())).or_insert_with(build)),
+            Ok(mut sets) => Arc::clone(sets.entry((samples, format)).or_insert_with(build)),
             Err(_) => build(),
         }
     }

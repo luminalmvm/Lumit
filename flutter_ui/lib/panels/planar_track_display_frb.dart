@@ -60,7 +60,9 @@ String bakeStatusSentence(BridgePlanarStatus? status) => switch (status?.stage) 
       BridgeTrackStage.solving =>
         l10n.bakeBaking(status!.done, status.total),
       BridgeTrackStage.cancelled => l10n.bakeStopped,
-      BridgeTrackStage.failed => l10n.bakeFailed,
+      BridgeTrackStage.failed => status!.failure == BridgeTrackFailure.tooBig
+          ? l10n.bakeTooBig
+          : l10n.bakeFailed,
       BridgeTrackStage.done => l10n.bakeBaked(status!.frames),
     };
 

@@ -21,8 +21,9 @@ const FOLDER: &str = "sim";
 const MAGIC: &[u8; 8] = b"LUMSIM01";
 const HEAD: usize = 8 + 8 + 8 + 8 + 8;
 
-/// The most a baked state says it unpacks to: a million particles.
-const MOST: usize = 16 + 48 * 1_000_000;
+/// The most a baked state says it unpacks to: a million particles, or smoke at
+/// the finest grid there is.
+const MOST: usize = 16 * 256 * 256 * 256;
 
 /// The most one bake writes, in bytes. Past it the bake stops where it got to.
 const MOST_ON_DISK: u64 = 64 << 30;
@@ -129,7 +130,7 @@ pub(super) fn nearest(
 
 /// The frames of the walk a layer shows from its in point to its out point, as
 /// `first..end`. Under a Retime that is the furthest it reads each way.
-fn frames_shown(src: &Source<'_>) -> (i64, i64) {
+pub(super) fn frames_shown(src: &Source<'_>) -> (i64, i64) {
     let rate = src.comp.frame_rate;
     let (from, to) = (
         rate.frame_at(src.layer.in_point),
@@ -168,9 +169,19 @@ pub fn status(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Opt
     let c = doc.comp(comp)?;
     let l = c.layers.iter().find(|l| l.id == layer)?;
     let e = l.effects.iter().find(|e| e.id == effect)?;
-    let carriage =
-        crate::trails::carriage(doc, c, l, e, lumit_core::fx::drivers::NO_CLONE, [0.0; 2]);
-    let (_, frames) = baked_frames(effect, &walk_name(&carriage))?;
+    let name = if e.effect.match_name == lumit_core::fx::effects::smoke::MATCH_NAME {
+        lumit_core::fx::effects::smoke::definition(doc, c, l, e)
+    } else {
+        walk_name(&crate::trails::carriage(
+            doc,
+            c,
+            l,
+            e,
+            lumit_core::fx::drivers::NO_CLONE,
+            [0.0; 2],
+        ))
+    };
+    let (_, frames) = baked_frames(effect, &name)?;
     let src = Source::find(doc, comp, layer, effect, lumit_core::fx::drivers::NO_CLONE)?;
     let (first, end) = frames_shown(&src);
     // A state every so often covers the frames up to the next.
@@ -183,25 +194,68 @@ pub fn status(doc: &Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Opt
 
 /// Bake on `effect`: its simulation if it has one, otherwise a Bake points bake.
 pub fn press(doc: Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Requested {
-    let simulates = doc.comp(comp).is_some_and(|c| {
-        c.layers
-            .iter()
-            .filter(|l| l.id == layer)
-            .flat_map(|l| &l.effects)
-            .any(|e| e.id == effect && lumit_core::fx::points::stepped::sim::wanted(e))
+    let named = |doc: &Document, wants: &dyn Fn(&lumit_core::model::EffectInstance) -> bool| {
+        doc.comp(comp).is_some_and(|c| {
+            c.layers
+                .iter()
+                .filter(|l| l.id == layer)
+                .flat_map(|l| &l.effects)
+                .any(|e| e.id == effect && wants(e))
+        })
+    };
+    let smoky = named(&doc, &|e| {
+        e.effect.match_name == lumit_core::fx::effects::smoke::MATCH_NAME
     });
+    let simulates = smoky || named(&doc, &lumit_core::fx::points::stepped::sim::wanted);
     if !simulates {
         return crate::track::request_bake(doc, comp, layer, effect);
     }
     crate::track::start(effect, move |cancel| {
         let step = |step| crate::track::report(effect, step);
-        let outcome = match walk(&doc, comp, layer, effect, cancel, &step) {
+        let walked = if smoky {
+            super::smoke::bake_walk(&doc, comp, layer, effect, cancel, &step)
+        } else {
+            walk(&doc, comp, layer, effect, cancel, &step)
+        };
+        let outcome = match walked {
             Ok(()) => Progress::Done,
             Err(AnalysisError::Cancelled) => Progress::Cancelled,
             Err(e) => Progress::Failed(e),
         };
         crate::track::finish(effect, Some(outcome));
     })
+}
+
+/// A clean folder for `name`'s bake. One effect has one bake, so the last one goes.
+pub(super) fn start_dir(effect: Uuid, name: &[u8; 32]) -> Option<PathBuf> {
+    let root = root()?;
+    let _ = lumit_ingress::files::remove_dir_all(&root.join(effect.to_string()));
+    let dir = walk_dir(&root, effect, name);
+    lumit_ingress::files::create_dir_all(&dir).ok()?;
+    Some(dir)
+}
+
+/// Writes a bake's states and counts them against what one may hold.
+#[derive(Default)]
+pub(super) struct Writer {
+    written: u64,
+}
+
+impl Writer {
+    /// The state `bytes`, as of `ledger`, in `dir`. `true` once the bake has
+    /// written all it may, which it stops at.
+    pub(super) fn write(
+        &mut self,
+        dir: &Path,
+        ledger: &Ledger,
+        bytes: &[u8],
+    ) -> Result<bool, AnalysisError> {
+        let packed = pack(ledger, bytes);
+        let file = dir.join(format!("{}.sim", ledger.frame));
+        lumit_ingress::files::write(&file, &packed).map_err(|_| AnalysisError::Unreadable)?;
+        self.written += packed.len() as u64;
+        Ok(self.written > MOST_ON_DISK)
+    }
 }
 
 /// Working buffers for a walk, with none born, reserved before they are made.
@@ -263,18 +317,14 @@ fn walk(
         [0.0; 2],
     );
     let name = walk_name(&carriage);
-    let root = root().ok_or(AnalysisError::Unreadable)?;
-    // One effect has one bake, so the last one goes.
-    let _ = lumit_ingress::files::remove_dir_all(&root.join(effect.to_string()));
-    let dir = walk_dir(&root, effect, &name);
-    lumit_ingress::files::create_dir_all(&dir).map_err(|_| AnalysisError::Unreadable)?;
+    let dir = start_dir(effect, &name).ok_or(AnalysisError::Unreadable)?;
 
     let start = src.inputs(0.0).ok_or(AnalysisError::Unreadable)?;
     let cap = start.rows.points().cap;
     let mut live = fresh(&fx, &ctx, name, cap);
     start_from(&fx, &ctx, &src, &name, &mut live, 0, 0).ok_or(AnalysisError::Unreadable)?;
     let mut now = start;
-    let mut written = 0u64;
+    let mut writer = Writer::default();
     let mut work = 0u64;
     // A bake stopped part of the way is the frames it got to.
     while live.ledger.frame < end {
@@ -297,11 +347,7 @@ fn walk(
             let bytes = fx
                 .sim_read(&ctx, &live.work)
                 .ok_or(AnalysisError::Unreadable)?;
-            let packed = pack(&live.ledger, &bytes);
-            let file = dir.join(format!("{frame}.sim"));
-            lumit_ingress::files::write(&file, &packed).map_err(|_| AnalysisError::Unreadable)?;
-            written += packed.len() as u64;
-            if written > MOST_ON_DISK {
+            if writer.write(&dir, &live.ledger, &bytes)? {
                 break;
             }
         }

@@ -3699,8 +3699,8 @@ class LayerReference {
       );
 
   /// The corners of a Model layer's box in its own pixels at comp frame
-  /// `at_frame`, three numbers each, once its file has been read. Empty
-  /// before that and on any other kind of layer.
+  /// `at_frame`, three numbers each, once its file has been read, or a box of
+  /// smoke's. Empty before that and on any other kind of layer.
   Float64List getModelBox({required int atFrame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceGetModelBox(that: this, atFrame: atFrame);
 

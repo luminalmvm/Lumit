@@ -87,7 +87,7 @@ pub(crate) fn reading(
     use lumit_core::fx::effects::bake_points;
     let project = layer.project().ok()?;
     let doc = project.read().ok()?.store.snapshot();
-    if inst.effect.match_name == "particulate" {
+    if matches!(inst.effect.match_name.as_str(), "particulate" | "smoke") {
         return lumit_render::sim::bake::status(&doc, layer.comp_id, layer.layer_id, effect);
     }
     if inst.effect.match_name != bake_points::MATCH_NAME {

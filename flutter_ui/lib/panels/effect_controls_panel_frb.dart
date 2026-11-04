@@ -3582,7 +3582,7 @@ Widget? customEffectDisplay(
           pressed: pressed,
           bake: true,
         ),
-      'particulate' when _simulating(values) => PlanarTrackDisplayFrb(
+      'particulate' || 'smoke' when _simulating(values) => PlanarTrackDisplayFrb(
           key: ValueKey<String>('fx-planar-track-display-$effectId'),
           layer: layer,
           effectId: effectId,

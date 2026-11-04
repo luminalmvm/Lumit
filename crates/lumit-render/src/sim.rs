@@ -9,6 +9,9 @@
 pub mod bake;
 mod colliders;
 mod distances;
+pub mod smoke;
+#[cfg(not(target_arch = "wasm32"))]
+mod volume_file;
 
 use std::sync::{Arc, Mutex, Weak};
 
@@ -72,6 +75,11 @@ struct Store {
     kept: lumit_cache::ByteLru<u128, Kept>,
     /// Latest used first.
     live: Vec<Live>,
+    /// The same, for smoke's walks.
+    smoke: Vec<smoke::Live>,
+    /// Volume files' frames, latest used first.
+    #[cfg(not(target_arch = "wasm32"))]
+    files: Vec<volume_file::OnCard>,
 }
 
 /// One store a card, so a Viewer and an export don't take each other's walks.
@@ -90,6 +98,9 @@ fn with_store<R>(ctx: &GpuContext, f: impl FnOnce(&mut Store) -> R) -> Option<R>
             ledger: Arc::downgrade(ctx.ledger()),
             kept,
             live: Vec::new(),
+            smoke: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            files: Vec::new(),
         });
     }
     stores.iter_mut().find(|s| s.ledger.as_ptr() == at).map(f)
@@ -120,6 +131,17 @@ fn furthest_kept(ctx: &GpuContext, walk: &[u8; 32], frame: i64, from: i64) -> Op
         None
     })
     .flatten()
+}
+
+/// The volume file `layer` draws, if it does.
+fn volume_file_path(doc: &Document, layer: &Layer) -> Option<std::path::PathBuf> {
+    #[cfg(not(target_arch = "wasm32"))]
+    return volume_file::path_of(doc, layer);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (doc, layer);
+        None
+    }
 }
 
 /// A walk's name: the rows and all it reads, and which clone it is.
