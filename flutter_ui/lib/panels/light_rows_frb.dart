@@ -4,6 +4,7 @@
 // Timeline's fold-out and the Effect controls card.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -104,6 +105,20 @@ List<LayerSetting> layerSettings({
     if (lightCasts(s.kind)) LayerSetting.lightCastsShadows,
   ];
 }
+
+/// Whether layer [l] has a picture an Environment light can read. A model, a
+/// light or an adjustment doesn't, whatever else it draws.
+bool canSurround(BridgeLayerEntry l) => switch (l.info.kind) {
+      BridgeLayerKind.footage ||
+      BridgeLayerKind.sequence ||
+      BridgeLayerKind.solid ||
+      BridgeLayerKind.precomp ||
+      BridgeLayerKind.text ||
+      BridgeLayerKind.shape =>
+        l.layer.hasPicture(),
+      _ => false,
+    };
+
 
 /// Whether a light of this kind weakens with distance.
 bool lightFallsOff(BridgeLightKind kind) =>
@@ -233,7 +248,7 @@ class LayerSettingRowFrb extends StatelessWidget {
           value: s.source,
           empty: l10n.none,
           missing: l10n.missingLayer,
-          offered: (l) => l.layer.hasPicture(),
+          offered: canSurround,
           onChanged: (id) => write(lightSettingsWith(s, source: (id,))),
         ),
       LayerSetting.lightBackground => Align(

@@ -210,9 +210,9 @@ linearised.
   along the light's aim), **Ambient** (light from everywhere, with no place or direction) or
   **Environment** (light from a picture of everything round the scene).
 - **Source**, on an environment light: the layer whose picture surrounds the scene, read as
-  a panorama twice as wide as it is tall: an HDR or OpenEXR picture, any footage or a
-  precomp. A layer an environment light names is never drawn itself. A new one from Light
-  settings starts on the selected layer, shown in the background.
+  a panorama twice as wide as it is tall: footage, a sequence, a solid, a precomp, text or a
+  shape. A new one from Light settings starts on the selected footage or precomp, shown in
+  the background, and switches the view it was added from to **Final**.
 - **Show in background**, on an environment light: draws the picture behind everything, as
   the camera sees it. **Background blur** softens it there.
 - **Intensity**: how bright the light is, as a percentage. Below 0 it takes light away.
@@ -246,7 +246,7 @@ and **Rotation** turn the picture. It has no place, so it has no Position. Only 
 environment light in a composition lights it, and a layer it lights starts from black. A
 model's occlusion map darkens the light it takes from one. The Ambient and Key light a first
 model brings stay on beside it. The fixed 3D views leave the background out. A view's looks
-other than **Final** ignore the light.
+other than **Final** ignore the light. A layer an environment light names is never drawn itself.
 
 **Material options**, beside Transform on a 3D layer, sets how it takes the lights:
 
