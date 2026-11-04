@@ -206,7 +206,7 @@ impl MeshFx {
             shadows_layout,
             samplers,
             environment: environment::Fallback::new(device),
-            shadow: std::sync::OnceLock::new(),
+            shadow: Default::default(),
             deform: std::sync::OnceLock::new(),
             depth_one,
             depth_many,

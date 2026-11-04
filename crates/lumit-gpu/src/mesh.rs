@@ -182,7 +182,7 @@ pub(crate) struct MeshFx {
     environment: environment::Fallback,
     layout: wgpu::PipelineLayout,
     /// Draws a shadow map's view ([`shadow`]), made when first asked for.
-    shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
+    shadow: [std::sync::OnceLock<wgpu::RenderPipeline>; 2],
     /// Writes a model's moving parts ([`deform`]), made when first asked for.
     deform: std::sync::OnceLock<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>,
     depth_one: (wgpu::BindGroupLayout, wgpu::RenderPipeline),

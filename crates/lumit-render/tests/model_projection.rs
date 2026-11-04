@@ -258,29 +258,36 @@ fn a_projection_is_the_picture_from_its_camera_and_stays_on_the_model_from_other
 }
 
 /// A strip with a skin that leans its top edge away from the camera over a
-/// second, past the box it has at rest.
+/// second, past the box it has at rest, and a small card in front of it with
+/// its back to the camera.
 fn leaning(dir: &std::path::Path) -> std::path::PathBuf {
     let corners = [
-        [-9.0f32, -0.7],
-        [9.0, -0.7],
-        [9.0, 0.0],
-        [-9.0, -0.7],
-        [9.0, 0.0],
-        [-9.0, 0.0],
-        [-9.0, 0.0],
-        [9.0, 0.0],
-        [9.0, 0.7],
-        [-9.0, 0.0],
-        [9.0, 0.7],
-        [-9.0, 0.7],
+        [-9.0f32, -0.9, 0.0],
+        [9.0, -0.9, 0.0],
+        [9.0, 0.0, 0.0],
+        [-9.0, -0.9, 0.0],
+        [9.0, 0.0, 0.0],
+        [-9.0, 0.0, 0.0],
+        [-9.0, 0.0, 0.0],
+        [9.0, 0.0, 0.0],
+        [9.0, 0.9, 0.0],
+        [-9.0, 0.0, 0.0],
+        [9.0, 0.9, 0.0],
+        [-9.0, 0.9, 0.0],
+        [-0.2, -0.2, 1.0],
+        [0.2, 0.2, 1.0],
+        [0.2, -0.2, 1.0],
+        [-0.2, -0.2, 1.0],
+        [-0.2, 0.2, 1.0],
+        [0.2, 0.2, 1.0],
     ];
     let mut bytes: Vec<u8> = Vec::new();
-    for [x, y] in corners {
-        for f in [x, y, 0.0] {
+    for corner in corners {
+        for f in corner {
             bytes.extend(f.to_le_bytes());
         }
     }
-    for [_, y] in corners {
+    for [_, y, _] in corners {
         bytes.extend([u8::from(y > 0.5), 0, 0, 0]);
     }
     for _ in corners {
@@ -302,18 +309,18 @@ fn leaning(dir: &std::path::Path) -> std::path::PathBuf {
         "animations":[{{"name":"Lean","samplers":[{{"input":3,"output":4}}],
             "channels":[{{"sampler":0,"target":{{"node":2,"path":"translation"}}}}]}}],
         "accessors":[
-            {{"bufferView":0,"componentType":5126,"count":12,"type":"VEC3",
-              "min":[-9,-0.9,0],"max":[9,0.9,0]}},
-            {{"bufferView":1,"componentType":5121,"count":12,"type":"VEC4"}},
-            {{"bufferView":2,"componentType":5126,"count":12,"type":"VEC4"}},
+            {{"bufferView":0,"componentType":5126,"count":18,"type":"VEC3",
+              "min":[-9,-0.9,0],"max":[9,0.9,1]}},
+            {{"bufferView":1,"componentType":5121,"count":18,"type":"VEC4"}},
+            {{"bufferView":2,"componentType":5126,"count":18,"type":"VEC4"}},
             {{"bufferView":3,"componentType":5126,"count":2,"type":"SCALAR",
               "min":[0],"max":[1]}},
             {{"bufferView":4,"componentType":5126,"count":2,"type":"VEC3"}}],
-        "bufferViews":[{{"buffer":0,"byteLength":144}},
-            {{"buffer":0,"byteOffset":144,"byteLength":48}},
-            {{"buffer":0,"byteOffset":192,"byteLength":192}},
-            {{"buffer":0,"byteOffset":384,"byteLength":8}},
-            {{"buffer":0,"byteOffset":392,"byteLength":24}}],
+        "bufferViews":[{{"buffer":0,"byteLength":216}},
+            {{"buffer":0,"byteOffset":216,"byteLength":72}},
+            {{"buffer":0,"byteOffset":288,"byteLength":288}},
+            {{"buffer":0,"byteOffset":576,"byteLength":8}},
+            {{"buffer":0,"byteOffset":584,"byteLength":24}}],
         "buffers":[{{"byteLength":{},"uri":"leaning.bin"}}]}}"#,
         bytes.len()
     );
@@ -324,8 +331,8 @@ fn leaning(dir: &std::path::Path) -> std::path::PathBuf {
 
 /// A projected model playing a take is the picture from its camera, following
 /// or held at the playhead, with motion blur on or off. A depth drawn at rest,
-/// or a shutter sample tested against the frame's depth, brings Base colour
-/// back on what has moved.
+/// a shutter sample tested against the frame's depth, or a depth holding a face
+/// the model isn't drawn with, brings Base colour back.
 #[test]
 fn a_projection_stays_on_a_model_in_its_pose() {
     let Ok(mut r) = HeadlessRenderer::shared() else {

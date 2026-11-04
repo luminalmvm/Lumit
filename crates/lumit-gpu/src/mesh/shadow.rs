@@ -310,8 +310,10 @@ impl MeshFx {
     }
 
     /// Draws depth alone into a view of a map, made the first time.
-    fn shadow_pipeline(&self, device: &wgpu::Device) -> &wgpu::RenderPipeline {
-        self.shadow.get_or_init(|| {
+    /// What draws a depth: `front` for the faces a model is drawn with, or
+    /// both, so an open model casts too.
+    fn shadow_pipeline(&self, device: &wgpu::Device, front: bool) -> &wgpu::RenderPipeline {
+        self.shadow[usize::from(front)].get_or_init(|| {
             let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("mesh-shadow"),
                 bind_group_layouts: &[
@@ -344,8 +346,10 @@ impl MeshFx {
                     targets: &[],
                     compilation_options: Default::default(),
                 }),
-                // Both faces, so an open model casts too.
-                primitive: Default::default(),
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: front.then_some(wgpu::Face::Back),
+                    ..Default::default()
+                },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: DEPTH,
                     depth_write_enabled: true,
@@ -558,7 +562,12 @@ impl MeshFx {
                 }),
                 usage: wgpu::BufferUsages::STORAGE,
             });
-        let pipeline = self.shadow_pipeline(&ctx.device);
+        let pipeline = self.shadow_pipeline(&ctx.device, false);
+        // A camera's depth, with no light to it, has to hide what the mesh pass
+        // will: a face drawn from the front only can't hide anything from behind.
+        let as_drawn = lights
+            .is_empty()
+            .then(|| self.shadow_pipeline(&ctx.device, true));
         let mut encoder = ctx.encoder("shadow-maps");
         for k in 0..layers {
             let group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -608,10 +617,15 @@ impl MeshFx {
                 ..Default::default()
             });
             pass.set_pipeline(pipeline);
-            for (i, (model, _, p, posed)) in parts.iter().enumerate() {
-                let Some((material, _, _, samplers)) = model.materials.get(p.material) else {
+            for (i, (model, at, p, posed)) in parts.iter().enumerate() {
+                let Some((material, _, double, samplers)) = model.materials.get(p.material) else {
                     continue;
                 };
+                // A mirrored part is drawn from both sides, so it hides as both.
+                if let Some(front) = as_drawn {
+                    let both = *double || at.determinant() < 0.0;
+                    pass.set_pipeline(if both { pipeline } else { front });
+                }
                 let (vertices, base) = posed.vertices(p, 0);
                 pass.set_vertex_buffer(0, vertices);
                 pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
