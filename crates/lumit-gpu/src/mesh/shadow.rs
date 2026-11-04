@@ -7,6 +7,7 @@
 //! round them. A comp with no model that casts never makes any.
 
 use super::{uniform_entry, DrawUniform, FrameUniform, MeshFx, DEPTH};
+use crate::fx::environment;
 use crate::fx::lighting::{
     caster_set, map_layout, LightingFx, LightingKind, LightingLight, ShadowCasters,
     DIFFUSION_SPREAD, MAX_LIT_LIGHTS,
@@ -121,6 +122,7 @@ pub(super) fn layout() -> Vec<wgpu::BindGroupLayoutEntry> {
         },
     ];
     entries.extend(map_layout(3, wgpu::ShaderStages::FRAGMENT));
+    entries.extend(environment::layout(6, wgpu::ShaderStages::FRAGMENT));
     entries
 }
 
@@ -238,13 +240,16 @@ fn fit(l: &LightingLight, points: &[Vec3], first: usize) -> Option<(Vec<Mat4>, G
 }
 
 impl MeshFx {
-    /// The mesh pass's third group, for a model taking `casters` and `maps`.
+    /// The mesh pass's last group, for a model taking `casters` and `maps`,
+    /// lit by `surround`. Only the drawing keeps it, so its samplers go when
+    /// the frame does.
     pub(super) fn shadows_group(
         &self,
         ctx: &GpuContext,
         lighting: &LightingFx,
         casters: Option<&ShadowCasters>,
         maps: Option<&ShadowMaps>,
+        surround: Option<&environment::EnvironmentLight>,
     ) -> wgpu::BindGroup {
         let set = ctx
             .device
@@ -275,6 +280,9 @@ impl MeshFx {
             },
         ];
         entries.extend(lighting.map_entries(3, &map_view, maps));
+        let own = surround.map(|e| environment::Views::of(ctx, e));
+        let views = own.as_ref().unwrap_or(&self.environment.views);
+        entries.extend(views.entries(6, &self.environment));
         ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("mesh-shadows"),
             layout: &self.shadows_layout,
@@ -287,7 +295,11 @@ impl MeshFx {
         self.shadow.get_or_init(|| {
             let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("mesh-shadow"),
-                bind_group_layouts: &[&self.frame_layout, &self.material_layout],
+                bind_group_layouts: &[
+                    &self.frame_layout,
+                    &self.material_layout,
+                    &self.samplers.layout,
+                ],
                 push_constant_ranges: &[],
             });
             let attributes = wgpu::vertex_attr_array![
@@ -562,13 +574,14 @@ impl MeshFx {
             });
             pass.set_pipeline(pipeline);
             for (i, (model, _, p)) in parts.iter().enumerate() {
-                let Some((material, _, _)) = model.materials.get(p.material) else {
+                let Some((material, _, _, samplers)) = model.materials.get(p.material) else {
                     continue;
                 };
                 pass.set_vertex_buffer(0, model.vertices.slice(..));
                 pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_bind_group(0, &group, &[(stride(draw_size) * i as u64) as u32]);
                 pass.set_bind_group(1, material, &[]);
+                pass.set_bind_group(2, samplers, &[]);
                 pass.draw_indexed(p.first..p.first + p.count, p.base_vertex, 0..1);
             }
         }

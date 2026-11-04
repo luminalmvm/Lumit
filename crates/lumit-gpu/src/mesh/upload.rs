@@ -226,33 +226,18 @@ impl GpuModel {
             .map(|(key, top)| (key, upload_levels(ctx, fx, &top, key.1)))
             .collect();
         let white = fx.white.create_view(&Default::default());
-        let sampler = |t: Option<&lumit_scene::Texture>| {
+        let reading = |t: &lumit_scene::Texture| {
             let wrap = |w: Wrap| match w {
                 Wrap::Repeat => wgpu::AddressMode::Repeat,
                 Wrap::Mirror => wgpu::AddressMode::MirrorRepeat,
                 Wrap::Clamp => wgpu::AddressMode::ClampToEdge,
             };
-            let filter = if t.is_some_and(|t| t.nearest) {
+            let filter = if t.nearest {
                 wgpu::FilterMode::Nearest
             } else {
                 wgpu::FilterMode::Linear
             };
-            ctx.device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("mesh-sampler"),
-                address_mode_u: wrap(t.map_or(Wrap::Repeat, |t| t.wrap_u)),
-                address_mode_v: wrap(t.map_or(Wrap::Repeat, |t| t.wrap_v)),
-                mag_filter: filter,
-                min_filter: filter,
-                mipmap_filter: wgpu::FilterMode::Linear,
-                // Sharper at a glancing angle. The card only takes it with
-                // every filter linear.
-                anisotropy_clamp: if filter == wgpu::FilterMode::Linear {
-                    16
-                } else {
-                    1
-                },
-                ..Default::default()
-            })
+            (wrap(t.wrap_u), wrap(t.wrap_v), filter)
         };
         let default = lumit_scene::Material::default();
         let (materials, kept) = scene
@@ -262,6 +247,7 @@ impl GpuModel {
             .map(|m| {
                 let mut uv = [[0.0; 4]; 10];
                 let mut bound = Vec::with_capacity(5);
+                let mut readings = [super::samplers::PLAIN; 5];
                 for (k, (r, srgb)) in slots(m).into_iter().enumerate() {
                     let view = r.and_then(|r| views.get(&(r.texture, srgb)));
                     // KHR_texture_transform: offset, then turn, then scale.
@@ -285,13 +271,21 @@ impl GpuModel {
                         offset[1],
                         f32::from(u8::from(view.is_some())),
                     ];
-                    let texture = r.and_then(|r| scene.textures.get(r.texture));
-                    bound.push((view.unwrap_or(&white).clone(), sampler(texture)));
+                    if let Some(t) = r.and_then(|r| scene.textures.get(r.texture)) {
+                        readings[k] = reading(t);
+                    }
+                    bound.push(view.unwrap_or(&white).clone());
                 }
+                let samplers = fx.samplers.group(&ctx.device, readings);
                 let kept = Kept { uv, bound };
                 let group = kept.group(ctx, fx, m, ([None; 4], true), None);
                 (
-                    (group, m.alpha_mode == AlphaMode::Blend, m.double_sided),
+                    (
+                        group,
+                        m.alpha_mode == AlphaMode::Blend,
+                        m.double_sided,
+                        samplers,
+                    ),
                     kept,
                 )
             })

@@ -24,6 +24,7 @@ use wgpu::util::DeviceExt;
 mod blur;
 pub mod display;
 pub mod look;
+mod samplers;
 pub mod shadow;
 mod upload;
 
@@ -148,9 +149,10 @@ pub(crate) struct GpuModel {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     parts: Vec<Part>,
-    /// Each material's bind group, whether it blends and whether it is
-    /// double-sided. The last is glTF's default, for parts with none.
-    materials: Vec<(wgpu::BindGroup, bool, bool)>,
+    /// Each material's bind group, whether it blends, whether it is
+    /// double-sided and the samplers it reads with. The last is glTF's
+    /// default, for parts with none.
+    materials: Vec<(wgpu::BindGroup, bool, bool, wgpu::BindGroup)>,
     /// Its edges as lines, made the first time a view draws them.
     edges: OnceLock<(wgpu::Buffer, lumit_budget::Reservation)>,
     kept: Vec<look::Kept>,
@@ -164,7 +166,8 @@ pub(crate) struct MeshFx {
     frame_layout: wgpu::BindGroupLayout,
     material_layout: wgpu::BindGroupLayout,
     shadows_layout: wgpu::BindGroupLayout,
-    environment: environment::Binding,
+    samplers: samplers::Samplers,
+    environment: environment::Fallback,
     layout: wgpu::PipelineLayout,
     /// Draws a shadow map's view ([`shadow`]), made when first asked for.
     shadow: std::sync::OnceLock<wgpu::RenderPipeline>,
@@ -278,13 +281,11 @@ impl MeshFx {
         );
         let mut entries = vec![uniform_entry(0, false)];
         entries.extend((1..=5).map(|b| texture_entry(b, float, false)));
-        entries.extend((6..=10).map(sampler));
         // The opacity picture, and the picture behind for glass.
         entries.extend([11, 12].map(|b| texture_entry(b, float, false)));
-        entries.push(sampler(13));
         let material_layout = layout("mesh-material", &entries);
         let shadows_layout = layout("mesh-shadows", &shadow::layout());
-        let environment = environment::Binding::new(device);
+        let samplers = samplers::Samplers::new(device);
         let pipeline_layout = |label, layouts: &[&wgpu::BindGroupLayout]| {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some(label),
@@ -390,22 +391,23 @@ impl MeshFx {
                 &[
                     &frame_layout,
                     &material_layout,
+                    &samplers.layout,
                     &shadows_layout,
-                    &environment.layout,
                 ],
             ),
             shader,
             frame_layout,
             material_layout,
             shadows_layout,
-            environment,
+            samplers,
+            environment: environment::Fallback::new(device),
             shadow: std::sync::OnceLock::new(),
             depth_one,
             depth_many,
             down,
             add,
             sets: Mutex::new(HashMap::new()),
-            shared: look::Shared::new(device, &white),
+            shared: look::Shared::new(&white),
             white,
             models: Mutex::new(Vec::new()),
             scratch: Mutex::new(None),
@@ -802,10 +804,8 @@ impl MeshFx {
                 },
             ],
         });
-        let shadows_group = self.shadows_group(ctx, lighting, casters, maps);
-        let environment_group = self
-            .environment
-            .group(ctx, view.environment.filter(|_| !m.unlit));
+        let surround = view.environment.filter(|_| !m.unlit);
+        let shadows_group = self.shadows_group(ctx, lighting, casters, maps, surround);
         let view_of = |t: &wgpu::Texture| t.create_view(&Default::default());
         let (colour_view, z_view, depth_view) = (view_of(&colour), view_of(z), view_of(&depth));
         let msaa_view = msaa.as_ref().map(view_of);
@@ -858,7 +858,7 @@ impl MeshFx {
             pass.set_vertex_buffer(0, model.vertices.slice(..));
             pass.set_index_buffer(model.indices.slice(..), wgpu::IndexFormat::Uint32);
             for &(p, offset, set) in these.iter().filter(|_| view.display.draws_faces()) {
-                let Some((group, _, _)) = materials.get(p.material) else {
+                let Some((group, _, _, samplers)) = materials.get(p.material) else {
                     continue;
                 };
                 let Some(pipeline) = &pipelines[if depth { depth_set(set) } else { set }] else {
@@ -867,8 +867,8 @@ impl MeshFx {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
-                pass.set_bind_group(2, &shadows_group, &[]);
-                pass.set_bind_group(3, &environment_group, &[]);
+                pass.set_bind_group(2, samplers, &[]);
+                pass.set_bind_group(3, &shadows_group, &[]);
                 pass.draw_indexed(
                     p.first..p.first + p.count,
                     p.base_vertex,
@@ -882,13 +882,13 @@ impl MeshFx {
             pass.set_index_buffer(lines.slice(..), wgpu::IndexFormat::Uint32);
             pass.set_pipeline(wire);
             for &(p, offset, _) in these {
-                let Some((group, _, _)) = model.materials.get(p.material) else {
+                let Some((group, _, _, samplers)) = model.materials.get(p.material) else {
                     continue;
                 };
                 pass.set_bind_group(0, &frame_group, &[offset]);
                 pass.set_bind_group(1, group, &[]);
-                pass.set_bind_group(2, &shadows_group, &[]);
-                pass.set_bind_group(3, &environment_group, &[]);
+                pass.set_bind_group(2, samplers, &[]);
+                pass.set_bind_group(3, &shadows_group, &[]);
                 pass.draw_indexed(
                     p.first * 2..(p.first + p.count) * 2,
                     p.base_vertex,
