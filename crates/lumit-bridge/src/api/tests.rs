@@ -332,7 +332,13 @@ fn a_packed_project_keeps_its_footage_when_the_original_goes() {
     assert_eq!(project.pack_state().expect("state").packed, 1);
 
     // The original goes, and an ordinary save still carries the footage.
-    std::fs::remove_file(&clip).expect("deleted");
+    // The probe may still hold it for a moment.
+    let mut tries = 0;
+    while let Err(e) = std::fs::remove_file(&clip) {
+        assert!(e.raw_os_error() == Some(32) && tries < 200, "deleted: {e}");
+        tries += 1;
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     project.new_composition("Later".into(), None).expect("comp");
     project.save(String::new()).expect("saved");
 
@@ -6860,7 +6866,8 @@ fn an_export_refuses_a_model_engine_with_no_pack_installed() {
         })
         .expect("the layer asks for the model");
 
-    let target = std::env::temp_dir().join("lumit-addon-export-probe.mp4");
+    let out = tempfile::tempdir().expect("a folder");
+    let target = out.path().join("probe.mp4");
     let path = target.to_string_lossy().into_owned();
     let _serial = addons_serially();
     let empty = tempfile::tempdir().expect("a folder");
@@ -6908,7 +6915,6 @@ fn an_export_refuses_a_model_engine_with_no_pack_installed() {
         "an export either starts or explains itself: {started:?}"
     );
     export_cancel();
-    std::fs::remove_file(&target).ok();
 }
 
 // --- Camera track: the effect's surface across the seam -------------------
