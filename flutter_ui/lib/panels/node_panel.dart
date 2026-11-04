@@ -547,9 +547,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           onChanged: ui.model.refresh,
           pressed: _pressed,
         ),
-      'depth' || 'remove_background' => PlaneDisplayFrb(
+      'depth' || 'depth_points' || 'remove_background' => PlaneDisplayFrb(
           key: ValueKey<String>('node-plane-display-$id'),
-          card: picked.info.name == 'depth' ? PlaneCard.depth : PlaneCard.matte,
+          card: picked.info.name == 'remove_background'
+              ? PlaneCard.matte
+              : PlaneCard.depth,
           layer: layer,
           graph: graph,
           effectId: id,

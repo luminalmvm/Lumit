@@ -95,6 +95,7 @@ use super::effects::{
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
     depth::{Depth, DepthDef},
+    depth_points::{DepthPoints, DepthPointsDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
     displacement_map::{DisplacementMap, DisplacementMapDef},
     dof::{Dof, DofDef},
@@ -356,6 +357,8 @@ crate::catalogue![
     // Depth of field that reads it, because what it holds is a reading of the
     // shot rather than a look laid over one.
     DepthDef => Depth,
+    // The same analysis, drawn as points through a camera.
+    DepthPointsDef => DepthPoints,
     // Remove background (docs/08 §3.105), beside Depth: the same tier, the
     // same shape and the other thing a model reads out of a shot. A matte
     // rather than a reading, so it draws its answer into the layer's own alpha

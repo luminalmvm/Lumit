@@ -15,6 +15,7 @@ pub mod colour;
 pub mod common;
 /// The Custom shader's GPU half: validate, compile, cache, dispatch.
 pub mod custom_shader;
+pub mod depth_points;
 pub mod distort;
 pub mod dof;
 pub mod energy_line;
@@ -396,6 +397,8 @@ pub struct FxEngine {
     particulate_blend: particulate::ParticulateBlendPipelines,
     /// Particles in the 3D scene, built the first time some are.
     particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
+    /// Depth points, built the first time a shot is drawn as them.
+    depth_points: std::sync::OnceLock<depth_points::Pipeline>,
     /// Points field: the nearest point to every pixel, found by jump
     /// flooding. Its three passes share one layout of their own.
     points_field: points_field::PointsFieldPipelines,

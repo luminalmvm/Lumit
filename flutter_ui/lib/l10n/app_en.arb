@@ -632,6 +632,14 @@
   "@fxCameraTrack": {
     "description": "Effect name in the Add effect menu — solves the camera motion of a tracked shot."
   },
+  "fxCamera": "Camera",
+  "@fxCamera": {
+    "description": "Effect controls: on Depth points, the Camera layer the points line up from."
+  },
+  "fxDepthPoints": "Depth points",
+  "@fxDepthPoints": {
+    "description": "An effect's name: a shot drawn as points in 3D space from its depth."
+  },
   "fxCancel": "Cancel",
   "@fxCancel": {
     "description": "Effect controls — the button that stops a running camera solve on Camera track."

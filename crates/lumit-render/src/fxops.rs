@@ -1636,14 +1636,13 @@ pub fn run_ops(
             };
         }
 
-        // **The planes tier** (docs/impl/addons.md §6.1). Neither effect has an
-        // entry in the GPU table, for the Roto brush's reason: what each draws
-        // is the plane its analysis filed, and both of the passes that takes are
-        // already written for a matte nobody picked.
-        //
-        // An **empty slot passes through**, running no pass at all: outside the
-        // analysed span, before any Analyse, and wherever the pack is not
-        // installed, there is no plane, and drawing a neighbour's would be a
+        // **The planes tier** (docs/impl/addons.md §6.1). None has an entry in the
+        // GPU table, for the Roto brush's reason: each draws the plane its analysis
+        // filed. Depth points draws it as points.
+        let picture = (&mut tex, &mut w, &mut h);
+        let draw = crate::realise::scene::depth_points::draw;
+        let plane = draw(fx, ctx, picture, &resolved, layer_input, plane);
+        // An **empty slot passes through**: drawing a neighbour's plane would be a
         // wrong answer wearing a right one's face.
         if let Some((task, Some(plane))) = plane {
             // `matte_prepare` is the pass that turns a plane into an opaque grey

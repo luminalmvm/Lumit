@@ -21671,6 +21671,109 @@
       "matte_role": "none"
     },
     {
+      "slug": "depth-points",
+      "match_name": "depth_points",
+      "label": "Depth points",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "analyse",
+          "label": "Analyse",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "depth_layer",
+          "label": "Depth layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "camera",
+          "label": "Camera",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "amount",
+          "label": "Depth",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 190.0,
+          "hard_min": 0.0,
+          "hard_max": 190.0
+        },
+        {
+          "id": "point_size",
+          "label": "Point size",
+          "kind": "float",
+          "unit": "px",
+          "default": 2.0,
+          "slider_min": 1.0,
+          "slider_max": 20.0,
+          "hard_min": 1.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density",
+          "label": "Density",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "analyse",
+          "on": "depth_layer",
+          "cond": "layer_unset"
+        },
+        {
+          "param": "frames",
+          "on": "depth_layer",
+          "cond": "layer_unset"
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
       "slug": "remove-background",
       "match_name": "remove_background",
       "label": "Remove background",

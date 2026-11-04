@@ -7527,8 +7527,7 @@ impl LayerReference {
         home: InstanceHome,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
-        // A plugin on the list answers the edit before it is committed, so
-        // what it wrote lands in the same undo step.
+        // A plugin on the list answers the edit in the same undo step.
         let edit = |list: &mut Vec<EffectInstance>| {
             let before = list.clone();
             edit(list)?;
@@ -7551,7 +7550,8 @@ impl LayerReference {
                         styles: list,
                     }
                 } else {
-                    lumit_core::fx::effects::particulate::set_effects(self.comp_id, &layer, list)
+                    let (doc, comp) = (self.document()?, self.composition()?);
+                    lumit_core::fx::effects::depth_points::set_effects(&doc, &comp, &layer, list)
                 }
             }
             InstanceHome::Group(group) => {

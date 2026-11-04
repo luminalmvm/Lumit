@@ -66,6 +66,7 @@ sound on the main rows, gaps, crossfades and a passage of twelve-frame cuts.
 | B33 | B30 with two lights casting shadows, their maps made in the frame | ≤ 12 ms | |
 | B34 | Environment light: its cubes made from a 2K panorama, once a picture | ≤ 50 ms | |
 | B35 | B30 lit by an environment, its background drawn, one frame | ≤ 9 ms | |
+| B38 | Depth points of a 1080p shot at Density full, off axis, over the same flat layer, one frame | ≤ 16 ms | |
 
 The UI holds 60 fps during any interaction (16.6 ms is the floor) and budgets 8.3 ms a
 frame so high-refresh screens are fed. An idle editor schedules no frames.
@@ -139,7 +140,7 @@ pressure it slows down, it never changes output.
 ## 7. CI
 
 - A frame submits one command buffer however many layers it has. A test holds that.
-- `lumit-bench` runs B3 to B7, B11, B12 to B31 and B33 to B35 and compares each with
+- `lumit-bench` runs B3 to B7, B11, B12 to B31, B33 to B35 and B38 and compares each with
   `crates/lumit-bench/baselines/<os>.json`. It fails at 1.6x worse. Under 1 ms isn't
   ratio-gated. Regenerate a baseline by running the harness and committing the file.
 - The absolute budgets are only asserted under `LUMIT_REFERENCE_HW=1`.

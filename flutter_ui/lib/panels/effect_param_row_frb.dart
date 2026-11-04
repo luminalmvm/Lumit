@@ -604,8 +604,13 @@ class EffectParamRowFrb extends StatelessWidget {
       return HouseButton(
         key: ValueKey<String>('fx-action-$id-${param.id}'),
         small: true,
-        onPressed: onAction == null ? null : () => onAction!(id, param.id),
-        child: Text(engineLabel(param.label), style: t.body),
+        onPressed: onAction == null || !enabled
+            ? null
+            : () => onAction!(id, param.id),
+        child: Text(
+          engineLabel(param.label),
+          style: _off ? t.body.copyWith(color: t.textMuted) : t.body,
+        ),
       );
     }
     if (value == null) return Text('—', style: t.small);
@@ -1514,10 +1519,13 @@ class EffectParamRowFrb extends StatelessWidget {
         // whole point on an **adjustment layer** — which has no picture
         // of its own, and whose input is the composite of everything
         // below it. A Lens flare added to one starts here.
-        offered: (l) =>
-            sound ||
-            l.layer.internallayerId == ownerLayerId ||
-            l.layer.hasPicture(),
+        //
+        // Depth points' Camera row is the other way about: only cameras.
+        offered: (l) => param.id == 'camera'
+            ? l.info.kind == BridgeLayerKind.camera
+            : sound ||
+                l.layer.internallayerId == ownerLayerId ||
+                l.layer.hasPicture(),
         onChanged: (picked) => _set(BridgeEffectValue.layer(picked)),
       ),
     );
