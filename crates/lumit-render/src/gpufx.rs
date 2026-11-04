@@ -356,9 +356,7 @@ pub trait GpuEffect: Sync + 'static {
     ) -> Tex;
 }
 
-/// Every migrated effect's GPU pass. Order is irrelevant here (the Add-effect
-/// menu reads the catalogue, not this), so it follows the catalogue's for the
-/// benefit of anyone reading the two side by side.
+/// Every migrated effect's GPU pass, in the catalogue's order.
 static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &CustomShader,
     &Blur,

@@ -7513,12 +7513,8 @@ fn every_effect_carries_a_matte_row() {
         // ordinary auxiliary-layer carriage that `layer_input` is the predicate
         // for.
         //
-        // **Roto brush**: the same answer as Set matte's, arrived at
-        // from the other side. What this effect applies IS a coverage — the
-        // matte its propagation solved for this source frame — so a second
-        // picture saying how much of it happens here would be a coverage laid
-        // over a coverage, and the honest place to say "not there" is another
-        // stroke.
+        // **Roto brush**: what it applies IS a coverage, so a second picture
+        // saying how much of it happens here would be a coverage over a coverage.
         //
         // **Depth**: the third of that family. What it draws is a reading of
         // the picture underneath - how far away every pixel is, as a model saw
@@ -7526,11 +7522,7 @@ fn every_effect_carries_a_matte_row() {
         // not a thing a measurement has an answer to. Where a reading is wanted
         // in part of the frame, the effect that consumes it takes the matte.
         //
-        // **Remove background**: Set matte's answer and the Roto brush's, on
-        // the tier Depth is on. What it applies IS the coverage a model made of
-        // this frame, so a second picture saying how much of it happens here
-        // would be a coverage over a coverage, and the honest way to keep part
-        // of the background is a mask on the layer.
+        // **Remove background**: the Roto brush's answer.
         //
         // Anything else that wants to opt out is argued for here, in these
         // words, before it may.
