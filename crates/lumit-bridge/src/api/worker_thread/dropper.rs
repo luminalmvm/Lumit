@@ -1,9 +1,11 @@
-//! The dropper's two helpers: the window cut out of a picture, and the
-//! composition with one layer soloed for a layer read.
+//! The dropper's helpers: the window cut out of a picture, and the composition
+//! with one layer soloed for a layer read.
 
 use flutter_rust_bridge::frb;
 use uuid::Uuid;
 
+#[cfg(not(target_arch = "wasm32"))]
+use super::{quality_for, LayerSample};
 use super::{viewed_through, SamplePixelsRequest, WorkerState, MAX_WINDOW};
 
 /// A window cut out of a picture: the pixels, and where its centre landed.
@@ -90,4 +92,48 @@ pub(super) fn soloed(
         state.camera_views.get(&req.view).copied(),
         std::sync::Arc::new(patched),
     ))
+}
+
+/// The composition rendered with one layer soloed — that layer alone, in its
+/// own place, on nothing.
+///
+/// Held in `state.layer_sample` against `(comp, frame, layer, revision,
+/// view)`: the dropper asks again on every pointer move, and re-compositing
+/// the whole composition per move is not a thing to do while someone is
+/// dragging a pointer. An edit moves the document's revision, which retires
+/// the entry.
+#[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn sample_layer_alone(
+    document: &lumit_core::model::Document,
+    revision: u64,
+    layer: Uuid,
+    req: &SamplePixelsRequest,
+    state: &mut WorkerState,
+) -> Option<(u32, u32, Vec<u8>)> {
+    let stamp = (req.comp.id, req.frame, layer, revision, req.view);
+    if let Some(held) = &state.layer_sample {
+        if held.stamp == stamp {
+            return Some((held.width, held.height, held.rgba.clone()));
+        }
+    }
+
+    let patched = soloed(document, layer, req, state)?;
+    let (rgba, w, h) = state
+        .renderer
+        .render_preview(
+            &patched,
+            req.comp.id,
+            req.frame,
+            quality_for(req.scale),
+            req.scale,
+        )
+        .ok()?;
+    state.layer_sample = Some(LayerSample {
+        stamp,
+        width: w,
+        height: h,
+        rgba: rgba.clone(),
+    });
+    Some((w, h, rgba))
 }
