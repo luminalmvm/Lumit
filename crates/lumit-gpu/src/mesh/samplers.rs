@@ -98,7 +98,11 @@ impl Samplers {
                 entries: &entries,
             })
         };
-        let kept = self.groups.lock().ok().and_then(|g| g.get(&readings).cloned());
+        let kept = self
+            .groups
+            .lock()
+            .ok()
+            .and_then(|g| g.get(&readings).cloned());
         kept.unwrap_or_else(|| {
             let group = make();
             if let Ok(mut groups) = self.groups.lock() {
