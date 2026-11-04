@@ -60,6 +60,8 @@ void main() {
       reduceTransparency: true,
       waveformsFromBottom: true,
       showToneMap: true,
+      invertOrbitAcross: true,
+      invertOrbitUpDown: true,
       easingInPopup: true,
       layerNamesOnBars: true,
       markerLines: false,
@@ -99,6 +101,8 @@ void main() {
     expect(back.reduceTransparency, isTrue);
     expect(back.waveformsFromBottom, isTrue);
     expect(back.showToneMap, isTrue);
+    expect(back.invertOrbitAcross, isTrue);
+    expect(back.invertOrbitUpDown, isTrue);
     expect(back.easingInPopup, isTrue);
     expect(back.layerNamesOnBars, isTrue);
     expect(back.markerLines, isFalse);
@@ -122,7 +126,7 @@ void main() {
     expect(back.labelCase, LabelCase.lower);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 40);
+    expect(all.toJson().keys.length, 42);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means
