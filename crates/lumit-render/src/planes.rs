@@ -1245,17 +1245,11 @@ pub(crate) fn run(job: PlaneJob, cancel: &AtomicBool) {
         return;
     }
 
-    // Opened here, on this thread, and dropped at the end of this function,
-    // never held between analyses and never behind a shared lock (§6.1).
-    let mut model = match open_model(job.settings) {
-        Ok(model) => model,
-        Err(why) => {
-            finish(instance, Some(Progress::Failed(why)), owns_slot);
-            return;
-        }
-    };
+    // Opened on this thread once the frames are, and dropped at the end of this
+    // function, never held between analyses or behind a shared lock (§6.1).
+    let mut model = lazy::Lazy::new(job.settings);
 
-    match analyse(job, resume, model.as_mut(), cancel, &|step| {
+    match analyse(job, resume, &mut model, cancel, &|step| {
         report(instance, step);
     }) {
         Ok((run, cancelled)) => {
@@ -1566,7 +1560,9 @@ pub fn warm(jobs: Vec<PlaneJob>) {
         });
 }
 
+mod lazy;
 pub mod steady;
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
