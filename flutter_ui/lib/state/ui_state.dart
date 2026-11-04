@@ -4179,6 +4179,9 @@ class LumitUiState extends ChangeNotifier {
   final Map<int, Duration> _pictureTook = {};
   static const _slowPicture = Duration(milliseconds: 50);
 
+  /// Why a 3D model isn't drawing, as the Project panel's badge says it, so a
+  /// view with no model to draw can say it too. Null when nothing's wrong.
+  final ValueNotifier<String?> modelTrouble = ValueNotifier(null);
 
   /// A drag or a flight started or ended. Each move is timed afresh, and
   /// ending one puts a view drawn as a draft back to its full scale.

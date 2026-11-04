@@ -891,6 +891,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       _blenderPoll?.cancel();
       _blenderPoll = null;
     }
+    if (mounted) {
+      Provider.of<LumitUiState>(context, listen: false).modelTrouble.value =
+          switch (_blender.values.firstOrNull) {
+        BridgeBlenderState_Converting() => l10n.projectItemConverting,
+        BridgeBlenderState_NoBlender() => l10n.projectItemNoBlender,
+        BridgeBlenderState_Stopped() => l10n.projectItemStopped,
+        null => null,
+        _ => l10n.projectItemUndecodable,
+      };
+    }
   }
 
   void _stopBlender(ItemReference item) {

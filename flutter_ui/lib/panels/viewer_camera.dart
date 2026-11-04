@@ -1325,15 +1325,17 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
           Positioned.fill(child: widget.active ? _tools() : _navigation()),
           // Asked of the engine once per comp and revision, and frames ask too.
           ListenableBuilder(
-            listenable: ui,
+            listenable: Listenable.merge([ui, ui.modelTrouble]),
             builder: (context, _) {
               final models = ui.holdsModels(widget.viewId);
               final display = ui.displayOf(widget.viewId);
+              final trouble = ui.modelTrouble.value;
               return Positioned(
                 top: viewLookInset,
                 left: viewLookInset,
                 child: ViewLookTag(
                   look: [
+                    if (models && trouble != null) trouble,
                     if (models && display != BridgeModelDisplay.final_)
                       display.title,
                     if (models && ui.facesShown(widget.viewId))
