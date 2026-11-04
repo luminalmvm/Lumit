@@ -107,6 +107,7 @@ fn a_lit_model_and_a_crossing_layer_cut_where_they_meet() {
         three_d: true,
         layer_mask: None,
         pre: None,
+        premultiplied: false,
     };
     let frame = |lights: &[LightingLight]| {
         let model = draw(lights);

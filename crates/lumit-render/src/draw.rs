@@ -123,7 +123,7 @@ pub struct PlaneDraw {
 
 /// A depth-of-field depth input packaged for the compositor (docs/impl/
 /// layer-input.md §2): the referenced layer's **source** pixels, ready for
-/// [`crate::fxops::render_layer_input`] to resample into the consuming layer's
+/// [`crate::fxops::layer_input::render_layer_input`] to resample into the consuming layer's
 /// working raster. The referenced layer is rendered source-only (its own
 /// effect stack is not applied), exactly as a matte source is — so a depth
 /// reference can never recurse into another effect, and the preview and export
@@ -866,6 +866,12 @@ impl CompLayerDraw {
 }
 
 impl CompLayerDraw {
+    /// Whether its picture's colour already has its alpha in it: all but a
+    /// source's own pixels, which come with theirs apart.
+    pub(crate) fn premultiplied(&self) -> bool {
+        !matches!(self.source, DrawSource::Pixels { .. })
+    }
+
     /// Whether this draw reads the comp's picture away from its own pixels,
     /// so a frame with it can't be drawn as a cropped region: an adjustment
     /// layer, the haze, the environment, a motion-blurred layer, or a 3D
