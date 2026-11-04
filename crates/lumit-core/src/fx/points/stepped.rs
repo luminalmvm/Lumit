@@ -152,6 +152,18 @@ pub struct Inputs {
 }
 
 impl Inputs {
+    /// The polyline a Mask path emitter walks, px@comp.
+    #[must_use]
+    pub fn path(&self) -> &MaskPolyline {
+        &self.path
+    }
+
+    /// The layer's picture size, px@comp, that the Edge row acts at.
+    #[must_use]
+    pub fn frame(&self) -> [f32; 2] {
+        self.params.frame
+    }
+
     /// `frame` is the layer's picture size, px@comp, for the Edge row.
     #[must_use]
     pub fn new(
@@ -196,6 +208,9 @@ pub fn definition(
     let _ = serde_json::to_writer(&mut h, &layer.masks);
     let _ = serde_json::to_writer(&mut h, &layer.kind);
     let _ = serde_json::to_writer(&mut h, &target);
+    if super::sim::wanted(comp, inst) {
+        super::sim::feed_colliders(doc, comp, inst, &mut h);
+    }
     for one in std::iter::once(layer).chain(target) {
         // A solid's size is the frame Edge acts at, and the rectangle a
         // layer with no shapes is hit at.
@@ -245,6 +260,7 @@ const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
 #[must_use]
 pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
     crate::fx::effects::particulate::rows::on_its_layer(inst)
+        && !super::sim::wanted(comp, inst)
         && (target(comp, inst).is_some() || WALK_ROWS.iter().any(|id| above(comp, inst, id)))
 }
 
@@ -252,12 +268,21 @@ pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
 /// above nought, at some time. It does not make the particles walk.
 #[must_use]
 pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
-    crate::fx::effects::particulate::rows::on_its_layer(inst) && above(comp, inst, "persistence")
+    crate::fx::effects::particulate::rows::on_its_layer(inst)
+        && !super::sim::wanted(comp, inst)
+        && above(comp, inst, "persistence")
+}
+
+/// Whether Particulate `inst` is drawn on the card from the document, at every
+/// frame from the in point: its Trails, or its simulation.
+#[must_use]
+pub fn carried(comp: &Composition, inst: &EffectInstance) -> bool {
+    trails(comp, inst) || super::sim::wanted(comp, inst)
 }
 
 /// Whether row `id` is above nought, or keyed, an expression or wired, as it
 /// may be at some time.
-fn above(comp: &Composition, inst: &EffectInstance, id: &str) -> bool {
+pub(super) fn above(comp: &Composition, inst: &EffectInstance, id: &str) -> bool {
     use crate::anim::Animation;
     use crate::graph::{InputRef, NodeRef};
     let on = match inst.param(id) {
@@ -440,9 +465,29 @@ fn step(s: &mut State, now: &Inputs, then: &Inputs, h: f64, dt: f64) {
 
 /// The burst on `s`'s frame, if one goes off, read at that frame.
 fn bursts(s: &mut State, now: &Inputs) {
-    let rows = &now.rows;
     let f = s.frame;
-    let high = rows.trigger > 0.5;
+    let n = burst_at(&now.rows, f, &mut s.high);
+    if n == 0 {
+        return;
+    }
+    let p = &now.params;
+    let outline = outline_polyline(&p.emitter);
+    let walk = if p.emitter.shape.is_outline() {
+        &outline
+    } else {
+        &now.path
+    };
+    for j in n.saturating_sub(p.cap)..n {
+        if let Some((q, _)) = born(p, walk, burst_base(f) + u64::from(j), 0.0) {
+            s.particles.push(q);
+        }
+    }
+}
+
+/// How many particles the burst on frame `f` throws, read at that frame, with
+/// `high` carrying whether Trigger was over a half on the frame before.
+pub(super) fn burst_at(rows: &Particulate, f: i64, high: &mut bool) -> u32 {
+    let above = rows.trigger > 0.5;
     let fires = match Burst::from_code(rows.burst) {
         Burst::Off => false,
         Burst::Once => f == 0,
@@ -455,29 +500,14 @@ fn bursts(s: &mut State, now: &Inputs) {
             };
             f % n == 0
         }
-        Burst::Trigger => high && !s.high,
+        Burst::Trigger => above && !*high,
     };
-    s.high = high;
-    if !fires {
-        return;
-    }
+    *high = above;
     let n = rows.burst_count;
-    let n = if n.is_finite() {
+    if fires && n.is_finite() {
         n.round().clamp(0.0, BURST_MAX as f32) as u32
     } else {
         0
-    };
-    let p = &now.params;
-    let outline = outline_polyline(&p.emitter);
-    let walk = if p.emitter.shape.is_outline() {
-        &outline
-    } else {
-        &now.path
-    };
-    for j in n.saturating_sub(p.cap)..n {
-        if let Some((q, _)) = born(p, walk, burst_base(f) + u64::from(j), 0.0) {
-            s.particles.push(q);
-        }
     }
 }
 

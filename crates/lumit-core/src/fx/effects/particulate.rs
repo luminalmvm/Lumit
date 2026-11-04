@@ -356,6 +356,66 @@ pub struct Particulate {
     )]
     pub speed_max: f32,
 
+    /// Works each frame's particles out from the frame before on the graphics
+    /// card, up to Max particles ([`points::sim`]). Turbulence becomes a flow
+    /// the particles are pushed about by, and the rows below come alive.
+    #[toggle(label = "Simulate", default = false)]
+    pub simulate: bool,
+
+    /// How many times a frame the particles move. More keeps fast ones honest.
+    #[counter(
+        label = "Sub-steps",
+        min = 1,
+        max = 8,
+        default = 2,
+        hard_min = 1,
+        hard_max = 8,
+        unit = Raw
+    )]
+    pub sub_steps: i32,
+
+    /// Where the Attractor, Vortex and Sphere sit, px@comp.
+    #[slider(label = "Field x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
+    pub field_x: f32,
+
+    /// See [`field_x`](Self::field_x).
+    #[slider(label = "Field y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
+    pub field_y: f32,
+
+    /// See [`field_x`](Self::field_x).
+    #[slider(label = "Field z", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub field_z: f32,
+
+    /// How far the three reach, px@comp.
+    #[slider(
+        label = "Field radius",
+        min = 1.0,
+        max = 2000.0,
+        default = 400.0,
+        hard_min = 1.0,
+        unit = Px
+    )]
+    pub field_radius: f32,
+
+    /// How hard particles are pulled to the field's middle, px@comp per
+    /// second². Below nought it pushes them away.
+    #[slider(min = -5000.0, max = 5000.0, default = 0.0, unit = Px)]
+    pub attractor: f32,
+
+    /// How fast particles are swept round the field's middle, px@comp per
+    /// second. Below nought they go the other way.
+    #[slider(min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub vortex: f32,
+
+    /// The line the Vortex turns about.
+    #[choice(label = "Vortex axis", options = ["X", "Y", "Z"], default = 1)]
+    pub vortex_axis: u32,
+
+    /// How hard particles are thrown out of a ball of the field's radius,
+    /// px@comp per second².
+    #[slider(min = 0.0, max = 20000.0, default = 0.0, hard_min = 0.0, unit = Px)]
+    pub sphere: f32,
+
     /// px@comp per second², positive down.
     #[slider(min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub gravity: f32,
@@ -435,6 +495,24 @@ pub struct Particulate {
     /// where they have been. Unset, nothing changes.
     #[layer(label = "Collide with")]
     pub collide_with: bool,
+
+    /// Particles hit every 3D layer in the comp, as well as Collide with.
+    #[toggle(label = "All 3D layers", default = false)]
+    pub collide_all: bool,
+
+    /// Particles hit the floor the 3D views draw.
+    #[toggle(label = "Ground", default = false)]
+    pub ground: bool,
+
+    /// How far above that floor they hit it, px@comp.
+    #[slider(
+        label = "Ground height",
+        min = -2000.0,
+        max = 2000.0,
+        default = 0.0,
+        unit = Px
+    )]
+    pub ground_height: f32,
 
     /// What a particle does when it hits.
     #[choice(label = "On contact", options = *points::Contact::OPTIONS, default = 0)]
@@ -521,6 +599,11 @@ pub struct Particulate {
         unit = Raw
     )]
     pub sparks: f32,
+
+    /// When a particle throws its sparks: all at once as it dies, each time it
+    /// hits something, or that many each second as it goes.
+    #[choice(label = "Sparks from", options = ["Death", "Bounce", "Flight"], default = 0)]
+    pub sparks_from: u32,
 
     /// How fast sparks fly out, px@comp per second.
     #[slider(

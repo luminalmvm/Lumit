@@ -31,6 +31,7 @@ Align to motion
 Align to path
 Alignment
 All
+All 3D layers
 All at once
 All edges
 All frames
@@ -71,6 +72,7 @@ Aspect
 Aspect ratio
 Asymmetric
 Attack
+Attractor
 Audio
 Audio level
 Auto
@@ -315,6 +317,7 @@ Darken
 Darker
 Darker colour
 Datamosh
+Death
 Decay
 Decimals
 Deep blue
@@ -465,6 +468,10 @@ Features
 Feedback
 Field
 Field of view
+Field radius
+Field x
+Field y
+Field z
 File
 Fill
 Fill cell
@@ -485,6 +492,7 @@ Flash
 Flash colour
 Flicker
 Flicker speed
+Flight
 Flip axis
 Flip direction
 Flip order
@@ -574,6 +582,8 @@ Grid size
 Grid size x
 Grid size y
 Grit
+Ground
+Ground height
 Group
 Group name
 Grow
@@ -1173,6 +1183,8 @@ Shutter angle
 Shutter phase
 Siceliot
 Sides
+Simulate
+Simulation
 Sine
 Single
 Single layer, straw
@@ -1222,6 +1234,7 @@ Spark life
 Spark size
 Spark speed
 Sparks
+Sparks from
 Speed
 Speed jitter
 Speed max
@@ -1287,6 +1300,7 @@ Stylise
 Sub influence
 Sub scaling
 Sub settings
+Sub-steps
 Subtract
 Super 16
 Super 35
@@ -1438,6 +1452,7 @@ Vivid light
 Voices
 Volume
 Vortex
+Vortex axis
 Wah
 Warming filter (81)
 Warming filter (85)
@@ -1491,6 +1506,7 @@ Y wave frequency
 Y wave phase
 Yellow
 Yellows
+Z
 Z amount
 Z dist
 Z frequency

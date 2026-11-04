@@ -34,6 +34,7 @@ pub mod lighting;
 pub mod particulate;
 pub mod particulate_params;
 pub mod particulate_scene;
+pub mod particulate_sim;
 pub mod points_draw;
 pub mod points_field;
 pub mod split;
@@ -397,6 +398,8 @@ pub struct FxEngine {
     particulate_blend: particulate::ParticulateBlendPipelines,
     /// Particles in the 3D scene, built the first time some are.
     particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
+    /// Particles worked out step by step, built the first time some are.
+    particulate_sim: std::sync::OnceLock<particulate_sim::SimPipelines>,
     /// Points field: the nearest point to every pixel, found by jump
     /// flooding. Its three passes share one layout of their own.
     points_field: points_field::PointsFieldPipelines,

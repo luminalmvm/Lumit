@@ -1233,6 +1233,10 @@ impl Eval<'_> {
                     ),
                 ))),
                 "particulate" => {
+                    // A simulation's particles are only ever on the card.
+                    if points::sim::wanted(comp, inst) {
+                        return None;
+                    }
                     let particulate = super::effects::particulate::Particulate::read(params);
                     // Births that follow a Density layer depend on a
                     // picture, so they fall out with Scatter's below. Trails

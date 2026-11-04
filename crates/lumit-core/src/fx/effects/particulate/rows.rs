@@ -74,6 +74,21 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         ],
     ),
     group(
+        "Simulation",
+        &[
+            "simulate",
+            "sub_steps",
+            "attractor",
+            "vortex",
+            "vortex_axis",
+            "sphere",
+            "field_x",
+            "field_y",
+            "field_z",
+            "field_radius",
+        ],
+    ),
+    group(
         "Forces",
         &[
             "gravity",
@@ -89,7 +104,15 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
     group("Edges", &["edge", "edge_margin"]),
     group(
         "Collide",
-        &["collide_with", "on_contact", "bounciness", "friction"],
+        &[
+            "collide_with",
+            "collide_all",
+            "ground",
+            "ground_height",
+            "on_contact",
+            "bounciness",
+            "friction",
+        ],
     ),
     group(
         "Flock",
@@ -97,7 +120,13 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
     ),
     group(
         "Sparks",
-        &["sparks", "spark_speed", "spark_life", "spark_size"],
+        &[
+            "sparks",
+            "sparks_from",
+            "spark_speed",
+            "spark_life",
+            "spark_size",
+        ],
     ),
     group("Trails", &["persistence", "zoom", "turn"]),
     group(
@@ -147,13 +176,8 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "shape",
         cond: EnabledCond::ChoiceIsNot(9),
     },
-    // The step and the kept picture draw on the layer, so they stand aside
-    // while the particles are in the scene.
-    EnabledWhen {
-        param: "collide_with",
-        on: "in_scene",
-        cond: EnabledCond::BoolIs(false),
-    },
+    // A flock and the kept picture draw on the layer, so they stand aside
+    // while the particles are in the scene or on the card.
     EnabledWhen {
         param: "separation",
         on: "in_scene",
@@ -170,14 +194,89 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         cond: EnabledCond::BoolIs(false),
     },
     EnabledWhen {
-        param: "sparks",
+        param: "persistence",
         on: "in_scene",
         cond: EnabledCond::BoolIs(false),
     },
     EnabledWhen {
-        param: "persistence",
-        on: "in_scene",
+        param: "separation",
+        on: "simulate",
         cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "alignment",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "cohesion",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "persistence",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(false),
+    },
+    EnabledWhen {
+        param: "sub_steps",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "attractor",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "vortex",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "vortex_axis",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "sphere",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "field_x",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "field_y",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "field_z",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "field_radius",
+        on: "simulate",
+        cond: EnabledCond::BoolIs(true),
+    },
+    EnabledWhen {
+        param: "ground_height",
+        on: "ground",
+        cond: EnabledCond::BoolIs(true),
     },
     // Each burst row means something only in the bursts that read it.
     EnabledWhen {
@@ -301,24 +400,9 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         cond: EnabledCond::LayerUnset,
     },
     EnabledWhen {
-        param: "on_contact",
-        on: "collide_with",
-        cond: EnabledCond::LayerSet,
-    },
-    EnabledWhen {
-        param: "bounciness",
-        on: "collide_with",
-        cond: EnabledCond::LayerSet,
-    },
-    EnabledWhen {
         param: "bounciness",
         on: "on_contact",
         cond: EnabledCond::ChoiceIs(0),
-    },
-    EnabledWhen {
-        param: "friction",
-        on: "collide_with",
-        cond: EnabledCond::LayerSet,
     },
     // Only a particle that carries on along the surface slows on it.
     EnabledWhen {

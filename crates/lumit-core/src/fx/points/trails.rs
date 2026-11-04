@@ -1,4 +1,4 @@
-//! What a Particulate with Trails on carries to the card.
+//! What a Particulate with Trails on, or a simulation, carries to the card.
 
 /// A Particulate with Persistence above nought: the card draws every frame
 /// from the in point again, each from the document at its own time.
@@ -16,4 +16,6 @@ pub struct Trails {
     /// The picture a Sprite layer stamps, named by what is in it. `None` for
     /// one nothing names, and then the walk keeps no pictures.
     pub sprite: Option<u128>,
+    /// Whether this is a simulation on the card rather than a kept picture.
+    pub sim: bool,
 }

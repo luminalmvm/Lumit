@@ -157,6 +157,8 @@ pub struct ParticulateOp<'a> {
     /// How particles combine where they overlap: an index into
     /// `lumit_core::model::BlendMode::ALL`, 0 being Normal.
     pub blend: u32,
+    /// The particles a simulation got to, which then stand in for the schedule.
+    pub sim: Option<super::particulate_sim::SimView<'a>>,
 }
 
 /// [`ParticulateOp::blend`]'s Add, the one mode besides Normal the card's own
@@ -524,7 +526,8 @@ impl FxEngine {
         // wrong frame is recoverable and an invalidated encoder is not.
         let candidates = op.candidates.min(MAX_CANDIDATES as u32);
         let cap = op.cap;
-        if candidates == 0 || cap == 0 || op.mix <= 0.0 || op.frames.len() < 2 {
+        let scheduled = candidates > 0 && op.frames.len() >= 2;
+        if !(scheduled || op.sim.is_some()) || cap == 0 || op.mix <= 0.0 {
             return None;
         }
         let blocks = candidates.div_ceil(SCAN_BLOCK);
@@ -673,6 +676,8 @@ impl FxEngine {
         Some(ParticulatePass {
             bind,
             draw_bind,
+            sim: op.sim.as_ref().map(|view| self.sim_out_bind(ctx, view)),
+            cap,
             empty,
             stream,
             args,
@@ -688,6 +693,9 @@ impl FxEngine {
 pub(super) struct ParticulatePass {
     bind: wgpu::BindGroup,
     pub(super) draw_bind: wgpu::BindGroup,
+    /// What makes the stream from a simulation, in place of the closed forms.
+    sim: Option<wgpu::BindGroup>,
+    cap: u32,
     pub(super) empty: wgpu::BindGroup,
     pub(super) stream: wgpu::Buffer,
     pub(super) args: wgpu::Buffer,
@@ -706,6 +714,10 @@ impl ParticulatePass {
             timestamp_writes: None,
         });
         cp.set_bind_group(0, &self.bind, &[]);
+        if let Some(out) = &self.sim {
+            fx.sim_out_pass(&mut cp, &self.empty, out, self.cap);
+            return;
+        }
         cp.set_pipeline(&fx.particulate_alive);
         cp.dispatch_workgroups(self.candidates.div_ceil(EVAL_WORKGROUP), 1, 1);
         cp.set_pipeline(&fx.particulate_scan);

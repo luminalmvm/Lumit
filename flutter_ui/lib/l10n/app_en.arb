@@ -4073,6 +4073,70 @@
   "@fxSparkSize": {
     "description": "Effect controls — a control on Particulate: how big a spark is, as a percentage of the particle it came from."
   },
+  "fxSimulation": "Simulation",
+  "@fxSimulation": {
+    "description": "Effect controls: a group of Particulate controls that work particles out step by step on the graphics card."
+  },
+  "fxSimulate": "Simulate",
+  "@fxSimulate": {
+    "description": "Effect controls: a switch on Particulate that works each frame out from the frame before on the graphics card."
+  },
+  "fxSubSteps": "Sub-steps",
+  "@fxSubSteps": {
+    "description": "Effect controls: a control on Particulate: how many times a frame the particles move."
+  },
+  "fxFieldX": "Field x",
+  "@fxFieldX": {
+    "description": "Effect controls: a control on Particulate: where the Attractor, Vortex and Sphere sit, across."
+  },
+  "fxFieldY": "Field y",
+  "@fxFieldY": {
+    "description": "Effect controls: a control on Particulate: where the Attractor, Vortex and Sphere sit, down."
+  },
+  "fxFieldZ": "Field z",
+  "@fxFieldZ": {
+    "description": "Effect controls: a control on Particulate: where the Attractor, Vortex and Sphere sit, in depth."
+  },
+  "fxFieldRadius": "Field radius",
+  "@fxFieldRadius": {
+    "description": "Effect controls: a control on Particulate: how far the Attractor, Vortex and Sphere reach."
+  },
+  "fxAttractor": "Attractor",
+  "@fxAttractor": {
+    "description": "Effect controls: a control on Particulate: how hard particles are pulled to a point."
+  },
+  "fxVortexAxis": "Vortex axis",
+  "@fxVortexAxis": {
+    "description": "Effect controls: a control on Particulate: the line the Vortex turns about."
+  },
+  "fxAll3dLayers": "All 3D layers",
+  "@fxAll3dLayers": {
+    "description": "Effect controls: a switch on Particulate: particles hit every 3D layer in the comp."
+  },
+  "fxGround": "Ground",
+  "@fxGround": {
+    "description": "Effect controls: a switch on Particulate: particles hit the floor the 3D views draw."
+  },
+  "fxGroundHeight": "Ground height",
+  "@fxGroundHeight": {
+    "description": "Effect controls: a control on Particulate: how far above the floor particles hit it."
+  },
+  "fxSparksFrom": "Sparks from",
+  "@fxSparksFrom": {
+    "description": "Effect controls: a control on Particulate: when a particle throws its sparks."
+  },
+  "fxDeath": "Death",
+  "@fxDeath": {
+    "description": "Effect controls: an option of Sparks from on Particulate: a particle throws its sparks as it dies."
+  },
+  "fxFlight": "Flight",
+  "@fxFlight": {
+    "description": "Effect controls: an option of Sparks from on Particulate: a particle throws its sparks all the way along."
+  },
+  "fxAxisZ": "Z",
+  "@fxAxisZ": {
+    "description": "Effect controls: the third axis, as an option."
+  },
   "fxTrails": "Trails",
   "@fxTrails": {
     "description": "Effect controls — a group heading on Particulate: the controls for keeping each frame's picture, so particles leave smears behind them."

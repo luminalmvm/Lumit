@@ -92,6 +92,15 @@ pub(crate) fn carried(doc: &Document, comp: &Composition, layer: &Layer) -> Opti
     })
 }
 
+/// The surface `layer`'s Particulate in the scene gives birth on, in px@comp.
+pub(crate) fn surface_of(
+    doc: &Document,
+    comp: &Composition,
+    layer: &Layer,
+) -> Option<Arc<[[f32; 4]]>> {
+    in_scene(layer).then(|| surface(doc, comp, layer)).flatten()
+}
+
 /// The most triangles a surface gives birth on.
 // ponytail: the triangles are gathered again each frame. Keep them with the
 // model's scene if a large model shows in a profile.

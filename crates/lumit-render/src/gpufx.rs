@@ -4697,7 +4697,7 @@ impl GpuEffect for Stroke {
 /// evaluation time, subtracted in `f64` so a two-second age never has to be
 /// recovered from inside an hour-long clock.
 #[allow(clippy::too_many_arguments)]
-fn particulate_op<'a>(
+pub(crate) fn particulate_op<'a>(
     packed: &'a lumit_core::fx::points::PointsParams,
     style: lumit_core::fx::points::DrawStyle,
     sched: &lumit_core::fx::points::PointsSchedule,
@@ -4768,6 +4768,7 @@ fn particulate_op<'a>(
         speed_range: look.speed_range,
         density,
         blend,
+        sim: None,
     }
 }
 
@@ -4809,11 +4810,11 @@ fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u3
 /// applies. This pass always hands over the *declared* cap, which is why the
 /// rung is never on the export path — there is nothing on this path that could
 /// turn it on.
-struct Particulate;
+pub(crate) struct Particulate;
 impl Particulate {
     /// The GPU op this frame's Particulate draws, handed to `f` with the
     /// sprite it stamps, if any.
-    fn with_op<R>(
+    pub(crate) fn with_op<R>(
         p: Params<'_>,
         aux: AuxSlot<'_>,
         f: impl FnOnce(&lumit_gpu::fx::particulate::ParticulateOp<'_>, Option<&Tex>) -> R,

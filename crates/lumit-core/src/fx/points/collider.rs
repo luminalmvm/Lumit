@@ -41,6 +41,33 @@ impl Collider {
         t: f64,
         context: &ExpressionContext,
     ) -> Self {
+        Self::seen(doc, comp, owner, target, t, context, false)
+    }
+
+    /// As [`Collider::of`], but a 3D layer facing the way this one does is a
+    /// surface too, as a simulation in 3D wants.
+    #[must_use]
+    pub fn of_in_3d(
+        doc: &Document,
+        comp: &Composition,
+        owner: &Layer,
+        target: &Layer,
+        t: f64,
+        context: &ExpressionContext,
+    ) -> Self {
+        let in_3d = owner.switches.three_d && target.switches.three_d;
+        Self::seen(doc, comp, owner, target, t, context, in_3d)
+    }
+
+    fn seen(
+        doc: &Document,
+        comp: &Composition,
+        owner: &Layer,
+        target: &Layer,
+        t: f64,
+        context: &ExpressionContext,
+        always_surface: bool,
+    ) -> Self {
         use crate::fx::drivers::measure;
         let lt = crate::time::layer_time(t, target.start_offset.0);
         let mut lines: Vec<MaskPolyline> = target
@@ -82,7 +109,7 @@ impl Collider {
             m[2][0] * m[0][1] - m[0][0] * m[2][1],
             m[0][0] * m[1][1] - m[1][0] * m[0][1],
         ];
-        let surface = n[0].hypot(n[1]) > 1e-6 * n[2].abs();
+        let surface = always_surface || n[0].hypot(n[1]) > 1e-6 * n[2].abs();
         let place = |p: [f32; 2]| {
             if surface {
                 return p;
@@ -136,6 +163,54 @@ impl Collider {
             from_layer,
             surface,
         }
+    }
+
+    /// The floor at height `y` in comp pixels, seen from `owner`'s pixels. In
+    /// its own pixels the floor is where z is nought, and z grows upwards.
+    #[must_use]
+    pub fn ground(
+        comp: &Composition,
+        owner: &Layer,
+        t: f64,
+        context: &ExpressionContext,
+        y: f64,
+    ) -> Self {
+        let read = crate::expression::space::reader(context, comp.id, t);
+        let world = crate::expression::space::space(&context.document, comp, owner, t, &read).world;
+        let floor = Place {
+            m: [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+            t: (0.0, y, 0.0),
+        };
+        let to_layer = match world.invert() {
+            Some(back) => floor.within(&back),
+            None => floor,
+        };
+        Collider::new(Vec::new(), to_layer, true)
+    }
+
+    /// Each edge's two ends: in this layer's pixels for walls, in the
+    /// collider's own for a surface.
+    #[must_use]
+    pub fn edges(&self) -> &[[[f32; 2]; 2]] {
+        &self.edges
+    }
+
+    /// The collider's own pixels to this layer's.
+    #[must_use]
+    pub fn to_layer(&self) -> &Place {
+        &self.to_layer
+    }
+
+    /// This layer's pixels to the collider's own.
+    #[must_use]
+    pub fn from_layer(&self) -> &Place {
+        &self.from_layer
+    }
+
+    /// Whether it is a surface, rather than walls.
+    #[must_use]
+    pub fn is_surface(&self) -> bool {
+        self.surface
     }
 
     /// Where a particle moving from `from` to `to` at `vel` ends up.
