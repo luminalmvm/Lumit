@@ -57,9 +57,7 @@ use crate::fx::noise::{hash01, value3};
 use crate::mask::MaskPolyline;
 use emitter::{birth_point, outline_polyline, Emitter};
 
-pub mod collider;
 pub mod emitter;
-pub mod sim;
 pub mod stepped;
 pub mod trails;
 

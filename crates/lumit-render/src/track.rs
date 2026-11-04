@@ -1615,9 +1615,6 @@ fn is_bake_points(fx: &&EffectInstance) -> bool {
 /// since what it was made from may have changed in a way the fingerprint
 /// cannot see.
 pub fn request_bake(doc: Arc<Document>, comp: Uuid, layer: Uuid, effect: Uuid) -> Requested {
-    if crate::sim::bake::wanted(&doc, comp, layer, effect) {
-        return crate::sim::bake::request(doc, comp, layer, effect);
-    }
     start(effect, move |cancel| {
         let step = |step| report(effect, step);
         let outcome = match bake(&doc, comp, layer, effect, cancel, &step) {
@@ -1762,7 +1759,9 @@ fn bake(
 
 /// The most blobs followed on one frame.
 ///
-/// ponytail: one number rather than a row, bounding what a noisy clip costs.
+/// ponytail: one number rather than a row. It bounds what a noisy clip can
+/// cost: this many points a frame in the sidecar at twelve bytes each. A Max
+/// points row is the upgrade if somebody needs more.
 const MAX_BLOBS: usize = 1000;
 
 /// A Track points analysis: every frame of the clip through the feature

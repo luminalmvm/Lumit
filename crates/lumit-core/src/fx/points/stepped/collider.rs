@@ -1,9 +1,9 @@
 //! What Particulate's particles hit: a layer's outline at one time, seen from
 //! the layer the particles are on.
 
-use super::Contact;
 use crate::camera::Place;
 use crate::expression::ExpressionContext;
+use crate::fx::points::Contact;
 use crate::mask::MaskPolyline;
 use crate::model::{Composition, Document, Layer, LayerKind};
 

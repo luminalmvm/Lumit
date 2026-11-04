@@ -6,7 +6,7 @@ use glam::Mat4;
 use lumit_core::camera::Place;
 use lumit_core::expression::ExpressionContext;
 use lumit_core::fx::effects::particulate::Particulate;
-use lumit_core::fx::points::collider::Collider;
+use lumit_core::fx::points::stepped::collider::Collider;
 use lumit_core::model::{EffectValue, Layer, LayerKind};
 use lumit_gpu::fx::particulate_sim::{ColliderKind, SimCollider};
 use lumit_gpu::GpuContext;

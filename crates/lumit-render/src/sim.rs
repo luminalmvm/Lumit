@@ -16,7 +16,7 @@ use lumit_budget::{Reservation, Tier};
 use lumit_core::expression::ExpressionContext;
 use lumit_core::fx::effects::particulate::Particulate as P;
 use lumit_core::fx::params::Params;
-use lumit_core::fx::points::sim::{physics, Ledger, Steady};
+use lumit_core::fx::points::stepped::sim::{physics, Ledger, Steady};
 use lumit_core::fx::points::stepped::Inputs;
 use lumit_core::fx::points::trails::Trails;
 use lumit_core::fx::registry::EffectMetadata;
@@ -267,7 +267,7 @@ fn run_steps(
             .map(|(pt, a)| [pt[0], pt[1], *a, 0.0])
             .collect(),
     };
-    let op = crate::gpufx::particulate_op(
+    let op = crate::gpufx_particulate::particulate_op(
         &packed,
         style,
         &sched,
@@ -601,7 +601,7 @@ pub(crate) fn draw(
     let Some(work) = work else {
         return input.clone();
     };
-    crate::gpufx::Particulate::with_op(p, aux, |op, sprite| {
+    crate::gpufx_particulate::Particulate::with_op(p, aux, |op, sprite| {
         let op = ParticulateOp {
             sim: Some(view(&work, p)),
             ..*op

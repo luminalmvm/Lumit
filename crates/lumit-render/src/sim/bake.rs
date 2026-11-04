@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use lumit_core::fx::points::sim::Ledger;
 use lumit_core::fx::points::stepped::carried;
+use lumit_core::fx::points::stepped::sim::Ledger;
 use lumit_core::model::Document;
 use uuid::Uuid;
 
@@ -162,7 +162,7 @@ pub fn wanted(doc: &Document, comp: Uuid, layer: Uuid, effect: Uuid) -> bool {
             .iter()
             .filter(|l| l.id == layer)
             .flat_map(|l| &l.effects)
-            .any(|e| e.id == effect && lumit_core::fx::points::sim::wanted(c, e))
+            .any(|e| e.id == effect && lumit_core::fx::points::stepped::sim::wanted(c, e))
     })
 }
 

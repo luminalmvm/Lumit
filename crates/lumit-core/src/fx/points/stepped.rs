@@ -23,12 +23,16 @@
 //! through every depth, hit across and down. One turned against it in 3D is a
 //! surface, hit where a particle passes through its shapes.
 
+pub mod collider;
+pub mod sim;
+#[cfg(test)]
+mod tests;
+
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 
-use super::collider::{narrow, wide, Collider, Hit};
 use super::{
     attr, burst_base, draw, emitter::birth_point, emitter::outline_polyline, integrate, jitter,
     launch, look_of, turbulence, wrapped, Burst, Contact, Edge, PointsParams, PointsStream,
@@ -38,6 +42,7 @@ use crate::camera::Place;
 use crate::fx::effects::particulate::Particulate;
 use crate::mask::MaskPolyline;
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, LayerKind};
+use collider::{narrow, wide, Collider, Hit};
 
 /// The most particles a walk carries, whatever Max particles says. Each is
 /// carried from frame to frame and kept with the frame, so this is lower than
@@ -208,8 +213,8 @@ pub fn definition(
     let _ = serde_json::to_writer(&mut h, &layer.masks);
     let _ = serde_json::to_writer(&mut h, &layer.kind);
     let _ = serde_json::to_writer(&mut h, &target);
-    if super::sim::wanted(comp, inst) {
-        super::sim::feed_colliders(doc, comp, inst, &mut h);
+    if sim::wanted(comp, inst) {
+        sim::feed_colliders(doc, comp, inst, &mut h);
     }
     for one in std::iter::once(layer).chain(target) {
         // A solid's size is the frame Edge acts at, and the rectangle a
@@ -260,7 +265,7 @@ const WALK_ROWS: [&str; 4] = ["separation", "alignment", "cohesion", "sparks"];
 #[must_use]
 pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
     crate::fx::effects::particulate::rows::on_its_layer(inst)
-        && !super::sim::wanted(comp, inst)
+        && !sim::wanted(comp, inst)
         && (target(comp, inst).is_some() || WALK_ROWS.iter().any(|id| above(comp, inst, id)))
 }
 
@@ -269,7 +274,7 @@ pub fn wanted(comp: &Composition, inst: &EffectInstance) -> bool {
 #[must_use]
 pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
     crate::fx::effects::particulate::rows::on_its_layer(inst)
-        && !super::sim::wanted(comp, inst)
+        && !sim::wanted(comp, inst)
         && above(comp, inst, "persistence")
 }
 
@@ -277,7 +282,7 @@ pub fn trails(comp: &Composition, inst: &EffectInstance) -> bool {
 /// frame from the in point: its Trails, or its simulation.
 #[must_use]
 pub fn carried(comp: &Composition, inst: &EffectInstance) -> bool {
-    trails(comp, inst) || super::sim::wanted(comp, inst)
+    trails(comp, inst) || sim::wanted(comp, inst)
 }
 
 /// Whether row `id` is above nought, or keyed, an expression or wired, as it

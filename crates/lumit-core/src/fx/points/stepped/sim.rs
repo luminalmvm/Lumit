@@ -6,9 +6,9 @@
 //! from the layer's in point, as in [`super::stepped`]: kept states only make
 //! it faster.
 
-use super::stepped::{above, burst_at};
-use super::{burst_base, Contact};
+use super::{above, burst_at};
 use crate::fx::effects::particulate::Particulate;
+use crate::fx::points::{burst_base, Contact};
 use crate::model::{Composition, Document, EffectInstance, EffectValue, LayerKind};
 
 fn on(inst: &EffectInstance, id: &str) -> bool {
@@ -332,7 +332,7 @@ mod tests {
     /// The floor is where its own z is nought, and up is its z.
     #[test]
     fn the_floor_is_a_surface_seen_from_the_layer() {
-        use crate::fx::points::collider::Collider;
+        use super::super::collider::Collider;
         use crate::model::{Document, LayerKind};
         use crate::time::Rational;
         let layer = crate::edits::base_layer(
@@ -370,14 +370,14 @@ mod tests {
             .find(|p| p.id == "collide_all")
             .unwrap()
             .value = EffectValue::Bool(true);
-        let named = super::super::stepped::definition(&doc, &comp, &layer, &e, None);
+        let named = super::super::definition(&doc, &comp, &layer, &e, None);
         let mut moved = comp.clone();
         let mut other = layer.clone();
         other.switches.three_d = true;
         moved.layers.push(other);
         assert_ne!(
             named,
-            super::super::stepped::definition(&doc, &moved, &layer, &e, None)
+            super::super::definition(&doc, &moved, &layer, &e, None)
         );
     }
 

@@ -1315,7 +1315,6 @@ impl ProjectReference {
                 *journal = Some(named);
             }
         }
-        lumit_render::sim::bake::project_opened(&target);
         state.path = Some(target);
         // The revision the file *contains*, read before the write — not
         // whatever the store is on now. An edit made while the disk was busy

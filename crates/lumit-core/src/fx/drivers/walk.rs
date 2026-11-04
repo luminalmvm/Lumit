@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::{measure, ArenaPool, Eval, EVAL_BUDGET};
 use crate::expression::ExpressionContext;
 use crate::fx::markers::MarkerContext;
-use crate::fx::points::collider::Collider;
+use crate::fx::points::stepped::collider::Collider;
 use crate::fx::points::stepped::{definition, stream_at, Inputs};
 use crate::fx::points::{self, PointsStream};
 use crate::fx::registry::{AudioTap, EffectDef, EffectMetadata};

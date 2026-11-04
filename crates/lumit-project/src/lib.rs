@@ -1633,36 +1633,7 @@ pub fn collect_for_sharing(
             Resolved::Missing => missing.push(f.name.clone()),
         }
     }
-    collect_baked_sims(source_dir, &dest_dir.join("sim"))?;
     Ok(Collected { doc: out, missing })
-}
-
-/// Simulations baked beside the project go with it: every `<project>-cache/sim`
-/// in `source_dir`, into `dest`.
-fn collect_baked_sims(source_dir: &Path, dest: &Path) -> Result<(), ProjectError> {
-    fn copy_tree(from: &Path, to: &Path) -> Result<(), ProjectError> {
-        fs::create_dir_all(to)?;
-        for entry in fs::read_dir(from)? {
-            let entry = entry?;
-            let there = to.join(entry.file_name());
-            if entry.file_type()?.is_dir() {
-                copy_tree(&entry.path(), &there)?;
-            } else {
-                fs::copy(entry.path(), there)?;
-            }
-        }
-        Ok(())
-    }
-    let Ok(entries) = fs::read_dir(source_dir) else {
-        return Ok(());
-    };
-    for entry in entries.flatten() {
-        let sim = entry.path().join("sim");
-        if entry.file_name().to_string_lossy().ends_with("-cache") && sim.is_dir() {
-            copy_tree(&sim, dest)?;
-        }
-    }
-    Ok(())
 }
 
 /// Append-only op log between saves; truncated on successful save.
