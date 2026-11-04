@@ -8852,6 +8852,10 @@
   "@replaceFootageEllipsis": {
     "description": "Project panel, a footage item's right-click menu: point the item at a different file. The same command as Relink, offered under this name when the file is not missing. The ellipsis means a file dialogue opens."
   },
+  "reloadFootage": "Reload footage",
+  "@reloadFootage": {
+    "description": "Project panel, a footage item's right-click menu: read the file again, so a run of stills that has grown since it was imported gets its new length."
+  },
   "projectShowInFolder": "Show in folder",
   "@projectShowInFolder": {
     "description": "Project panel right-click menu, on a footage item whose file is there: opens the folder the file is in, in the desktop's own file manager, with the file selected."
