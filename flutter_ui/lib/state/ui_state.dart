@@ -2737,7 +2737,7 @@ class LumitUiState extends ChangeNotifier {
         // The endpoint's file goes with it, so nothing names a Lumit that
         // has gone.
         if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
-        await stopBlenders();
+        stopBlenders();
         return AppExitResponse.exit;
       },
     );

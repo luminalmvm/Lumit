@@ -25614,16 +25614,15 @@ fn wire__crate__api__script__start_live_endpoint_impl(
     )
 }
 fn wire__crate__api__blender__stop_blenders_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "stop_blenders",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
         },
         move || {
             let message = unsafe {
@@ -25636,14 +25635,12 @@ fn wire__crate__api__blender__stop_blenders_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            move |context| {
-                transform_result_sse::<_, ()>((move || {
-                    let output_ok = Result::<_, ()>::Ok({
-                        crate::api::blender::stop_blenders();
-                    })?;
-                    Ok(output_ok)
-                })())
-            }
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::blender::stop_blenders();
+                })?;
+                Ok(output_ok)
+            })())
         },
     )
 }
@@ -36645,7 +36642,6 @@ fn pde_ffi_dispatcher_primary_impl(
         739 => {
             wire__crate__api__script__start_live_endpoint_impl(port, ptr, rust_vec_len, data_len)
         }
-        740 => wire__crate__api__blender__stop_blenders_impl(port, ptr, rust_vec_len, data_len),
         741 => wire__crate__api__script__stop_live_endpoint_impl(port, ptr, rust_vec_len, data_len),
         743 => {
             wire__crate__api__styles__style_install_package_impl(port, ptr, rust_vec_len, data_len)
@@ -37314,6 +37310,7 @@ fn pde_ffi_dispatcher_sync_impl(
 736 => wire__crate__api__share__share_set_limits_impl(ptr, rust_vec_len, data_len),
 737 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
 738 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
+740 => wire__crate__api__blender__stop_blenders_impl(ptr, rust_vec_len, data_len),
 742 => wire__crate__api__script__stop_script_impl(ptr, rust_vec_len, data_len),
 745 => wire__crate__api__styles__style_read_package_impl(ptr, rust_vec_len, data_len),
 746 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),

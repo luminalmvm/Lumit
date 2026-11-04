@@ -21,9 +21,9 @@ void chooseBlender({required String path}) =>
 Future<BridgeBlender?> findBlender() =>
     BridgeLib.instance.api.crateApiBlenderFindBlender();
 
-/// Stop every Blender running and wait for them to go, as the app quits.
-Future<void> stopBlenders() =>
-    BridgeLib.instance.api.crateApiBlenderStopBlenders();
+/// Stop every Blender running and wait for them to go, as the app quits. Sync,
+/// so quitting never waits on a reply: with none running it returns at once.
+void stopBlenders() => BridgeLib.instance.api.crateApiBlenderStopBlenders();
 
 /// The Blender 3D models open with.
 class BridgeBlender {

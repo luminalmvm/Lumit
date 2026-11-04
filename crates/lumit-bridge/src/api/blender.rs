@@ -50,7 +50,9 @@ pub fn find_blender() -> Option<BridgeBlender> {
     })
 }
 
-/// Stop every Blender running and wait for them to go, as the app quits.
+/// Stop every Blender running and wait for them to go, as the app quits. Sync,
+/// so quitting never waits on a reply: with none running it returns at once.
+#[frb(sync)]
 pub fn stop_blenders() {
     blender::stop_where(&|_| true);
     blender::wait_for_stopped();

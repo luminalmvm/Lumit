@@ -2772,7 +2772,7 @@ abstract class BridgeLibApi extends BaseApi {
   Future<bool> crateApiScriptStartLiveEndpoint(
       {RustStreamSink<BridgeLiveEvent>? events});
 
-  Future<void> crateApiBlenderStopBlenders();
+  void crateApiBlenderStopBlenders();
 
   Future<void> crateApiScriptStopLiveEndpoint();
 
@@ -23570,12 +23570,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  Future<void> crateApiBlenderStopBlenders() {
-    return handler.executeNormal(NormalTask(
-      callFfi: (port_) {
+  void crateApiBlenderStopBlenders() {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 740, port: port_);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 740)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
