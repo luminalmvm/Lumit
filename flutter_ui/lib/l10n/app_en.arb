@@ -8611,7 +8611,7 @@
   "@tipProjectConvertAgain": {
     "description": "Tooltip on the stopped badge of a Project panel 3D model. Clicking the badge starts converting the file through Blender again."
   },
-  "tipProjectNoImporter": "This Blender can't open this file type",
+  "tipProjectNoImporter": "Can't open",
   "@tipProjectNoImporter": {
     "description": "Tooltip on the unreadable badge of a Project panel 3D model whose file type the Blender found has no importer for, as with Collada files on Blender 5. Blender is a product name; keep it as it is."
   },
