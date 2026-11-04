@@ -483,15 +483,17 @@ pub fn on_its_layer(inst: &crate::model::EffectInstance) -> bool {
         )
 }
 
-/// Whether `e` is a Particulate with its particles in the scene.
+/// Whether `e` draws in the comp's scene: a Particulate with its particles
+/// there, or Depth points, which is never anywhere else.
 #[must_use]
 pub fn is_scene(e: &crate::model::EffectInstance) -> bool {
     e.enabled
-        && e.effect.match_name == "particulate"
-        && matches!(
-            e.param("in_scene"),
-            Some(crate::model::EffectValue::Bool(true))
-        )
+        && (e.effect.match_name == crate::planes::DEPTH_POINTS
+            || e.effect.match_name == "particulate"
+                && matches!(
+                    e.param("in_scene"),
+                    Some(crate::model::EffectValue::Bool(true))
+                ))
 }
 
 #[cfg(test)]
