@@ -1161,10 +1161,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final hash = id.lastIndexOf('#');
         if (hash <= 0) continue;
         final path = id.substring(0, hash);
+        final index = int.tryParse(id.substring(hash + 1));
+        if (index == null) continue;
         for (final channel in channels) {
-          if (channel.path == path) {
-            (out['${channel.id}${id.substring(hash)}'] ??= [])
-                .add(person.colour);
+          if (channel.path != path) continue;
+          if (channel.ownKeyIndex(index) case final own?) {
+            (out['${channel.id}#$own'] ??= []).add(person.colour);
           }
         }
       }
@@ -1567,16 +1569,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The keys picked on [path]'s row, by index, in whichever view is up. A
   /// graph key on either axis of a row counts for the row, as a lane key does.
   Set<int> _keysPickedOn(String path) {
-    final rows = _graph
-        ? {
-            for (final c in graphChannels(
-                layers: Provider.of<LumitUiState>(context, listen: false)
-                    .model
-                    .layers,
-                selected: [path]))
-              c.id
-          }
-        : {path};
+    final channels = graphChannels(
+        layers: Provider.of<LumitUiState>(context, listen: false).model.layers,
+        selected: [path]);
+    // An index means the same key on each axis only while they are keyed
+    // together. Apart, a value edit is the ordinary edit at the playhead.
+    if (channels.any((c) =>
+        c.scalar is BridgeScalar_Keyframed &&
+        c.rowKeys != null &&
+        c.rowKeys!.length != c.keys.length)) {
+      return const {};
+    }
+    final rows = _graph ? {for (final c in channels) c.id} : {path};
     return {
       for (final id in _graph ? _graphKeySelection : _laneKeySelection)
         if (id.lastIndexOf('#') case final hash
@@ -2364,9 +2368,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final hash = id.lastIndexOf('#');
       if (hash <= 0) continue;
       final path = id.substring(0, hash);
-      final index = id.substring(hash + 1);
+      final index = int.tryParse(id.substring(hash + 1));
+      if (index == null) continue;
       for (final channel in channels) {
-        if (channel.path == path) out.add('${channel.id}#$index');
+        if (channel.path != path) continue;
+        if (channel.ownKeyIndex(index) case final own?) {
+          out.add('${channel.id}#$own');
+        }
       }
     }
     return out;

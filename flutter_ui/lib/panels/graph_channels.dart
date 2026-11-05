@@ -110,6 +110,17 @@ class GraphChannel {
   /// lead and every write to it is the pair's write ([withLinkedPartners]).
   final BridgeTransformProp? linkedPartner;
 
+  /// The keys the lane of this channel's row draws, where the row has axes
+  /// that may be keyed apart ([rowKeysOf]). Null where lane and channel are one.
+  final List<BridgeKeyframe>? rowKeys;
+
+  /// This channel's own key for the lane's key [index], or null when this axis
+  /// has no key at that time.
+  int? ownKeyIndex(int index) => switch (rowKeys) {
+        final row? => axisKeyIndex(row, index, keys),
+        null => index,
+      };
+
   /// Set for an effect parameter channel.
   final BridgeEffectInstanceInfo? effect;
   final BridgeParamInfo? param;
@@ -180,6 +191,7 @@ class GraphChannel {
     required this.entry,
     this.prop,
     this.linkedPartner,
+    this.rowKeys,
     this.effect,
     this.param,
     this.linkedParam,
@@ -320,6 +332,8 @@ List<GraphChannel> graphChannels({
         // is drawn and edited; the partner follows every write at the ratio
         // the pair holds ([withLinkedPartners]).
         final axes = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
+        final rowKeys = rowKeysOf(
+            [for (final axis in group.axes) read(entry.info.transform, axis.prop)]);
         for (final axis in axes) {
           out.add(GraphChannel(
             path: path,
@@ -332,6 +346,7 @@ List<GraphChannel> graphChannels({
             entry: entry,
             prop: axis.prop,
             linkedPartner: group.isLinked ? group.axes[1].prop : null,
+            rowKeys: rowKeys,
           ));
         }
         break;
