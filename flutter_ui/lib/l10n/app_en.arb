@@ -16193,6 +16193,14 @@
   "@tipAccelerationGraph": {
     "description": "Tooltip: show how fast the speed changes. One or two words."
   },
+  "graphStartSpeed": "Start speed",
+  "@graphStartSpeed": {
+    "description": "Timeline, Graph mode, acceleration graph, under Constant acceleration: the label beside the field holding the speed the value leaves the keyframe at, in the property's unit per second. 0 means it starts at rest."
+  },
+  "graphEndSpeed": "End speed",
+  "@graphEndSpeed": {
+    "description": "Timeline, Graph mode, acceleration graph, under Constant acceleration: the label beside the field holding the speed the value has when it reaches the end, in the property's unit per second. Typed, it decides how far and how long the value slows down or speeds up."
+  },
   "graphConstantAcceleration": "Constant acceleration",
   "@graphConstantAcceleration": {
     "description": "Timeline, Graph mode, acceleration graph: the heading over three fields in a keyframe's box — an acceleration, an end value and an end frame. From this keyframe the value starts at rest and speeds up evenly by that acceleration until it reaches the end. Shown in small capitals."

@@ -705,6 +705,37 @@ void main() {
       }
     });
 
+    /// A start speed, an acceleration and an end speed: the box works out how
+    /// long the value slows down and how far it goes, and writes it.
+    testWidgets('a start and end speed decide how far a slowing goes',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0]);
+      await mountGraph(tester, p);
+      await tester.tap(find.byKey(const ValueKey('graph-lens-acceleration')));
+      await tester.pumpAndSettle();
+
+      final dot =
+          find.byKey(ValueKey<String>('${opacityKey(p.layer, 0)}-out'));
+      await tester.tap(dot);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(dot);
+      await tester.pumpAndSettle();
+
+      await _type(tester, 'graph-constant-start-speed', '10');
+      await _type(tester, 'graph-constant-acceleration', '-2');
+      await _type(tester, 'graph-constant-end-speed', '0');
+
+      final keys = opacityKeys(p.layer);
+      expect(keys, hasLength(2));
+      expect(rationalSeconds(keys[1].time), closeTo(5, 1e-3),
+          reason: 'from 10 a second to rest at 2 a second squared: 5 s');
+      expect(keys[1].value, closeTo(25, 1e-6), reason: 'and 25 further on');
+      expect(evaluateKeysSpeed(keys, 4.999), closeTo(0, 1e-2),
+          reason: 'it arrives at the end speed');
+      expect(evaluateKeysAcceleration(keys, 2.5), closeTo(-2, 1e-6));
+    });
+
     /// The acceleration lens has handles too: a selected key's influence bar,
     /// dragged sideways, sets that side's influence and leaves its speed and
     /// the other side alone.

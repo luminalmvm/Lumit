@@ -17,6 +17,7 @@ BridgeKeyframe key(int seconds, double v, BridgeSideInterp side) =>
 void main() {
   accelerationTests();
   constantAccelerationTests();
+  startSpeedTests();
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
   const linear = BridgeSideInterp.linear();
@@ -137,5 +138,59 @@ void constantAccelerationTests() {
             endValue: 360),
         isNull,
         reason: 'it may not jump the key after the next');
+  });
+}
+
+/// A start speed, and an end speed: the stretch slows down (or speeds up)
+/// evenly, and any two of acceleration, end speed, end value and time give
+/// the rest.
+void startSpeedTests() {
+  const ease =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
+
+  test('start speed, acceleration and end speed: how long, how far', () {
+    final k = constantAcceleration(0,
+        startSpeed: 10, acceleration: -2, endSpeed: 0)!;
+    expect(k.seconds, closeTo(5, 1e-9));
+    expect(k.endValue, closeTo(25, 1e-9));
+  });
+
+  test('start speed, acceleration and end value: the first moment it is there',
+      () {
+    final k = constantAcceleration(0,
+        startSpeed: 10, acceleration: -2, endValue: 16)!;
+    expect(k.seconds, closeTo(2, 1e-9));
+    expect(k.endSpeed, closeTo(6, 1e-9));
+    expect(
+        constantAcceleration(0,
+            startSpeed: 10, acceleration: -2, endValue: 30),
+        isNull,
+        reason: 'slowing from 10 at 2 a second squared stops short at 25');
+  });
+
+  test('end speed and time, end speed and value, value and time', () {
+    final a = constantAcceleration(0, startSpeed: 10, endSpeed: 0, seconds: 5)!;
+    expect(a.acceleration, closeTo(-2, 1e-9));
+    final b = constantAcceleration(0, startSpeed: 10, endSpeed: 0, endValue: 25)!;
+    expect(b.seconds, closeTo(5, 1e-9));
+    final c = constantAcceleration(0, startSpeed: 10, endValue: 25, seconds: 5)!;
+    expect(c.endSpeed, closeTo(0, 1e-9));
+    expect(constantAcceleration(0, startSpeed: 10, acceleration: -2), isNull,
+        reason: 'two of the four, no fewer');
+  });
+
+  test('the keys hold the start speed, the end speed and the acceleration',
+      () {
+    final keys = [key(0, 0, ease)];
+    final shaped = keysWithConstantAcceleration(keys, 0,
+        startSpeed: 10,
+        acceleration: -2,
+        endTime: BridgeRational(num: 5, den: 1),
+        endValue: 25)!;
+    for (var t = 0.2; t < 5; t += 0.4) {
+      expect(evaluateKeysAcceleration(shaped, t), closeTo(-2, 1e-6));
+      expect(evaluateKeys(shaped, t), closeTo(10 * t - t * t, 1e-6));
+      expect(evaluateKeysSpeed(shaped, t), closeTo(10 - 2 * t, 1e-6));
+    }
   });
 }

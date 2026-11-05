@@ -2321,6 +2321,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             hasIn ? sideAccelerationAtKey(keys, index, isOut: false) : null,
         accelerationOut:
             hasOut ? sideAccelerationAtKey(keys, index, isOut: true) : null,
+        startSpeed: hasOut ? sideSpeedAtKey(keys, index, isOut: true) : 0,
         next: hasOut
             ? (
                 frame: keyFrame(keys[index + 1], widget.fps),
@@ -2341,8 +2342,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         },
         onAcceleration: (isOut, target) =>
             _applyKeyAcceleration(channel.id, index, isOut, target),
-        onConstant: (acceleration, endFrame, endValue) =>
+        onConstant: (startSpeed, acceleration, endFrame, endValue) =>
             _applyConstantAcceleration(channel.id, index,
+                startSpeed: startSpeed,
                 acceleration: acceleration,
                 endFrame: endFrame,
                 endValue: endValue),
@@ -2468,19 +2470,22 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
   }
 
-  /// From the key at [index], a stretch of constant [acceleration] from rest
-  /// to [endValue] at [endFrame] ([keysWithConstantAcceleration]): the key
-  /// after it moves to the end, or one is added. The end may fall between
-  /// frames, so the parabola is met exactly; nothing is written where it would
-  /// cross the key after that, or leave the composition.
+  /// From the key at [index], a stretch of constant [acceleration] from
+  /// [startSpeed] to [endValue] at [endFrame]
+  /// ([keysWithConstantAcceleration]): the key after it moves to the end, or
+  /// one is added. The end may fall between frames, so the parabola is met
+  /// exactly; nothing is written where it would cross the key after that, or
+  /// leave the composition.
   void _applyConstantAcceleration(String channelId, int index,
-      {required double acceleration,
+      {required double startSpeed,
+      required double acceleration,
       required double endFrame,
       required double endValue}) {
     if (endFrame > widget.frames) return;
     for (final channel in widget.channels) {
       if (channel.id != channelId) continue;
       final keys = keysWithConstantAcceleration(channel.keys, index,
+          startSpeed: startSpeed,
           acceleration: acceleration,
           endTime: timeOfSubframe(endFrame, widget.fpsNum, widget.fpsDen),
           endValue: endValue);

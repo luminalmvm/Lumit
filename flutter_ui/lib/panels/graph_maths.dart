@@ -455,19 +455,20 @@ BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
 }
 
 /// `keys` with a stretch of **constant acceleration** from `keys[index]`: the
-/// value starts there at rest and speeds up by [acceleration] every second,
-/// `value(t) = start + ½ · acceleration · t²`, until [endTime], where it reaches
-/// [endValue]. The caller works out which two of acceleration, end value and
-/// end time were typed and passes the third to match.
+/// value leaves there at [startSpeed] and its speed changes by [acceleration]
+/// every second, `value(t) = start + startSpeed · t + ½ · acceleration · t²`,
+/// until [endTime], where it reaches [endValue]. The caller works the numbers
+/// out together ([constantAcceleration]) so they agree.
 ///
-/// A cubic span holds that parabola exactly: no speed leaving the start, the
-/// speed `acceleration · T` reaching the end, both influences a third (so time
-/// runs evenly along the span). The key after `index` becomes the end — moved
-/// there — or one is added where there is none. Null when the end is not after
-/// the start, or would land on or past the key after that one.
+/// A cubic span holds that parabola exactly: [startSpeed] leaving the start,
+/// `startSpeed + acceleration · T` reaching the end, both influences a third
+/// (so time runs evenly along the span). The key after `index` becomes the end
+/// — moved there — or one is added where there is none. Null when the end is
+/// not after the start, or would land on or past the key after that one.
 List<BridgeKeyframe>? keysWithConstantAcceleration(
   List<BridgeKeyframe> keys,
   int index, {
+  double startSpeed = 0,
   required double acceleration,
   required BridgeRational endTime,
   required double endValue,
@@ -482,10 +483,10 @@ List<BridgeKeyframe>? keysWithConstantAcceleration(
     return null;
   }
   const third = 1 / 3;
-  final leave =
-      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: third));
-  final arrive = BridgeSideInterp.bezier(
-      BridgeBezierSide(speed: acceleration * duration, influence: third));
+  final leave = BridgeSideInterp.bezier(
+      BridgeBezierSide(speed: startSpeed, influence: third));
+  final arrive = BridgeSideInterp.bezier(BridgeBezierSide(
+      speed: startSpeed + acceleration * duration, influence: third));
   final next = index + 1 < keys.length ? keys[index + 1] : null;
   return [
     for (var i = 0; i < index; i++) keys[i],
@@ -503,42 +504,80 @@ List<BridgeKeyframe>? keysWithConstantAcceleration(
   ];
 }
 
-/// The third of a constant acceleration's three numbers from the other two,
-/// starting at rest from [startValue]: with [acceleration] and [endValue] the
-/// seconds it takes, with [acceleration] and [seconds] the value it reaches,
-/// with [endValue] and [seconds] the acceleration. Null where they cannot
-/// meet: no time, or an acceleration that heads away from the end value.
-({double acceleration, double endValue, double seconds})? constantAcceleration(
+/// A stretch of constant acceleration, all five of its numbers, from the
+/// start value, the [startSpeed] (0 is at rest) and **two** of the other
+/// four: [acceleration], [endSpeed], [endValue] and [seconds] (how long it
+/// lasts). The two left out are worked out.
+///
+/// The three rules it rests on, for a speed that changes evenly:
+/// `endSpeed = startSpeed + acceleration · t`,
+/// `endValue − start = startSpeed · t + ½ · acceleration · t²`,
+/// `endValue − start = (startSpeed + endSpeed) / 2 · t`.
+///
+/// Null where they cannot meet: not exactly two given, no time, or a time
+/// that comes out at nought or before it (an end speed the acceleration heads
+/// away from, an end value never reached).
+({
+  double acceleration,
+  double endSpeed,
+  double endValue,
+  double seconds
+})? constantAcceleration(
   double startValue, {
+  double startSpeed = 0,
   double? acceleration,
+  double? endSpeed,
   double? endValue,
   double? seconds,
 }) {
-  if (acceleration != null && endValue != null) {
-    final squared = 2 * (endValue - startValue) / acceleration;
-    if (acceleration == 0 || !(squared > 0)) return null;
-    return (
-      acceleration: acceleration,
-      endValue: endValue,
-      seconds: math.sqrt(squared)
-    );
+  final given = [acceleration, endSpeed, endValue, seconds]
+      .where((v) => v != null)
+      .length;
+  if (given != 2) return null;
+  final v0 = startSpeed;
+  double? t;
+  double? a = acceleration;
+  if (seconds != null) {
+    t = seconds;
+  } else if (acceleration != null && endSpeed != null) {
+    if (acceleration == 0) return null;
+    t = (endSpeed - v0) / acceleration;
+  } else if (acceleration != null && endValue != null) {
+    final d = endValue - startValue;
+    if (acceleration.abs() < 1e-12) {
+      if (v0 == 0) return null;
+      t = d / v0;
+    } else {
+      // ½·a·t² + v0·t − d = 0: the first moment it gets there.
+      final disc = v0 * v0 + 2 * acceleration * d;
+      if (disc < 0) return null;
+      final r = math.sqrt(disc);
+      final roots = [(-v0 + r) / acceleration, (-v0 - r) / acceleration]
+          .where((x) => x > 1e-9)
+          .toList()
+        ..sort();
+      if (roots.isEmpty) return null;
+      t = roots.first;
+    }
+  } else if (endSpeed != null && endValue != null) {
+    final sum = v0 + endSpeed;
+    if (sum.abs() < 1e-12) return null;
+    t = 2 * (endValue - startValue) / sum;
   }
-  if (seconds == null || seconds <= 0) return null;
-  if (acceleration != null) {
-    return (
-      acceleration: acceleration,
-      endValue: startValue + acceleration * seconds * seconds / 2,
-      seconds: seconds
-    );
+  if (t == null || !(t > 1e-9)) return null;
+  if (a == null) {
+    if (endSpeed != null) {
+      a = (endSpeed - v0) / t;
+    } else {
+      a = 2 * (endValue! - startValue - v0 * t) / (t * t);
+    }
   }
-  if (endValue != null) {
-    return (
-      acceleration: 2 * (endValue - startValue) / (seconds * seconds),
-      endValue: endValue,
-      seconds: seconds
-    );
-  }
-  return null;
+  return (
+    acceleration: a,
+    endSpeed: v0 + a * t,
+    endValue: startValue + v0 * t + a * t * t / 2,
+    seconds: t,
+  );
 }
 
 /// The speed a key's chosen side reads *at the key* — what the speed graph's
