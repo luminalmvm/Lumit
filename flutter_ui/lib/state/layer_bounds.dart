@@ -23,6 +23,8 @@ import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeEffectInstanceInfo;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
@@ -31,6 +33,33 @@ import 'package:lumit_flutter/panels/graph_maths.dart' show evaluateScalar;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
 import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:uuid/uuid.dart';
+
+/// What Geometry options are known by: a Text or Shape layer's, then each
+/// 3D shape's.
+const geometryOptionsNames = {
+  'geometry_options',
+  'cube_geometry',
+  'sphere_geometry',
+  'cylinder_geometry',
+  'cone_geometry',
+  'torus_geometry',
+  'plane_geometry',
+};
+
+/// Whether [fx] is those rows rather than a material's.
+bool isGeometryOptions(BridgeEffectInstanceInfo fx) =>
+    geometryOptionsNames.contains(fx.name);
+
+/// The kind of layer [info] draws as. A Text or Shape layer in 3D with a depth
+/// or a bevel to show draws as a Model layer does.
+BridgeLayerKind meshKindOf(BridgeLayerInfo info) {
+  final rows = info.materials;
+  final solid = info.switches.threeD &&
+      rows != null &&
+      rows.length > 1 &&
+      isGeometryOptions(rows.first);
+  return solid ? BridgeLayerKind.model : info.kind;
+}
 
 /// A Null layer's box, in layer pixels.
 ///
@@ -399,7 +428,7 @@ class LayerBoundsCache extends ChangeNotifier {
   /// path is. A click meets the model where it is, whatever the box says.
   List<double>? modelBoxOf(BridgeLayerEntry entry,
       {required int? revision, required int frame, required bool outlined}) {
-    if (entry.info.kind != BridgeLayerKind.model) return null;
+    if (meshKindOf(entry.info) != BridgeLayerKind.model) return null;
     _atRevision(revision);
     final id = entry.layer.internallayerId;
     final moves = outlined && (entry.info.modelRows?.moves ?? false);
@@ -452,7 +481,8 @@ class LayerBoundsCache extends ChangeNotifier {
     // anything read from the document. A Model layer borrows it until its box
     // comes from the model's own bounds.
     if (entry.info.kind == BridgeLayerKind.nullLayer ||
-        entry.info.kind == BridgeLayerKind.model) {
+        entry.info.kind == BridgeLayerKind.model ||
+        entry.info.kind == BridgeLayerKind.mesh) {
       return nullLayerBounds;
     }
 

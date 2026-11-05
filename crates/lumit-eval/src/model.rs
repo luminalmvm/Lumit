@@ -46,6 +46,13 @@ pub(crate) fn feed(
     )
 }
 
+/// A 3D shape's part of the name: its shape, as its rows go in with the
+/// materials'.
+pub(crate) fn feed_shape(h: &mut blake3::Hasher, shape: lumit_core::mesh_shape::MeshShape) {
+    h.update(b"mesh/");
+    h.update(shape.options().as_bytes());
+}
+
 /// The model's own part of the name: its file, how it sits, and when it plays a
 /// take, the moment as the stamper tells it, which is nothing for a still file.
 fn named(
@@ -60,7 +67,11 @@ fn named(
     } else {
         source_time
     };
-    let (identity, frame) = stamper.stamp(item, at, false)?;
+    // A card has no file to name, and is always the same scene.
+    let (identity, frame) = match item == lumit_core::model_layer::CARD {
+        true => (String::new(), 0),
+        false => stamper.stamp(item, at, false)?,
+    };
     h.update(b"model/");
     h.update(identity.as_bytes());
     if let Ok(json) = serde_json::to_vec(settings) {

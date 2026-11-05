@@ -114,25 +114,8 @@ impl CompositionReference {
         let model = ops.iter().any(|op| {
             matches!(op, Op::AddLayer { layer, .. } if matches!(layer.kind, LayerKind::Model { .. }))
         });
-        if model
-            && !comp
-                .layers
-                .iter()
-                .any(|l| matches!(l.kind, LayerKind::Light { .. }))
-        {
-            // Ambient (4) and Parallel (3), as Layer > New > Light makes them,
-            // so a lone model isn't drawn as a flat silhouette.
-            let mut ambient = Self::light_layer(&comp, 4);
-            let mut key = Self::key_light(&comp);
-            if let Some([a, k]) = light_names.as_deref() {
-                ambient.name.clone_from(a);
-                key.name.clone_from(k);
-            }
-            if let LayerKind::Light { light } = &mut ambient.kind {
-                light.intensity = Property::fixed(25.0);
-            }
-            for mut light in [key, ambient] {
-                crate::edits::solo_on_arrival(&mut light, comp.layers.iter());
+        if model {
+            for light in Self::first_lights(&comp, light_names.as_deref()) {
                 ops.push(Op::AddLayer {
                     comp: self.id,
                     index: 0,
@@ -156,6 +139,76 @@ impl CompositionReference {
             .commit(Op::Batch { ops })
             .map_err(BridgeError::OpError)?;
         Ok(placed)
+    }
+
+    /// Add 3D shape `entry` of the menu (cube, sphere, cylinder, cone, torus,
+    /// plane, then pyramid) at comp point `at`, or the comp's centre. In a
+    /// comp with no lights it brings the lights a 3D model does, named by
+    /// `light_names`, in the same undo step.
+    #[frb(sync)]
+    pub fn add_mesh_layer(
+        &self,
+        entry: u32,
+        row: Option<u32>,
+        at: Option<Vec<f64>>,
+        light_names: Option<Vec<String>>,
+    ) -> Result<LayerReference, BridgeError> {
+        let comp = self.composition()?;
+        let mut layer = lumit_core::mesh_shape::mesh_layer(&comp, entry as usize)
+            .ok_or(BridgeError::InvalidParam)?;
+        if let Some([x, y]) = at.as_deref() {
+            layer.transform.position_x = Property::fixed(*x);
+            layer.transform.position_y = Property::fixed(*y);
+        }
+        crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
+        let id = layer.id;
+        let mut ops = vec![Op::AddLayer {
+            comp: self.id,
+            index: insert_row(row, comp.layers.len()),
+            layer: Box::new(layer),
+        }];
+        for light in Self::first_lights(&comp, light_names.as_deref()) {
+            ops.push(Op::AddLayer {
+                comp: self.id,
+                index: 0,
+                layer: Box::new(light),
+            });
+        }
+        self.commit(Op::Batch { ops })?;
+        Ok(LayerReference::new(self.project, self.id, id))
+    }
+
+    /// The Key and Ambient lights a comp with no lights gets from its first
+    /// model or solid layer, so that isn't drawn as a flat silhouette. Nothing
+    /// for a comp that has a light. Named by `names` (ambient, then key) when
+    /// given.
+    #[frb(ignore)]
+    pub(crate) fn first_lights(
+        comp: &lumit_core::model::Composition,
+        names: Option<&[String]>,
+    ) -> Vec<Layer> {
+        if comp
+            .layers
+            .iter()
+            .any(|l| matches!(l.kind, LayerKind::Light { .. }))
+        {
+            return Vec::new();
+        }
+        // Ambient (4) and Parallel (3), as Layer > New > Light makes them.
+        let mut ambient = Self::light_layer(comp, 4);
+        let mut key = Self::key_light(comp);
+        if let Some([a, k]) = names {
+            ambient.name.clone_from(a);
+            key.name.clone_from(k);
+        }
+        if let LayerKind::Light { light } = &mut ambient.kind {
+            light.intensity = Property::fixed(25.0);
+        }
+        let mut lights = [key, ambient];
+        for light in &mut lights {
+            crate::edits::solo_on_arrival(light, comp.layers.iter());
+        }
+        lights.into()
     }
 
     /// The Key light the first 3D model in a comp brings, marked so that lights
@@ -226,6 +279,26 @@ impl CompositionReference {
                 ..TransformGroup::default()
             },
         )
+    }
+}
+
+/// Lay staged `effects` over layer `index` in `comp`, a copy made for a
+/// preview. A depth being dragged up from nought shows lit as it will land.
+#[frb(ignore)]
+pub(crate) fn stage_rows(
+    comp: &mut lumit_core::model::Composition,
+    index: usize,
+    effects: Vec<lumit_core::model::EffectInstance>,
+) {
+    let Some(layer) = comp.layers.get_mut(index) else {
+        return;
+    };
+    let was = lumit_core::extrude::is_extruded(layer);
+    lumit_render::model_material::stage(layer, effects);
+    if !was && lumit_core::extrude::is_extruded(layer) {
+        // At the end, so the layer's own place in the stack doesn't move.
+        let lights = CompositionReference::first_lights(comp, None);
+        comp.layers.extend(lights);
     }
 }
 

@@ -233,7 +233,7 @@ fn has_sound(state: &LumitBridgeState, footage: &FootageItem) -> bool {
 /// Whether this media is a still: a picture with no length of its own. Media
 /// that will not probe answers false.
 #[frb(ignore)]
-fn is_still(state: &LumitBridgeState, footage: &FootageItem) -> bool {
+pub(crate) fn is_still(state: &LumitBridgeState, footage: &FootageItem) -> bool {
     #[cfg(feature = "media")]
     {
         FootageReference::resolve_source(state, footage)

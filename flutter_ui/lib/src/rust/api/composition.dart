@@ -585,6 +585,13 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceAddCameraLayer(
           that: this, row: row);
 
+  /// Add a card filling the frame of the comp's camera at comp frame `frame`,
+  /// square on to it.
+  LayerReference addCardLayer({int? row, required int frame}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddCardLayer(
+              that: this, row: row, frame: frame);
+
   /// Add an empty Audio layer: a row for sound clips with nothing on it yet,
   /// so there is somewhere to put them. One undo step.
   LayerReference addEmptyAudioLayer({int? row}) => BridgeLib.instance.api
@@ -696,6 +703,23 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddLightLayer(
               that: this, kind: kind, row: row);
+
+  /// Add 3D shape `entry` of the menu (cube, sphere, cylinder, cone, torus,
+  /// plane, then pyramid) at comp point `at`, or the comp's centre. In a
+  /// comp with no lights it brings the lights a 3D model does, named by
+  /// `light_names`, in the same undo step.
+  LayerReference addMeshLayer(
+          {required int entry,
+          int? row,
+          Float64List? at,
+          List<String>? lightNames}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceAddMeshLayer(
+              that: this,
+              entry: entry,
+              row: row,
+              at: at,
+              lightNames: lightNames);
 
   /// Add a Null layer: an invisible layer with no source of its own, carrying
   /// only a transform, for parenting rigs. It has no size, so only its

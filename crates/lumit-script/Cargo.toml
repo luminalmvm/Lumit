@@ -13,6 +13,8 @@ lumit-core = { path = "../lumit-core" }
 # project converts them.
 lumit-import = { path = "../lumit-import" }
 lumit-ingress = { path = "../lumit-ingress" }
+# Measures a new text layer so it turns about the middle of its words.
+lumit-text = { path = "../lumit-text" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

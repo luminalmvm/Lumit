@@ -109,7 +109,8 @@ impl Realiser<'_> {
             .filter(|(l, _)| shown(l))
             .filter_map(|(l, group)| match &l.source {
                 DrawSource::Model(m) => {
-                    Some((l, m.looks.iter().map(|k| self.look(k)).collect(), group))
+                    let looks = m.looks.iter().map(|k| self.look_without_camera(k));
+                    Some((l, looks.collect(), group))
                 }
                 _ => None,
             })

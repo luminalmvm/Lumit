@@ -879,6 +879,11 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
         setState(() {});
         widget.onChanged();
       },
+      onWritePair: (effect, values) {
+        _editor.writeAll(widget.layer, effect, values);
+        setState(() {});
+        widget.onChanged();
+      },
       onLive: (effect, param, value) {
         _pick(ui, param);
         setState(() {

@@ -27,6 +27,8 @@ use lumit_core::model::{Folder, FootageItem, MediaRef, ProjectItem};
 use lumit_core::ops::Op;
 use uuid::Uuid;
 
+mod animator_tests;
+
 /// A project holding a folder that lists one footage item, plus a second
 /// footage item at the root. Returns the project and the three references.
 ///
@@ -1009,7 +1011,7 @@ fn every_effect_value_kind_round_trips_through_the_document() {
             .set_value(id.clone(), value)
             .unwrap_or_else(|e| panic!("every kind writes: {id} answered {e}"));
     }
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
 
     assert_eq!(stack_of(&layer), vec![original]);
 }
@@ -1039,7 +1041,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
     // One staged write, one commit, one undo step.
     let mut staged = layer.get_effects().expect("stack");
     staged[0].set_shader_graph(graph).expect("a graph document");
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
 
     let held = stack_of(&layer);
     let block = held[0].extra.get("shader").expect("the block");
@@ -1057,7 +1059,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
     assert!(staged[0].shader_graph().is_some());
     staged[0].detach_shader_graph();
     assert!(staged[0].shader_graph().is_none());
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
     let held = stack_of(&layer);
     let block = held[0].extra.get("shader").expect("the block");
     assert!(
@@ -1154,7 +1156,7 @@ fn an_old_instance_reaches_a_parameter_its_schema_grew_later() {
             BridgeEffectValue::Float(BridgeScalar::Static(30.0)),
         )
         .expect("a grown parameter must be writable");
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
 
     let after = stack_of(&layer);
     let stored = after[0]
@@ -1439,7 +1441,7 @@ fn committing_a_staged_stack_that_no_longer_matches_the_document_is_refused() {
         .expect("removed behind the panel's back");
 
     assert!(matches!(
-        layer.set_effects(staged, None),
+        layer.set_effects(staged, None, None),
         Err(BridgeError::StaleEffectStack)
     ));
     assert_eq!(
@@ -1463,7 +1465,7 @@ fn a_layer_edit_scopes_to_its_layer_and_not_the_item_list() {
     let (comp, layer) = (Uuid::now_v7(), Uuid::now_v7());
 
     assert_eq!(
-        crate::api::state::op_scope(&Op::SetLayerVisible {
+        crate::api::state::scope::op_scope(&Op::SetLayerVisible {
             comp,
             layer,
             visible: false,
@@ -1474,7 +1476,7 @@ fn a_layer_edit_scopes_to_its_layer_and_not_the_item_list() {
     // Adding or removing a layer changes the comp's layer list, not one layer's
     // contents, so it reports the comp alone.
     assert_eq!(
-        crate::api::state::op_scope(&Op::RemoveLayer { comp, layer }),
+        crate::api::state::scope::op_scope(&Op::RemoveLayer { comp, layer }),
         (Some(comp), None, false)
     );
 }
@@ -2070,7 +2072,7 @@ fn a_copied_layer_pastes_whole_and_lands_at_the_playhead() {
             BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(0, 0.0), key(2, 40.0)])),
         )
         .expect("animated");
-    source.set_effects(staged, None).expect("committed");
+    source.set_effects(staged, None, None).expect("committed");
 
     let text = source.copy_layer().expect("copied");
 
@@ -2137,7 +2139,7 @@ fn a_pasted_effect_starts_its_animation_at_the_playhead() {
             BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(4, 0.0), key(5, 40.0)])),
         )
         .expect("animated");
-    source.set_effects(staged, None).expect("committed");
+    source.set_effects(staged, None, None).expect("committed");
 
     let text = source.copy_effects(Vec::new()).expect("copied");
     let target = comp.add_solid_layer(None).expect("somewhere to paste");
@@ -3847,127 +3849,6 @@ fn a_stroke_is_added_read_back_and_undone_in_one_step() {
 
 // --- Assets: what a layer is made of --------------------------------------
 
-/// **Adding the first animator moves the anchor with it, in one undo step**.
-/// An animated line is drawn into a box one text size larger a side with the
-/// words that far in, so without the compensating shift the words would jump
-/// the moment the first animator arrived — and the shift has to
-/// ride in the same `Op` as the document, or `Ctrl+Z` puts the pivot back
-/// before it takes the animator away.
-#[test]
-fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
-    use crate::api::assets::{
-        BridgeColourRgba, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorShape,
-        BridgeTextAnimator, BridgeTextDocument,
-    };
-    use crate::api::effect::BridgeScalar;
-
-    let (project, layer) = project_with_layer();
-    let comp = CompositionReference::new(project.id, layer.comp_id());
-    let text = comp.add_text_layer(None).expect("a text layer");
-    let zero = || BridgeScalar::Static(0.0);
-    let plain = BridgeTextDocument {
-        text: "Lumit".into(),
-        expression: None,
-        size: 72.0,
-        fill: BridgeColourRgba {
-            r: 1.0,
-            g: 1.0,
-            b: 1.0,
-            a: 1.0,
-        },
-        path: None,
-        path_offset: zero(),
-        animators: Vec::new(),
-        style: crate::api::assets::default_text_style(),
-        paragraph: crate::api::assets::default_paragraph_style(),
-    };
-    text.set_text(plain.clone()).expect("set");
-    let anchor = |t: &crate::api::layer::LayerReference| match t
-        .get_transform()
-        .expect("transform")
-        .anchor_x
-    {
-        BridgeScalar::Static(v) => v,
-        other => panic!("the anchor is not still: {other:?}"),
-    };
-    let before = anchor(&text);
-
-    let animator = BridgeTextAnimator {
-        name: "Cascade".into(),
-        selector: BridgeRangeSelector {
-            start: zero(),
-            end: BridgeScalar::Static(25.0),
-            offset: zero(),
-            basis: BridgeSelectorBasis::Characters,
-            shape: BridgeSelectorShape::Square,
-        },
-        position_x: zero(),
-        position_y: BridgeScalar::Static(-40.0),
-        rotation: zero(),
-        scale_x: BridgeScalar::Static(100.0),
-        scale_y: BridgeScalar::Static(100.0),
-        opacity: BridgeScalar::Static(100.0),
-        fill_r: zero(),
-        fill_g: zero(),
-        fill_b: zero(),
-    };
-    let animated = BridgeTextDocument {
-        animators: vec![animator.clone()],
-        ..plain.clone()
-    };
-    text.set_text(animated).expect("set");
-    assert!(
-        (anchor(&text) - before - 72.0).abs() < 1e-6,
-        "the anchor did not follow the margin ({} → {})",
-        before,
-        anchor(&text)
-    );
-    let back = text.get_text().expect("text").expect("still text");
-    assert_eq!(
-        back.animators,
-        vec![animator],
-        "the animator did not survive"
-    );
-
-    // One undo step takes the animator and the pivot away together.
-    project.undo().expect("undone");
-    assert!(
-        text.get_text()
-            .expect("text")
-            .expect("still text")
-            .animators
-            .is_empty(),
-        "the animator outlived its undo"
-    );
-    assert!(
-        (anchor(&text) - before).abs() < 1e-6,
-        "the pivot was left where the animator put it"
-    );
-
-    // And editing an animator that is already there moves nothing.
-    let with = BridgeTextDocument {
-        animators: vec![BridgeTextAnimator {
-            name: "Cascade".into(),
-            ..back.animators[0].clone()
-        }],
-        ..plain
-    };
-    text.set_text(with.clone()).expect("set");
-    let settled = anchor(&text);
-    text.set_text(BridgeTextDocument {
-        animators: vec![BridgeTextAnimator {
-            rotation: BridgeScalar::Static(30.0),
-            ..with.animators[0].clone()
-        }],
-        ..with
-    })
-    .expect("set");
-    assert!(
-        (anchor(&text) - settled).abs() < 1e-6,
-        "editing an animator moved the layer"
-    );
-}
-
 /// **Text to shapes and Text to points**: each makes a copy beside the
 /// original, and the original is kept — the layer is still a Type layer
 /// still saying what it said, which is what makes the commands safe to try.
@@ -5247,7 +5128,7 @@ fn a_clips_effects_round_trip_through_the_instance_lookup() {
     // held against the layer's own stack instead.
     layer.add_effect("glow".into()).expect("on the layer");
     layer
-        .set_effects(Vec::new(), Some(clip.id))
+        .set_effects(Vec::new(), Some(clip.id), None)
         .expect("the clip's empty stack commits to the clip");
     assert_eq!(
         layer.get_effects().expect("stack").len(),
@@ -5255,7 +5136,7 @@ fn a_clips_effects_round_trip_through_the_instance_lookup() {
         "and the layer's stack is untouched"
     );
     assert!(matches!(
-        layer.set_effects(Vec::new(), None),
+        layer.set_effects(Vec::new(), None, None),
         Err(BridgeError::StaleEffectStack)
     ));
 }
@@ -7204,7 +7085,7 @@ fn a_prompt_lands_in_the_document_and_the_status_counts_it() {
         brush.roto_add_prompt(vec![1.0], vec![1], 18),
         Err(BridgeError::InvalidParam)
     ));
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
 
     let after = roto_status(layer, effect).expect("a status");
     assert_eq!(after.prompts, 2, "both taps are in the document");
@@ -7229,7 +7110,7 @@ fn a_prompt_lands_in_the_document_and_the_status_counts_it() {
     // And moving the base takes the taps the new one can never read with it, in
     // this same staged edit, so one undo brings both back.
     brush.roto_set_base_frame(Some(40)).expect("the base moves");
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     let moved = roto_status(layer, effect).expect("a status");
     assert_eq!(moved.base_frame, Some(40));
     assert_eq!(
@@ -8192,7 +8073,7 @@ fn a_planar_tracked_layer() -> (
             crate::api::effect::BridgeEffectValue::Layer(Some(target.layer_id)),
         )
         .expect("the Pin layer row takes a layer");
-    shot.set_effects(staged, None).expect("committed");
+    shot.set_effects(staged, None, None).expect("committed");
 
     let frames: Vec<lumit_track::planar::PlanarFrame> = (0..50)
         .map(|frame| {
@@ -8328,7 +8209,7 @@ fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
             BridgeEffectValue::Choice(lumit_core::fx::effects::planar_track::FOLLOW_ONE_POINT),
         )
         .expect("the Follow row takes a choice");
-    shot.set_effects(staged, None).expect("committed");
+    shot.set_effects(staged, None, None).expect("committed");
 
     fire_effect_action(shot, effect, "transform_keys".into(), None)
         .expect("position alone still writes");
@@ -8957,7 +8838,7 @@ fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
             BridgeEffectValue::Float(BridgeScalar::Static(2.5)),
         )
         .expect("a plugin row takes a write like any other");
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     assert_eq!(
         layer.get_effects().expect("stack")[0]
             .get_value("p1".to_owned())
@@ -9203,7 +9084,7 @@ fn set_shader(layer: &LayerReference, source: &str, origin: Option<&str>) {
     let stack = layer.get_effects().expect("stack");
     let mut stack = stack;
     stack[0].set_shader_source(source.to_owned(), origin.map(str::to_owned));
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
 }
 
 fn only_effect(layer: &LayerReference) -> BridgeEffectInstance {
@@ -9302,7 +9183,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
         stack[0].sync_parameters().is_empty(),
         "a second press has nothing left to adopt"
     );
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     assert!(
         only_effect(&layer).parameter_sync().adds.is_empty(),
         "the document holds them now"
@@ -9331,7 +9212,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
             )),
         )
         .expect("driven");
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
 
     // The edit that stops naming them: rule 1, and the cost of removal.
     set_shader(&layer, NEXT_ROWS, None);
@@ -9361,7 +9242,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
     // Remove: says what it took, one commit, and undo is the way back.
     let mut stack = layer.get_effects().expect("stack");
     assert_eq!(stack[0].remove_unused_parameters(), ["radius", "wobble"]);
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     let trimmed = only_effect(&layer);
     assert!(trimmed.parameter_sync().removes.is_empty());
     assert!(
@@ -9392,7 +9273,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
         "the new text does not name it, and it was never the document's"
     );
     assert!(stack[0].parameter_sync().adds.is_empty());
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     assert!(only_effect(&layer).get_value("steps".into()).is_err());
 }
 
@@ -9730,7 +9611,9 @@ fn a_layer_with_no_inputs_is_offered_a_fresh_one_and_adopts_it_on_commit() {
             BridgeEffectValue::Float(BridgeScalar::Static(0.75)),
         )
         .expect("the derived row takes a value");
-    layer.set_effects(vec![offered], None).expect("committed");
+    layer
+        .set_effects(vec![offered], None, None)
+        .expect("committed");
 
     let landed = layer
         .get_info()

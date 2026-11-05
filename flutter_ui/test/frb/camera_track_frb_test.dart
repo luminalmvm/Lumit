@@ -166,6 +166,8 @@ void main() {
       expect(one.points.where((p) => p.picked).length, 1);
       expect(find.byKey(const ValueKey('viewer-track-create-null')),
           findsOneWidget);
+      expect(find.byKey(const ValueKey('viewer-track-create-card')),
+          findsOneWidget);
       expect(find.byKey(const ValueKey('viewer-track-create-solid')),
           findsOneWidget);
 

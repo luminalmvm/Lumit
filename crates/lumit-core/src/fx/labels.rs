@@ -97,6 +97,9 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for mode in crate::model::BlendMode::ALL {
         out.insert(mode.name().to_owned());
     }
+    out.extend(crate::extrude::FACES.map(str::to_owned));
+    // A 3D shape's one material.
+    out.insert("Surface".to_owned());
     out
 }
 

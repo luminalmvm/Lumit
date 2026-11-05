@@ -57,6 +57,7 @@ Anchor y
 Angle
 Angle control
 Angle offset
+Angular
 Animate
 Animation
 Anticlockwise
@@ -79,6 +80,7 @@ Audio level
 Auto
 Away from points
 B
+Back
 Background
 Backing
 Backward
@@ -123,7 +125,10 @@ Beats
 Behind
 Bend
 Between
+Bevel
 Bevel and emboss
+Bevel depth
+Bevel segments
 Bevel style
 Bezier warp
 BiRefNet
@@ -153,6 +158,7 @@ Bottom edge
 Bottom left
 Bottom left tangent x
 Bottom left tangent y
+Bottom radius
 Bottom right
 Bottom right tangent x
 Bottom right tangent y
@@ -265,6 +271,7 @@ Composite
 Composite on original
 Compositing
 Compressor
+Concave
 Conductivity state
 Confidence
 Connect points
@@ -274,6 +281,7 @@ Constant length
 Contrast
 Controls
 Conversion
+Convex
 Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
@@ -288,6 +296,7 @@ Core softness
 Corner pin
 Corner point
 Corner radius
+Corner segments
 Corner x
 Corner y
 Corners
@@ -457,6 +466,7 @@ Expansion
 Exposure
 Expression
 Extract channels
+Extrusion depth
 F-stop
 Fade
 Fade in
@@ -536,6 +546,7 @@ From
 From group
 From x
 From y
+Front
 Frosted glass
 Fujicolor C200
 Fujicolor Pro 400H
@@ -550,6 +561,7 @@ Gate weave
 Gaussian
 Gaussian blur
 Generate
+Geometry options
 Ghost
 Ghost intensity
 Ghost softness
@@ -624,7 +636,9 @@ Highlight threshold
 Highlight tonal width
 Highlights
 Hold
+Hold frame
 Hold off
+Hole bevel depth
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -973,6 +987,8 @@ Pin to
 Ping-pong
 Pinned
 Pinning
+Pipe radius
+Pipe segments
 Pixel motion
 Pixel sort
 Pixels
@@ -1024,6 +1040,8 @@ Print
 Print stock
 Producer x
 Producer y
+Projected from
+Projection time
 Propagate
 Provia 100F
 Pull
@@ -1199,6 +1217,7 @@ Shutter
 Shutter angle
 Shutter phase
 Siceliot
+Side
 Sides
 Simulate
 Simulation
@@ -1214,7 +1233,9 @@ Size over life
 Size with distance
 Skew
 Skew axis
+Slice end
 Slice repeat
+Slice start
 Slide
 Slider
 Slider control
@@ -1376,6 +1397,7 @@ Top edge
 Top left
 Top left tangent x
 Top left tangent y
+Top radius
 Top right
 Top right tangent x
 Top right tangent y

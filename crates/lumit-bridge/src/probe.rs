@@ -350,6 +350,11 @@ pub(crate) fn ensure_probed(
 /// size. A picture with no size is one FFmpeg found but could not read.
 #[cfg(feature = "media")]
 pub(crate) fn reads(src: impl Into<MediaSource>) -> bool {
+    let src = src.into();
+    // A 3D model has its own reader, so FFmpeg's probe says nothing about it.
+    if lumit_scene::is_model(&src.path) {
+        return true;
+    }
     ensure_probed(src).is_some_and(|info| {
         info.video
             .as_ref()

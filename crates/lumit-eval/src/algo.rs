@@ -59,6 +59,8 @@
 ///   Blender is left out, and Shaded is a little darker.
 /// * 31: the 3D layers in a collapsed Precomp take the parent's lights.
 /// * 32: a layer that only shows shadows takes them with its back to a light.
+/// * 33: the camera's depth of field blurs a Model layer.
+/// * 34: a row reading a Precomp layer sees that layer's own paint and effects.
 /// * 35: a Precomp layer and a motion blurred layer are multiplied by their
 ///   alpha once, where their soft edges and see-through parts came out dark.
 pub const ALGO_VERSION: u32 = 35;

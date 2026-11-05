@@ -192,6 +192,76 @@ fn a_run_of_commands_is_one_undo_step() {
 }
 
 #[test]
+fn a_layer_written_in_file_form_keeps_its_id_place_and_links() {
+    let host = Bare(DocumentStore::new(Document::new()));
+    call(&host, "comp.new", json!({ "name": "Main" }));
+    call(
+        &host,
+        "layer.add",
+        json!({ "comp": "Main", "kind": "null", "name": "Rig" }),
+    );
+    let text = call(
+        &host,
+        "layer.add",
+        json!({ "comp": "Main", "kind": "text", "name": "Title",
+        "fields": { "parent": call(&host, "layer.get", json!({ "comp": "Main", "layer": "Rig" }))["id"],
+            "kind": { "Text": { "document": { "text": "Hello", "size": 100.0 } } } } }),
+    );
+    call(
+        &host,
+        "layer.add",
+        json!({ "comp": "Main", "kind": "shape", "name": "Top" }),
+    );
+
+    // A key list over a still value: the choice replaces it, not merged with it.
+    call(
+        &host,
+        "layer.write",
+        json!({ "comp": "Main", "layer": "Title", "fields": { "transform": { "opacity": {
+        "animation": { "Keyframed": [
+            { "time": [0, 1], "value": 0.0, "interp_in": "Linear", "interp_out": "Linear" },
+            { "time": [1, 1], "value": 100.0, "interp_in": "Linear", "interp_out": "Linear" },
+        ] } } } } }),
+    );
+
+    let after = call(
+        &host,
+        "layer.read",
+        json!({ "comp": "Main", "layer": "Title" }),
+    );
+    assert_eq!(after["id"], text["id"]);
+    assert_eq!(after["kind"]["Text"]["document"]["text"], "Hello");
+    assert!(after["transform"]["opacity"]["animation"]["Static"].is_null());
+    assert_eq!(
+        after["transform"]["opacity"]["animation"]["Keyframed"][1]["value"],
+        100.0
+    );
+    assert!(
+        after["parent"].is_string(),
+        "the parent link survives the write"
+    );
+    let layers = call(&host, "comp.get", json!({ "comp": "Main" }))["layers"].clone();
+    assert_eq!(
+        layers[1]["name"], "Title",
+        "the write keeps its place in the stack"
+    );
+    // Turned about the middle of its words.
+    assert!(
+        after["transform"]["anchor_x"]["animation"]["Static"]
+            .as_f64()
+            .unwrap()
+            > 50.0
+    );
+
+    let refused = dispatch(
+        &host,
+        "layer.write",
+        json!({ "comp": "Main", "layer": "Title", "fields": { "id": Uuid::nil() } }),
+    );
+    assert!(refused.is_err(), "a layer keeps its id");
+}
+
+#[test]
 fn a_script_that_runs_away_stops_on_the_flag_and_leaves_nothing() {
     let host = Bare(DocumentStore::new(Document::new()));
     call(&host, "comp.new", json!({ "name": "Main" }));

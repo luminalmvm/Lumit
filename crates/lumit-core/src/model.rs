@@ -12,6 +12,7 @@ use crate::time::{CompTime, Duration, FrameRate, Rational};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod axis_modes;
 mod light;
 mod light_file;
 mod material;
@@ -760,6 +761,10 @@ pub struct Material {
     /// behind it.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub holdout: bool,
+    /// A Text or Shape layer's Geometry options ([`crate::extrude`]) and its
+    /// faces' rows, each `None` for rows left as they were. Empty on any other.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub geometry: Vec<Option<EffectInstance>>,
 }
 
 /// After Effects' three answers to Casts shadows and Accepts shadows: no,
@@ -817,29 +822,6 @@ impl Default for AxisModes {
             anchor: AxisMode::Combined,
             position: AxisMode::Combined,
             scale: AxisMode::Linked,
-        }
-    }
-}
-
-impl AxisModes {
-    /// Nothing to write: every pair is where a fresh layer leaves it.
-    pub fn is_default(&self) -> bool {
-        *self == Self::default()
-    }
-
-    pub fn get(&self, pair: TransformPair) -> AxisMode {
-        match pair {
-            TransformPair::Anchor => self.anchor,
-            TransformPair::Position => self.position,
-            TransformPair::Scale => self.scale,
-        }
-    }
-
-    pub fn set(&mut self, pair: TransformPair, mode: AxisMode) {
-        match pair {
-            TransformPair::Anchor => self.anchor = mode,
-            TransformPair::Position => self.position = mode,
-            TransformPair::Scale => self.scale = mode,
         }
     }
 }
@@ -2105,7 +2087,10 @@ impl Layer {
         self.switches.three_d
             || matches!(
                 self.kind,
-                LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Model { .. }
+                LayerKind::Camera { .. }
+                    | LayerKind::Light { .. }
+                    | LayerKind::Model { .. }
+                    | LayerKind::Mesh { .. }
             )
     }
 
@@ -2493,6 +2478,8 @@ pub enum LayerKind {
         #[serde(default)]
         settings: Box<crate::model_layer::ModelSettings>,
     },
+    /// A 3D shape Lumit makes itself ([`crate::mesh_shape`]). Always 3D.
+    Mesh { shape: crate::mesh_shape::MeshShape },
 }
 
 impl LayerKind {
@@ -2511,7 +2498,7 @@ impl LayerKind {
             Self::Null => 8,
             Self::Shape { .. } => 9,
             Self::Light { .. } => 10,
-            Self::Model { .. } => 11,
+            Self::Model { .. } | Self::Mesh { .. } => 11,
         }
     }
 }
@@ -3906,6 +3893,7 @@ fn collect_comp_footage(
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
             | LayerKind::Model { .. }
+            | LayerKind::Mesh { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
         }
@@ -4027,6 +4015,7 @@ pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
         | LayerKind::Shape { .. }
         | LayerKind::Camera { .. }
         | LayerKind::Light { .. }
+        | LayerKind::Mesh { .. }
         | LayerKind::Adjustment
         | LayerKind::Null => false,
     }

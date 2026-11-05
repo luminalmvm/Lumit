@@ -27,8 +27,7 @@ pub fn samples(
 ) -> Vec<MbSample> {
     // A model blurs in the mesh pass, from its own placements (model::draw),
     // and particles in the scene along their own paths.
-    let model = matches!(layer.kind, lumit_core::model::LayerKind::Model { .. })
-        || crate::realise::scene::in_scene(layer);
+    let model = lumit_core::extrude::draws_mesh(layer) || crate::realise::scene::in_scene(layer);
     if !layer.switches.motion_blur || model {
         return Vec::new();
     }

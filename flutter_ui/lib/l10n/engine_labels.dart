@@ -1712,8 +1712,27 @@ Map<String, String> get _built => {
       "Zoom": l10n.fxZoom,
       // A Model layer's material rows, and their presets.
       "Material": l10n.fxMaterial,
+      "Geometry options": l10n.fxGeometryOptions,
+      "Extrusion depth": l10n.fxExtrusionDepth,
+      "Bevel depth": l10n.fxBevelDepth,
+      "Bevel segments": l10n.fxBevelSegments,
+      "Slice start": l10n.fxSliceStart,
+      "Slice end": l10n.fxSliceEnd,
+      "Top radius": l10n.fxTopRadius,
+      "Bottom radius": l10n.fxBottomRadius,
+      "Pipe radius": l10n.fxPipeRadius,
+      "Pipe segments": l10n.fxPipeSegments,
+      "Corner segments": l10n.fxCornerSegments,
+      "Hole bevel depth": l10n.fxHoleBevelDepth,
+      "Angular": l10n.fxBevelAngular,
+      "Convex": l10n.fxBevelConvex,
+      "Concave": l10n.fxBevelConcave,
+      "Bevel": l10n.fxFaceBevel,
       "Base colour": l10n.fxBaseColour,
       "Base colour layer": l10n.fxBaseColourLayer,
+      "Projected from": l10n.fxProjectedFrom,
+      "Projection time": l10n.fxProjectionTime,
+      "Hold frame": l10n.fxHoldFrame,
       "Metallic": l10n.fxMetallic,
       "Emission colour": l10n.fxEmissionColour,
       "Emission strength": l10n.fxEmissionStrength,
@@ -1844,6 +1863,7 @@ Map<String, String> get _built => {
       "Roto brush tool": l10n.keyRotoBrushTool,
       "Puppet tool": l10n.keyPuppetTool,
       "Camera tool": l10n.keyCameraTool,
+      "3D shape tool": l10n.key3dShapeTool,
       "Reveal Position": l10n.keyRevealPosition,
       "Reveal Scale": l10n.keyRevealScale,
       "Reveal Rotation": l10n.keyRevealRotation,
@@ -1872,6 +1892,8 @@ Map<String, String> get _built => {
       "New Solid layer": l10n.keyNewSolidLayer,
       "New Text layer": l10n.keyNewTextLayer,
       "New Camera layer": l10n.keyNewCameraLayer,
+      "New Card layer": l10n.keyNewCardLayer,
+      "Project from camera": l10n.menuProjectFromCamera,
       "New Light layer": l10n.keyNewLightLayer,
       "New Adjustment layer": l10n.keyNewAdjustmentLayer,
       "New Null layer": l10n.keyNewNullLayer,
@@ -2071,6 +2093,7 @@ Map<String, String> get _built => {
       "Set camera settings": l10n.histSetCameraSettings,
       "Set light settings": l10n.histSetLightSettings,
       "Set material settings": l10n.histSetMaterialSettings,
+      "Edit geometry options": l10n.histEditGeometryOptions,
       "Set lighting": l10n.histSetLighting,
       "Link camera to solve": l10n.histLinkCameraToSolve,
       "Edit volume": l10n.histEditVolume,
@@ -2204,6 +2227,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeLightKindApproximated(a('ae_kind'));
     case 'shadow_switch_keyed':
       return l10n.aeShadowSwitchKeyed;
+    case 'geometry_options_carried':
+      return l10n.aeGeometryOptionsCarried;
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':

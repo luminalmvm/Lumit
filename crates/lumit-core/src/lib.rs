@@ -15,6 +15,7 @@ pub mod edits;
 /// The Environment light: a picture of everything round the scene.
 pub mod environment;
 pub mod expression;
+pub mod extrude;
 pub mod fx;
 /// The layer driver graph: the additive wiring beside the effect stack.
 pub mod graph;
@@ -30,6 +31,7 @@ pub mod linalg;
 pub mod lut;
 pub mod markers;
 pub mod mask;
+pub mod mesh_shape;
 pub mod model;
 pub mod model_layer;
 pub mod model_material;

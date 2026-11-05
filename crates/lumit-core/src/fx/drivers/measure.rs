@@ -250,7 +250,8 @@ pub fn layer_rect(
         LayerKind::Null
         | LayerKind::Camera { .. }
         | LayerKind::Light { .. }
-        | LayerKind::Model { .. } => None,
+        | LayerKind::Model { .. }
+        | LayerKind::Mesh { .. } => None,
     }
 }
 

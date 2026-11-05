@@ -202,6 +202,7 @@ impl ActionId {
             "tool.roto" => "Roto brush tool",
             "tool.puppet" => "Puppet tool",
             "tool.camera" => "Camera tool",
+            "tool.shape3d" => "3D shape tool",
             // Timeline reveals and edits.
             "reveal.position" => "Reveal Position",
             "reveal.scale" => "Reveal Scale",
@@ -229,6 +230,8 @@ impl ActionId {
             "layer.new.light.point" => "New Light layer",
             "layer.new.adjustment" => "New Adjustment layer",
             "layer.new.null" => "New Null layer",
+            "layer.new.card" => "New Card layer",
+            "layer.project.from.camera" => "Project from camera",
             "layer.new.sequence" => "New Sequence layer",
             "layer.new.audio" => "New Audio layer",
             "layer.settings" => "Layer settings",

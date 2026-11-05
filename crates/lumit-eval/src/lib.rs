@@ -40,6 +40,7 @@ mod material;
 mod model;
 mod moments;
 pub mod pool;
+mod projection;
 pub mod schedule;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
@@ -1247,15 +1248,11 @@ fn feed_effect_stack(
                 }
                 EffectValue::Layer(lref) => {
                     // The referenced layer is rendered alone at comp size as
-                    // this effect's auxiliary input (a depth pass for depth
-                    // of field, docs/impl/layer-input.md §4): its content is
-                    // content the parameter hash cannot otherwise see, so it
-                    // joins the key. It is rendered SOURCE-ONLY (its own
-                    // effect stack is not applied), so — exactly like a matte
-                    // source — the key is the referenced layer's source plus
-                    // its evaluated transform. A source-only render never
-                    // re-enters an effect stack, so a layer reference cannot
-                    // recurse; `visited` still guards any precomp cycle
+                    // this effect's auxiliary input (docs/impl/layer-input.md
+                    // §4), content the parameter hash cannot otherwise see.
+                    // Rendered source-only, the key is its source, its paint
+                    // and its evaluated transform, and a layer reference
+                    // cannot recurse; `visited` still guards any precomp cycle
                     // inside that source. An unset or dangling reference
                     // feeds a distinct 0 marker (the effect is a no-op).
                     //
@@ -1298,6 +1295,9 @@ fn feed_effect_stack(
                             h.update(src.id.as_bytes());
                             let slt = lumit_core::time::layer_time(t, src.start_offset.0);
                             feed_source(h, doc, comp, src, slt, t, quality, stamper, visited)?;
+                            if !src.paint.is_empty() {
+                                let _ = serde_json::to_writer(&mut *h, &src.paint);
+                            }
                             let dtr = &src.transform;
                             for v in [
                                 dtr.position_x.value_at(slt),
@@ -1701,10 +1701,9 @@ fn feed_layer(
         true,
     )?;
 
-    // The **style stack** (docs/impl/layer-styles.md §1), and a Model layer's
-    // material rows, which draw whatever the fx switch says, through the very
-    // same fold: they're picture, not metadata. Nothing at all for an empty
-    // list, so every key written before either existed is still that layer's.
+    // The **style stack** and a Model layer's material rows, which draw
+    // whatever the fx switch says, through the same fold. Nothing at all for
+    // an empty list, so every older key is still that layer's.
     feed_effect_stack(
         h,
         layer.switches.fx,
@@ -1720,13 +1719,14 @@ fn feed_layer(
         true,
     )?;
     let (m, l) = (lumit_core::model_material::stored(layer), Some(layer));
+    let named = lumit_core::model_material::unheld(&m, comp, lt);
     feed_effect_stack(
-        h, true, &m, l, comp, doc, t, lt, quality, stamper, visited, true,
+        h, true, &named, l, comp, doc, t, lt, quality, stamper, visited, true,
     )?;
+    projection::feed_projections(h, doc, comp, &m, (t, lt), quality, stamper, visited)?;
 
-    // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
-    // source frames, which are content the parameter hash cannot see:
-    // two comp times sharing the current frame — a held/frozen leading frame —
+    // A temporal effect (echo) reads the layer's neighbour source frames, which
+    // the parameter hash cannot see: two comp times sharing the current frame
     // can differ in their neighbours, so their echoes differ. Key the stamped
     // neighbour frames, exactly the ones the render decodes (same window, same
     // retime mapping, same comp frame step). Footage layers only, as the render
@@ -2382,6 +2382,7 @@ fn feed_source(
         LayerKind::Model { .. } => {
             model::feed(h, doc, owner, layer, comp_time, quality, stamper, visited)?;
         }
+        LayerKind::Mesh { shape } => model::feed_shape(h, *shape),
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a

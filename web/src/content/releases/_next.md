@@ -8,6 +8,7 @@ section below, and when the release note is written the lines move into it.
 - A project set to 8 or 32 bits draws its effects, where most of them used to come out empty.
 - Particulate in the scene inside a collapsed 3D precomp now follows the precomp, where it used
   to stay behind when the precomp was moved.
+- The camera's depth of field now blurs Model layers, which it used to leave sharp.
 - Depth of field pro no longer leaves a fine grain over a wide blur, by either method.
 - Fast layers with motion blur are drawn with more copies, up to 128, so they smear instead of stepping. A child now blurs with its parent, a 3D layer blurs when the camera moves, and the layers inside a collapsed precomp blur. Exports of those can look smoother and take longer. Set the second number beside **Samples** in **Composition settings** to the first to keep a fixed count.
 - Glow, and the other effects that spread light, no longer show a faint box behind each letter
@@ -22,4 +23,5 @@ section below, and when the release note is written the lines move into it.
 - The 3D layers and models in a collapsed precomp take the lights of the composition it sits in, where they ignored them.
 - A collapsed precomp's own environment light no longer draws its picture flat in the parent.
 - A layer with Accepts shadows on Only, or with Accepts lights off, now takes shadows with its back to the light, where it showed none. A floor at X rotation +90 can gain a shadow.
+- An effect or material reading a Precomp layer now sees that layer's own paint and, with Effects and masks, its own effects, where it used to see the comp alone.
 - A Precomp layer on Flow, as one from After Effects with Pixel Motion comes in, now makes the frames between, and is no longer collapsed.

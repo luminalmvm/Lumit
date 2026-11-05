@@ -1473,7 +1473,7 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // that has no colour of its own at all.
       BridgeLayerKind.adjustment => LumitIcon.adjustment,
       BridgeLayerKind.nullLayer => LumitIcon.nullLayer,
-      BridgeLayerKind.model => LumitIcon.cube3d,
+      BridgeLayerKind.model || BridgeLayerKind.mesh => LumitIcon.cube3d,
     };
 
 /// The cache bar: a thin stripe under the time ruler showing which frames are

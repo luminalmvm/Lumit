@@ -6426,6 +6426,10 @@
   "@keyCameraTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "key3dShapeTool": "3D shape tool",
+  "@key3dShapeTool": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The toolbar tool that puts a cube, sphere and so on in the comp."
+  },
   "keyCompositionSettings": "Composition settings",
   "@keyCompositionSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6557,6 +6561,10 @@
   "keyNewAdjustmentLayer": "New Adjustment layer",
   "@keyNewAdjustmentLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewCardLayer": "New Card layer",
+  "@keyNewCardLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A card is a flat Model layer with no 3D model behind it."
   },
   "keyNewCameraLayer": "New Camera layer",
   "@keyNewCameraLayer": {
@@ -7515,6 +7523,10 @@
   "@menuAdjustment": {
     "description": "Menu item."
   },
+  "menuShape3d": "3D shape",
+  "@menuShape3d": {
+    "description": "Layer > New submenu: cubes, spheres and other solid shapes the app makes itself, drawn in the comp’s 3D space."
+  },
   "menuAnimateText": "Animate text",
   "@menuAnimateText": {
     "description": "Menu item."
@@ -7546,6 +7558,10 @@
   "menuBlendingMode": "Blending mode",
   "@menuBlendingMode": {
     "description": "Menu item."
+  },
+  "menuCard": "Card",
+  "@menuCard": {
+    "description": "Layer > New menu item: a flat Model layer that needs no file."
   },
   "menuCamera": "Camera",
   "@menuCamera": {
@@ -11139,6 +11155,34 @@
   "@toolShapeStar": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "shape3dCube": "Cube",
+  "@shape3dCube": {
+    "description": "A 3D shape: a box. Names the toolbar tool, the Layer > New > 3D shape row and nothing else."
+  },
+  "shape3dSphere": "Sphere",
+  "@shape3dSphere": {
+    "description": "A 3D shape: a ball. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCylinder": "Cylinder",
+  "@shape3dCylinder": {
+    "description": "A 3D shape: a round can. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCone": "Cone",
+  "@shape3dCone": {
+    "description": "A 3D shape: a cone. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dTorus": "Torus",
+  "@shape3dTorus": {
+    "description": "A 3D shape: a ring like a doughnut. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPlane": "Plane",
+  "@shape3dPlane": {
+    "description": "A 3D shape: a flat card. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPyramid": "Pyramid",
+  "@shape3dPyramid": {
+    "description": "A 3D shape: a four-sided pyramid. Toolbar tool and Layer > New > 3D shape row."
+  },
   "toolSize": "Size",
   "@toolSize": {
     "description": "Toolbar options strip — label beside the brush size field."
@@ -13302,6 +13346,10 @@
       }
     }
   },
+  "aeGeometryOptionsCarried": "The geometry options were imported",
+  "@aeGeometryOptionsCarried": {
+    "description": "Import report: a Text or Shape layer's extrusion and bevel in After Effects came across."
+  },
   "aeShadowSwitchKeyed": "The shadow setting kept its first key",
   "@aeShadowSwitchKeyed": {
     "description": "Import report row reason. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
@@ -13643,6 +13691,10 @@
   "trackCreateNull": "Create null",
   "@trackCreateNull": {
     "description": "Button over the Viewer's picture when solved points are selected: puts a Null layer at their average position."
+  },
+  "trackCreateCard": "Create card",
+  "@trackCreateCard": {
+    "description": "Button over the Viewer's picture when solved points are selected: puts a flat Model layer at their average position with the shot projected on it from the solved camera."
   },
   "trackCreateSolid": "Create solid",
   "@trackCreateSolid": {
@@ -16722,6 +16774,10 @@
   "histSetLightSettings": "Set light settings",
   "@histSetLightSettings": {
     "description": "Undo history entry: a light's type, falloff, aim or shadows were changed."
+  },
+  "histEditGeometryOptions": "Edit geometry options",
+  "@histEditGeometryOptions": {
+    "description": "Undo history entry: a Text or Shape layer's Geometry options, or a face's material, was changed."
   },
   "histSetMaterialSettings": "Set material settings",
   "@histSetMaterialSettings": {
@@ -24083,6 +24139,22 @@
   "@fxBaseColourLayer": {
     "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture stands in for the base colour."
   },
+  "menuProjectFromCamera": "Project from camera",
+  "@menuProjectFromCamera": {
+    "description": "Layer menu and command palette: sets every material of the selected Model layers to read a picture from a camera, rather than on the model's own uvs."
+  },
+  "fxProjectedFrom": "Projected from",
+  "@fxProjectedFrom": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The Camera layer its base colour layer is projected from, rather than read on the model's own uvs. None leaves it on the uvs."
+  },
+  "fxProjectionTime": "Projection time",
+  "@fxProjectionTime": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Whether the projecting camera and its picture follow the playhead (Follow) or stop at one frame (Hold)."
+  },
+  "fxHoldFrame": "Hold frame",
+  "@fxHoldFrame": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The comp frame the projecting camera and its picture stop at."
+  },
   "fxMetallic": "Metallic",
   "@fxMetallic": {
     "description": "Effect controls and the Timeline: a row on a Model layer's material."
@@ -24158,5 +24230,69 @@
   "foldMaterials": "Materials",
   "@foldMaterials": {
     "description": "Heading in a Model layer's fold-out and in the Effect controls panel, over a group of rows for each material in its 3D model."
+  },
+  "fxGeometryOptions": "Geometry options",
+  "@fxGeometryOptions": {
+    "description": "Heading in a Text or Shape layer's fold-out and in the Effect controls panel, over how its outline is made solid."
+  },
+  "fxExtrusionDepth": "Extrusion depth",
+  "@fxExtrusionDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: how far back its outline reaches, in pixels."
+  },
+  "fxBevelDepth": "Bevel depth",
+  "@fxBevelDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: how far in and how far back its bevel goes, in pixels."
+  },
+  "fxBevelSegments": "Bevel segments",
+  "@fxBevelSegments": {
+    "description": "Row in a Text or Shape layer's Geometry options: how many steps a rounded bevel is made of."
+  },
+  "fxSliceStart": "Slice start",
+  "@fxSliceStart": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape starts, so part of it can be cut away."
+  },
+  "fxSliceEnd": "Slice end",
+  "@fxSliceEnd": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape ends."
+  },
+  "fxTopRadius": "Top radius",
+  "@fxTopRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its top is. Nought makes a point."
+  },
+  "fxBottomRadius": "Bottom radius",
+  "@fxBottomRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its base is."
+  },
+  "fxPipeRadius": "Pipe radius",
+  "@fxPipeRadius": {
+    "description": "Row in a torus’s Geometry options: how thick the ring is."
+  },
+  "fxPipeSegments": "Pipe segments",
+  "@fxPipeSegments": {
+    "description": "Row in a torus’s Geometry options: how many steps make the round of its ring’s thickness."
+  },
+  "fxCornerSegments": "Corner segments",
+  "@fxCornerSegments": {
+    "description": "Row in a 3D plane’s Geometry options: how many steps make each rounded corner."
+  },
+  "fxHoleBevelDepth": "Hole bevel depth",
+  "@fxHoleBevelDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: a hole's bevel as a share of the Bevel depth, as in the middle of an o."
+  },
+  "fxBevelAngular": "Angular",
+  "@fxBevelAngular": {
+    "description": "Bevel style: a flat slope."
+  },
+  "fxBevelConvex": "Convex",
+  "@fxBevelConvex": {
+    "description": "Bevel style: rounded over."
+  },
+  "fxBevelConcave": "Concave",
+  "@fxBevelConcave": {
+    "description": "Bevel style: scooped out."
+  },
+  "fxFaceBevel": "Bevel",
+  "@fxFaceBevel": {
+    "description": "Name of a Text or Shape layer's material for its bevel, beside Front, Side and Back."
   }
 }

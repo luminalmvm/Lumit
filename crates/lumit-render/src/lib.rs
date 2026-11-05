@@ -60,6 +60,7 @@ mod environment;
 pub mod export;
 pub mod export_defaults;
 pub mod export_presets;
+pub mod extrude;
 /// How a baked per-frame analysis reads a clip, shared by the tiers that do.
 pub mod frames;
 pub mod fxops;
@@ -89,6 +90,7 @@ pub mod plan;
 pub mod planes;
 pub mod prefetch;
 pub mod profile;
+mod projection;
 pub mod proxy;
 pub mod puppet;
 pub mod realise;

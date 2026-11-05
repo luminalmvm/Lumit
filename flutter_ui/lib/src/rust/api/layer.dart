@@ -1162,6 +1162,9 @@ enum BridgeLayerKind {
 
   /// A Model layer: a 3D model file drawn in the comp's 3D space.
   model,
+
+  /// A 3D shape Lumit makes itself: a cube, a sphere and so on.
+  mesh,
   ;
 }
 
@@ -3077,6 +3080,12 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceCameraOwnPoseAt(that: this, frame: frame);
 
+  /// Whether Project from camera has a picture to use.
+  bool canProjectFromCamera(
+          {required List<UuidValue> selected, required int frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCanProjectFromCamera(
+          that: this, selected: selected, frame: frame);
+
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
   /// The stopwatch turning off, and it matches what the stopwatch does
@@ -3699,8 +3708,9 @@ class LayerReference {
       );
 
   /// The corners of a Model layer's box in its own pixels at comp frame
-  /// `at_frame`, three numbers each, once its file has been read. Empty
-  /// before that and on any other kind of layer.
+  /// `at_frame`, three numbers each, once its file has been read, a 3D
+  /// shape's, or a solid Text or Shape layer's once it has been drawn.
+  /// Empty before that and on any other kind of layer.
   Float64List getModelBox({required int atFrame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceGetModelBox(that: this, atFrame: atFrame);
 
@@ -3714,8 +3724,10 @@ class LayerReference {
   /// How far along the ray from `origin` by `direction`, three numbers
   /// each in the layer's own pixels, it first meets a Model layer's model,
   /// in parts of `direction`. `None` where it misses, before the file has
-  /// been read and on any other kind of layer. Asked once a click, and when
-  /// the pointer rests for a moment, as the model is at comp frame `at_frame`.
+  /// been read and on any other kind of layer. A solid Text or Shape layer
+  /// answers the same, of what it was last drawn as. Asked once a click, and
+  /// when the pointer rests for a moment, as the model is at comp frame
+  /// `at_frame`.
   double? getModelHit(
           {required List<double> origin,
           required List<double> direction,
@@ -4085,6 +4097,14 @@ class LayerReference {
   /// a row that runs past its media.
   void pasteSequenceShape({required String text}) => BridgeLib.instance.api
       .crateApiLayerLayerReferencePasteSequenceShape(that: this, text: text);
+
+  /// Project a picture on every material of this Model layer, as one undo
+  /// step: held at `frame` for a still, following the playhead otherwise, with
+  /// a Camera layer made first if the comp has none.
+  void projectFromCamera(
+          {required List<UuidValue> selected, required int frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceProjectFromCamera(
+          that: this, selected: selected, frame: frame);
 
   /// The wireframe this layer is showing, or `None` when no frame carrying a
   /// mesh on it has been built — an unpinned layer with no tool armed on it,
@@ -4460,9 +4480,11 @@ class LayerReference {
   /// stack. It is ignored while the list has anything in it, because then
   /// the ids say where the list lives.
   void setEffects(
-          {required List<BridgeEffectInstance> effects, UuidValue? clip}) =>
+          {required List<BridgeEffectInstance> effects,
+          UuidValue? clip,
+          List<String>? lightNames}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetEffects(
-          that: this, effects: effects, clip: clip);
+          that: this, effects: effects, clip: clip, lightNames: lightNames);
 
   /// Turn flow on or off. Off returns the layer to Nearest — the
   /// policy it had before flow is not recorded, and Nearest is the crisp

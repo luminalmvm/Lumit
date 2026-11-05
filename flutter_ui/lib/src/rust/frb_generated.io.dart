@@ -33,6 +33,7 @@ import 'api/planes.dart';
 import 'api/presets.dart';
 import 'api/project.dart';
 import 'api/project_item.dart';
+import 'api/projection.dart';
 import 'api/retime.dart';
 import 'api/roto.dart';
 import 'api/routes.dart';
@@ -2264,6 +2265,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw);
+
+  @protected
+  Float64List? dco_decode_opt_list_prim_f_64_strict(dynamic raw);
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
@@ -4872,6 +4876,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   Float32List? sse_decode_opt_list_prim_f_32_strict(
+      SseDeserializer deserializer);
+
+  @protected
+  Float64List? sse_decode_opt_list_prim_f_64_strict(
       SseDeserializer deserializer);
 
   @protected
@@ -7639,6 +7647,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_list_prim_f_32_strict(
       Float32List? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_prim_f_64_strict(
+      Float64List? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_prim_u_8_strict(

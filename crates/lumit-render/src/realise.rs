@@ -697,7 +697,7 @@ impl Realiser<'_> {
                         None => LayerInput::Absent,
                     };
                 } else if let Some(n) = &d.nested {
-                    self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
+                    self.painted_input(n)
                 } else {
                     // Through the referenced layer's own colour space:
                     // a background plate is a picture like any other, and it is

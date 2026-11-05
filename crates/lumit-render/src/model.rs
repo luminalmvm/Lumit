@@ -10,7 +10,7 @@ use std::time::SystemTime;
 
 use lumit_core::expression::ExpressionContext;
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, ShadowMode};
-use lumit_core::model_layer::{ModelSettings, UpAxis};
+use lumit_core::model_layer::{ModelSettings, UpAxis, CARD};
 use lumit_gpu::mesh::display::ModelDisplay;
 use lumit_scene::{Bounds, ModelScene};
 use uuid::Uuid;
@@ -29,6 +29,9 @@ pub struct ModelDraw {
     /// `placement` at each shutter sample when the layer blurs, empty when
     /// it doesn't.
     pub shutter: Vec<[[f32; 4]; 4]>,
+    /// The scene at each of those samples, where its shape moves across the
+    /// shutter. Empty when it holds still.
+    pub shutter_scenes: Vec<Arc<ModelScene>>,
     /// Where its nodes are, one for each of `shutter` or one for the frame.
     /// Empty when it draws as its file has it.
     pub poses: Vec<lumit_scene::pose::Pose>,
@@ -41,6 +44,10 @@ pub struct ModelDraw {
     /// it bends, laid there each time its run of 3D layers is drawn.
     pub(crate) looks: Vec<crate::model_material::Look>,
     pub(crate) behind: Mutex<Behind>,
+    /// The shadow maps it takes when it differs from every other model's:
+    /// a projected model's are made without the projected models, whose
+    /// shadows are in the picture already.
+    pub(crate) own_maps: Mutex<Option<Option<lumit_gpu::mesh::shadow::ShadowMaps>>>,
 }
 
 impl ModelDraw {
@@ -166,6 +173,7 @@ pub fn reading() -> bool {
 
 /// Count kept scenes against the governor's `ledger` from here on.
 pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
+    crate::extrude::account_against(ledger);
     if let Ok(mut slot) = KEPT.lock() {
         let mut kept = lumit_cache::ByteLru::new(KEPT_BYTES);
         kept.account_against(Arc::clone(ledger), lumit_budget::Tier::Ram);
@@ -176,6 +184,9 @@ pub(crate) fn account_against(ledger: &Arc<lumit_budget::Ledger>) {
 /// The scene of model item `item`, read the first time it's asked for and
 /// kept after. `None` when the file is missing or won't open.
 pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
+    if item == CARD {
+        return Some(card());
+    }
     let key = key_of(doc, item)?;
     if let Some(scene) = kept(&key) {
         return scene;
@@ -189,23 +200,47 @@ pub(crate) fn scene(doc: &Document, item: Uuid) -> Option<Arc<ModelScene>> {
     read_and_keep(key.clone()).or_else(|| last_read(&key))
 }
 
+/// How a Model layer's rows fetch a layer's picture: at this frame, and at
+/// another comp time for a held projection.
+pub(crate) type Pictures<'a> = (
+    &'a dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
+    &'a dyn Fn(&lumit_core::model::EffectInstance, &str, f64) -> Option<crate::draw::DofInputDraw>,
+);
+
 /// Model layer `layer` as the mesh pass draws it at comp time `t_comp`,
 /// `None` while its file is missing, won't open or is still being read.
 pub(crate) fn draw(
-    doc: &Document,
+    doc: &Arc<Document>,
     comp: &Composition,
     layer: &Layer,
     t_comp: f64,
     context: &Arc<ExpressionContext>,
-    picture: &dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<crate::draw::DofInputDraw>,
+    pictures: Pictures<'_>,
 ) -> Option<ModelDraw> {
-    let LayerKind::Model { item, settings } = &layer.kind else {
-        return None;
-    };
-    let (item, settings) = (*item, &**settings);
-    let scene = scene(doc, item)?;
-    let material = &layer.transform.material;
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let plates = crate::projection::Plates::new(comp, lt, pictures);
+    let picture = |rows: &lumit_core::model::EffectInstance, row: &str| plates.fetch(rows, row);
+    let mut tinted = None;
+    let (item, scene, model_to_comp, mut looks) = match &layer.kind {
+        LayerKind::Model { item, settings } => {
+            let scene = scene(doc, *item)?;
+            let to_comp = model_to_comp(
+                settings,
+                &scene.bounds,
+                (comp.width as f32, comp.height as f32),
+            );
+            let looks = crate::model_material::looks(settings, &scene, lt, context, &picture);
+            (*item, scene, to_comp, looks)
+        }
+        // A solid's mesh is in the layer's own pixels already.
+        _ => {
+            let made = crate::extrude::made(layer, lt, context, &picture)?;
+            tinted = Some(made.tinted);
+            let same = glam::Mat4::IDENTITY.to_cols_array_2d();
+            (layer.id, made.scene, same, made.looks)
+        }
+    };
+    let material = &layer.transform.material;
     let placed = |t: f64| {
         // Each shutter sample reads `time` at its own moment.
         let context = Arc::new(ExpressionContext {
@@ -224,7 +259,34 @@ pub(crate) fn draw(
         .iter()
         .map(|off| placed(t_comp + off * dt))
         .collect();
-    let pose_at = |t| crate::model_motion::pose_at(comp, layer, settings, &scene, t, context);
+    // A solid whose letters or outline move has a scene for each sample.
+    let mut shutter_scenes = Vec::new();
+    if let Some(tinted) =
+        tinted.filter(|_| !offsets.is_empty() && crate::extrude::may_change(layer, lt, context))
+    {
+        shutter_scenes = (offsets.iter())
+            .filter_map(|off| {
+                let t = t_comp + off * dt;
+                let context = Arc::new(ExpressionContext {
+                    comp_time: t,
+                    ..(**context).clone()
+                });
+                let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+                crate::extrude::scene_at(layer, lt, &context, tinted)
+            })
+            .collect();
+        if shutter_scenes.len() != offsets.len()
+            || shutter_scenes.iter().all(|s| Arc::ptr_eq(s, &scene))
+        {
+            shutter_scenes.clear();
+        }
+    }
+    // A Model layer's moving parts have a pose for each.
+    let settings = match &layer.kind {
+        LayerKind::Model { settings, .. } => Some(settings),
+        _ => None,
+    };
+    let pose_at = |t| crate::model_motion::pose_at(comp, layer, settings?, &scene, t, context);
     let frame_pose = pose_at(t_comp);
     let mut poses: Vec<_> = match frame_pose.is_some() {
         true => (offsets.iter())
@@ -232,8 +294,33 @@ pub(crate) fn draw(
             .collect(),
         false => Vec::new(),
     };
+    let at = crate::projection::Moment {
+        t_comp,
+        lt,
+        context,
+        layer,
+        placement,
+    };
+    let (kept, file) = match settings {
+        Some(settings) => (
+            &settings.materials[..],
+            crate::model_material::materials_of(&scene),
+        ),
+        None => (
+            lumit_core::extrude::kept(layer).get(1..).unwrap_or(&[]),
+            std::borrow::Cow::Owned(crate::extrude::faces(layer).to_vec()),
+        ),
+    };
+    crate::projection::aim(doc, comp, kept, &file, model_to_comp, &at, &mut looks);
+    // A projection is tested against one depth, in the frame's pose, so a
+    // projected model's take doesn't blur. Its placement still can.
+    if looks.iter().any(|l| l.projector.is_some()) {
+        poses = frame_pose.iter().cloned().collect();
+        shutter_scenes.clear();
+    }
     // A model that stays put over the shutter is drawn once.
-    if shutter.iter().all(|s| *s == placement)
+    if shutter_scenes.is_empty()
+        && shutter.iter().all(|s| *s == placement)
         && poses.iter().all(|p| Some(p) == frame_pose.as_ref())
     {
         shutter.clear();
@@ -241,16 +328,12 @@ pub(crate) fn draw(
     if shutter.is_empty() {
         poses = frame_pose.into_iter().collect();
     }
-    let looks = crate::model_material::looks(settings, &scene, lt, context, picture);
     Some(ModelDraw {
         item,
         placement,
-        model_to_comp: model_to_comp(
-            settings,
-            &scene.bounds,
-            (comp.width as f32, comp.height as f32),
-        ),
+        model_to_comp,
         shutter,
+        shutter_scenes,
         poses,
         scene,
         opacity: layer
@@ -263,7 +346,22 @@ pub(crate) fn draw(
         holdout: material.holdout,
         looks,
         behind: Mutex::new(Behind::Unset),
+        own_maps: Mutex::new(None),
     })
+}
+
+/// The scene every card draws, which is never read from anywhere.
+fn card() -> Arc<ModelScene> {
+    static SCENE: std::sync::OnceLock<Arc<ModelScene>> = std::sync::OnceLock::new();
+    Arc::clone(SCENE.get_or_init(|| Arc::new(lumit_scene::card())))
+}
+
+/// What reading model item `item` has come to so far, as [`kept`] answers.
+fn read_so_far(doc: &Document, item: Uuid) -> Option<Option<Arc<ModelScene>>> {
+    match item == CARD {
+        true => Some(Some(card())),
+        false => kept(&key_of(doc, item)?),
+    }
 }
 
 /// The key model item `item`'s file is kept under, as it is on disk now.
@@ -298,6 +396,9 @@ fn last_read(key: &Key) -> Option<Arc<ModelScene>> {
 /// when it wouldn't open. `None` while it hasn't been, and a read beside
 /// starts, so a panel can ask as it draws.
 pub fn scene_if_read(doc: &Document, item: Uuid) -> Option<Option<Arc<ModelScene>>> {
+    if item == CARD {
+        return Some(Some(card()));
+    }
     let Some(key) = key_of(doc, item) else {
         return Some(None);
     };
@@ -319,7 +420,7 @@ pub fn layer_box(
     comp: (f32, f32),
     pose: Option<&lumit_scene::pose::Pose>,
 ) -> Option<[[f32; 3]; 8]> {
-    let rest = kept(&key_of(doc, item)?)??.bounds;
+    let rest = read_so_far(doc, item)??.bounds;
     let bounds = pose.map_or(rest, |p| p.bounds);
     // Placed by its box at rest, so a model doesn't drift as it moves.
     let m = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &rest, comp));
@@ -370,10 +471,23 @@ pub fn hit(
     origin: [f32; 3],
     direction: [f32; 3],
 ) -> Option<(f32, usize)> {
+    let scene = read_so_far(doc, item)??;
+    let placed = glam::Mat4::from_cols_array_2d(&model_to_comp(settings, &scene.bounds, comp));
+    scene_hit(&scene, placed, pose, origin, direction)
+}
+
+/// How far along the ray from `origin` by `direction` `scene` placed by
+/// `placed` is first met as `pose` has it, in parts of `direction`, and which
+/// node's part it met.
+pub fn scene_hit(
+    scene: &ModelScene,
+    placed: glam::Mat4,
+    pose: Option<&lumit_scene::pose::Pose>,
+    origin: [f32; 3],
+    direction: [f32; 3],
+) -> Option<(f32, usize)> {
     use glam::{Mat4, Vec3};
     let (origin, direction) = (Vec3::from(origin), Vec3::from(direction));
-    let scene = kept(&key_of(doc, item)?)??;
-    let placed = Mat4::from_cols_array_2d(&model_to_comp(settings, &scene.bounds, comp));
     let mut nearest = None::<(f32, usize)>;
     for (k, node) in scene.nodes.iter().enumerate() {
         let Some(mesh) = node.mesh.and_then(|m| scene.meshes.get(m)) else {
@@ -388,7 +502,7 @@ pub fn hit(
             Some(_) => Mat4::IDENTITY,
             None => scene.node_world(k),
         };
-        let mover = pose.map(|p| p.mover(&scene, k));
+        let mover = pose.map(|p| p.mover(scene, k));
         // The ray in the node's own space, which keeps its parts of direction.
         let back = (placed * world).inverse();
         let (o, d) = (
@@ -569,5 +683,5 @@ fn fitted(up: UpAxis, bounds: &Bounds, comp: (f32, f32)) -> Option<f32> {
 /// What [`fitted`] gives model item `item` turned by `up` in a comp `comp`
 /// pixels in size, once its file has been read, which this never does.
 pub fn fitted_units(doc: &Document, item: Uuid, up: UpAxis, comp: (f32, f32)) -> Option<f32> {
-    fitted(up, &kept(&key_of(doc, item)?)??.bounds, comp)
+    fitted(up, &read_so_far(doc, item)??.bounds, comp)
 }
