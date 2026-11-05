@@ -3,6 +3,7 @@
 #   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored
 1 kHz
 125 Hz
+128
 16 kHz
 16 mm
 2 kHz
@@ -14,8 +15,10 @@
 4 kHz
 500 Hz
 63 Hz
+64
 65 mm
 8 kHz
+96
 A
 APS-C
 Accumulation motion blur
@@ -181,6 +184,7 @@ Brush hardness
 Brush size
 Brushed metal
 Bulge
+Buoyancy
 Burst
 Burst count
 Burst interval
@@ -191,6 +195,7 @@ Camera
 Camera kick
 Camera track
 Cancel
+Candle
 Card wipe
 Ceiling
 Cell height
@@ -238,6 +243,7 @@ Coating
 Cohesion
 Collide
 Collide with
+Collision
 Colour
 Colour 1
 Colour 2
@@ -371,6 +377,7 @@ Dispersion
 Displacement
 Displacement map
 Display
+Dissipation
 Distance
 Distortion
 Distribution
@@ -437,11 +444,14 @@ Emission colour
 Emission layer
 Emission strength
 Emissive
+Emit from
 Emit from image
+Emit layer
 Emit rate
 Emitter
 Emitter angle
 Emitter layer
+Emitter size
 End
 End colour
 End size
@@ -463,6 +473,7 @@ Evolution options
 Evolution speed
 Exclusion
 Expansion
+Explosion
 Exposure
 Expression
 Extract channels
@@ -497,6 +508,9 @@ Final
 Final result
 Find edges
 Fire
+Fire brightness
+Fire colour
+Fire core
 Fish
 Fisheye
 Fit cell
@@ -548,6 +562,7 @@ From x
 From y
 Front
 Frosted glass
+Fuel
 Fujicolor C200
 Fujicolor Pro 400H
 Full body
@@ -723,6 +738,7 @@ Layer out
 Layer points
 Layer size
 Layer time
+Layer's box
 Layout
 Left
 Left and right
@@ -852,6 +868,7 @@ Mirror edges
 Mix
 Mode
 Model
+Model layer
 Mono below
 Monochrome
 Mood lighting
@@ -956,6 +973,7 @@ Part id
 Part matte
 Particle
 Particle blend
+Particles from a layer
 Particulate
 Parts
 Pass
@@ -1109,6 +1127,7 @@ Repeat start
 Replace colour
 Replace method
 Reset interval
+Resolution
 Resonance
 Result
 Reveal original
@@ -1201,6 +1220,7 @@ Shadow colour
 Shadow highlight
 Shadow only
 Shadow opacity
+Shadow strength
 Shadow tonal width
 Shadows
 Shake
@@ -1242,6 +1262,8 @@ Slider control
 Slope channel
 Slow motion with blur
 Smoke
+Smoke and fire
+Smoke colour
 Smooth
 Smooth noise
 Smoothness
@@ -1402,6 +1424,7 @@ Top right
 Top right tangent x
 Top right tangent y
 Top to bottom
+Torch
 Toxic
 Track points
 Trail
@@ -1418,6 +1441,7 @@ Triangles
 Trigger
 Tritone
 True peak
+Turbulence
 Turbulence amount
 Turbulence scale
 Turbulence speed
@@ -1495,6 +1519,7 @@ Voices
 Volume
 Vortex
 Vortex axis
+Vorticity
 Wah
 Warming filter (81)
 Warming filter (85)

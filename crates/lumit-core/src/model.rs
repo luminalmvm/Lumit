@@ -2325,10 +2325,7 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
         nested.graph.is_some()
             || nested.layers.iter().any(|l| {
                 l.switches.visible
-                    && (l.matte.is_some()
-                        || (l.is_adjustment()
-                            && l.switches.fx
-                            && l.effects.iter().any(|e| e.enabled)))
+                    && (l.matte.is_some() || crate::fx::effects::smoke::keeps_own_comp(l))
             })
     });
     let forced = !layer.masks.is_empty()

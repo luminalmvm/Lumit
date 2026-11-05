@@ -58,7 +58,7 @@ const List<String> footageExtensions = [
   // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
   // 3D models, and the ones the user's Blender converts
-  'gltf', 'glb', 'fbx', 'obj', 'blend', 'usd', 'usdz', 'usdc', 'usda', 'abc',
+  'gltf', 'glb', 'fbx', 'obj', 'vdb', 'blend', 'usd', 'usdz', 'usdc', 'usda', 'abc',
   'ply', 'stl', 'dae',
 ];
 /// The footage type group.

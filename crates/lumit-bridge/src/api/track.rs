@@ -87,14 +87,15 @@ pub enum BridgeTrackFailure {
     Tracking,
     /// Too little in the picture held still enough to follow.
     NoFeatures,
-    /// The camera only turned: there is no position to solve and no depth to
-    /// recover (docs/impl/tracking.md §4's sixth deviation).
+    /// The camera only turned: there is no position or depth to solve.
     RotationOnly,
     /// The shot carries a camera move the solver could not stand behind.
     NoSolve,
     /// The quad's contents are not one flat surface, or move against
     /// themselves.
     NotPlanar,
+    /// More than the graphics card has room for.
+    TooBig,
 }
 
 /// Everything the Camera track's status row draws, in one crossing.
@@ -233,11 +234,10 @@ fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
     use lumit_track::solve::SolveError;
     match why {
         AnalysisError::Unreadable => BridgeTrackFailure::Unreadable,
-        // A cancelled run is reported as `Cancelled`, never as a failure, so
-        // this arm is unreachable through `progress`. It is spelled out rather
-        // than caught by a wildcard so that adding a variant to the engine's
-        // enum is a compile error here instead of a silent "could not solve".
+        // A cancelled run never reaches here. It is spelled out so a new variant
+        // of the engine's is a compile error, not a silent "could not solve".
         AnalysisError::Cancelled => BridgeTrackFailure::NoSolve,
+        AnalysisError::TooBig => BridgeTrackFailure::TooBig,
         AnalysisError::NoFrames => BridgeTrackFailure::NoFrames,
         AnalysisError::Tracking(_) => BridgeTrackFailure::Tracking,
         AnalysisError::Solve(SolveError::NoTracks | SolveError::NoKeyframes) => {
@@ -467,7 +467,7 @@ pub fn fire_effect_action(
         };
     }
     // Bake points' two, and a simulation's. The bake reads the document as it stands now.
-    if matches!(fx.effect.match_name.as_str(), "bake_points" | "particulate") {
+    if lumit_core::fx::effects::smoke::bakes_a_walk(&fx.effect.match_name) {
         return match param.as_str() {
             CANCEL => {
                 lumit_render::track::cancel(effect);
@@ -1060,7 +1060,7 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         e.id == effect
             && (e.effect.match_name == lumit_core::track::PLANAR_TRACK
                 || e.effect.match_name == track_points::MATCH_NAME
-                || matches!(e.effect.match_name.as_str(), "bake_points" | "particulate"))
+                || lumit_core::fx::effects::smoke::bakes_a_walk(&e.effect.match_name))
     }) else {
         return status;
     };

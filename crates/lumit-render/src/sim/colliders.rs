@@ -53,7 +53,7 @@ fn place_mat(p: &Place) -> Mat4 {
 
 /// The layer the particles' pixels are in: the Model layer a Layer emitter names,
 /// when it has them born on that model's surface, or their own.
-fn space<'a>(src: &Source<'a>) -> &'a Layer {
+pub(super) fn space<'a>(src: &Source<'a>) -> &'a Layer {
     let named = matches!(src.inst.param("shape"), Some(EffectValue::Choice(9)))
         .then(|| src.inst.layer_ref("emitter_layer"))
         .flatten()

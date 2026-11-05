@@ -24,9 +24,10 @@ const PICTURES: [&str; 4] = [
 ];
 
 /// A scene's materials, or for one with none the default the mesh pass
-/// draws it with, so it still has rows to colour.
+/// draws it with, so it still has rows to colour. A volume has no faces to colour.
 pub(crate) fn materials_of(scene: &ModelScene) -> Cow<'_, [Material]> {
     match scene.materials.is_empty() {
+        true if scene.meshes.is_empty() => Cow::Borrowed(&[]),
         true => Cow::Owned(vec![Material::default()]),
         false => Cow::Borrowed(&scene.materials),
     }

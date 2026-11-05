@@ -148,7 +148,7 @@ impl Realiser<'_> {
             .iter()
             .filter(|l| l.material.accepts_shadows != LightingShadows::Off)
             .flat_map(|l| l.lights.iter().copied())
-            .chain(haze.into_iter().flatten().map(|(l, _)| *l))
+            .chain(haze.into_iter().flat_map(|h| &h.lights).map(|(l, _)| *l))
             .collect();
         // About a texel a pixel at 1080p, fewer at a smaller preview.
         let side = ((2048.0 * self.render_scale) as u32)

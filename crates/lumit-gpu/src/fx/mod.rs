@@ -38,6 +38,7 @@ pub mod particulate_scene;
 pub mod particulate_sim;
 pub mod points_draw;
 pub mod points_field;
+pub mod smoke;
 pub mod split;
 pub mod sprite_flare;
 pub mod stylise;
@@ -401,6 +402,8 @@ pub struct FxEngine {
     particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
     /// Particles worked out step by step, built the first time some are.
     particulate_sim: std::sync::OnceLock<particulate_sim::SimPipelines>,
+    /// Smoke and fire, built the first time some are.
+    smoke: std::sync::OnceLock<smoke::SmokePipelines>,
     /// Depth points, built the first time a shot is drawn as them.
     depth_points: std::sync::OnceLock<depth_points::Pipeline>,
     /// Points field: the nearest point to every pixel, found by jump

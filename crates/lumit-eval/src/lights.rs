@@ -21,6 +21,20 @@ pub(crate) fn feed_lights(
     stamper: &dyn SourceStamper,
     visited: &mut Vec<Uuid>,
 ) -> Option<()> {
+    // A box of smoke is read from its whole walk, whose rows and sources all feed
+    // this name. Its layer may have no picture for the rest of this walk to notice.
+    for layer in &comp.layers {
+        if let Some(e) = lumit_core::fx::effects::smoke::on_layer(layer) {
+            let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+            h.update(b"smoke/");
+            h.update(&lumit_core::fx::effects::smoke::definition(
+                doc, comp, layer, e,
+            ));
+            let _ = serde_json::to_writer(&mut *h, e);
+            let _ = serde_json::to_writer(&mut *h, &layer.transform);
+            feed_f64(h, layer.source_time_at(lt));
+        }
+    }
     let context = lumit_core::model::comp_context(doc, comp, t);
     let read = lumit_core::model::context_reader(&context, t);
     let lights = comp.lights_at(t, &read, stamper.solves().map(|store| (doc, store)));

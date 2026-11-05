@@ -1,10 +1,10 @@
-//! Volumetric light in the draw list (`lumit_core::haze`).
+//! Volumetric light and smoke in the draw list (`lumit_core::haze`).
 //!
-//! When a comp's lights show in the air, the walk puts one haze draw just
-//! above its top 3D layer, or under everything when it has none. The realiser
-//! ends a segment there, as it does at an adjustment layer, and lays the haze
-//! over everything below before going on with the 2D layers above. A comp
-//! with no light in the air has no haze draw and runs none of this.
+//! When a comp's lights show in the air or it has a box of smoke, the walk puts
+//! one haze draw just above its top 3D layer, or under everything when it has
+//! none. The realiser ends a segment there, as it does at an adjustment layer,
+//! and lays the haze over everything below before going on with the 2D layers
+//! above. A comp with neither has no haze draw and runs none of this.
 
 use std::sync::Arc;
 
@@ -15,8 +15,13 @@ use crate::build::shading::{caster_plane, lighting_light};
 use crate::draw::{CompLayerDraw, DrawSource};
 use crate::realise::Realiser;
 
-/// The lights a haze draw shows, each with its haze.
-pub(crate) type HazeLights = [(LightingLight, Haze)];
+/// What a haze draw shows: the comp's lights, each with its haze, and its boxes
+/// of smoke. A light that only lights the smoke has a Volumetric of nought.
+#[derive(Clone)]
+pub struct HazeLights {
+    pub(crate) lights: Vec<(LightingLight, Haze)>,
+    pub(crate) volumes: Vec<crate::sim::smoke::VolumeDraw>,
+}
 
 /// Put the comp's haze draw just above its top 3D layer, or under every layer
 /// when it has none, if any of its lights show in the air at `t`.
@@ -26,22 +31,42 @@ pub(crate) fn add(
     comp: &lumit_core::model::Composition,
     t: f64,
 ) {
-    if !comp
+    let volumes = crate::sim::smoke::volumes(doc, comp, t);
+    // A smoke layer's own picture never shows, only its box does.
+    if !volumes.is_empty() {
+        draws.retain(|d| {
+            matches!(d.source, DrawSource::Model(_)) || !volumes.iter().any(|v| v.layer == d.layer)
+        });
+    }
+    let lit = comp
         .layers
         .iter()
-        .any(|l| matches!(l.kind, lumit_core::model::LayerKind::Light { .. }))
-    {
+        .any(|l| matches!(l.kind, lumit_core::model::LayerKind::Light { .. }));
+    if !lit && volumes.is_empty() {
         return;
     }
     let context = lumit_core::model::comp_context(doc, comp, t);
     let read = lumit_core::model::context_reader(&context, t);
-    let lights: Vec<(LightingLight, Haze)> = comp
-        .lights_at(t, &read, crate::track::solves_for(doc))
+    let every = comp.lights_at(t, &read, crate::track::solves_for(doc));
+    use lumit_core::model::LightKind;
+    let in_air =
+        |l: &&lumit_core::model::ResolvedLight| l.haze.amount > 0.0 && l.kind != LightKind::Ambient;
+    // Those that show in the air first, so a full list drops the others.
+    let also = every.iter().filter(|l| !volumes.is_empty() && !in_air(l));
+    let lights: Vec<(LightingLight, Haze)> = every
         .iter()
-        .filter(|l| l.haze.amount > 0.0 && l.kind != lumit_core::model::LightKind::Ambient)
+        .filter(in_air)
+        .chain(also)
         .take(lumit_gpu::fx::lighting::MAX_LIT_LIGHTS)
         .map(|l| {
-            let h = l.haze;
+            let h = if in_air(&l) {
+                l.haze
+            } else {
+                lumit_core::haze::HazeLook {
+                    colour: [1.0; 3],
+                    ..Default::default()
+                }
+            };
             let mut light = lighting_light(l, false);
             // The haze's colour tints only what it scatters.
             light.colour = [0, 1, 2].map(|c| light.colour[c] * h.colour[c]);
@@ -57,11 +82,21 @@ pub(crate) fn add(
             (light, haze)
         })
         .collect();
-    if lights.is_empty() {
+    if lights.is_empty() && volumes.is_empty() {
         return;
     }
-    let at = draws.iter().rposition(|d| d.three_d).map_or(0, |i| i + 1);
-    draws.insert(at, CompLayerDraw::over_comp(comp, DrawSource::Haze(lights)));
+    // Above the top 3D layer, and above the layers under the top box of smoke,
+    // whose layer may be the only 3D one and has no draw of its own.
+    let at_index = |id: uuid::Uuid| comp.layers.iter().position(|l| l.id == id);
+    let top_box = volumes.iter().filter_map(|v| at_index(v.layer)).min();
+    let at = draws
+        .iter()
+        .rposition(|d| {
+            d.three_d || top_box.is_some_and(|k| at_index(d.layer).is_some_and(|i| i > k))
+        })
+        .map_or(0, |i| i + 1);
+    let haze = HazeLights { lights, volumes };
+    draws.insert(at, CompLayerDraw::over_comp(comp, DrawSource::Haze(haze)));
 }
 
 /// The haze draw a segment ends with, if it has one, and the layers under it.
@@ -79,6 +114,64 @@ pub(crate) fn peel(layers: &[CompLayerDraw]) -> (Option<&HazeLights>, &[CompLaye
 }
 
 impl Realiser<'_> {
+    /// How far the 3D in `layers` is from the camera `cam` at each pixel, as
+    /// clip w counted from the returned near. The near sits just short of the
+    /// nearest corner, so a view from far off (an orthographic one is a
+    /// hundred comps away) keeps a pixel's worth of precision where the
+    /// layers are. `wide` keeps a depth past one at any bit depth, for boxes of
+    /// smoke, which the haze alone has never needed.
+    pub(crate) fn view_depth(
+        &self,
+        layers: &[lumit_gpu::composite::CompositeLayer<'_>],
+        models: &[lumit_gpu::mesh::ModelPicture],
+        cam: glam::Mat4,
+        (width, height): (u32, u32),
+        wide: bool,
+    ) -> (wgpu::Texture, f32) {
+        let mut near = f32::INFINITY;
+        // A model's quad is the whole frame, not where the model is.
+        let model = |l: &&lumit_gpu::composite::CompositeLayer<'_>| {
+            models.iter().any(|m| &m.colour == l.texture)
+        };
+        for l in layers.iter().filter(|l| l.three_d && !model(l)) {
+            let m = cam * l.world();
+            for (u, v) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+                near = near.min(m.col(0).w * u + m.col(1).w * v + m.col(3).w);
+            }
+        }
+        let near = if near.is_finite() && near > 0.0 {
+            near * 0.999
+        } else {
+            0.0
+        };
+        let depth = if wide {
+            self.compositor.composite_depth_wide(
+                &self.ctx,
+                width,
+                height,
+                &[layers],
+                cam,
+                near,
+                self.render_scale,
+                models,
+            )
+        } else {
+            self.compositor.composite_depth_joined(
+                &self.ctx,
+                width,
+                height,
+                &[layers],
+                cam,
+                1.0,
+                near,
+                self.render_scale,
+                None,
+                models,
+            )
+        };
+        (depth, near)
+    }
+
     /// `frame` with the haze of `lights` laid over it, if there is any, seen
     /// through `camera`. `drawn` is the segment's draws with each one's
     /// finished picture and grow, `placed` the same as the compositor draws
@@ -99,14 +192,17 @@ impl Realiser<'_> {
         (width, height): (u32, u32),
     ) -> wgpu::Texture {
         use lumit_gpu::fx::lighting::{DIFFUSION_SPREAD, MAX_SHADOW_CASTERS, MAX_STRETCH};
-        let Some(lights) = lights else {
+        let Some(HazeLights { lights, volumes }) = lights else {
             return frame;
         };
         let pose = camera.unwrap_or_else(|| {
             lumit_core::camera::default_pose(f64::from(width), f64::from(height))
         });
         let cam = crate::export::camera_mat(width, height, pose);
-        let (depth, near) = self.view_depth(placed, models, cam, (width, height));
+        // Walked here so the frame's cancelling reaches it.
+        let mut boxes = crate::sim::smoke::walked_volumes(self.fx, &self.ctx, volumes);
+        let (depth, near) =
+            self.view_depth(placed, models, cam, (width, height), !boxes.is_empty());
         // The shafts: every casting 3D layer cuts every light that casts.
         let shadowed = lights.iter().any(|(l, _)| l.shadow_darkness > 0.0);
         let casting: Vec<(&wgpu::Texture, CasterPlane)> = layers
@@ -173,7 +269,47 @@ impl Realiser<'_> {
         let radius = (half[0] * half[0] + half[1] * half[1] + half[2] * half[2]).sqrt() + w.max(h);
         let [right, up, forward] = lumit_core::camera::axes(pose.rotation_deg);
         let v = |p: (f64, f64, f64)| [p.0 as f32, p.1 as f32, p.2 as f32];
-        let op = lumit_gpu::fx::volumetric::HazeOp {
+        // More boxes than one walk takes go in lots, furthest first, so the
+        // nearer ones cover the further.
+        let eye_at = glam::Vec3::from(v(pose.position));
+        let distance = |b: &lumit_gpu::fx::volumetric::VolumeOp| {
+            glam::Vec3::from(b.look.from_box[3]).distance_squared(eye_at)
+        };
+        boxes.sort_by(|a, b| distance(b).total_cmp(&distance(a)));
+        // A surface that takes no light or no shadow keeps out of smoke's shadow.
+        let no_shadow = if boxes.is_empty() {
+            None
+        } else {
+            let refused: Vec<&wgpu::Texture> = layers
+                .iter()
+                .zip(textures)
+                .filter(|(l, _)| {
+                    l.three_d
+                        && (l.material.unlit || l.material.accepts_shadows == LightingShadows::Off)
+                })
+                .map(|(_, t)| t)
+                .collect();
+            let them: Vec<_> = placed
+                .iter()
+                .filter(|p| p.three_d && refused.contains(&p.texture))
+                .cloned()
+                .collect();
+            (!them.is_empty()).then(|| {
+                self.compositor.composite_depth_wide(
+                    &self.ctx,
+                    width,
+                    height,
+                    &[&them],
+                    cam,
+                    near,
+                    self.render_scale,
+                    models,
+                )
+            })
+        };
+        let lots = lumit_gpu::fx::volumetric::MAX_VOLUMES;
+        let extra = boxes.len().saturating_sub(1) / lots;
+        let base = lumit_gpu::fx::volumetric::HazeOp {
             eye: v(pose.position),
             right: v(right),
             up: v(up),
@@ -184,9 +320,25 @@ impl Realiser<'_> {
             near,
             centre,
             radius,
-            lights: lights.to_vec(),
+            lights: lights.clone(),
+            volumes: Vec::new(),
+            no_shadow,
         };
-        self.fx
-            .haze(&self.ctx, &frame, &depth, &op, casters.as_ref(), maps)
+        let mut picture = frame;
+        for k in 0..=extra {
+            let lot = boxes.iter().skip(k * lots).take(lots).cloned().collect();
+            let mut op = base.clone();
+            op.volumes = lot;
+            // The haze only needs walking once.
+            if k < extra {
+                for (_, h) in &mut op.lights {
+                    h.amount = 0.0;
+                }
+            }
+            picture = self
+                .fx
+                .haze(&self.ctx, &picture, &depth, &op, casters.as_ref(), maps);
+        }
+        picture
     }
 }

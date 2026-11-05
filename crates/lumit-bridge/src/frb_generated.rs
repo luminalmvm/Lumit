@@ -33267,6 +33267,7 @@ impl SseDecode for crate::api::track::BridgeTrackFailure {
             4 => crate::api::track::BridgeTrackFailure::RotationOnly,
             5 => crate::api::track::BridgeTrackFailure::NoSolve,
             6 => crate::api::track::BridgeTrackFailure::NotPlanar,
+            7 => crate::api::track::BridgeTrackFailure::TooBig,
             _ => unreachable!("Invalid variant for BridgeTrackFailure: {}", inner),
         };
     }
@@ -45919,6 +45920,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::track::BridgeTrackFailure {
             Self::RotationOnly => 4.into_dart(),
             Self::NoSolve => 5.into_dart(),
             Self::NotPlanar => 6.into_dart(),
+            Self::TooBig => 7.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -51729,6 +51731,7 @@ impl SseEncode for crate::api::track::BridgeTrackFailure {
                 crate::api::track::BridgeTrackFailure::RotationOnly => 4,
                 crate::api::track::BridgeTrackFailure::NoSolve => 5,
                 crate::api::track::BridgeTrackFailure::NotPlanar => 6,
+                crate::api::track::BridgeTrackFailure::TooBig => 7,
                 _ => {
                     unimplemented!("");
                 }

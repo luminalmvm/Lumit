@@ -145,6 +145,14 @@ fn run() -> Result<(), String> {
         );
     })?);
 
+    // A step and a march of smoke at 128 cells a side (docs/13 §2 B40).
+    results.extend(lumit_bench::smoke_step::budgets(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
     let out = out_path();
     let banked = Baseline::from_results(&results);
     let text =

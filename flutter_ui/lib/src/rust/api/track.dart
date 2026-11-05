@@ -268,8 +268,7 @@ enum BridgeTrackFailure {
   /// Too little in the picture held still enough to follow.
   noFeatures,
 
-  /// The camera only turned: there is no position to solve and no depth to
-  /// recover (docs/impl/tracking.md §4's sixth deviation).
+  /// The camera only turned: there is no position or depth to solve.
   rotationOnly,
 
   /// The shot carries a camera move the solver could not stand behind.
@@ -278,6 +277,9 @@ enum BridgeTrackFailure {
   /// The quad's contents are not one flat surface, or move against
   /// themselves.
   notPlanar,
+
+  /// More than the graphics card has room for.
+  tooBig,
   ;
 }
 

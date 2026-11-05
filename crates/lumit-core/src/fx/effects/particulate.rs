@@ -966,9 +966,10 @@ pub fn set_effects(
         .map(|e| e.id)
         .collect();
     let into_3d = !layer.switches.three_d
-        && effects
-            .iter()
-            .any(|e| rows::is_scene(e) && !before.contains(&e.id));
+        && effects.iter().any(|e| {
+            (rows::is_scene(e) && !before.contains(&e.id))
+                || (super::smoke::is_smoke(e) && !layer.effects.iter().any(|b| b.id == e.id))
+        });
     let set = Op::SetLayerEffects {
         comp,
         layer: layer.id,

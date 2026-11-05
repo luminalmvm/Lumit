@@ -13,6 +13,25 @@ use crate::api::{
 use lumit_core::model::{EffectInstance, EffectValue};
 use uuid::Uuid;
 
+/// The Model layer a dropped file makes. A volume draws through Smoke and fire's
+/// rows and walks nothing.
+pub(crate) fn dropped_layer(
+    comp: &lumit_core::model::Composition,
+    file: &lumit_core::model::FootageItem,
+) -> lumit_core::model::Layer {
+    let mut layer = lumit_core::model_layer::model_layer(comp, file);
+    if lumit_scene::is_volume(file.media.on_disk()) {
+        layer.effects = lumit_core::fx::effects::smoke::for_volume()
+            .into_iter()
+            .collect();
+        // The volumes people drop are nearly all Z up.
+        if let LayerKind::Model { settings, .. } = &mut layer.kind {
+            settings.up_axis = UpAxis::Z;
+        }
+    }
+    layer
+}
+
 /// One part of a 3D precomp's scene: the number a matte keeps, and the name to
 /// show.
 #[frb(non_opaque)]
@@ -225,23 +244,33 @@ impl LayerReference {
 
     /// The corners of a Model layer's box in its own pixels at comp frame
     /// `at_frame`, three numbers each, once its file has been read, a 3D
-    /// shape's, or a solid Text or Shape layer's once it has been drawn.
-    /// Empty before that and on any other kind of layer.
+    /// shape's, a solid Text or Shape layer's once it has been drawn, or a box
+    /// of smoke's. Empty before that and on any other kind of layer.
     #[frb(sync)]
     pub fn get_model_box(&self, at_frame: i64) -> Result<Vec<f64>, BridgeError> {
         let layer = self.item()?;
-        let LayerKind::Model { item, settings } = &layer.kind else {
-            let corners = lumit_render::extrude::layer_box(self.layer_id)
-                .or_else(|| lumit_render::extrude::shape_box(&layer));
-            return Ok(corners
-                .iter()
-                .flatten()
-                .flatten()
-                .map(|v| f64::from(*v))
-                .collect());
-        };
         let doc = self.snapshot()?;
         let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidComp)?;
+        let LayerKind::Model { item, settings } = &layer.kind else {
+            use lumit_core::fx::effects::smoke;
+            if smoke::on_layer(&layer).is_none() {
+                let corners = lumit_render::extrude::layer_box(self.layer_id)
+                    .or_else(|| lumit_render::extrude::shape_box(&layer));
+                return Ok(corners
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .map(|v| f64::from(*v))
+                    .collect());
+            }
+            let [w, h, d] = smoke::box_size(&doc, comp, &layer).map(f64::from);
+            return Ok((0..8)
+                .flat_map(|i| {
+                    let across = |k: usize, v: f64| if i >> k & 1 == 0 { 0.0 } else { v };
+                    [across(0, w), across(1, h), across(2, d) - d * 0.5]
+                })
+                .collect());
+        };
         let size = (comp.width as f32, comp.height as f32);
         let pose = pose_at_frame(&doc, comp, &layer, at_frame);
         let corners = lumit_render::model::layer_box(&doc, *item, settings, size, pose.as_ref());

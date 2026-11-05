@@ -27,7 +27,7 @@ folder becomes a project folder of the same name.
 The dialogue's **Footage** filter lists the common formats: MP4, MOV, MKV, AVI, WebM,
 M4V, MPEG, TS, MTS, M2TS, WMV, FLV, 3GP, OGV, MXF and GIF; PNG, JPEG, TIFF, OpenEXR, HDR,
 Targa, DPX, BMP, WebP, PSD, AI and the Netpbm family; WAV, MP3, FLAC, AAC, M4A, OGG, Opus, AIFF
-and WMA; and the 3D models glTF, GLB, FBX and OBJ, plus Blender, USD, Alembic, PLY, STL and
+and WMA; and the 3D models glTF, GLB, FBX and OBJ, plus OpenVDB volumes, Blender, USD, Alembic, PLY, STL and
 Collada files.
 
 The filter is a convenience, not a limit. Switch it to **All files** and pick anything -
@@ -108,6 +108,9 @@ opens **Model settings**: **Up axis**, **Fit to comp**, and **Units**, the comp 
 each metre of the model, greyed while it is fitted. **Layer ▸ Model settings** opens it again. In a comp with no
 lights, the first model also adds an **Ambient light** and a **Key light**.
 
+A `.vdb` file imports the same way and draws through [Smoke and
+fire](/effects/generate/smoke-and-fire/).
+
 A Model layer is drawn through the comp's camera with the file's own materials, lit by the
 comp's lights, and passes through other 3D layers by depth. Its effects run on its
 picture, which keeps its depth. Motion blur smears it along its own movement. In the
@@ -173,7 +176,9 @@ ends:
 
 Skins and morph targets from glTF and FBX are drawn, and motion blur, shadows and the outline
 follow them. A skin that names a joint the file doesn't have draws at rest and wears
-**Missing**, as does a model too large for the graphics card to pose.
+**Missing**, as does a model too large for the graphics card to pose. A model that
+[Smoke and fire](/effects/generate/smoke-and-fire/) comes from or goes round holds the pose its
+take starts in.
 
 **Parts** on the layer lists the file's nodes as a tree. Each part has a tick that hides it and
 what hangs from it, and a **Transform** heading over **Visible**, **Position**, **Rotation**

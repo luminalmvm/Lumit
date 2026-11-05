@@ -40,6 +40,7 @@ String trackFailureSentence(BridgeTrackFailure failure) => switch (failure) {
       // A planar refusal, reached only from the Planar track's own status.
       // The two effects share a tracker and so share its refusals;
       // a second set of words for them would be a second thing to translate.
+      BridgeTrackFailure.tooBig => l10n.bakeTooBig,
       BridgeTrackFailure.notPlanar => l10n.trackFailedNotPlanar,
     };
 

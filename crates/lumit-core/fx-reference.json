@@ -22291,6 +22291,474 @@
       "matte_role": "none"
     },
     {
+      "slug": "smoke-and-fire",
+      "match_name": "smoke",
+      "label": "Smoke and fire",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "simulate",
+          "label": "Simulate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "sub_steps",
+          "label": "Sub-steps",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 8.0,
+          "hard_min": 1.0,
+          "hard_max": 8.0
+        },
+        {
+          "id": "bake",
+          "label": "Bake",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "resolution",
+          "label": "Resolution",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "64",
+            "96",
+            "128"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "emit_from",
+          "label": "Emit from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Layer's box",
+            "Particles from a layer",
+            "Model layer"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "emit_layer",
+          "label": "Emit layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "emit_size",
+          "label": "Emitter size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density",
+          "label": "Density",
+          "kind": "float",
+          "unit": "percent",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "temperature",
+          "label": "Temperature",
+          "kind": "float",
+          "unit": "percent",
+          "default": 70.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "fuel",
+          "label": "Fuel",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "expansion",
+          "label": "Expansion",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "buoyancy",
+          "label": "Buoyancy",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 200.0
+        },
+        {
+          "id": "turbulence",
+          "label": "Turbulence",
+          "kind": "float",
+          "unit": "percent",
+          "default": 30.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "vorticity",
+          "label": "Vorticity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 30.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "dissipation",
+          "label": "Dissipation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "wind_across",
+          "label": "Wind x",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "wind_vertical",
+          "label": "Wind y",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "wind_depth",
+          "label": "Wind z",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "trail",
+          "label": "Trail",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "collide_with",
+          "label": "Collide with",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "collide_all",
+          "label": "All 3D layers",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "smoke_colour",
+          "label": "Smoke colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.18,
+            0.18,
+            0.19,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "fire_brightness",
+          "label": "Fire brightness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "fire_colour",
+          "label": "Fire colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.15,
+            0.008,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 16.0
+        },
+        {
+          "id": "fire_core",
+          "label": "Fire core",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            3.0,
+            1.3,
+            0.12,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 16.0
+        },
+        {
+          "id": "shadow_strength",
+          "label": "Shadow strength",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [
+        {
+          "label": "Simulation",
+          "params": [
+            "simulate",
+            "sub_steps",
+            "bake",
+            "cancel",
+            "resolution"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Emitter",
+          "params": [
+            "emit_from",
+            "emit_layer",
+            "emit_size",
+            "density",
+            "temperature",
+            "fuel",
+            "expansion"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Motion",
+          "params": [
+            "buoyancy",
+            "turbulence",
+            "vorticity",
+            "dissipation",
+            "wind_across",
+            "wind_vertical",
+            "wind_depth",
+            "trail"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Collision",
+          "params": [
+            "collide_with",
+            "collide_all"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Look",
+          "params": [
+            "smoke_colour",
+            "fire_brightness",
+            "fire_colour",
+            "fire_core",
+            "shadow_strength"
+          ],
+          "collapsed": false
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "emit_layer",
+          "on": "emit_from",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "emit_size",
+          "on": "emit_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "sub_steps",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "resolution",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "emit_from",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "emit_layer",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "emit_size",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "temperature",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "fuel",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "expansion",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "buoyancy",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "vorticity",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "turbulence",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "dissipation",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "wind_across",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "wind_vertical",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "wind_depth",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "trail",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "collide_with",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "collide_all",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bake",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "cancel",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
       "slug": "remove-background",
       "match_name": "remove_background",
       "label": "Remove background",

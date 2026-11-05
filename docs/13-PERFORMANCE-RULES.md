@@ -70,6 +70,7 @@ sound on the main rows, gaps, crossfades and a passage of twelve-frame cuts.
 | B37 | Particulate's Simulate, 1,000,000 live particles, flow on and a card to hit, one step, GPU | ≤ 4 ms | |
 | B38 | Depth points of a 1080p shot at Density full, off axis, over the same flat layer, one frame | ≤ 16 ms | |
 | B39 | Extruded layer: one letter's mesh, bevelled, what a playing type-on adds a frame. Meshes are cached by outline under the governor, so a repeated outline adds nothing | ≤ 4 ms | |
+| B40 | Smoke and fire, a box 128 cells a side, full of burning gas: one step, and its march at 1080p, each | ≤ 8 ms | |
 
 The UI holds 60 fps during any interaction (16.6 ms is the floor) and budgets 8.3 ms a
 frame so high-refresh screens are fed. An idle editor schedules no frames.
@@ -143,7 +144,7 @@ pressure it slows down, it never changes output.
 ## 7. CI
 
 - A frame submits one command buffer however many layers it has. A test holds that.
-- `lumit-bench` runs B3 to B7, B11, B12 to B31, B33 to B39 and compares each with
+- `lumit-bench` runs B3 to B7, B11, B12 to B31, B33 to B40 and compares each with
   `crates/lumit-bench/baselines/<os>.json`. It fails at 1.6x worse. Under 1 ms isn't
   ratio-gated. Regenerate a baseline by running the harness and committing the file.
 - The absolute budgets are only asserted under `LUMIT_REFERENCE_HW=1`.

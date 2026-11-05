@@ -34,6 +34,7 @@
 //!   1080p shot's Depth points, B38.
 //! - [`sim_step`] times one step of a million simulated particles: B37.
 //! - [`extruded`] times one letter's mesh on an extruded layer: B39.
+//! - [`smoke_step`] times a step and a march of smoke at 128 cells a side: B40.
 //! - [`baseline`] is the gate — the checked-in numbers a run is compared with,
 //!   per operating system, and the factor that separates a regression from a
 //!   noisy runner.
@@ -60,3 +61,4 @@ pub mod ofx;
 pub mod scenarios;
 pub mod scene_points;
 pub mod sim_step;
+pub mod smoke_step;

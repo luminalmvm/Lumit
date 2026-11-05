@@ -623,9 +623,7 @@ pub enum Progress {
     Failed(AnalysisError),
 }
 
-/// Why an analysis did not produce a camera path. Every variant is a refusal
-/// rather than a fault: the pictures did not carry the answer, or the file
-/// could not be read.
+/// Why an analysis stopped. Every variant is a refusal rather than a fault.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AnalysisError {
     /// The media could not be opened, or carries no video.
@@ -646,6 +644,8 @@ pub enum AnalysisError {
     /// The caller stopped it.
     #[error("the analysis was cancelled")]
     Cancelled,
+    #[error("there is not enough video memory")]
+    TooBig,
 }
 
 // ---------------------------------------------------------------------------

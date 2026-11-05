@@ -500,14 +500,10 @@ pub enum DrawSource {
     /// so the Precomp layer arm, the matte arm and the layer-input arm all
     /// reach it through the calls they already make.
     Graph(Box<GraphDraw>),
-    /// Volumetric light (`crate::haze`): the comp's lights that show in the
-    /// air, laid over everything below it once that is composited.
-    Haze(
-        Vec<(
-            lumit_gpu::fx::lighting::LightingLight,
-            lumit_gpu::fx::volumetric::Haze,
-        )>,
-    ),
+    /// Volumetric light and smoke (`crate::haze`): the comp's lights that show
+    /// in the air and its boxes of smoke, laid over everything below it once that
+    /// is composited.
+    Haze(crate::haze::HazeLights),
     /// A Model layer's 3D model, for the mesh pass.
     Model(Box<crate::model::ModelDraw>),
     /// The comp's Environment light (`crate::environment`), at the head of
