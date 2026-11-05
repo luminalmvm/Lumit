@@ -857,15 +857,11 @@ final class FoldWaveformRow extends LayerFoldRow {
 }
 
 /// The keyframes a fold row shows as diamonds on its lane (docs/07 §4.3), or
-/// empty for rows with nothing keyed. A multi-axis transform row reads its
-/// lead axis: the axes key together, so one axis's times are the row's.
+/// empty for rows with nothing keyed. A multi-axis transform row has one key
+/// for each time any of its axes does ([rowKeysOf]).
 List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
-      FoldTransformRow(:final group, :final transform) => switch (
-            read(transform, group.axes.first.prop)) {
-          BridgeScalar_Keyframed(:final field0) => field0,
-          BridgeScalar_Static() => const [],
-          BridgeScalar_Expression() => const [],
-        },
+      FoldTransformRow(:final group, :final transform) =>
+        rowKeysOf([for (final axis in group.axes) read(transform, axis.prop)]),
       FoldRetimeRow(:final scalar) => switch (scalar) {
           BridgeScalar_Keyframed(:final field0) => field0,
           BridgeScalar_Static() => const [],
@@ -1093,8 +1089,7 @@ bool foldRowRevealed(
 /// which is why [laneKeysOf] reads those two out of the path key list
 /// instead.
 BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
-      // The lead axis, exactly as the row's diamonds are read: the axes of one
-      // row key and drive together.
+      // The lead axis: the axes of one row are driven together.
       FoldTransformRow(:final group, :final transform) =>
         read(transform, group.axes.first.prop),
       FoldRetimeRow(:final scalar) => scalar,
@@ -1962,7 +1957,10 @@ bool moveLaneKeys({
 }) {
   if (times.isEmpty) return false;
 
-  List<BridgeKeyframe>? moved(List<BridgeKeyframe> keys) {
+  List<BridgeKeyframe>? movedBy(
+    Map<int, BridgeRational> times,
+    List<BridgeKeyframe> keys,
+  ) {
     if (times.keys.any((i) => i < 0 || i >= keys.length)) return null;
     final next = [
       for (var i = 0; i < keys.length; i++)
@@ -1987,16 +1985,27 @@ bool moveLaneKeys({
     return next;
   }
 
+  List<BridgeKeyframe>? moved(List<BridgeKeyframe> keys) => movedBy(times, keys);
+
   switch (row) {
     case FoldTransformRow(:final group, :final transform):
+      final rowKeys = laneKeysOf(row);
+      if (times.keys.any((i) => i < 0 || i >= rowKeys.length)) return false;
       final props = <BridgeTransformProp>[];
       final values = <BridgeScalar>[];
       for (final axis in group.axes) {
         final scalar = read(transform, axis.prop);
-        if (scalar is! BridgeScalar_Keyframed) return false;
-        final next = moved(scalar.field0);
-        // Every axis or none: a half-applied move would leave the row's axes
-        // keyed at different times, which is not a row any more.
+        // An axis with no keys, or none at these times, has nothing to move.
+        if (scalar is! BridgeScalar_Keyframed) continue;
+        final keys = scalar.field0;
+        final own = {
+          for (final MapEntry(key: i, value: time) in times.entries)
+            if (axisKeyIndex(rowKeys, i, keys) case final j?) j: time,
+        };
+        if (own.isEmpty) continue;
+        final next = movedBy(own, keys);
+        // Every axis or none: a half-applied move would pull apart keys that
+        // sat together.
         if (next == null) return false;
         props.add(axis.prop);
         values.add(BridgeScalar.keyframed(next));
