@@ -16193,6 +16193,10 @@
   "@tipAccelerationGraph": {
     "description": "Tooltip: show how fast the speed changes. One or two words."
   },
+  "graphConstantAcceleration": "Constant acceleration",
+  "@graphConstantAcceleration": {
+    "description": "Timeline, Graph mode, acceleration graph: the heading over three fields in a keyframe's box — an acceleration, an end value and an end frame. From this keyframe the value starts at rest and speeds up evenly by that acceleration until it reaches the end. Shown in small capitals."
+  },
   "fxOcioColourSpaceTransform": "OCIO colour space transform",
   "@fxOcioColourSpaceTransform": {
     "description": "Effect controls - the name of an effect: converts a layer between two colour spaces of the project's OCIO config."

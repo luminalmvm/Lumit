@@ -404,6 +404,143 @@ double? influenceForAcceleration(List<BridgeKeyframe> keys, int index,
   return math.sqrt(squared).clamp(1e-3, 1.0).toDouble();
 }
 
+/// One side of `keys[index]` shaped so the curve has the acceleration
+/// [target] at the key, or null where the side has no curve to shape (no
+/// neighbour that way, a hold, keys on one moment).
+///
+/// The influence moves first, keeping the side's speed
+/// ([influenceForAcceleration]). Where the influence alone cannot get there —
+/// the other sign, or more gently than full influence allows — the influence
+/// stays where it ended and the side's **speed** is solved instead: at the key
+/// the acceleration is linear in that speed, so any target is met exactly.
+BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
+    {required bool isOut, required double target}) {
+  final span = isOut ? index : index - 1;
+  if (span < 0 || span + 1 >= keys.length) return null;
+  final a = keys[span], b = keys[span + 1];
+  final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
+  if (dt <= 0 || a.interpOut is BridgeSideInterp_Hold) return null;
+  final chord = (b.value - a.value) / dt;
+  final (s1, b1) =
+      sideParams(a.interpOut, chord, _autoOf(keys, span, isOut: true));
+  final (s2, b2) =
+      sideParams(b.interpIn, chord, _autoOf(keys, span + 1, isOut: false));
+  final speed = isOut ? s1 : s2;
+  final influence =
+      influenceForAcceleration(keys, index, isOut: isOut, target: target) ??
+          (isOut ? b1 : b2);
+  BridgeSideInterp side(double s, double b) => BridgeSideInterp.bezier(
+      BridgeBezierSide(speed: s, influence: b.clamp(1e-3, 1.0).toDouble()));
+  // At the key: acceleration = 2k / (3 · b² · Δt), k as in
+  // [influenceForAcceleration]. Met with the speed kept?
+  double reached(double s, double bSide) {
+    final k = isOut ? chord - s - b2 * (s2 - s) : s - chord + b1 * (s1 - s);
+    return 2 * k / (3 * bSide * bSide * dt);
+  }
+
+  if ((reached(speed, influence) - target).abs() <=
+      1e-6 * (target.abs() + 1)) {
+    return side(speed, influence);
+  }
+  // Solve the speed for k = 3 · target · b² · Δt / 2.
+  final k = 3 * target * influence * influence * dt / 2;
+  if (isOut) {
+    // k = chord − s − b2·(s2 − s) = chord − b2·s2 − s·(1 − b2)
+    if ((1 - b2).abs() < 1e-9) return side(speed, influence);
+    return side((chord - b2 * s2 - k) / (1 - b2), influence);
+  }
+  // k = s2 − chord + b1·(s1 − s2) = s2·(1 − b1) − chord + b1·s1
+  if ((1 - b1).abs() < 1e-9) return side(speed, influence);
+  return side((k + chord - b1 * s1) / (1 - b1), influence);
+}
+
+/// `keys` with a stretch of **constant acceleration** from `keys[index]`: the
+/// value starts there at rest and speeds up by [acceleration] every second,
+/// `value(t) = start + ½ · acceleration · t²`, until [endTime], where it reaches
+/// [endValue]. The caller works out which two of acceleration, end value and
+/// end time were typed and passes the third to match.
+///
+/// A cubic span holds that parabola exactly: no speed leaving the start, the
+/// speed `acceleration · T` reaching the end, both influences a third (so time
+/// runs evenly along the span). The key after `index` becomes the end — moved
+/// there — or one is added where there is none. Null when the end is not after
+/// the start, or would land on or past the key after that one.
+List<BridgeKeyframe>? keysWithConstantAcceleration(
+  List<BridgeKeyframe> keys,
+  int index, {
+  required double acceleration,
+  required BridgeRational endTime,
+  required double endValue,
+}) {
+  if (index < 0 || index >= keys.length) return null;
+  final start = keys[index];
+  final t0 = rationalSeconds(start.time);
+  final duration = rationalSeconds(endTime) - t0;
+  if (duration <= 1e-9) return null;
+  if (index + 2 < keys.length &&
+      rationalSeconds(endTime) >= rationalSeconds(keys[index + 2].time) - 1e-9) {
+    return null;
+  }
+  const third = 1 / 3;
+  final leave =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: third));
+  final arrive = BridgeSideInterp.bezier(
+      BridgeBezierSide(speed: acceleration * duration, influence: third));
+  final next = index + 1 < keys.length ? keys[index + 1] : null;
+  return [
+    for (var i = 0; i < index; i++) keys[i],
+    BridgeKeyframe(
+        time: start.time,
+        value: start.value,
+        interpIn: start.interpIn,
+        interpOut: leave),
+    BridgeKeyframe(
+        time: endTime,
+        value: endValue,
+        interpIn: arrive,
+        interpOut: next?.interpOut ?? const BridgeSideInterp.linear()),
+    for (var i = index + 2; i < keys.length; i++) keys[i],
+  ];
+}
+
+/// The third of a constant acceleration's three numbers from the other two,
+/// starting at rest from [startValue]: with [acceleration] and [endValue] the
+/// seconds it takes, with [acceleration] and [seconds] the value it reaches,
+/// with [endValue] and [seconds] the acceleration. Null where they cannot
+/// meet: no time, or an acceleration that heads away from the end value.
+({double acceleration, double endValue, double seconds})? constantAcceleration(
+  double startValue, {
+  double? acceleration,
+  double? endValue,
+  double? seconds,
+}) {
+  if (acceleration != null && endValue != null) {
+    final squared = 2 * (endValue - startValue) / acceleration;
+    if (acceleration == 0 || !(squared > 0)) return null;
+    return (
+      acceleration: acceleration,
+      endValue: endValue,
+      seconds: math.sqrt(squared)
+    );
+  }
+  if (seconds == null || seconds <= 0) return null;
+  if (acceleration != null) {
+    return (
+      acceleration: acceleration,
+      endValue: startValue + acceleration * seconds * seconds / 2,
+      seconds: seconds
+    );
+  }
+  if (endValue != null) {
+    return (
+      acceleration: 2 * (endValue - startValue) / (seconds * seconds),
+      endValue: endValue,
+      seconds: seconds
+    );
+  }
+  return null;
+}
+
 /// The speed a key's chosen side reads *at the key* — what the speed graph's
 /// dot sits at. At u=0 (and u=1) the cubic's slope is exactly the side's own
 /// speed parameter, so this is closed-form: a bezier side is its speed, a

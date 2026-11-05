@@ -553,6 +553,198 @@ void main() {
           reason: 'the other side did not move');
     });
 
+    /// The three graphs are chosen in the graph's own corner, under the Layers
+    /// / Graph switch: there in Graph, gone in Layers, and no longer on the
+    /// bottom strip.
+    testWidgets('the graph switch sits in the graph, not on the strip',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      final pill = find.byKey(const ValueKey('graph-lens-switch'));
+      expect(pill, findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(KeyCommandStrip),
+              matching: find.byKey(const ValueKey('graph-lens-speed'))),
+          findsNothing);
+      // Beside the curves: its top is below the ruler, over the graph.
+      final graph = tester.getRect(find.byType(GraphEditorFrb));
+      expect(graph.contains(tester.getCenter(pill)), isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('graph-lens-speed')));
+      await tester.pumpAndSettle();
+      final base =
+          'graph-key-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      expect(find.byKey(ValueKey<String>('$base-out')), findsOneWidget,
+          reason: 'one click, the speed graph');
+
+      await tester.tap(find.byKey(const ValueKey('tl-view-lanes')));
+      await tester.pumpAndSettle();
+      expect(pill, findsNothing);
+    });
+
+    /// In the speed graph `Shift` holds a dot to one axis: dragged sideways
+    /// the key moves in time and keeps its speed.
+    testWidgets('Shift keeps a speed dot level while it moves in time',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 200, 400]);
+      await mountGraph(tester, p);
+      await tester.tap(find.byKey(const ValueKey('graph-lens-speed')));
+      await tester.pumpAndSettle();
+
+      final base =
+          'graph-key-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      final before = opacityKeys(p.layer)[1];
+      final speedBefore = sideSpeedAtKey(opacityKeys(p.layer), 1, isOut: true);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await _drag(tester, find.byKey(ValueKey<String>('$base-out')),
+          const Offset(40, 25));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+
+      final keys = opacityKeys(p.layer);
+      expect(p.comp.frameAtTime(time: keys[1].time),
+          isNot(p.comp.frameAtTime(time: before.time)),
+          reason: 'the key moved in time');
+      expect(keys[1].value, before.value, reason: 'its value stayed');
+      expect(sideSpeedAtKey(keys, 1, isOut: true),
+          closeTo(speedBefore, 1e-6),
+          reason: 'Shift held the speed where it started');
+    });
+
+    /// A picked key's readout in the speed and acceleration graphs is its
+    /// frame alone; the acceleration graph's double-click types the
+    /// acceleration each side has at the key.
+    testWidgets('the acceleration graph types a key\'s acceleration',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 200, 400]);
+      await mountGraph(tester, p);
+      await tester.tap(find.byKey(const ValueKey('graph-lens-acceleration')));
+      await tester.pumpAndSettle();
+
+      final base =
+          'graph-key-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      final dot = find.byKey(ValueKey<String>('$base-out'));
+      await tester.tap(dot);
+      await tester.pumpAndSettle();
+      final frame = p.comp.frameAtTime(time: opacityKeys(p.layer)[1].time);
+      final pill = find.byKey(const ValueKey('graph-value-hint'));
+      expect(
+          find.descendant(of: pill, matching: find.text('f$frame')),
+          findsOneWidget,
+          reason: 'the frame alone');
+
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(dot);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('graph-accel-in')), findsOneWidget);
+      expect(find.byKey(const ValueKey('graph-accel-out')), findsOneWidget);
+
+      await _type(tester, 'graph-accel-out', '-3');
+      final keys = opacityKeys(p.layer);
+      expect(sideAccelerationAtKey(keys, 1, isOut: true), closeTo(-3, 1e-3),
+          reason: 'the out side now has the typed acceleration');
+      expect(keys, hasLength(3));
+    });
+
+    /// The first key has no in side, so its box types the out side alone.
+    testWidgets('the first key\'s acceleration box has its Out field',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 200, 400]);
+      await mountGraph(tester, p);
+      await tester.tap(find.byKey(const ValueKey('graph-lens-acceleration')));
+      await tester.pumpAndSettle();
+
+      final dot =
+          find.byKey(ValueKey<String>('${opacityKey(p.layer, 0)}-out'));
+      await tester.tap(dot);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(dot);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('graph-accel-frame')), findsOneWidget);
+      expect(find.byKey(const ValueKey('graph-accel-in')), findsNothing);
+      expect(find.byKey(const ValueKey('graph-accel-out')), findsOneWidget);
+    });
+
+    /// One key at 0, and a constant acceleration typed into its box with an
+    /// end value: a second key is added where the value gets there, and the
+    /// acceleration is the same the whole way.
+    testWidgets('a constant acceleration grows a second key from rest',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0]);
+      await mountGraph(tester, p);
+      await tester.tap(find.byKey(const ValueKey('graph-lens-acceleration')));
+      await tester.pumpAndSettle();
+
+      final dot =
+          find.byKey(ValueKey<String>('${opacityKey(p.layer, 0)}-out'));
+      await tester.tap(dot);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(dot);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('graph-accel-out')), findsNothing,
+          reason: 'one key alone has no side to shape');
+
+      await _type(tester, 'graph-constant-acceleration', '20');
+      expect(opacityKeys(p.layer), hasLength(1),
+          reason: 'an acceleration with no end yet writes nothing');
+      await _type(tester, 'graph-constant-value', '90');
+
+      final keys = opacityKeys(p.layer);
+      expect(keys, hasLength(2));
+      expect(keys[1].value, closeTo(90, 1e-9));
+      expect(rationalSeconds(keys[1].time), closeTo(3, 1e-3),
+          reason: '90 from rest at 20 a second squared takes 3 seconds');
+      for (final t in [0.5, 1.5, 2.5]) {
+        expect(evaluateKeysAcceleration(keys, t), closeTo(20, 1e-3));
+      }
+    });
+
+    /// The acceleration lens has handles too: a selected key's influence bar,
+    /// dragged sideways, sets that side's influence and leaves its speed and
+    /// the other side alone.
+    testWidgets('the acceleration lens drags an influence handle',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 200, 400]);
+      await mountGraph(tester, p);
+
+      // Easy-ease the middle key, so both its sides have an influence.
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f9);
+      await tester.pumpAndSettle();
+
+      final lens = find.byKey(const ValueKey('graph-lens-acceleration'));
+      await tester.ensureVisible(lens);
+      await tester.tap(lens);
+      await tester.pumpAndSettle();
+
+      final base =
+          'graph-handle-${p.layer.internallayerId}/transform/opacity@opacity#1';
+      final outHandle = find.byKey(ValueKey<String>('$base-out'));
+      expect(outHandle, findsOneWidget,
+          reason: 'a selected key shows its influence handles');
+      expect(find.byKey(ValueKey<String>('$base-in')), findsOneWidget);
+
+      final before = opacityKeys(p.layer)[1];
+      final inBefore = (before.interpIn as BridgeSideInterp_Bezier).field0;
+      await _drag(tester, outHandle, const Offset(60, 0));
+      final after = opacityKeys(p.layer)[1];
+      final out = (after.interpOut as BridgeSideInterp_Bezier).field0;
+      expect(out.influence, greaterThan(1 / 3 + 0.01),
+          reason: 'dragged outwards, the influence grew');
+      expect(out.speed, closeTo(0, 1e-9), reason: 'the speed stayed put');
+      final inAfter = (after.interpIn as BridgeSideInterp_Bezier).field0;
+      expect(inAfter.influence, closeTo(inBefore.influence, 1e-9),
+          reason: 'the other side did not move');
+    });
+
     /// Ctrl+C / Ctrl+V: the in-app clipboard carries full easing, and pasting
     /// lands the earliest key on the playhead.
     testWidgets('copy and paste land keys on the playhead', (tester) async {
