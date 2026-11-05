@@ -89,6 +89,7 @@ fn placed<'a>(
         three_d: l.three_d,
         layer_mask: None,
         pre: None,
+        premultiplied: false,
     }
 }
 

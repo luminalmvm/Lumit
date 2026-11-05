@@ -196,6 +196,9 @@ pub struct CompositeLayer<'a> {
     /// comp's pixels, then `pre` carries it into the parent comp's pixels.
     /// Column-major 4×4 from [`place_matrix`]. None = placed directly.
     pub pre: Option<[[f32; 4]; 4]>,
+    /// The picture's colour already has its alpha in it, as anything the
+    /// compositor or an effect stack made does. Off for a source's own pixels.
+    pub premultiplied: bool,
 }
 
 /// One sub-frame placement for per-layer motion blur (docs/06 §4): the
@@ -1076,6 +1079,7 @@ impl Compositor {
             three_d: false,
             layer_mask: None,
             pre: None,
+            premultiplied: false,
         }
         .matrix(width as f32, height as f32, None, region)
         .to_cols_array_2d()
@@ -1243,6 +1247,7 @@ impl Compositor {
         width: u32,
         height: u32,
         texture: &wgpu::Texture,
+        premultiplied: bool,
         size: (f32, f32),
         samples: &[MbSample],
         three_d: bool,
@@ -1300,6 +1305,7 @@ impl Compositor {
                     three_d,
                     layer_mask: None,
                     pre: s.pre.or(pre),
+                    premultiplied,
                 };
                 let uniform = LayerUniform {
                     matrix: layer
@@ -1312,7 +1318,7 @@ impl Compositor {
                     // averaged result at the caller's 1:1 composite. Full alpha —
                     // the 1/N weight is applied later, in f32, by the add pass.
                     params: [1.0, 0.0, 0.0, 0.0],
-                    target: [tw as f32, th as f32, -1.0, 0.0],
+                    target: [tw as f32, th as f32, -1.0, f32::from(premultiplied)],
                     cut: [0.0; 4],
                     piece: [[0.0; 4]; PIECE_CORNERS / 2],
                 };
@@ -2127,6 +2133,28 @@ mod tests {
         assert!((q.x - 120.0).abs() < 1e-4 && (q.y - 90.0).abs() < 1e-4);
     }
 
+    /// A layer at the comp's corner with nothing set but its picture.
+    fn bare(texture: &wgpu::Texture, size: (f32, f32)) -> CompositeLayer<'_> {
+        CompositeLayer {
+            texture,
+            size,
+            position: (0.0, 0.0),
+            anchor: (0.0, 0.0),
+            scale: (100.0, 100.0),
+            rotation_deg: 0.0,
+            opacity: 100.0,
+            matte: None,
+            blend: Blend::Normal,
+            z: 0.0,
+            rotation_x_deg: 0.0,
+            rotation_y_deg: 0.0,
+            three_d: false,
+            layer_mask: None,
+            pre: None,
+            premultiplied: false,
+        }
+    }
+
     fn solid_linear(
         ctx: &GpuContext,
         colour: &ColourEngine,
@@ -2170,21 +2198,8 @@ mod tests {
 
         let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 4, 4);
         let layer = CompositeLayer {
-            texture: &red,
-            size: (4.0, 4.0),
-            position: (0.0, 0.0),
-            anchor: (0.0, 0.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
             opacity: 50.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&red, (4.0, 4.0))
         };
         // Background: linear green = sRGB 0,255,0 decoded.
         let g_lin = srgb_decode(1.0);
@@ -2230,47 +2245,18 @@ mod tests {
             8,
             8,
             [0.0, 0.0, 0.0, 0.0],
-            &[CompositeLayer {
-                texture: &white,
-                size: (4.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
-            }],
+            &[bare(&white, (4.0, 8.0))],
         );
 
         // The consumer: full-comp red, gated by the matte's alpha.
         let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
         let consumer = |inverted: bool| CompositeLayer {
-            texture: &red,
-            size: (8.0, 8.0),
-            position: (0.0, 0.0),
-            anchor: (0.0, 0.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
             matte: Some(MatteInput {
                 texture: &matte_tex,
                 luma: false,
                 inverted,
             }),
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&red, (8.0, 8.0))
         };
 
         let shown = render_for_display(
@@ -2320,29 +2306,8 @@ mod tests {
         let compositor = ctx.compositor();
         // sRGB 188 ≈ linear 0.5; a solid, fully-opaque grey fills the comp.
         let grey = solid_linear(&ctx, colour, [188, 188, 188, 255], 8, 8);
-        let matte_tex = compositor.composite(
-            &ctx,
-            8,
-            8,
-            [0.0, 0.0, 0.0, 0.0],
-            &[CompositeLayer {
-                texture: &grey,
-                size: (8.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
-            }],
-        );
+        let matte_tex =
+            compositor.composite(&ctx, 8, 8, [0.0, 0.0, 0.0, 0.0], &[bare(&grey, (8.0, 8.0))]);
         let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
         let out = compositor.composite(
             &ctx,
@@ -2350,25 +2315,12 @@ mod tests {
             8,
             [0.0, 0.0, 0.0, 0.0],
             &[CompositeLayer {
-                texture: &red,
-                size: (8.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
                 matte: Some(MatteInput {
                     texture: &matte_tex,
                     luma: true,
                     inverted: false,
                 }),
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(&red, (8.0, 8.0))
             }],
         );
         let px = crate::fx::common::readback_linear_f32(&ctx, &out, 8, 8).unwrap();
@@ -2400,21 +2352,12 @@ mod tests {
         let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
         let count_white = |z: f32, rotation_x_deg: f32, three_d: bool, camera: Option<Mat4>| {
             let layer = CompositeLayer {
-                texture: &white,
-                size: (8.0, 8.0),
                 position: (16.0, 16.0),
                 anchor: (4.0, 4.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
                 z,
                 rotation_x_deg,
-                rotation_y_deg: 0.0,
                 three_d,
-                layer_mask: None,
-                pre: None,
+                ..bare(&white, (8.0, 8.0))
             };
             let linear = compositor.composite_with_camera(
                 &ctx,
@@ -2454,21 +2397,11 @@ mod tests {
         let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
         let layer = |z: f32| CompositeLayer {
-            texture: &white,
-            size: (8.0, 8.0),
             position: (16.0, 16.0),
             anchor: (4.0, 4.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
             z,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
             three_d: true,
-            layer_mask: None,
-            pre: None,
+            ..bare(&white, (8.0, 8.0))
         };
         let count_white = |z: f32| {
             let linear = compositor.composite_with_camera(
@@ -2510,21 +2443,11 @@ mod tests {
         let blue = solid_linear(&ctx, colour, [0, 0, 255, 255], 16, 16);
         let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
         let card = |deg: f32| CompositeLayer {
-            texture: if deg > 0.0 { &red } else { &blue },
-            size: (16.0, 16.0),
             position: (16.0, 16.0),
             anchor: (8.0, 8.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
             rotation_y_deg: deg,
             three_d: true,
-            layer_mask: None,
-            pre: None,
+            ..bare(if deg > 0.0 { &red } else { &blue }, (16.0, 16.0))
         };
         let depth = compositor.composite_depth(
             &ctx,
@@ -2799,21 +2722,8 @@ mod tests {
 
         fn plain(texture: &wgpu::Texture, blend: Blend) -> CompositeLayer<'_> {
             CompositeLayer {
-                texture,
-                size: (4.0, 4.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
                 blend,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(texture, (4.0, 4.0))
             }
         }
 
@@ -2885,21 +2795,8 @@ mod tests {
             8,
             [0.0, 0.0, 0.0, 1.0],
             &[CompositeLayer {
-                texture: &white,
-                size: (8.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
                 layer_mask: Some(&mask),
-                pre: None,
+                ..bare(&white, (8.0, 8.0))
             }],
         );
         let shown = colour.display(&ctx, &linear, crate::DisplayParams::NEUTRAL);
@@ -2933,21 +2830,8 @@ mod tests {
                 4,
                 [d_lin, d_lin, d_lin, 1.0],
                 &[CompositeLayer {
-                    texture: &src_tex,
-                    size: (4.0, 4.0),
-                    position: (0.0, 0.0),
-                    anchor: (0.0, 0.0),
-                    scale: (100.0, 100.0),
-                    rotation_deg: 0.0,
-                    opacity: 100.0,
-                    matte: None,
                     blend,
-                    z: 0.0,
-                    rotation_x_deg: 0.0,
-                    rotation_y_deg: 0.0,
-                    three_d: false,
-                    layer_mask: None,
-                    pre: None,
+                    ..bare(&src_tex, (4.0, 4.0))
                 }],
             );
             colour.readback8(&ctx, &shown).unwrap()[0]
@@ -3007,21 +2891,8 @@ mod tests {
         let compositor = ctx.compositor();
         let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 4, 4);
         let layer = |blend: Blend| CompositeLayer {
-            texture: &grey,
-            size: (4.0, 4.0),
-            position: (0.0, 0.0),
-            anchor: (0.0, 0.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
             blend,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&grey, (4.0, 4.0))
         };
         let g_lin = srgb_decode(128.0 / 255.0);
         let bg = [g_lin, g_lin, g_lin, 1.0];
@@ -3058,21 +2929,10 @@ mod tests {
         let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 8, 8);
         fn layer(tex: &wgpu::Texture, x: f32, blend: Blend) -> CompositeLayer<'_> {
             CompositeLayer {
-                texture: tex,
-                size: (8.0, 8.0),
                 position: (x, 4.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
                 opacity: 60.0,
-                matte: None,
                 blend,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(tex, (8.0, 8.0))
             }
         }
         let bg = [0.1, 0.2, 0.3, 1.0];
@@ -3125,23 +2985,10 @@ mod tests {
             16,
             [0.0, 0.0, 0.0, 1.0],
             &[CompositeLayer {
-                texture: &red,
-                size: (8.0, 8.0),
                 // Comp pixels: the quad covers x 8..16 × y 8..16, the comp's
                 // bottom-right quarter.
                 position: (8.0, 8.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(&red, (8.0, 8.0))
             }],
             None,
             None,
@@ -3195,6 +3042,7 @@ mod tests {
                 w,
                 h,
                 &white,
+                false,
                 (4.0, 4.0),
                 samples,
                 false,
@@ -3325,21 +3173,10 @@ mod tests {
         let compositor = ctx.compositor();
         let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let layer = CompositeLayer {
-            texture: &white,
-            size: (8.0, 8.0),
             position: (8.0, 8.0), // centre of a 16×16 comp
             anchor: (4.0, 4.0),   // layer centre
             scale: (50.0, 50.0),  // 8px quad → 4px
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&white, (8.0, 8.0))
         };
         let shown = render_for_display(
             &ctx,
@@ -3366,21 +3203,11 @@ mod tests {
     /// pixels diagonally, which is the artefact anti-aliasing exists to fix.
     fn rotated_quad<'a>(tex: &'a wgpu::Texture, size: f32, deg: f32) -> CompositeLayer<'a> {
         CompositeLayer {
-            texture: tex,
-            size: (size, size),
             position: (size * 0.5, size * 0.5),
             anchor: (size * 0.5, size * 0.5),
             scale: (60.0, 60.0),
             rotation_deg: deg,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(tex, (size, size))
         }
     }
 

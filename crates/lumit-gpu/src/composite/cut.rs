@@ -432,7 +432,12 @@ impl Compositor {
                     f32::from(layer.matte.as_ref().is_some_and(|m| m.luma)),
                     f32::from(layer.matte.as_ref().is_some_and(|m| m.inverted)),
                 ],
-                target: [tw as f32, th as f32, layer.blend.snapshot_mode(), 0.0],
+                target: [
+                    tw as f32,
+                    th as f32,
+                    layer.blend.snapshot_mode(),
+                    f32::from(layer.premultiplied),
+                ],
                 cut: match cut_of(i) {
                     Some(Cut::Depth(z)) => [z, 0.0, 0.0, 0.0],
                     Some(Cut::Piece { count, .. }) => [0.0, count as f32, 0.0, 0.0],

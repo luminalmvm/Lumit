@@ -22,6 +22,7 @@ use shadows::{casts_shadows, shadow_only};
 
 mod lighting;
 mod order;
+mod paint;
 mod passes;
 mod picture;
 mod shadows;
@@ -452,7 +453,7 @@ impl Realiser<'_> {
     /// is per (instance, source frame), because the bytes do not move while a
     /// plane is being watched. The **resample** is per frame, because the
     /// working raster moves with the preview tier, and it goes through
-    /// [`crate::fxops::render_layer_input`] - the one helper the preview and
+    /// [`crate::fxops::layer_input::render_layer_input`] - the one helper the preview and
     /// export paths both stretch a picture to a working raster with, so a plane
     /// lands on the same pixel grid in the viewport and the file.
     ///
@@ -462,12 +463,13 @@ impl Realiser<'_> {
     /// small square of depth in a sea of nothing.
     fn plane_texture(&self, p: &crate::draw::PlaneDraw, w: u32, h: u32) -> wgpu::Texture {
         let uploaded = self.upload_plane(p);
-        crate::fxops::render_layer_input(
+        crate::fxops::layer_input::render_layer_input(
             self.compositor,
             &self.ctx,
             w,
             h,
             &uploaded,
+            false,
             p.width as f32,
             p.height as f32,
         )
@@ -564,6 +566,7 @@ impl Realiser<'_> {
                 three_d: false,
                 layer_mask: None,
                 pre: None,
+                premultiplied: false,
             }],
             None,
         )
@@ -574,7 +577,7 @@ impl Realiser<'_> {
     /// flares. Each [`LayerInputDraw::Layer`] (the referenced layer's source
     /// pixels) is uploaded, linearised and resampled into the effect's
     /// working raster `(w, h)` through the shared
-    /// [`crate::fxops::render_layer_input`], so the parallel list handed to
+    /// [`crate::fxops::layer_input::render_layer_input`], so the parallel list handed to
     /// `run_ops` is 1:1 with the stack's ops and aligned with the layer
     /// texture the kernel reads. Export renders these identically.
     ///
@@ -655,22 +658,24 @@ impl Realiser<'_> {
                 };
                 // Onto the consuming layer's raster, where its placement says.
                 let set_down = |linear: &wgpu::Texture| match &d.place {
-                    Some(place) => crate::fxops::place_layer_input(
+                    Some(place) => crate::fxops::layer_input::place_layer_input(
                         self.compositor,
                         &self.ctx,
                         w,
                         h,
                         linear,
+                        d.nested.is_some(),
                         d.natural,
                         place,
                         of,
                     ),
-                    None => crate::fxops::render_layer_input(
+                    None => crate::fxops::layer_input::render_layer_input(
                         self.compositor,
                         &self.ctx,
                         w,
                         h,
                         linear,
+                        d.nested.is_some(),
                         d.tex_w as f32,
                         d.tex_h as f32,
                     ),
@@ -940,12 +945,13 @@ impl Realiser<'_> {
                 GraphStep::SceneDepth(n) => {
                     let depth = self.realise_scene_depth(n, None);
                     Some((
-                        crate::fxops::render_layer_input(
+                        crate::fxops::layer_input::render_layer_input(
                             self.compositor,
                             &self.ctx,
                             w,
                             h,
                             &depth,
+                            false,
                             n.width as f32,
                             n.height as f32,
                         ),
@@ -1056,6 +1062,7 @@ impl Realiser<'_> {
                                 three_d: false,
                                 layer_mask: None,
                                 pre: None,
+                                premultiplied: draw.premultiplied(),
                             }],
                             None,
                             None,
@@ -1247,6 +1254,8 @@ impl Realiser<'_> {
                                 three_d: false,
                                 layer_mask: None,
                                 pre: None,
+                                // Every picture in a graph has been composited.
+                                premultiplied: true,
                             }
                         }
                         let bounds = [&a, &b]
@@ -1315,49 +1324,6 @@ impl Realiser<'_> {
             // Node graph effect degrades to.
             None => provided.cloned().unwrap_or_else(|| self.transparent(w, h)),
         }
-    }
-
-    /// Stamp a Precomp layer's paint strokes into its realised picture.
-    ///
-    /// Every other kind of layer is painted on the CPU, in the layer's own
-    /// 8-bit sRGB raster, before it is uploaded — a Precomp has no such
-    /// raster, because its picture is made on the graphics card. So the
-    /// picture comes back the way an export reads it (the neutral display
-    /// encode, never the Viewer's exposure), goes through the *same*
-    /// `apply_strokes` every other layer uses, and is uploaded again. One
-    /// rasteriser, one set of rules, and a stroke that lands identically
-    /// wherever it is painted.
-    ///
-    /// ponytail: an 8-bit round trip per painted Precomp per frame — the
-    /// nested picture is quantised to the depth every footage layer is
-    /// painted at anyway, and read back synchronously (in the browser build,
-    /// an earlier frame's copy). A GPU stamping pass (docs/impl/paint.md, "Not
-    /// built") is the upgrade if a painted Precomp ever shows in a profile.
-    /// Costs nothing on the Precomp layers that carry no paint.
-    fn paint_over(
-        &self,
-        tex: wgpu::Texture,
-        natural_w: f64,
-        natural_h: f64,
-        strokes: &[lumit_core::paint::PaintStroke],
-        t: f64,
-    ) -> wgpu::Texture {
-        if strokes.is_empty() {
-            return tex;
-        }
-        let (w, h) = (tex.width(), tex.height());
-        let display = self
-            .engine
-            .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL);
-        let read = lumit_gpu::device::read_texture8(&self.ctx, self.engine, "paint", &display);
-        let Ok(mut rgba) = read else {
-            // The read failed (a lost device, a surface gone). The unpainted
-            // picture is the calm answer; engine crates do not panic.
-            return tex;
-        };
-        lumit_core::paint::apply_strokes(&mut rgba, w, h, natural_w, natural_h, strokes, t);
-        let src = self.engine.upload_srgb8(&self.ctx, &rgba, w, h);
-        self.engine.linearise(&self.ctx, &src)
     }
 
     /// As [`Self::realise`], but compositing only `region` of the composition
@@ -2101,6 +2067,7 @@ impl Realiser<'_> {
                 three_d: m.three_d,
                 layer_mask: None,
                 pre: m.pre,
+                premultiplied: m.nested.is_some(),
             }],
             cam_mat,
             None,
@@ -2167,6 +2134,7 @@ impl Realiser<'_> {
                 three_d: l.three_d,
                 layer_mask: None,
                 pre: l.pre,
+                premultiplied: false,
             }],
             cam_mat,
             None,
@@ -2383,6 +2351,7 @@ impl Realiser<'_> {
                         width,
                         height,
                         tex,
+                        l.premultiplied(),
                         grow_size(l.natural_size, *g),
                         if mb.is_empty() { &l.mb } else { &mb },
                         l.three_d,
@@ -2471,6 +2440,8 @@ impl Realiser<'_> {
                         blend: l.blend,
                         layer_mask: mask_tex.as_ref(),
                         pre: None,
+                        // An average of copies is premultiplied, whatever they were.
+                        premultiplied: true,
                     },
                     None => lumit_gpu::composite::CompositeLayer {
                         texture,
@@ -2496,6 +2467,7 @@ impl Realiser<'_> {
                         blend: l.blend,
                         layer_mask: mask_tex.as_ref(),
                         pre: l.pre,
+                        premultiplied: l.premultiplied(),
                     },
                 }
             })
@@ -2802,6 +2774,7 @@ pub(crate) fn placed_in_3d<'a>(
         blend: l.blend,
         layer_mask: None,
         pre: l.pre,
+        premultiplied: l.premultiplied(),
     }
 }
 

@@ -17,6 +17,7 @@ struct LayerUniform {
     //    10 colour dodge · 11 lighter colour · 12 vivid light · 13 linear light ·
     //    14 pin light · 15 hard mix · 16 difference · 17 exclusion · 18 divide ·
     //    19 hue · 20 saturation · 21 colour · 22 luminosity
+    // w: 1 when the picture is premultiplied already, 0 when its alpha is straight
     target_size: vec4<f32>,
     // x: the clip z a layer cut by depth draws at, y: how many corners of
     // `piece` a piece of a layer draws, 0 for every other draw
@@ -229,7 +230,12 @@ fn blend_encoded(mode: f32, s: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
 // domain-invariant and run directly in linear.
 @fragment
 fn fs_layer_snapshot(in: VsOut) -> @location(0) vec4<f32> {
-    let texel = textureSample(src, samp, in.uv);
+    let sampled = textureSample(src, samp, in.uv);
+    // The formulas want the colour itself, however the picture stores it.
+    let texel = vec4<f32>(
+        select(sampled.rgb, sampled.rgb / max(sampled.a, 1e-6), layer.target_size.w > 0.5),
+        sampled.a,
+    );
     var a = texel.a * layer.params.x * textureSample(layer_mask, samp, in.uv).a;
     let comp_uv = in.pos.xy / layer.target_size.xy;
     if (layer.params.y > 0.5) {
@@ -284,8 +290,10 @@ fn fs_layer_cut(in: VsOut) -> @location(0) vec4<f32> {
 
 fn layer_colour(in: VsOut) -> vec4<f32> {
     let texel = textureSample(src, samp, in.uv);
-    // Straight-alpha source → premultiplied output, opacity folded in.
-    var a = texel.a * layer.params.x * textureSample(layer_mask, samp, in.uv).a;
+    // Premultiplied output, opacity folded in. `k` is everything but the
+    // picture's own alpha, which a premultiplied picture's colour already has.
+    var k = layer.params.x * textureSample(layer_mask, samp, in.uv).a;
+    var a = texel.a * k;
     if (layer.params.y > 0.5) {
         // Matte lives in comp space: sample at this fragment's comp position.
         let comp_uv = in.pos.xy / layer.target_size.xy;
@@ -303,8 +311,9 @@ fn layer_colour(in: VsOut) -> vec4<f32> {
             strength = 1.0 - strength;
         }
         a = a * clamp(strength, 0.0, 1.0);
+        k = k * clamp(strength, 0.0, 1.0);
     }
-    return vec4<f32>(texel.rgb * a, a);
+    return vec4<f32>(texel.rgb * select(a, k, layer.target_size.w > 0.5), a);
 }
 
 // Scene depth: how far this layer's pixel is from the camera, metres, where

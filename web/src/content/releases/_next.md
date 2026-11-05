@@ -4,6 +4,7 @@ section below, and when the release note is written the lines move into it.
 
 ## Before you update
 
+- A Precomp layer is no longer multiplied by its own alpha twice, so see-through parts and soft edges in a precomp match the same layers drawn flat, where they came out dark. Its blend modes, and the mattes and rows that read it, change with it. The trails of motion blurred layers lighten too.
 - A project set to 8 or 32 bits draws its effects, where most of them used to come out empty.
 - Particulate in the scene inside a collapsed 3D precomp now follows the precomp, where it used
   to stay behind when the precomp was moved.
