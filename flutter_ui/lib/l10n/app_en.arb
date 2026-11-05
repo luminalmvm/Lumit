@@ -16195,15 +16195,23 @@
   },
   "graphStartSpeed": "Start speed",
   "@graphStartSpeed": {
-    "description": "Timeline, Graph mode, acceleration graph, under Constant acceleration: the label beside the field holding the speed the value leaves the keyframe at, in the property's unit per second. 0 means it starts at rest."
+    "description": "Timeline, Graph mode, acceleration graph, under Gravity: the label beside the field holding the speed the value leaves the keyframe at, in the property's unit per second. 0 means it starts at rest, as an object that starts to fall; below 0 it is thrown the other way."
   },
-  "graphEndSpeed": "End speed",
-  "@graphEndSpeed": {
-    "description": "Timeline, Graph mode, acceleration graph, under Constant acceleration: the label beside the field holding the speed the value has when it reaches the end, in the property's unit per second. Typed, it decides how far and how long the value slows down or speeds up."
+  "graphSpeedProfile": "Speed profile",
+  "@graphSpeedProfile": {
+    "description": "Timeline, Graph mode, acceleration graph: one of two options on a small switch in a keyframe's box. From this keyframe the value speeds up from rest, holds a steady speed, then slows down to rest again. Shown in small capitals."
   },
-  "graphConstantAcceleration": "Constant acceleration",
-  "@graphConstantAcceleration": {
-    "description": "Timeline, Graph mode, acceleration graph: the heading over three fields in a keyframe's box — an acceleration, an end value and an end frame. From this keyframe the value starts at rest and speeds up evenly by that acceleration until it reaches the end. Shown in small capitals."
+  "graphGravity": "Gravity",
+  "@graphGravity": {
+    "description": "Timeline, Graph mode, acceleration graph: the other option on the switch in a keyframe's box. From this keyframe the value moves with a constant acceleration, its speed growing, like an object falling. Shown in small capitals."
+  },
+  "graphCruiseSpeed": "Cruise speed",
+  "@graphCruiseSpeed": {
+    "description": "Timeline, Graph mode, acceleration graph, under Speed profile: the label beside the field holding the steady speed the value holds between speeding up and slowing down, in the property's unit per second."
+  },
+  "graphDeceleration": "Deceleration",
+  "@graphDeceleration": {
+    "description": "Timeline, Graph mode, acceleration graph, under Speed profile: the label beside the field holding how much the speed drops every second at the end, as it slows down to rest, in the property's unit per second squared."
   },
   "fxOcioColourSpaceTransform": "OCIO colour space transform",
   "@fxOcioColourSpaceTransform": {

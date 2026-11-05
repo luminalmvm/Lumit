@@ -580,6 +580,135 @@ List<BridgeKeyframe>? keysWithConstantAcceleration(
   );
 }
 
+/// A **speed profile**: from rest, speed up by [acceleration] to
+/// [cruiseSpeed], hold it, then slow by [deceleration] to rest again — over
+/// [distance], or in [seconds] (one of the two). All are sizes (the way is
+/// the caller's). Where the distance or the time is too short to reach the
+/// cruise speed, it speeds up and at once slows down, to the highest speed
+/// that fits ([peakSpeed] below the cruise, no time at it).
+///
+/// Null where a number is not above nought, or neither or both of distance
+/// and seconds are given.
+({
+  double peakSpeed,
+  double accelSeconds,
+  double cruiseSeconds,
+  double decelSeconds,
+  double distance
+})? speedProfile({
+  required double acceleration,
+  required double cruiseSpeed,
+  required double deceleration,
+  double? distance,
+  double? seconds,
+}) {
+  final a1 = acceleration, v = cruiseSpeed, a2 = deceleration;
+  if (!(a1 > 0) || !(v > 0) || !(a2 > 0)) return null;
+  if ((distance == null) == (seconds == null)) return null;
+  if (distance != null) {
+    if (!(distance > 0)) return null;
+    final ramps = v * v / (2 * a1) + v * v / (2 * a2);
+    if (ramps <= distance) {
+      return (
+        peakSpeed: v,
+        accelSeconds: v / a1,
+        cruiseSeconds: (distance - ramps) / v,
+        decelSeconds: v / a2,
+        distance: distance,
+      );
+    }
+    final peak = math.sqrt(2 * distance * a1 * a2 / (a1 + a2));
+    return (
+      peakSpeed: peak,
+      accelSeconds: peak / a1,
+      cruiseSeconds: 0,
+      decelSeconds: peak / a2,
+      distance: distance,
+    );
+  }
+  final t = seconds!;
+  if (!(t > 0)) return null;
+  final t1 = v / a1, t3 = v / a2;
+  if (t1 + t3 <= t) {
+    final cruise = t - t1 - t3;
+    return (
+      peakSpeed: v,
+      accelSeconds: t1,
+      cruiseSeconds: cruise,
+      decelSeconds: t3,
+      distance: v * (t1 / 2 + cruise + t3 / 2),
+    );
+  }
+  final peak = t / (1 / a1 + 1 / a2);
+  return (
+    peakSpeed: peak,
+    accelSeconds: peak / a1,
+    cruiseSeconds: 0,
+    decelSeconds: peak / a2,
+    distance: peak * t / 2,
+  );
+}
+
+/// `keys` with a speed profile from `keys[index]`: at rest there, up to
+/// [peakSpeed] (signed: the way the value goes) by [accelEnd], held to
+/// [cruiseEnd], down to rest at [end]. Each stretch is exact — a parabola,
+/// a straight line, a parabola — as cubics with a third of influence a side.
+/// Keys are added where the speeding up ends and the slowing down starts (one
+/// only when there is no time at the cruise speed); the key after `index`
+/// becomes the end, or one is added. The values follow from the times, so they
+/// agree however the times were rounded.
+///
+/// Null when the times are not in order, or the end would land on or past the
+/// key after the next.
+List<BridgeKeyframe>? keysWithSpeedProfile(
+  List<BridgeKeyframe> keys,
+  int index, {
+  required double peakSpeed,
+  required BridgeRational accelEnd,
+  required BridgeRational cruiseEnd,
+  required BridgeRational end,
+}) {
+  if (index < 0 || index >= keys.length) return null;
+  final start = keys[index];
+  final t0 = rationalSeconds(start.time);
+  final ta = rationalSeconds(accelEnd);
+  final tb = rationalSeconds(cruiseEnd);
+  final te = rationalSeconds(end);
+  if (!(ta > t0 + 1e-9) || tb < ta - 1e-9 || !(te > tb + 1e-9)) return null;
+  if (index + 2 < keys.length &&
+      te >= rationalSeconds(keys[index + 2].time) - 1e-9) {
+    return null;
+  }
+  const third = 1 / 3;
+  BridgeSideInterp side(double speed) =>
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: speed, influence: third));
+  final v = peakSpeed;
+  final ya = start.value + v * (ta - t0) / 2;
+  final yb = ya + v * (tb - ta);
+  final ye = yb + v * (te - tb) / 2;
+  final cruise = tb - ta > 1e-9;
+  final next = index + 1 < keys.length ? keys[index + 1] : null;
+  return [
+    for (var i = 0; i < index; i++) keys[i],
+    BridgeKeyframe(
+        time: start.time,
+        value: start.value,
+        interpIn: start.interpIn,
+        interpOut: side(0)),
+    BridgeKeyframe(
+        time: accelEnd, value: ya, interpIn: side(v), interpOut: side(v)),
+    if (cruise)
+      BridgeKeyframe(
+          time: cruiseEnd, value: yb, interpIn: side(v), interpOut: side(v)),
+    BridgeKeyframe(
+        time: end,
+        value: ye,
+        interpIn: side(0),
+        interpOut: next?.interpOut ?? const BridgeSideInterp.linear()),
+    for (var i = index + 2; i < keys.length; i++) keys[i],
+  ];
+}
+
 /// The speed a key's chosen side reads *at the key* — what the speed graph's
 /// dot sits at. At u=0 (and u=1) the cubic's slope is exactly the side's own
 /// speed parameter, so this is closed-form: a bezier side is its speed, a

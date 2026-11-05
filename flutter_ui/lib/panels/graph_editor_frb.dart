@@ -2342,7 +2342,13 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         },
         onAcceleration: (isOut, target) =>
             _applyKeyAcceleration(channel.id, index, isOut, target),
-        onConstant: (startSpeed, acceleration, endFrame, endValue) =>
+        onProfile: (peakSpeed, accelEnd, cruiseEnd, end) =>
+            _applySpeedProfile(channel.id, index,
+                peakSpeed: peakSpeed,
+                accelEnd: accelEnd,
+                cruiseEnd: cruiseEnd,
+                end: end),
+        onGravity: (startSpeed, acceleration, endFrame, endValue) =>
             _applyConstantAcceleration(channel.id, index,
                 startSpeed: startSpeed,
                 acceleration: acceleration,
@@ -2465,6 +2471,33 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               keys[i],
         ]),
       });
+      widget.onChanged();
+      return;
+    }
+  }
+
+  /// From the key at [index], a speed profile ([keysWithSpeedProfile]): up
+  /// from rest to [peakSpeed] by the frame [accelEnd], held to [cruiseEnd],
+  /// down to rest at [end]. Frames may fall between frames, so each stretch is
+  /// exact; nothing is written where the end would leave the composition or
+  /// cross the key after the next.
+  void _applySpeedProfile(String channelId, int index,
+      {required double peakSpeed,
+      required double accelEnd,
+      required double cruiseEnd,
+      required double end}) {
+    if (end > widget.frames) return;
+    BridgeRational at(double frame) =>
+        timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final keys = keysWithSpeedProfile(channel.keys, index,
+          peakSpeed: peakSpeed,
+          accelEnd: at(accelEnd),
+          cruiseEnd: at(cruiseEnd),
+          end: at(end));
+      if (keys == null) return;
+      commitChannelEdits({channel: BridgeScalar.keyframed(keys)});
       widget.onChanged();
       return;
     }

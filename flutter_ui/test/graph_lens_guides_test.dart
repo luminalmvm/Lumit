@@ -18,6 +18,7 @@ void main() {
   accelerationTests();
   constantAccelerationTests();
   startSpeedTests();
+  speedProfileTests();
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
   const linear = BridgeSideInterp.linear();
@@ -192,5 +193,68 @@ void startSpeedTests() {
       expect(evaluateKeys(shaped, t), closeTo(10 * t - t * t, 1e-6));
       expect(evaluateKeysSpeed(shaped, t), closeTo(10 - 2 * t, 1e-6));
     }
+  });
+}
+
+/// Speed up, hold, slow down: the profile's times and the keys that hold it.
+void speedProfileTests() {
+  const ease =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
+
+  test('over a distance: up, cruise, down', () {
+    final p = speedProfile(
+        acceleration: 100, cruiseSpeed: 200, deceleration: 50, distance: 1000)!;
+    expect(p.accelSeconds, closeTo(2, 1e-9));
+    expect(p.decelSeconds, closeTo(4, 1e-9));
+    // 200 + 400 on the ramps, 400 at 200 a second.
+    expect(p.cruiseSeconds, closeTo(2, 1e-9));
+    expect(p.peakSpeed, 200);
+  });
+
+  test('too short for the cruise speed: a triangle', () {
+    final p = speedProfile(
+        acceleration: 100, cruiseSpeed: 200, deceleration: 100, distance: 100)!;
+    expect(p.cruiseSeconds, 0);
+    expect(p.peakSpeed, closeTo(100, 1e-9));
+    expect(p.accelSeconds + p.decelSeconds, closeTo(2, 1e-9));
+  });
+
+  test('in a time: the distance it covers', () {
+    final p = speedProfile(
+        acceleration: 100, cruiseSpeed: 200, deceleration: 50, seconds: 8)!;
+    expect(p.cruiseSeconds, closeTo(2, 1e-9));
+    expect(p.distance, closeTo(1000, 1e-9));
+    expect(
+        speedProfile(acceleration: 0, cruiseSpeed: 200, deceleration: 50,
+            seconds: 8),
+        isNull);
+  });
+
+  test('the keys: speed rising, flat, falling, at rest both ends', () {
+    final keys = [key(0, 0, ease)];
+    final shaped = keysWithSpeedProfile(keys, 0,
+        peakSpeed: 200,
+        accelEnd: BridgeRational(num: 2, den: 1),
+        cruiseEnd: BridgeRational(num: 4, den: 1),
+        end: BridgeRational(num: 8, den: 1))!;
+    expect(shaped, hasLength(4));
+    expect(shaped.last.value, closeTo(1000, 1e-9));
+    expect(evaluateKeysAcceleration(shaped, 1), closeTo(100, 1e-6));
+    expect(evaluateKeysSpeed(shaped, 3), closeTo(200, 1e-6));
+    expect(evaluateKeysAcceleration(shaped, 3), closeTo(0, 1e-6));
+    expect(evaluateKeysAcceleration(shaped, 6), closeTo(-50, 1e-6));
+    expect(evaluateKeysSpeed(shaped, 7.9999), closeTo(0, 1e-2));
+    expect(evaluateKeys(shaped, 1), closeTo(50, 1e-6));
+  });
+
+  test('a triangle adds one key, and a falling value goes down', () {
+    final keys = [key(0, 500, ease)];
+    final shaped = keysWithSpeedProfile(keys, 0,
+        peakSpeed: -100,
+        accelEnd: BridgeRational(num: 1, den: 1),
+        cruiseEnd: BridgeRational(num: 1, den: 1),
+        end: BridgeRational(num: 2, den: 1))!;
+    expect(shaped, hasLength(3));
+    expect(shaped.last.value, closeTo(400, 1e-9));
   });
 }

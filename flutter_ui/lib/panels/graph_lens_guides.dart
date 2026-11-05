@@ -307,12 +307,18 @@ class GraphLensSwitch extends StatelessWidget {
 /// * **In** and **Out**: the acceleration each side has at the key, in the
 ///   property's unit per second squared. A typed one reshapes that side
 ///   ([sideForAcceleration]). A side with no key beyond it has no field;
-/// * **Constant acceleration**: from this key the speed changes evenly. It
-///   leaves at **Start speed** (0 is at rest) and changes by **Acceleration**
-///   every second, to **End speed** at the end **Value** and **Frame**. Of
-///   Acceleration, End speed, Value and Frame, the two typed last decide the
-///   other two ([constantAcceleration]), and the key after this one becomes
-///   the end — added where there is none ([keysWithConstantAcceleration]).
+/// * then one of two motions from this key, chosen on a pill:
+///   * **Speed profile**: from rest, speed up by **Acceleration** to the
+///     **Cruise speed**, hold it, slow by **Deceleration** to rest at the end
+///     **Value** or **Frame** (the one typed last decides; [speedProfile],
+///     [keysWithSpeedProfile]);
+///   * **Gravity**: leave at **Start speed** and change speed by
+///     **Acceleration** every second, the acceleration constant and the speed
+///     growing, to the end **Value** or **Frame** ([constantAcceleration],
+///     [keysWithConstantAcceleration]).
+///
+///   Either writes the keys it needs: the key after this one becomes the end,
+///   or one is added.
 ///
 /// Every field writes as it is set and the box stays up.
 Future<void> showKeyAccelerationPopover({
@@ -330,9 +336,12 @@ Future<void> showKeyAccelerationPopover({
   required String unit,
   required void Function(double frame, double value) onFrameValue,
   required void Function(bool isOut, double target) onAcceleration,
+  required void Function(
+          double peakSpeed, double accelEnd, double cruiseEnd, double end)
+      onProfile,
   required void Function(double startSpeed, double acceleration,
           double endFrame, double endValue)
-      onConstant,
+      onGravity,
 }) =>
     showLumitPopup<void>(
       context: context,
@@ -350,13 +359,16 @@ Future<void> showKeyAccelerationPopover({
         unit: unit,
         onFrameValue: onFrameValue,
         onAcceleration: onAcceleration,
-        onConstant: onConstant,
+        onProfile: onProfile,
+        onGravity: onGravity,
       ),
     );
 
-/// Which of the constant stretch's numbers was typed. The start speed is
-/// always given; two of these four decide the other two.
-enum _Constant { acceleration, endSpeed, value, frame }
+/// The two motions the box writes from a key.
+enum _Motion { profile, gravity }
+
+/// Which end a motion was last given: where it stops, or when.
+enum _End { value, frame }
 
 class _KeyAccelerationPopover extends StatefulWidget {
   final double fps;
@@ -371,8 +383,10 @@ class _KeyAccelerationPopover extends StatefulWidget {
   final String unit;
   final void Function(double frame, double value) onFrameValue;
   final void Function(bool isOut, double target) onAcceleration;
+  final void Function(
+      double peakSpeed, double accelEnd, double cruiseEnd, double end) onProfile;
   final void Function(double startSpeed, double acceleration, double endFrame,
-      double endValue) onConstant;
+      double endValue) onGravity;
 
   const _KeyAccelerationPopover({
     required this.fps,
@@ -387,7 +401,8 @@ class _KeyAccelerationPopover extends StatefulWidget {
     required this.unit,
     required this.onFrameValue,
     required this.onAcceleration,
-    required this.onConstant,
+    required this.onProfile,
+    required this.onGravity,
   });
 
   @override
@@ -402,67 +417,81 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
   late double? _in = widget.accelerationIn;
   late double? _out = widget.accelerationOut;
 
-  /// The constant stretch. With a key after this one, it reads as the stretch
-  /// that would reach that key from this key's own out speed; alone, it is at
-  /// rest with nothing typed yet.
+  _Motion _motion = _Motion.profile;
+
+  /// The speed profile: its three rates, and its end — the key after this one
+  /// where there is one.
+  double _rise = 0;
+  double _cruise = 0;
+  double _fall = 0;
+  late double _profileValue = widget.next?.value ?? widget.value;
+  late double _profileFrame = widget.next?.frame ?? widget.frame;
+  _End _profileEnd = _End.value;
+
+  /// Gravity: the start speed (this key's own out speed where it has a key
+  /// after it, else at rest), the acceleration, and the end.
   late double _startSpeed = widget.next == null ? 0 : widget.startSpeed;
-  late double _endValue = widget.next?.value ?? widget.value;
-  late double _endFrame = widget.next?.frame ?? widget.frame;
-  late double _acceleration = _fit?.acceleration ?? 0;
-  late double _endSpeed = _fit?.endSpeed ?? _startSpeed;
+  double _gravity = 0;
+  late double _gravityValue = widget.next?.value ?? widget.value;
+  late double _gravityFrame = widget.next?.frame ?? widget.frame;
+  _End _gravityEnd = _End.value;
 
-  ({double acceleration, double endSpeed, double endValue, double seconds})?
-      get _fit {
-    final next = widget.next;
-    if (next == null || widget.fps <= 0) return null;
-    return constantAcceleration(widget.value,
-        startSpeed: _startSpeed,
-        endValue: next.value,
-        seconds: (next.frame - widget.frame) / widget.fps);
-  }
-
-  /// The two numbers typed last, newest first; the other two are worked out.
-  final List<_Constant> _typed = [_Constant.acceleration, _Constant.frame];
-
-  void _setConstant(_Constant which, double v) {
-    _typed
-      ..remove(which)
-      ..insert(0, which);
-    if (_typed.length > 2) _typed.removeLast();
-    switch (which) {
-      case _Constant.acceleration:
-        _acceleration = v;
-      case _Constant.endSpeed:
-        _endSpeed = v;
-      case _Constant.value:
-        _endValue = v;
-      case _Constant.frame:
-        _endFrame = v;
+  /// Lay the speed profile out from what it holds, and write it where it
+  /// works out. Typed by the end value, it goes the way that value lies; by
+  /// the end frame, the way the cruise speed's sign says.
+  void _solveProfile() {
+    final fps = widget.fps;
+    if (fps <= 0) return;
+    final double sign;
+    final ({
+      double peakSpeed,
+      double accelSeconds,
+      double cruiseSeconds,
+      double decelSeconds,
+      double distance
+    })? p;
+    if (_profileEnd == _End.value) {
+      final d = _profileValue - _value;
+      sign = d < 0 ? -1 : 1;
+      p = speedProfile(
+          acceleration: _rise.abs(),
+          cruiseSpeed: _cruise.abs(),
+          deceleration: _fall.abs(),
+          distance: d.abs());
+    } else {
+      sign = _cruise < 0 ? -1 : 1;
+      p = speedProfile(
+          acceleration: _rise.abs(),
+          cruiseSpeed: _cruise.abs(),
+          deceleration: _fall.abs(),
+          seconds: (_profileFrame - _frame) / fps);
     }
-    _solve();
+    if (p == null) return;
+    final accelEnd = _frame + p.accelSeconds * fps;
+    final cruiseEnd = accelEnd + p.cruiseSeconds * fps;
+    final end = cruiseEnd + p.decelSeconds * fps;
+    _profileFrame = end;
+    _profileValue = _value + sign * p.distance;
+    widget.onProfile(sign * p.peakSpeed, accelEnd, cruiseEnd, end);
   }
 
-  /// Work the two numbers not typed out from the two that were and the start
-  /// speed, and write the stretch, where they meet.
-  void _solve() {
-    if (widget.fps <= 0) return;
+  /// Work gravity's end out from its start speed, acceleration and the end
+  /// typed last, and write it where it works out.
+  void _solveGravity() {
+    final fps = widget.fps;
+    if (fps <= 0) return;
     final fit = constantAcceleration(
       _value,
       startSpeed: _startSpeed,
-      acceleration:
-          _typed.contains(_Constant.acceleration) ? _acceleration : null,
-      endSpeed: _typed.contains(_Constant.endSpeed) ? _endSpeed : null,
-      endValue: _typed.contains(_Constant.value) ? _endValue : null,
-      seconds: _typed.contains(_Constant.frame)
-          ? (_endFrame - _frame) / widget.fps
-          : null,
+      acceleration: _gravity,
+      endValue: _gravityEnd == _End.value ? _gravityValue : null,
+      seconds:
+          _gravityEnd == _End.frame ? (_gravityFrame - _frame) / fps : null,
     );
     if (fit == null) return;
-    _acceleration = fit.acceleration;
-    _endSpeed = fit.endSpeed;
-    _endValue = fit.endValue;
-    _endFrame = _frame + fit.seconds * widget.fps;
-    widget.onConstant(_startSpeed, _acceleration, _endFrame, _endValue);
+    _gravityValue = fit.endValue;
+    _gravityFrame = _frame + fit.seconds * fps;
+    widget.onGravity(_startSpeed, _gravity, _gravityFrame, _gravityValue);
   }
 
   @override
@@ -516,8 +545,81 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
         }),
       null => const SizedBox.shrink(),
     };
+    const wide = 84.0;
+    final profile = [
+      pair(
+        field(l10n.graphAcceleration, 'graph-profile-acceleration', _rise,
+            decimals: 2,
+            min: 0,
+            suffix: perSecondSquared,
+            label: wide, set: (v) {
+          _rise = v;
+          _solveProfile();
+        }),
+        field(l10n.graphDeceleration, 'graph-profile-deceleration', _fall,
+            decimals: 2,
+            min: 0,
+            suffix: perSecondSquared,
+            label: wide, set: (v) {
+          _fall = v;
+          _solveProfile();
+        }),
+      ),
+      pair(
+        field(l10n.graphCruiseSpeed, 'graph-profile-cruise', _cruise,
+            decimals: 2, suffix: perSecond, label: wide, set: (v) {
+          _cruise = v;
+          _solveProfile();
+        }),
+        const SizedBox.shrink(),
+      ),
+      pair(
+        field(l10n.graphKeyValueField, 'graph-profile-value', _profileValue,
+            decimals: 2, label: wide, set: (v) {
+          _profileValue = v;
+          _profileEnd = _End.value;
+          _solveProfile();
+        }),
+        field(l10n.graphKeyFrameField, 'graph-profile-frame', _profileFrame,
+            decimals: 2, min: _frame, label: wide, set: (v) {
+          _profileFrame = v;
+          _profileEnd = _End.frame;
+          _solveProfile();
+        }),
+      ),
+    ];
+    final gravity = [
+      pair(
+        field(l10n.graphStartSpeed, 'graph-gravity-speed', _startSpeed,
+            decimals: 2, suffix: perSecond, label: wide, set: (v) {
+          _startSpeed = v;
+          _solveGravity();
+        }),
+        field(l10n.graphAcceleration, 'graph-gravity-acceleration', _gravity,
+            decimals: 2,
+            suffix: perSecondSquared,
+            label: wide, set: (v) {
+          _gravity = v;
+          _solveGravity();
+        }),
+      ),
+      pair(
+        field(l10n.graphKeyValueField, 'graph-gravity-value', _gravityValue,
+            decimals: 2, label: wide, set: (v) {
+          _gravityValue = v;
+          _gravityEnd = _End.value;
+          _solveGravity();
+        }),
+        field(l10n.graphKeyFrameField, 'graph-gravity-frame', _gravityFrame,
+            decimals: 2, min: _frame, label: wide, set: (v) {
+          _gravityFrame = v;
+          _gravityEnd = _End.frame;
+          _solveGravity();
+        }),
+      ),
+    ];
     return FloatSurface(
-      width: 380,
+      width: 400,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -525,40 +627,35 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
           pair(frameField, valueField),
           if (_in != null || _out != null) pair(inField, outField),
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
-            child: Text(t.kickerCase(l10n.graphConstantAcceleration),
-                style: t.kicker),
+            padding: const EdgeInsets.fromLTRB(4, 6, 4, 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Segment(
+                key: const ValueKey<String>('graph-motion-switch'),
+                children: [
+                  for (final (keyName, which, label) in [
+                    (
+                      'graph-motion-profile',
+                      _Motion.profile,
+                      l10n.graphSpeedProfile
+                    ),
+                    ('graph-motion-gravity', _Motion.gravity, l10n.graphGravity),
+                  ])
+                    SegmentOption(
+                      key: ValueKey<String>(keyName),
+                      active: _motion == which,
+                      onTap: () => setState(() => _motion = which),
+                      child: Text(t.kickerCase(label),
+                          style: _motion == which ? t.kickerOn : t.kicker),
+                    ),
+                ],
+              ),
+            ),
           ),
-          pair(
-            field(l10n.graphStartSpeed, 'graph-constant-start-speed',
-                _startSpeed,
-                decimals: 2, suffix: perSecond, label: 72, set: (v) {
-              _startSpeed = v;
-              _solve();
-            }),
-            field(l10n.graphEndSpeed, 'graph-constant-end-speed', _endSpeed,
-                decimals: 2,
-                suffix: perSecond,
-                label: 72,
-                set: (v) => _setConstant(_Constant.endSpeed, v)),
-          ),
-          field(l10n.graphAcceleration, 'graph-constant-acceleration',
-              _acceleration,
-              decimals: 2,
-              suffix: perSecondSquared,
-              label: 72,
-              set: (v) => _setConstant(_Constant.acceleration, v)),
-          pair(
-            field(l10n.graphKeyValueField, 'graph-constant-value', _endValue,
-                decimals: 2,
-                label: 72,
-                set: (v) => _setConstant(_Constant.value, v)),
-            field(l10n.graphKeyFrameField, 'graph-constant-frame', _endFrame,
-                decimals: 2,
-                min: _frame,
-                label: 72,
-                set: (v) => _setConstant(_Constant.frame, v)),
-          ),
+          ...switch (_motion) {
+            _Motion.profile => profile,
+            _Motion.gravity => gravity,
+          },
         ],
       ),
     );

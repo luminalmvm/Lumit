@@ -670,11 +670,10 @@ void main() {
       expect(find.byKey(const ValueKey('graph-accel-out')), findsOneWidget);
     });
 
-    /// One key at 0, and a constant acceleration typed into its box with an
-    /// end value: a second key is added where the value gets there, and the
-    /// acceleration is the same the whole way.
-    testWidgets('a constant acceleration grows a second key from rest',
-        (tester) async {
+    /// One key at 0, Gravity: an acceleration and an end value typed into its
+    /// box add a second key where the value gets there, the acceleration the
+    /// same the whole way and the speed growing.
+    testWidgets('gravity grows a second key from rest', (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer, frames: [0]);
       await mountGraph(tester, p);
@@ -690,10 +689,12 @@ void main() {
       expect(find.byKey(const ValueKey('graph-accel-out')), findsNothing,
           reason: 'one key alone has no side to shape');
 
-      await _type(tester, 'graph-constant-acceleration', '20');
+      await tester.tap(find.byKey(const ValueKey('graph-motion-gravity')));
+      await tester.pumpAndSettle();
+      await _type(tester, 'graph-gravity-acceleration', '20');
       expect(opacityKeys(p.layer), hasLength(1),
           reason: 'an acceleration with no end yet writes nothing');
-      await _type(tester, 'graph-constant-value', '90');
+      await _type(tester, 'graph-gravity-value', '90');
 
       final keys = opacityKeys(p.layer);
       expect(keys, hasLength(2));
@@ -703,11 +704,15 @@ void main() {
       for (final t in [0.5, 1.5, 2.5]) {
         expect(evaluateKeysAcceleration(keys, t), closeTo(20, 1e-3));
       }
+      expect(evaluateKeysSpeed(keys, 2.5),
+          greaterThan(evaluateKeysSpeed(keys, 0.5)),
+          reason: 'the speed grows');
     });
 
-    /// A start speed, an acceleration and an end speed: the box works out how
-    /// long the value slows down and how far it goes, and writes it.
-    testWidgets('a start and end speed decide how far a slowing goes',
+    /// One key at 0, Speed profile: up at 20 a second squared to 20 a second,
+    /// held, down at 20 to rest at 60. Two keys are added where the speeding
+    /// up ends and the slowing down starts, and the end key last.
+    testWidgets('a speed profile speeds up, holds, slows down',
         (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer, frames: [0]);
@@ -722,18 +727,22 @@ void main() {
       await tester.tap(dot);
       await tester.pumpAndSettle();
 
-      await _type(tester, 'graph-constant-start-speed', '10');
-      await _type(tester, 'graph-constant-acceleration', '-2');
-      await _type(tester, 'graph-constant-end-speed', '0');
+      await _type(tester, 'graph-profile-acceleration', '20');
+      await _type(tester, 'graph-profile-deceleration', '20');
+      await _type(tester, 'graph-profile-cruise', '20');
+      await _type(tester, 'graph-profile-value', '60');
 
       final keys = opacityKeys(p.layer);
-      expect(keys, hasLength(2));
-      expect(rationalSeconds(keys[1].time), closeTo(5, 1e-3),
-          reason: 'from 10 a second to rest at 2 a second squared: 5 s');
-      expect(keys[1].value, closeTo(25, 1e-6), reason: 'and 25 further on');
-      expect(evaluateKeysSpeed(keys, 4.999), closeTo(0, 1e-2),
-          reason: 'it arrives at the end speed');
-      expect(evaluateKeysAcceleration(keys, 2.5), closeTo(-2, 1e-6));
+      expect(keys, hasLength(4));
+      expect(rationalSeconds(keys[1].time), closeTo(1, 1e-3));
+      expect(rationalSeconds(keys[2].time), closeTo(3, 1e-3));
+      expect(rationalSeconds(keys[3].time), closeTo(4, 1e-3));
+      expect(keys[3].value, closeTo(60, 1e-3));
+      expect(evaluateKeysAcceleration(keys, 0.5), closeTo(20, 1e-2));
+      expect(evaluateKeysSpeed(keys, 2), closeTo(20, 1e-2),
+          reason: 'the cruise speed');
+      expect(evaluateKeysAcceleration(keys, 2), closeTo(0, 1e-2));
+      expect(evaluateKeysAcceleration(keys, 3.5), closeTo(-20, 1e-2));
     });
 
     /// The acceleration lens has handles too: a selected key's influence bar,
