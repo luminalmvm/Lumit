@@ -49,7 +49,7 @@ void main() {
     test('each platform is offered the attachment it can install', () {
       for (final (platform, expected) in const [
         ('windows', 'lumit-0.2.0-windows-x64-setup.exe'),
-        ('macos', 'lumit-0.2.0.dmg'),
+        ('macos', 'lumit-0.2.0-macos-arm64.dmg'),
         ('linux', 'lumit-0.2.0-linux-x64.tar.gz'),
       ]) {
         final release = UpdateRelease.parse(_releaseJson(), platform: platform);
@@ -63,6 +63,34 @@ void main() {
           platform: 'macos', kind: InstallKind.bundle, replaceable: true);
       expect(release?.assetName, 'lumit-0.2.0-macos-arm64.app.zip');
       expect(release?.delivery, UpdateDelivery.inPlace);
+    });
+
+    test('an Intel Mac only ever takes the Intel build', () {
+      for (final replaceable in const [true, false]) {
+        UpdateRelease? intel(List<String> names) => UpdateRelease.parse(
+            _releaseJson(assets: [for (final name in names) _asset(name)]),
+            platform: 'macos',
+            kind: InstallKind.bundle,
+            replaceable: replaceable,
+            macArch: 'x86_64');
+
+        expect(
+            intel(const [
+              'lumit-0.2.0-macos-arm64.app.zip',
+              'lumit-0.2.0-macos-arm64.dmg',
+            ]),
+            isNull);
+        expect(
+            intel(const [
+              'lumit-0.2.0-macos-arm64.app.zip',
+              'lumit-0.2.0-macos-arm64.dmg',
+              'lumit-0.2.0-macos-x86_64.app.zip',
+              'lumit-0.2.0-macos-x86_64.dmg',
+            ])?.assetName,
+            replaceable
+                ? 'lumit-0.2.0-macos-x86_64.app.zip'
+                : 'lumit-0.2.0-macos-x86_64.dmg');
+      }
     });
 
     test('drafts and pre-releases are refused', () {
@@ -676,7 +704,7 @@ Map<String, dynamic> _releaseJson({
           [
             _asset('lumit-0.2.0-windows-x64-setup.exe'),
             _asset('lumit-0.2.0-windows-x64.zip'),
-            _asset('lumit-0.2.0.dmg'),
+            _asset('lumit-0.2.0-macos-arm64.dmg'),
             _asset('lumit-0.2.0-macos-arm64.app.zip'),
             _asset('lumit-0.2.0-linux-x64.tar.gz'),
             _asset('lumit-0.2.0-linux-x64.flatpak'),
