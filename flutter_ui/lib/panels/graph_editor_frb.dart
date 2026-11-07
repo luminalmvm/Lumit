@@ -2310,6 +2310,16 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       // acceleration at the key, typed to reshape that side.
       final hasIn = _neighbour(keys, index, false) != null;
       final hasOut = _neighbour(keys, index, true) != null;
+      // The keys the box's last motion put between this key and its end. The
+      // next motion takes their place.
+      var between = 0;
+      KeyBoxReading? afterMotion(
+          ({List<BridgeKeyframe> keys, int between})? written) {
+        if (written == null) return null;
+        between = written.between;
+        return _keyBoxReading(written.keys, index);
+      }
+
       await showKeyAccelerationPopover(
         context: context,
         position: position,
@@ -2334,27 +2344,31 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           // Through the value graph's own write, with each side's influence
           // as it stands, so only the frame and the value move.
           final current = _keyNow(channel.id, index);
-          if (current == null) return;
-          _applyKeyFields(channel.id, index,
+          if (current == null) return null;
+          final written = _applyKeyFields(channel.id, index,
               frame: frame,
               value: value,
               inPercent: (sideInfluence(current.interpIn) * 100).round(),
               outPercent: (sideInfluence(current.interpOut) * 100).round());
+          return written == null ? null : _keyBoxReading(written, index);
         },
-        onAcceleration: (isOut, target) =>
-            _applyKeyAcceleration(channel.id, index, isOut, target),
+        onAcceleration: (isOut, target) {
+          final written =
+              _applyKeyAcceleration(channel.id, index, isOut, target);
+          return written == null ? null : _keyBoxReading(written, index);
+        },
         onProfile: (peakSpeed, accelEnd, cruiseEnd, end) =>
-            _applySpeedProfile(channel.id, index,
+            afterMotion(_applySpeedProfile(channel.id, index, between,
                 peakSpeed: peakSpeed,
                 accelEnd: accelEnd,
                 cruiseEnd: cruiseEnd,
-                end: end),
+                end: end)),
         onGravity: (startSpeed, acceleration, endFrame, endValue) =>
-            _applyConstantAcceleration(channel.id, index,
+            afterMotion(_applyConstantAcceleration(channel.id, index, between,
                 startSpeed: startSpeed,
                 acceleration: acceleration,
                 endFrame: endFrame,
-                endValue: endValue),
+                endValue: endValue)),
       );
       return;
     }
@@ -2383,8 +2397,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// The channel is looked up **by id at the moment of the write**, never held
   /// by the popover: a channel is a snapshot of the read model, and a box that
   /// kept the one it opened with would write its second edit on top of a curve
-  /// that no longer exists.
-  void _applyKeyFields(
+  /// that no longer exists. Hands back the keys it wrote, or null when it wrote
+  /// nothing.
+  List<BridgeKeyframe>? _applyKeyFields(
     String channelId,
     int index, {
     required double frame,
@@ -2395,12 +2410,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     for (final channel in widget.channels) {
       if (channel.id != channelId) continue;
       final keys = channel.keys;
-      if (index < 0 || index >= keys.length) return;
+      if (index < 0 || index >= keys.length) return null;
       final key = keys[index];
       final f = frame.clamp(0.0, widget.frames.toDouble());
       for (var i = 0; i < keys.length; i++) {
         if (i != index && (keyFrame(keys[i], widget.fps) - f).abs() < 1e-9) {
-          return;
+          return null;
         }
       }
       // A side is rewritten only when its own number changed: giving a side an
@@ -2414,23 +2429,40 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       if ((sideInfluence(key.interpOut) * 100).round() != outPercent) {
         interpOut = sideWithInfluence(keys, index, true, outPercent.toDouble());
       }
-      commitChannelEdits({
-        channel: BridgeScalar.keyframed([
-          for (var i = 0; i < keys.length; i++)
-            if (i == index)
-              BridgeKeyframe(
-                time: timeOfSubframe(f, widget.fpsNum, widget.fpsDen),
-                value: value,
-                interpIn: interpIn,
-                interpOut: interpOut,
-              )
-            else
-              keys[i],
-        ]),
-      });
+      final written = [
+        for (var i = 0; i < keys.length; i++)
+          if (i == index)
+            BridgeKeyframe(
+              time: timeOfSubframe(f, widget.fpsNum, widget.fpsDen),
+              value: value,
+              interpIn: interpIn,
+              interpOut: interpOut,
+            )
+          else
+            keys[i],
+      ];
+      commitChannelEdits({channel: BridgeScalar.keyframed(written)});
       widget.onChanged();
-      return;
+      return written;
     }
+    return null;
+  }
+
+  /// What the box on the key at [index] reads from [keys].
+  KeyBoxReading _keyBoxReading(List<BridgeKeyframe> keys, int index) {
+    final hasOut = index + 1 < keys.length;
+    final at = keyFrame(keys[index], widget.fps);
+    final gap = widget.magnet ? 1.0 : 0.01;
+    final latest = hasOut
+        ? keyFrame(keys[index + 1], widget.fps) - gap
+        : widget.frames.toDouble();
+    return (
+      accelerationIn:
+          index > 0 ? sideAccelerationAtKey(keys, index, isOut: false) : null,
+      accelerationOut:
+          hasOut ? sideAccelerationAtKey(keys, index, isOut: true) : null,
+      maxFrame: latest < at ? at : latest,
+    );
   }
 
   /// The key at [index] of the channel [channelId] as the graph holds it now —
@@ -2447,88 +2479,114 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// Give one side of a key the acceleration [target] at the key
   /// ([sideForAcceleration]): its influence first, its speed where the
   /// influence cannot reach it. Looked up by id at the moment of the write, as
-  /// [_applyKeyFields] does.
-  void _applyKeyAcceleration(
+  /// [_applyKeyFields] does. Hands back the keys it wrote, or null when it wrote
+  /// nothing.
+  List<BridgeKeyframe>? _applyKeyAcceleration(
       String channelId, int index, bool isOut, double target) {
     for (final channel in widget.channels) {
       if (channel.id != channelId) continue;
       final keys = channel.keys;
-      if (index < 0 || index >= keys.length) return;
+      if (index < 0 || index >= keys.length) return null;
       final side =
           sideForAcceleration(keys, index, isOut: isOut, target: target);
-      if (side == null) return;
+      if (side == null) return null;
       final key = keys[index];
-      commitChannelEdits({
-        channel: BridgeScalar.keyframed([
-          for (var i = 0; i < keys.length; i++)
-            if (i == index)
-              BridgeKeyframe(
-                time: key.time,
-                value: key.value,
-                interpIn: isOut ? key.interpIn : side,
-                interpOut: isOut ? side : key.interpOut,
-              )
-            else
-              keys[i],
-        ]),
-      });
+      final written = [
+        for (var i = 0; i < keys.length; i++)
+          if (i == index)
+            BridgeKeyframe(
+              time: key.time,
+              value: key.value,
+              interpIn: isOut ? key.interpIn : side,
+              interpOut: isOut ? side : key.interpOut,
+            )
+          else
+            keys[i],
+      ];
+      commitChannelEdits({channel: BridgeScalar.keyframed(written)});
       widget.onChanged();
-      return;
+      return written;
     }
+    return null;
+  }
+
+  /// Write a motion from the key at [index], from what [solve] makes of the
+  /// channel's keys. The [between] keys the box's last motion put after this
+  /// one go first, so typing again replaces that motion and leaves no keys
+  /// behind. Hands back the keys written and how many now sit between, or null
+  /// where nothing was written: the end would leave the composition, or cross
+  /// the key after the next.
+  ({List<BridgeKeyframe> keys, int between})? _applyMotion(
+      String channelId,
+      int index,
+      int between,
+      double endFrame,
+      List<BridgeKeyframe>? Function(List<BridgeKeyframe> keys) solve) {
+    if (endFrame > widget.frames) return null;
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final before = [
+        ...channel.keys.take(index + 1),
+        ...channel.keys.skip(index + 1 + between),
+      ];
+      final keys = solve(before);
+      if (keys == null) return null;
+      commitChannelEdits({channel: BridgeScalar.keyframed(keys)});
+      widget.onChanged();
+      final hadEnd = index + 1 < before.length;
+      return (
+        keys: keys,
+        between: keys.length - before.length - (hadEnd ? 0 : 1),
+      );
+    }
+    return null;
   }
 
   /// From the key at [index], a speed profile ([keysWithSpeedProfile]): up
   /// from rest to [peakSpeed] by the frame [accelEnd], held to [cruiseEnd],
   /// down to rest at [end]. Frames may fall between frames, so each stretch is
-  /// exact; nothing is written where the end would leave the composition or
-  /// cross the key after the next.
-  void _applySpeedProfile(String channelId, int index,
+  /// exact.
+  ({List<BridgeKeyframe> keys, int between})? _applySpeedProfile(
+      String channelId, int index, int between,
       {required double peakSpeed,
       required double accelEnd,
       required double cruiseEnd,
       required double end}) {
-    if (end > widget.frames) return;
     BridgeRational at(double frame) =>
         timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
-    for (final channel in widget.channels) {
-      if (channel.id != channelId) continue;
-      final keys = keysWithSpeedProfile(channel.keys, index,
-          peakSpeed: peakSpeed,
-          accelEnd: at(accelEnd),
-          cruiseEnd: at(cruiseEnd),
-          end: at(end));
-      if (keys == null) return;
-      commitChannelEdits({channel: BridgeScalar.keyframed(keys)});
-      widget.onChanged();
-      return;
-    }
+    return _applyMotion(
+        channelId,
+        index,
+        between,
+        end,
+        (keys) => keysWithSpeedProfile(keys, index,
+            peakSpeed: peakSpeed,
+            accelEnd: at(accelEnd),
+            cruiseEnd: at(cruiseEnd),
+            end: at(end)));
   }
 
   /// From the key at [index], a stretch of constant [acceleration] from
   /// [startSpeed] to [endValue] at [endFrame]
   /// ([keysWithConstantAcceleration]): the key after it moves to the end, or
   /// one is added. The end may fall between frames, so the parabola is met
-  /// exactly; nothing is written where it would cross the key after that, or
-  /// leave the composition.
-  void _applyConstantAcceleration(String channelId, int index,
+  /// exactly.
+  ({List<BridgeKeyframe> keys, int between})? _applyConstantAcceleration(
+      String channelId, int index, int between,
       {required double startSpeed,
       required double acceleration,
       required double endFrame,
-      required double endValue}) {
-    if (endFrame > widget.frames) return;
-    for (final channel in widget.channels) {
-      if (channel.id != channelId) continue;
-      final keys = keysWithConstantAcceleration(channel.keys, index,
-          startSpeed: startSpeed,
-          acceleration: acceleration,
-          endTime: timeOfSubframe(endFrame, widget.fpsNum, widget.fpsDen),
-          endValue: endValue);
-      if (keys == null) return;
-      commitChannelEdits({channel: BridgeScalar.keyframed(keys)});
-      widget.onChanged();
-      return;
-    }
-  }
+      required double endValue}) =>
+      _applyMotion(
+          channelId,
+          index,
+          between,
+          endFrame,
+          (keys) => keysWithConstantAcceleration(keys, index,
+              startSpeed: startSpeed,
+              acceleration: acceleration,
+              endTime: timeOfSubframe(endFrame, widget.fpsNum, widget.fpsDen),
+              endValue: endValue));
 
   /// Write a typed speed, and a typed frame, onto one envelope point.
   ///

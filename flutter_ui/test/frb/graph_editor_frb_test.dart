@@ -757,6 +757,25 @@ void main() {
           reason: 'the cruise speed');
       expect(evaluateKeysAcceleration(keys, 2), closeTo(0, 1e-2));
       expect(evaluateKeysAcceleration(keys, 3.5), closeTo(-20, 1e-2));
+
+      // Typed again, it replaces the motion it wrote. Further: 1 s up, 3 s at
+      // the cruise, 1 s down.
+      await _type(tester, 'graph-profile-value', '80');
+      final further = opacityKeys(p.layer);
+      expect(further, hasLength(4));
+      expect(rationalSeconds(further[3].time), closeTo(5, 1e-3));
+      expect(further[3].value, closeTo(80, 1e-3));
+      // Shorter: no keys are left behind it.
+      await _type(tester, 'graph-profile-value', '30');
+      final shorter = opacityKeys(p.layer);
+      expect(shorter.last.value, closeTo(30, 1e-3));
+      expect(rationalSeconds(shorter.last.time), closeTo(2.5, 1e-3));
+
+      // Past the end of the comp, nothing is written and the box says so.
+      expect(find.byKey(const ValueKey('graph-box-refused')), findsNothing);
+      await _type(tester, 'graph-profile-value', '900000');
+      expect(find.byKey(const ValueKey('graph-box-refused')), findsOneWidget);
+      expect(opacityKeys(p.layer).last.value, closeTo(30, 1e-3));
     });
 
     /// The acceleration lens has handles too: a selected key's influence bar,

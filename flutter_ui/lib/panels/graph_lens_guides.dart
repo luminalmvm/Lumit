@@ -335,7 +335,9 @@ class GraphLensSwitch extends StatelessWidget {
 ///   Either writes the keys it needs: the key after this one becomes the end,
 ///   or one is added.
 ///
-/// Every field writes as it is set and the box stays up.
+/// Every field writes as it is set and the box stays up. Each write hands back
+/// what the key now reads, or null when nothing was written. The box then says
+/// so and keeps the numbers the document holds.
 Future<void> showKeyAccelerationPopover({
   required BuildContext context,
   required Offset position,
@@ -349,12 +351,12 @@ Future<void> showKeyAccelerationPopover({
   required double startSpeed,
   required ({double frame, double value})? next,
   required String unit,
-  required void Function(double frame, double value) onFrameValue,
-  required void Function(bool isOut, double target) onAcceleration,
-  required void Function(
+  required KeyBoxReading? Function(double frame, double value) onFrameValue,
+  required KeyBoxReading? Function(bool isOut, double target) onAcceleration,
+  required KeyBoxReading? Function(
           double peakSpeed, double accelEnd, double cruiseEnd, double end)
       onProfile,
-  required void Function(double startSpeed, double acceleration,
+  required KeyBoxReading? Function(double startSpeed, double acceleration,
           double endFrame, double endValue)
       onGravity,
 }) =>
@@ -379,6 +381,14 @@ Future<void> showKeyAccelerationPopover({
       ),
     );
 
+/// What the key a box is open on reads after a write: its two accelerations
+/// (null on a side with no key beyond it) and how late its frame can go.
+typedef KeyBoxReading = ({
+  double? accelerationIn,
+  double? accelerationOut,
+  double maxFrame
+});
+
 /// The two motions the box writes from a key.
 enum _Motion { profile, gravity }
 
@@ -396,12 +406,12 @@ class _KeyAccelerationPopover extends StatefulWidget {
   final double startSpeed;
   final ({double frame, double value})? next;
   final String unit;
-  final void Function(double frame, double value) onFrameValue;
-  final void Function(bool isOut, double target) onAcceleration;
-  final void Function(
+  final KeyBoxReading? Function(double frame, double value) onFrameValue;
+  final KeyBoxReading? Function(bool isOut, double target) onAcceleration;
+  final KeyBoxReading? Function(
       double peakSpeed, double accelEnd, double cruiseEnd, double end) onProfile;
-  final void Function(double startSpeed, double acceleration, double endFrame,
-      double endValue) onGravity;
+  final KeyBoxReading? Function(double startSpeed, double acceleration,
+      double endFrame, double endValue) onGravity;
 
   const _KeyAccelerationPopover({
     required this.fps,
@@ -431,6 +441,20 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
   late double _value = widget.value;
   late double? _in = widget.accelerationIn;
   late double? _out = widget.accelerationOut;
+  late double _maxFrame = widget.maxFrame;
+
+  /// Whether the last thing typed could not be written.
+  bool _refused = false;
+
+  /// Take in what a write hands back, and whether anything was written.
+  bool _wrote(KeyBoxReading? now) {
+    _refused = now == null;
+    if (now == null) return false;
+    _in = now.accelerationIn;
+    _out = now.accelerationOut;
+    _maxFrame = now.maxFrame;
+    return true;
+  }
 
   _Motion _motion = _Motion.profile;
 
@@ -481,13 +505,18 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
           deceleration: _fall.abs(),
           seconds: (_profileFrame - _frame) / fps);
     }
-    if (p == null) return;
+    // Not all typed yet, which is not a refusal.
+    if (p == null) {
+      _refused = false;
+      return;
+    }
     final accelEnd = _frame + p.accelSeconds * fps;
     final cruiseEnd = accelEnd + p.cruiseSeconds * fps;
     final end = cruiseEnd + p.decelSeconds * fps;
-    _profileFrame = end;
-    _profileValue = _value + sign * p.distance;
-    widget.onProfile(sign * p.peakSpeed, accelEnd, cruiseEnd, end);
+    if (_wrote(widget.onProfile(sign * p.peakSpeed, accelEnd, cruiseEnd, end))) {
+      _profileFrame = end;
+      _profileValue = _value + sign * p.distance;
+    }
   }
 
   /// Work gravity's end out from its start speed, acceleration and the end
@@ -503,10 +532,22 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
       seconds:
           _gravityEnd == _End.frame ? (_gravityFrame - _frame) / fps : null,
     );
-    if (fit == null) return;
-    _gravityValue = fit.endValue;
-    _gravityFrame = _frame + fit.seconds * fps;
-    widget.onGravity(_startSpeed, _gravity, _gravityFrame, _gravityValue);
+    if (fit == null) {
+      // No motion or no end typed yet is not a refusal. An end it never
+      // reaches is.
+      final waiting = (_gravity == 0 && _startSpeed == 0) ||
+          (_gravityEnd == _End.value
+              ? _gravityValue == _value
+              : _gravityFrame <= _frame);
+      _refused = !waiting;
+      return;
+    }
+    final endFrame = _frame + fit.seconds * fps;
+    if (_wrote(
+        widget.onGravity(_startSpeed, _gravity, endFrame, fit.endValue))) {
+      _gravityValue = fit.endValue;
+      _gravityFrame = endFrame;
+    }
   }
 
   @override
@@ -534,30 +575,26 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
             set: (v) => setState(() => set(v)));
     final frameField = field(
         l10n.graphKeyFrameField, 'graph-accel-frame', _frame,
-        decimals: 0, min: widget.minFrame, max: widget.maxFrame, set: (v) {
-      _frame = v;
-      widget.onFrameValue(_frame, _value);
+        decimals: 0, min: widget.minFrame, max: _maxFrame, set: (v) {
+      if (_wrote(widget.onFrameValue(v, _value))) _frame = v;
     });
     final valueField = field(
         l10n.graphKeyValueField, 'graph-accel-value', _value,
         decimals: 2, set: (v) {
-      _value = v;
-      widget.onFrameValue(_frame, _value);
+      if (_wrote(widget.onFrameValue(_frame, v))) _value = v;
     });
     final inField = switch (_in) {
       final accIn? => field(l10n.graphEaseIn, 'graph-accel-in', accIn,
-            decimals: 2, suffix: perSecondSquared, set: (v) {
-          _in = v;
-          widget.onAcceleration(false, v);
-        }),
+            decimals: 2,
+            suffix: perSecondSquared,
+            set: (v) => _wrote(widget.onAcceleration(false, v))),
       null => const SizedBox.shrink(),
     };
     final outField = switch (_out) {
       final accOut? => field(l10n.graphEaseOut, 'graph-accel-out', accOut,
-            decimals: 2, suffix: perSecondSquared, set: (v) {
-          _out = v;
-          widget.onAcceleration(true, v);
-        }),
+            decimals: 2,
+            suffix: perSecondSquared,
+            set: (v) => _wrote(widget.onAcceleration(true, v))),
       null => const SizedBox.shrink(),
     };
     const wide = 84.0;
@@ -659,7 +696,10 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
                     SegmentOption(
                       key: ValueKey<String>(keyName),
                       active: _motion == which,
-                      onTap: () => setState(() => _motion = which),
+                      onTap: () => setState(() {
+                        _motion = which;
+                        _refused = false;
+                      }),
                       child: Text(t.kickerCase(label),
                           style: _motion == which ? t.kickerOn : t.kicker),
                     ),
@@ -671,6 +711,15 @@ class _KeyAccelerationPopoverState extends State<_KeyAccelerationPopover> {
             _Motion.profile => profile,
             _Motion.gravity => gravity,
           },
+          if (_refused)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 2),
+              child: Text(
+                l10n.graphBoxRefused,
+                key: const ValueKey<String>('graph-box-refused'),
+                style: t.mono.copyWith(fontSize: 10, color: t.warning),
+              ),
+            ),
         ],
       ),
     );

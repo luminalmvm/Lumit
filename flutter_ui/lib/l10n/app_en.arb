@@ -16209,6 +16209,10 @@
   "@graphCruiseSpeed": {
     "description": "Timeline, Graph mode, acceleration graph, under Speed profile: the label beside the field holding the steady speed the value holds between speeding up and slowing down, in the property's unit per second."
   },
+  "graphBoxRefused": "That doesn't fit, so nothing was written.",
+  "@graphBoxRefused": {
+    "description": "Timeline, Graph mode, acceleration graph: a short line in a keyframe's box when what was just typed cannot be done, such as a motion that would run past the end of the composition. Nothing has changed in the project."
+  },
   "graphDeceleration": "Deceleration",
   "@graphDeceleration": {
     "description": "Timeline, Graph mode, acceleration graph, under Speed profile: the label beside the field holding how much the speed drops every second at the end, as it slows down to rest, in the property's unit per second squared."
