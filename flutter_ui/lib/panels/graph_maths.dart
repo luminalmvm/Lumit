@@ -426,7 +426,8 @@ double? influenceForAcceleration(List<BridgeKeyframe> keys, int index,
 /// ([influenceForAcceleration]). Where the influence alone cannot get there —
 /// the other sign, or more gently than full influence allows — the influence
 /// stays where it ended and the side's **speed** is solved instead: at the key
-/// the acceleration is linear in that speed, so any target is met exactly.
+/// the acceleration is linear in that speed. Null too where the far side's
+/// influence is full, as the side's speed then has no say in the acceleration.
 BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
     {required bool isOut, required double target}) {
   final span = isOut ? index : index - 1;
@@ -460,11 +461,11 @@ BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
   final k = 3 * target * influence * influence * dt / 2;
   if (isOut) {
     // k = chord − s − b2·(s2 − s) = chord − b2·s2 − s·(1 − b2)
-    if ((1 - b2).abs() < 1e-9) return side(speed, influence);
+    if ((1 - b2).abs() < 1e-9) return null;
     return side((chord - b2 * s2 - k) / (1 - b2), influence);
   }
   // k = s2 − chord + b1·(s1 − s2) = s2·(1 − b1) − chord + b1·s1
-  if ((1 - b1).abs() < 1e-9) return side(speed, influence);
+  if ((1 - b1).abs() < 1e-9) return null;
   return side((k + chord - b1 * s1) / (1 - b1), influence);
 }
 

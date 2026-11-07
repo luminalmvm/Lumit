@@ -2305,9 +2305,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       );
       return;
     }
-    if (widget.lens == GraphLens.acceleration) {
+    if (widget.lens == GraphLens.acceleration && !channel.isPath) {
       // The acceleration graph's box: the frame and value, then each side's
-      // acceleration at the key, typed to reshape that side.
+      // acceleration at the key, typed to reshape that side. A path key holds a
+      // shape, so it has no value to type or motion to write.
       final hasIn = _neighbour(keys, index, false) != null;
       final hasOut = _neighbour(keys, index, true) != null;
       // The keys the box's last motion put between this key and its end. The
@@ -2345,6 +2346,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           // as it stands, so only the frame and the value move.
           final current = _keyNow(channel.id, index);
           if (current == null) return null;
+          if (channel.clampToBounds(value) != value) return null;
           final written = _applyKeyFields(channel.id, index,
               frame: frame,
               value: value,
@@ -2514,8 +2516,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// channel's keys. The [between] keys the box's last motion put after this
   /// one go first, so typing again replaces that motion and leaves no keys
   /// behind. Hands back the keys written and how many now sit between, or null
-  /// where nothing was written: the end would leave the composition, or cross
-  /// the key after the next.
+  /// where nothing was written: the end would leave the composition, cross the
+  /// key after the next, or go past the parameter's hard range.
   ({List<BridgeKeyframe> keys, int between})? _applyMotion(
       String channelId,
       int index,
@@ -2531,6 +2533,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       ];
       final keys = solve(before);
       if (keys == null) return null;
+      if (keys.any((k) => channel.clampToBounds(k.value) != k.value)) {
+        return null;
+      }
       commitChannelEdits({channel: BridgeScalar.keyframed(keys)});
       widget.onChanged();
       final hadEnd = index + 1 < before.length;
@@ -3660,6 +3665,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // An envelope point has no influence handle: its sides are always the
     // chord, which is what keeps the lines between points straight.
     if (isEnvelope(channel)) return null;
+    // A held span has no curve for an influence to shape.
+    if (keys[isOut ? index : index - 1].interpOut is BridgeSideInterp_Hold) {
+      return null;
+    }
     // Speed and acceleration lenses: the influence handle reaches
     // horizontally from the dot, as far as the influence goes.
     final keyTime = rationalSeconds(key.time);
