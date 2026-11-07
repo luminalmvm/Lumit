@@ -801,7 +801,8 @@ pub fn migrate(e: &mut EffectInstance, wired: &dyn Fn(&str) -> bool) {
     }
     // v2 → v3: the twist and zoom rows are divided by Amplitude / 30. That
     // only works for a still Amplitude above 0, and while the rows stay in
-    // range. Any other shake stays on version 2 and reads the old way.
+    // range. Any other shake stays on version 2 and reads the old way, apart
+    // from settling when its keys take Amplitude to 0 (`resolve::derived`).
     if e.effect.version != 2 {
         return;
     }

@@ -2,6 +2,7 @@
 //! legacy folds, sampled at resolve time and pushed as `derived.*` values.
 
 use super::Shake;
+use crate::anim::Animation;
 use crate::fx::{
     maths::shake_jump_noise, maths::shake_mb_offsets, maths::shake_noise, maths::shake_twitch_gate,
     maths::SHAKE_MB_DEFAULT_SAMPLES, maths::SHAKE_MB_SAMPLES, params::ParamId, params::Value,
@@ -84,10 +85,22 @@ pub(super) fn derived(cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) 
     // Amplitude scales the twist and the zoom as well, against its default
     // of 30, so a fresh shake looks as it always did and 0 stills it. Before
     // version 3 they ignored it, and a shake load could not carry over still
-    // reads that way.
-    let twist = match e.effect.version < 3 {
-        true => 1.0,
-        false => fl("amplitude").unwrap_or(30.0).max(0.0) / 30.0,
+    // reads that way. If its Amplitude is keyed, they hold down to its lowest
+    // key above 0 and settle from there, so a fade to 0 lands still and any
+    // other keyed shake keeps its bits.
+    let amplitude = fl("amplitude").unwrap_or(30.0).max(0.0);
+    let twist = match (e.effect.version < 3, e.param("amplitude")) {
+        (false, _) => amplitude / 30.0,
+        (true, Some(EffectValue::Float(p))) => match &p.animation {
+            Animation::Keyframed(keys) => {
+                let low = (keys.iter().map(|k| k.value))
+                    .filter(|v| *v > 0.0)
+                    .fold(f64::INFINITY, f64::min);
+                (amplitude / low).min(1.0)
+            }
+            _ => 1.0,
+        },
+        (true, _) => 1.0,
     };
     // Channels: each colour's amount and phase, and the wobble of its own
     // that Channel randomness adds. Untouched, the channels stay together.
