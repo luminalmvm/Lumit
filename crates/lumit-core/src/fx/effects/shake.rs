@@ -23,7 +23,7 @@
 //! step for step — same association, same cast points — so a shake that has not
 //! been touched renders the bits it always did.
 
-use crate::anim::Animation;
+use crate::anim::{Animation, Property};
 use crate::fx::builtins::scale_property;
 use crate::fx::{
     cpu, maths::shake_affine, maths::transform_op, maths::ShakeSample, maths::NO_SKEW,
@@ -584,6 +584,9 @@ pub struct ShakeDerived {
     /// The channels shake apart: the motion-blur set holds red's sub-frames,
     /// then green's, then blue's, the same count each.
     pub split: bool,
+    /// How much of Scale, Crop and Blend is left, 0..1: 0 at Amplitude 0, and
+    /// exactly 1 above its last few pixels.
+    pub settle: f32,
 }
 
 /// Which dispatch a shake draws through, and the numbers that dispatch wants
@@ -712,6 +715,7 @@ impl Shake {
             edge: p.choice(Self::DERIVED_EDGE, EdgesMode::Repeat.code()),
             prescaled: p.bool(Self::DERIVED_PRESCALED, false),
             split: p.bool(Self::DERIVED_SPLIT, false),
+            settle: p.float(crate::fx::schema::BLEND_FADE, 1.0),
         }
     }
 
@@ -732,8 +736,10 @@ impl Shake {
         let y_amp = self.y_amp.max(0.0);
         let rot_amount = self.rotation.max(0.0);
         let mix = (self.mix / 100.0).clamp(0.0, 1.0);
-        // 100% divides to exactly 1, so an old shake keeps its bits.
+        // 100% divides to exactly 1, so an old shake keeps its bits, and a
+        // settle of exactly 1 adds nothing.
         let scale = (self.scale / 100.0).max(0.01);
+        let scale = scale + (1.0 - scale) * (1.0 - d.settle);
         let at = |n: [f32; 4]| match d.prescaled {
             true => ShakeSample {
                 offset_px: [amp_px * n[0], amp_px * n[1]],
@@ -773,7 +779,11 @@ impl Shake {
                 split: d.split,
                 crop,
                 edge: d.edge,
-                mix,
+                // A Crop has no wobble to shrink, so what it fills dissolves.
+                mix: match crop == [0.0; 4] {
+                    true => mix,
+                    false => mix * d.settle,
+                },
             },
         }
     }
@@ -801,8 +811,28 @@ pub fn migrate(e: &mut EffectInstance, wired: &dyn Fn(&str) -> bool) {
     }
     // v2 → v3: the twist and zoom rows are divided by Amplitude / 30. That
     // only works for a still Amplitude above 0, and while the rows stay in
-    // range. Any other shake stays on version 2 and reads the old way.
+    // range. Any other shake stays on version 2 and reads the old way, apart
+    // from settling when its keys take Amplitude to 0 (`resolve::derived`).
     if e.effect.version != 2 {
+        return;
+    }
+    // Only for this update: a still Amplitude of 0 only ever twisted and
+    // zoomed, so it comes in as 30 with no X or Y and moves as it did.
+    let across = ["x_amp", "y_amp", "x_wave", "y_wave"];
+    if matches!(e.param("amplitude"), Some(EffectValue::Float(p))
+        if matches!(p.animation, Animation::Static(a) if a <= 0.0))
+        && !wired("amplitude")
+        && !across.iter().any(|id| wired(id))
+    {
+        for p in &mut e.params {
+            let v = match p.id.as_str() {
+                "amplitude" => 30.0,
+                id if across.contains(&id) => 0.0,
+                _ => continue,
+            };
+            p.value = EffectValue::Float(Property::fixed(v));
+        }
+        e.effect.version = 3;
         return;
     }
     let k = match e.param("amplitude") {
@@ -851,6 +881,11 @@ impl EffectDef for ShakeDef {
     /// [`ShakeWobble::at`](crate::fx::maths::ShakeWobble::at) narrowed it.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         resolve::derived(cx, push);
+    }
+
+    /// Amplitude 0 has faded out everything the rows can do.
+    fn leaves_picture(&self, p: Params<'_>) -> bool {
+        Shake::derived_of(p).settle == 0.0
     }
 
     /// Shake is a transform-domain effect (docs/08 §3.4): the wobble maps to the

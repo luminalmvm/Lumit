@@ -63,6 +63,9 @@
 /// * 34: a row reading a Precomp layer sees that layer's own paint and effects.
 /// * 35: a Precomp layer and a motion blurred layer are multiplied by their
 ///   alpha once, where their soft edges and see-through parts came out dark.
-/// * 36: a comp shown at two times in one frame draws its footage at both, where
+/// * 36: an old Shake's twist and zoom settle when its keys take Amplitude to 0,
+///   a layer with only a still Shake draws as if it had no effects, and Shake's
+///   Scale, Crop and Blend fade out as Amplitude reaches 0.
+/// * 37: a comp shown at two times in one frame draws its footage at both, where
 ///   both drew one and the wrong picture could be banked under the other's name.
-pub const ALGO_VERSION: u32 = 36;
+pub const ALGO_VERSION: u32 = 37;

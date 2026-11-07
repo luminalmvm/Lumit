@@ -477,6 +477,13 @@ pub trait EffectDef: Sync + Send + 'static {
         true
     }
 
+    /// Whether these resolved rows hand the picture on as it came. A layer whose
+    /// whole stack says so draws as a layer with no effects, which skips the
+    /// rounding of the trip through the working format.
+    fn leaves_picture(&self, _p: Params<'_>) -> bool {
+        false
+    }
+
     /// The built-in presets its menu offers ([`crate::fx::presets`]). None by
     /// default.
     fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {

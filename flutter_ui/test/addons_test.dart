@@ -154,8 +154,6 @@ void main() {
           scan = [for (final a in scan) if (a.id != id) a];
         },
         runtime: () => const RuntimeStatus(state: RuntimeState.present),
-        loadRuntime: () async =>
-            const RuntimeStatus(state: RuntimeState.loaded, provider: 'CPU'),
         folder: () => scratch.path,
         fetch: fetch ?? (url) async => indexJson(),
         download: download ?? chunked(),

@@ -17690,10 +17690,6 @@
   "@settingsAddonsRemove": {
     "description": "Settings window, Addons: the button that deletes an installed addon from this machine."
   },
-  "settingsAddonsLoad": "Load now",
-  "@settingsAddonsLoad": {
-    "description": "Settings window, Addons: the button that loads the runtime straight away, to see whether it works on this machine."
-  },
   "settingsAddonsNeedsRuntime": "Needs the runtime",
   "@settingsAddonsNeedsRuntime": {
     "description": "Settings window, Addons: what a model pack's button reads while the runtime it needs is not installed. The button cannot be pressed."
