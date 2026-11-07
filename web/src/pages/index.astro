@@ -258,7 +258,7 @@ import Closing from "../components/home/Closing.astro";
   const ASSET: Record<string, RegExp> = {
     Windows: /windows.*\.exe$/i,
     Linux: /linux.*\.flatpak$/i,
-    macOS: /\.dmg$/i,
+    macOS: /macos-arm64\.dmg$/i,
   };
   // The inline script in the hero has already worked the platform out.
   const os = document.documentElement.dataset.os;
