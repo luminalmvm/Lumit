@@ -1170,12 +1170,9 @@ List<MenuSection> lumitMenus(
             MenuEntry.divider(),
             MenuEntry(
                 l10n.menuDuplicate,
-                layers.isEmpty
+                layers.isEmpty && ui.selectedEffects.value.isEmpty
                     ? null
-                    : () {
-                        duplicateLayersFrb(layers);
-                        app.notifyDocumentChanged();
-                      },
+                    : () => duplicateSelectionFrb(app, ui),
                 action: 'layer.duplicate'),
             MenuEntry(l10n.menuSplitLayer, onComp((c) => _splitAtPlayhead(ui)),
                 action: 'layer.split'),
@@ -2298,6 +2295,29 @@ void duplicateLayersFrb(Iterable<LayerReference> layers) {
       layer.duplicate();
     } catch (_) {}
   }
+}
+
+/// What Duplicate takes, finest selection first as Copy does: the picked
+/// effects, each copy after its original and picked in its place, else the
+/// selected layers. False when there was nothing to duplicate.
+bool duplicateSelectionFrb(LumitState app, LumitUiState ui) {
+  if (ui.selectedEffectsLayer case final layer?
+      when ui.selectedEffects.value.isNotEmpty) {
+    try {
+      ui.setEffectSelection(
+          layer, layer.duplicateEffects(effects: ui.selectedEffects.value));
+    } catch (_) {
+      // The effects went away under the selection.
+      return false;
+    }
+  } else if (ui.selectedLayers.value.isNotEmpty) {
+    duplicateLayersFrb(ui.selectedLayers.value);
+  } else {
+    return false;
+  }
+  app.notifyDocumentChanged();
+  ui.model.refresh();
+  return true;
 }
 
 /// Whether Cut and Copy have anything to act on — an effect picked out of a

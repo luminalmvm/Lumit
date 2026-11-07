@@ -1065,16 +1065,10 @@ class _LumitAppViewState extends State<LumitAppView> {
           );
           state.notifyDocumentChanged();
         }
-      // Every selected layer, through the call the Edit menu and the Timeline
-      // row's own menu make.
-      case 'layer.duplicate':
-        final layers = ui.selectedLayers.value;
-        if (layers.isEmpty) {
-          handled = false;
-        } else {
-          duplicateLayersFrb(layers);
-          state.notifyDocumentChanged();
-        }
+      // The picked effects, else every selected layer, through the call the
+      // Edit menu makes.
+      case 'layer.duplicate' || 'effect.duplicate':
+        handled = duplicateSelectionFrb(state, ui);
       // The light fold, beside the heavy one below it. Ctrl+G gathers
       // the selected run into a named band in the outline; the engine refuses
       // a selection that is not an unbroken run of the stack, which is the

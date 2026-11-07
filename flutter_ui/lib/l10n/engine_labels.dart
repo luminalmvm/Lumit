@@ -1943,6 +1943,7 @@ Map<String, String> get _built => {
       "Apply the remembered interpretation":
           l10n.keyApplyTheRememberedInterpretation,
       "Rename the selected effect": l10n.keyRenameTheSelectedEffect,
+      "Duplicate the selected effects": l10n.keyDuplicateTheSelectedEffects,
       "Show or hide the layer": l10n.keyShowOrHideTheLayer,
       "Easy ease": l10n.keyEasyEase,
       "Easy ease in": l10n.keyEasyEaseIn,

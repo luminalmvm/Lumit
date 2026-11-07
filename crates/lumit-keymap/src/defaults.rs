@@ -260,6 +260,7 @@ pub fn default_keymap() -> Keymap {
         row(Project, "Mod+Alt+C", "footage.interpretation.remember"),
         row(Project, "Mod+Alt+V", "footage.interpretation.apply"),
         row(Effects, "Enter", "effect.rename"),
+        row(Effects, "Mod+D", "effect.duplicate"),
         row(Timeline, "X", "layer.toggle.visible"),
         // --- Graph editor ---
         row(Graph, "F9", "graph.ease"),
