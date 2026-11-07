@@ -358,7 +358,7 @@ class _HandleDrag {
   /// when the gesture began. Together they let `Shift` hold the speed exactly
   /// where it started while the key moves in time.
   double rawDy = 0;
-  final double startSpeed;
+  double startSpeed;
 
   /// An envelope point's drag: the speed the pointer's travel asks for before
   /// the every-frame guide takes it, where the pointer last was, and whether
@@ -1684,7 +1684,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
     // An envelope point is dragged in per cent, which is what its axis reads.
     if (isEnvelope(channel)) {
-      drag.speed = drag.asked = envelopeSpeeds(channel.keys)[index];
+      drag.speed =
+          drag.asked = drag.startSpeed = envelopeSpeeds(channel.keys)[index];
     }
     setState(() {
       _handleDrag = drag;
@@ -2093,7 +2094,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // Every keyframe *time* stays exactly put, so a beat already
     // synced stays synced — the covenant this whole feature is built around.
     if (isEnvelope(drag.channel)) {
-      return setEnvelopeSpeed(keys, drag.index, drag.speed);
+      return setEnvelopeSpeed(keys, drag.index, drag.shownSpeed);
     }
     // An acceleration dot writes its one side, and only once its influence
     // has moved: sliding the key in time leaves both sides as they were.
@@ -3443,7 +3444,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   if (box is RenderBox) {
                     _updateHandleDrag(
                         box.globalToLocal(d.globalPosition), range, height,
-                        dx: d.delta.dx);
+                        dx: d.delta.dx, dy: d.delta.dy);
                   }
                 }
               },

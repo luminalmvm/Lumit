@@ -612,6 +612,20 @@ void main() {
       expect(sideSpeedAtKey(keys, 1, isOut: true),
           closeTo(speedBefore, 1e-6),
           reason: 'Shift held the speed where it started');
+
+      // Mostly upward, Shift holds the key in time and the speed moves.
+      final moved = keys[1];
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await _drag(tester, find.byKey(ValueKey<String>('$base-out')),
+          const Offset(2, -40));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      final after = opacityKeys(p.layer);
+      expect(p.comp.frameAtTime(time: after[1].time),
+          p.comp.frameAtTime(time: moved.time),
+          reason: 'the key stayed in time');
+      expect(sideSpeedAtKey(after, 1, isOut: true),
+          isNot(closeTo(speedBefore, 1e-6)),
+          reason: 'the speed moved');
     });
 
     /// A picked key's readout in the speed and acceleration graphs is its
