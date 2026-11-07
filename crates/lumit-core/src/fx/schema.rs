@@ -868,6 +868,10 @@ pub const BLEND_PARAM: &str = "blend";
 /// [`BLEND_PARAM`]'s resolved id.
 pub const BLEND_ID: super::params::ParamId = super::params::ParamId::new(BLEND_PARAM);
 
+/// How much of an effect's result its Blend keeps, 0..1, on top of its Mix.
+/// Absent is all of it. Shake's, as its Amplitude reaches 0.
+pub const BLEND_FADE: super::params::ParamId = super::params::ParamId::new("derived.blend_fade");
+
 /// What an effect's Matte row *means*, and therefore who consumes it.
 ///
 /// # In plain terms

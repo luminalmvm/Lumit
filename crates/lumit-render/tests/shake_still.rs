@@ -90,7 +90,10 @@ fn shake(version: u32, amplitude: Property, rows: &[(&str, f64)]) -> EffectInsta
     let rotated = [("rotation", 12.0), ("z_amp", 15.0)];
     for p in &mut e.params {
         if let Some((_, v)) = rotated.iter().chain(rows).find(|(id, _)| p.id == *id) {
-            p.value = EffectValue::Float(Property::fixed(*v));
+            p.value = match p.id.as_str() {
+                "blend" => EffectValue::Choice(*v as u32),
+                _ => EffectValue::Float(Property::fixed(*v)),
+            };
         }
         match p.id.as_str() {
             "amplitude" => p.value = EffectValue::Float(amplitude.clone()),
@@ -127,6 +130,12 @@ fn a_shake_at_amplitude_0_leaves_the_picture_alone() {
         ("rgb_randomness", 0.7),
         ("rgb_freq", 2.3),
     ];
+    let framed = [
+        ("scale", 130.0),
+        ("crop_left", 10.0),
+        ("crop_top", 7.0),
+        ("blend", 6.0),
+    ];
     let mut render = |d: (Arc<Document>, Uuid)| {
         r.render_preview(&d.0, d.1, 45, Default::default(), 1.0)
             .unwrap()
@@ -139,7 +148,7 @@ fn a_shake_at_amplitude_0_leaves_the_picture_alone() {
         // Saved before Amplitude scaled the twist and the zoom.
         ("old and keyed", 2, faded.clone()),
     ] {
-        for rows in [&[][..], &channels[..]] {
+        for rows in [&[][..], &channels[..], &framed[..]] {
             let fx = shake(version, amplitude.clone(), rows);
             let got = render(scene(&file, Some(fx)));
             assert!(got == none, "{what} with {} rows", rows.len());

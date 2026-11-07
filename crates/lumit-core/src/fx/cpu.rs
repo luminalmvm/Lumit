@@ -78,7 +78,8 @@ pub fn blend_seam(
     if mode == 0 {
         return None;
     }
-    let mix = (p.float(super::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+    let mix = (p.float(super::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0)
+        * p.float(super::schema::BLEND_FADE, 1.0);
     let entries = p
         .iter()
         .map(|(id, v)| {

@@ -584,6 +584,9 @@ pub struct ShakeDerived {
     /// The channels shake apart: the motion-blur set holds red's sub-frames,
     /// then green's, then blue's, the same count each.
     pub split: bool,
+    /// How much of Scale, Crop and Blend is left, 0..1: 0 at Amplitude 0, and
+    /// exactly 1 above its last few pixels.
+    pub settle: f32,
 }
 
 /// Which dispatch a shake draws through, and the numbers that dispatch wants
@@ -712,6 +715,7 @@ impl Shake {
             edge: p.choice(Self::DERIVED_EDGE, EdgesMode::Repeat.code()),
             prescaled: p.bool(Self::DERIVED_PRESCALED, false),
             split: p.bool(Self::DERIVED_SPLIT, false),
+            settle: p.float(crate::fx::schema::BLEND_FADE, 1.0),
         }
     }
 
@@ -732,8 +736,10 @@ impl Shake {
         let y_amp = self.y_amp.max(0.0);
         let rot_amount = self.rotation.max(0.0);
         let mix = (self.mix / 100.0).clamp(0.0, 1.0);
-        // 100% divides to exactly 1, so an old shake keeps its bits.
+        // 100% divides to exactly 1, so an old shake keeps its bits, and a
+        // settle of exactly 1 adds nothing.
         let scale = (self.scale / 100.0).max(0.01);
+        let scale = scale + (1.0 - scale) * (1.0 - d.settle);
         let at = |n: [f32; 4]| match d.prescaled {
             true => ShakeSample {
                 offset_px: [amp_px * n[0], amp_px * n[1]],
@@ -773,7 +779,11 @@ impl Shake {
                 split: d.split,
                 crop,
                 edge: d.edge,
-                mix,
+                // A Crop has no wobble to shrink, so what it fills dissolves.
+                mix: match crop == [0.0; 4] {
+                    true => mix,
+                    false => mix * d.settle,
+                },
             },
         }
     }
@@ -854,20 +864,9 @@ impl EffectDef for ShakeDef {
         resolve::derived(cx, push);
     }
 
-    /// Every placement is the identity, with no Crop to fill past and no Blend
-    /// to lay the picture over itself. Scale is in the placements.
+    /// Amplitude 0 has faded out everything the rows can do.
     fn leaves_picture(&self, p: Params<'_>) -> bool {
-        let still = |s: &ShakeSample| *s == ShakeSample::IDENTITY;
-        p.choice(crate::fx::schema::BLEND_ID, 0) == 0
-            && match Shake::read(p).packed(Shake::derived_of(p)) {
-                Shaken::Plain { wobble, .. } => still(&wobble),
-                Shaken::Taps {
-                    samples,
-                    count,
-                    crop,
-                    ..
-                } => crop == [0.0; 4] && samples.iter().take(count).all(still),
-            }
+        Shake::derived_of(p).settle == 0.0
     }
 
     /// Shake is a transform-domain effect (docs/08 §3.4): the wobble maps to the
