@@ -1123,6 +1123,14 @@ fn a_plugin_writes_its_own_control_while_it_is_being_built() {
             (read - 0.75).abs() < f64::EPSILON,
             "the double came back {read}"
         );
+        // It reads the same at every time, so it has no keys. Twixtor fails
+        // its render on any other answer.
+        let mut keys: c_uint = 9;
+        assert_eq!(
+            (params.param_get_num_keys)(amount, &raw mut keys),
+            Status::Ok.code()
+        );
+        assert_eq!(keys, 0);
 
         // An integer.
         let count = handle_of(param_set, c"count");
