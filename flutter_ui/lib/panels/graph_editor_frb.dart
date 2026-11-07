@@ -3059,7 +3059,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                               envelope: [
                                 for (final c in widget.channels) isEnvelope(c)
                               ],
-                              lens: widget.lens,
                               fps: widget.fps,
                               frame: playhead.value,
                               palette: t.curve,

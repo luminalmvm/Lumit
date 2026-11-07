@@ -519,46 +519,27 @@ List<BridgeKeyframe>? keysWithConstantAcceleration(
   ];
 }
 
-/// A stretch of constant acceleration, all five of its numbers, from the
-/// start value, the [startSpeed] (0 is at rest) and **two** of the other
-/// four: [acceleration], [endSpeed], [endValue] and [seconds] (how long it
-/// lasts). The two left out are worked out.
+/// A stretch of constant acceleration from the start value and [startSpeed]
+/// (0 is at rest), ending at [endValue] or after [seconds], exactly one of
+/// them. The other is worked out from
+/// `endValue − start = startSpeed · t + ½ · acceleration · t²`.
 ///
-/// The three rules it rests on, for a speed that changes evenly:
-/// `endSpeed = startSpeed + acceleration · t`,
-/// `endValue − start = startSpeed · t + ½ · acceleration · t²`,
-/// `endValue − start = (startSpeed + endSpeed) / 2 · t`.
-///
-/// Null where they cannot meet: not exactly two given, no time, or a time
-/// that comes out at nought or before it (an end speed the acceleration heads
-/// away from, an end value never reached).
-({
-  double acceleration,
-  double endSpeed,
-  double endValue,
-  double seconds
-})? constantAcceleration(
+/// Null where the time comes out at nought or before it: an end value never
+/// reached, or nothing to go on.
+({double endValue, double seconds})? constantAcceleration(
   double startValue, {
   double startSpeed = 0,
-  double? acceleration,
-  double? endSpeed,
+  required double acceleration,
   double? endValue,
   double? seconds,
 }) {
-  final given = [acceleration, endSpeed, endValue, seconds]
-      .where((v) => v != null)
-      .length;
-  if (given != 2) return null;
+  if ((endValue == null) == (seconds == null)) return null;
   final v0 = startSpeed;
-  double? t;
-  double? a = acceleration;
+  final double t;
   if (seconds != null) {
     t = seconds;
-  } else if (acceleration != null && endSpeed != null) {
-    if (acceleration == 0) return null;
-    t = (endSpeed - v0) / acceleration;
-  } else if (acceleration != null && endValue != null) {
-    final d = endValue - startValue;
+  } else {
+    final d = endValue! - startValue;
     if (acceleration.abs() < 1e-12) {
       if (v0 == 0) return null;
       t = d / v0;
@@ -574,23 +555,10 @@ List<BridgeKeyframe>? keysWithConstantAcceleration(
       if (roots.isEmpty) return null;
       t = roots.first;
     }
-  } else if (endSpeed != null && endValue != null) {
-    final sum = v0 + endSpeed;
-    if (sum.abs() < 1e-12) return null;
-    t = 2 * (endValue - startValue) / sum;
   }
-  if (t == null || !(t > 1e-9)) return null;
-  if (a == null) {
-    if (endSpeed != null) {
-      a = (endSpeed - v0) / t;
-    } else {
-      a = 2 * (endValue! - startValue - v0 * t) / (t * t);
-    }
-  }
+  if (!(t > 1e-9)) return null;
   return (
-    acceleration: a,
-    endSpeed: v0 + a * t,
-    endValue: startValue + v0 * t + a * t * t / 2,
+    endValue: startValue + v0 * t + acceleration * t * t / 2,
     seconds: t,
   );
 }

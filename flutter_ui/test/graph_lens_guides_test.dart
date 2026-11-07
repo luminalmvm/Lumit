@@ -28,27 +28,13 @@ void main() {
     final speed = turningPointsOf(keys, GraphLens.speed);
     expect(speed, hasLength(1));
     expect(speed.single, closeTo(1, 0.05));
-    // The value graph rings the same moment: its steepest point.
-    final value = turningPointsOf(keys, GraphLens.value);
-    expect(value, hasLength(1));
-    expect(value.single, closeTo(1, 0.05));
   });
 
   test('a straight run has no turning point', () {
     final keys = [key(0, 0, linear), key(2, 100, linear)];
-    for (final lens in GraphLens.values) {
+    for (final lens in [GraphLens.speed, GraphLens.acceleration]) {
       expect(turningPointsOf(keys, lens), isEmpty, reason: '$lens');
     }
-  });
-
-  test('a peak of the value is a turning point of the value', () {
-    final keys = [key(0, 0, ease), key(1, 100, ease), key(2, 0, ease)];
-    // The peak sits on the middle key, which is drawn already; the two
-    // steepest moments are inside the spans.
-    final value = turningPointsOf(keys, GraphLens.value);
-    expect(value, hasLength(2));
-    expect(value[0], closeTo(0.5, 0.05));
-    expect(value[1], closeTo(1.5, 0.05));
   });
 
   // A baked curve is thousands of keys, and sampling them all on every repaint
@@ -105,13 +91,11 @@ void constantAccelerationTests() {
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
 
-  test('the three numbers, two given', () {
+  test('an end value gives the time, a time gives the end value', () {
     final a = constantAcceleration(0, acceleration: 20, endValue: 100)!;
     expect(a.seconds, closeTo(3.1623, 1e-4));
     final b = constantAcceleration(0, acceleration: 20, seconds: 2)!;
     expect(b.endValue, closeTo(40, 1e-9));
-    final c = constantAcceleration(0, endValue: 90, seconds: 3)!;
-    expect(c.acceleration, closeTo(20, 1e-9));
     expect(constantAcceleration(0, acceleration: -20, endValue: 100), isNull,
         reason: 'slowing down never reaches a higher value from rest');
     expect(constantAcceleration(0, acceleration: 20, seconds: 0), isNull);
@@ -152,26 +136,16 @@ void constantAccelerationTests() {
   });
 }
 
-/// A start speed, and an end speed: the stretch slows down (or speeds up)
-/// evenly, and any two of acceleration, end speed, end value and time give
-/// the rest.
+/// A start speed: the stretch slows down (or speeds up) evenly.
 void startSpeedTests() {
   const ease =
       BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
-
-  test('start speed, acceleration and end speed: how long, how far', () {
-    final k = constantAcceleration(0,
-        startSpeed: 10, acceleration: -2, endSpeed: 0)!;
-    expect(k.seconds, closeTo(5, 1e-9));
-    expect(k.endValue, closeTo(25, 1e-9));
-  });
 
   test('start speed, acceleration and end value: the first moment it is there',
       () {
     final k = constantAcceleration(0,
         startSpeed: 10, acceleration: -2, endValue: 16)!;
     expect(k.seconds, closeTo(2, 1e-9));
-    expect(k.endSpeed, closeTo(6, 1e-9));
     expect(
         constantAcceleration(0,
             startSpeed: 10, acceleration: -2, endValue: 30),
@@ -179,18 +153,7 @@ void startSpeedTests() {
         reason: 'slowing from 10 at 2 a second squared stops short at 25');
   });
 
-  test('end speed and time, end speed and value, value and time', () {
-    final a = constantAcceleration(0, startSpeed: 10, endSpeed: 0, seconds: 5)!;
-    expect(a.acceleration, closeTo(-2, 1e-9));
-    final b = constantAcceleration(0, startSpeed: 10, endSpeed: 0, endValue: 25)!;
-    expect(b.seconds, closeTo(5, 1e-9));
-    final c = constantAcceleration(0, startSpeed: 10, endValue: 25, seconds: 5)!;
-    expect(c.endSpeed, closeTo(0, 1e-9));
-    expect(constantAcceleration(0, startSpeed: 10, acceleration: -2), isNull,
-        reason: 'two of the four, no fewer');
-  });
-
-  test('the keys hold the start speed, the end speed and the acceleration',
+  test('the keys hold the start speed and the acceleration',
       () {
     final keys = [key(0, 0, ease)];
     final shaped = keysWithConstantAcceleration(keys, 0,

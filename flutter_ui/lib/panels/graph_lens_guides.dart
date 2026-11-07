@@ -19,11 +19,6 @@ import 'graph_channels.dart';
 import 'graph_maths.dart';
 import 'timeline_extras_frb.dart';
 
-/// Which reading [channel] draws in under [lens]: a mask's shape has no value
-/// to plot, so it draws its rate of change in the value lens too.
-GraphLens guideLensOf(GraphChannel channel, GraphLens lens) =>
-    channel.isPath && lens == GraphLens.value ? GraphLens.speed : lens;
-
 /// Whether [channel] has a curve the guides can read: keys to walk, not a
 /// flat line, not an expression, and not the Vegas envelope (which reads in
 /// per cent of playback speed, not in the property's own unit).
@@ -34,37 +29,22 @@ bool guidesRead(GraphChannel channel, List<BridgeKeyframe> keys,
     channel.scalar is! BridgeScalar_Expression &&
     keys.length >= 2;
 
-/// [channel]'s reading at [seconds] under [lens].
-double guideValueAt(GraphChannel channel, List<BridgeKeyframe> keys,
-        GraphLens lens, double seconds) =>
-    switch (guideLensOf(channel, lens)) {
-      GraphLens.value => channel.drawnValueAt(keys, seconds),
-      GraphLens.speed => evaluateKeysSpeed(keys, seconds),
-      GraphLens.acceleration => evaluateKeysAcceleration(keys, seconds),
-    };
+/// The reading at [seconds] under [lens]: speed, or acceleration.
+double guideValueAt(List<BridgeKeyframe> keys, GraphLens lens, double seconds) =>
+    lens == GraphLens.acceleration
+        ? evaluateKeysAcceleration(keys, seconds)
+        : evaluateKeysSpeed(keys, seconds);
 
-/// The turning points of [channel]'s reading between its keys, in seconds:
-/// where the curve drawn under [lens] peaks or dips, and in the value graph
-/// also where it is steepest (the speed's peaks and dips). The keys themselves
-/// are left out — a key is drawn already.
-List<double> guideTurningPoints(
-        GraphChannel channel, List<BridgeKeyframe> keys, GraphLens lens,
-        {required double from, required double to, required double shortest}) =>
-    turningPointsOf(keys, guideLensOf(channel, lens),
-        from: from, to: to, shortest: shortest);
-
-/// [guideTurningPoints] for keys drawn as [shown]. Only the spans that reach
-/// between [from] and [to] and last at least [shortest] seconds are sampled,
-/// so what a repaint costs follows the view and not the length of the curve.
-List<double> turningPointsOf(List<BridgeKeyframe> keys, GraphLens shown,
+/// The turning points of the reading under [lens] between the keys, in seconds:
+/// where the curve drawn peaks or dips. The keys themselves are left out, as a
+/// key is drawn already. Only the spans that reach between [from] and [to] and
+/// last at least [shortest] seconds are sampled, so what a repaint costs follows
+/// the view and not the length of the curve.
+List<double> turningPointsOf(List<BridgeKeyframe> keys, GraphLens lens,
     {int samples = 64,
     double from = double.negativeInfinity,
     double to = double.infinity,
     double shortest = 0}) {
-  final readings = [
-    shown,
-    if (shown == GraphLens.value) GraphLens.speed,
-  ];
   final out = <double>[];
   for (var k = 0; k + 1 < keys.length; k++) {
     final t0 = rationalSeconds(keys[k].time);
@@ -73,34 +53,30 @@ List<double> turningPointsOf(List<BridgeKeyframe> keys, GraphLens shown,
     if (t1 < from || t0 > to) continue;
     // A hold or a straight span has no turning point inside it.
     if (keys[k].interpOut is BridgeSideInterp_Hold) continue;
-    for (final reading in readings) {
-      double at(double t) => switch (reading) {
-            GraphLens.value => evaluateKeys(keys, t),
-            GraphLens.speed => speedInSpan(keys, k, t),
-            GraphLens.acceleration => accelerationInSpan(keys, k, t),
-          };
-      // Sampled just inside the span: at the keys the speed and acceleration
-      // step, which is not a turning point.
-      final step = (t1 - t0) / samples;
-      final span = _spread(at, t0, t1, samples);
-      if (span <= 1e-9) continue;
-      // The way the curve last went, and where it last moved. Two equal
-      // samples either side of a peak are a flat step, not a turn, so the
-      // turn is where the way changes across them.
-      var previous = at(t0 + step * 0.5);
-      var way = 0;
-      var movedAt = t0 + step * 0.5;
-      for (var i = 1; i < samples; i++) {
-        final t = t0 + step * (i + 0.5);
-        final v = at(t);
-        final d = v - previous;
-        previous = v;
-        if (d.abs() <= span * 1e-9) continue;
-        final now = d > 0 ? 1 : -1;
-        if (way != 0 && now != way) out.add((movedAt + t - step) / 2);
-        way = now;
-        movedAt = t;
-      }
+    double at(double t) => lens == GraphLens.acceleration
+        ? accelerationInSpan(keys, k, t)
+        : speedInSpan(keys, k, t);
+    // Sampled just inside the span: at the keys the speed and acceleration
+    // step, which is not a turning point.
+    final step = (t1 - t0) / samples;
+    final span = _spread(at, t0, t1, samples);
+    if (span <= 1e-9) continue;
+    // The way the curve last went, and where it last moved. Two equal
+    // samples either side of a peak are a flat step, not a turn, so the
+    // turn is where the way changes across them.
+    var previous = at(t0 + step * 0.5);
+    var way = 0;
+    var movedAt = t0 + step * 0.5;
+    for (var i = 1; i < samples; i++) {
+      final t = t0 + step * (i + 0.5);
+      final v = at(t);
+      final d = v - previous;
+      previous = v;
+      if (d.abs() <= span * 1e-9) continue;
+      final now = d > 0 ? 1 : -1;
+      if (way != 0 && now != way) out.add((movedAt + t - step) / 2);
+      way = now;
+      movedAt = t;
     }
   }
   return out;
@@ -172,12 +148,12 @@ class GraphLensGuidesPainter extends CustomPainter {
         ..color = colour
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2;
-      for (final t in guideTurningPoints(channel, keys, lens,
+      for (final t in turningPointsOf(keys, lens,
           from: from, to: to, shortest: shortest)) {
         final px = axis.xOf(t * fps);
         if (px < left - 4 || px > right + 4) continue;
         canvas.drawCircle(
-            Offset(px, _yOf(guideValueAt(channel, keys, lens, t), size)),
+            Offset(px, _yOf(guideValueAt(keys, lens, t), size)),
             _ringRadius,
             ring);
       }
@@ -194,13 +170,12 @@ class GraphLensGuidesPainter extends CustomPainter {
       !identical(old.shownKeys, shownKeys);
 }
 
-/// The pane's corner: each curve's number at the playhead in its own colour
-/// and unit.
+/// The acceleration graph's corner: each curve's acceleration at the playhead,
+/// in its own colour.
 class GraphLensReadout extends StatelessWidget {
   final List<GraphChannel> channels;
   final List<List<BridgeKeyframe>> shownKeys;
   final List<bool> envelope;
-  final GraphLens lens;
   final double fps;
   final int frame;
   final List<Color> palette;
@@ -215,7 +190,6 @@ class GraphLensReadout extends StatelessWidget {
     required this.channels,
     required this.shownKeys,
     required this.envelope,
-    required this.lens,
     required this.fps,
     required this.frame,
     required this.palette,
@@ -232,14 +206,8 @@ class GraphLensReadout extends StatelessWidget {
       final keys = shownKeys[c];
       if (!guidesRead(channel, keys, envelope: envelope[c])) continue;
       final unit = graphChannelUnit(channel) ?? '';
-      final shown = guideLensOf(channel, lens);
-      final v = guideValueAt(channel, keys, lens, seconds);
-      final text = switch (shown) {
-        GraphLens.value => '${graphNumberText(v)} $unit',
-        GraphLens.speed => '${graphNumberText(v)} ${l10n.unitPerSecond(unit)}',
-        GraphLens.acceleration =>
-          '${graphNumberText(v)} ${l10n.unitPerSecondSquared(unit)}',
-      };
+      final v = evaluateKeysAcceleration(keys, seconds);
+      final text = '${graphNumberText(v)} ${l10n.unitPerSecondSquared(unit)}';
       rows.add(Text('${channel.label}  ${text.trim()}',
           style: style.copyWith(
               color: palette[channel.colourIndex % palette.length])));
