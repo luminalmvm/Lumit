@@ -82,7 +82,6 @@ Future<void> main() async {
     await ui.addons.installFromFile('$folder${Platform.pathSeparator}addon.json');
     await pause(1);
   }
-  await ui.addons.runtimeLoad();
   await pause(3);
   await captureUi('settings-addons.png', scale: 2, crop: _window());
   exit(0);

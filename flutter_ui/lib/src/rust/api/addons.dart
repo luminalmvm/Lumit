@@ -51,13 +51,6 @@ void addonRemove({required String id}) =>
 BridgeRuntimeStatus addonRuntime() =>
     BridgeLib.instance.api.crateApiAddonsAddonRuntime();
 
-/// Load the runtime library now and say what happened.
-///
-/// Not `#[frb(sync)]`: opening a shared library and initialising a provider is
-/// disk and driver work, and it happens once per run.
-Future<BridgeRuntimeStatus> addonRuntimeLoad() =>
-    BridgeLib.instance.api.crateApiAddonsAddonRuntimeLoad();
-
 /// One installed addon, as the page's row draws it.
 class BridgeAddon {
   /// Its folder name, and what [`addon_remove`] takes.
