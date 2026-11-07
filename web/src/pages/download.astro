@@ -37,7 +37,7 @@ const platforms = [
     ext: ".dmg",
     meta: "Apple silicon · signed dmg",
     cta: "Download .dmg",
-    note: "macOS supports Apple silicon only.",
+    alt: { key: "intel", cta: "Intel-based .dmg download", hidden: true },
   },
 ];
 
@@ -119,10 +119,10 @@ const [latest] = await releasesNewestFirst();
                 </svg>
                 {p.cta}
               </a>
-              <p class="mt-6 border-t border-line pt-5 text-[14px] leading-[1.5] text-fg-3">{p.note}</p>
+              {p.note && <p class="mt-6 border-t border-line pt-5 text-[14px] leading-[1.5] text-fg-3">{p.note}</p>}
               {p.code && <code class="cmd">{p.code}</code>}
               {p.alt && (
-                <a class="mt-4 text-[13.5px] text-fg-2 underline underline-offset-2 hover:text-fg" href={RELEASES + "/latest"} data-link={p.alt.key}>
+                <a class="mt-auto pt-4 text-[13.5px] text-fg-2 underline underline-offset-2 hover:text-fg" href={RELEASES + "/latest"} data-link={p.alt.key} hidden={p.alt.hidden}>
                   {p.alt.cta}
                 </a>
               )}
@@ -308,7 +308,8 @@ const [latest] = await releasesNewestFirst();
     win: /windows.*\.exe$/i,
     lin: /linux.*\.flatpak$/i,
     img: /linux.*\.appimage$/i,
-    mac: /\.dmg$/i,
+    mac: /macos-arm64\.dmg$/i,
+    intel: /macos-x86_64\.dmg$/i,
   };
 
   type Asset = { name: string; size: number; browser_download_url: string };
@@ -349,6 +350,8 @@ const [latest] = await releasesNewestFirst();
         if (!asset) continue;
         // A phone can't run an installer, so its buttons keep the releases page.
         const link = document.querySelector<HTMLAnchorElement>(`[data-link="${key}"]`);
+        // The Intel link starts hidden, as older releases have nothing for it.
+        if (link) link.hidden = false;
         if (link && !handheld) link.href = asset.browser_download_url;
         set(`[data-size="${key}"]`, `${Math.round(asset.size / 1048576)} MB`);
       }
