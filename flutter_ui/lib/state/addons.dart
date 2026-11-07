@@ -317,10 +317,16 @@ class AddonService extends ChangeNotifier {
   /// installed, installed at another version, which the row reads as Update,
   /// or installed with its files gone, because installing it again is the one
   /// thing that mends that.
-  List<Addon> get available => [
-        for (final e in _entries)
-          if (e.kind != AddonKind.runtime && _worthOffering(e)) e
-      ];
+  ///
+  /// None when this machine has no runtime and the catalogue has none for it,
+  /// as on an Intel Mac, since a pack could only ever read Needs runtime.
+  List<Addon> get available =>
+      runtimeInstalled == null && runtimeOffered == null
+          ? const []
+          : [
+              for (final e in _entries)
+                if (e.kind != AddonKind.runtime && _worthOffering(e)) e
+            ];
 
   bool _worthOffering(Addon offer) {
     final here = installedById(offer.id);
