@@ -328,8 +328,16 @@ double evaluateKeysSpeed(List<BridgeKeyframe> keys, double t) {
       t >= rationalSeconds(keys.last.time)) {
     return 0;
   }
-  final (i, a, b, t1, t2) = _spanAt(keys, t);
-  final dt = t2 - t1;
+  final (i, _, _, _, _) = _spanAt(keys, t);
+  return speedInSpan(keys, i, t);
+}
+
+/// [evaluateKeysSpeed] inside the span leaving `keys[i]`, with no search for
+/// the span: a caller walking the spans would otherwise cost the square of the
+/// keys, and a baked camera is thousands of them.
+double speedInSpan(List<BridgeKeyframe> keys, int i, double t) {
+  final a = keys[i], b = keys[i + 1];
+  final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
   if (dt <= 0) return 0;
   if (a.interpOut is BridgeSideInterp_Hold) return 0;
   if (a.interpOut is BridgeSideInterp_Linear &&
@@ -349,6 +357,12 @@ double evaluateKeysAcceleration(List<BridgeKeyframe> keys, double t) {
     return 0;
   }
   final (i, _, _, _, _) = _spanAt(keys, t);
+  return accelerationInSpan(keys, i, t);
+}
+
+/// [evaluateKeysAcceleration] inside the span leaving `keys[i]`, with no search
+/// for the span ([speedInSpan]).
+double accelerationInSpan(List<BridgeKeyframe> keys, int i, double t) {
   final cubic = _shapedSpan(keys, i);
   return cubic == null ? 0 : cubic.accelerationAtU(cubic.solveU(t));
 }

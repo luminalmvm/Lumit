@@ -50,6 +50,16 @@ void main() {
     expect(value[0], closeTo(0.5, 0.05));
     expect(value[1], closeTo(1.5, 0.05));
   });
+
+  // A baked curve is thousands of keys, and sampling them all on every repaint
+  // hung the graph.
+  test('a span out of view or too narrow for a ring is not sampled', () {
+    final keys = [key(0, 0, ease), key(2, 100, ease), key(4, 0, ease)];
+    expect(turningPointsOf(keys, GraphLens.speed), hasLength(2));
+    final later = turningPointsOf(keys, GraphLens.speed, from: 2.5, to: 3.5);
+    expect(later.single, closeTo(3, 0.05));
+    expect(turningPointsOf(keys, GraphLens.speed, shortest: 3), isEmpty);
+  });
 }
 
 /// A typed acceleration is met at the key, whichever way it points: by the

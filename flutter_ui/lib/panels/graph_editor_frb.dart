@@ -2893,21 +2893,22 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               ),
               // The turning points, as hollow rings over the curves. Their own
               // layer, repainted by the scroll as the curves are.
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: AnimatedBuilder(
-                    animation:
-                        widget.hScroll ?? const AlwaysStoppedAnimation(0),
-                    builder: (context, _) => ClipRect(
-                      child: CustomPaint(
-                        key: const ValueKey<String>('graph-lens-guides'),
-                        painter:
-                            _guidesPainter(t, range, constraints.maxWidth),
+              if (widget.lens != GraphLens.value)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation:
+                          widget.hScroll ?? const AlwaysStoppedAnimation(0),
+                      builder: (context, _) => ClipRect(
+                        child: CustomPaint(
+                          key: const ValueKey<String>('graph-lens-guides'),
+                          painter:
+                              _guidesPainter(t, range, constraints.maxWidth),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
               Positioned.fill(
                 child: MarqueeSelect(
                   key: const ValueKey('graph-marquee'),

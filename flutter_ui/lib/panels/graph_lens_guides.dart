@@ -48,12 +48,19 @@ double guideValueAt(GraphChannel channel, List<BridgeKeyframe> keys,
 /// also where it is steepest (the speed's peaks and dips). The keys themselves
 /// are left out — a key is drawn already.
 List<double> guideTurningPoints(
-        GraphChannel channel, List<BridgeKeyframe> keys, GraphLens lens) =>
-    turningPointsOf(keys, guideLensOf(channel, lens));
+        GraphChannel channel, List<BridgeKeyframe> keys, GraphLens lens,
+        {required double from, required double to, required double shortest}) =>
+    turningPointsOf(keys, guideLensOf(channel, lens),
+        from: from, to: to, shortest: shortest);
 
-/// [guideTurningPoints] for keys drawn as [shown].
+/// [guideTurningPoints] for keys drawn as [shown]. Only the spans that reach
+/// between [from] and [to] and last at least [shortest] seconds are sampled,
+/// so what a repaint costs follows the view and not the length of the curve.
 List<double> turningPointsOf(List<BridgeKeyframe> keys, GraphLens shown,
-    {int samples = 64}) {
+    {int samples = 64,
+    double from = double.negativeInfinity,
+    double to = double.infinity,
+    double shortest = 0}) {
   final readings = [
     shown,
     if (shown == GraphLens.value) GraphLens.speed,
@@ -62,14 +69,15 @@ List<double> turningPointsOf(List<BridgeKeyframe> keys, GraphLens shown,
   for (var k = 0; k + 1 < keys.length; k++) {
     final t0 = rationalSeconds(keys[k].time);
     final t1 = rationalSeconds(keys[k + 1].time);
-    if (t1 - t0 <= 1e-9) continue;
+    if (t1 - t0 <= 1e-9 || t1 - t0 < shortest) continue;
+    if (t1 < from || t0 > to) continue;
     // A hold or a straight span has no turning point inside it.
     if (keys[k].interpOut is BridgeSideInterp_Hold) continue;
     for (final reading in readings) {
       double at(double t) => switch (reading) {
             GraphLens.value => evaluateKeys(keys, t),
-            GraphLens.speed => evaluateKeysSpeed(keys, t),
-            GraphLens.acceleration => evaluateKeysAcceleration(keys, t),
+            GraphLens.speed => speedInSpan(keys, k, t),
+            GraphLens.acceleration => accelerationInSpan(keys, k, t),
           };
       // Sampled just inside the span: at the keys the speed and acceleration
       // step, which is not a turning point.
@@ -108,6 +116,8 @@ double _spread(double Function(double) at, double t0, double t1, int n) {
   return hi - lo;
 }
 
+const double _ringRadius = 3.5;
+
 /// The turning points, painted as hollow rings over one pane's curves.
 class GraphLensGuidesPainter extends CustomPainter {
   final List<GraphChannel> channels;
@@ -145,8 +155,12 @@ class GraphLensGuidesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // The value graph shows no rings: its keys and handles say enough.
-    if (fps <= 0 || lens == GraphLens.value) return;
+    if (fps <= 0 || axis.perFrame <= 0 || lens == GraphLens.value) return;
     final left = viewportLeft, right = viewportLeft + viewportWidth;
+    final from = axis.frameAtExact(left) / fps;
+    final to = axis.frameAtExact(right) / fps;
+    // A span narrower than a ring has no room to show one.
+    final shortest = 2 * _ringRadius / axis.perFrame / fps;
     for (var c = 0; c < channels.length; c++) {
       final channel = channels[c];
       final keys = shownKeys[c];
@@ -158,12 +172,13 @@ class GraphLensGuidesPainter extends CustomPainter {
         ..color = colour
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2;
-      for (final t in guideTurningPoints(channel, keys, lens)) {
+      for (final t in guideTurningPoints(channel, keys, lens,
+          from: from, to: to, shortest: shortest)) {
         final px = axis.xOf(t * fps);
         if (px < left - 4 || px > right + 4) continue;
         canvas.drawCircle(
             Offset(px, _yOf(guideValueAt(channel, keys, lens, t), size)),
-            3.5,
+            _ringRadius,
             ring);
       }
     }
