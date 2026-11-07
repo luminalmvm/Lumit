@@ -3271,6 +3271,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final channelId = id.substring(0, hash);
     for (final channel in widget.channels) {
       if (channel.id != channelId) continue;
+      // An envelope point has its own box. This pill's ease box would write
+      // curved sides, and an envelope's are always the chord.
+      if (isEnvelope(channel)) return const [];
       final keys = _shownKeys(channel);
       if (index < 0 || index >= keys.length) return const [];
       final key = keys[index];
