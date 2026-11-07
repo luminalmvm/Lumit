@@ -23,7 +23,7 @@
 //! step for step — same association, same cast points — so a shake that has not
 //! been touched renders the bits it always did.
 
-use crate::anim::Animation;
+use crate::anim::{Animation, Property};
 use crate::fx::builtins::scale_property;
 use crate::fx::{
     cpu, maths::shake_affine, maths::transform_op, maths::ShakeSample, maths::NO_SKEW,
@@ -814,6 +814,25 @@ pub fn migrate(e: &mut EffectInstance, wired: &dyn Fn(&str) -> bool) {
     // range. Any other shake stays on version 2 and reads the old way, apart
     // from settling when its keys take Amplitude to 0 (`resolve::derived`).
     if e.effect.version != 2 {
+        return;
+    }
+    // Only for this update: a still Amplitude of 0 only ever twisted and
+    // zoomed, so it comes in as 30 with no X or Y and moves as it did.
+    let across = ["x_amp", "y_amp", "x_wave", "y_wave"];
+    if matches!(e.param("amplitude"), Some(EffectValue::Float(p))
+        if matches!(p.animation, Animation::Static(a) if a <= 0.0))
+        && !wired("amplitude")
+        && !across.iter().any(|id| wired(id))
+    {
+        for p in &mut e.params {
+            let v = match p.id.as_str() {
+                "amplitude" => 30.0,
+                id if across.contains(&id) => 0.0,
+                _ => continue,
+            };
+            p.value = EffectValue::Float(Property::fixed(v));
+        }
+        e.effect.version = 3;
         return;
     }
     let k = match e.param("amplitude") {

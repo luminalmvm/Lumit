@@ -4,7 +4,7 @@ section below, and when the release note is written the lines move into it.
 
 ## Before you update
 
-- Shake's Amplitude now scales Rotation amount and Z amount too, and at 0 the layer is left as it came in. Scale, Crop and Blend fade out over the last 4 pixels of Amplitude. A saved Shake renders as it did, unless its Amplitude is keyed down to 0, where its twist and zoom now settle with the fade. One with Amplitude scripted, wired or set to 0 keeps twisting until it's added again.
+- Shake's Amplitude now scales Rotation amount and Z amount too, and at 0 the layer is left as it came in. Scale, Crop and Blend fade out over the last 4 pixels of Amplitude. A saved Shake renders as it did, unless its Amplitude is keyed down to 0, where its twist and zoom now settle with the fade. One with Amplitude set to 0 comes in at 30 with X and Y at 0, so it moves as it did. One with Amplitude scripted or wired keeps twisting until it's added again.
 - A Precomp layer is no longer multiplied by its own alpha twice, so see-through parts and soft edges in a precomp match the same layers drawn flat, where they came out dark. Its blend modes, and the mattes and rows that read it, change with it. The trails of motion blurred layers lighten too.
 - A project set to 8 or 32 bits draws its effects, where most of them used to come out empty.
 - Particulate in the scene inside a collapsed 3D precomp now follows the precomp, where it used
