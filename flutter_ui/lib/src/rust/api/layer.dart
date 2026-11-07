@@ -3404,6 +3404,15 @@ class LayerReference {
         that: this,
       );
 
+  /// Copy each of `effects` onto this layer, each copy right after its
+  /// original, as one undo step. Answers the copies' ids, in stack order.
+  ///
+  /// The same copy a paste makes, keys left where they are: fresh ids, and
+  /// any drivers feeding them come along with their wires.
+  List<UuidValue> duplicateEffects({required List<UuidValue> effects}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceDuplicateEffects(
+          that: this, effects: effects);
+
   bool equals({required LayerReference layer}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
 

@@ -3113,6 +3113,20 @@ class _EffectSection extends StatelessWidget {
     }
   }
 
+  /// Duplicate this effect in place, with the rest of the picked run when it
+  /// is part of one, and pick the copies.
+  void _duplicateEffect(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    try {
+      ui.setEffectSelection(layer,
+          layer.duplicateEffects(effects: ui.effectsToCopy(layer, info.id)));
+    } catch (_) {
+      // The effect is gone.
+      return;
+    }
+    onStackChanged();
+  }
+
   /// Save this effect alone as a `.lumfx` in the preset library, where the
   /// Effects & presets panel lists it. Named after the effect to begin with.
   Future<void> _savePreset(BuildContext context) async {
@@ -3250,6 +3264,15 @@ class _EffectSection extends StatelessWidget {
                   _copyEffect(context);
                 },
                 child: Text(l10n.copyEffect),
+              ),
+            if (!style)
+              MenuRow(
+                key: ValueKey<String>('fx-menu-duplicate-$id'),
+                onPressed: () {
+                  close(null);
+                  _duplicateEffect(context);
+                },
+                child: Text(l10n.menuDuplicate),
               ),
             // The presets this effect ships with. Each sets the whole effect,
             // with any keyframes starting at the playhead.

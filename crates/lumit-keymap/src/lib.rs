@@ -259,6 +259,7 @@ impl ActionId {
             "timeline.fit.keys" => "Fit the keyframes to the panel",
             "layer.rename" => "Rename the layer",
             "effect.rename" => "Rename the selected effect",
+            "effect.duplicate" => "Duplicate the selected effects",
             "layer.toggle.visible" => "Show or hide the layer",
             // Graph editor.
             "graph.ease" => "Easy ease",
