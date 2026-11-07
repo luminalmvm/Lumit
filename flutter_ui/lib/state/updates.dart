@@ -42,6 +42,8 @@ import 'release_signature.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
 
 // The download, the digest check and the plain text fetch are shared with the
 // addons page, so they live in `download.dart`. This one stays exported from
@@ -196,6 +198,7 @@ class UpdateRelease {
     InstallKind kind = InstallKind.unknown,
     bool replaceable = false,
     bool nightly = false,
+    String macArch = 'arm64',
   }) {
     final tag = json['tag_name'];
     if (tag is! String || tag.isEmpty) return null;
@@ -214,8 +217,8 @@ class UpdateRelease {
     if (assets is! List) return null;
 
     Map<String, dynamic>? chosen;
-    for (final suffix
-        in assetSuffixesFor(platform, kind: kind, replaceable: replaceable)) {
+    for (final suffix in assetSuffixesFor(platform,
+        kind: kind, replaceable: replaceable, macArch: macArch)) {
       for (final raw in assets) {
         if (raw is! Map) continue;
         final asset = raw.cast<String, dynamic>();
@@ -383,8 +386,14 @@ String _plainNotes(String line) => line
 /// A Flatpak is offered the Flatpak bundle and nothing else: the sandbox cannot
 /// be updated from inside, so the other attachments would be useless there.
 /// An AppImage is offered the AppImage, the one file it can rename over itself.
+///
+/// A Mac is only offered its own processor's build, never the other as a
+/// fallback. An Intel Mac can't start the arm64 one, so a release with nothing
+/// for it is no update at all.
 List<String> assetSuffixesFor(String platform,
-    {InstallKind kind = InstallKind.unknown, bool replaceable = false}) {
+    {InstallKind kind = InstallKind.unknown,
+    bool replaceable = false,
+    String macArch = 'arm64'}) {
   if (kind == InstallKind.flatpak) return const ['.flatpak'];
   if (kind == InstallKind.appImage) return const ['.appimage'];
   switch (platform) {
@@ -393,12 +402,16 @@ List<String> assetSuffixesFor(String platform,
     case 'macos':
       return kind == InstallKind.bundle && replaceable
           // `.app.zip`: the name builds before 0.8.0 don't match (release.yml).
-          ? const ['macos-arm64.app.zip', 'macos-x64.app.zip', '.dmg']
-          : const ['.dmg'];
+          ? ['macos-$macArch.app.zip', 'macos-$macArch.dmg']
+          : ['macos-$macArch.dmg'];
     default:
       return const ['linux-x64.tar.gz', '.tar.gz', '.flatpak'];
   }
 }
+
+/// This Mac's builds as a release names them, in `uname -m`'s spelling, which is
+/// where make-dmg.sh gets it.
+String currentMacArch() => abiName() == 'macos_x64' ? 'x86_64' : 'arm64';
 
 /// What will happen to an attachment once it has been fetched.
 ///
@@ -536,6 +549,9 @@ class UpdateService extends ChangeNotifier {
   /// the shipped application; set outright in tests.
   final String platform;
 
+  /// Which Mac build to look for ([currentMacArch]); set outright in tests.
+  final String macArch;
+
   /// Where this copy of Lumit lives and whether it may replace itself.
   final InstallSite site;
 
@@ -565,6 +581,7 @@ class UpdateService extends ChangeNotifier {
     required this.currentVersion,
     bool? Function()? nightly,
     String? platform,
+    String? macArch,
     InstallSite? site,
     ReleaseFetcher? fetch,
     AssetDownloader? download,
@@ -579,6 +596,7 @@ class UpdateService extends ChangeNotifier {
   })  : _signingKey = signingKey,
         _nightlyChoice = nightly ?? _noChoice,
         platform = platform ?? Platform.operatingSystem,
+        macArch = macArch ?? currentMacArch(),
         site = site ?? InstallSite.detect(),
         _fetch = fetch ?? _fetchReleaseJson,
         _fetchBytes = fetchBytes ?? _fetchSmallFile,
@@ -705,6 +723,7 @@ class UpdateService extends ChangeNotifier {
           kind: site.kind,
           replaceable: site.replaceable,
           nightly: nightly,
+          macArch: macArch,
         );
         if (release?.version == current) _said = release!.notice;
         if (release != null) seen.add(release);
