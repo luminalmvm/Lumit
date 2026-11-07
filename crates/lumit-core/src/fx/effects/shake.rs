@@ -854,6 +854,22 @@ impl EffectDef for ShakeDef {
         resolve::derived(cx, push);
     }
 
+    /// Every placement is the identity, with no Crop to fill past and no Blend
+    /// to lay the picture over itself. Scale is in the placements.
+    fn leaves_picture(&self, p: Params<'_>) -> bool {
+        let still = |s: &ShakeSample| *s == ShakeSample::IDENTITY;
+        p.choice(crate::fx::schema::BLEND_ID, 0) == 0
+            && match Shake::read(p).packed(Shake::derived_of(p)) {
+                Shaken::Plain { wobble, .. } => still(&wobble),
+                Shaken::Taps {
+                    samples,
+                    count,
+                    crop,
+                    ..
+                } => crop == [0.0; 4] && samples.iter().take(count).all(still),
+            }
+    }
+
     /// Shake is a transform-domain effect (docs/08 §3.4): the wobble maps to the
     /// Transform reference through the shared [`shake_affine`], so the CPU and
     /// GPU paths consume bit-identical numbers. A neutral wobble maps to the
