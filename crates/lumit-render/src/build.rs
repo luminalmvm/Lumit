@@ -1747,6 +1747,9 @@ fn comp_walk(
     // Nothing else in it is named, which is how every rebuild used to be.
     let rebuild_keys = keys;
     let keys = keys.filter(|_| !with.rebuild);
+    // A comp shown at two times in the frame has pixels for each of them.
+    let placed = crate::placed::pixels_of_walk(doc, comp, t_comp, frame_t, pixels_by_layer);
+    let pixels_by_layer = placed.as_ref().unwrap_or(pixels_by_layer);
     // A rebuild at another moment draws each clip as it is at that moment,
     // where the planner fetched it.
     let at_moment = pixels_at_moment(doc, comp, t_comp, frame_t, pixels_by_layer);
@@ -2431,15 +2434,6 @@ fn comp_walk(
          feed: &dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<DofInputDraw>|
          -> Vec<GraphDraw> {
             use lumit_core::model::EffectNamespace;
-            // **The host layer's clock, not the comp's.** The decode plan and the
-            // frame key both read the named comp at the layer time, so a layer
-            // with a start offset would otherwise take its picture from one clock
-            // and its frame's name from another.
-            let lower = GraphLower {
-                t: lt,
-                frame_t: frame_lt,
-                ..lower
-            };
             let instances: Vec<&lumit_core::model::EffectInstance> = effects
                 .iter()
                 .filter(|e| {
@@ -2457,6 +2451,18 @@ fn comp_walk(
             if instances.is_empty() {
                 return Vec::new();
             }
+            let placed =
+                crate::placed::pixels_on_clock(doc, effects, lt, frame_lt, lower.pixels_by_layer);
+            // **The host layer's clock, not the comp's.** The decode plan and the
+            // frame key both read the named comp at the layer time, so a layer
+            // with a start offset would otherwise take its picture from one clock
+            // and its frame's name from another.
+            let lower = GraphLower {
+                t: lt,
+                frame_t: frame_lt,
+                pixels_by_layer: placed.as_ref().unwrap_or(lower.pixels_by_layer),
+                ..lower
+            };
             // The layer's own wires, resolved once for all its graph ops: a
             // driver into a graph's row is substituted where a keyframe would
             // have been read, exactly as it is on any other effect. A group
@@ -5768,7 +5774,18 @@ impl GraphLower<'_> {
                 )
             }
             _ => {
-                let (rgba, tex_w, tex_h, natural, format) = (self.pixels_for)(&layer)?;
+                // Footage comes from this graph's own map, which two layers
+                // applying it at two times do not share.
+                let (rgba, tex_w, tex_h, natural, format) = match self.pixels_by_layer.get(&id) {
+                    Some(lp) => (
+                        Arc::clone(&lp.rgba),
+                        lp.width,
+                        lp.height,
+                        (lp.natural_w as f32, lp.natural_h as f32),
+                        lp.format,
+                    ),
+                    None => (self.pixels_for)(&layer)?,
+                };
                 (
                     DrawSource::Pixels {
                         rgba,
@@ -6671,7 +6688,12 @@ fn pixels_at_moment<'a>(
                 lumit_core::time::layer_time(frame_t, layer.start_offset.0),
                 graph_dt,
             );
-            let moment = pixels_by_layer.get(&id).and_then(|lp| {
+            // A box with a choice of pixels is settled on its host's clock
+            // ([`crate::placed::pixels_on_clock`]).
+            let lp = pixels_by_layer
+                .get(&id)
+                .filter(|lp| lp.elsewhere.is_empty());
+            let moment = lp.and_then(|lp| {
                 lp.shutter
                     .iter()
                     .find(|(o, _)| o.to_bits() == offset.to_bits())
@@ -6746,7 +6768,9 @@ fn rebuilt_as_itself(
             && !layer.graph.out_unwired
             && !(any_solo && !layer.switches.solo)
             && !occluder.is_some_and(|o| idx > o);
-        let fetched = pixels_by_layer.get(&layer.id);
+        let fetched = pixels_by_layer
+            .get(&layer.id)
+            .map(|lp| lp.placed_at(t, frame_t));
         // Not drawn and nothing fetched for it: no layer reads it either, so
         // it is nothing in both.
         if !drawn && fetched.is_none() && !matches!(layer.kind, LayerKind::Precomp { .. }) {
@@ -6833,7 +6857,7 @@ fn without_gaps<'a>(
 /// included, each with one frame of its own comp in seconds. A graph's Read
 /// of footage is filed under its box. `seen` stops a graph that applies
 /// itself.
-fn applied_boxes(
+pub(crate) fn applied_boxes(
     doc: &lumit_core::model::Document,
     effects: &[lumit_core::model::EffectInstance],
     seen: &mut Vec<Uuid>,
@@ -6887,6 +6911,10 @@ pub(crate) mod motion_blur;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod build_tests;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod placed_tests;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -7697,7 +7725,7 @@ mod render_below_at_tests {
     use std::collections::HashMap;
     use uuid::Uuid;
 
-    fn text_layer(x: f64) -> Layer {
+    pub(super) fn text_layer(x: f64) -> Layer {
         Layer {
             graph: Default::default(),
             markers: Vec::new(),
@@ -8332,7 +8360,7 @@ mod render_below_at_tests {
 
     // An adjustment layer carrying a Posterize Time effect (everything-below) at
     // the given posterised frame rate.
-    fn posterize_adjustment(rate: f64) -> Layer {
+    pub(super) fn posterize_adjustment(rate: f64) -> Layer {
         let mut post = lumit_core::fx::builtins::instantiate("posterize_time").unwrap();
         for p in &mut post.params {
             if p.id == "rate" {
@@ -8528,7 +8556,7 @@ mod render_below_at_tests {
         }
     }
 
-    fn comp_with(fps: u32, layers: Vec<Layer>) -> Composition {
+    pub(super) fn comp_with(fps: u32, layers: Vec<Layer>) -> Composition {
         Composition {
             graph: None,
             master_volume_db: 0.0,
@@ -8857,7 +8885,7 @@ mod render_below_at_tests {
 
     // One instance of it, registered the way a scanned plugin is: a window of
     // a frame either side, which is what a plugin with temporal access declares.
-    fn previous_frame_effect() -> lumit_core::model::EffectInstance {
+    pub(super) fn previous_frame_effect() -> lumit_core::model::EffectInstance {
         const NAME: &str = "ofx:test.build.previous";
         static REGISTERED: std::sync::Once = std::sync::Once::new();
         REGISTERED.call_once(|| {
@@ -8889,7 +8917,7 @@ mod render_below_at_tests {
     // A clip that fills the frame, and the item and probe the planner reads
     // it by: 10 fps, the rate of the comps here, so a comp frame is a source
     // frame.
-    fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::source::SourceProbe>) {
+    pub(super) fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::source::SourceProbe>) {
         use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
         let item = Uuid::now_v7();
         doc.items.push(ProjectItem::Footage(FootageItem {
@@ -8927,6 +8955,8 @@ mod render_below_at_tests {
         use crate::decode::Cut;
         let flat = |rgb: [u8; 3]| CompLayerPixels {
             layer: job.layer,
+            at: job.at,
+            elsewhere: Vec::new(),
             width: 8,
             height: 8,
             rgba: [rgb[0], rgb[1], rgb[2], 255].repeat(64).into(),
