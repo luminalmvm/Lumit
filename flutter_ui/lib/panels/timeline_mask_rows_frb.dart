@@ -444,7 +444,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithMaskPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           masks: [

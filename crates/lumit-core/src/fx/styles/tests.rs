@@ -219,6 +219,7 @@ fn an_empty_style_list_leaves_the_file_exactly_as_it_was() {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,

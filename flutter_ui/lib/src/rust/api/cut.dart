@@ -26,7 +26,7 @@ class BridgeCutMove {
 
   /// The part of a frame to add to the move, in samples at 48 kHz. Read
   /// only when every clip that moves is sound.
-  final PlatformInt64 nudgeTicks;
+  final int nudgeTicks;
 
   const BridgeCutMove({
     required this.overlap,
@@ -53,7 +53,7 @@ class BridgeCutPaste {
 
   /// The frame the pasted clips end on, the first one after the last of
   /// them. The frame asked for when nothing was pasted.
-  final PlatformInt64 endFrame;
+  final int endFrame;
 
   const BridgeCutPaste({
     required this.result,

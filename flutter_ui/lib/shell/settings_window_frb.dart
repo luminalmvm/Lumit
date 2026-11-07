@@ -32,14 +32,17 @@
 // their page names, and on this one it asks the engine the same question.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kDebugMode;
+    show TargetPlatform, defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeExpressionLanguage, BridgeFfxImport, importFfxPresets;
@@ -70,6 +73,7 @@ import '../state/workspace.dart';
 import '../theme/custom_theme.dart';
 import '../icons/icon_style.dart';
 import '../theme/motion.dart';
+import '../theme/style_sheet.dart' show styleFileExtension;
 import '../theme/theme.dart';
 import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
@@ -91,6 +95,7 @@ import 'menu_bar_frb.dart';
 import 'run_script_frb.dart' show scriptsFolderIn;
 import 'settings_account.dart';
 import 'settings_rows.dart';
+import 'style_import.dart';
 import 'theme_editor_frb.dart';
 import 'theme_name_dialog.dart';
 import 'update_dialog_frb.dart';
@@ -188,6 +193,12 @@ enum SettingsPage {
         SettingsPage.previewAndCache => l10n.settingsPagePreviewAndCache,
         SettingsPage.shortcuts => l10n.settingsPageShortcuts,
       };
+
+  /// The pages in the sidebar. A page has no account, addons or extensions.
+  static List<SettingsPage> get shown => [
+        for (final page in values)
+          if (!kIsWeb || (page != account && page != addons)) page,
+      ];
 }
 
 /// Open Settings, on [initialPage] when somewhere else has a reason to send the
@@ -250,7 +261,9 @@ class _SettingsWindow extends StatefulWidget {
 enum CacheScope { everywhere, thisProject }
 
 class _SettingsWindowState extends State<_SettingsWindow> {
-  late SettingsPage _page = widget.initialPage;
+  late SettingsPage _page = SettingsPage.shown.contains(widget.initialPage)
+      ? widget.initialPage
+      : SettingsPage.general;
 
   /// How many times the page has been changed since the window opened. The
   /// page the window opens on arrives with the window, and every page after
@@ -271,6 +284,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     _pluginsOnCard = pluginsOnGraphicsCard();
     _largest = largestPicture();
     _largestChoices = largestPictureChoices();
+    unawaited(_findBlender());
     // Preview and cache draws its readings in the first frame, so a window
     // opened straight onto it has to have them by then.
     if (widget.initialPage == SettingsPage.previewAndCache) _pollPerf();
@@ -286,6 +300,31 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// On the row the window was opened to show, so it can be scrolled to.
   final GlobalKey _wantedRow = GlobalKey();
+
+  /// The Blender 3D models open with, once looked for. Asking each one its
+  /// version takes a moment, so the row fills in when the answer comes.
+  BridgeBlender? _blender;
+  bool _blenderLooked = false;
+
+  Future<void> _findBlender() async {
+    final found = await findBlender();
+    if (mounted) {
+      setState(() {
+        _blender = found;
+        _blenderLooked = true;
+      });
+    }
+  }
+
+  void _chooseBlender(LumitUiState ui, String path) {
+    ui.workspace.setBlenderPath(path);
+    chooseBlender(path: path);
+    // A model that wanted a Blender is tried again.
+    ui.requestFrame();
+    // The old answer stays until the new one lands, so the line doesn't blink.
+    setState(() {});
+    unawaited(_findBlender());
+  }
 
   /// Whether this build has put [_wantedRow] on a row yet. A name can be on a
   /// page more than once and a key can be in the tree only once.
@@ -437,6 +476,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// keep every row under "Theme" for the word *theme*, which is a page, not a
   /// result.
   bool _matches(String title) {
+    if (kIsWeb && settingsNotInPage.contains(title)) return false;
     // [settingsRowNames] is asking what the rows are called, not for the rows.
     if (_names case final names?) {
       names.add(title);
@@ -638,7 +678,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final page in SettingsPage.values)
+            for (final page in SettingsPage.shown)
               // The highlight a menu's rows take, under the page's own mark:
               // the page in force draws its fill over it.
               HoverFill(
@@ -653,10 +693,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     duration: ThemeScope.of(context).motion.mark.duration,
                     curve: ThemeScope.of(context).motion.mark.curve,
                     height: settingsNavRow,
-                    alignment: Alignment.centerLeft,
-                    padding: EdgeInsets.only(
-                        left: _marked(page) ? 14 - settingsNavTick : 14,
-                        right: 14),
+                    alignment: AlignmentDirectional.centerStart,
+                    padding: EdgeInsetsDirectional.only(
+                        start: _marked(page) ? 14 - settingsNavTick : 14,
+                        end: 14),
                     decoration: BoxDecoration(
                       color: _marked(page) ? t.surface2 : null,
                       // The tick, not a fill: the page in force is marked by
@@ -741,7 +781,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// page, under a band with the page's name. Pressing the band goes to the
   /// page.
   List<Widget> _found(LumitTheme t, LumitUiState ui) => [
-        for (final page in SettingsPage.values)
+        for (final page in SettingsPage.shown)
           if (page != SettingsPage.shortcuts)
             if (_sectionsOf(page, t, ui) case final sections
                 when sections.isNotEmpty) ...[
@@ -756,7 +796,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                       height: settingsNavRow,
                       padding: const EdgeInsets.symmetric(
                           horizontal: settingsRowPadding),
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(page.label, style: t.bodyPrimary),
                     ),
                   ),
@@ -775,7 +815,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         thumbVisibility: true,
         trackVisibility: true,
         thickness: _gutterThickness,
-        padding: const EdgeInsets.fromLTRB(
+        padding: const EdgeInsetsDirectional.fromSTEB(
             0, _gutterEnds, _gutterInset, _gutterEnds),
         // Built whole, so the thumb is sized from the page's real length rather
         // than a lazy list's guess, and without the app's own second scrollbar.
@@ -822,9 +862,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // pages the way it always did, and above the thumb, whose drag it
       // reproduces exactly (the ratio below is the one the thumb is drawn
       // with).
-      Positioned(
+      PositionedDirectional(
         key: const ValueKey('settings-gutter'),
-        right: _gutterInset,
+        end: _gutterInset,
         top: _gutterEnds,
         bottom: _gutterEnds,
         // As wide as the bar at its widest, under the pointer.
@@ -1212,6 +1252,47 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ),
           ],
         ),
+        (
+          l10n.settingsGroup3dModels,
+          [
+            // Picked here, or the one found on the machine. Clear goes back
+            // to looking.
+            _row(
+              t,
+              l10n.settingsBlender,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-blender'),
+                    small: true,
+                    onPressed: () async {
+                      final path = await pickProgram();
+                      if (path == null || !mounted) return;
+                      _chooseBlender(ui, path);
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.blenderPath.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-blender-clear'),
+                      small: true,
+                      onPressed: () => _chooseBlender(ui, ''),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              ),
+              description: switch ((_blenderLooked, _blender)) {
+                (false, _) => '',
+                (true, null) => l10n.settingsBlenderNotFound,
+                (true, final found?) =>
+                  l10n.settingsBlenderFound(found.version, found.path),
+              },
+            ),
+          ],
+        ),
         // The same updater the Help menu drives, seen from the other side: one
         // service, two views, so they can never disagree about whether a check
         // is running or an update is waiting.
@@ -1406,21 +1487,47 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
-          // A person's own styles: one file each, in the folder beside the
-          // workspace store. Read again when a file changes or the window
-          // comes back.
+          // A person's own styles: one file each, or a folder each, in the
+          // folder beside the workspace store. Read again when a file
+          // changes or the window comes back.
           _row(
             t,
             l10n.settingsStylesFolder,
-            SizedBox(
-              width: 240,
-              child: Text(
-                Workspace.stylesFolder(),
-                key: const ValueKey('settings-styles-folder'),
-                style: t.small.copyWith(color: t.textMuted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                HouseButton(
+                  key: const ValueKey('settings-style-import'),
+                  small: true,
+                  onPressed: () => importStyleFromDisk(
+                      context, context.read<LumitState>(), ui),
+                  child: Text(l10n.menuImport, style: t.small),
+                ),
+                HouseButton(
+                  key: const ValueKey('settings-style-package'),
+                  small: true,
+                  onPressed: ui.workspace.activeStyle == null
+                      ? null
+                      : () =>
+                          makeStylePackage(context.read<LumitState>(), ui),
+                  child: Text(l10n.settingsStylesMakePackage, style: t.small),
+                ),
+                HouseButton(
+                  key: const ValueKey('settings-styles-folder'),
+                  small: true,
+                  frameless: true,
+                  // The style in use, picked out, or the folder itself.
+                  onPressed: () => revealInFolder(
+                      path: switch (ui.workspace.activeStyle) {
+                    final style? =>
+                      '${style.folder}${Platform.pathSeparator}'
+                          '${style.name}.$styleFileExtension',
+                    null => Workspace.stylesFolder(),
+                  }),
+                  child: Text(l10n.settingsStylesShowFolder, style: t.small),
+                ),
+              ],
             ),
             description: ui.workspace.activeStyle?.problems.firstOrNull ?? '',
           ),
@@ -1428,6 +1535,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsReduceTransparency,
               value: settings.reduceTransparency, set: (on) {
             settings.reduceTransparency = on;
+            ui.workspace.beforeLookChange?.call();
             ui.workspace.recompose();
             ui.workspace.settingsChanged();
           }),
@@ -1995,26 +2103,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   Future<void> _importTheme(LumitUiState ui) async {
     final path = await pickThemeToOpen();
     if (path == null) return;
-    String text;
-    try {
-      text = await File(path).readAsString();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _themeMessage = l10n.keymapFileUnreadable);
-      }
-      return;
-    }
-    final file = path.split(RegExp(r'[\\/]')).last;
-    final read = readThemeFile(text,
-        name: file.contains('.') ? file.substring(0, file.lastIndexOf('.')) : file);
-    if (!mounted) return;
-    final theme = read.theme;
-    if (theme == null) {
-      setState(() => _themeMessage = read.refusal);
-      return;
-    }
-    ui.workspace.importCustomTheme(theme);
-    setState(() => _themeMessage = null);
+    final refusal = await ui.workspace.importThemeFile(path);
+    if (mounted) setState(() => _themeMessage = refusal);
   }
 
   /// Write the theme in use out as a file. Offered from a built-in scheme too:
@@ -2331,8 +2421,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   // ---- Autosave ------------------------------------------------------------
 
   /// How often Lumit writes a spare copy of the work, and how many it keeps.
-  /// The Autosave page was drawn in the Settings drawing and left unbuilt
-  /// until the engine had a timer to set.
   ///
   /// Two numbers and nothing else, because there are only two answers to give.
   /// The copies rotate beside the project in an `autosaves/` folder, newest
@@ -2395,6 +2483,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ),
             ),
           ),
+          if (kIsWeb) _row(t, l10n.settingsBrowserStorage, storageKept(t)),
         ],
       ),
     ]);
@@ -2948,7 +3037,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       return const SizedBox.shrink();
     }
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsetsDirectional.only(end: 8),
       child: HouseButton(
         key: ValueKey<String>('settings-addon-licence-${addon.id}'),
         small: true,
@@ -2993,14 +3082,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ],
         ),
         description: l10n.settingsAddonsPackDetail(pack.licence,
-            _bytes(BigInt.from(pack.sizeBytes)), addonTask(pack.task)),
+            byteSize(pack.sizeBytes), addonTask(pack.task)),
       );
 
   /// One pack the catalogue offers. While it is coming down the row is the bar
   /// and a Cancel; every other button on the page is unpressable meanwhile.
   Widget? _offerRow(LumitTheme t, AddonService service, Addon offer) {
     final coming = service.working == offer.id;
-    final size = _bytes(BigInt.from(offer.sizeBytes));
+    final size = byteSize(offer.sizeBytes);
     return _row(
       t,
       offer.name.isEmpty ? offer.id : offer.name,
@@ -3516,7 +3605,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               width: _ddWide,
               // What one picture that size holds at 16-bit.
               label: (side) => l10n.settingsLargestPictureSize(
-                  '$side', _bytes(BigInt.from(side * side * 8))),
+                  '$side', byteSize(side * side * 8)),
               onChanged: (side) => setState(() {
                 setLargestPicture(side: side);
                 _largest = largestPicture();
@@ -3570,7 +3659,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               children: [
                 Text(
                   l10n.settingsUsedMbIn(
-                      _mib(stats.usedBytes.toInt()), '${stats.entries}'),
+                      mibText(stats.usedBytes.toInt()), '${stats.entries}'),
                   key: const ValueKey('settings-cache-used'),
                   style: t.small,
                 ),
@@ -3607,7 +3696,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               children: [
                 Text(
                   l10n.settingsUsedMbIn(
-                      _mib(vram.usedBytes.toInt()), '${vram.entries}'),
+                      mibText(vram.usedBytes.toInt()), '${vram.entries}'),
                   key: const ValueKey('settings-vram-used'),
                   style: t.small,
                 ),
@@ -3670,9 +3759,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   t,
                   l10n.settingsThisProcess,
                   Text(
-                    memory.processBytes == BigInt.zero
+                    memory.processBytes == 0
                         ? l10n.settingsMemoryNotKnown
-                        : _bytes(memory.processBytes),
+                        : byteSize(memory.processBytes),
                     key: const ValueKey('settings-memory-process'),
                     style: t.small,
                   ),
@@ -3681,9 +3770,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   t,
                   l10n.settingsNotHeldByAnyCache,
                   Text(
-                    memory.processBytes == BigInt.zero
+                    memory.processBytes == 0
                         ? '—'
-                        : _bytes(memory.unaccountedBytes),
+                        : byteSize(memory.unaccountedBytes),
                     key: const ValueKey('settings-memory-unaccounted'),
                     style: t.small,
                   ),
@@ -3701,14 +3790,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 // The byte figures are Vulkan and D3D12 only, so the row is not
                 // drawn at all on a Mac rather than printing two zeroes and
                 // inviting the reader to draw a conclusion from them.
-                if (memory.gpuReservedBytes != BigInt.zero)
+                if (memory.gpuReservedBytes != 0)
                   _row(
                     t,
                     l10n.settingsGraphicsMemoryReserved,
                     Text(
                       l10n.settingsMemoryReservedInUse(
-                          _bytes(memory.gpuReservedBytes),
-                          _bytes(memory.gpuAllocatedBytes)),
+                          byteSize(memory.gpuReservedBytes),
+                          byteSize(memory.gpuAllocatedBytes)),
                       key: const ValueKey('settings-memory-gpu-bytes'),
                       style: t.small,
                     ),
@@ -3818,7 +3907,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             children: [
               Text(
                 l10n.settingsUsedMbIn(
-                    _mib(disk.usedBytes.toInt()), '${disk.entries}'),
+                    mibText(disk.usedBytes.toInt()), '${disk.entries}'),
                 key: const ValueKey('settings-disk-used'),
                 style: t.small,
               ),
@@ -3934,7 +4023,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     required String key,
     required int bytes,
     required double ceilingMib,
-    required ValueChanged<BigInt> onSet,
+    required ValueChanged<int> onSet,
   }) =>
       _row(
         t,
@@ -3953,7 +4042,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 // A megabyte a pixel is far too fine on a 32 GB ceiling.
                 speed: 16,
                 decimals: 0,
-                onChanged: (mib) => onSet(BigInt.from(mib.round()) << 20),
+                onChanged: (mib) => onSet(mib.round() << 20),
               ),
             ),
             const SizedBox(width: 8),
@@ -3972,7 +4061,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   static final double _systemMib = _mibOf(systemMemoryBytes());
   static final double _vramMib = _mibOf(videoMemoryBytes());
 
-  static double _mibOf(BigInt bytes) {
+  static double _mibOf(int bytes) {
     final mib = (bytes >> 20).toDouble();
     return mib <= 0 ? _unknownMemoryMib : mib;
   }
@@ -4003,7 +4092,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         children: [
           Text(
             l10n.settingsGovernorUsedOfBudget(
-                _bytes(tier.usedBytes), _bytes(tier.budgetBytes)),
+                byteSize(tier.usedBytes), byteSize(tier.budgetBytes)),
             key: ValueKey<String>('settings-governor-$key'),
             style: t.small,
           ),
@@ -4019,7 +4108,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               style: t.small.copyWith(color: t.textMuted),
             ),
           Text(
-            l10n.settingsGovernorPeak(_bytes(tier.peakBytes)),
+            l10n.settingsGovernorPeak(byteSize(tier.peakBytes)),
             key: ValueKey<String>('settings-governor-$key-peak'),
             style: t.small.copyWith(color: t.textMuted),
           ),
@@ -4037,16 +4126,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         2 => l10n.settingsGovernorSevere,
         _ => l10n.settingsGovernorFull,
       };
-
-  static String _bytes(BigInt bytes) {
-    final b = bytes.toDouble();
-    if (b >= 1 << 30) {
-      return '${(b / (1 << 30)).toStringAsFixed(1)} ${l10n.unitGb}';
-    }
-    return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
-  }
-
-  static String _mib(int bytes) => (bytes / (1 << 20)).toStringAsFixed(0);
 
   static String _tierLabel(int tier) => switch (tier) {
         1 => l10n.menuFull,
@@ -4177,7 +4256,7 @@ class _ChordCellState extends State<_ChordCell> {
       children: [
         if (_refusal != null)
           Padding(
-            padding: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsetsDirectional.only(end: 6),
             child: Text(_refusal!, style: t.small.copyWith(color: t.error)),
           ),
         GestureDetector(

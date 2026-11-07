@@ -5,6 +5,9 @@
 // It is one function because the menu is one gesture: the rows it draws and
 // the work it does after the click are two halves of the same answer.
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -34,6 +37,7 @@ enum _ProjectMenuAction {
   relink,
   reload,
   reveal,
+  editInBlender,
   findMissing,
   addAudioOnly,
   setProxy,
@@ -209,6 +213,12 @@ Future<void> showProjectMenuFrb({
     _ => (false, null),
   };
   final isComp = item is ItemReference_Composition;
+  // Read here, as the menu opens: a gesture, not a rebuild.
+  final blend = switch (item) {
+    ItemReference_Footage(:final field0) when !missing && !kIsWeb =>
+      _filePathOf(field0).toLowerCase().endsWith('.blend'),
+    _ => false,
+  };
   // The comp the sound would land in. Read once, here, rather than in
   // the row's build: the menu is a gesture, not a rebuild path.
   final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -268,17 +278,23 @@ Future<void> showProjectMenuFrb({
               child: Text(
                   missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis),
             ),
-          if (isFootage && !missing)
+          if (isFootage && !missing && !kIsWeb)
             MenuRow(
               key: const ValueKey('project-menu-reload'),
               onPressed: () => close(_ProjectMenuAction.reload),
               child: Text(l10n.reloadFootage),
             ),
-          if (isFootage && !missing)
+          if (isFootage && !missing && !kIsWeb)
             MenuRow(
               key: const ValueKey('project-menu-reveal'),
               onPressed: () => close(_ProjectMenuAction.reveal),
               child: Text(l10n.projectShowInFolder),
+            ),
+          if (blend)
+            MenuRow(
+              key: const ValueKey('project-menu-edit-in-blender'),
+              onPressed: () => close(_ProjectMenuAction.editInBlender),
+              child: Text(l10n.menuEditInBlender),
             ),
           // How the file is read. Remember takes this row's reading and
           // Apply gives the last one remembered to everything picked.
@@ -473,7 +489,7 @@ Future<void> showProjectMenuFrb({
                           child: Container(
                             width: 10,
                             height: 10,
-                            margin: const EdgeInsets.only(right: 2),
+                            margin: const EdgeInsetsDirectional.only(end: 2),
                             decoration: BoxDecoration(
                               color: menuTheme.labelColour(i),
                               shape: BoxShape.circle,
@@ -599,6 +615,10 @@ Future<void> showProjectMenuFrb({
       onLocalEdit();
     case _ProjectMenuAction.reveal:
       if (item case ItemReference_Footage(:final field0)) field0.reveal();
+    case _ProjectMenuAction.editInBlender:
+      if (item case ItemReference_Footage(:final field0)) {
+        unawaited(field0.editInBlender());
+      }
     case _ProjectMenuAction.findMissing:
       onFindMissing();
     case _ProjectMenuAction.addAudioOnly:
@@ -755,4 +775,13 @@ class _SequenceRateFieldState extends State<_SequenceRateField> {
           ),
         ),
       );
+}
+
+/// [footage]'s file, or empty when the project has gone.
+String _filePathOf(FootageReference footage) {
+  try {
+    return footage.filePath();
+  } catch (_) {
+    return '';
+  }
 }

@@ -23,15 +23,18 @@
 //! step for step — same association, same cast points — so a shake that has not
 //! been touched renders the bits it always did.
 
+use crate::anim::Animation;
+use crate::fx::builtins::scale_property;
 use crate::fx::{
-    cpu, maths::shake_affine, maths::shake_jump_noise, maths::shake_mb_offsets, maths::shake_noise,
-    maths::shake_twitch_gate, maths::transform_op, maths::ShakeSample, maths::NO_SKEW,
-    maths::SHAKE_MB_DEFAULT_SAMPLES, maths::SHAKE_MB_SAMPLES, params::ParamId, params::Params,
-    params::Value, registry::EffectDef, registry::EffectMetadata, registry::ResolveCx,
-    schema::EdgesMode, schema::EffectSchema, schema::ParamGroup,
+    cpu, maths::shake_affine, maths::transform_op, maths::ShakeSample, maths::NO_SKEW,
+    maths::SHAKE_MB_SAMPLES, params::ParamId, params::Params, params::Value, registry::EffectDef,
+    registry::EffectMetadata, registry::ResolveCx, schema::EdgesMode, schema::EffectSchema,
+    schema::ParamGroup,
 };
-use crate::model::EffectValue;
+use crate::model::{EffectInstance, EffectValue};
 use lumit_fx_macros::Effect;
+
+mod resolve;
 
 /// `derived.mb_noise_<n>` for each listed n, as one const array.
 macro_rules! mb_noise_ids {
@@ -90,8 +93,31 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
         visible_when_lens_elements: None,
     },
     ParamGroup {
+        label: "Channels",
+        params: &[
+            "red_amount",
+            "red_phase",
+            "green_amount",
+            "green_phase",
+            "blue_amount",
+            "blue_phase",
+            "rgb_randomness",
+            "rgb_freq",
+        ],
+        collapsed: true,
+        visible_when: None,
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
         label: "Motion blur",
         params: &["motion_blur", "mb_amount", "mb_samples"],
+        collapsed: true,
+        visible_when: None,
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "Crop",
+        params: &["crop_left", "crop_right", "crop_top", "crop_bottom"],
         collapsed: true,
         visible_when: None,
         visible_when_lens_elements: None,
@@ -103,7 +129,10 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
 #[effect(
     match_name = "shake",
     label = "Shake",
-    version = 1,
+    // 2: Phase holds the shake back rather than bringing it forward.
+    // 3: Amplitude scales the twist and the zoom too. Both are carried over
+    // on load ([`migrate`]).
+    version = 3,
     category = Distortion,
     cost = Cheap,
     roi = FullFrame,
@@ -121,8 +150,9 @@ pub const SHAKE_GROUPS: &[ParamGroup] = &[
     ),
 )]
 pub struct Shake {
-    /// px@comp (§2.3): how far the wobble roams. Declared `Px`, so the resolve
-    /// step scales it to the raster in play and
+    /// px@comp (§2.3): how far the wobble roams. The twist and the zoom go
+    /// with it, × Amplitude / 30, so 0 leaves the picture where it is.
+    /// Declared `Px`, so the resolve step scales it to the raster in play and
     /// [`ResolvedStack::rescale_spatial`](crate::fx::params::ResolvedStack::
     /// rescale_spatial) moves it again if the stack is reused at another size.
     /// The old arm scaled the *resolved offsets* by hand; declaring the unit
@@ -144,8 +174,8 @@ pub struct Shake {
     #[slider(min = 0.1, max = 30.0, default = 8.0, hard_min = 0.0, unit = Raw)]
     pub frequency: f32,
 
-    /// Seconds the whole shake is shifted in time, so two layers with the
-    /// same seed can shake out of step.
+    /// Seconds the whole shake runs behind, as S_Shake's Phase does, so two
+    /// layers with the same seed can shake out of step.
     #[slider(min = -5.0, max = 5.0, default = 0.0, unit = Seconds)]
     pub phase: f32,
 
@@ -188,7 +218,7 @@ pub struct Shake {
     )]
     pub centre_bias: f32,
 
-    /// Degrees of twist wobble either way.
+    /// Degrees of twist wobble either way at the default Amplitude.
     #[slider(
         label = "Rotation amount",
         min = 0.0,
@@ -396,6 +426,41 @@ pub struct Shake {
     #[slider(label = "Rotation wave phase", min = 0.0, max = 360.0, default = 0.0, unit = Degrees)]
     pub rot_wave_phase: f32,
 
+    /// × the whole shake for the red channel alone. Typed below 0 it goes
+    /// the other way.
+    #[slider(label = "Red amount", min = 0.0, max = 2.0, default = 1.0, hard_min = -4.0, hard_max = 4.0, unit = Raw)]
+    pub red_amount: f32,
+
+    /// Seconds the red channel's shake runs behind the rest, as S_Shake's
+    /// Red Phase does. Typed below 0 it runs ahead.
+    #[slider(label = "Red phase", min = -1.0, max = 1.0, default = 0.0, unit = Seconds)]
+    pub red_phase: f32,
+
+    /// See [`red_amount`](Self::red_amount).
+    #[slider(label = "Green amount", min = 0.0, max = 2.0, default = 1.0, hard_min = -4.0, hard_max = 4.0, unit = Raw)]
+    pub green_amount: f32,
+
+    /// See [`red_phase`](Self::red_phase).
+    #[slider(label = "Green phase", min = -1.0, max = 1.0, default = 0.0, unit = Seconds)]
+    pub green_phase: f32,
+
+    /// See [`red_amount`](Self::red_amount).
+    #[slider(label = "Blue amount", min = 0.0, max = 2.0, default = 1.0, hard_min = -4.0, hard_max = 4.0, unit = Raw)]
+    pub blue_amount: f32,
+
+    /// See [`red_phase`](Self::red_phase).
+    #[slider(label = "Blue phase", min = -1.0, max = 1.0, default = 0.0, unit = Seconds)]
+    pub blue_phase: f32,
+
+    /// A wobble of each channel's own on top, × the shake's size. 0 keeps
+    /// the channels together.
+    #[slider(label = "Randomness", min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 4.0, unit = Raw)]
+    pub rgb_randomness: f32,
+
+    /// × the master Frequency, for the channels' own wobble.
+    #[slider(label = "Random rate", min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
+    pub rgb_freq: f32,
+
     /// The shake's own motion blur (T18), smeared along the wobble's
     /// inter-frame movement and applied to this effect alone.
     #[toggle(label = "Motion blur", default = false)]
@@ -461,6 +526,23 @@ pub struct Shake {
     )]
     pub y_edge: u32,
 
+    /// % of the width cut from the left before the shake. The cut lines
+    /// stand in for the frame's edges, so Edges fills past them.
+    #[slider(label = "Crop left", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
+    pub crop_left: f32,
+
+    /// See [`crop_left`](Self::crop_left).
+    #[slider(label = "Crop right", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
+    pub crop_right: f32,
+
+    /// See [`crop_left`](Self::crop_left).
+    #[slider(label = "Crop top", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
+    pub crop_top: f32,
+
+    /// See [`crop_left`](Self::crop_left).
+    #[slider(label = "Crop bottom", min = 0.0, max = 50.0, default = 0.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
+    pub crop_bottom: f32,
+
     /// Per instance (§1.3), so two shakes on two layers do not wobble in step.
     #[seed]
     pub seed: u32,
@@ -499,6 +581,9 @@ pub struct ShakeDerived {
     /// [`Shake::packed`] only adds the master Amplitude. Set only while a wave
     /// is on, so a shake without one keeps the bits it always had.
     pub prescaled: bool,
+    /// The channels shake apart: the motion-blur set holds red's sub-frames,
+    /// then green's, then blue's, the same count each.
+    pub split: bool,
 }
 
 /// Which dispatch a shake draws through, and the numbers that dispatch wants
@@ -516,7 +601,8 @@ pub struct ShakeDerived {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Shaken {
-    /// The plain single resample through the Transform kernel.
+    /// The plain single resample through the Transform kernel: no smear,
+    /// no Channels and no Crop.
     Plain {
         /// This frame's wobble.
         wobble: ShakeSample,
@@ -525,20 +611,51 @@ pub enum Shaken {
         /// 0..1.
         mix: f32,
     },
-    /// The shake's own motion blur (T18): the wobble at `count` sub-frame
-    /// placements, resampled and averaged in premultiplied linear space. An
-    /// odd count's centre sample is the frame itself.
-    Blurred {
-        /// One wobble per sub-frame, in shutter order; only the first `count`
+    /// Everything else through the averaging kernel: the wobble at `count`
+    /// placements, each resampled and averaged in premultiplied linear space.
+    /// Its own motion blur (T18) puts them across the shutter, an odd count's
+    /// centre sample being the frame itself. One placement is a plain shake
+    /// that is only cropped.
+    Taps {
+        /// One wobble per placement, in shutter order; only the first `count`
         /// are live.
         samples: [ShakeSample; SHAKE_MB_SAMPLES],
-        /// Live sub-frames, `2..=SHAKE_MB_SAMPLES`.
+        /// Live placements, `1..=SHAKE_MB_SAMPLES`.
         count: usize,
+        /// The first third of the placements feed red, the next green, the
+        /// last blue. Alpha averages all of them.
+        split: bool,
+        /// The Crop rows as 0..1 of the frame: left, top, right, bottom.
+        crop: [f32; 4],
         /// [`EdgesMode`] wire code for the revealed border.
         edge: u32,
         /// 0..1.
         mix: f32,
     },
+}
+
+impl Shaken {
+    /// The channels placement `i` of `count` feeds, as bits: 1 red, 2 green,
+    /// 4 blue. Alpha takes every placement.
+    pub fn tap_channels(i: usize, count: usize, split: bool) -> u32 {
+        match split {
+            true => 1 << (i * 3 / count.max(1)).min(2),
+            false => 7,
+        }
+    }
+
+    /// A Crop as whole pixels of a `w`×`h` frame: the first column and row
+    /// kept and one past the last. Never empty.
+    pub fn crop_px(crop: [f32; 4], w: u32, h: u32) -> [u32; 4] {
+        let cut = |v: f32, n: u32| ((v * n as f32).round() as u32).min(n.saturating_sub(1));
+        let (x0, y0) = (cut(crop[0], w), cut(crop[1], h));
+        [
+            x0,
+            y0,
+            w.saturating_sub(cut(crop[2], w)).max(x0 + 1),
+            h.saturating_sub(cut(crop[3], h)).max(y0 + 1),
+        ]
+    }
 }
 
 impl Shake {
@@ -564,6 +681,9 @@ impl Shake {
 
     /// Whether the noise is prescaled (see [`ShakeDerived::prescaled`]).
     pub const DERIVED_PRESCALED: ParamId = ParamId::new("derived.prescaled");
+
+    /// Whether the channels shake apart (see [`ShakeDerived::split`]).
+    pub const DERIVED_SPLIT: ParamId = ParamId::new("derived.split");
 
     /// Everything [`Shake::packed`] needs that is not a declared row, out of a
     /// resolved bag — so no caller has to know the ids.
@@ -591,6 +711,7 @@ impl Shake {
             z_amp: p.float(Self::DERIVED_Z_AMP, 0.0),
             edge: p.choice(Self::DERIVED_EDGE, EdgesMode::Repeat.code()),
             prescaled: p.bool(Self::DERIVED_PRESCALED, false),
+            split: p.bool(Self::DERIVED_SPLIT, false),
         }
     }
 
@@ -625,19 +746,91 @@ impl Shake {
                 zoom: (1.0 + d.z_amp * n[3]) * scale,
             },
         };
-        match d.mb_count {
-            count if count >= 2 => Shaken::Blurred {
-                samples: d.mb_noise.map(at),
-                count,
+        let crop = [
+            self.crop_left,
+            self.crop_top,
+            self.crop_right,
+            self.crop_bottom,
+        ]
+        .map(|v| (v / 100.0).clamp(0.0, 1.0));
+        let mut samples = d.mb_noise.map(at);
+        let count = match d.split || d.mb_count >= 2 {
+            true => d.mb_count,
+            false => {
+                samples[0] = at(d.noise);
+                1
+            }
+        };
+        match count == 1 && crop == [0.0; 4] {
+            true => Shaken::Plain {
+                wobble: samples[0],
                 edge: d.edge,
                 mix,
             },
-            _ => Shaken::Plain {
-                wobble: at(d.noise),
+            false => Shaken::Taps {
+                samples,
+                count,
+                split: d.split,
+                crop,
                 edge: d.edge,
                 mix,
             },
         }
+    }
+}
+
+/// Carry a saved shake over to this version, so it renders as it did.
+/// `wired` says whether a row has a wire into it.
+pub fn migrate(e: &mut EffectInstance, wired: &dyn Fn(&str) -> bool) {
+    let rows = |e: &mut EffectInstance, ids: &[&str], k: f64| {
+        for p in &mut e.params {
+            if let (true, EffectValue::Float(prop)) = (ids.contains(&p.id.as_str()), &mut p.value) {
+                scale_property(prop, k);
+            }
+        }
+    };
+    // v1 → v2: Phase brought the shake forward and now holds it back, so an
+    // old value is turned round. One an expression drives is left on version
+    // 1, which the resolver reads the old way, since a script cannot be turned
+    // round safely.
+    let scripted = matches!(e.param("phase"), Some(EffectValue::Float(p))
+        if matches!(p.animation, Animation::Expression(_)));
+    if e.effect.version < 2 && !scripted {
+        rows(e, &["phase"], -1.0);
+        e.effect.version = 2;
+    }
+    // v2 → v3: the twist and zoom rows are divided by Amplitude / 30. That
+    // only works for a still Amplitude above 0, and while the rows stay in
+    // range. Any other shake stays on version 2 and reads the old way.
+    if e.effect.version != 2 {
+        return;
+    }
+    let k = match e.param("amplitude") {
+        Some(EffectValue::Float(p)) if !wired("amplitude") => match p.animation {
+            Animation::Static(a) if a > 0.0 => 30.0 / a,
+            _ => return,
+        },
+        _ => return,
+    };
+    let twist = [
+        ("rotation", 360.0),
+        ("rot_wave", 360.0),
+        ("z_amp", 100.0),
+        ("zoom_pump", 100.0),
+        ("z_wave", 100.0),
+    ];
+    let fits = |(id, max): (&str, f64)| match e.param(id) {
+        None => true,
+        Some(EffectValue::Float(p)) if !wired(id) => match &p.animation {
+            Animation::Static(v) => v * k <= max,
+            Animation::Keyframed(keys) => keys.iter().all(|key| key.value * k <= max),
+            Animation::Expression(_) => false,
+        },
+        _ => false,
+    };
+    if twist.into_iter().all(fits) {
+        rows(e, &twist.map(|(id, _)| id), k);
+        e.effect.version = 3;
     }
 }
 
@@ -657,142 +850,7 @@ impl EffectDef for ShakeDef {
     /// arm had them. Only the sample itself narrows to `f32`, at the point
     /// [`ShakeWobble::at`](crate::fx::maths::ShakeWobble::at) narrowed it.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
-        let (e, lt) = (cx.inst, cx.lt);
-        let fl = |id: &str| e.float_at_with_context(id, lt, cx.context.clone());
-        let freq = fl("frequency").unwrap_or(8.0).max(0.0);
-        let rot_freq = fl("rot_freq").unwrap_or(1.0).max(0.0);
-        let x_freq = fl("x_freq").unwrap_or(1.0).max(0.0);
-        let y_freq = fl("y_freq").unwrap_or(1.0).max(0.0);
-        let z_freq = fl("z_freq").unwrap_or(1.0).max(0.0);
-        let seed = match e.param("seed") {
-            Some(EffectValue::Seed(s)) => *s,
-            _ => 0,
-        };
-        // Independent noise channels sampled at local time × frequency (per
-        // axis, §3.4) — deterministic, hop-free, identical on every machine
-        // (§2.4). One sampler drives the frame-time wobble and the motion-blur
-        // sub-frames, so they agree bit-for-bit. Phase shifts the whole shake
-        // in time; at 0 the base is exactly what it always was.
-        let phase = fl("phase").unwrap_or(0.0);
-        let base = (lt + phase) * freq;
-        // Style: 0 Normal, 1 Twitchy, 2 Jumpy. Normal takes the same path as
-        // before, and its gate is exactly 1, so an old shake keeps its bits.
-        let style = match e.param("style") {
-            Some(EffectValue::Choice(c)) => *c,
-            _ => 0,
-        };
-        let drift = fl("drift").unwrap_or(0.3).clamp(0.0, 1.0);
-        let centre = fl("centre_bias").unwrap_or(0.0);
-        let stillness = fl("stillness").unwrap_or(0.7);
-        let twitch_freq = fl("twitch_freq").unwrap_or(2.0).max(0.0);
-        let sample = |channel: u32, x: f64| match style {
-            2 => shake_jump_noise(seed, channel, x, drift, centre),
-            _ => shake_noise(seed, channel, x),
-        };
-
-        // z (depth/scale) amount: the new id, else the old `zoom_pump` (a
-        // project saved before FX-11 keeps its pump), a scale-pump per cent
-        // either way.
-        let z_pct = fl("z_amp").or_else(|| fl("zoom_pump")).unwrap_or(0.0) as f32;
-        let z_amp = (z_pct / 100.0).clamp(0.0, 1.0);
-        push(Shake::DERIVED_Z_AMP, Value::Float(z_amp));
-
-        // The waves, as (amount, × Frequency, phase in radians) per axis in
-        // the noise's order. Z's amount is a per cent like Z amount's.
-        let wave = |[amount, hz, ph]: [&str; 3], per: f64| {
-            (
-                fl(amount).unwrap_or(0.0).max(0.0) / per,
-                fl(hz).unwrap_or(0.5).max(0.0),
-                fl(ph).unwrap_or(0.0).to_radians(),
-            )
-        };
-        let waves = [
-            wave(["x_wave", "x_wave_freq", "x_wave_phase"], 1.0),
-            wave(["y_wave", "y_wave_freq", "y_wave_phase"], 1.0),
-            wave(["rot_wave", "rot_wave_freq", "rot_wave_phase"], 1.0),
-            wave(["z_wave", "z_wave_freq", "z_wave_phase"], 100.0),
-        ];
-        let waving = waves.iter().any(|w| w.0 > 0.0);
-        // With a wave on, the random part takes its per-axis amount here, so
-        // the wave can be added on top in the same units.
-        let amounts = [
-            fl("x_amp").unwrap_or(1.0).max(0.0),
-            fl("y_amp").unwrap_or(1.0).max(0.0),
-            fl("rotation").unwrap_or(1.0).max(0.0),
-            f64::from(z_amp),
-        ];
-        if waving {
-            push(Shake::DERIVED_PRESCALED, Value::Bool(true));
-        }
-
-        // The twitch gate runs on time, not on the noise base, so a
-        // motion-blur sub-frame gets its time back from its base.
-        let noise = |b: f64| {
-            let gate = match style {
-                1 => {
-                    let t = if freq > 0.0 { b / freq } else { lt + phase };
-                    shake_twitch_gate(seed, t * twitch_freq, stillness)
-                }
-                _ => 1.0,
-            };
-            let n = [
-                sample(0, b * x_freq) * gate,
-                sample(1, b * y_freq) * gate,
-                sample(2, b * rot_freq) * gate,
-                sample(3, b * z_freq) * gate,
-            ];
-            if !waving {
-                return Value::Vec4(n.map(|v| v as f32));
-            }
-            let mut out = [0.0f32; 4];
-            for (o, ((v, k), (a, f, p))) in out.iter_mut().zip(n.iter().zip(amounts).zip(waves)) {
-                *o = (v * k + a * (std::f64::consts::TAU * f * b + p).sin()) as f32;
-            }
-            Value::Vec4(out)
-        };
-        push(Shake::DERIVED_NOISE, noise(base));
-
-        // Edges (P3): the stored Choice, else the old Auto-scale bool
-        // (on → Repeat hides the border as the cover once did; off →
-        // Transparent), else Repeat.
-        let edge = match e.param("edge") {
-            Some(EffectValue::Choice(c)) => {
-                EdgesMode::from_code((*c).min(2)).unwrap_or(EdgesMode::Repeat)
-            }
-            _ => match e.param("auto_scale") {
-                Some(EffectValue::Bool(false)) => EdgesMode::Transparent,
-                _ => EdgesMode::Repeat,
-            },
-        };
-        // Y edges ride in the bits above, plus one, so Same leaves the code
-        // as it always was (cpu::bilinear_edge reads them).
-        let y_edge = match e.param("y_edge") {
-            Some(EffectValue::Choice(c)) => (*c).min(3),
-            _ => 0,
-        };
-        push(
-            Shake::DERIVED_EDGE,
-            Value::Choice(edge.code() | (y_edge << 2)),
-        );
-
-        // The shake's own motion blur (T18): when the toggle is on and
-        // the amount is non-zero, sample the wobble across the shutter for the
-        // dispatch to average; off is the plain single resample (the bit-exact
-        // passthrough). The centre offset is 0, so the middle sample is the
-        // frame-time wobble exactly.
-        let motion_blur = e.bool_of("motion_blur").unwrap_or(false);
-        let mb_amount = fl("mb_amount").unwrap_or(0.5);
-        // A shake saved before the Samples row keeps the nine it was made with.
-        let mb_samples =
-            fl("mb_samples").map_or(SHAKE_MB_DEFAULT_SAMPLES, |s| s.round().max(0.0) as usize);
-        if motion_blur && mb_amount > 0.0 {
-            for (id, db) in Shake::DERIVED_MB_NOISE
-                .iter()
-                .zip(shake_mb_offsets(mb_amount, mb_samples))
-            {
-                push(*id, noise(base + db));
-            }
-        }
+        resolve::derived(cx, push);
     }
 
     /// Shake is a transform-domain effect (docs/08 §3.4): the wobble maps to the
@@ -810,20 +868,23 @@ impl EffectDef for ShakeDef {
                     rgba, w, h, anchor, position, scale, rot, NO_SKEW, edge, 1.0, mix,
                 );
             }
-            Shaken::Blurred {
+            Shaken::Taps {
                 samples,
                 count,
+                split,
+                crop,
                 edge,
                 mix,
             } => {
-                let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); SHAKE_MB_SAMPLES];
-                for (op, s) in ops.iter_mut().zip(samples.iter()) {
+                let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0], 7); SHAKE_MB_SAMPLES];
+                for (i, (op, s)) in ops.iter_mut().zip(samples.iter()).enumerate() {
                     let (anchor, position, scale, rot) =
                         shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
                     let (m, o, _opacity) = transform_op(anchor, position, scale, rot, NO_SKEW, 1.0);
-                    *op = (m, o);
+                    *op = (m, o, Shaken::tap_channels(i, count, split));
                 }
-                cpu::transform_average(rgba, w, h, &ops[..count], edge, mix);
+                let crop = Shaken::crop_px(crop, w, h);
+                cpu::transform_average(rgba, w, h, &ops[..count], edge, crop, mix);
             }
         }
     }

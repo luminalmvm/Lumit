@@ -18,11 +18,12 @@
 
 use crate::GpuContext;
 
+use super::particulate_params::ParticulateParams;
 use super::{work_texture, FxEngine};
 
 /// The evaluate passes' workgroup width: one thread per candidate, and the
 /// same 64 the kernel declares.
-const EVAL_WORKGROUP: u32 = 64;
+pub(super) const EVAL_WORKGROUP: u32 = 64;
 
 /// `max_compute_workgroups_per_dimension` as **every** device guarantees it.
 ///
@@ -79,7 +80,7 @@ pub struct ParticulateOp<'a> {
     /// `0..=1`.
     pub speed_jitter: f32,
     /// The `EmitterShape` code: 0 Point, 1 Line, 2 Ellipse, 3 Rectangle,
-    /// 4 Mask path.
+    /// 4 Mask path, 5 and 6 the outlines, 7 Box, 8 Sphere, 9 Layer.
     pub shape: u32,
     pub seed: u32,
     /// The most particles to **draw**: Max particles, halved once per
@@ -120,12 +121,12 @@ pub struct ParticulateOp<'a> {
     pub candidates: u32,
     /// The two baked over-life curves, size then opacity, 257 entries each.
     pub curves: &'a [f32],
-    /// The mask path as `(x, y, arc length, unused)` per vertex; empty
-    /// for every other emitter shape, and the documented no-op for Mask path.
+    /// The mask path as `(x, y, arc length, unused)` per vertex, empty for any other shape.
     pub path: &'a [[f32; 4]],
     pub path_total: f32,
-    /// Streak length in seconds; zero in every other mode.
+    /// Streak length in seconds, zero in every other mode, and how far on the head is.
     pub tail_seconds: f32,
+    pub tail_lead: f32,
     /// `0..=1`.
     pub feather: f32,
     /// The host Mix, `0..=1`, folded into the particle's own coverage.
@@ -156,113 +157,13 @@ pub struct ParticulateOp<'a> {
     /// How particles combine where they overlap: an index into
     /// `lumit_core::model::BlendMode::ALL`, 0 being Normal.
     pub blend: u32,
+    /// The particles a simulation got to, which then stand in for the schedule.
+    pub sim: Option<super::particulate_sim::SimView<'a>>,
 }
 
 /// [`ParticulateOp::blend`]'s Add, the one mode besides Normal the card's own
 /// blending draws exactly.
 const BLEND_ADD: u32 = 6;
-
-#[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub(super) struct ParticulateParams {
-    pub(super) em_pos: [f32; 2],
-    pub(super) em_wh: [f32; 2],
-    pub(super) em_angle: f32,
-    pub(super) dir: f32,
-    pub(super) spread: f32,
-    pub(super) speed: f32,
-
-    pub(super) speed_jitter: f32,
-    pub(super) shape: u32,
-    pub(super) seed: u32,
-    pub(super) cap: u32,
-
-    pub(super) life: f32,
-    pub(super) life_jitter: f32,
-    pub(super) size: f32,
-    pub(super) size_jitter: f32,
-
-    pub(super) rotation: f32,
-    pub(super) rotation_jitter: f32,
-    pub(super) spin: f32,
-    pub(super) align: u32,
-
-    pub(super) colour: [f32; 4],
-    pub(super) end_colour: [f32; 4],
-
-    pub(super) wind: [f32; 2],
-    pub(super) gravity: f32,
-    pub(super) drag: f32,
-
-    pub(super) turb: f32,
-    pub(super) turb_scale: f32,
-    pub(super) turb_speed: f32,
-    pub(super) eps: f32,
-
-    pub(super) dt: f32,
-    pub(super) _spare: [u32; 2],
-    pub(super) frames: u32,
-
-    pub(super) candidates: u32,
-    pub(super) path_len: u32,
-    pub(super) path_total: f32,
-    pub(super) tail: f32,
-
-    pub(super) feather: f32,
-    pub(super) mix: f32,
-    pub(super) mode: u32,
-    pub(super) target_w: f32,
-
-    pub(super) target_h: f32,
-    pub(super) sprite_w: f32,
-    pub(super) sprite_h: f32,
-    pub(super) wind_z: f32,
-
-    pub(super) em_z: f32,
-    pub(super) em_depth: f32,
-    pub(super) dir_z: f32,
-    pub(super) spread_z: f32,
-
-    pub(super) proj0: [f32; 4],
-    pub(super) proj1: [f32; 4],
-    pub(super) proj2: [f32; 4],
-
-    pub(super) project: u32,
-    pub(super) field_mode: u32,
-    pub(super) field_invert: u32,
-    pub(super) field_threshold: f32,
-
-    /// The size of the "who stood" target, or 0 for an ordinary draw.
-    pub(super) probe_w: u32,
-    pub(super) probe_h: u32,
-    /// How a sprite sits on its point, each as the amount past the plain
-    /// square of the point's size, so all nought is that square. Only the
-    /// generic points draw writes them.
-    pub(super) stamp_unit: [f32; 2],
-
-    pub(super) stamp_anchor: [f32; 2],
-    pub(super) stamp_uv: [f32; 2],
-
-    pub(super) stamp_corner: f32,
-    pub(super) edge: u32,
-    pub(super) margin: f32,
-    /// Always nought; see the kernel's `turb_cycle`.
-    pub(super) turb_cycle: i32,
-
-    pub(super) size_by: u32,
-    pub(super) opacity_by: u32,
-    pub(super) colour_by: u32,
-    pub(super) speed_min: f32,
-
-    pub(super) speed_max: f32,
-    pub(super) density: u32,
-    pub(super) blend: u32,
-    pub(super) pair_max: u32,
-
-    pub(super) scan_len: u32,
-    pub(super) tile_scale: u32,
-    pub(super) _pad: [u32; 2],
-}
 
 /// One render pass drawing into `view`, the picture kept or cleared.
 fn draw_pass<'e>(
@@ -297,18 +198,18 @@ const TILE: u32 = 16;
 /// at the most, which is sixteen megabytes each way and a dispatch of 8 192
 /// blocks. Past it the oldest particles are left off the layer, the cap rule
 /// again.
-fn pair_max(cap: u32) -> u32 {
+pub(super) fn pair_max(cap: u32) -> u32 {
     cap.saturating_mul(16)
         .clamp(1 << 20, 1 << 21)
         .next_multiple_of(SCAN_BLOCK)
 }
 
 /// The words at the head of the tiles' `scan` buffer, before its numbers.
-const SCAN_HEAD: u32 = 16;
+pub(super) const SCAN_HEAD: u32 = 16;
 
 /// How many 16 px steps a tile's side is, so a frame has fewer tiles than
 /// the sort's sixteen bits can name.
-fn tile_scale(w: u32, h: u32) -> u32 {
+pub(super) fn tile_scale(w: u32, h: u32) -> u32 {
     let mut m = 1;
     while m < 64 && w.div_ceil(TILE * m) * h.div_ceil(TILE * m) >= 0xffff {
         m *= 2;
@@ -318,14 +219,14 @@ fn tile_scale(w: u32, h: u32) -> u32 {
 
 /// How many numbers the tiles' `scan` holds: a particle's count each, the
 /// sort's digit counts, or two words a tile, whichever is most.
-fn scan_len(cap: u32, w: u32, h: u32) -> u32 {
+pub(super) fn scan_len(cap: u32, w: u32, h: u32) -> u32 {
     let side = TILE * tile_scale(w, h);
     let tiles = w.div_ceil(side) * h.div_ceil(side);
     cap.max(pair_max(cap)).max(tiles * 2)
 }
 
 /// The scan's block width — the same 256 the kernel declares.
-const SCAN_BLOCK: u32 = 256;
+pub(super) const SCAN_BLOCK: u32 = 256;
 
 /// Words of stream per particle: position 3, speed 3, age, life, size,
 /// rotation, colour 2 (half pairs), id 2, and the draw's own tail 3.
@@ -593,15 +494,9 @@ impl FxEngine {
             enc.copy_buffer_to_buffer(&pass.stream, 0, &staging, 16, stream_bytes);
         }
         ctx.flush();
-        let slice = staging.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        ctx.device.poll(wgpu::Maintain::Wait);
-        rx.recv().ok()?.ok()?;
-        let words: Vec<u32> = bytemuck::cast_slice(&slice.get_mapped_range()).to_vec();
-        staging.unmap();
+        // The browser build answers with the stream an earlier frame left.
+        let words: Vec<u32> =
+            crate::device::read_buffer(ctx, ("particulate", op.cap, w, h), &staging)?;
         // Word 1 of the indirect arguments is the instance count: how many
         // particles the cap rule left standing.
         let count = *words.get(1)?;
@@ -611,7 +506,7 @@ impl FxEngine {
     /// Everything one Particulate pass needs bound, or `None` when there is
     /// nothing to draw — no candidates, no capacity, or a Mix of nothing, each
     /// of which leaves the input picture exactly as it was.
-    fn particulate_prepare(
+    pub(super) fn particulate_prepare(
         &self,
         ctx: &GpuContext,
         src: &wgpu::Texture,
@@ -631,90 +526,13 @@ impl FxEngine {
         // wrong frame is recoverable and an invalidated encoder is not.
         let candidates = op.candidates.min(MAX_CANDIDATES as u32);
         let cap = op.cap;
-        if candidates == 0 || cap == 0 || op.mix <= 0.0 || op.frames.len() < 2 {
+        let scheduled = candidates > 0 && op.frames.len() >= 2;
+        if !(scheduled || op.sim.is_some()) || cap == 0 || op.mix <= 0.0 {
             return None;
         }
         let blocks = candidates.div_ceil(SCAN_BLOCK);
         let sprite_size = sprite.map_or((1.0, 1.0), |t| (t.width() as f32, t.height() as f32));
-        let proj = op.projection.unwrap_or([[0.0; 4]; 3]);
-        let u = ParticulateParams {
-            em_pos: [op.emitter_pos[0], op.emitter_pos[1]],
-            em_wh: op.emitter_wh,
-            em_angle: op.emitter_angle_deg,
-            dir: op.direction_deg,
-            spread: op.spread_deg,
-            speed: op.speed,
-            speed_jitter: op.speed_jitter,
-            shape: op.shape,
-            seed: op.seed,
-            cap,
-            life: op.life,
-            life_jitter: op.life_jitter,
-            size: op.size,
-            size_jitter: op.size_jitter,
-            rotation: op.rotation_deg,
-            rotation_jitter: op.rotation_jitter_deg,
-            spin: op.spin_deg,
-            align: u32::from(op.align_to_motion),
-            colour: op.colour,
-            end_colour: op.end_colour,
-            wind: [op.wind[0], op.wind[1]],
-            gravity: op.gravity,
-            drag: op.drag,
-            turb: op.turbulence,
-            turb_scale: op.turbulence_scale,
-            turb_speed: op.turbulence_speed,
-            eps: op.eps,
-            dt: op.dt,
-            _spare: [0; 2],
-            frames: op.frames.len() as u32 - 1,
-            candidates,
-            path_len: op.path.len() as u32,
-            path_total: op.path_total,
-            tail: op.tail_seconds,
-            feather: op.feather,
-            mix: op.mix,
-            mode: op.mode,
-            target_w: w as f32,
-            target_h: h as f32,
-            sprite_w: sprite_size.0,
-            sprite_h: sprite_size.1,
-            wind_z: op.wind[2],
-            em_z: op.emitter_pos[2],
-            em_depth: op.emitter_depth,
-            dir_z: op.direction_z_deg,
-            spread_z: op.spread_z_deg,
-            proj0: proj[0],
-            proj1: proj[1],
-            proj2: proj[2],
-            project: u32::from(op.projection.is_some()),
-            // Particulate's points were decided by the compaction; only the
-            // generic draw's two field-testing callers turn the vertex-stage
-            // rejection on.
-            field_mode: 0,
-            field_invert: 0,
-            field_threshold: 0.0,
-            probe_w: 0,
-            probe_h: 0,
-            stamp_unit: [0.0; 2],
-            stamp_anchor: [0.0; 2],
-            stamp_uv: [0.0; 2],
-            stamp_corner: 0.0,
-            edge: op.edge,
-            margin: op.margin,
-            turb_cycle: 0,
-            size_by: op.drives[0],
-            opacity_by: op.drives[1],
-            colour_by: op.drives[2],
-            speed_min: op.speed_range[0],
-            speed_max: op.speed_range[1],
-            density: u32::from(op.density.is_some()),
-            blend: op.blend,
-            pair_max: pair_max(cap),
-            scan_len: scan_len(cap, w, h),
-            tile_scale: tile_scale(w, h),
-            _pad: [0; 2],
-        };
+        let u = ParticulateParams::of(op, (w, h), sprite_size, candidates);
         let ubuf = ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -858,6 +676,8 @@ impl FxEngine {
         Some(ParticulatePass {
             bind,
             draw_bind,
+            sim: op.sim.as_ref().map(|view| self.sim_out_bind(ctx, view)),
+            cap,
             empty,
             stream,
             args,
@@ -870,12 +690,15 @@ impl FxEngine {
 }
 
 /// One pass's bound resources, alive until the encoder is done with them.
-struct ParticulatePass {
+pub(super) struct ParticulatePass {
     bind: wgpu::BindGroup,
-    draw_bind: wgpu::BindGroup,
-    empty: wgpu::BindGroup,
-    stream: wgpu::Buffer,
-    args: wgpu::Buffer,
+    pub(super) draw_bind: wgpu::BindGroup,
+    /// What makes the stream from a simulation, in place of the closed forms.
+    sim: Option<wgpu::BindGroup>,
+    cap: u32,
+    pub(super) empty: wgpu::BindGroup,
+    pub(super) stream: wgpu::Buffer,
+    pub(super) args: wgpu::Buffer,
     candidates: u32,
     blocks: u32,
     _keep: [wgpu::Buffer; 6],
@@ -885,12 +708,16 @@ impl ParticulatePass {
     /// Count, scan, place — the three kernels, in the one order that makes a
     /// compacted slot a function of the birth index rather than of which
     /// workgroup arrived first.
-    fn evaluate(&self, fx: &FxEngine, enc: &mut wgpu::CommandEncoder) {
+    pub(super) fn evaluate(&self, fx: &FxEngine, enc: &mut wgpu::CommandEncoder) {
         let mut cp = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("fx-particulate-evaluate"),
             timestamp_writes: None,
         });
         cp.set_bind_group(0, &self.bind, &[]);
+        if let Some(out) = &self.sim {
+            fx.sim_out_pass(&mut cp, &self.empty, out, self.cap);
+            return;
+        }
         cp.set_pipeline(&fx.particulate_alive);
         cp.dispatch_workgroups(self.candidates.div_ceil(EVAL_WORKGROUP), 1, 1);
         cp.set_pipeline(&fx.particulate_scan);
@@ -1043,7 +870,7 @@ impl ParticulatePipelines {
         // draw pipeline and not one after another.
         let compute = |entry: &'static str, label: &'static str| {
             let (device, layout, module) = (ctx.device.clone(), compute_pl.clone(), module.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(label),
                     layout: Some(&layout),
@@ -1195,7 +1022,7 @@ impl ParticulateBlendPipelines {
             });
         let compute = |entry: &'static str| {
             let (device, layout, module) = (ctx.device.clone(), tiles_pl.clone(), module.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(entry),
                     layout: Some(&layout),

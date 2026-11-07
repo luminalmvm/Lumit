@@ -23,7 +23,12 @@ A particle system.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
-| **Shape** | Dropdown | Point · Line · Ellipse · Rectangle · Mask path · Ellipse outline · Rectangle outline | Point | - |
+| **Simulate** | Checkbox | On or off | Off | - |
+| **Sub-steps** | Slider, whole numbers | 1 to 8 | 2 | - |
+| **Bake** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **In the scene** | Checkbox | On or off | Off | - |
+| **Shape** | Dropdown | Point · Line · Ellipse · Rectangle · Mask path · Ellipse outline · Rectangle outline · Box · Sphere · Layer | Point | - |
 | **Position x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Position y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
 | **Position z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -33,6 +38,7 @@ A particle system.
 | **Emitter angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Follow** | Dropdown | Mask · Shape | Mask | - |
 | **Mask path** | Masks | This layer's masks | First mask | - |
+| **Emitter layer** | Layer | Any layer in the composition | None | - |
 | **Density layer** | Layer | Any layer in the composition | None | - |
 | **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
@@ -63,6 +69,14 @@ A particle system.
 | **Colour by** | Dropdown | Age · Speed · Random | Age | - |
 | **Speed min** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
 | **Speed max** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
+| **Field x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Field y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Field z** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Field radius** | Slider | 1 to 2000; higher | 400 | Pixels at composition size |
+| **Attractor** | Slider | -5000 to 5000; any value by typing | 0 | Pixels at composition size |
+| **Vortex** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
+| **Vortex axis** | Dropdown | X · Y · Z | Y | - |
+| **Sphere** | Slider | 0 to 20000; higher | 0 | Pixels at composition size |
 | **Gravity** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind x** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind y** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -74,6 +88,9 @@ A particle system.
 | **Edge** | Dropdown | None · Kill · Wrap | None | - |
 | **Edge margin** | Slider | 0 to 500; higher | 20 | Pixels at composition size |
 | **Collide with** | Layer | Any layer in the composition | None | - |
+| **All 3D layers** | Checkbox | On or off | Off | - |
+| **Ground** | Checkbox | On or off | Off | - |
+| **Ground height** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **On contact** | Dropdown | Bounce · Slide · Stick · Kill | Bounce | - |
 | **Bounciness** | Slider | 0 to 100 | 60 | Per cent |
 | **Friction** | Slider | 0 to 100 | 10 | Per cent |
@@ -82,7 +99,9 @@ A particle system.
 | **Cohesion** | Slider | 0 to 100 | 0 | Per cent |
 | **Flock radius** | Slider | 0 to 500; higher | 150 | Pixels at composition size |
 | **Sparks** | Slider | 0 to 50 | 0 | - |
+| **Sparks from** | Dropdown | Death · Bounce · Flight | Death | - |
 | **Spark speed** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
+| **Spark inherit** | Slider | 0 to 100 | 0 | Per cent |
 | **Spark life** | Slider | 0.1 to 5; down to 0 and higher | 0.5 | Seconds |
 | **Spark size** | Slider | 0 to 100; higher | 50 | Per cent |
 | **Persistence** | Slider | 0 to 100 | 0 | Per cent |
@@ -103,29 +122,60 @@ A particle system.
 
 In the Effect Controls panel:
 
-- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Density layer**, **Map placement**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Simulation** groups **Simulate**, **Sub-steps**, **Bake**, **Cancel**.
+- **Emitter** groups **In the scene**, **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emitter layer**, **Density layer**, **Map placement**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
+- **Fields** groups **Field x**, **Field y**, **Field z**, **Field radius**, **Attractor**, **Vortex**, **Vortex axis**, **Sphere**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Edges** groups **Edge**, **Edge margin**.
-- **Collide** groups **Collide with**, **On contact**, **Bounciness**, **Friction**.
+- **Collide** groups **Collide with**, **All 3D layers**, **Ground**, **Ground height**, **On contact**, **Bounciness**, **Friction**.
 - **Flock** groups **Separation**, **Alignment**, **Cohesion**, **Flock radius**.
-- **Sparks** groups **Sparks**, **Spark speed**, **Spark life**, **Spark size**.
+- **Sparks** groups **Sparks**, **Sparks from**, **Spark speed**, **Spark inherit**, **Spark life**, **Spark size**.
 - **Trails** groups **Persistence**, **Zoom**, **Turn**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
 - **Streak length** is editable while **Mode** is set to Streak.
+- **Emitter layer** is editable while **Shape** is set to Layer.
+- **Density layer** is editable while **Shape** is anything but Layer.
+- **Collide with** is editable while **Simulate** is on, or **In the scene** is off.
+- **Separation** is editable while **Simulate** is on, or **In the scene** is off.
+- **Alignment** is editable while **Simulate** is on, or **In the scene** is off.
+- **Cohesion** is editable while **Simulate** is on, or **In the scene** is off.
+- **Sparks** is editable while **Simulate** is on, or **In the scene** is off.
+- **Persistence** is editable while **In the scene** is off.
+- **Persistence** is editable while **Simulate** is off.
+- **Density layer** is editable while **Simulate** is off.
+- **Map placement** is editable while **Simulate** is off.
+- **Sub-steps** is editable while **Simulate** is on.
+- **Attractor** is editable while **Simulate** is on.
+- **Vortex** is editable while **Simulate** is on.
+- **Vortex axis** is editable while **Simulate** is on.
+- **Sphere** is editable while **Simulate** is on.
+- **Field x** is editable while **Simulate** is on.
+- **Field y** is editable while **Simulate** is on.
+- **Field z** is editable while **Simulate** is on.
+- **Field radius** is editable while **Simulate** is on.
+- **Bake** is editable while **Simulate** is on.
+- **Cancel** is editable while **Simulate** is on.
+- **All 3D layers** is editable while **Simulate** is on.
+- **Ground** is editable while **Simulate** is on.
+- **Ground height** is editable while **Simulate** is on.
+- **Sparks from** is editable while **Simulate** is on.
+- **Spark inherit** is editable while **Simulate** is on.
+- **Ground height** is editable while **Ground** is on.
 - **Burst count** is editable while **Burst** is anything but Off.
 - **Burst interval** is editable while **Burst** is set to Every N frames.
 - **Trigger** is editable while **Burst** is set to On trigger.
 - **Edge margin** is editable while **Edge** is anything but None.
 - **Mask path** is editable while **Follow** is anything but Shape.
-- **Particle blend** is editable while **Separation** is 0.
-- **Particle blend** is editable while **Alignment** is 0.
-- **Particle blend** is editable while **Cohesion** is 0.
-- **Particle blend** is editable while **Sparks** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Separation** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Alignment** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Cohesion** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Sparks** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Collide with** names no layer.
 - **Density layer** is editable while **Separation** is 0.
 - **Density layer** is editable while **Alignment** is 0.
 - **Density layer** is editable while **Cohesion** is 0.
@@ -134,16 +184,15 @@ In the Effect Controls panel:
 - **Map placement** is editable while **Alignment** is 0.
 - **Map placement** is editable while **Cohesion** is 0.
 - **Map placement** is editable while **Sparks** is 0.
-- **Particle blend** is editable while **Persistence** is 0.
+- **Particle blend** is editable while **Simulate** is on, or **Persistence** is 0.
 - **Density layer** is editable while **Persistence** is 0.
 - **Map placement** is editable while **Persistence** is 0.
-- **Particle blend** is editable while **Collide with** names no layer.
 - **Density layer** is editable while **Collide with** names no layer.
 - **Map placement** is editable while **Collide with** names no layer.
-- **On contact** is editable while **Collide with** names a layer.
-- **Bounciness** is editable while **Collide with** names a layer.
+- **On contact** is editable while **Ground** is on, or **All 3D layers** is on, or **Collide with** names a layer.
+- **Bounciness** is editable while **Ground** is on, or **All 3D layers** is on, or **Collide with** names a layer.
+- **Friction** is editable while **Ground** is on, or **All 3D layers** is on, or **Collide with** names a layer.
 - **Bounciness** is editable while **On contact** is set to Bounce.
-- **Friction** is editable while **Collide with** names a layer.
 - **Friction** is editable while **On contact** is anything but Stick.
 - **Friction** is editable while **On contact** is anything but Kill.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
@@ -152,9 +201,28 @@ In the Effect Controls panel:
 
 ## What each control does
 
+The **Simulation** group, particles worked out step by step on the graphics card:
+
+- **Simulate**: each frame's particles are worked out from the frame before, up to Max
+  particles. **Turbulence amount**, **Turbulence scale** and **Turbulence speed** become a
+  flow that pushes particles about wherever they are. Density layer and Trails are not read,
+  and a Layer emitter gives birth only on a model's surface. A flock steers by the cells round
+  a particle, up to 64 cells a side, rather than by each neighbour.
+- **Sub-steps**: how many times a frame the particles move.
+- **Bake**: writes the frames the layer shows to the folder the project caches in. A change
+  to anything the walk reads leaves the bake unread. A change to how particles look does not.
+- **Cancel**: stops a running bake. The frames it reached stay baked.
+A simulation may differ slightly between graphics cards. On one machine a frame is the same however it is reached.
+
 The **Emitter** group, where particles come from and travel:
 
-- **Shape**: which emitter.
+- **In the scene**: the particles live in the composition's 3D space, lit, focused and
+  scaled like a 3D layer, with 3D layers and models passing in front of and behind them.
+  Turning it on puts the layer in 3D. Masks, track matte and blend mode do not apply.
+- **Shape**: which emitter. **Box** fills a box of Width, Height and Depth. **Sphere** fills a
+  ball as wide as Width. **Layer** gives birth over the whole frame where the Emitter
+  layer's picture is bright, and with no Emitter layer nothing is born. In the scene, a
+  Model layer as the Emitter layer gives birth all over its model's surface.
 - **Position x**, **Position y** and **Position z**: where the emitter sits.
 - **Width** and **Height**: how big the emitter is.
 - **Depth**: how far the emitter reaches through the plane.
@@ -164,6 +232,7 @@ The **Emitter** group, where particles come from and travel:
   and dashes as drawn, one line after another, repeater copies included. On any other layer
   Shape emits nothing.
 - **Mask path**: which of the layer's masks particles are emitted from.
+- **Emitter layer**: the layer a Layer emitter gives birth from.
 - **Density layer**: a layer whose brightness weights where particles are born inside the
   emitter. A birth with nowhere bright enough to go is skipped. While it is set, the
   points effects below Particulate on the same layer can read its particles, and
@@ -213,6 +282,16 @@ The **Variation** group, what runs those changes:
 - **Speed min** and **Speed max**: the speeds, in pixels per second, at the left and right
   ends of the curve or blend.
 
+The **Fields** group, read with Simulate on:
+
+- **Attractor**: how hard particles are pulled to the field's middle. Below nought it pushes
+  them away.
+- **Vortex**: how fast particles are swept round the field's middle.
+- **Vortex axis**: the line the Vortex turns about.
+- **Sphere**: how hard particles are thrown out of a ball of Field radius.
+- **Field x**, **Field y** and **Field z**: where the field's middle is.
+- **Field radius**: how far the three reach.
+
 The **Forces** group, what moves them:
 
 - **Gravity**: a constant pull.
@@ -235,16 +314,24 @@ The **Collide** group, what particles hit:
 - **Collide with**: a layer whose shapes and masks particles hit. A layer with neither is
   hit at its rectangle. While it is set, each frame's particles are worked out from the
   frame before. A particle keeps the place it was born when the emitter moves, and a
-  change of force acts from the frame it happens on. Density layer and Particle blend are
-  not read, and at most 100,000 particles are alive at once.
+  change of force acts from the frame it happens on. Without Simulate, Density layer and
+  Particle blend are not read, and at most 100,000 particles are alive at once.
 - **On contact**: **Bounce** sends a particle off the other way. **Slide** carries it on
   along the surface. **Stick** holds it where it hit, moving with that layer. **Kill**
   ends it.
 - **Bounciness**: how much of its speed a particle keeps as it bounces.
 - **Friction**: how much a particle slows along the surface.
+- **All 3D layers**: particles hit every 3D layer that is showing, up to 32. Simulate only.
+- **Ground**: particles hit the floor the 3D views draw. Simulate only.
+- **Ground height**: how far above that floor they hit it.
 
 A layer facing the same way as this one is hit across and down, at every depth. One turned
 against it in 3D is hit where particles pass through its shapes.
+
+With Simulate on, any 3D layer in Collide with is hit where particles pass through it,
+whichever way it faces. A layer moving into particles throws them. A Model layer is hit all
+over its surface, in the pose its take starts in. The hit doesn't follow the take from
+there, or a moved part.
 
 The **Flock** group, particles steering by their neighbours:
 
@@ -260,15 +347,19 @@ The **Sparks** group, small particles thrown out where one dies:
 
 - **Sparks**: how many sparks a particle throws out when its life ends, Edge kills it or
   it is killed on contact. Sparks throw out none.
-- **Spark speed**: how fast they fly out, every way at once.
+- **Sparks from**: **Death** throws them as a particle dies. **Bounce** throws them each time
+  it hits something. **Flight** throws that many each second. Simulate only.
+- **Spark speed**: how fast they fly out, every way at once. From a hit, they fly off the side
+  the particle came from.
+- **Spark inherit**: how much of its parent's speed a spark starts with. Simulate only.
 - **Spark life**: how long a spark lasts.
 - **Spark size**: how big a spark is, against the particle it came from.
 
 Sparks fade and change colour by the Particle group's rows, over their own life.
 
 With Separation, Alignment, Cohesion or Sparks above nought, each frame's particles are
-worked out from the frame before, as with Collide with, and Density layer and Particle
-blend are not read. A row that is keyframed, has an expression or is wired counts as above
+worked out from the frame before, as with Collide with. Without Simulate, Density layer and
+Particle blend are not read. A row that is keyframed, has an expression or is wired counts as above
 nought.
 
 The **Trails** group, a picture kept from frame to frame:
@@ -285,13 +376,16 @@ picture at the current frame is stamped on every earlier frame.
 
 The **Render** group, how they are drawn:
 
-- **Mode**: Disc, Sprite or Streak.
+- **Mode**: Disc, Sprite or Streak. In the scene, motion blur draws a disc across the open
+  shutter. Sprites, model copies and the layer's and camera's own moves do not blur.
 - **Feather**: how soft a disc's edge is. Disc mode only.
 - **Sprite layer**: the layer stamped at each particle. Sprite mode only, and discs are
-  drawn until you set it.
+  drawn until you set it. In the scene, a Model layer as the Sprite layer draws its model at
+  up to 20,000 particles, sized, turned and tinted by each.
 - **Streak length**: how long the tail is, in seconds.
 - **Particle blend**: how particles combine with each other where they overlap, by the layer
-  blend modes. They then go over the picture together, as Normal particles do.
+  blend modes. They then go over the picture together, as Normal particles do. In the
+  scene every mode but Add and Screen draws as Normal, nearest last.
 - **Max particles**: the most particles that may be alive at once.
 
 The remaining properties:

@@ -25,8 +25,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver as Queue, RecvTimeoutError, SyncSender};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
 use uuid::Uuid;
+use web_time::{Duration, Instant};
 
 /// What one machine asks another for.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -40,23 +40,26 @@ pub enum Wanted {
     Original { item: Uuid },
     /// The file an export this machine asked another to do came to.
     Export { job: Uuid },
+    /// What an analysis made of a shot, such as depth or a track.
+    Analysis { id: Uuid },
 }
 
 impl Wanted {
-    /// The footage item this is of, or `None` for an export.
+    /// The footage item or analysis this is, or `None` for an export.
     #[must_use]
     pub fn item(&self) -> Option<Uuid> {
         match self {
             Wanted::StandIn { item } | Wanted::Part { item, .. } | Wanted::Original { item } => {
                 Some(*item)
             }
+            Wanted::Analysis { id } => Some(*id),
             Wanted::Export { .. } => None,
         }
     }
 }
 
-/// A footage item one machine has the original of, and how big that file
-/// is, which is what fetching it would cost.
+/// A footage item one machine has the original of, or an analysis it has,
+/// and how big that file is, which is what fetching it would cost.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Held {
     pub item: Uuid,
@@ -995,28 +998,4 @@ impl Hub {
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
-    use super::*;
-
-    /// A limit is kept to: what is taken faster than it allows is waited
-    /// for, and nought is no limit at all.
-    #[test]
-    fn a_limit_makes_a_taker_wait() {
-        let (limits, stop) = (Limits::default(), AtomicBool::new(false));
-        let start = Instant::now();
-        for _ in 0..20 {
-            limits.up.take(PIECE, &stop);
-        }
-        assert!(start.elapsed() < Duration::from_millis(200));
-
-        // Forty pieces at twenty a second, with a second's worth to start.
-        limits.set(20 * PIECE as u64, 0);
-        std::thread::sleep(Duration::from_millis(50));
-        let start = Instant::now();
-        for _ in 0..40 {
-            limits.up.take(PIECE, &stop);
-        }
-        assert!(start.elapsed() > Duration::from_millis(800));
-        assert_eq!(limits.get(), (20 * PIECE as u64, 0));
-    }
-}
+mod tests;

@@ -373,6 +373,12 @@ pub fn rasterise_line(text: &str, size: f32, rgb8: [u8; 3]) -> RasterText {
                     continue;
                 }
                 let cov = bitmap[row * metrics.width + col];
+                // No ink, no colour: a pixel the glyph doesn't cover stays
+                // empty, as the shaped and curved paths leave it, or an effect
+                // that lifts the alpha shows the letter's box.
+                if cov == 0 {
+                    continue;
+                }
                 let idx = ((py as u32 * width + px as u32) * 4) as usize;
                 rgba[idx] = rgb8[0];
                 rgba[idx + 1] = rgb8[1];

@@ -463,11 +463,51 @@ pub trait EffectDef: Sync + Send + 'static {
         None
     }
 
+    /// Whether this instance's picture changes from frame to frame with every
+    /// row held still, so the layer time has to join its frame key. `false`
+    /// for an effect that has no clock in it.
+    fn moves_with_time(&self, _inst: &EffectInstance) -> bool {
+        false
+    }
+
     /// Whether this effect has an image operation at all. `false` for the
     /// orchestration-only effects, which the render path skips and the
     /// registry-agreement test excuses from needing a GPU entry.
     fn is_image_op(&self) -> bool {
         true
+    }
+
+    /// The built-in presets its menu offers ([`crate::fx::presets`]). None by
+    /// default.
+    fn presets(&self) -> &'static [crate::fx::presets::EffectPreset] {
+        &[]
+    }
+
+    /// The moments of its own input this effect shows at layer time `lt`, with
+    /// the layer's markers and the comp's rate in `markers`: the input is
+    /// rendered again at those layer times, the effects above it included, and
+    /// handed over as its layer pictures. `None` for every effect but the ones
+    /// that show their input at another time.
+    fn own_moments(
+        &self,
+        _e: &EffectInstance,
+        _lt: f64,
+        _markers: &crate::fx::markers::MarkerContext,
+    ) -> Option<crate::fx::moments::OwnMoments> {
+        None
+    }
+
+    /// Whether [`Self::own_moments`] can answer at all: such an effect takes a
+    /// layer-picture slot of its own whatever its rows.
+    fn shows_own_moments(&self) -> bool {
+        false
+    }
+
+    /// Whether this instance, as its rows stand, is the one in its stack that
+    /// shows its input at other moments. Read off the rows rather than the
+    /// clock, so which effect it is never changes from frame to frame.
+    fn wants_own_moments(&self, _e: &EffectInstance) -> bool {
+        self.shows_own_moments()
     }
 
     /// Whether this effect reads a Text layer's look (its Text
@@ -538,6 +578,15 @@ pub trait EffectDef: Sync + Send + 'static {
     /// when its Depth row names the precomp it sits on.
     fn traces_scene(&self, _inst: &crate::model::EffectInstance) -> bool {
         false
+    }
+
+    /// What this instance's layer row reads from a 3D precomp in place of its
+    /// picture: a pass of the scene. `None` for every effect but those.
+    fn scene_read(
+        &self,
+        _inst: &crate::model::EffectInstance,
+    ) -> Option<super::effects::scene_pass::SceneRead> {
+        None
     }
 
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it

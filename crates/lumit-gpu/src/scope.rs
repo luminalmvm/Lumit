@@ -72,6 +72,19 @@ pub enum ScopeKind {
 }
 
 impl ScopeKind {
+    /// The kind a bridge code names: 0 waveform, 1 parade, 2 vectorscope, 3
+    /// histogram.
+    #[must_use]
+    pub fn from_code(code: u32) -> Option<Self> {
+        match code {
+            0 => Some(ScopeKind::WaveformLuma),
+            1 => Some(ScopeKind::WaveformRgb),
+            2 => Some(ScopeKind::Vectorscope),
+            3 => Some(ScopeKind::Histogram),
+            _ => None,
+        }
+    }
+
     fn tag(self) -> u32 {
         match self {
             ScopeKind::WaveformLuma => 0,
@@ -102,6 +115,20 @@ pub struct ScopeColours {
     pub red: [u8; 3],
     pub green: [u8; 3],
     pub blue: [u8; 3],
+}
+
+/// Background, trace, then the red, green and blue tints, as the bridge sends
+/// them.
+impl From<[[u8; 3]; 5]> for ScopeColours {
+    fn from([bg, trace, red, green, blue]: [[u8; 3]; 5]) -> Self {
+        ScopeColours {
+            bg,
+            trace,
+            red,
+            green,
+            blue,
+        }
+    }
 }
 
 /// The `scope.wgsl` uniform: sampling geometry, the kind tag, and the trace
@@ -351,8 +378,9 @@ impl ScopeEngine {
     }
 
     /// Run the three passes into a fresh trace texture, returning it (the shared
-    /// core of [`Self::trace`] and the test count hook).
-    fn run(
+    /// core of [`Self::trace`], the browser build's trace, which reads it back
+    /// on a later turn, and the test count hook).
+    pub fn run(
         &self,
         ctx: &GpuContext,
         kind: ScopeKind,
@@ -530,6 +558,7 @@ fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
 /// `GRID * 4 = 1024` bytes, already a multiple of `COPY_BYTES_PER_ROW_ALIGNMENT`
 /// (256), so no per-row padding is needed.
 fn readback_trace(ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u8>, GpuError> {
+    crate::device::wait_here()?;
     let row = GRID * 4;
     debug_assert_eq!(row % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
     let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {

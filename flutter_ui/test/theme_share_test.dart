@@ -2,7 +2,7 @@
 // is written to and read from, duplicating, importing under a free name, and
 // renaming.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/workspace.dart';
@@ -10,6 +10,8 @@ import 'package:lumit_flutter/theme/custom_theme.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/theme/theme_file.dart';
 import 'package:lumit_flutter/theme/theme_tokens.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A settings file of this test's own: every workspace call that changes a
 /// theme saves, and the store is machine state a test must not reach.

@@ -3,7 +3,6 @@
 // and the scale-handle solve. No widget tree: pure geometry.
 
 import 'package:flutter/widgets.dart' show Matrix4;
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/panels/viewer_stage.dart' show parentMatrix;
@@ -117,6 +116,7 @@ void main() {
             internalprojectId: id, internalcompId: id, internallayerId: id),
         info: BridgeLayerInfo(
           pitchFollowsSpeed: false,
+          sends: const [],
           name: 'Layer',
           kind: BridgeLayerKind.nullLayer,
           switches: BridgeLayerSwitches(
@@ -139,7 +139,7 @@ void main() {
           ),
           inFrame: 0,
           outFrame: 10,
-          clipFrames: Int64List(0),
+          clipFrames: const [],
           clips: const [],
           parent: parent,
           transform: BridgeTransform(

@@ -31,6 +31,7 @@ use crate::api::{
 };
 
 mod attributes;
+mod solids;
 mod streams;
 mod takes;
 
@@ -232,7 +233,7 @@ fn has_sound(state: &LumitBridgeState, footage: &FootageItem) -> bool {
 /// Whether this media is a still: a picture with no length of its own. Media
 /// that will not probe answers false.
 #[frb(ignore)]
-fn is_still(state: &LumitBridgeState, footage: &FootageItem) -> bool {
+pub(crate) fn is_still(state: &LumitBridgeState, footage: &FootageItem) -> bool {
     #[cfg(feature = "media")]
     {
         FootageReference::resolve_source(state, footage)
@@ -961,7 +962,7 @@ impl<'a> Edit<'a> {
         }
         Ok(match clip.source {
             ClipSource::Footage(item) => !self.kinds_of(item)?.0,
-            ClipSource::Comp(_) => false,
+            ClipSource::Comp(_) | ClipSource::Solid(_) => false,
         })
     }
 
@@ -1620,6 +1621,10 @@ impl<'a> Edit<'a> {
                                 CompositionReference::footage_span_and_size(&state, f, &self.comp);
                             (f.name.clone(), w, h)
                         }
+                        ClipSource::Solid(id) => {
+                            let sd = doc.solid(id).ok_or(BridgeCutResult::Nothing)?;
+                            (sd.name.clone(), f64::from(sd.width), f64::from(sd.height))
+                        }
                     };
                     look.get_or_insert(named);
                 }
@@ -1726,6 +1731,8 @@ impl<'a> Edit<'a> {
                 return Ok(());
             }
             ClipSource::Footage(item) => item,
+            // A colour has nothing inside it to open.
+            ClipSource::Solid(_) => return Err(BridgeCutResult::Nothing.into()),
         };
         if self.rows[r].locked {
             return Err(BridgeCutResult::Locked.into());
@@ -1861,6 +1868,18 @@ impl CompositionReference {
         at_frame: i64,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| edit.place_comp(target, comp.id, at_frame))
+    }
+
+    /// Put a solid down at `at_frame` as one clip, as long as a still, on
+    /// `target` or a new picture Sequence layer at the top.
+    #[frb(sync)]
+    pub fn cut_place_solid(
+        &self,
+        target: Option<LayerReference>,
+        solid: &crate::api::solid::SolidReference,
+        at_frame: i64,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.place_solid(target, solid.id, at_frame))
     }
 
     /// **Split audio streams**: give each audio stream these clips sound a

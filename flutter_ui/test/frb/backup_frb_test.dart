@@ -5,7 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -19,6 +19,8 @@ import 'package:lumit_flutter/state/backup.dart';
 import 'package:lumit_flutter/state/transfer.dart';
 
 import 'frb_test_support.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 void main() {
   setUpAll(initEngineForTests);

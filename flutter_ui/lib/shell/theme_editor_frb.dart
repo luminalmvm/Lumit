@@ -105,7 +105,7 @@ class _ThemeEditorState extends State<_ThemeEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
+              padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 10, 6),
               child: Row(
                 children: [
                   Expanded(
@@ -150,7 +150,7 @@ class _ThemeEditorState extends State<_ThemeEditor> {
                 children: [
                   for (final group in groups) ...[
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(2, 6, 0, 4),
+                      padding: const EdgeInsetsDirectional.fromSTEB(2, 6, 0, 4),
                       child: Text(group,
                           style: t.small.copyWith(color: t.textMuted)),
                     ),

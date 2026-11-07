@@ -1550,6 +1550,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -1957,6 +1958,7 @@ mod tests {
                     audio_streams: Default::default(),
                     adjustment: false,
                     pitch_follows_speed: false,
+                    audio_routes: Default::default(),
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
@@ -2098,6 +2100,7 @@ mod tests {
                     audio_streams: Default::default(),
                     adjustment: false,
                     pitch_follows_speed: false,
+                    audio_routes: Default::default(),
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
@@ -2362,6 +2365,33 @@ mod tests {
         assert_eq!(vol(&store), -12.0);
         store.undo().unwrap();
         assert_eq!(vol(&store), 0.0, "default volume is unity (0 dB)");
+
+        // Routing is one value, so undo puts the whole of it back.
+        let routes = |s: &DocumentStore| {
+            s.snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer_id)
+                .unwrap()
+                .audio_routes
+                .clone()
+        };
+        let routed = crate::routes::AudioRoutes {
+            output: Some(Uuid::now_v7()),
+            sends: Vec::new(),
+        };
+        store
+            .commit(Op::SetLayerRoutes {
+                comp: comp_id,
+                layer: layer_id,
+                routes: routed.clone(),
+            })
+            .unwrap();
+        assert_eq!(routes(&store), routed);
+        store.undo().unwrap();
+        assert!(routes(&store).is_master());
 
         // The master fader (docs/09 §3.1) is comp state and round-trips
         // the same way — one op, one undo step, back to unity.

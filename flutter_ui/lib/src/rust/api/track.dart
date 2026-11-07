@@ -9,7 +9,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `create_transform_keys`, `failure_of`, `idle`, `idle`, `keep`, `media_source_in`, `media_source`, `press_frame`, `press_plugin_now`, `press_plugin`, `settle`, `snapshot`, `tracked_media`, `write_row`
+// These functions are ignored because they are not marked as `pub`: `create_transform_keys`, `failure_of`, `idle`, `idle`, `keep`, `media_source_in`, `media_source`, `press_frame`, `press_plugin_now`, `press_plugin`, `settle`, `snapshot`, `solved_camera_layer`, `tracked_media`, `write_row`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// How `layer`'s analysis is getting on.
@@ -34,14 +34,14 @@ BridgeTrackStatus trackStatus({required LayerReference layer}) =>
 /// footage's own raster centred on the comp. Exact for the ordinary case — a
 /// comp made from the shot — and off by the size ratio otherwise.
 List<BridgeTrackPoint> trackedPoints(
-        {required LayerReference layer, required PlatformInt64 frame}) =>
+        {required LayerReference layer, required int frame}) =>
     BridgeLib.instance.api
         .crateApiTrackTrackedPoints(layer: layer, frame: frame);
 
 /// `camera`'s solve link and how it is reading at composition frame `frame` —
 /// the badge, in one crossing.
 BridgeCameraLink cameraLink(
-        {required LayerReference camera, required PlatformInt64 frame}) =>
+        {required LayerReference camera, required int frame}) =>
     BridgeLib.instance.api
         .crateApiTrackCameraLink(camera: camera, frame: frame);
 
@@ -61,7 +61,7 @@ void fireEffectAction(
         {required LayerReference layer,
         required UuidValue effect,
         required String param,
-        BigInt? frame}) =>
+        int? frame}) =>
     BridgeLib.instance.api.crateApiTrackFireEffectAction(
         layer: layer, effect: effect, param: param, frame: frame);
 
@@ -120,7 +120,7 @@ void setCameraSolveLink({required LayerReference camera, UuidValue? tracked}) =>
 LayerReference addLayerAtPoints(
         {required LayerReference tracked,
         required List<int> tracks,
-        required PlatformInt64 frame,
+        required int frame,
         required bool solid}) =>
     BridgeLib.instance.api.crateApiTrackAddLayerAtPoints(
         tracked: tracked, tracks: tracks, frame: frame, solid: solid);
@@ -268,8 +268,7 @@ enum BridgeTrackFailure {
   /// Too little in the picture held still enough to follow.
   noFeatures,
 
-  /// The camera only turned: there is no position to solve and no depth to
-  /// recover (docs/impl/tracking.md §4's sixth deviation).
+  /// The camera only turned: there is no position or depth to solve.
   rotationOnly,
 
   /// The shot carries a camera move the solver could not stand behind.
@@ -278,6 +277,9 @@ enum BridgeTrackFailure {
   /// The quad's contents are not one flat surface, or move against
   /// themselves.
   notPlanar,
+
+  /// More than the graphics card has room for.
+  tooBig,
   ;
 }
 
@@ -364,14 +366,15 @@ class BridgeTrackStatus {
   final int points;
 
   /// How many frames of the clip carry a solved camera. The span always
-  /// starts at the clip's first frame — the analysis tracks the source from
-  /// its beginning and can only stop early, never start late — so this and
+  /// starts where the analysis started, the clip's first frame or the Frames
+  /// row's, and can only stop early, never start late, so this and
   /// `clip_frames` are the whole of the bar the panel draws.
   final int frames;
 
-  /// How many frames the clip has. `frames < clip_frames` is a **partial**
-  /// track: the shot could not be followed all the way through, and what was
-  /// solved is the part before it stopped carrying
+  /// How many frames the clip has, or the Frames row's span of it.
+  /// `frames < clip_frames` is a **partial** track: the shot could not be
+  /// followed all the way through, and what was solved is the part before it
+  /// stopped carrying
   /// ([`lumit_render::track::Solved::is_partial`]).
   final int clipFrames;
 

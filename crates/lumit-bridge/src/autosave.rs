@@ -94,15 +94,37 @@ fn schedule_every(every: Duration, keep: u32) {
         sched.keep = keep.max(1);
     }
     THREAD.call_once(|| {
+        #[cfg(target_arch = "wasm32")]
+        crate::turns::start(page_turn());
         // Named, because a thread that appears in a debugger as `<unnamed>` is
         // a thread somebody has to identify by what it is doing.
+        #[cfg(not(target_arch = "wasm32"))]
         let _ = std::thread::Builder::new()
             .name("lumit-autosave".into())
             .spawn(run);
     });
 }
 
+/// The timer in the browser build, which has no thread to give it: a turn
+/// each second from the page's timer, writing once the interval has gone by.
+#[cfg(target_arch = "wasm32")]
+fn page_turn() -> impl FnMut() -> bool {
+    let mut since = web_time::Instant::now();
+    move || {
+        let (every, keep) = now();
+        if every.is_zero() {
+            since = web_time::Instant::now();
+        } else if since.elapsed() >= every {
+            since = web_time::Instant::now();
+            sweep(keep);
+        }
+        crate::turns::pause(MAX_TICK);
+        true
+    }
+}
+
 /// The timer. Sleeps, counts, sweeps — for the life of the process.
+#[cfg(not(target_arch = "wasm32"))]
 fn run() {
     let mut waited = Duration::ZERO;
     loop {

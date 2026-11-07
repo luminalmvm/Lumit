@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart' show BridgeMediaInfo;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraPose;
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_view.dart' show PreviewResolution;
@@ -116,7 +117,8 @@ void main() {
       pair[1].cameraPoses['comp-b/free'] = free;
       pair[1].orthoZooms['comp-b'] = 2666;
       pair[1].resolution = PreviewResolution.quarter;
-      pair[1].wireframeOnly = true;
+      pair[1].viewDisplay = BridgeModelDisplay.normals;
+      pair[1].faces = true;
 
       final project = views.toProjectJson();
       final workspace = views.toWorkspaceJson();
@@ -138,7 +140,9 @@ void main() {
       expect(read[1].cameraPoses['comp-b/free'], free);
       expect(read[1].orthoZooms, {'comp-b': 2666.0});
       expect(read[1].resolution, PreviewResolution.quarter);
-      expect(read[1].wireframeOnly, isTrue);
+      expect(read[1].viewDisplay, BridgeModelDisplay.normals);
+      expect(read[1].cameraDisplay, isNull);
+      expect(read[1].faces, isTrue);
 
       // **A workspace someone sent you carries no locks.** The project half
       // is what says what a view shows; without it the views are laid out and
@@ -193,7 +197,7 @@ void main() {
           sampleRate: 0,
           audioStreams: 0,
           isStill: false,
-          startFrame: BigInt.zero,
+          startFrame: 0,
           startDropFrame: false,
         );
 

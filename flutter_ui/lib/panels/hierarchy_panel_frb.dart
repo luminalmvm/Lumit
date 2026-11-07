@@ -177,7 +177,8 @@ class _HierarchyRow extends StatelessWidget {
         child: Container(
           height: 22,
           color: selected ? t.surface2 : null,
-          padding: EdgeInsets.only(left: 6 + depth * _indent, right: 6),
+          padding:
+              EdgeInsetsDirectional.only(start: 6 + depth * _indent, end: 6),
           child: Row(
             children: [
               SizedBox(

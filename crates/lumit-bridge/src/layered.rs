@@ -9,7 +9,8 @@
 //! fill with no mask becomes a Solid layer instead, and a layer keeps the
 //! layer styles that Lumit also has. A vector mask the file has not already
 //! drawn into the layer's picture becomes masks on the layer. An adjustment
-//! layer becomes an Adjustment layer carrying the nearest effect, switched off.
+//! layer becomes an Adjustment layer carrying the nearest effect, switched on
+//! where that gives Photoshop's picture and off where it does not.
 //!
 //! A group becomes a layer group where that changes nothing about the
 //! picture: straight inside a composition, passing its layers' blend modes
@@ -293,19 +294,24 @@ fn masks(psd: &PsdDocument, record: &PsdLayer) -> Vec<Mask> {
         .collect()
 }
 
-/// The Lumit effects a Photoshop adjustment layer becomes, or `None` for a
-/// kind that is not mapped.
+/// The Lumit effects a Photoshop adjustment layer becomes, and whether they
+/// give Photoshop's picture, or `None` for a kind that is not mapped.
 ///
 /// Each number is carried the way the After Effects import carries the same
 /// effect's, where it has one. Photoshop adjusts the encoded picture and Lumit
-/// works in linear light, so the result is near Photoshop's and not the same.
+/// works in linear light, so most kinds run between two sRGB curves to give
+/// the same picture. Exposure is worked out in linear light in Photoshop too.
+/// Posterize, Threshold, Brightness/Contrast, Vibrance, Colour Balance, Photo
+/// Filter, a tinted Black and White, Levels with an output white under 255
+/// and Hue/Saturation with a saturation or a range set do their sums another
+/// way, and come out near Photoshop's picture and not the same.
 // ponytail: Invert, Posterize, Threshold, Brightness/Contrast, Exposure,
 // Hue/Saturation, Levels, Curves, Black and White, Vibrance and Colour
 // Balance. Exposure's offset and gamma, a colourised Hue/Saturation, a range's
 // own edges, a curve of more than sixteen points, a negative Vibrance and
 // Colour Balance's preserve luminosity are not carried. Every other kind is
 // left out, and the upgrade is an arm here for each.
-fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
+fn adjustment(record: &PsdLayer) -> Option<(Vec<EffectInstance>, bool)> {
     let word = |path: &str| record.number(path);
     let colour = |[r, g, b]: [f32; 3]| {
         EffectValue::Colour([r, g, b, 1.0].map(|c| Property::fixed(f64::from(c))))
@@ -314,8 +320,11 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
     // The rows that are not plain numbers, and a second effect to carry.
     let mut others: Vec<(&str, EffectValue)> = Vec::new();
     let mut second = None;
+    // Whether the effect gives Photoshop's picture with these numbers.
+    let mut same = false;
     let (vibrance, saturation) = (word("vibA/vibrance"), word("vibA/Strt"));
     let name = if word("nvrt").is_some() {
+        same = true;
         "invert"
     } else if let Some(levels) = word("post/0") {
         rows.push(("levels".into(), levels));
@@ -332,6 +341,7 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
         "brightness"
     } else if let Some(stops) = word("expA/0") {
         rows.push(("stops".into(), stops));
+        same = word("expA/1") == Some(0.0) && word("expA/2") == Some(1.0);
         "exposure"
     } else if word("hue2/0") == Some(2.0) {
         // Colourise throws the picture's own hue away, which no row here does.
@@ -349,6 +359,9 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
                 rows.push((format!("{range}_{row}"), word(&format!("hue2/{}", at + i))?));
             }
         }
+        same = rows
+            .iter()
+            .all(|(id, value)| *value == 0.0 || id == "master_hue" || id == "master_lightness");
         "hue_saturation"
     } else if word("levl/0") == Some(2.0) {
         // Five numbers a channel: the four levels from 0 to 255, then gamma
@@ -366,6 +379,11 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
                 rows.push((format!("{channel}_{row}"), stored / full));
             }
         }
+        // Photoshop stops a value at the output white, and Lumit lets one past
+        // the input white carry on.
+        same = rows
+            .iter()
+            .all(|(id, value)| !id.ends_with("out_white") || *value == 1.0);
         "levels"
     } else if word("curv/0") == Some(1.0) {
         // A bit for each curve that is there: composite, red, green, blue.
@@ -397,6 +415,7 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
             at += 1 + count * 2;
             others.push((channel, EffectValue::Curve(points)));
         }
+        same = true;
         "curves"
     } else if word("blwh/Rd  ").is_some() {
         let weights = [
@@ -420,6 +439,7 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
             _ if tint => return None,
             _ => {}
         }
+        same = !tint;
         "black_and_white"
     } else if vibrance.is_some() || saturation.is_some() {
         // Vibrancy only lifts, so a negative Vibrance has no row to land on.
@@ -498,7 +518,30 @@ fn adjustment(record: &PsdLayer) -> Option<Vec<EffectInstance>> {
             param.value = value;
         }
     }
-    Some(effects)
+    // Lumit lays an adjustment over the picture in linear light and leaves
+    // its blend mode out, and Photoshop fades it in the encoded picture. So a
+    // grade between two sRGB curves takes the layer's opacity as its Mix, and
+    // exposure only gives Photoshop's picture at full opacity.
+    let encoded = name != "exposure";
+    let full = record.opacity == 255 && record.fill_opacity == 255;
+    let same = same && record.blend == *b"norm" && (encoded || full);
+    if same && encoded {
+        let opacity = f64::from(record.opacity) * f64::from(record.fill_opacity) / 650.25;
+        for param in effects.iter_mut().flat_map(|e| &mut e.params) {
+            if param.id == "mix" {
+                param.value = EffectValue::Float(Property::fixed(opacity));
+            }
+        }
+        let curve = |direction: u32| {
+            let mut curve = lumit_core::fx::builtins::instantiate("srgb_curve")?;
+            let param = curve.params.iter_mut().find(|p| p.id == "direction")?;
+            param.value = EffectValue::Choice(direction);
+            Some(curve)
+        };
+        effects.insert(0, curve(0)?);
+        effects.push(curve(1)?);
+    }
+    Some((effects, same))
 }
 
 /// A layered file that imports as a composition.
@@ -760,7 +803,7 @@ fn psd_ops(
                 close(&mut scopes, &mut items, comp_size, rate, out);
             }
             Section::Layer if !record.has_pixels() => {
-                let Some(effects) = adjustment(record) else {
+                let Some((effects, same)) = adjustment(record) else {
                     left_out += 1;
                     continue;
                 };
@@ -772,11 +815,15 @@ fn psd_ops(
                 );
                 dress(&mut layer, record);
                 layer.effects = effects;
-                // It arrives switched off. Photoshop adjusts the encoded
-                // picture and Lumit works in linear light, so the same numbers
-                // give a different picture, and the real file drew further
-                // from Photoshop's with them on than with them left out.
-                layer.switches.visible = false;
+                // One that gives Photoshop's picture arrives as it was, with
+                // its opacity already in its effects. Any other arrives
+                // switched off, since the same numbers give a different
+                // picture.
+                if same {
+                    layer.transform.opacity = Property::fixed(100.0);
+                } else {
+                    layer.switches.visible = false;
+                }
                 if !record.clipped && !record.has_mask() {
                     scope.place(layer);
                     continue;

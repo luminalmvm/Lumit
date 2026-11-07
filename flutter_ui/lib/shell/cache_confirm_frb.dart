@@ -22,7 +22,7 @@ import '../widgets/controls.dart';
 /// question about deleting nothing is just noise).
 Future<bool> confirmClearDiskCache(BuildContext context) async {
   final before = diskCacheStats();
-  if (before.entries == BigInt.zero) return false;
+  if (before.entries == 0) return false;
 
   final confirmed = await showLumitModal<bool>(
     context: context,

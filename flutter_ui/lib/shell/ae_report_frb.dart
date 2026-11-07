@@ -149,7 +149,7 @@ class _ReportBodyState extends State<_ReportBody> {
           ),
           const SizedBox(height: 10),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerEnd,
             child: HouseButton(
               primary: true,
               autofocus: true,
@@ -188,7 +188,7 @@ class _ReportBodyState extends State<_ReportBody> {
     );
     if (group.places.length == 1) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 0, 4),
+        padding: const EdgeInsetsDirectional.fromSTEB(20, 4, 0, 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [Text(group.said, style: t.body), place],
@@ -231,7 +231,7 @@ class _ReportBodyState extends State<_ReportBody> {
         ),
         if (open)
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 0, 6),
+            padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 0, 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

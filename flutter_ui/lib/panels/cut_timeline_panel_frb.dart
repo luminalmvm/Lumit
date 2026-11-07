@@ -28,6 +28,10 @@ import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/solid.dart';
+import 'package:desktop_drop/desktop_drop.dart';
+import '../shell/run_script_frb.dart' show isScriptFile;
+import 'project_panel_frb.dart' show importDroppedPaths;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeAudioStreams;
 import 'package:provider/provider.dart';
@@ -83,7 +87,7 @@ import 'timeline_outline_frb.dart' show GutterScrollbar;
 import 'timeline_razor.dart' show RazorOverlay;
 import 'timeline_snap.dart';
 import 'timeline_toolbar_frb.dart' show timelineChromeControl;
-import 'volume_band_frb.dart' show BandKind, VolumeBand, volumeBandFloorDb;
+import 'volume_band_frb.dart' show BandKind, VolumeBand, VolumeBandState, volumeBandFloorDb;
 import 'waveform_frb.dart';
 
 /// How wide the header column stands: a name and three switches.
@@ -188,7 +192,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// without a walk.
   List<CutTrack> _tracks = const [];
   Map<String, int> _trackOfClip = const {};
-  BigInt? _tracksRevision;
+  int? _tracksRevision;
   CompositionReference? _tracksComp;
 
   /// Whether the tracks stand in stack order with no dividing line, as
@@ -245,6 +249,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   _Press? _press;
   final ValueNotifier<CutDrag?> _drag = ValueNotifier<CutDrag?>(null);
   final ValueNotifier<SnapTarget?> _caught = ValueNotifier<SnapTarget?>(null);
+
+  /// Where something dragged from the Project panel would land, drawn as a
+  /// clip that is not there yet. The drop puts it down exactly there.
+  final ValueNotifier<CutLanding?> _landing = ValueNotifier<CutLanding?>(null);
   final ValueNotifier<({Offset at, int row, String text})?> _hint =
       ValueNotifier<({Offset at, int row, String text})?>(null);
   final ValueNotifier<CutHover?> _hover = ValueNotifier<CutHover?>(null);
@@ -307,7 +315,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// The work area, held between document revisions.
   ({int start, int end, bool whole})? _workArea;
-  BigInt? _workRevision;
+  int? _workRevision;
   CompositionReference? _workComp;
   final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
       ValueNotifier<({int start, int end, bool whole})?>(null);
@@ -388,6 +396,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _hLane.dispose();
     _drag.dispose();
     _caught.dispose();
+    _landing.dispose();
     _hint.dispose();
     _hover.dispose();
     _gainLive.dispose();
@@ -1141,7 +1150,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _openAsComposition(ui, comp, clip);
       return;
     }
-    if (ui.sourceView == null) return;
+    if (ui.sourceView == null || clip.sourceIsSolid) return;
     final at = ui.playheadFrame.value;
     final start = clip.startFrame.toInt();
     final inside = at >= start && at < clip.endFrame.toInt();
@@ -1481,7 +1490,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     for (final track in _tracks) {
       if (track.kind != CutTrackKind.picture) continue;
       for (final clip in track.clips) {
-        if (clip.sourceIsComp) continue;
+        if (clip.sourceIsComp || clip.sourceIsSolid) continue;
         final id = clip.id.toString();
         switch (_pictured[id]) {
           case false:
@@ -1573,10 +1582,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   void _makeGlyph(Color colour) {
     if (_glyphColour == colour) return;
     _glyphColour = colour;
+    final t = ThemeScope.of(context).theme;
+    final svg = IconStyle.resolve(LumitIcons.composition, t);
+    final own = IconStyle.keepsColours(svg);
     vg
         .loadPicture(
-            SvgStringLoader(
-                IconStyle.resolve(LumitIcons.composition, ThemeScope.of(context).theme),
+            SvgStringLoader(own ? IconStyle.themed(svg, t) : svg,
                 theme: SvgTheme(currentColor: colour)),
             null)
         .then((info) {
@@ -1588,7 +1599,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       // with the new one before the old is let go: a lane repainting with a
       // disposed picture throws.
       final old = _compGlyph;
-      setState(() => _compGlyph = (picture: info.picture, size: info.size));
+      // A person's own one-colour file not drawn in `currentColor` is
+      // tinted as it is painted.
+      setState(() => _compGlyph = (
+            picture: info.picture,
+            size: info.size,
+            tint: own || svg.contains('currentColor') ? null : colour,
+          ));
       WidgetsBinding.instance
           .addPostFrameCallback((_) => old?.picture.dispose());
     });
@@ -1673,7 +1690,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           final heard = track.entry.info.switches.audible &&
               clip.audible &&
               !clip.retimed &&
-              !clip.sourceIsComp;
+              !clip.sourceIsComp &&
+              !clip.sourceIsSolid;
           if (!heard) continue;
         }
         live.add(id);
@@ -1763,7 +1781,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// read through its speed, so a ramp shows in its pictures.
   void _wantFilm(CutTrack track, BridgeClip clip, TimelineAxis axis,
       double fps, double viewLeft, double viewRight, Set<String> wanted) {
-    if (clip.sourceIsComp || fps <= 0 || axis.perFrame <= 0) return;
+    if (clip.sourceIsComp || clip.sourceIsSolid || fps <= 0) return;
+    if (axis.perFrame <= 0) return;
     final start = clip.startFrame.toInt();
     final length = clip.endFrame.toInt() - start;
     final (left, _) = cutClipBox(axis, start, clip.endFrame.toInt());
@@ -1998,6 +2017,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// arena from one.
   void _down(PointerDownEvent event, LumitUiState ui) {
     if (_press != null) return;
+    // An envelope took this press.
+    if (VolumeBandState.claimed == event.pointer) return;
     _headPicked = false;
     final at = event.localPosition;
     final index = cutTrackAt(_tracks, at.dy, _tops);
@@ -2372,7 +2393,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       if (end <= start) return;
       try {
         comp.renderFrameWithClipSpan(
-          frame: BigInt.from(max(0, head ? start : end - 1)),
+          frame: max(0, head ? start : end - 1),
           scale: 1.0,
           layer: _tracks[row].entry.layer,
           clip: clip.id,
@@ -3278,14 +3299,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               Expanded(child: Text(l10n.menuKeepPitch)),
             ]),
           ),
-        MenuRow(
-          key: const ValueKey('ctl-menu-open-comp'),
-          onPressed: () {
-            close(null);
-            _openAsComposition(ui, comp, clip);
-          },
-          child: Text(l10n.cutOpenAsComposition),
-        ),
+        // A solid has nothing inside it to open.
+        if (!clip.sourceIsSolid)
+          MenuRow(
+            key: const ValueKey('ctl-menu-open-comp'),
+            onPressed: () {
+              close(null);
+              _openAsComposition(ui, comp, clip);
+            },
+            child: Text(l10n.cutOpenAsComposition),
+          ),
         // A picture clip's own blend mode, or its track's.
         if (track.kind == CutTrackKind.picture)
           SubmenuRow(
@@ -3425,7 +3448,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         // brought back from the clip it was taken onto.
         if (track.kind == CutTrackKind.picture &&
             !clip.retimed &&
-            !clip.sourceIsComp) ...[
+            !clip.sourceIsComp &&
+            !clip.sourceIsSolid) ...[
           if (heard && clip.audible)
             MenuRow(
               key: const ValueKey('ctl-menu-detach-audio'),
@@ -3817,12 +3841,127 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     return box is RenderBox ? box.globalToLocal(global) : null;
   }
 
+  /// Where [data] held at [global] would land: on the track under the
+  /// pointer when it can go there and on a new one below the rest when it
+  /// cannot, at the frame under the pointer, its start or its end caught by
+  /// what a clip move catches. Null for anything else.
+  CutLanding? _landingOf(Object? data, Offset global) {
+    final ui = _ui;
+    final at = _pointOnLanes(global);
+    if (ui == null || at == null) return null;
+    final fps = ui.model.fps;
+    // A still or a file not yet probed has no length of its own, so it is
+    // drawn as long as a still lands.
+    final still = (5 * fps).round();
+    int footageFrames(FootageReference f) {
+      final facts = ui.itemFacts(f);
+      final frames = facts == null ? 0 : LumitUiState.framesOf(facts);
+      return frames > 1 ? frames : still;
+    }
+
+    final (length, label, picture) = switch (data) {
+      FootageDragData(:final footage, :final label) => (
+          footage.fold<int>(0, (n, f) => n + footageFrames(f)),
+          label,
+          false,
+        ),
+      CompDragData(:final comp, :final label) => (
+          comp.durationFrames().toInt(),
+          label,
+          true,
+        ),
+      SolidDragData(:final label) => (still, label, true),
+      // Files from outside: where they land, with no length yet.
+      _Files() => (0, '', false),
+      _ => (-1, '', false),
+    };
+    if (length < 0) return null;
+    final index = cutTrackAt(_tracks, at.dy, _tops);
+    final kind = index == null ? null : _tracks[index].kind;
+    final fits = picture
+        ? kind == CutTrackKind.picture
+        : kind != null &&
+            kind != CutTrackKind.plain &&
+            kind != CutTrackKind.layerSound;
+    final axis = _laneAxis;
+    final snapped = snappedDelta(
+      rawFrames: axis.frameAtExact(at.dx),
+      perFrame: axis.perFrame,
+      sources: [0, length.toDouble()],
+      targets: _snapTargets,
+      magnet: _magnet,
+    );
+    return (
+      track: fits ? index : null,
+      frame: max(0, snapped.delta),
+      length: length,
+      label: label,
+      caught: snapped.caught,
+    );
+  }
+
+  /// Whether files from outside Lumit are over the lanes.
+  bool _filesOver = false;
+
+  /// Files dropped from outside Lumit: imported, then put down at [global]
+  /// as footage dragged from the Project panel is.
+  Future<void> _dropFiles(
+      CompositionReference comp, List<String> paths, Offset global,
+      {int? atFrame}) async {
+    final state = Provider.of<LumitState>(context, listen: false);
+    final project = state.project;
+    if (project == null) return;
+    Iterable<FootageReference> footage() => [
+          for (final item in project.getItems())
+            if (item case ItemReference_Footage(:final field0)) field0,
+        ];
+    final known = {for (final f in footage()) f.internalid};
+    final imported = await importDroppedPaths(
+        state, paths.where((path) => !isScriptFile(path)).toList());
+    if (!imported || !mounted) return;
+    final fresh = [
+      for (final f in footage())
+        if (!known.contains(f.internalid)) f,
+    ];
+    if (fresh.isNotEmpty) {
+      await _dropFootage(comp, fresh, global, atFrame: atFrame);
+    }
+  }
+
+  /// Files from outside Lumit can be let go anywhere on the lanes too.
+  /// Files from outside Lumit have no length until they are read, so they
+  /// are shown as the point they will land at rather than as a clip.
+  Widget _filesTarget(CompositionReference comp, Widget child) => DropTarget(
+        onDragEntered: (_) => setState(() => _filesOver = true),
+        onDragUpdated: (details) {
+          final landing = _landingOf(const _Files(), details.globalPosition);
+          _landing.value = landing;
+          _caught.value = landing?.caught;
+        },
+        onDragExited: (_) {
+          setState(() => _filesOver = false);
+          _landing.value = null;
+          _caught.value = null;
+        },
+        onDragDone: (details) {
+          final frame =
+              _landingOf(const _Files(), details.globalPosition)?.frame;
+          setState(() => _filesOver = false);
+          _landing.value = null;
+          _caught.value = null;
+          _dropFiles(comp, [for (final f in details.files) f.path],
+              details.globalPosition,
+              atFrame: frame);
+        },
+        child: child,
+      );
+
   /// Footage let go on the table: the whole of it put down on the track it
   /// landed on at the frame under the pointer, overwriting what is there, or
   /// on a new track when it landed on none. Each item is one Cut call; the
   /// first refusal is said and stops the rest.
   Future<void> _dropFootage(CompositionReference comp,
-      List<FootageReference> footage, Offset global) async {
+      List<FootageReference> footage, Offset global, {int? atFrame}) async {
     final ui = _ui;
     if (ui == null) return;
     final at = _pointOnLanes(global);
@@ -3867,7 +4006,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       if (facts != null) drops.add((f, facts));
     }
     if (!mounted) return;
-    var frame = at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
+    var frame = atFrame ??
+        (at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx));
     var onto = across ? null : target;
     var result = BridgeCutResult.nothing;
     var placed = false;
@@ -3920,7 +4060,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// A comp dropped at [global] goes down whole as one clip, on the picture
   /// track under the pointer or a new one.
   void _dropComp(
-      CompositionReference comp, CompositionReference dropped, Offset global) {
+      CompositionReference comp, CompositionReference dropped, Offset global,
+      {int? atFrame}) {
     final ui = _ui;
     if (ui == null) return;
     final at = _pointOnLanes(global);
@@ -3928,10 +4069,70 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final track = index == null ? null : _tracks[index];
     final target =
         track?.kind == CutTrackKind.picture ? track!.entry.layer : null;
-    final frame =
-        at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx);
+    final frame = atFrame ??
+        (at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx));
     _afterCut(_cut(() =>
         comp.cutPlaceComp(target: target, comp: dropped, atFrame: frame)));
+  }
+
+  /// A solid dropped at [global] goes down as one clip, as long as a still,
+  /// on the picture track under the pointer or a new one.
+  void _dropSolid(
+      CompositionReference comp, SolidReference solid, Offset global,
+      {int? atFrame}) {
+    final ui = _ui;
+    if (ui == null) return;
+    final at = _pointOnLanes(global);
+    final index = at == null ? null : cutTrackAt(_tracks, at.dy, _tops);
+    final track = index == null ? null : _tracks[index];
+    final target =
+        track?.kind == CutTrackKind.picture ? track!.entry.layer : null;
+    final frame = atFrame ??
+        (at == null ? ui.playheadFrame.value : _laneAxis.frameAt(at.dx));
+    _afterCut(_cut(() =>
+        comp.cutPlaceSolid(target: target, solid: solid, atFrame: frame)));
+  }
+
+  /// [landing] drawn as the clip it will put down: on its track, or a
+  /// track's height under the last one when it makes a new track.
+  Widget _landingBox(LumitTheme t, TimelineAxis axis, CutLanding landing) {
+    final track = landing.track;
+    final top = track == null ? _tops.last : _tops[track];
+    final height = track == null
+        ? _trackHeight
+        : _tops[track + 1] - _tops[track];
+    if (landing.length == 0) {
+      return Positioned(
+        key: const ValueKey<String>('ctl-landing'),
+        left: axis.xOf(landing.frame.toDouble()) - 1,
+        top: top + 1,
+        width: 2,
+        height: max(2.0, height - 2),
+        child: IgnorePointer(child: ColoredBox(color: t.accent)),
+      );
+    }
+    return Positioned(
+      key: const ValueKey<String>('ctl-landing'),
+      left: axis.xOf(landing.frame.toDouble()),
+      top: top + 1,
+      width: max(2.0, landing.length * axis.perFrame),
+      height: max(2.0, height - 2),
+      child: IgnorePointer(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          alignment: Alignment.centerLeft,
+          decoration: BoxDecoration(
+            color: t.accent.withValues(alpha: 0.16),
+            border: Border.all(color: t.accent, width: 1.5),
+            borderRadius: BorderRadius.circular(clipRadius(t)),
+          ),
+          child: Text(landing.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.small.copyWith(color: t.textPrimary)),
+        ),
+      ),
+    );
   }
 
   /// The clip under [global], with its track, or null on empty ground.
@@ -4021,23 +4222,40 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ),
         _strip(t, ui),
         Expanded(
-          child: DragTarget<Object>(
+          child: _filesTarget(comp, DragTarget<Object>(
             onWillAcceptWithDetails: (details) =>
                 details.data is FootageDragData ||
                 details.data is CompDragData ||
+                details.data is SolidDragData ||
                 details.data is EffectDragData,
-            // An effect in hand rings the clip it is over.
+            // An effect in hand rings the clip it is over, and anything
+            // else shows where it will land.
             onMove: (details) {
-              if (details.data is! EffectDragData) return;
+              if (details.data is! EffectDragData) {
+                final landing = _landingOf(details.data, details.offset);
+                _landing.value = landing;
+                _caught.value = landing?.caught;
+                return;
+              }
               _dropOn.value = _clipAt(details.offset)?.clip.id.toString();
             },
-            onLeave: (_) => _dropOn.value = null,
+            onLeave: (_) {
+              _dropOn.value = null;
+              _landing.value = null;
+              _caught.value = null;
+            },
             onAcceptWithDetails: (details) async {
+              final frame = _landingOf(details.data, details.offset)?.frame;
+              _landing.value = null;
+              _caught.value = null;
               switch (details.data) {
                 case FootageDragData(:final footage):
-                  await _dropFootage(comp, footage, details.offset);
+                  await _dropFootage(comp, footage, details.offset,
+                      atFrame: frame);
                 case CompDragData(comp: final dropped):
-                  _dropComp(comp, dropped, details.offset);
+                  _dropComp(comp, dropped, details.offset, atFrame: frame);
+                case SolidDragData(:final solid):
+                  _dropSolid(comp, solid, details.offset, atFrame: frame);
                 case final EffectDragData effect:
                   await _dropEffect(effect, details.offset);
               }
@@ -4052,8 +4270,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               // An effect lands on one clip, and the clip is.
               foregroundDecoration: BoxDecoration(
                   border: Border.all(
-                      color: candidate.any((data) =>
-                              data is FootageDragData || data is CompDragData)
+                      color: _filesOver ||
+                              candidate.any((data) =>
+                                  data is FootageDragData ||
+                                  data is CompDragData ||
+                                  data is SolidDragData)
                           ? t.accent
                           : t.accent.withValues(alpha: 0),
                       width: 2)),
@@ -4125,7 +4346,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 },
               ),
             ),
-          ),
+          )),
         ),
       ],
     );
@@ -4458,7 +4679,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ui.model.heldLayers.indexWhere((e) => e.layer.internallayerId == id);
     if (index < 0) return;
     try {
-      _tracks[from].entry.layer.reorder(newIndex: BigInt.from(index));
+      _tracks[from].entry.layer.reorder(newIndex: index);
     } catch (_) {
       // A locked layer refuses, and quietly.
     }
@@ -4822,7 +5043,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       },
       onTapped: _speedTaps.tap,
       onPreview: (clip, keys) => comp.renderFrameWithClipRetime(
-        frame: BigInt.from(ui.playheadFrame.value),
+        frame: ui.playheadFrame.value,
         scale: 1.0,
         layer: track.entry.layer,
         clip: clip.id,
@@ -5017,6 +5238,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                     : Positioned.fromRect(
                                         rect: rect, child: const MarqueeBox()),
                               ),
+                              ValueListenableBuilder<CutLanding?>(
+                                valueListenable: _landing,
+                                builder: (context, landing, _) =>
+                                    landing == null
+                                        ? const SizedBox.shrink()
+                                        : _landingBox(t, axis, landing),
+                              ),
                               // What the drag landed on, marked while it
                               // holds it: the hairline the Timeline draws
                               // through a caught target, down every track.
@@ -5199,4 +5427,9 @@ class _SeamsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SeamsPainter old) =>
       old.tops != tops || old.colour != colour || old.scrolled != scrolled;
+}
+
+/// Files dragged in from outside Lumit, as `_landingOf` reads them.
+class _Files {
+  const _Files();
 }

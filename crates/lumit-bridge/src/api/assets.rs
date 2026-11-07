@@ -17,6 +17,8 @@ use uuid::Uuid;
 
 use crate::api::{effect::BridgeScalar, layer::LayerReference, solid::SolidReference, BridgeError};
 
+pub(crate) mod animators;
+
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
 #[frb(non_opaque)]
@@ -213,6 +215,9 @@ pub struct BridgeTextAnimator {
     pub position_x: BridgeScalar,
     pub position_y: BridgeScalar,
     pub rotation: BridgeScalar,
+    pub position_z: BridgeScalar,
+    pub rotation_x: BridgeScalar,
+    pub rotation_y: BridgeScalar,
     pub scale_x: BridgeScalar,
     pub scale_y: BridgeScalar,
     pub opacity: BridgeScalar,
@@ -325,7 +330,7 @@ impl LayerReference {
             animators: document
                 .animators
                 .iter()
-                .map(|a| read_animator(a, offset))
+                .map(|a| animators::read_animator(a, offset))
                 .collect(),
             style: read_style(&document.style),
             paragraph: read_paragraph(&document.paragraph),
@@ -801,7 +806,7 @@ pub(crate) fn text_document_of(
         animators: document
             .animators
             .into_iter()
-            .map(|a| animator_from(a, offset))
+            .map(|a| animators::animator_from(a, offset))
             .collect::<Result<Vec<_>, _>>()?,
         style: Box::new(style_of(document.style)),
         paragraph: paragraph_of(document.paragraph),
@@ -960,80 +965,6 @@ fn paragraph_of(paragraph: BridgeParagraphStyle) -> lumit_core::text::ParagraphS
         space_after: paragraph.space_after,
         extra: serde_json::Map::new(),
     }
-}
-
-/// One animator on its way out to the panel, its keys on the comp's clock.
-#[frb(ignore)]
-pub(crate) fn read_animator(
-    animator: &lumit_core::text::TextAnimator,
-    offset: lumit_core::time::Rational,
-) -> BridgeTextAnimator {
-    let read = |p| BridgeScalar::read_at(p, offset);
-    BridgeTextAnimator {
-        name: animator.name.clone(),
-        selector: BridgeRangeSelector {
-            start: read(&animator.selector.start),
-            end: read(&animator.selector.end),
-            offset: read(&animator.selector.offset),
-            basis: match animator.selector.basis {
-                lumit_core::text::SelectorBasis::Characters => BridgeSelectorBasis::Characters,
-                lumit_core::text::SelectorBasis::Words => BridgeSelectorBasis::Words,
-            },
-            shape: match animator.selector.shape {
-                lumit_core::text::SelectorShape::Square => BridgeSelectorShape::Square,
-                lumit_core::text::SelectorShape::Ramp => BridgeSelectorShape::Ramp,
-            },
-        },
-        position_x: read(&animator.position_x),
-        position_y: read(&animator.position_y),
-        rotation: read(&animator.rotation),
-        scale_x: read(&animator.scale_x),
-        scale_y: read(&animator.scale_y),
-        opacity: read(&animator.opacity),
-        fill_r: read(&animator.fill_r),
-        fill_g: read(&animator.fill_g),
-        fill_b: read(&animator.fill_b),
-    }
-}
-
-/// And back: the panel's animator returned to the layer's own clock.
-#[frb(ignore)]
-fn animator_from(
-    animator: BridgeTextAnimator,
-    offset: lumit_core::time::Rational,
-) -> Result<lumit_core::text::TextAnimator, BridgeError> {
-    let write = |s: &BridgeScalar| -> Result<lumit_core::anim::Property, BridgeError> {
-        Ok(lumit_core::anim::Property {
-            animation: s.animation_at(offset)?,
-            extra: serde_json::Map::new(),
-        })
-    };
-    Ok(lumit_core::text::TextAnimator {
-        name: animator.name,
-        selector: lumit_core::text::RangeSelector {
-            start: write(&animator.selector.start)?,
-            end: write(&animator.selector.end)?,
-            offset: write(&animator.selector.offset)?,
-            basis: match animator.selector.basis {
-                BridgeSelectorBasis::Characters => lumit_core::text::SelectorBasis::Characters,
-                BridgeSelectorBasis::Words => lumit_core::text::SelectorBasis::Words,
-            },
-            shape: match animator.selector.shape {
-                BridgeSelectorShape::Square => lumit_core::text::SelectorShape::Square,
-                BridgeSelectorShape::Ramp => lumit_core::text::SelectorShape::Ramp,
-            },
-        },
-        position_x: write(&animator.position_x)?,
-        position_y: write(&animator.position_y)?,
-        rotation: write(&animator.rotation)?,
-        scale_x: write(&animator.scale_x)?,
-        scale_y: write(&animator.scale_y)?,
-        opacity: write(&animator.opacity)?,
-        fill_r: write(&animator.fill_r)?,
-        fill_g: write(&animator.fill_g)?,
-        fill_b: write(&animator.fill_b)?,
-        extra: serde_json::Map::new(),
-    })
 }
 
 /// Slide an animatable number by `delta` without changing its shape — every

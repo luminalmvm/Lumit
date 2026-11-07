@@ -24,7 +24,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -36,8 +36,6 @@ import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
-import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
-import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../icons/lumit_icon.dart' as glyph;
@@ -48,6 +46,7 @@ import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
+import '../panels/viewer_shape3d.dart' show addShape3d, shape3dTools;
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
 import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
@@ -471,7 +470,9 @@ class _CommandBox extends StatelessWidget {
                 ),
               ),
               if (chord case final chord?)
-                Text(chord, style: t.kicker.copyWith(color: t.textDisabled)),
+                Text(chord,
+                    textDirection: TextDirection.ltr,
+                    style: t.kicker.copyWith(color: t.textDisabled)),
             ],
           ),
           ),
@@ -609,7 +610,7 @@ class LumitMenuBarFrb extends StatelessWidget {
             if (windowFrameDrawn)
               const WindowDragArea(
                 child: Padding(
-                  padding: EdgeInsets.only(left: 10, right: 4),
+                  padding: EdgeInsetsDirectional.only(start: 10, end: 4),
                   child: Center(widthFactor: 1, child: LumitMark(size: 16)),
                 ),
               ),
@@ -766,7 +767,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       ));
     }
     // Every Settings page and every row on one: Enter opens Settings there.
-    for (final page in SettingsPage.values) {
+    for (final page in SettingsPage.shown) {
       final path = '${l10n.settingsTitle}$palettePathSeparator${page.label}';
       commands.add(PaletteCommand(
         label: path,
@@ -978,10 +979,11 @@ List<MenuSection> lumitMenus(
                 for (final path in ui.workspace.recentProjects)
                   MenuEntry(projectDisplayName(path),
                       () => app.openProject(path),
-                      tip: path),
+                      tip: kIsWeb ? null : path),
             ]),
-            MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
-                needsPro: needsPro()),
+            if (!kIsWeb)
+              MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
+                  needsPro: needsPro()),
             MenuEntry.divider(),
             // Closing a project puts an empty one in its place, because the shell
             // always has a document: the engine's `close` is what `newProject`
@@ -1008,14 +1010,15 @@ List<MenuSection> lumitMenus(
                 action: 'file.save.as'),
             // Save, and name the version the save makes. Greyed for a
             // project whose saves are not sent, which has no version to name.
-            MenuEntry(
-                l10n.backupMenuSaveVersion,
-                project == null || (ui.account.pro && !ui.backup.sends)
-                    ? null
-                    : () => saveVersionFrb(context, app, ui,
-                        picker: savePicker),
-                action: 'file.save.version',
-                needsPro: needsPro()),
+            if (!kIsWeb)
+              MenuEntry(
+                  l10n.backupMenuSaveVersion,
+                  project == null || (ui.account.pro && !ui.backup.sends)
+                      ? null
+                      : () => saveVersionFrb(context, app, ui,
+                          picker: savePicker),
+                  action: 'file.save.version',
+                  needsPro: needsPro()),
             // The footage inside the `.lum`, so the one file can be handed to
             // somebody else. Read as the menu opens: a pack is a save, and
             // nothing else tells the bar that one has happened.
@@ -1079,16 +1082,16 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
-            MenuEntry.submenu(l10n.menuScripts, _scriptRows(context, app, ui)),
-            MenuEntry.divider(),
-            // Sharing this project, joining somebody else's, and who is here.
-            MenuEntry(
-                l10n.menuSharedProject, () => showShareFrb(context, app)),
-            // Exports sent out for comments, and the comments that came back.
-            // Sending one is Pro's, and the window says so to an account
-            // without it.
-            MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context),
-                needsPro: needsPro()),
+            // Scripts, sharing this project and joining somebody else's, and
+            // exports sent out for comments. A page runs and sends nothing.
+            if (!kIsWeb) ...[
+              MenuEntry.submenu(l10n.menuScripts, scriptRows(context, app, ui)),
+              MenuEntry.divider(),
+              MenuEntry(
+                  l10n.menuSharedProject, () => showShareFrb(context, app)),
+              MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context),
+                  needsPro: needsPro()),
+            ],
             MenuEntry.divider(),
             // The project's own settings, kept apart from Settings because Settings
             // is this machine's and these travel in the `.lum`.
@@ -1103,9 +1106,10 @@ List<MenuSection> lumitMenus(
             // is the one command whose absence costs a day's work.
             MenuEntry(l10n.menuRecover,
                 projectPath == null ? null : () => _recover(context, app)),
-            MenuEntry(l10n.backupMenuHistory,
-                project == null ? null : () => showProjectHistory(context),
-                needsPro: needsPro()),
+            if (!kIsWeb)
+              MenuEntry(l10n.backupMenuHistory,
+                  project == null ? null : () => showProjectHistory(context),
+                  needsPro: needsPro()),
           ]
     ),
     (
@@ -1244,11 +1248,12 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuAddToExportQueue,
                 comp == null ? null : () => exportFrb(context),
                 action: 'export.queue.add'),
-            MenuEntry(
-                l10n.menuSendForReview,
-                comp == null
-                    ? null
-                    : () => showReviewLinks(context, send: comp)),
+            if (!kIsWeb)
+              MenuEntry(
+                  l10n.menuSendForReview,
+                  comp == null
+                      ? null
+                      : () => showReviewLinks(context, send: comp)),
             MenuEntry.divider(),
             // Comp-level markers, including the beat pass, which makes them
             // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
@@ -1308,12 +1313,24 @@ List<MenuSection> lumitMenus(
                           row: row(comp),
                           onDone: app.notifyDocumentChanged),
                   action: 'layer.new.light.point'),
+              MenuEntry.submenu(l10n.menuShape3d, [
+                for (final tool in shape3dTools)
+                  MenuEntry(tool.label,
+                      onComp((c) => addShape3d(ui, c, tool, row: row(c)))),
+              ]),
               MenuEntry(l10n.menuAdjustment,
                   onComp((c) => c.addAdjustmentLayer(row: row(c))),
                   action: 'layer.new.adjustment'),
               MenuEntry(
                   l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
                   action: 'layer.new.null'),
+              MenuEntry(
+                  l10n.menuCard,
+                  onComp((c) => ui.setSelection([
+                        c.addCardLayer(
+                            row: row(c), frame: ui.playheadFrame.value),
+                      ])),
+                  action: 'layer.new.card'),
               MenuEntry(l10n.menuSequence,
                   onComp((c) => c.addSequenceLayer(row: row(c))),
                   action: 'layer.new.sequence'),
@@ -1471,6 +1488,10 @@ List<MenuSection> lumitMenus(
             MenuEntry.divider(),
             cameraSettingsRow(context, app, ui),
             lightSettingsRow(context, app, ui),
+            modelSettingsRow(context, ui),
+            projectFromCameraRow(app, ui),
+            editInBlenderRow(ui),
+            modelLayersRow(app, ui),
             MenuEntry.todo(l10n.menuAutoOutline),
             // Pre-compose… is live only with a comp open and something selected in
             // it — the menu says so by greying out rather than by failing.
@@ -1825,19 +1846,20 @@ List<MenuSection> lumitMenus(
                   action: panelToggleAction(panel),
                   checked: () => panelVisible(ui.split, panel),
                 ),
-            MenuEntry.submenu(l10n.menuExtensions, [
-              for (final extension in ui.extensions.panels)
-                MenuEntry.toggle(
-                  extension.name,
-                  () => ui.toggleExtension(extension.id),
-                  checked: () => ui.extensionShown(extension.id),
-                ),
-              if (ui.extensions.panels.isNotEmpty) MenuEntry.divider(),
-              MenuEntry(
-                  l10n.menuManageExtensions,
-                  () => showSettingsWindowFrb(context,
-                      initialPage: SettingsPage.addons)),
-            ]),
+            if (!kIsWeb)
+              MenuEntry.submenu(l10n.menuExtensions, [
+                for (final extension in ui.extensions.panels)
+                  MenuEntry.toggle(
+                    extension.name,
+                    () => ui.toggleExtension(extension.id),
+                    checked: () => ui.extensionShown(extension.id),
+                  ),
+                if (ui.extensions.panels.isNotEmpty) MenuEntry.divider(),
+                MenuEntry(
+                    l10n.menuManageExtensions,
+                    () => showSettingsWindowFrb(context,
+                        initialPage: SettingsPage.addons)),
+              ]),
             MenuEntry.divider(),
             // Another Viewer panel, beside the one being worked in. The Viewer is
             // the one panel that can be in the arrangement more than once
@@ -1857,11 +1879,14 @@ List<MenuSection> lumitMenus(
       title: l10n.menuHelp,
       items: () => [
             MenuEntry(l10n.menuAboutLumit, () => showAboutWindowFrb(context)),
-            MenuEntry(l10n.menuLumitPro, () => showProWindow(context)),
-            MenuEntry.live(
-              ui.updates,
-              () => updateMenuEntry(context, app, ui, savePicker: savePicker),
-            ),
+            // A page has no account to buy Pro for and is always the newest.
+            if (!kIsWeb) ...[
+              MenuEntry(l10n.menuLumitPro, () => showProWindow(context)),
+              MenuEntry.live(
+                ui.updates,
+                () => updateMenuEntry(context, app, ui, savePicker: savePicker),
+              ),
+            ],
             MenuEntry.divider(),
             // The documentation, in whatever the user reads the web with. Both are
             // pages on docs.lumitlab.com rather than one of them being the
@@ -2053,6 +2078,8 @@ void insertEmptyLayer(
       comp.addSequenceLayer(row: row);
     case 'layer.new.adjustment':
       comp.addAdjustmentLayer(row: row);
+    case 'layer.new.bus':
+      comp.addBusLayer(row: row ?? ui.model.layers.length);
   }
 }
 
@@ -2065,6 +2092,7 @@ Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
   final t = ThemeScope.of(context).theme;
   final rows = [
     ('layer.new.audio', l10n.insertAudioLayer),
+    if (!picture) ('layer.new.bus', l10n.insertBus),
     if (picture) ...[
       ('layer.new.sequence', l10n.insertVideoLayer),
       ('layer.new.adjustment', l10n.insertAdjustmentLayer),
@@ -2087,9 +2115,11 @@ Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
             Expanded(child: Text(label)),
             if (ui.keymap.chordFor(action) case final chord?)
               Padding(
-                padding: const EdgeInsets.only(left: 16),
+                padding: const EdgeInsetsDirectional.only(start: 16),
                 child:
-                    Text(chord, style: t.small.copyWith(color: t.textMuted)),
+                    Text(chord,
+                        textDirection: TextDirection.ltr,
+                        style: t.small.copyWith(color: t.textMuted)),
               ),
           ]),
         ),
@@ -2163,54 +2193,6 @@ void togglePanel(LumitUiState ui, Panel panel) {
   ui.workspace.touch();
 }
 
-/// File ▸ Scripts: each script in the Scripts folder, a submenu for each
-/// folder inside it, then Run script… and the folder itself. Read from disk
-/// as the menu opens.
-List<MenuEntry> _scriptRows(
-    BuildContext context, LumitState app, LumitUiState ui) {
-  final folder = scriptsFolderIn(ui.workspace.scriptsFolder);
-  var scripts = const <String>[];
-  try {
-    if (folder != null) scripts = listScripts(folder: folder);
-  } catch (_) {}
-  VoidCallback? run(String path) => app.project == null
-      ? null
-      : () => runScriptFrb(context, app, ui,
-          path: '$folder${Platform.pathSeparator}'
-              '${path.replaceAll('/', Platform.pathSeparator)}');
-
-  // A folder's scripts come together in the list, so each run of paths
-  // under one name is that folder's submenu.
-  List<MenuEntry> rows(List<String> paths, String under) {
-    final out = <MenuEntry>[];
-    for (var i = 0; i < paths.length;) {
-      final slash = paths[i].indexOf('/');
-      if (slash < 0) {
-        out.add(MenuEntry(paths[i], run('$under${paths[i]}')));
-        i++;
-        continue;
-      }
-      final name = paths[i].substring(0, slash + 1);
-      final inside = <String>[];
-      for (; i < paths.length && paths[i].startsWith(name); i++) {
-        inside.add(paths[i].substring(name.length));
-      }
-      out.add(MenuEntry.submenu(
-          name.substring(0, slash), rows(inside, '$under$name')));
-    }
-    return out;
-  }
-
-  return [
-    ...rows(scripts, ''),
-    if (scripts.isNotEmpty) MenuEntry.divider(),
-    MenuEntry(l10n.menuRunScript,
-        app.project == null ? null : () => runScriptFrb(context, app, ui)),
-    MenuEntry(l10n.menuOpenScriptsFolder,
-        folder == null ? null : () => revealInFolder(path: folder)),
-  ];
-}
-
 Future<void> openProjectFrb(LumitState app,
     {Future<String?> Function()? picker}) async {
   final path = await (picker ?? pickProjectToOpen)();
@@ -2224,17 +2206,21 @@ Future<void> openProjectFrb(LumitState app,
 Future<bool> importFootageFrb(BuildContext context, LumitState app,
     {Future<List<String>> Function()? picker}) async {
   final picked = await (picker ?? () => pickFootage(projects: true))();
-  bool project(String path) => path.toLowerCase().endsWith('.lum');
+  final projects = [
+    for (final path in picked)
+      if (path.toLowerCase().endsWith('.lum')) path,
+  ];
   var landed = await app.importFootagePaths([
     for (final path in picked)
-      if (!project(path)) path,
+      if (!projects.contains(path)) path,
   ]);
-  for (final path in picked.where(project)) {
+  for (final path in projects) {
     if (!context.mounted) break;
-    landed |= await bringCompositionFrom(context, path,
+    final brought = await bringCompositionFrom(context, path,
         earlierSave: false,
         subject: projectDisplayName(path),
         source: projectDisplayName(path));
+    landed = landed || brought;
   }
   return landed;
 }
@@ -2648,6 +2634,7 @@ Future<void> saveProjectFrb(
         app.postNotice(l10n.savedTo(written));
       }
     }
+    await handOver(written);
     // Save as gives the project a new path, and the session is filed by path —
     // and the title bar carries the name.
     ui.rememberSession();
@@ -3246,13 +3233,15 @@ class _MenuListState extends State<_MenuList> {
         ),
         if (item.needsPro)
           const Padding(
-            padding: EdgeInsets.only(left: 16),
+            padding: EdgeInsetsDirectional.only(start: 16),
             child: Opacity(opacity: 0.6, child: ProBadge()),
           )
         else if (shortcut != null)
           Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: Text(shortcut, style: t.small.copyWith(color: t.textMuted)),
+            padding: const EdgeInsetsDirectional.only(start: 16),
+            child: Text(shortcut,
+                textDirection: TextDirection.ltr,
+                style: t.small.copyWith(color: t.textMuted)),
           ),
       ],
     );

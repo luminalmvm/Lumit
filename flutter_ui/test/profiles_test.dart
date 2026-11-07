@@ -4,13 +4,15 @@
 // settings never move, and two machines' edits merge without one eating the
 // other.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/profiles.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A settings folder of this test's own, emptied first.
 Workspace _workspace(String name) {

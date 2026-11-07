@@ -1755,8 +1755,8 @@ extension BridgeShareAskingPatterns on BridgeShareAsking {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? idle,
     TResult Function()? waiting,
-    TResult Function(BigInt frame, BigInt total)? running,
-    TResult Function(BigInt done, BigInt total)? fetching,
+    TResult Function(int frame, int total)? running,
+    TResult Function(int done, int total)? fetching,
     TResult Function(String path)? done,
     TResult Function(String why)? failed,
     required TResult orElse(),
@@ -1797,8 +1797,8 @@ extension BridgeShareAskingPatterns on BridgeShareAsking {
   TResult when<TResult extends Object?>({
     required TResult Function() idle,
     required TResult Function() waiting,
-    required TResult Function(BigInt frame, BigInt total) running,
-    required TResult Function(BigInt done, BigInt total) fetching,
+    required TResult Function(int frame, int total) running,
+    required TResult Function(int done, int total) fetching,
     required TResult Function(String path) done,
     required TResult Function(String why) failed,
   }) {
@@ -1835,8 +1835,8 @@ extension BridgeShareAskingPatterns on BridgeShareAsking {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? idle,
     TResult? Function()? waiting,
-    TResult? Function(BigInt frame, BigInt total)? running,
-    TResult? Function(BigInt done, BigInt total)? fetching,
+    TResult? Function(int frame, int total)? running,
+    TResult? Function(int done, int total)? fetching,
     TResult? Function(String path)? done,
     TResult? Function(String why)? failed,
   }) {
@@ -1907,8 +1907,8 @@ class BridgeShareAsking_Running extends BridgeShareAsking {
   const BridgeShareAsking_Running({required this.frame, required this.total})
       : super._();
 
-  final BigInt frame;
-  final BigInt total;
+  final int frame;
+  final int total;
 
   /// Create a copy of BridgeShareAsking
   /// with the given fields replaced by the non-null parameter values.
@@ -1943,7 +1943,7 @@ abstract mixin class $BridgeShareAsking_RunningCopyWith<$Res>
           $Res Function(BridgeShareAsking_Running) _then) =
       _$BridgeShareAsking_RunningCopyWithImpl;
   @useResult
-  $Res call({BigInt frame, BigInt total});
+  $Res call({int frame, int total});
 }
 
 /// @nodoc
@@ -1965,11 +1965,11 @@ class _$BridgeShareAsking_RunningCopyWithImpl<$Res>
       frame: null == frame
           ? _self.frame
           : frame // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
       total: null == total
           ? _self.total
           : total // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
     ));
   }
 }
@@ -1980,8 +1980,8 @@ class BridgeShareAsking_Fetching extends BridgeShareAsking {
   const BridgeShareAsking_Fetching({required this.done, required this.total})
       : super._();
 
-  final BigInt done;
-  final BigInt total;
+  final int done;
+  final int total;
 
   /// Create a copy of BridgeShareAsking
   /// with the given fields replaced by the non-null parameter values.
@@ -2017,7 +2017,7 @@ abstract mixin class $BridgeShareAsking_FetchingCopyWith<$Res>
           $Res Function(BridgeShareAsking_Fetching) _then) =
       _$BridgeShareAsking_FetchingCopyWithImpl;
   @useResult
-  $Res call({BigInt done, BigInt total});
+  $Res call({int done, int total});
 }
 
 /// @nodoc
@@ -2039,11 +2039,11 @@ class _$BridgeShareAsking_FetchingCopyWithImpl<$Res>
       done: null == done
           ? _self.done
           : done // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
       total: null == total
           ? _self.total
           : total // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
     ));
   }
 }
@@ -4075,7 +4075,7 @@ extension BridgeShareFetchingPatterns on BridgeShareFetching {
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? idle,
-    TResult Function(BigInt done, BigInt total)? working,
+    TResult Function(int done, int total)? working,
     TResult Function(int id)? queued,
     TResult Function()? failed,
     required TResult orElse(),
@@ -4111,7 +4111,7 @@ extension BridgeShareFetchingPatterns on BridgeShareFetching {
   @optionalTypeArgs
   TResult when<TResult extends Object?>({
     required TResult Function() idle,
-    required TResult Function(BigInt done, BigInt total) working,
+    required TResult Function(int done, int total) working,
     required TResult Function(int id) queued,
     required TResult Function() failed,
   }) {
@@ -4143,7 +4143,7 @@ extension BridgeShareFetchingPatterns on BridgeShareFetching {
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? idle,
-    TResult? Function(BigInt done, BigInt total)? working,
+    TResult? Function(int done, int total)? working,
     TResult? Function(int id)? queued,
     TResult? Function()? failed,
   }) {
@@ -4189,8 +4189,8 @@ class BridgeShareFetching_Working extends BridgeShareFetching {
   const BridgeShareFetching_Working({required this.done, required this.total})
       : super._();
 
-  final BigInt done;
-  final BigInt total;
+  final int done;
+  final int total;
 
   /// Create a copy of BridgeShareFetching
   /// with the given fields replaced by the non-null parameter values.
@@ -4226,7 +4226,7 @@ abstract mixin class $BridgeShareFetching_WorkingCopyWith<$Res>
           $Res Function(BridgeShareFetching_Working) _then) =
       _$BridgeShareFetching_WorkingCopyWithImpl;
   @useResult
-  $Res call({BigInt done, BigInt total});
+  $Res call({int done, int total});
 }
 
 /// @nodoc
@@ -4248,11 +4248,11 @@ class _$BridgeShareFetching_WorkingCopyWithImpl<$Res>
       done: null == done
           ? _self.done
           : done // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
       total: null == total
           ? _self.total
           : total // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
     ));
   }
 }

@@ -46,6 +46,7 @@ part that worked.
 | **Pin layer** | Layer | Any layer in the composition | None | - |
 | **Feature density** | Dropdown | Low · Normal · High | Normal | - |
 | **Use masks** | Checkbox | On or off | On | - |
+| **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
 
 {/* END GENERATED */}
 
@@ -68,6 +69,10 @@ part that worked.
 - **Feature density**: how many specks the tracker chases. More is slower but copes better
   with a plain or badly lit surface.
 - **Use masks**: masks on the layer are left out of the track.
+- **Frames**: which frames Analyse tracks. **All frames** is the whole footage however the
+  layer is trimmed, **Layer in to out** is the frames between the layer's in and out
+  points, and **Work area** is the frames inside the composition's work area. The corners
+  are where the surface is on the first of them.
 
 ## Related
 

@@ -873,7 +873,7 @@ impl FootageReference {
                 // and a media-less build used to answer "ready" for a path that
                 // plainly was not on disk. Asking the filesystem costs
                 // one stat and gives both builds the same answer.
-                if !path.exists() {
+                if !lumit_media::is_file(&path) && !lumit_ingress::files::exists(&path) {
                     return Ok(LumitMediaStatus::Missing);
                 }
 
@@ -890,8 +890,8 @@ impl FootageReference {
                 #[cfg(not(feature = "media"))]
                 let probed = true;
                 #[cfg(feature = "media")]
-                let probed =
-                    Self::resolve_source(&proj, footage_item).is_some_and(crate::probe::reads);
+                let probed = lumit_scene::is_model(&path)
+                    || Self::resolve_source(&proj, footage_item).is_some_and(crate::probe::reads);
 
                 // A run with a file that would not read wears the badge too,
                 // though a neighbour is drawn in that file's place.

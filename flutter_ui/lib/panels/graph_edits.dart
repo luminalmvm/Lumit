@@ -8,6 +8,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
 
 import 'easing_curve.dart';
+import 'effect_param_row_frb.dart' show graphInputsOf;
 import 'graph_channels.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
@@ -168,16 +169,26 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
   for (final (layer, props, values) in transforms.values) {
     layer.setTransforms(props: props, values: values);
   }
+  // Each of the layer's lists an edit lands on, staged and committed alone:
+  // the stack, its styles, a placed graph's Inputs.
   for (final (layer, byEffect) in effects.values) {
-    final staged = layer.getEffects();
-    for (final instance in staged) {
-      final wanted = byEffect[instance.id().toString()];
-      if (wanted == null) continue;
-      wanted.forEach((paramId, scalar) {
-        instance.setValue(id: paramId, value: BridgeEffectValue.float(scalar));
-      });
+    for (final staged in [
+      layer.getEffects(),
+      layer.getStyles(),
+      graphInputsOf(layer),
+    ]) {
+      var touched = false;
+      for (final instance in staged) {
+        final wanted = byEffect[instance.id().toString()];
+        if (wanted == null) continue;
+        touched = true;
+        wanted.forEach((paramId, scalar) {
+          instance.setValue(
+              id: paramId, value: BridgeEffectValue.float(scalar));
+        });
+      }
+      if (touched) layer.setEffects(effects: staged);
     }
-    layer.setEffects(effects: staged);
   }
   for (final (layer, writes) in shapes.values) {
     var entries = layer.getShapeContents();
@@ -225,7 +236,7 @@ void previewChannelEdits({
   final layerId = layer.internallayerId.toString();
   bool sameLayer(GraphChannel c) =>
       c.entry.layer.internallayerId.toString() == layerId;
-  final bigFrame = BigInt.from(frame);
+  final bigFrame = frame;
 
   if (lead.retime) {
     comp.renderFrameWithRetime(

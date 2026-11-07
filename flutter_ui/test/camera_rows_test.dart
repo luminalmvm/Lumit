@@ -85,14 +85,16 @@ void main() {
       BridgeTransformProp.rotationY,
       BridgeTransformProp.rotation,
     };
-    test('a point light: its place, its three turns, its strength and colour',
-        () {
+    test(
+        'a point light: its place, its three turns, its strength and colour, '
+        'and how much it shows in the air', () {
       expect(propsOf(rowsFor(BridgeLayerKind.light)), {
         ...placement,
         BridgeTransformProp.lightIntensity,
         BridgeTransformProp.lightColourR,
         BridgeTransformProp.lightColourG,
         BridgeTransformProp.lightColourB,
+        BridgeTransformProp.hazeAmount,
       });
     });
 
@@ -106,6 +108,10 @@ void main() {
           falloff: BridgeLightFalloff.smooth,
           twoNode: true,
           castsShadows: false,
+          inAir: false,
+          noisy: false,
+          source: null,
+          background: false,
         ),
       ));
       expect(

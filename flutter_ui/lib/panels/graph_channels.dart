@@ -12,6 +12,7 @@ import '../l10n/strings.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
@@ -109,6 +110,17 @@ class GraphChannel {
   /// lead and every write to it is the pair's write ([withLinkedPartners]).
   final BridgeTransformProp? linkedPartner;
 
+  /// The keys the lane of this channel's row draws, where the row has axes
+  /// that may be keyed apart ([rowKeysOf]). Null where lane and channel are one.
+  final List<BridgeKeyframe>? rowKeys;
+
+  /// This channel's own key for the lane's key [index], or null when this axis
+  /// has no key at that time.
+  int? ownKeyIndex(int index) => switch (rowKeys) {
+        final row? => axisKeyIndex(row, index, keys),
+        null => index,
+      };
+
   /// Set for an effect parameter channel.
   final BridgeEffectInstanceInfo? effect;
   final BridgeParamInfo? param;
@@ -179,6 +191,7 @@ class GraphChannel {
     required this.entry,
     this.prop,
     this.linkedPartner,
+    this.rowKeys,
     this.effect,
     this.param,
     this.linkedParam,
@@ -319,6 +332,8 @@ List<GraphChannel> graphChannels({
         // is drawn and edited; the partner follows every write at the ratio
         // the pair holds ([withLinkedPartners]).
         final axes = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
+        final rowKeys = rowKeysOf(
+            [for (final axis in group.axes) read(entry.info.transform, axis.prop)]);
         for (final axis in axes) {
           out.add(GraphChannel(
             path: path,
@@ -331,6 +346,7 @@ List<GraphChannel> graphChannels({
             entry: entry,
             prop: axis.prop,
             linkedPartner: group.isLinked ? group.axes[1].prop : null,
+            rowKeys: rowKeys,
           ));
         }
         break;
@@ -341,15 +357,50 @@ List<GraphChannel> graphChannels({
     // An effect's parameters, and a **layer style's** on the same road:
     // a style is an effect instance in a second list, so its curve is drawn,
     // edited and coloured by this branch rather than by a copy of it.
+    // A placed graph's Inputs too, whose one instance has no id in the path,
+    // a Model layer's materials, and its Animation and parts, the Animation's
+    // one instance having no id in the path either.
     final styles = path.startsWith('${stylesPath(layerId)}/');
-    if (styles || path.startsWith('${effectsPath(layerId)}/')) {
-      final head = styles ? stylesPath(layerId) : effectsPath(layerId);
+    final animation = path.startsWith('${modelAnimationPath(layerId)}/');
+    final parts = path.startsWith('${modelPartsPath(layerId)}/');
+    final inputs = path.startsWith('${inputsPath(layerId)}/');
+    final materials = path.startsWith('${materialsPath(layerId)}/');
+    if (inputs ||
+        animation ||
+        parts ||
+        styles ||
+        materials ||
+        path.startsWith('${effectsPath(layerId)}/')) {
+      final head = inputs
+          ? inputsPath(layerId)
+          : animation
+              ? modelAnimationPath(layerId)
+              : parts
+                  ? modelPartsPath(layerId)
+                  : materials
+                      ? materialsPath(layerId)
+                      : styles
+                          ? stylesPath(layerId)
+                          : effectsPath(layerId);
+      final single = inputs || animation;
       final rest = path.substring(head.length + 1);
-      final slash = rest.indexOf('/');
-      if (slash <= 0) continue;
-      final effectId = rest.substring(0, slash);
+      final slash = single ? -1 : rest.indexOf('/');
+      if (!single && slash <= 0) continue;
+      final model = entry.info.modelRows;
+      final graphInputs = animation ? model?.playback : entry.info.graphInputs;
+      final effectId =
+          single ? '${graphInputs?.id}' : rest.substring(0, slash);
       final paramId = rest.substring(slash + 1);
-      for (final fx in styles ? entry.info.styles : entry.info.effects) {
+      final part = parts && model != null ? modelRowsById(model, effectId) : null;
+      for (final fx in single
+          ? [if (graphInputs != null) graphInputs]
+          : parts
+              ? [if (part != null) part]
+              : materials
+                  ? entry.info.materials ?? const <BridgeEffectInstanceInfo>[]
+              : styles
+                  ? entry.info.styles
+                  : entry.info.effects) {
         if (fx.id.toString() != effectId) continue;
         // The rows an instance derives are rows like any other: a Custom
         // controls slider is keyed and eased as a declared one is.
@@ -367,7 +418,11 @@ List<GraphChannel> graphChannels({
             if (row.id == pair.y) linkedParam = row;
           }
         }
-        final channelId = leadId == paramId ? path : '$head/$effectId/$leadId';
+        final channelId = leadId == paramId
+            ? path
+            : single
+                ? '$head/$leadId'
+                : '$head/$effectId/$leadId';
         if (out.any((c) => c.id == channelId)) continue;
         for (final param in rows) {
           if (param.id != leadId) continue;
@@ -385,8 +440,9 @@ List<GraphChannel> graphChannels({
           out.add(GraphChannel(
             path: path,
             id: channelId,
-            label:
-                '${entry.info.name} · ${effectLabelOf(fx.name)} · ${param.label}',
+            label: '${entry.info.name} · '
+                '${inputs ? l10n.foldInputs : effectLabelOf(fx.name)} · '
+                '${param.label}',
             colourIndex: out.length,
             scalar: scalar,
             entry: entry,

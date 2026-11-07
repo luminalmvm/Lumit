@@ -10,9 +10,13 @@
 // The model is plain data. Edits still go through the reference handles —
 // this holds what to *show*, never what to *do*.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart' show modelReads;
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:uuid/uuid.dart';
 
@@ -24,13 +28,13 @@ class CompModel extends ChangeNotifier {
   /// Comparing it per read is what makes every rebuild honest: a widget that
   /// rebuilds for any reason sees the current document, exactly as when every
   /// widget re-read the engine itself — for one call instead of dozens.
-  BigInt? _revision;
+  int? _revision;
 
   /// The revision listeners were last told about. A getter re-reads without
   /// telling anyone, so after an undo the new revision may already be read
   /// by the time the change event lands. The graph canvases keep their own
   /// copy and still need telling.
-  BigInt? _told;
+  int? _told;
 
   /// The frame [_freshen] last asked the engine for its revision in.
   ///
@@ -92,7 +96,7 @@ class CompModel extends ChangeNotifier {
   /// against: the cache is good for as long as this number is, and an edit
   /// moves it. Reading it freshens the model first, so it never reports a
   /// revision older than what the caller is about to draw.
-  BigInt? get revision {
+  int? get revision {
     _freshen();
     return _revision;
   }
@@ -120,7 +124,7 @@ class CompModel extends ChangeNotifier {
   /// has just *committed* an edit and wants to read it back keeps the checking
   /// getters above.
   List<BridgeLayerEntry> get heldLayers => _model?.layers ?? const [];
-  BigInt? get heldRevision => _revision;
+  int? get heldRevision => _revision;
 
   /// The comp's rate from the copy in hand, on the same terms — what turns a
   /// playhead frame into seconds while a paint is running, which is where a
@@ -209,8 +213,11 @@ class CompModel extends ChangeNotifier {
     try {
       final revision = comp.documentRevision();
       if (revision == _revision && _model != null) return;
+      // Asked before the model is, so a read landing between the two is seen.
+      final reads = modelReads();
       _model = comp.getModel();
       _revision = revision;
+      _whileReading(reads);
     } catch (_) {
       // The comp has gone (deleted, or the project closed): an empty model,
       // not a crash — the panels show their placeholders. The revision goes
@@ -219,6 +226,29 @@ class CompModel extends ChangeNotifier {
       _model = null;
       _revision = null;
     }
+  }
+
+  /// Held while a Model layer's file is still being read, so the rows that
+  /// come with the file are read again once a read lands.
+  Timer? _reading;
+
+  void _whileReading(int reads) {
+    final waiting = _model?.layers.any((e) =>
+            e.info.kind == BridgeLayerKind.model && e.info.modelRows == null) ??
+        false;
+    if (!waiting || _reading != null) return;
+    _reading = Timer.periodic(const Duration(milliseconds: 300), (tick) {
+      if (modelReads() == reads) return;
+      tick.cancel();
+      _reading = null;
+      refresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _reading?.cancel();
+    super.dispose();
   }
 
   /// The entry for [id], or null when the layer is gone.

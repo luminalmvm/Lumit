@@ -63,6 +63,10 @@ class FlutterWindow : public Win32Window {
   // Say |method| to Dart on |channel|, with no arguments.
   void Tell(const char* channel, const char* method);
 
+  // The pointer is on the maximise button, and was pressed there.
+  bool maximise_hover_ = false;
+  bool maximise_pressed_ = false;
+
   // Started at sign-in and not shown yet.
   bool start_hidden_ = false;
 
@@ -74,6 +78,11 @@ class FlutterWindow : public Win32Window {
 
   // What a second start passed on, until Dart takes it (lumit/open).
   std::vector<std::string> open_waiting_;
+
+  // The backdrop Flutter last asked for, put back when Windows' settings
+  // change.
+  std::string backdrop_;
+  bool backdrop_dark_ = true;
 };
 
 // Hand this start's arguments to a Lumit from the same folder that is kept

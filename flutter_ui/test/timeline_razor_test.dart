@@ -6,7 +6,6 @@
 // point in a Sequence layer, a split into two layers otherwise — is the
 // engine's, and is tested against it in test/frb/.
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/timeline_razor.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -28,6 +27,7 @@ void main() {
       ),
       info: BridgeLayerInfo(
         pitchFollowsSpeed: false,
+        sends: const [],
         collapseForced: false,
         volumeDb: const BridgeScalar.static_(0),
         pan: const BridgeScalar.static_(0),
@@ -55,7 +55,7 @@ void main() {
         ),
         inFrame: inFrame,
         outFrame: outFrame,
-        clipFrames: Int64List(0),
+        clipFrames: const [],
         clips: const [],
         transform: BridgeTransform(
           anchorX: const BridgeScalar.static_(0),

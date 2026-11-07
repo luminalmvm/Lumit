@@ -15,6 +15,7 @@
 // pinned by the impl note on both sides, and the golden tests hold the two
 // implementations together.
 
+import 'dart:collection' show SplayTreeMap;
 import 'dart:math' as math;
 
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -1673,6 +1674,52 @@ BridgeSideInterp inheritedSide(BridgeSideInterp? facing) => switch (facing) {
       BridgeSideInterp_Auto() => facing,
       _ => const BridgeSideInterp.linear(),
     };
+
+/// The keys one row of several axes shows: one for each time any axis has a
+/// key. The axes are separate curves, and a 3D handle, a value box or the graph
+/// can key one alone. Nearly always they agree, and this is the first's own list.
+List<BridgeKeyframe> rowKeysOf(Iterable<BridgeScalar> axes) {
+  final keyed = [
+    for (final axis in axes)
+      if (axis case BridgeScalar_Keyframed(:final field0)) field0,
+  ];
+  if (keyed.isEmpty) return const [];
+  final lead = keyed.first;
+  bool agrees(List<BridgeKeyframe> keys) {
+    if (keys.length != lead.length) return false;
+    for (var i = 0; i < keys.length; i++) {
+      if (rationalSeconds(keys[i].time) != rationalSeconds(lead[i].time)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (keyed.every(agrees)) return lead;
+  final byTime = SplayTreeMap<double, BridgeKeyframe>();
+  for (final keys in keyed) {
+    for (final key in keys) {
+      byTime.putIfAbsent(rationalSeconds(key.time), () => key);
+    }
+  }
+  return byTime.values.toList();
+}
+
+/// Where the row's key [index] sits among one axis's [keys], or null when that
+/// axis has no key at that time. [rowKeys] is what [rowKeysOf] made.
+int? axisKeyIndex(
+  List<BridgeKeyframe> rowKeys,
+  int index,
+  List<BridgeKeyframe> keys,
+) {
+  if (index < 0 || index >= rowKeys.length) return null;
+  // The row holds every time this axis does, so the same count means the same
+  // times. A baked camera is thousands of keys, so this must not search.
+  if (keys.length == rowKeys.length) return index;
+  final at = rationalSeconds(rowKeys[index].time);
+  final own = keys.indexWhere((k) => rationalSeconds(k.time) == at);
+  return own < 0 ? null : own;
+}
 
 /// A new keyframe at [seconds] carrying [value], taking its interpolation from
 /// the keys around it (M19). [keys] need not be sorted; a key already at that

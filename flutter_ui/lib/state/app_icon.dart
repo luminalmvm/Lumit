@@ -20,9 +20,11 @@
 // Linux is left alone: a Wayland desktop takes the icon from the desktop entry
 // and has no window icon to set.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/services.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 const MethodChannel _channel = MethodChannel('lumit/app_icon');
 

@@ -152,6 +152,7 @@ impl GpuKernels {
             three_d: false,
             layer_mask: None,
             pre: None,
+            premultiplied: false,
         }
     }
 

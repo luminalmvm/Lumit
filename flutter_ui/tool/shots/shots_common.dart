@@ -23,7 +23,7 @@
 // automatic can find itself driving the editor and writing PNGs into the site.
 // The sweep exits by itself when the last shot is taken.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -37,6 +37,8 @@ import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Where the media fixtures live. Made once with ffmpeg (see the repo's shots
 /// report) and never committed.

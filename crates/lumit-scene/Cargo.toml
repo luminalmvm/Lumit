@@ -1,0 +1,39 @@
+[package]
+name = "lumit-scene"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[features]
+# The models built in code (src/fixtures.rs), for other crates' tests and the
+# bench. Nothing shipped turns it on.
+test-fixtures = []
+
+[dependencies]
+base64 = "0.22"
+bevy_mikktspace = "1"
+glam = "0.29"
+gltf = { version = "1.4", default-features = false, features = ["utils", "names", "extras", "extensions", "KHR_lights_punctual", "KHR_materials_emissive_strength", "KHR_materials_transmission", "KHR_materials_ior", "KHR_materials_unlit", "KHR_texture_transform"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tga", "webp"] }
+lumit-ingress = { path = "../lumit-ingress" }
+serde_json = "1"
+thiserror = "2"
+
+# FBX and OBJ, and OpenVDB volumes. Their C code has no C library to build
+# against in the browser.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+half = "2"
+ufbx = "0.11"
+vdb-rs = "0.6"
+
+# Where Blender is installed, from the uninstall keys, Steam and the .blend
+# file type. Its windows-link, -result and -strings are already in the tree.
+[target.'cfg(windows)'.dependencies]
+windows-registry = "0.6"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

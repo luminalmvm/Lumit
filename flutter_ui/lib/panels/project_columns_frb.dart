@@ -407,6 +407,9 @@ class ProjectColumns {
                 textAlign: column == ProjectColumn.path
                     ? TextAlign.left
                     : TextAlign.right,
+                // Numbers, dates and paths, which read left to right in
+                // every language.
+                textDirection: TextDirection.ltr,
                 maxLines: 1,
                 overflow: overflow),
       ),

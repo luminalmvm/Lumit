@@ -100,13 +100,13 @@ pub fn from_json(text: &str) -> Result<EffectPreset, String> {
     serde_json::from_str::<EffectPreset>(text).map_err(|e| e.to_string())
 }
 
-/// The preset's effects with fresh instance ids — what actually lands on a
-/// layer, so applying one preset to several layers never shares an instance
-/// id (ids are instance identity only; they never feed a cache key).
+/// The preset's effects with fresh instance ids, so applying one to several
+/// layers never shares an id (ids never feed a cache key).
 pub fn instantiated(preset: &EffectPreset) -> Vec<EffectInstance> {
     preset
         .effects
         .iter()
+        .filter(|e| e.effect.match_name != crate::model_material::MATCH_NAME)
         .cloned()
         .map(|mut e| {
             e.id = uuid::Uuid::now_v7();
@@ -325,6 +325,9 @@ pub struct GroupPreset {
     /// on into `effects`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inner: Vec<InnerGroup>,
+    /// The ties on the saved wires, from the same corner as [`Self::layout`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
 /// A group nested inside a saved one, naming its boxes by where they sit in
@@ -453,10 +456,23 @@ pub fn group_from_graph(
             .map(|g| (g.name.clone(), g.colour, g.members.clone())),
     );
 
+    let ends: Vec<(uuid::Uuid, &str)> = edges
+        .iter()
+        .filter_map(|e| match &e.to {
+            InputRef::Param {
+                node: NodeRef::Driver(id) | NodeRef::Effect(id),
+                port,
+            } => Some((*id, port.as_str())),
+            _ => None,
+        })
+        .collect();
+    let ties = crate::wire_tie::WireTie::saved(&graph.ties, &ends, origin);
+
     GroupPreset {
         format: GROUP_FORMAT,
         name: name.to_owned(),
         colour,
+        ties,
         layout: from_corner(&places),
         effect_layout: from_corner(&effect_places),
         nodes,
@@ -489,6 +505,8 @@ pub struct InsertedGroup {
     pub group: crate::graph::NodeGroup,
     /// The groups nested inside [`Self::group`].
     pub inner: Vec<crate::graph::NodeGroup>,
+    /// The ties on its wires, renamed to the fresh ids.
+    pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
 /// What inserting `preset` at canvas point `at` adds to a graph: fresh nodes,
@@ -582,6 +600,7 @@ pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
         })
         .collect();
     InsertedGroup {
+        ties: crate::wire_tie::WireTie::minted(&preset.ties, &fresh, at),
         effects,
         nodes,
         edges,
@@ -624,6 +643,9 @@ pub struct CompGroupPreset {
     /// The groups inside this one. A member is a place in `nodes`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inner: Vec<InnerGroup>,
+    /// The ties on the saved wires, from the same corner as [`Self::layout`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
 /// The current on-disk format version for a node graph group.
@@ -677,6 +699,12 @@ pub fn comp_group_from_graph(
         .map(|p| [p[0] - origin[0], p[1] - origin[1]])
         .collect();
 
+    let edges: Vec<crate::comp_graph::GraphEdge> = graph
+        .edges
+        .iter()
+        .filter(|e| wanted.contains(&e.from) && wanted.contains(&e.to))
+        .cloned()
+        .collect();
     CompGroupPreset {
         format: COMP_GROUP_FORMAT,
         name: name.to_owned(),
@@ -688,12 +716,15 @@ pub fn comp_group_from_graph(
                 .iter()
                 .map(|g| (g.name.clone(), g.colour, g.members.clone())),
         ),
-        edges: graph
-            .edges
-            .iter()
-            .filter(|e| wanted.contains(&e.from) && wanted.contains(&e.to))
-            .cloned()
-            .collect(),
+        ties: crate::wire_tie::WireTie::saved(
+            &graph.ties,
+            &edges
+                .iter()
+                .map(|e| (e.to, e.to_port.as_str()))
+                .collect::<Vec<_>>(),
+            origin,
+        ),
+        edges,
         nodes,
         layout,
     }
@@ -720,6 +751,8 @@ pub struct InsertedCompGroup {
     pub group: crate::comp_graph::GraphGroup,
     /// The groups nested inside [`Self::group`].
     pub inner: Vec<crate::comp_graph::GraphGroup>,
+    /// The ties on its wires, renamed to the fresh ids.
+    pub ties: Vec<crate::wire_tie::WireTie>,
 }
 
 /// What inserting `preset` at canvas point `at` adds to a graph: fresh boxes,
@@ -805,6 +838,7 @@ pub fn comp_group_instantiated(preset: &CompGroupPreset, at: [f64; 2]) -> Insert
         })
         .collect();
     InsertedCompGroup {
+        ties: crate::wire_tie::WireTie::minted(&preset.ties, &fresh, at),
         nodes,
         edges,
         layout,

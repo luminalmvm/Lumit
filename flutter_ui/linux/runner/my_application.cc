@@ -4,6 +4,7 @@
 #include <glib/gstdio.h>
 #include <flutter_linux/flutter_linux.h>
 
+#include "backdrop.h"
 #include "extension_views.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "viewer_texture_bridge.h"
@@ -22,6 +23,8 @@ struct _MyApplication {
   char** dart_entrypoint_arguments;
   GtkWindow* window;
   FlView* view;
+  // What the view sits in, which a see-through window blurs behind.
+  GtkWidget* content;
   FlMethodChannel* window_channel;
   FlMethodChannel* open_channel;
   // Started at sign-in and not shown yet.
@@ -427,6 +430,20 @@ static void window_method_cb(FlMethodChannel* channel,
     close_splash(self);
     return;
   }
+  // The style's see-through window (backdrop.cc).
+  if (g_strcmp0(asked, "backdrop") == 0) {
+    FlValue* args = fl_method_call_get_args(call);
+    FlValue* kind = fl_value_get_type(args) == FL_VALUE_TYPE_MAP
+                        ? fl_value_lookup_string(args, "kind")
+                        : nullptr;
+    g_autoptr(FlValue) showing = fl_value_new_bool(backdrop_set(
+        self->window, self->content, self->view,
+        kind != nullptr && fl_value_get_type(kind) == FL_VALUE_TYPE_STRING
+            ? fl_value_get_string(kind)
+            : ""));
+    fl_method_call_respond_success(call, showing, nullptr);
+    return;
+  }
   GtkWindow* window = self->window;
   FlView* view = self->view;
   const gboolean maximised = gtk_window_is_maximized(window);
@@ -486,6 +503,15 @@ static void window_method_cb(FlMethodChannel* channel,
   }
 }
 
+// The compositor started or stopped, so a see-through window may have to go
+// solid, or may come back.
+static void composited_cb(MyApplication* self) {
+  if (self->window_channel != nullptr) {
+    fl_method_channel_invoke_method(self->window_channel, "backdrop", nullptr,
+                                    nullptr, nullptr, nullptr);
+  }
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -517,6 +543,12 @@ static void my_application_activate(GApplication* application) {
   smallest.min_width = 840;
   smallest.min_height = 560;
   gtk_window_set_geometry_hints(window, nullptr, &smallest, GDK_HINT_MIN_SIZE);
+  // So a style can make it see-through later. Dart asks again when the
+  // compositor starts or stops.
+  backdrop_prepare(window);
+  g_signal_connect_swapped(gtk_widget_get_screen(GTK_WIDGET(window)),
+                           "composited-changed",
+                           G_CALLBACK(composited_cb), self);
 
   // Lumit opens maximised, as it does on Windows (windows/runner/
   // win32_window.cpp) and macOS — but the asking happens in `first_frame_cb`,
@@ -562,6 +594,7 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_show(overlay);
   gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), overlay);
+  self->content = overlay;
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.
@@ -610,11 +643,13 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
 
-// Whether this start was asked to install an extension package.
+// Whether this start was asked to install an extension package, a style, a
+// preset or a theme.
 static gboolean asks_for_package(gchar** arguments) {
   for (gchar** argument = arguments; *argument != nullptr; argument++) {
     g_autofree gchar* lower = g_ascii_strdown(*argument, -1);
-    if (g_str_has_suffix(lower, ".lfx")) {
+    if (g_str_has_suffix(lower, ".lfx") || g_str_has_suffix(lower, ".lumstyle") ||
+        g_str_has_suffix(lower, ".lumfx") || g_str_has_suffix(lower, ".lumtheme")) {
       return TRUE;
     }
   }

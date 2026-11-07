@@ -14,6 +14,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
@@ -41,6 +42,7 @@ import 'package:lumit_flutter/src/rust/api/script.dart'
     show disconnectLiveProgram;
 
 import 'cache_confirm_frb.dart';
+import 'export_queue_frb.dart' show exportTimeLeft;
 import 'live_endpoint_frb.dart';
 import 'profile_chip.dart';
 import 'project_history_window.dart';
@@ -311,17 +313,17 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       child: _line(
         t,
         (width) => [
-          // Whose settings these are, first on the line: it is about the
-          // person, and everything after it is about the project. The update
-          // button stands with it: both are about this Lumit, not the work.
-          _bubble(
-            t,
-            const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [ProfileChip(), UpdateChip()],
+          // Whose settings, and updates. A page has no account and no updates.
+          if (!kIsWeb) ...[
+            _bubble(
+              t,
+              const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [ProfileChip(), UpdateChip()],
+              ),
             ),
-          ),
-          _divider(t),
+            _divider(t),
+          ],
           // Which kind of Lumit this is, when it is not the ordinary kind: in
           // every screenshot of a nightly, and beside the name it belongs to.
           if (_ui.updates.runningNightly) ...[
@@ -469,7 +471,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   Widget _bubble(LumitTheme t, Widget child) => !t.tokens.roomed
       ? child
       : Padding(
-          padding: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsetsDirectional.only(end: 8),
           child: Container(
             key: const ValueKey('status-bubble'),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
@@ -505,7 +507,12 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// states where nothing is at risk.
   Widget _savedState(LumitTheme t, LumitState state) {
     final project = state.project;
-    final dirty = project?.isDirty() ?? false;
+    var dirty = false;
+    try {
+      dirty = project?.isDirty() ?? false;
+    } catch (_) {
+      // Closed already, as one project gives way to the next.
+    }
     _unsaved = dirty;
     final label = project == null
         ? l10n.noProject
@@ -547,11 +554,11 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       builder: (context, room) => room.maxWidth < 120
           ? const SizedBox.shrink()
           : Align(
-              alignment: Alignment.centerRight,
+              alignment: AlignmentDirectional.centerEnd,
               child: Padding(
                 // Clear of the readout before it on a flush strip. Bubbles
                 // space themselves.
-                padding: EdgeInsets.only(left: t.tokens.roomed ? 0 : 12),
+                padding: EdgeInsetsDirectional.only(start: t.tokens.roomed ? 0 : 12),
                 child: _bubble(
                   t,
                   Text(
@@ -662,7 +669,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         // hover, and a press follows them, or stops if it already does.
         for (final person in others.take(drawn))
           Padding(
-            padding: const EdgeInsets.only(left: 4),
+            padding: const EdgeInsetsDirectional.only(start: 4),
             child: LumitTooltip(
               message: [
                 person.name,
@@ -695,7 +702,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
         // Whoever there is no room for, as a count that opens the window.
         if (drawn < others.length)
           Padding(
-            padding: const EdgeInsets.only(left: 4),
+            padding: const EdgeInsetsDirectional.only(start: 4),
             child: LumitTooltip(
               message: others.skip(drawn).map((p) => p.name).join(', '),
               child: MouseRegion(
@@ -892,7 +899,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             SizedBox(
               width: 120,
               child: HouseProgressBar(
-                fraction: total == BigInt.zero
+                fraction: total == 0
                     ? 0.0
                     : frame.toDouble() / total.toDouble(),
               ),
@@ -951,7 +958,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             SizedBox(
               width: 120,
               child: HouseProgressBar(
-                fraction: total == BigInt.zero
+                fraction: total == 0
                     ? 0.0
                     : frame.toDouble() / total.toDouble(),
               ),
@@ -976,7 +983,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 child: HoverMark(
                   builder: (context, lit) => GestureDetector(
                     key: const ValueKey('status-export-done'),
-                    onTap: () => revealInFolder(path: path),
+                    onTap: kIsWeb ? null : () => revealInFolder(path: path),
                     child: Text(
                       l10n.exportedTo(path),
                       style: t.small.copyWith(
@@ -1008,22 +1015,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     final motion = ThemeScope.of(context).motion;
     return Entrance(spec: motion.reveal, rise: motion.revealRise, child: line);
   }
-}
-
-/// How long a running export has left, in words for the strip, or null while
-/// there is too little to go on.
-///
-/// It is frames done over time taken since the strip first saw the export, so
-/// it follows the average speed and one slow frame does not move it. Nothing
-/// is said for the first five seconds, when that average is mostly noise.
-String? exportTimeLeft(
-    {required int done, required int left, required Duration taken}) {
-  if (done <= 0 || left <= 0 || taken < const Duration(seconds: 5)) return null;
-  final minutes = (taken.inMilliseconds / 60000 * left / done).round();
-  if (minutes < 1) return l10n.exportLeftUnderMinute;
-  return minutes < 120
-      ? l10n.exportLeftMinutes('$minutes')
-      : l10n.exportLeftHours('${(minutes / 60).round()}');
 }
 
 /// The export's frame count with the estimate after it. One line of text, so
@@ -1195,7 +1186,9 @@ class _TierMeter extends StatelessWidget {
               // Used only: the budget is in the tooltip and in Settings, and
               // the status line is one line shared with the notices and
               // export.
-              Text('${_mibText(used)} MB', style: t.small.copyWith(color: ink)),
+              Text('${_mibText(used)} MB',
+                  textDirection: TextDirection.ltr,
+                  style: t.small.copyWith(color: ink)),
             ],
           );
         }),

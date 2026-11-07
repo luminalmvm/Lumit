@@ -11,6 +11,18 @@ publish = false
 # The addons folder, and nothing else from it. One answer about where a pack
 # lives, shared by the engine and the bridge (docs/impl/addons.md §4).
 lumit-project = { path = "../lumit-project" }
+# The manifest is read from JSON and written back unchanged, so it derives
+# both ways rather than being parsed by hand.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Unpacking a download. Deflate only, the same pin `lumit-project` reads `.lum`
+# files with, so the addon installer adds no compression codec to the graph.
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+# Native only: the browser build has no ONNX Runtime.
+web-time = "1"
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # ONNX Runtime through its safe Rust wrapper. `load-dynamic` is the whole
 # point: the library is an addon the user installs, so nothing links against it
 # at build time and no default feature is allowed to fetch one. `api-24` asks
@@ -21,14 +33,6 @@ ort = { version = "2.0.0-rc.13", default-features = false, features = [
     "load-dynamic",
     "api-24",
 ] }
-# The manifest is read from JSON and written back unchanged, so it derives
-# both ways rather than being parsed by hand.
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-# Unpacking a download. Deflate only, the same pin `lumit-project` reads `.lum`
-# files with, so the addon installer adds no compression codec to the graph.
-zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # DirectX 12 hardware on Windows. The execution provider is a feature of the
 # same crate, so it rides a per-target table the way `lumit-gpu` carries

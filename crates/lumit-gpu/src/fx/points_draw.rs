@@ -17,7 +17,9 @@
 
 use crate::GpuContext;
 
-use super::{particulate::ParticulateParams, particulate::STREAM_WORDS, work_texture, FxEngine};
+use super::{
+    particulate::STREAM_WORDS, particulate_params::ParticulateParams, work_texture, FxEngine,
+};
 
 /// **Which picture-derived field a point is put to a vote against**, in the
 /// vertex stage.
@@ -198,7 +200,8 @@ impl FxEngine {
     /// The same vertex-stage test [`points_draw`](Self::points_draw) runs, read
     /// back, so a points stream made from the kept ones is the set the draw
     /// shows. Costs one small synchronous readback. A readback that fails
-    /// keeps nothing.
+    /// keeps nothing, and in the browser build an earlier frame's answer
+    /// stands in.
     pub fn points_stood(
         &self,
         ctx: &GpuContext,
@@ -286,15 +289,11 @@ impl FxEngine {
             target.size(),
         );
         ctx.submit([encoder.finish()]);
-        let slice = buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        ctx.device.poll(wgpu::Maintain::Wait);
         let mut read = vec![[0.0f32; 4]; count];
-        if matches!(rx.recv(), Ok(Ok(()))) {
-            let data = slice.get_mapped_range();
+        // The browser build answers with what an earlier frame kept.
+        if let Some(data) =
+            crate::device::read_buffer::<u8>(ctx, ("points-stood", count, w, h), &buffer)
+        {
             for (i, out) in read.iter_mut().enumerate() {
                 let at = (i as u32 / pw * padded + i as u32 % pw * bytes) as usize;
                 let Some(px) = data.get(at..at + bytes as usize) else {
@@ -315,8 +314,6 @@ impl FxEngine {
                     };
                 }
             }
-            drop(data);
-            buffer.unmap();
         }
         ctx.recycle(target);
         read

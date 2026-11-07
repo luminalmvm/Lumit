@@ -99,6 +99,7 @@ fn run_with_masks(node: &AeProp, masks: Vec<(Uuid, f64)>) -> Ran {
             tb: TimeBase::of_fps(Some(25.0)).expect("a rate"),
             offset: Rational::ZERO,
             size: (W, H),
+            solids: false,
             span: (Rational::ZERO, Rational::new(4, 1).unwrap()),
             layer_ids: BTreeMap::new(),
             masks,
@@ -627,6 +628,7 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("VISINF Grain Implant", "add_grain"),
         ("ADBE Scribble Fill", "scribble"),
         ("ADBE Stroke", "stroke"),
+        ("VIDEOCOPILOT LightSaber", "energy_line"),
         ("ADBE Echo", "echo"),
         ("ADBE Posterize Time", "posterize_time"),
         // The distortion / stylise / transition / utility / controls half.
@@ -659,6 +661,8 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("ADBE IRIS_WIPE", "iris_wipe"),
         ("ADBE Venetian Blinds", "venetian_blinds"),
         ("APC CardWipeCam", "card_wipe"),
+        ("ADBE Gradient Wipe", "luma_fade"),
+        ("ADBE Timewarp", "timewarp"),
         ("ADBE Slider Control", "slider_control"),
         ("ADBE Angle Control", "angle_control"),
         ("ADBE Checkbox Control", "checkbox_control"),
@@ -666,7 +670,6 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("ADBE Point Control", "point_control"),
         // Placeholders on purpose (docs/11 §5).
         ("VISINF Grain Removal", ""),
-        ("ADBE Timewarp", ""),
     ];
 
     for (ae, lumit) in ROWS {
@@ -757,4 +760,46 @@ fn sharpen_converts_its_amount_onto_the_kernel_coefficient() {
     assert!(ran.rebased("Sharpen Amount"));
     // The neighbourhood After Effects uses, which is Lumit's default.
     assert!(close(ran.f("radius"), 1.0));
+}
+
+/// The sabre plug-in's controls are found by the plug-in's own names, the
+/// second Distortion Amount is the core's, and its defaults land on Energy
+/// line's.
+#[test]
+fn the_sabre_plugin_maps_its_controls_by_name() {
+    let m = |i: u32| format!("VIDEOCOPILOT LightSaber-{i:04}");
+    let node = effect(
+        "VIDEOCOPILOT LightSaber",
+        "Saber",
+        vec![
+            vendor_leaf(&m(73), "Glow Spread", "float", serde_json::json!(0.5)),
+            vendor_leaf(&m(5), "Core Size", "float", serde_json::json!(3.0)),
+            vendor_leaf(&m(4), "Glow Intensity", "float", serde_json::json!(50.0)),
+            vendor_leaf(&m(40), "Distortion Amount", "float", serde_json::json!(2.0)),
+            vendor_leaf(&m(55), "Distortion Amount", "float", serde_json::json!(3.0)),
+            vendor_leaf(
+                &m(70),
+                "Composite Settings",
+                "float",
+                serde_json::json!(3.0),
+            ),
+            vendor_leaf(&m(10), "Core Type", "float", serde_json::json!(2.0)),
+        ],
+    );
+    let ran = run(&node);
+    assert!(ran.mapped);
+    let f = |id: &str| match ran.inst.param(id) {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        other => panic!("{id}: {other:?}"),
+    };
+    assert!((f("glow_size") - 60.0).abs() < 1e-4);
+    assert!((f("core_size") - 10.0).abs() < 1e-4);
+    assert!((f("glow_intensity") - 100.0).abs() < 1e-4);
+    assert!((f("glow_distortion") - 2.0).abs() < 1e-4);
+    assert!((f("core_distortion") - 3.0).abs() < 1e-4);
+    assert_eq!(ran.inst.param("source"), Some(&EffectValue::Choice(1)));
+    assert_eq!(
+        ran.inst.param("composite_on_original"),
+        Some(&EffectValue::Bool(true))
+    );
 }

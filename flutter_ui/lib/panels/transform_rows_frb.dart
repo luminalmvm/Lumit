@@ -116,11 +116,15 @@ class TransformGroup {
 
 /// Whether a layer of this kind has a 3D switch to flip.
 ///
-/// A Camera and a Light are three-dimensional by being what they are
-/// (docs/impl/camera.md §1), so the switch would be one you cannot turn off:
-/// the Timeline leaves their cell blank and the Layer menu skips them.
+/// A Camera, a Light, a Model layer and a 3D shape are three-dimensional by
+/// being what they are (docs/impl/camera.md §1), so the switch would be one you
+/// cannot turn off: the Timeline leaves their cell blank and the Layer menu
+/// skips them.
 bool hasThreeDSwitch(BridgeLayerKind kind) =>
-    kind != BridgeLayerKind.camera && kind != BridgeLayerKind.light;
+    kind != BridgeLayerKind.camera &&
+    kind != BridgeLayerKind.light &&
+    kind != BridgeLayerKind.model &&
+    kind != BridgeLayerKind.mesh;
 
 /// Whether a layer of this kind carries the visibility eye.
 ///
@@ -191,8 +195,10 @@ List<TransformGroup> transformGroups({
   ]);
 
   // The placement a viewpoint has: where it stands, and which way it faces.
-  List<TransformGroup> placement() => [
-        ...pairRows(
+  // An environment light is nowhere, so it only faces.
+  List<TransformGroup> placement({bool placed = true}) => [
+        if (placed)
+          ...pairRows(
           BridgeTransformPair.position,
           l10n.transformPosition,
           [
@@ -257,7 +263,7 @@ List<TransformGroup> transformGroups({
           TransformAxis(BridgeTransformProp.poiY),
           TransformAxis(BridgeTransformProp.poiZ),
         ]),
-      ...placement(),
+      ...placement(placed: s.kind != BridgeLightKind.environment),
       TransformGroup(l10n.lightIntensity, const [
         TransformAxis(BridgeTransformProp.lightIntensity,
             suffix: '%', decimals: 0, speed: 0.5),
@@ -298,7 +304,12 @@ List<TransformGroup> transformGroups({
           TransformAxis(BridgeTransformProp.falloffDistance,
               suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
         ], section: option),
-      if (s.castsShadows && s.kind != BridgeLightKind.ambient) ...[
+      if (s.kind == BridgeLightKind.environment && s.background)
+        TransformGroup(l10n.lightBackgroundBlur, const [
+          TransformAxis(BridgeTransformProp.backgroundBlur,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+      if (s.castsShadows && lightCasts(s.kind)) ...[
         TransformGroup(l10n.lightShadowDarkness, const [
           TransformAxis(BridgeTransformProp.shadowDarkness,
               suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
@@ -306,6 +317,53 @@ List<TransformGroup> transformGroups({
         TransformGroup(l10n.lightShadowDiffusion, [
           TransformAxis(BridgeTransformProp.shadowDiffusion,
               suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+      ],
+      // How it shows in the air, and once it does, what the air is like. An
+      // ambient or environment light comes from nowhere, so it has no beam
+      // to show.
+      if (lightCasts(s.kind))
+        TransformGroup(l10n.lightVolumetric, const [
+          TransformAxis(BridgeTransformProp.hazeAmount,
+              suffix: '%', min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+      if (lightCasts(s.kind) && s.inAir) ...[
+        TransformGroup(l10n.lightHazeDensity, const [
+          TransformAxis(BridgeTransformProp.hazeDensity,
+              suffix: '%', min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(
+            l10n.lightHazeColour,
+            const [
+              TransformAxis(BridgeTransformProp.hazeColourR, min: 0),
+              TransformAxis(BridgeTransformProp.hazeColourG, min: 0),
+              TransformAxis(BridgeTransformProp.hazeColourB, min: 0),
+            ],
+            section: option,
+            colour: true),
+        TransformGroup(l10n.lightHeightFalloff, const [
+          TransformAxis(BridgeTransformProp.hazeFalloff,
+              suffix: '%', min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(l10n.lightForwardScatter, const [
+          TransformAxis(BridgeTransformProp.hazeScatter,
+              suffix: '%', min: -100, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(l10n.lightNoise, const [
+          TransformAxis(BridgeTransformProp.hazeNoise,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+      ],
+      if (lightCasts(s.kind) && s.inAir && s.noisy) ...[
+        TransformGroup(l10n.lightNoiseSize, [
+          TransformAxis(BridgeTransformProp.hazeNoiseSize,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
+        ], section: option),
+        TransformGroup(l10n.lightNoiseSpeed, [
+          TransformAxis(BridgeTransformProp.hazeNoiseSpeed,
+              suffix: l10n.unitPerSecond(l10n.unitSymbolPx),
+              decimals: 0,
+              speed: 0.5),
         ], section: option),
       ],
     ];
@@ -372,8 +430,12 @@ List<TransformGroup> transformGroups({
           suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
     ]),
     // How a 3D layer takes the comp's lights, as After Effects has it. A null
-    // has no picture to light.
-    if (threeD && kind != BridgeLayerKind.nullLayer)
+    // has no picture to light, and a model's or a 3D shape's materials have
+    // their own rows.
+    if (threeD &&
+        kind != BridgeLayerKind.nullLayer &&
+        kind != BridgeLayerKind.model &&
+        kind != BridgeLayerKind.mesh)
       for (final (label, prop) in [
         // Light passes through a layer only where it casts a shadow.
         if (material?.castsShadows != BridgeShadowMode.off)
@@ -383,6 +445,7 @@ List<TransformGroup> transformGroups({
         (l10n.materialSpecular, BridgeTransformProp.specular),
         (l10n.materialShininess, BridgeTransformProp.shininess),
         (l10n.materialMetal, BridgeTransformProp.metal),
+        (l10n.materialReflection, BridgeTransformProp.reflection),
       ])
         TransformGroup(label, [
           TransformAxis(prop,
@@ -464,6 +527,32 @@ class TransformRowsFrb extends StatelessWidget {
     final settings = layerSettings(kind: kind, light: light, threeD: threeD);
     final out = <Widget>[];
     TransformSection? last;
+    final seen = <TransformSection>{};
+    // The Effect controls card names each options group as the Timeline's
+    // headings do.
+    void options(TransformSection section) {
+      seen.add(section);
+      final heading = switch (section) {
+        TransformSection.transform => null,
+        TransformSection.camera => l10n.cameraOptions,
+        TransformSection.light => l10n.lightOptions,
+        TransformSection.material => l10n.materialOptions,
+      };
+      if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
+      for (final setting in settings) {
+        if (setting.section != section) continue;
+        out.add(LayerSettingRowFrb(
+          layer: layer,
+          setting: setting,
+          light: light,
+          material: material,
+          acceptsLights: acceptsLights,
+          onChanged: onChanged,
+          keyPrefix: keyPrefix,
+        ));
+      }
+    }
+
     for (final group in transformGroups(
         threeD: threeD,
         modes: axisModes,
@@ -473,27 +562,7 @@ class TransformRowsFrb extends StatelessWidget {
         material: material)) {
       if (group.section != last) {
         last = group.section;
-        // The Effect controls card names each options group as the
-        // Timeline's headings do.
-        final heading = switch (group.section) {
-          TransformSection.transform => null,
-          TransformSection.camera => l10n.cameraOptions,
-          TransformSection.light => l10n.lightOptions,
-          TransformSection.material => l10n.materialOptions,
-        };
-        if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
-        for (final setting in settings) {
-          if (setting.section != last) continue;
-          out.add(LayerSettingRowFrb(
-            layer: layer,
-            setting: setting,
-            light: light,
-            material: material,
-            acceptsLights: acceptsLights,
-            onChanged: onChanged,
-            keyPrefix: keyPrefix,
-          ));
-        }
+        options(group.section);
       }
       out.add(TransformRowFrb(
         comp: comp,
@@ -508,6 +577,10 @@ class TransformRowsFrb extends StatelessWidget {
         rowPadding: rowPadding,
         twoColumn: twoColumn,
       ));
+    }
+    // A section of switches with no numbers, as a Model layer's materials.
+    for (final section in {for (final s in settings) s.section}) {
+      if (!seen.contains(section)) options(section);
     }
     return out;
   }
@@ -531,9 +604,9 @@ class _OptionsHeading extends StatelessWidget {
     return SizedBox(
       height: fxRowHeight(t),
       child: Padding(
-        padding: const EdgeInsets.only(left: fxKeyColumnWidth + 4),
+        padding: const EdgeInsetsDirectional.only(start: fxKeyColumnWidth + 4),
         child: Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(t.kickerCase(label), style: t.kicker),
         ),
       ),
@@ -769,7 +842,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           if ((widget.graphColours?.length ?? 0) > 1)
             for (final colour in widget.graphColours!)
               Padding(
-                padding: const EdgeInsets.only(left: 3),
+                padding: const EdgeInsetsDirectional.only(start: 3),
                 child: Container(
                   width: 5,
                   height: 5,
@@ -1025,7 +1098,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         ];
     final exact = PickedColour(rgb[0], rgb[1], rgb[2]);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: ColourSwatchButton(
         key: ValueKey<String>(
             '${widget.keyPrefix}-${group.axes.first.prop.name}'),
@@ -1042,7 +1115,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           }
           final ui = _ui;
           _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-                frame: BigInt.from(ui.playheadFrame.value),
+                frame: ui.playheadFrame.value,
                 scale: ui.viewerScale,
                 layer: widget.layer,
                 transform: staged,
@@ -1112,7 +1185,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     _publishLive(staged);
     final ui = _ui;
     _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           transform: staged,
@@ -1162,7 +1235,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
     final ui = _ui;
     _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           transform: _staged ?? staged,
@@ -1176,7 +1249,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
     final ui = _ui;
     _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: widget.layer,
           transform: _staged ?? staged,
@@ -1365,6 +1438,20 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
         tf.light?.shadowDarkness ?? _noChannel,
       BridgeTransformProp.shadowDiffusion =>
         tf.light?.shadowDiffusion ?? _noChannel,
+      BridgeTransformProp.hazeAmount => tf.light?.hazeAmount ?? _noChannel,
+      BridgeTransformProp.hazeDensity => tf.light?.hazeDensity ?? _noChannel,
+      BridgeTransformProp.hazeColourR => tf.light?.hazeColourR ?? _noChannel,
+      BridgeTransformProp.hazeColourG => tf.light?.hazeColourG ?? _noChannel,
+      BridgeTransformProp.hazeColourB => tf.light?.hazeColourB ?? _noChannel,
+      BridgeTransformProp.hazeFalloff => tf.light?.hazeFalloff ?? _noChannel,
+      BridgeTransformProp.hazeScatter => tf.light?.hazeScatter ?? _noChannel,
+      BridgeTransformProp.hazeNoise => tf.light?.hazeNoise ?? _noChannel,
+      BridgeTransformProp.hazeNoiseSize =>
+        tf.light?.hazeNoiseSize ?? _noChannel,
+      BridgeTransformProp.hazeNoiseSpeed =>
+        tf.light?.hazeNoiseSpeed ?? _noChannel,
+      BridgeTransformProp.backgroundBlur =>
+        tf.light?.backgroundBlur ?? _noChannel,
       BridgeTransformProp.ambient => tf.material?.ambient ?? _noChannel,
       BridgeTransformProp.diffuse => tf.material?.diffuse ?? _noChannel,
       BridgeTransformProp.specular => tf.material?.specular ?? _noChannel,
@@ -1372,6 +1459,7 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.metal => tf.material?.metal ?? _noChannel,
       BridgeTransformProp.lightTransmission =>
         tf.material?.lightTransmission ?? _noChannel,
+      BridgeTransformProp.reflection => tf.material?.reflection ?? _noChannel,
     };
 
 /// A copy of `tf` with one property replaced — what the preview renders.
@@ -1441,6 +1529,26 @@ BridgeTransform writeScalar(
                 pick(BridgeTransformProp.shadowDarkness, light.shadowDarkness),
             shadowDiffusion:
                 pick(BridgeTransformProp.shadowDiffusion, light.shadowDiffusion),
+            hazeAmount: pick(BridgeTransformProp.hazeAmount, light.hazeAmount),
+            hazeDensity:
+                pick(BridgeTransformProp.hazeDensity, light.hazeDensity),
+            hazeColourR:
+                pick(BridgeTransformProp.hazeColourR, light.hazeColourR),
+            hazeColourG:
+                pick(BridgeTransformProp.hazeColourG, light.hazeColourG),
+            hazeColourB:
+                pick(BridgeTransformProp.hazeColourB, light.hazeColourB),
+            hazeFalloff:
+                pick(BridgeTransformProp.hazeFalloff, light.hazeFalloff),
+            hazeScatter:
+                pick(BridgeTransformProp.hazeScatter, light.hazeScatter),
+            hazeNoise: pick(BridgeTransformProp.hazeNoise, light.hazeNoise),
+            hazeNoiseSize:
+                pick(BridgeTransformProp.hazeNoiseSize, light.hazeNoiseSize),
+            hazeNoiseSpeed:
+                pick(BridgeTransformProp.hazeNoiseSpeed, light.hazeNoiseSpeed),
+            backgroundBlur:
+                pick(BridgeTransformProp.backgroundBlur, light.backgroundBlur),
           ),
     material: material == null
         ? null
@@ -1452,6 +1560,7 @@ BridgeTransform writeScalar(
             metal: pick(BridgeTransformProp.metal, material.metal),
             lightTransmission: pick(BridgeTransformProp.lightTransmission,
                 material.lightTransmission),
+            reflection: pick(BridgeTransformProp.reflection, material.reflection),
           ),
     depth: depth == null
         ? null

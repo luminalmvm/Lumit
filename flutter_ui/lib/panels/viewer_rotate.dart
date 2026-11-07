@@ -198,6 +198,9 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
   /// The ring under the pointer, drawn stronger.
   int? _hotRing;
 
+  /// The pointer is on rings an expression drives.
+  bool _drivenRing = false;
+
   final PreviewThrottle _throttle = PreviewThrottle();
 
   @override
@@ -225,24 +228,27 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     return layerAtPoint(widget.boxes, at);
   }
 
-  /// The rings round [box]'s anchor, null for a layer that is not turned in
-  /// 3D: a 2D one, or one whose turn an expression drives.
+  /// Whether an expression drives [box]'s turn, so its rings can't be held.
+  bool _turnDriven(LayerBox box) {
+    final tf = box.transform;
+    final depth = tf?.depth;
+    return tf != null &&
+        [
+          tf.rotationX,
+          tf.rotationY,
+          tf.rotation,
+          if (depth != null) ...[
+            depth.orientationX,
+            depth.orientationY,
+            depth.orientationZ
+          ],
+        ].any((s) => s is BridgeScalar_Expression);
+  }
+
+  /// The rings round [box]'s anchor, null for a 2D layer.
   Gizmo3d? _ringsOf(LayerBox box) {
     final tf = box.transform;
     if (!box.map.projected || tf == null) return null;
-    final depth = tf.depth;
-    if ([
-      tf.rotationX,
-      tf.rotationY,
-      tf.rotation,
-      if (depth != null) ...[
-        depth.orientationX,
-        depth.orientationY,
-        depth.orientationZ
-      ],
-    ].any((s) => s is BridgeScalar_Expression)) {
-      return null;
-    }
     final outside = box.map.depth?.outside;
     // Turning the Orientation, a Local ring turns about the layer's own axis;
     // turning the rotations, about the axis that rotation turns about.
@@ -260,11 +266,20 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
         mode: widget.uiState.tools.axes);
   }
 
-  /// The rings on screen, on the selected 3D layer picked first.
+  /// The selected 3D layer picked first, which the rings on screen are on.
+  LayerBox? get _primary => primary3d(
+      _selected, widget.uiState.selectedLayer.value?.internallayerId);
+
   Gizmo3d? get _shownRings {
-    final first = primary3d(
-        _selected, widget.uiState.selectedLayer.value?.internallayerId);
+    // A picked part's rings stand in for its layer's.
+    if (widget.uiState.pickedPart.value != null) return null;
+    final first = _primary;
     return first == null ? null : _ringsOf(first);
+  }
+
+  bool get _shownDriven {
+    final first = _primary;
+    return first != null && _turnDriven(first);
   }
 
   @override
@@ -276,18 +291,24 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
         ? null
         : rotateCursorFor(pointer: at, box: _shapeBox(at));
     final rings = _shownRings;
+    final driven = _shownDriven;
 
     return Positioned.fill(
       // The system pointer is hidden, because what replaces it is drawn below —
       // and a system arrow sitting inside the curved mark would read as two
       // pointers.
       child: DrawnPointerRegion(
+        cursor: _drivenRing
+            ? SystemMouseCursors.forbidden
+            : SystemMouseCursors.none,
         onPointer: (at) => setState(() {
           _pointer = at;
           if (_from == null) {
-            _hotRing = at == null
+            final hot = at == null
                 ? null
                 : _shownRings?.pick(at, turning: true)?.axis;
+            _drivenRing = hot != null && driven;
+            _hotRing = driven ? null : hot;
           }
         }),
         child: Listener(
@@ -304,12 +325,14 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
             onPanCancel: _onPanEnd,
             child: CustomPaint(
               painter: _RotateCursorPainter(
-                at: at,
+                // The system's no-entry sign stands in for the drawn pointer.
+                at: _drivenRing ? null : at,
                 angle: shape?.angle ?? 0,
                 sweep: shape?.sweep ?? rotateCursorEdgeSweep,
                 mark: widget.mark,
                 outline: widget.outline,
                 rings: rings,
+                ringTint: driven ? t.port.number : null,
                 hotRing: _hotRing,
                 heldRing: _ring?.axis,
                 readout: _rings == null ? const [] : _readout(),
@@ -346,7 +369,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
         widget.uiState.selectedLayerIds, widget.uiState.model.heldLayers);
     // A 3D layer first in the selection turns in 3D: about the ring the
     // press is on, or freely off them, as After Effects does.
-    final rings = _shownRings;
+    final rings = _shownDriven ? null : _shownRings;
     if (rings != null) {
       final first = primary3d(
           _selected, widget.uiState.selectedLayer.value?.internallayerId)!;
@@ -356,7 +379,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
             !box.marker &&
             box.transform != null &&
             box.transform!.rotation is! BridgeScalar_Expression;
-        if (flat || _ringsOf(box) != null) {
+        if (flat || (_ringsOf(box) != null && !_turnDriven(box))) {
           _start3d[box.id] ??= (box, turnOfBox(box), _orientationOf(box));
         }
       }
@@ -400,7 +423,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: box.layer,
           transform: transformWith(box.layer.getTransform(), rotation: degrees),
@@ -575,7 +598,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: layer,
           transform: tf,
@@ -697,6 +720,7 @@ class _RotateCursorPainter extends CustomPainter {
   /// A 3D layer's rings, the one under the pointer and the one in hand, and
   /// what a turn of it has changed so far.
   final Gizmo3d? rings;
+  final Color? ringTint;
   final int? hotRing;
   final int? heldRing;
   final List<String> readout;
@@ -710,6 +734,7 @@ class _RotateCursorPainter extends CustomPainter {
     required this.mark,
     required this.outline,
     this.rings,
+    this.ringTint,
     this.hotRing,
     this.heldRing,
     this.readout = const [],
@@ -728,6 +753,7 @@ class _RotateCursorPainter extends CustomPainter {
         outline: outline,
         hot: hotRing == null ? null : (kind: GizmoKind.ring, axis: hotRing!),
         held: heldRing == null ? null : (kind: GizmoKind.ring, axis: heldRing!),
+        tint: ringTint,
       );
     }
     final centre = at;
@@ -776,6 +802,7 @@ class _RotateCursorPainter extends CustomPainter {
       old.mark != mark ||
       old.outline != outline ||
       old.rings != rings ||
+      old.ringTint != ringTint ||
       old.hotRing != hotRing ||
       old.heldRing != heldRing ||
       old.readout.join() != readout.join();

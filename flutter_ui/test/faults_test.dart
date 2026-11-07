@@ -5,11 +5,13 @@
 // blank grey rectangle and printed the exception to a console a windowed
 // Windows build does not have, so the fault left no trace of any kind.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/faults.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A file of this test's own, never the diagnostics file a real session — or
 /// the developer running this — is writing to.

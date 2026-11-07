@@ -30,6 +30,7 @@ class AlignPanel extends StatelessWidget {
               BridgeLayerKind.camera,
               BridgeLayerKind.light,
               BridgeLayerKind.audio,
+              BridgeLayerKind.bus,
             }.contains(e.info.kind));
         Widget grid(String label, bool anchor, double side) => Column(
               mainAxisSize: MainAxisSize.min,

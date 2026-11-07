@@ -1,9 +1,15 @@
 // Ties on a graph canvas's wires.
 //
 // A tie gathers wires at one spot, so a bundle of them runs side by side
-// through it. A drag with the right button across some wires ties them. A tie
-// is moved by dragging it, and let go by a right-click on it or a drag across
-// it.
+// through it. A drag with the right button across some wires ties them. With
+// Shift held the drag reroutes instead: each wire it crosses gets a point of
+// its own there, and wires from the same socket share one and fan out after
+// it. A tie is moved by dragging it, and let go by a right-click on it, a drag
+// across it, or a click to pick it and Delete. Ctrl and a drag out of a point
+// draws a new wire from the socket its wires leave, through the point.
+//
+// A reroute point takes its wires through the one spot and is drawn as a
+// dot, as a tie on a single wire is.
 //
 // A tie keeps where it is and which wires go through it, each named by the
 // socket it ends in. Which way they run through it and in what order is worked
@@ -19,19 +25,25 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart'
     show PointerDownEvent, kPrimaryMouseButton, kSecondaryMouseButton;
 import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, SystemMouseCursors;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 
 import '../theme/motion.dart' show MotionSpec;
 import '../theme/theme.dart';
 import '../widgets/controls.dart' show ThemeScope;
-import 'graph_panel.dart' show graphWirePath, graphWireStub, graphWireWidth;
+import 'graph_panel.dart'
+    show graphWireDistance, graphWirePath, graphWireStub, graphWireWidth;
 
 /// How far apart the wires in a tie run, in canvas units.
 const double graphTieGap = 4;
 
 /// How thick a tie is drawn, in canvas units.
 const double graphTieWidth = 3.5;
+
+/// How big a reroute point is across, in canvas units.
+const double graphRerouteSize = 9;
 
 /// One wire as the ties see it: where it runs from and to, in canvas units,
 /// and its name, the socket it ends in.
@@ -40,8 +52,9 @@ typedef TieWire = ({String key, Offset from, Offset to});
 /// What a tie calls the wire ending in [socket] on [box].
 String tieWireKey(String box, String socket) => '$box/$socket';
 
-/// A tie as it is drawn: its middle, the way across it, and how long it is.
-typedef TieBar = ({Offset at, Offset across, double length});
+/// A tie as it is drawn: its middle, the way across it, how long it is, and
+/// how many places it holds. One place is drawn as a reroute point.
+typedef TieBar = ({Offset at, Offset across, double length, int lanes});
 
 /// Where the wires run through the ties, worked out from the wires.
 class TieLayout {
@@ -55,7 +68,9 @@ class TieLayout {
 
   const TieLayout._(this.through, this.bars);
 
-  factory TieLayout.of(List<BridgeWireTie> ties, List<TieWire> wires) {
+  /// [level] runs every bundle level through its ties, for angled wires.
+  factory TieLayout.of(List<BridgeWireTie> ties, List<TieWire> wires,
+      {bool level = false}) {
     final ends = {for (final w in wires) w.key: w};
     Offset at(int i) => Offset(ties[i].x, ties[i].y);
     double dot(Offset a, Offset b) => a.dx * b.dx + a.dy * b.dy;
@@ -108,6 +123,7 @@ class TieLayout {
       heading = heading.distance < 1e-6
           ? const Offset(1, 0)
           : heading / heading.distance;
+      if (level) heading = Offset(heading.dx < 0 ? -1 : 1, 0);
       final across = Offset(-heading.dy, heading.dx);
       // Side by side in the order their two ends lie, which every tie on the
       // same wires agrees on, so they keep their places from tie to tie.
@@ -117,25 +133,36 @@ class TieLayout {
       }
 
       members.sort((a, b) => side(a).compareTo(side(b)));
+      // A point takes every wire through its middle; a tie lays them side
+      // by side.
+      final lanes = tie.point ? 1 : members.length;
       for (final (j, key) in members.indexed) {
-        final slot =
-            centre + across * ((j - (members.length - 1) / 2) * graphTieGap);
+        final slot = tie.point
+            ? centre
+            : centre + across * ((j - (lanes - 1) / 2) * graphTieGap);
         through[key]![order[key]!.indexOf(i)] = (slot, heading);
       }
       bars.add((
         at: centre,
         across: across,
-        length: (members.length - 1) * graphTieGap + graphTieGap * 1.5,
+        length: (lanes - 1) * graphTieGap + graphTieGap * 1.5,
+        lanes: lanes,
       ));
     }
     return TieLayout._(through, bars);
   }
 
-  /// The tie whose bar is under [at], or null.
+  /// The tie whose bar or point is under [at], or null.
   int? barAt(Offset at, double zoom) {
     final reach = math.max(graphTieWidth, 6 / zoom);
     for (final (i, bar) in bars.indexed.toList().reversed) {
       if (bar == null) continue;
+      if (bar.lanes == 1) {
+        if ((at - bar.at).distance <= math.max(graphRerouteSize, 8 / zoom)) {
+          return i;
+        }
+        continue;
+      }
       final half = bar.across * (bar.length / 2);
       if (_toSegment(at, bar.at - half, bar.at + half) <= reach) return i;
     }
@@ -151,6 +178,16 @@ Path tiedWirePath(Offset a, Offset b, List<(Offset, Offset)> through,
     {double zoom = 1, WireStyle wires = WireStyle.curved}) {
   if (through.isEmpty) return graphWirePath(a, b, zoom: zoom, wires: wires);
   final path = Path()..moveTo(a.dx, a.dy);
+  if (wires == WireStyle.angled) {
+    // Each stretch is an angled wire of its own, level through every tie.
+    var p = a;
+    for (final q in [for (final (q, _) in through) q, b]) {
+      path.extendWithPath(
+          graphWirePath(p, q, zoom: zoom, wires: wires), Offset.zero);
+      p = q;
+    }
+    return path;
+  }
   final stub = graphWireStub * zoom;
   var (p, u) = (a, const Offset(1, 0));
   final stops = [...through, (b, const Offset(1, 0))];
@@ -215,6 +252,26 @@ Path tiedWireBetween(Offset a, Offset b, List<(Offset, Offset)> from,
       wires: wires);
 }
 
+/// How far [at] is from the wire [w] running through [through], sampled
+/// along it as [graphWireDistance] samples an untied one.
+double tiedWireDistance(TieWire w, List<(Offset, Offset)> through, Offset at,
+    {WireStyle wires = WireStyle.curved}) {
+  if (through.isEmpty) {
+    return graphWireDistance(w.from, w.to, at, wires: wires);
+  }
+  var best = double.infinity;
+  final path = tiedWirePath(w.from, w.to, through, wires: wires);
+  for (final metric in path.computeMetrics()) {
+    final steps = math.max(20, (metric.length / 12).ceil());
+    for (var i = 0; i <= steps; i++) {
+      final point =
+          metric.getTangentForOffset(metric.length * i / steps)?.position;
+      if (point != null) best = math.min(best, (point - at).distance);
+    }
+  }
+  return best;
+}
+
 /// How far [p] is from the segment [a] to [b].
 double _toSegment(Offset p, Offset a, Offset b) {
   final ab = b - a;
@@ -252,8 +309,14 @@ class TieView {
   /// The wires it crosses.
   final Set<String> crossed;
 
+  /// Where a Shift drag's reroute points would land, in canvas units.
+  final List<Offset> landing;
+
   /// The tie under the pointer or in hand.
   final int? lit;
+
+  /// Where a wire in hand comes out of, when it is drawn out of a point.
+  final Offset? via;
 
   const TieView({
     this.ties = const [],
@@ -261,7 +324,9 @@ class TieView {
     this.t = 1,
     this.stroke,
     this.crossed = const {},
+    this.landing = const [],
     this.lit,
+    this.via,
   });
 }
 
@@ -277,8 +342,10 @@ void paintTiedWires(
   required LumitTheme theme,
 }) {
   final plain = [for (final (w, _, _) in wires) w];
-  final now = TieLayout.of(view.ties, plain);
-  final before = view.was == null ? null : TieLayout.of(view.was!, plain);
+  final level = style == WireStyle.angled;
+  final now = TieLayout.of(view.ties, plain, level: level);
+  final before =
+      view.was == null ? null : TieLayout.of(view.was!, plain, level: level);
   Offset screen(Offset canvas) => canvas * zoom + pan;
   List<(Offset, Offset)> onScreen(List<(Offset, Offset)>? points) => [
         for (final (p, d) in points ?? const <(Offset, Offset)>[])
@@ -306,6 +373,10 @@ void paintTiedWires(
   void bar(TieBar bar, double grown, bool lit) {
     if (grown <= 0) return;
     final c = screen(bar.at);
+    if (bar.lanes == 1) {
+      paintReroutePoint(canvas, c, grown, lit, zoom: zoom, theme: theme);
+      return;
+    }
     final half = bar.across * (bar.length * zoom * grown / 2);
     // A rim of the ground first, so a tie reads over the wires it holds.
     canvas.drawLine(
@@ -347,13 +418,36 @@ void paintTiedWires(
           ..color = theme.accent
           ..strokeWidth = graphWireWidth
           ..strokeCap = StrokeCap.round);
+    for (final at in view.landing) {
+      paintReroutePoint(canvas, screen(at), 0.8, true, zoom: zoom, theme: theme);
+    }
   }
+}
+
+/// A reroute point at [c] on screen, [grown] of the way in. It comes in from
+/// half its size, fading up, never from nothing.
+void paintReroutePoint(Canvas canvas, Offset c, double grown, bool lit,
+    {required double zoom, required LumitTheme theme}) {
+  if (grown <= 0) return;
+  final r = graphRerouteSize / 2 * zoom * (0.5 + 0.5 * grown);
+  final a = grown.clamp(0.0, 1.0);
+  canvas.drawCircle(
+      c, r + zoom, Paint()..color = theme.surface0.withValues(alpha: a));
+  canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..color = (lit ? theme.accent : theme.textSecondary)
+            .withValues(alpha: a));
 }
 
 /// Whether [ties] has [tie], by value: ties read again after each change
 /// are new lists, and the generated == compares the wires by identity.
 bool _hasTie(List<BridgeWireTie> ties, BridgeWireTie tie) => ties.any((t) =>
-    t.x == tie.x && t.y == tie.y && listEquals(t.wires, tie.wires));
+    t.x == tie.x &&
+    t.y == tie.y &&
+    t.point == tie.point &&
+    listEquals(t.wires, tie.wires));
 
 bool _samePoints(List<(Offset, Offset)>? a, List<(Offset, Offset)>? b) {
   if ((a?.length ?? 0) != (b?.length ?? 0)) return false;
@@ -376,11 +470,24 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
   (Offset, Offset)? _stroke;
   Set<String> _crossed = const {};
 
+  /// Whether the stroke in hand reroutes (Shift) rather than ties.
+  bool _rerouting = false;
+  List<Offset> _landing = const [];
+
   /// A tie in hand: which, and where it has got to.
   (int, Offset)? _tieDrag;
   Offset _tieGrab = Offset.zero;
 
   int? _tieHover;
+
+  /// The tie a click picked, which Delete takes away.
+  int? _tiePicked;
+
+  /// A wire being drawn out of a point: the tie, and the socket it leaves.
+  (int, Offset)? _growing;
+
+  /// The canvas's wires as they stand now.
+  List<TieWire> tieWiresNow();
 
   List<BridgeWireTie>? _tiesWas;
   double _tieT = 1;
@@ -396,12 +503,25 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
   WireStyle get _style =>
       ThemeScope.maybeOf(context)?.wireStyle ?? WireStyle.curved;
 
+  /// [child] wearing a hand over a tie or a point, closed while one is held,
+  /// so what can be picked up says so.
+  Widget tieCursorRegion(Widget child) => MouseRegion(
+        opaque: false,
+        cursor: _tieDrag != null
+            ? SystemMouseCursors.grabbing
+            : _tieHover != null
+                ? SystemMouseCursors.grab
+                : MouseCursor.defer,
+        child: child,
+      );
+
   /// The ties for the painter, a tie in hand drawn where it has got to.
   TieView tieView() => TieView(
         ties: [
           for (final (i, tie) in ties.indexed)
             if (_tieDrag case (final at, final where) when at == i)
-              BridgeWireTie(x: where.dx, y: where.dy, wires: tie.wires)
+              BridgeWireTie(
+                x: where.dx, y: where.dy, wires: tie.wires, point: tie.point)
             else
               tie,
         ],
@@ -409,22 +529,90 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
         t: _tieT,
         stroke: _stroke,
         crossed: _crossed,
-        lit: _tieDrag?.$1 ?? _tieHover,
+        landing: _landing,
+        lit: _tieDrag?.$1 ?? _tiePicked ?? _tieHover,
+        via: switch (_growing) {
+          (final i, _) when i < ties.length => Offset(ties[i].x, ties[i].y),
+          _ => null,
+        },
       );
 
-  /// A press on empty canvas. The right button starts a stroke and the left
-  /// takes hold of a tie under it. True when the press was the ties'.
+  /// A press on empty canvas. The right button starts a stroke, with Shift a
+  /// reroute, and the left takes hold of a tie under it. True when the press
+  /// was the ties'.
   bool tieDown(PointerDownEvent event, Offset at, List<TieWire> wires) {
+    if (_tiePicked != null) setState(() => _tiePicked = null);
     if (event.buttons == kSecondaryMouseButton) {
-      setState(() => _stroke = (at, at));
+      setState(() {
+        _stroke = (at, at);
+        _rerouting = HardwareKeyboard.instance.isShiftPressed;
+        _landing = const [];
+      });
       return true;
     }
     if (event.buttons != kPrimaryMouseButton) return false;
-    final hit = TieLayout.of(ties, wires).barAt(at, tieZoom);
+    final hit = _layout(wires).barAt(at, tieZoom);
     if (hit == null) return false;
     final held = Offset(ties[hit].x, ties[hit].y);
     _tieGrab = held - at;
     setState(() => _tieDrag = (hit, held));
+    return true;
+  }
+
+  /// With Ctrl held, a press on a tie starts a new wire from the socket its
+  /// first wire leaves: where that socket is, for the canvas to start the
+  /// wire from as if the socket itself were pressed. Null otherwise.
+  Offset? tieWireFrom(PointerDownEvent event, Offset at, List<TieWire> wires) {
+    final keys = HardwareKeyboard.instance;
+    if (event.buttons != kPrimaryMouseButton ||
+        !(keys.isControlPressed || keys.isMetaPressed)) {
+      return null;
+    }
+    final hit = _layout(wires).barAt(at, tieZoom);
+    if (hit == null) return null;
+    final ends = {for (final w in wires) w.key: w.from};
+    final from = ties[hit].wires.map((k) => ends[k]).nonNulls.firstOrNull;
+    if (from == null) return null;
+    _growing = (hit, from);
+    return from;
+  }
+
+  /// A wire in hand was let go. One drawn out of a point joins that point
+  /// once the canvas has it.
+  void tieWireLanded() {
+    final growing = _growing;
+    _growing = null;
+    if (growing == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final (i, from) = growing;
+      if (i >= ties.length) return;
+      final wires = tieWiresNow();
+      final tie = ties[i];
+      final joining = [
+        for (final w in wires)
+          if (w.from == from && !tie.wires.contains(w.key)) w.key,
+      ];
+      if (joining.isEmpty) return;
+      _write([
+        for (final (j, t) in ties.indexed)
+          j == i
+              ? BridgeWireTie(
+                  x: t.x,
+                  y: t.y,
+                  wires: [...t.wires, ...joining],
+                  point: t.point)
+              : t,
+      ], wires);
+    });
+  }
+
+  /// Delete with a tie picked takes it away. True when there was one.
+  bool tieDelete() {
+    final i = _tiePicked;
+    if (i == null || i >= ties.length) return false;
+    setState(() => _tiePicked = null);
+    _write([...ties]..removeAt(i), tieWiresNow());
     return true;
   }
 
@@ -435,10 +623,13 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
       return true;
     }
     if (_stroke case (final from, _)?) {
-      final crossed = _crossings(from, at, wires).keys.toSet();
+      final crossings = _crossings(from, at, wires);
       setState(() {
         _stroke = (from, at);
-        _crossed = crossed;
+        _crossed = crossings.keys.toSet();
+        _landing = _rerouting
+            ? [for (final (at, _) in _reroutes(crossings, wires)) at]
+            : const [];
       });
       return true;
     }
@@ -447,8 +638,7 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
 
   /// The pointer over the canvas with nothing held: a tie under it lights.
   void tieHover(Offset at, List<TieWire> wires) {
-    final hit =
-        ties.isEmpty ? null : TieLayout.of(ties, wires).barAt(at, tieZoom);
+    final hit = ties.isEmpty ? null : _layout(wires).barAt(at, tieZoom);
     if (hit != _tieHover) setState(() => _tieHover = hit);
   }
 
@@ -456,12 +646,17 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
   /// canvas then treats as its own.
   bool tieUp(Offset at, bool moved, List<TieWire> wires) {
     if (_tieDrag case (final i, final where)?) {
-      setState(() => _tieDrag = null);
+      setState(() {
+        _tieDrag = null;
+        // A click, not a drag, picks the tie.
+        if (!moved) _tiePicked = i;
+      });
       if (moved && i < ties.length) {
         _write([
           for (final (j, tie) in ties.indexed)
             j == i
-                ? BridgeWireTie(x: where.dx, y: where.dy, wires: tie.wires)
+                ? BridgeWireTie(
+                x: where.dx, y: where.dy, wires: tie.wires, point: tie.point)
                 : tie,
         ], wires, morph: false);
       }
@@ -472,8 +667,9 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
     setState(() {
       _stroke = null;
       _crossed = const {};
+      _landing = const [];
     });
-    final layout = TieLayout.of(ties, wires);
+    final layout = _layout(wires);
     if (!moved) {
       final hit = layout.barAt(at, tieZoom);
       if (hit == null) return false;
@@ -499,18 +695,57 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
     }
     final crossed = _crossings(from, at, wires);
     if (crossed.isEmpty) return true;
+    if (_rerouting) {
+      _write([
+        ...ties,
+        for (final (at, keys) in _reroutes(crossed, wires))
+          BridgeWireTie(x: at.dx, y: at.dy, wires: keys, point: true),
+      ], wires);
+      return true;
+    }
     final centre =
         crossed.values.reduce((a, b) => a + b) / crossed.length.toDouble();
     _write([
       ...ties,
-      BridgeWireTie(x: centre.dx, y: centre.dy, wires: crossed.keys.toList()),
+      BridgeWireTie(
+          x: centre.dx,
+          y: centre.dy,
+          wires: crossed.keys.toList(),
+          point: false),
     ], wires);
     return true;
   }
 
+  TieLayout _layout(List<TieWire> wires) =>
+      TieLayout.of(ties, wires, level: _style == WireStyle.angled);
+
+  /// How far [at] is from wire [w] as it runs through the ties.
+  double tieWireDistance(TieWire w, Offset at, List<TieWire> wires) =>
+      tiedWireDistance(w, _layout(wires).through[w.key] ?? const [], at,
+          wires: _style);
+
+  /// One reroute point per socket the [crossed] wires leave, where they
+  /// were crossed, each with its wires.
+  List<(Offset, List<String>)> _reroutes(
+      Map<String, Offset> crossed, List<TieWire> wires) {
+    final from = {for (final w in wires) w.key: w.from};
+    final bySocket = <Offset, List<String>>{};
+    for (final key in crossed.keys) {
+      (bySocket[from[key]!] ??= []).add(key);
+    }
+    return [
+      for (final keys in bySocket.values)
+        (
+          keys.map((k) => crossed[k]!).reduce((a, b) => a + b) /
+              keys.length.toDouble(),
+          keys,
+        ),
+    ];
+  }
+
   /// The wires the stroke from [p] to [q] crosses, each with where.
   Map<String, Offset> _crossings(Offset p, Offset q, List<TieWire> wires) {
-    final layout = TieLayout.of(ties, wires);
+    final layout = _layout(wires);
     final crossed = <String, Offset>{};
     for (final w in wires) {
       final path = tiedWirePath(w.from, w.to, layout.through[w.key] ?? const [],
@@ -543,7 +778,7 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
       for (final tie in next)
         if (tie.wires.where(live.contains).toList() case final keep
             when keep.isNotEmpty)
-          BridgeWireTie(x: tie.x, y: tie.y, wires: keep),
+          BridgeWireTie(x: tie.x, y: tie.y, wires: keep, point: tie.point),
     ];
     _tieSpec = ThemeScope.maybeOf(context)?.motion.tie ?? MotionSpec.still;
     if (morph && !_tieSpec.isStill) {

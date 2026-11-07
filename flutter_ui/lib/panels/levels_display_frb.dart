@@ -179,7 +179,7 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     final t = ThemeScope.of(context).theme;
     try {
       widget.comp.renderScope(
-        frame: BigInt.from(widget.playheadFrame),
+        frame: widget.playheadFrame,
         scale: state.measuredScale,
         kind: _histogramKind,
         colours: levelsHistogramColours(t,

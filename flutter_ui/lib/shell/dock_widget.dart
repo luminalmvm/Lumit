@@ -14,9 +14,12 @@ import '../l10n/strings.dart';
 import '../panels/viewer_strips.dart' show viewerPaneCorners;
 import '../state/dock.dart';
 import '../theme/style_sheet.dart';
+import '../state/settings.dart' show effectiveUiScale;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
+import '../widgets/ui_scale.dart';
+import 'pop_out.dart';
 
 typedef PanelBuilder = Widget Function(BuildContext context, PaneId pane);
 
@@ -161,6 +164,9 @@ class DockWidget extends StatefulWidget {
   /// A pane, not a panel, because two Viewers are two homes.
   final ValueNotifier<PaneId?> activePanel;
 
+  /// Settings ▸ Interface ▸ Scale, which a popped-out window draws at too.
+  final double uiScale;
+
   const DockWidget({
     super.key,
     required this.root,
@@ -168,6 +174,7 @@ class DockWidget extends StatefulWidget {
     required this.onLayoutChanged,
     required this.activePanel,
     required this.maximised,
+    this.uiScale = 1.0,
   });
 
   @override
@@ -200,8 +207,42 @@ class _DockWidgetState extends State<DockWidget> {
   );
   OverlayEntry? _ghost;
 
+  // Panes popped out into windows of their own. They stay in the arrangement,
+  // so it saves, restores and changes with the project as it always did, and
+  // the dock just leaves them out. Closing the window puts the pane back where
+  // it was.
+  final Map<PaneId, PopOutWindow> _popped = {};
+
+  bool _shown(DockNode node) =>
+      panesIn(node).any((pane) => !_popped.containsKey(pane));
+
+  void _popOut(PaneId pane) {
+    final size = _paneKey(pane).currentContext?.size ?? const Size(960, 540);
+    final window = PopOutWindow.open(
+      title: paneTitle(pane),
+      size: size * effectiveUiScale(widget.uiScale),
+      onClosed: () => _dock(pane),
+    );
+    if (window == null) return;
+    setState(() => _popped[pane] = window);
+    widget.activePanel.value = pane;
+  }
+
+  void _dock(PaneId pane) {
+    if (_forget(pane) && mounted) setState(() {});
+  }
+
+  // The window closes after the frame that takes its view out of the tree.
+  bool _forget(PaneId pane) {
+    final window = _popped.remove(pane);
+    if (window == null) return false;
+    WidgetsBinding.instance.addPostFrameCallback((_) => window.close());
+    return true;
+  }
+
   @override
   void dispose() {
+    _popped.keys.toList().forEach(_forget);
     _removeGhost();
     _drag.dispose();
     super.dispose();
@@ -234,7 +275,14 @@ class _DockWidgetState extends State<DockWidget> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return ValueListenableBuilder<PaneId?>(
+    // A popped pane taken out of the arrangement (closed, or another project's
+    // arrangement came in without it) takes its window with it. So does every
+    // popped pane when nothing would be left in the dock.
+    final present = panesIn(widget.root).toSet();
+    for (final pane in _popped.keys.toList()) {
+      if (!present.contains(pane) || !_shown(widget.root)) _forget(pane);
+    }
+    final dock = ValueListenableBuilder<PaneId?>(
       valueListenable: widget.maximised,
       builder: (context, maximised, _) => Container(
         // Cards stand on the room; flush panes sit on the canvas.
@@ -243,7 +291,9 @@ class _DockWidgetState extends State<DockWidget> {
         // One pane filling the window, when one has been asked for and is
         // still in the arrangement. A pane closed while it was maximised
         // simply puts the arrangement back rather than showing nothing.
-        child: maximised != null && panesIn(widget.root).contains(maximised)
+        child: maximised != null &&
+                present.contains(maximised) &&
+                !_popped.containsKey(maximised)
             ? _PaneChrome(
                 pane: maximised,
                 activePanel: widget.activePanel,
@@ -253,6 +303,31 @@ class _DockWidgetState extends State<DockWidget> {
                 child: widget.buildPanel(context, maximised),
               )
             : _buildNode(context, widget.root),
+      ),
+    );
+    return _PopOutScope(
+      // The main window keeps at least one pane.
+      popOut: popOutAvailable &&
+              present.where((p) => !_popped.containsKey(p)).length > 1
+          ? _popOut
+          : null,
+      child: ViewAnchor(
+        view: _popped.isEmpty
+            ? null
+            : ViewCollection(views: [
+                for (final MapEntry(key: pane, value: window)
+                    in _popped.entries)
+                  KeyedSubtree(
+                    key: ValueKey(pane),
+                    child: window.view(_PoppedPane(
+                      pane: pane,
+                      buildPanel: widget.buildPanel,
+                      activePanel: widget.activePanel,
+                      uiScale: widget.uiScale,
+                    )),
+                  ),
+              ]),
+        child: dock,
       ),
     );
   }
@@ -294,6 +369,7 @@ class _DockWidgetState extends State<DockWidget> {
           ),
         DockTabs() when node.stacked => _StackGroup(
             tabs: node,
+            hidden: _popped.keys.toSet(),
             buildPanel: widget.buildPanel,
             activePanel: widget.activePanel,
             drag: _drag,
@@ -303,6 +379,7 @@ class _DockWidgetState extends State<DockWidget> {
           ),
         DockTabs() => _TabGroup(
             tabs: node,
+            hidden: _popped.keys.toSet(),
             buildPanel: widget.buildPanel,
             activePanel: widget.activePanel,
             drag: _drag,
@@ -322,37 +399,54 @@ class _DockWidgetState extends State<DockWidget> {
   Widget _buildSplit(BuildContext context, DockSplit split) {
     final t = ThemeScope.of(context).theme;
     final horizontal = split.axis == DockAxis.horizontal;
+    // A child whose panes are all popped out takes no room, and the seam
+    // across the gap it leaves moves the two either side of it.
+    final shown = [
+      for (var i = 0; i < split.children.length; i++)
+        if (_shown(split.children[i])) i,
+    ];
     final children = <Widget>[];
-    for (var i = 0; i < split.children.length; i++) {
+    for (final (k, i) in shown.indexed) {
       children.add(Expanded(
         // Flex is integer; scale the share up to keep precision.
         flex: (split.shares[i] * 10000).round().clamp(1, 1 << 30),
         child: _buildNode(context, split.children[i]),
       ));
-      if (i < split.children.length - 1) {
+      if (k < shown.length - 1) {
+        final j = shown[k + 1];
         children.add(_Divider(
           horizontal: horizontal,
           gap: t.tokens.tileGap,
           onDrag: (delta, totalExtent) {
             setState(() {
-              _resize(split, i, horizontal ? delta.dx : delta.dy, totalExtent);
+              _resize(split, i, j, horizontal ? delta.dx : delta.dy,
+                  totalExtent);
             });
           },
           onDragEnd: widget.onLayoutChanged,
         ));
       }
     }
-    return horizontal ? Row(children: children) : Column(children: children);
+    // The arrangement is the one the user built, in every language: the seam
+    // drags and the drop sides below are in screen terms.
+    return horizontal
+        ? Row(textDirection: TextDirection.ltr, children: children)
+        : Column(children: children);
   }
 
-  /// Move the boundary between child i and i+1 by `deltaPx` of `totalExtent`.
-  void _resize(DockSplit split, int i, double deltaPx, double totalExtent) {
+  /// Move the boundary between child i and child j, the next one drawn, by
+  /// `deltaPx` of `totalExtent`.
+  void _resize(
+      DockSplit split, int i, int j, double deltaPx, double totalExtent) {
     if (totalExtent <= 0) return;
-    final total = split.shares.reduce((a, b) => a + b);
+    final total = [
+      for (var k = 0; k < split.children.length; k++)
+        if (_shown(split.children[k])) split.shares[k],
+    ].reduce((a, b) => a + b);
     final deltaShare = deltaPx / totalExtent * total;
     const minShare = 0.05;
     final a = split.shares[i] + deltaShare;
-    final b = split.shares[i + 1] - deltaShare;
+    final b = split.shares[j] - deltaShare;
     if (a < minShare || b < minShare) return;
     // **The seam stops at the panels' own minimums.** Every panel declares a
     // minimum, and the dock will not shrink it past that. Across a horizontal
@@ -363,12 +457,12 @@ class _DockWidgetState extends State<DockWidget> {
       final aPx = a / total * totalExtent;
       final bPx = b / total * totalExtent;
       if (aPx < dockMinWidth(split.children[i]) ||
-          bPx < dockMinWidth(split.children[i + 1])) {
+          bPx < dockMinWidth(split.children[j])) {
         return;
       }
     }
     split.shares[i] = a;
-    split.shares[i + 1] = b;
+    split.shares[j] = b;
   }
 }
 
@@ -768,7 +862,7 @@ class _TitleLine extends StatelessWidget {
           Expanded(
             child: t.tokens.titleCentred
                 ? Center(child: child)
-                : Align(alignment: Alignment.centerLeft, child: child),
+                : Align(alignment: AlignmentDirectional.centerStart, child: child),
           ),
           // The dot's own width again, so the words centre on the line rather
           // than on what is left of it.
@@ -810,6 +904,9 @@ Widget _card(BuildContext context, LumitTheme t, String? panel, Widget child) {
 /// Lantern the whole group is one card and the tabs sit on its title line.
 class _TabGroup extends StatelessWidget {
   final DockTabs tabs;
+
+  /// Panes popped out into windows of their own, which the group leaves out.
+  final Set<PaneId> hidden;
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
   final ValueNotifier<PaneId?> activePanel;
@@ -820,6 +917,7 @@ class _TabGroup extends StatelessWidget {
 
   const _TabGroup({
     required this.tabs,
+    required this.hidden,
     required this.buildPanel,
     required this.onChanged,
     required this.activePanel,
@@ -830,7 +928,13 @@ class _TabGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final active = tabs.children[tabs.active];
+    final shown = [
+      for (var i = 0; i < tabs.children.length; i++)
+        if (!hidden.contains(tabs.children[i].id)) i,
+    ];
+    // The tab in front, or the first one left when that one is popped out.
+    final front = shown.contains(tabs.active) ? tabs.active : shown.first;
+    final active = tabs.children[front];
 
     return _card(
       context,
@@ -849,11 +953,11 @@ class _TabGroup extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (var i = 0; i < tabs.children.length; i++)
+                    for (final i in shown)
                       _TabPill(
                         pane: tabs.children[i].id,
                         title: paneTitle(tabs.children[i].id),
-                        active: i == tabs.active,
+                        active: i == front,
                         drag: drag,
                         onClose: onClose,
                         group: tabs,
@@ -880,8 +984,8 @@ class _TabGroup extends StatelessWidget {
           Expanded(
             child: Stack(
               children: [
-                for (final tab in tabs.children)
-                  _paneBody(context, tab.id, identical(tab, active)),
+                for (final i in shown)
+                  _paneBody(context, tabs.children[i].id, i == front),
               ],
             ),
           ),
@@ -1123,20 +1227,11 @@ class _TabPillState extends State<_TabPill> {
   }
 }
 
-/// Whether a panel can be torn into its own window. Not yet, so the menu
-/// below leaves the row out; turning this on brings it back.
-const bool _popOutBuilt = false;
-
 /// A panel's right-click menu, on its tab, its header in a stack or its own
 /// title when it stands alone: close the panel, and how the group it is in is
 /// drawn. A pane standing alone has no group, so it gets the close and no more.
 ///
-/// **Pop out is left off until it is built.** Tearing a panel into its own
-/// window needs real operating-system windows, and Flutter has not shipped
-/// those on a stable release (`docs/impl/multi-window.md`). It is
-/// deliberately *not* faked with a floating in-window panel: a panel that
-/// says it popped out and then cannot leave the app window is a worse answer
-/// than no row.
+/// The Viewer's also has Pop out, which puts it in a window of its own.
 void _showPaneMenu(
   BuildContext context,
   Offset position, {
@@ -1145,7 +1240,9 @@ void _showPaneMenu(
   DockTabs? group,
   VoidCallback? onGroupChanged,
 }) {
-  final t = ThemeScope.of(context).theme;
+  final popOut = pane.panel == Panel.viewer
+      ? context.getInheritedWidgetOfExactType<_PopOutScope>()?.popOut
+      : null;
   showLumitPopup<void>(
     context: context,
     position: position,
@@ -1163,18 +1260,14 @@ void _showPaneMenu(
               },
               child: Text(l10n.closePanel),
             ),
-            if (_popOutBuilt)
-              LumitTooltip(
-                message: l10n.popOutPanelBlocked,
-                child: Padding(
-                  key: const ValueKey('tab-menu-pop-out'),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  child: Text(
-                    l10n.popOutPanel,
-                    style: t.body.copyWith(color: t.textDisabled),
-                  ),
-                ),
+            if (popOut != null)
+              MenuRow(
+                key: const ValueKey('tab-menu-pop-out'),
+                onPressed: () {
+                  close(null);
+                  popOut(pane);
+                },
+                child: Text(l10n.popOutPanel),
               ),
             if (group != null)
               MenuRow(
@@ -1228,6 +1321,9 @@ const double _stackMinBody = 48;
 /// tab does: a panel's scroll, twirls and half-typed text survive being shut.
 class _StackGroup extends StatelessWidget {
   final DockTabs tabs;
+
+  /// Panes popped out into windows of their own, which the stack leaves out.
+  final Set<PaneId> hidden;
   final PanelBuilder buildPanel;
   final VoidCallback onChanged;
 
@@ -1239,6 +1335,7 @@ class _StackGroup extends StatelessWidget {
 
   const _StackGroup({
     required this.tabs,
+    required this.hidden,
     required this.buildPanel,
     required this.onChanged,
     required this.onResized,
@@ -1250,7 +1347,10 @@ class _StackGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final panes = [for (final c in tabs.children) c.id];
+    final panes = [
+      for (final c in tabs.children)
+        if (!hidden.contains(c.id)) c.id,
+    ];
     final open = [for (final p in panes) if (tabs.isOpen(p)) p];
     final hit = t.tokens.tileGap < 7.0 ? 7.0 : t.tokens.tileGap;
     final total = open.fold<double>(0, (sum, p) => sum + tabs.shareOf(p));
@@ -1287,7 +1387,9 @@ class _StackGroup extends StatelessWidget {
                 drag: drag,
                 onToggle: () {
                   tabs.setOpen(pane, !isOpen);
-                  if (!isOpen) tabs.active = panes.indexOf(pane);
+                  if (!isOpen) {
+                    tabs.active = tabs.children.indexWhere((c) => c.id == pane);
+                  }
                   onChanged();
                 },
                 onMenu: (context, at) => _showPaneMenu(
@@ -1775,3 +1877,63 @@ class _DropPainter extends CustomPainter {
 /// Workspace holds the presets, the reset and the per-panel toggles. A pane
 /// that is alone in its slot is lifted by its own title (`DockPaneHandle`),
 /// which sits in the panel's header strip rather than floating over its content.
+
+/// Pop out, for the menus of the panes in this dock.
+class _PopOutScope extends InheritedWidget {
+  /// Null where a panel cannot be popped out.
+  final void Function(PaneId)? popOut;
+
+  const _PopOutScope({required this.popOut, required super.child});
+
+  @override
+  bool updateShouldNotify(_PopOutScope old) => old.popOut != popOut;
+}
+
+/// A popped-out pane, filling its window.
+///
+/// It sits in the tree under the dock, so the panel sees the same state and
+/// theme it does there. Its window is drawn apart from the main one, though,
+/// so it brings its own scale, and its own overlay for menus and tooltips to
+/// open in.
+class _PoppedPane extends StatefulWidget {
+  final PaneId pane;
+  final PanelBuilder buildPanel;
+  final ValueNotifier<PaneId?> activePanel;
+  final double uiScale;
+
+  const _PoppedPane({
+    required this.pane,
+    required this.buildPanel,
+    required this.activePanel,
+    required this.uiScale,
+  });
+
+  @override
+  State<_PoppedPane> createState() => _PoppedPaneState();
+}
+
+class _PoppedPaneState extends State<_PoppedPane> {
+  late final OverlayEntry _body = OverlayEntry(builder: (context) {
+    final t = ThemeScope.of(context).theme;
+    final pane = widget.pane;
+    return ColoredBox(
+      color: t.tokens.roomed ? t.room : t.surface1,
+      child: Listener(
+        // A press here points the keyboard at this pane, as one in the dock
+        // does.
+        onPointerDown: (_) => widget.activePanel.value = pane,
+        child: PanelFloor(
+          minWidth: panelMinWidth(pane.panel),
+          child: StylePart(
+              name: pane.panel.name, child: widget.buildPanel(context, pane)),
+        ),
+      ),
+    );
+  });
+
+  @override
+  Widget build(BuildContext context) => UiScaleView(
+        scale: widget.uiScale,
+        child: Overlay(initialEntries: [_body]),
+      );
+}

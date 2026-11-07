@@ -1470,7 +1470,7 @@ void main() {
         height: 30,
         x: 20,
         y: 15,
-        frame: BigInt.zero,
+        frame: 0,
         view: 0,
         layerAlone: false,
       );

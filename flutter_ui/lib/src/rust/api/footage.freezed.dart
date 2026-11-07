@@ -154,7 +154,7 @@ extension BridgeProxyStatePatterns on BridgeProxyState {
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? idle,
-    TResult Function(BigInt frame, BigInt total)? running,
+    TResult Function(int frame, int total)? running,
     TResult Function(String path)? done,
     TResult Function(String error)? failed,
     required TResult orElse(),
@@ -190,7 +190,7 @@ extension BridgeProxyStatePatterns on BridgeProxyState {
   @optionalTypeArgs
   TResult when<TResult extends Object?>({
     required TResult Function() idle,
-    required TResult Function(BigInt frame, BigInt total) running,
+    required TResult Function(int frame, int total) running,
     required TResult Function(String path) done,
     required TResult Function(String error) failed,
   }) {
@@ -222,7 +222,7 @@ extension BridgeProxyStatePatterns on BridgeProxyState {
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? idle,
-    TResult? Function(BigInt frame, BigInt total)? running,
+    TResult? Function(int frame, int total)? running,
     TResult? Function(String path)? done,
     TResult? Function(String error)? failed,
   }) {
@@ -268,10 +268,10 @@ class BridgeProxyState_Running extends BridgeProxyState {
   const BridgeProxyState_Running({required this.frame, required this.total})
       : super._();
 
-  final BigInt frame;
+  final int frame;
 
   /// Zero until the source's length has been read.
-  final BigInt total;
+  final int total;
 
   /// Create a copy of BridgeProxyState
   /// with the given fields replaced by the non-null parameter values.
@@ -306,7 +306,7 @@ abstract mixin class $BridgeProxyState_RunningCopyWith<$Res>
           $Res Function(BridgeProxyState_Running) _then) =
       _$BridgeProxyState_RunningCopyWithImpl;
   @useResult
-  $Res call({BigInt frame, BigInt total});
+  $Res call({int frame, int total});
 }
 
 /// @nodoc
@@ -328,11 +328,11 @@ class _$BridgeProxyState_RunningCopyWithImpl<$Res>
       frame: null == frame
           ? _self.frame
           : frame // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
       total: null == total
           ? _self.total
           : total // ignore: cast_nullable_to_non_nullable
-              as BigInt,
+              as int,
     ));
   }
 }

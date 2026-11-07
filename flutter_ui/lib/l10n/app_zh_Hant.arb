@@ -12169,10 +12169,6 @@
   "@popOutPanel": {
     "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
   },
-  "popOutPanelBlocked": "不可用",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
-  },
   "precompose": "預合成",
   "@precompose": {
     "description": "Title and button: put the selected layers inside a new composition."

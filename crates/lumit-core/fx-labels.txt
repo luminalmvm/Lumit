@@ -3,15 +3,22 @@
 #   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored
 1 kHz
 125 Hz
+128
 16 kHz
+16 mm
 2 kHz
 250 Hz
 31 Hz
+35 mm
+35 mm stills
 3D point
 4 kHz
 500 Hz
 63 Hz
+64
+65 mm
 8 kHz
+96
 A
 APS-C
 Accumulation motion blur
@@ -21,11 +28,14 @@ Add grain
 Add input
 Add to picked
 Add up
+Adjust time by
 Age
 Align to motion
 Align to path
 Alignment
 All
+All 3D layers
+All at once
 All edges
 All frames
 All points
@@ -35,6 +45,7 @@ Alpha blur
 Alpha from
 Altitude
 Ambient
+Amorphous
 Amount
 Amplitude
 Analyse
@@ -49,7 +60,9 @@ Anchor y
 Angle
 Angle control
 Angle offset
+Angular
 Animate
+Animation
 Anticlockwise
 Anywhere
 Aperture
@@ -60,15 +73,20 @@ Arc upper
 Arch
 As placed in comp
 As the lens file
+Aspect
 Aspect ratio
 Asymmetric
 Attack
+Attractor
 Audio
 Audio level
 Auto
 Away from points
 B
+Back
 Background
+Backing
+Backward
 Backwards
 Bake
 Bake points
@@ -99,14 +117,21 @@ Band 5 frequency
 Band 5 gain
 Band 5 on
 Band 5 type
+Base colour
+Base colour layer
 Basic
 Beam
 Beat markers
+Beat pulse
 Beat trigger
+Beats
 Behind
 Bend
 Between
+Bevel
 Bevel and emboss
+Bevel depth
+Bevel segments
 Bevel style
 Bezier warp
 BiRefNet
@@ -119,9 +144,13 @@ Block glitch
 Block size
 Bloom
 Blue
+Blue amount
+Blue blade
 Blue blur
 Blue from
+Blue phase
 Blues
+Blur
 Blur & sharpen
 Blur size
 Border
@@ -132,6 +161,7 @@ Bottom edge
 Bottom left
 Bottom left tangent x
 Bottom left tangent y
+Bottom radius
 Bottom right
 Bottom right tangent x
 Bottom right tangent y
@@ -140,9 +170,11 @@ Bounce
 Bounciness
 Boundary
 Bounds
+Box
 Boxes x
 Boxes y
 Bright spots
+Brighter
 Brightness
 Broadband, amber
 Broadband, blue
@@ -150,15 +182,20 @@ Broadband, green
 Broadcast safe
 Brush hardness
 Brush size
+Brushed metal
 Bulge
+Buoyancy
 Burst
 Burst count
 Burst interval
 Bursts
 By strength
 Bypass
+Camera
+Camera kick
 Camera track
 Cancel
+Candle
 Card wipe
 Ceiling
 Cell height
@@ -172,6 +209,7 @@ Change above
 Channel
 Channel blur
 Channel offset
+Channels
 Character
 Checkbox
 Checkbox control
@@ -182,6 +220,7 @@ Choke
 Choose by
 Chorus
 Chromatic aberration
+Chrome
 Circle
 Clamp
 Clearance
@@ -198,10 +237,13 @@ Clone layer 3
 Clone layer 4
 Clone to points
 Closed
+Coat
+Coat roughness
 Coating
 Cohesion
 Collide
 Collide with
+Collision
 Colour
 Colour 1
 Colour 2
@@ -235,6 +277,7 @@ Composite
 Composite on original
 Compositing
 Compressor
+Concave
 Conductivity state
 Confidence
 Connect points
@@ -244,24 +287,36 @@ Constant length
 Contrast
 Controls
 Conversion
+Convex
 Cooling filter (80)
 Cooling filter (82)
 Cooling filter (LBB)
 Copies
 Copy
+Core
 Core colour
+Core distortion
 Core radius
+Core size
+Core softness
 Corner pin
 Corner point
 Corner radius
+Corner segments
 Corner x
 Corner y
 Corners
 Count
 Count nested inputs
+Crackle
 Create corner pin
 Create transform keys
 Crop
+Crop bottom
+Crop left
+Crop right
+Crop top
+Crystal Archive paper
 Curl noise
 Curve
 Curves
@@ -276,8 +331,10 @@ Cycle
 Cycle evolution
 Damping
 Darken
+Darker
 Darker colour
 Datamosh
+Death
 Decay
 Decimals
 Deep blue
@@ -290,9 +347,11 @@ Density layer
 Depth
 Depth Anything V2 Small
 Depth channel
+Depth layer
 Depth map
 Depth of field
 Depth of field pro
+Depth points
 Depth sort
 Despill amount
 Despill bias
@@ -304,6 +363,7 @@ Detected beats
 Detector
 Diagonal
 Difference
+Digital
 Direction
 Direction x
 Direction y
@@ -317,6 +377,7 @@ Dispersion
 Displacement
 Displacement map
 Display
+Dissipation
 Distance
 Distortion
 Distribution
@@ -326,6 +387,7 @@ Dots
 Down
 Draft
 Drag
+Draw along
 Drift
 Drive
 Drivers
@@ -337,6 +399,8 @@ Duration
 Dust
 Each path
 Each point
+Ease in
+Ease out
 Echo
 Echoes
 Edge
@@ -350,6 +414,9 @@ Edit expression…
 Edit flare…
 Edit lens…
 Edit shader…
+Ektachrome 100
+Ektar 100
+Electric
 Element 1
 Element 10
 Element 11
@@ -373,29 +440,44 @@ Element 9
 Ellipse
 Ellipse outline
 Emboss
+Emission colour
+Emission layer
+Emission strength
+Emissive
+Emit from
 Emit from image
+Emit layer
 Emit rate
 Emitter
 Emitter angle
+Emitter layer
+Emitter size
 End
 End colour
+End size
 End thickness
 End x
 End y
+Energy
+Energy line
 Envelope
 Even
 Events
 Every N frames
 Every Nth beat
 Every layer
+Every mask
 Every nth
 Evolution
 Evolution options
+Evolution speed
 Exclusion
 Expansion
+Explosion
 Exposure
 Expression
 Extract channels
+Extrusion depth
 F-stop
 Fade
 Fade in
@@ -404,19 +486,31 @@ Fade power
 Falloff
 Far blur
 Farthest (m)
+Fast forward blur
 Feather
 Feature density
 Features
 Feedback
 Field
 Field of view
+Field radius
+Field x
+Field y
+Field z
+Fields
 File
 Fill
 Fill cell
+Film
+Film colour
 Filter
 Final
 Final result
 Find edges
+Fire
+Fire brightness
+Fire colour
+Fire core
 Fish
 Fisheye
 Fit cell
@@ -426,6 +520,8 @@ Flare options
 Flash
 Flash colour
 Flicker
+Flicker speed
+Flight
 Flip axis
 Flip direction
 Flip order
@@ -434,6 +530,7 @@ Flock radius
 Flow points
 Flow resolution
 Flow smoothness
+Focal length
 Focus distance
 Focus distance (m)
 Focus map
@@ -446,17 +543,28 @@ For
 Force on all layers
 Forces
 Forking
+Format
+Forward
 Forwards
 Fractal influence
 Fractal noise
 Fractal type
+Frame mix
 Frame rate
 Frames
 Free
+Freeze
 Frequency
 Friction
 From
 From group
+From x
+From y
+Front
+Frosted glass
+Fuel
+Fujicolor C200
+Fujicolor Pro 400H
 Full body
 Full frame
 Full off
@@ -464,17 +572,28 @@ Full on
 Gain
 Gamma
 Gate
+Gate weave
 Gaussian
 Gaussian blur
 Generate
+Geometry options
+Ghost
 Ghost intensity
 Ghost softness
+Glass
 Glass curvature
 Glass dirt
+Glitch hit
 Glow
 Glow colour
+Glow distortion
+Glow falloff
+Glow intensity
 Glow opacity
 Glow radius
+Glow size
+Gold
+Gold 200
 Gradient
 Gradient 1
 Gradient 2
@@ -483,17 +602,22 @@ Gradient 4
 Gradient overlay
 Gradient stops
 Gradient type
+Grain
 Graphic EQ
 Gravity
 Green
+Green amount
 Green blur
 Green from
+Green phase
 Greens
 Grid
 Grid size
 Grid size x
 Grid size y
 Grit
+Ground
+Ground height
 Group
 Group name
 Grow
@@ -501,9 +625,13 @@ Grow max
 Grow min
 H line rel width
 Hairs
+Halation
 Half
+Half speed
+Halo
 Hard
 Hard colour
+Hard hide
 Hard light
 Hard mix
 Hardness
@@ -523,7 +651,9 @@ Highlight threshold
 Highlight tonal width
 Highlights
 Hold
+Hold frame
 Hold off
+Hole bevel depth
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -538,12 +668,15 @@ Hue range
 Hue shift
 Hue start
 Hysteresis
+IOR
+Ice
 Image
 Image layer
 In front
 In high
 In low
 In order
+In the scene
 In turn
 Include spaces
 Index
@@ -556,6 +689,7 @@ Inner shadow
 Input
 Input black
 Input colour space
+Input rate
 Input space
 Input white
 Inside
@@ -563,6 +697,7 @@ Inside colour
 Inside mask
 Intensity
 Interlace offset
+Interlayer
 Interpolation
 Interval
 Inverse
@@ -580,6 +715,8 @@ Jagged
 Jitter x
 Jitter y
 Jitter z
+Jolt
+Jolts only
 Jumpy
 Keep in picked
 Keep inside
@@ -587,10 +724,12 @@ Key out safe
 Key out unsafe
 Kill
 Knee
+Kodachrome 64
 LUT
 Label points
 Label rotation
 Label scale
+Laser
 Latitude
 Layer
 Layer in to out
@@ -599,6 +738,7 @@ Layer out
 Layer points
 Layer size
 Layer time
+Layer's box
 Layout
 Left
 Left and right
@@ -628,6 +768,7 @@ Light
 Light colour
 Light direction
 Light distance (m)
+Light flicker
 Light from
 Light size
 Light tint
@@ -648,6 +789,7 @@ Line width
 Linear
 Linear burn
 Linear light
+Linear to sRGB
 Linear wipe
 Lines
 Load from file…
@@ -660,6 +802,9 @@ Lower left y
 Lower right x
 Lower right y
 Luma
+Luma fade
+Luma hide
+Luma reveal
 Luminance
 Luminance only
 Luminosity
@@ -676,11 +821,13 @@ Map placement
 Map slope
 Map softness
 Map white to
+Markers
 Mask
 Mask path
 Mask points
 Mask/Path
 Master
+Material
 Math
 Matte
 Matte inverted
@@ -704,6 +851,7 @@ Measure
 Median
 Merge
 Merge points
+Metallic
 Method
 Micro Four Thirds
 Middle
@@ -720,12 +868,14 @@ Mirror edges
 Mix
 Mode
 Model
+Model layer
 Mono below
 Monochrome
 Mood lighting
 More layers
 More options
 Mosaic
+Motion
 Motion blur
 Motion vectors
 Multiply
@@ -737,14 +887,20 @@ Nearby
 Nearest
 Nearest (m)
 Nearest distance
+Negative
+Neon
 Node graph
 Noise
 Noise scale
+Noise size
 Noise speed
 Noise type
 None
 Normal
+Normal layer
+Normal strength
 Normalised
+Normals
 Not picked
 Note
 Nothing
@@ -767,15 +923,18 @@ Offset x
 Offset y
 Offset z
 Omni
+On
 On contact
 On original
 On transparent
 On trigger
 Once at start
+One after another
 One point
 Opacity
 Opacity %
 Opacity by
+Opacity layer
 Opacity over life
 Open graph
 Operate on alpha
@@ -809,12 +968,19 @@ Padding x
 Padding y
 Paint style
 Parametric EQ
+Part
+Part id
+Part matte
 Particle
 Particle blend
+Particles from a layer
 Particulate
+Parts
+Pass
 Passes
 Path
 Path overlap
+Paths
 Pattern
 Peak
 Per
@@ -839,6 +1005,9 @@ Pin to
 Ping-pong
 Pinned
 Pinning
+Pipe radius
+Pipe segments
+Pixel motion
 Pixel sort
 Pixels
 Place
@@ -847,6 +1016,8 @@ Place y
 Placement
 Planar track
 Planes
+Plasma
+Plastic
 Point
 Point 1 x
 Point 1 y
@@ -867,6 +1038,10 @@ Points layer
 Points sample
 Polar coordinates
 Polar to rectangular
+Portra 160
+Portra 400
+Portra 800
+Portra Endura paper
 Portrait
 Position
 Position x
@@ -878,13 +1053,21 @@ Power
 Pre-delay
 Preserve luminance
 Preserve luminosity
+Preset
+Print
+Print stock
 Producer x
 Producer y
+Projected from
+Projection time
 Propagate
+Provia 100F
 Pull
 Pulse
+Push or pull
 Quality
 Quarter
+Quarter speed
 RGB split
 Radial
 Radial blur
@@ -895,6 +1078,8 @@ Ramp
 Random
 Random hue
 Random offset scale
+Random origin
+Random rate
 Random span offsets
 Randomness
 Range
@@ -908,8 +1093,11 @@ Rectangle
 Rectangle outline
 Rectangular to polar
 Red
+Red amount
+Red blade
 Red blur
 Red from
+Red phase
 Reds
 Reduce brightness
 Reduce saturation
@@ -929,6 +1117,7 @@ Remove background
 Remove edge leak
 Remove from picked
 Remove input
+Removed
 Render
 Rendered
 Repeat
@@ -938,6 +1127,7 @@ Repeat start
 Replace colour
 Replace method
 Reset interval
+Resolution
 Resonance
 Result
 Reveal original
@@ -968,13 +1158,18 @@ Rotation jitter
 Rotation wave
 Rotation wave frequency
 Rotation wave phase
+Rotation x
+Rotation y
+Rotation z
 Roto brush
 Roughen
 Roughen edges
+Roughness
 Roundness
 Row gap
 Rows
 Rows/columns jitter
+Rubber
 Same
 Same as Per
 Samples
@@ -991,6 +1186,7 @@ Scale x %
 Scale y %
 Scanlines
 Scatter
+Scene pass
 Scramble rate
 Scratches
 Screen
@@ -1012,6 +1208,7 @@ Segments
 Semicircle
 Sensitivity
 Sensor
+Separate timing
 Separation
 Sepia
 Set channels
@@ -1023,6 +1220,7 @@ Shadow colour
 Shadow highlight
 Shadow only
 Shadow opacity
+Shadow strength
 Shadow tonal width
 Shadows
 Shake
@@ -1039,7 +1237,10 @@ Shutter
 Shutter angle
 Shutter phase
 Siceliot
+Side
 Sides
+Simulate
+Simulation
 Sine
 Single
 Single layer, straw
@@ -1052,22 +1253,31 @@ Size over life
 Size with distance
 Skew
 Skew axis
+Slice end
 Slice repeat
+Slice start
 Slide
 Slider
 Slider control
 Slope channel
+Slow motion with blur
+Smoke
+Smoke and fire
+Smoke colour
 Smooth
 Smooth noise
+Smoothness
 Smudges
 Soft colour
 Soft light
 Softness
+Solar
 Sort
 Sort by
 Source
 Source alpha
 Source blue
+Source frame
 Source green
 Source height
 Source layer
@@ -1080,15 +1290,19 @@ Spacing x
 Spacing y
 Spacing z
 Span mode
+Spark inherit
 Spark life
 Spark size
 Spark speed
 Sparks
+Sparks from
 Speed
 Speed jitter
 Speed max
 Speed min
+Speed ramp
 Speed variance
+Sphere
 Spherize
 Spiky
 Spin
@@ -1111,6 +1325,7 @@ Starburst intensity
 Start
 Start angle
 Start colour
+Start size
 Start thickness
 Start x
 Start y
@@ -1121,10 +1336,12 @@ Stereo phase
 Stereo width
 Stick
 Stillness
+Stock
 Stops
 Store
 Streak
 Streak length
+Streaks
 Strength
 Stretch
 Stretch to fit
@@ -1138,18 +1355,24 @@ Stroke colour
 Stroke emboss
 Stroke width
 Strokes
+Strong
 Style
 Stylise
 Sub influence
 Sub scaling
 Sub settings
+Sub-steps
 Subtract
+Super 16
 Super 35
+Super 8
+Superia X-TRA 400
 Surface
 Swing
 Switch
 Symmetric
 Sync
+Take
 Taper
 Technique
 Tele lens width
@@ -1164,6 +1387,7 @@ Texture contrast
 Texture layer
 Textures
 Texturize
+The stock's own
 Thickness max
 Thickness min
 This comp
@@ -1179,11 +1403,15 @@ Time offset
 Time samples
 Time since last
 Time step
+Time stutter
 Times
+Timewarp
 Tint
 Tint colour
 To
 To group
+To x
+To y
 Tone
 Top
 Top and bottom
@@ -1191,10 +1419,13 @@ Top edge
 Top left
 Top left tangent x
 Top left tangent y
+Top radius
 Top right
 Top right tangent x
 Top right tangent y
 Top to bottom
+Torch
+Toxic
 Track points
 Trail
 Trails
@@ -1202,6 +1433,7 @@ Transform
 Transform points
 Transition
 Transition width
+Transmission
 Transparent
 Tremolo
 Triangle
@@ -1209,6 +1441,7 @@ Triangles
 Trigger
 Tritone
 True peak
+Turbulence
 Turbulence amount
 Turbulence scale
 Turbulence speed
@@ -1227,6 +1460,7 @@ Two-way strike
 Type
 Type fill
 Ultra
+Ultramax 400
 Uncircle
 Uncoated
 Underwater
@@ -1259,6 +1493,7 @@ Vector blur
 Vector scale
 Vectors from
 Vegas
+Velvia 100
 Venetian blinds
 Vertical
 Vertical amount
@@ -1272,10 +1507,19 @@ Vibrato
 View
 Vignette
 Violet
+Visible
+Vision 2383
+Vision Premier 2393
+Vision3 200T
+Vision3 250D
+Vision3 500T
+Vision3 50D
 Vivid light
 Voices
 Volume
 Vortex
+Vortex axis
+Vorticity
 Wah
 Warming filter (81)
 Warming filter (85)
@@ -1290,13 +1534,17 @@ Wave warp
 Wave width
 Wavelength
 Waves
+Weak
 Wet
+Whole frames
 Width
 Wiggle
 Wiggle type
 Wiggles per second
 Wiggly
 Wind
+Wind direction
+Wind speed
 Wind x
 Wind y
 Wind z
@@ -1325,6 +1573,7 @@ Y wave frequency
 Y wave phase
 Yellow
 Yellows
+Z
 Z amount
 Z dist
 Z frequency
@@ -1334,3 +1583,5 @@ Z wave phase
 Zebra
 Zoom
 sRGB
+sRGB curve
+sRGB to linear

@@ -26,9 +26,8 @@ use crate::api::{
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod style_tests;
 
-/// Which list an instance lives on: the five homes
-/// `LayerReference::with_instances` can commit to. Internal to the shared
-/// lookup: no panel ever sees it, which is the point.
+/// Which list an instance lives on, for `LayerReference::with_instances`.
+/// Internal to the shared lookup: no panel ever sees it, which is the point.
 #[frb(ignore)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InstanceHome {
@@ -41,6 +40,10 @@ pub(crate) enum InstanceHome {
     /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
     /// instance rather than a list, held in `Layer::graph_inputs`.
     GraphInputs,
+    /// A Model layer's material rows, one for each material in its file.
+    Materials,
+    /// A Model layer's playback and part rows.
+    ModelRows,
 }
 
 /// The node graph `layer` places, when it places one.
@@ -1274,6 +1277,13 @@ pub enum BridgeLayerKind {
     /// `audio_only` set — but the frontend draws it as its own kind (its own
     /// glyph, no thumbnail, no visibility switch), so it is its own kind here.
     Audio,
+    /// A Bus layer: a Null layer with `audio_only` set, whose rack and Volume
+    /// work on what is routed to it.
+    Bus,
+    /// A Model layer: a 3D model file drawn in the comp's 3D space.
+    Model,
+    /// A 3D shape Lumit makes itself: a cube, a sphere and so on.
+    Mesh,
 }
 
 /// How the frontend should draw this layer: the model's kind, except
@@ -1284,6 +1294,9 @@ pub enum BridgeLayerKind {
 #[frb(ignore)]
 pub(crate) fn bridge_kind(layer: &lumit_core::model::Layer) -> BridgeLayerKind {
     use lumit_core::model::LayerKind as K;
+    if layer.is_bus() {
+        return BridgeLayerKind::Bus;
+    }
     if layer.audio_only {
         return BridgeLayerKind::Audio;
     }
@@ -1298,6 +1311,8 @@ pub(crate) fn bridge_kind(layer: &lumit_core::model::Layer) -> BridgeLayerKind {
         K::Shape { .. } => BridgeLayerKind::Shape,
         K::Null => BridgeLayerKind::NullLayer,
         K::Light { .. } => BridgeLayerKind::Light,
+        K::Model { .. } => BridgeLayerKind::Model,
+        K::Mesh { .. } => BridgeLayerKind::Mesh,
     }
 }
 
@@ -1521,6 +1536,8 @@ pub struct BridgeClip {
     pub source_out: BridgeRational,
     /// Whether the clip plays a composition and not a footage item.
     pub source_is_comp: bool,
+    /// Whether the clip plays a solid: a colour, with no file behind it.
+    pub source_is_solid: bool,
     /// The footage item or composition the clip plays: its take's, when T
     /// has stepped to another.
     pub source: Uuid,
@@ -1553,6 +1570,8 @@ pub(crate) fn clip_source_duration(
 ) -> Option<lumit_core::time::Rational> {
     match source {
         lumit_core::sequence::ClipSource::Comp(id) => Some(doc.comp(id)?.duration.0),
+        // A colour is the same for ever, so it can be stretched as far as asked.
+        lumit_core::sequence::ClipSource::Solid(_) => None,
         lumit_core::sequence::ClipSource::Footage(id) => {
             let lumit_core::model::ProjectItem::Footage(footage) = doc.item(id)? else {
                 return None;
@@ -1608,12 +1627,10 @@ fn bridge_clip(
         (layer.start_offset.0.to_f64() + t.to_f64()) * f64::from(comp.frame_rate.num())
             / f64::from(comp.frame_rate.den())
     };
-    let name = |source| match source {
-        lumit_core::sequence::ClipSource::Footage(id)
-        | lumit_core::sequence::ClipSource::Comp(id) => doc
-            .item(id)
+    let name = |source: lumit_core::sequence::ClipSource| {
+        doc.item(source.id())
             .map(|i| i.name().to_string())
-            .unwrap_or_default(),
+            .unwrap_or_default()
     };
     BridgeClip {
         id: clip.id,
@@ -1658,10 +1675,8 @@ fn bridge_clip(
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
-        source: match clip.source {
-            lumit_core::sequence::ClipSource::Footage(id)
-            | lumit_core::sequence::ClipSource::Comp(id) => id,
-        },
+        source_is_solid: matches!(clip.source, lumit_core::sequence::ClipSource::Solid(_)),
+        source: clip.source.id(),
         blend: clip.blend.map(|blend| {
             lumit_core::model::BlendMode::ALL
                 .iter()
@@ -1732,6 +1747,11 @@ pub struct BridgeLayerInfo {
     /// file or an import. `LayerReference::get_graph_inputs` offers such a layer a
     /// fresh one, which the user's next edit adopts.
     pub graph_inputs: Option<crate::api::effect::BridgeEffectInstanceInfo>,
+    /// A Model layer's material rows, `None` while its file is being read.
+    pub materials: Option<Vec<crate::api::effect::BridgeEffectInstanceInfo>>,
+    /// A Model layer's Animation and parts' rows, `None` while its file is
+    /// being read and on any other kind of layer.
+    pub model_rows: Option<crate::api::model_rows::BridgeModelRows>,
     /// Whether collapse is set on this layer but something forces an
     /// intermediate anyway (docs/06 §1.4, docs/impl/node-graph-comp.md §5.9),
     /// which is what the Timeline's collapse cell draws dimmed.
@@ -1751,6 +1771,9 @@ pub struct BridgeLayerInfo {
     pub retime: Option<BridgeScalar>,
     /// Sound played faster or slower changes pitch with the speed.
     pub pitch_follows_speed: bool,
+    /// The Bus layer this layer's sound goes to, or `None` for the master.
+    pub output: Option<Uuid>,
+    pub sends: Vec<crate::api::routes::BridgeSend>,
     /// The layer's masks, bottom of the stack first. Carried in the
     /// read model for the same reason the effects are: the Timeline's
     /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -1902,122 +1925,6 @@ pub struct BridgeMotionPath {
     pub keys: Vec<BridgeMotionKey>,
 }
 
-/// The motion path of `layer` in `comp`, or `None` while its Position is
-/// still on both axes — which is most layers, and the answer that costs
-/// nothing.
-#[frb(ignore)]
-pub(crate) fn motion_path_of(
-    comp: &lumit_core::model::Composition,
-    layer: &Layer,
-) -> Option<BridgeMotionPath> {
-    use lumit_core::anim::{resolved_side, SideInterp};
-
-    fn keys_of(property: &Property) -> Option<&[Keyframe]> {
-        match &property.animation {
-            Animation::Keyframed(keys) if !keys.is_empty() => Some(keys.as_slice()),
-            _ => None,
-        }
-    }
-    let (px, py) = (&layer.transform.position_x, &layer.transform.position_y);
-    let (kx, ky) = (keys_of(px), keys_of(py));
-    // A 3D layer moving only in depth still has a path to show.
-    let pz = layer
-        .switches
-        .three_d
-        .then_some(&layer.transform.position_z);
-    let kz = pz.and_then(keys_of);
-    if kx.is_none() && ky.is_none() && kz.is_none() {
-        return None;
-    }
-    let offset = layer.start_offset.0;
-    let comp_time = |t: Rational| CompTime(t.checked_add(offset).unwrap_or(t));
-
-    // Every time either axis has a key at, on the layer's clock, oldest first.
-    let mut times: Vec<Rational> = kx
-        .into_iter()
-        .chain(ky)
-        .chain(kz)
-        .flatten()
-        .map(|k| k.time)
-        .collect();
-    times.sort_by(|a, b| a.to_f64().total_cmp(&b.to_f64()));
-    times.dedup();
-    let first_frame = comp.frame_rate.frame_at(comp_time(*times.first()?));
-    let last_frame = comp.frame_rate.frame_at(comp_time(*times.last()?));
-
-    let mut samples = Vec::new();
-    let mut depths = Vec::new();
-    for frame in first_frame..=last_frame {
-        let t = comp.frame_rate.time_of_frame(frame).ok()?.0;
-        let local = lumit_core::time::layer_time(t.to_f64(), offset);
-        samples.push(px.value_at(local));
-        samples.push(py.value_at(local));
-        depths.extend(pz.map(|z| z.value_at(local)));
-    }
-
-    // How far one axis' handle sits from its key on one side: the cubic's
-    // first control point less the key, in that axis' own units. A straight
-    // side is a handle a third of the way along the chord, as the evaluator
-    // treats it; a held side has no span to draw a handle across.
-    let reach = |keys: &[Keyframe], i: usize, out: bool| -> Option<f64> {
-        let j = if out {
-            i.checked_add(1)?
-        } else {
-            i.checked_sub(1)?
-        };
-        let neighbour = keys.get(j)?;
-        let key = keys.get(i)?;
-        let dt = (neighbour.time.to_f64() - key.time.to_f64()).abs();
-        match resolved_side(keys, i, out) {
-            SideInterp::Bezier { speed, influence } => {
-                let along = speed * influence.clamp(1e-3, 1.0) * dt;
-                Some(if out { along } else { -along })
-            }
-            SideInterp::Linear => Some((neighbour.value - key.value) / 3.0),
-            SideInterp::Hold | SideInterp::Auto { .. } => None,
-        }
-    };
-    let eased = |keys: &[Keyframe], i: usize, out: bool| {
-        matches!(resolved_side(keys, i, out), SideInterp::Bezier { .. })
-    };
-
-    let keys = times
-        .iter()
-        .map(|&time| {
-            let local = time.to_f64();
-            let (x, y) = (px.value_at(local), py.value_at(local));
-            let index = |keys: Option<&[Keyframe]>| {
-                keys.and_then(|k| k.iter().position(|key| key.time == time))
-            };
-            let (ix, iy) = (index(kx), index(ky));
-            let handle = |out: bool| -> Option<[f64; 2]> {
-                let (kx, ky, ix, iy) = (kx?, ky?, ix?, iy?);
-                if !eased(kx, ix, out) && !eased(ky, iy, out) {
-                    return None;
-                }
-                Some([x + reach(kx, ix, out)?, y + reach(ky, iy, out)?])
-            };
-            BridgeMotionKey {
-                time: rational_of(comp_time(time).0),
-                frame: comp.frame_rate.frame_at(comp_time(time)),
-                x,
-                y,
-                z: pz.map_or(0.0, |z| z.value_at(local)),
-                x_index: ix.and_then(|i| u32::try_from(i).ok()),
-                y_index: iy.and_then(|i| u32::try_from(i).ok()),
-                handle_in: handle(false),
-                handle_out: handle(true),
-            }
-        })
-        .collect();
-    Some(BridgeMotionPath {
-        first_frame,
-        samples,
-        depths,
-        keys,
-    })
-}
-
 /// Build one layer's [`BridgeLayerInfo`] from an already-fetched composition —
 /// the shared body of [`LayerReference::get_info`] and the comp-wide
 /// [`crate::api::composition::CompositionReference::get_model`].
@@ -2104,6 +2011,11 @@ pub(crate) fn read_layer_info(
                 !layer.is_adjustment(),
             )
         }),
+        materials: lumit_render::model_material::rows(doc, layer).map(|rows| {
+            let read = |r| crate::api::effect::read_instance_info(r, layer.start_offset.0, true);
+            rows.iter().map(read).collect()
+        }),
+        model_rows: crate::api::model_rows::read_model_rows(doc, layer),
         collapse_forced: lumit_core::model::collapse_state(
             doc,
             comp,
@@ -2121,6 +2033,8 @@ pub(crate) fn read_layer_info(
             .as_ref()
             .map(|r| BridgeScalar::read_at(r, layer.start_offset.0)),
         pitch_follows_speed: layer.pitch_follows_speed,
+        output: layer.audio_routes.output,
+        sends: crate::api::routes::bridge_sends(layer),
         masks: layer
             .masks
             .iter()
@@ -2189,7 +2103,7 @@ pub(crate) fn read_layer_info(
             K::Text { document } => document
                 .animators
                 .iter()
-                .map(|a| crate::api::assets::read_animator(a, layer.start_offset.0))
+                .map(|a| crate::api::assets::animators::read_animator(a, layer.start_offset.0))
                 .collect(),
             _ => Vec::new(),
         },
@@ -2239,9 +2153,11 @@ pub(crate) fn read_layer_info(
             _ => None,
         },
         light: match &layer.kind {
-            lumit_core::model::LayerKind::Light { light } => {
-                Some(BridgeLightSettings::of(light.settings()))
-            }
+            lumit_core::model::LayerKind::Light { light } => Some(BridgeLightSettings {
+                in_air: light.haze.shows(),
+                noisy: light.haze.noisy(),
+                ..BridgeLightSettings::of(light.settings())
+            }),
             _ => None,
         },
         material: (layer.switches.three_d && layer.can_adjust())
@@ -2434,6 +2350,7 @@ pub struct BridgeMaterialChannels {
     pub shininess: BridgeScalar,
     pub metal: BridgeScalar,
     pub light_transmission: BridgeScalar,
+    pub reflection: BridgeScalar,
 }
 
 /// Casts shadows and Accepts shadows ([`lumit_core::model::ShadowMode`]).
@@ -2445,27 +2362,25 @@ pub enum BridgeShadowMode {
     Only,
 }
 
-/// Whether a layer casts and accepts shadows, one op
+/// Whether a layer casts and accepts shadows and is a holdout, one op
 /// ([`lumit_core::model::MaterialSettings`]).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BridgeMaterialSettings {
     pub casts_shadows: BridgeShadowMode,
     pub accepts_shadows: BridgeShadowMode,
+    pub holdout: bool,
 }
 
 impl BridgeMaterialSettings {
     #[frb(ignore)]
     pub(crate) fn of(s: lumit_core::model::MaterialSettings) -> Self {
-        use lumit_core::model::ShadowMode as M;
-        let mode = |m: M| match m {
-            M::Off => BridgeShadowMode::Off,
-            M::On => BridgeShadowMode::On,
-            M::Only => BridgeShadowMode::Only,
-        };
+        use BridgeShadowMode as B;
+        let mode = |m: lumit_core::model::ShadowMode| [B::Off, B::On, B::Only][m as usize];
         Self {
             casts_shadows: mode(s.casts_shadows),
             accepts_shadows: mode(s.accepts_shadows),
+            holdout: s.holdout,
         }
     }
 
@@ -2480,6 +2395,7 @@ impl BridgeMaterialSettings {
         lumit_core::model::MaterialSettings {
             casts_shadows: mode(self.casts_shadows),
             accepts_shadows: mode(self.accepts_shadows),
+            holdout: self.holdout,
         }
     }
 }
@@ -2507,6 +2423,20 @@ pub struct BridgeLightChannels {
     pub shadow_darkness: BridgeScalar,
     /// Comp pixels.
     pub shadow_diffusion: BridgeScalar,
+    /// How it shows in the air: percentages and a linear colour, then the
+    /// noise's size in comp pixels and its speed in comp pixels a second.
+    pub haze_amount: BridgeScalar,
+    pub haze_density: BridgeScalar,
+    pub haze_colour_r: BridgeScalar,
+    pub haze_colour_g: BridgeScalar,
+    pub haze_colour_b: BridgeScalar,
+    pub haze_falloff: BridgeScalar,
+    pub haze_scatter: BridgeScalar,
+    pub haze_noise: BridgeScalar,
+    pub haze_noise_size: BridgeScalar,
+    pub haze_noise_speed: BridgeScalar,
+    /// An Environment light's Background blur, percent.
+    pub background_blur: BridgeScalar,
 }
 
 /// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
@@ -2518,6 +2448,7 @@ pub enum BridgeLightKind {
     Area,
     Parallel,
     Ambient,
+    Environment,
 }
 
 /// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
@@ -2539,52 +2470,14 @@ pub struct BridgeLightSettings {
     /// Aimed at its point of interest.
     pub two_node: bool,
     pub casts_shadows: bool,
-}
-
-impl BridgeLightSettings {
-    #[frb(ignore)]
-    pub(crate) fn of(s: lumit_core::model::LightSettings) -> Self {
-        use lumit_core::model::{LightFalloff as F, LightKind as K};
-        Self {
-            kind: match s.kind {
-                K::Point => BridgeLightKind::Point,
-                K::Spot => BridgeLightKind::Spot,
-                K::Area => BridgeLightKind::Area,
-                K::Parallel => BridgeLightKind::Parallel,
-                K::Ambient => BridgeLightKind::Ambient,
-            },
-            falloff: match s.falloff {
-                F::None => BridgeLightFalloff::None,
-                F::Smooth => BridgeLightFalloff::Smooth,
-                F::InverseSquareClamped => BridgeLightFalloff::InverseSquareClamped,
-            },
-            two_node: s.two_node,
-            casts_shadows: s.casts_shadows,
-        }
-    }
-
-    /// `legacy_shape` is the light's own, which the window never shows.
-    #[frb(ignore)]
-    pub(crate) fn core(self, legacy_shape: bool) -> lumit_core::model::LightSettings {
-        use lumit_core::model::{LightFalloff as F, LightKind as K};
-        lumit_core::model::LightSettings {
-            kind: match self.kind {
-                BridgeLightKind::Point => K::Point,
-                BridgeLightKind::Spot => K::Spot,
-                BridgeLightKind::Area => K::Area,
-                BridgeLightKind::Parallel => K::Parallel,
-                BridgeLightKind::Ambient => K::Ambient,
-            },
-            falloff: match self.falloff {
-                BridgeLightFalloff::None => F::None,
-                BridgeLightFalloff::Smooth => F::Smooth,
-                BridgeLightFalloff::InverseSquareClamped => F::InverseSquareClamped,
-            },
-            two_node: self.two_node,
-            legacy_shape,
-            casts_shadows: self.casts_shadows,
-        }
-    }
+    /// Shows in the air, so its haze rows show, and has Noise, so the
+    /// noise's size and speed show. Read only.
+    pub in_air: bool,
+    pub noisy: bool,
+    /// An Environment light's picture, a layer of the same comp, and whether
+    /// it shows behind everything.
+    pub source: Option<Uuid>,
+    pub background: bool,
 }
 
 /// The seven animatable channels a Camera layer has beyond its transform.
@@ -2801,12 +2694,24 @@ pub enum BridgeTransformProp {
     LightHeight,
     ShadowDarkness,
     ShadowDiffusion,
+    HazeAmount,
+    HazeDensity,
+    HazeColourR,
+    HazeColourG,
+    HazeColourB,
+    HazeFalloff,
+    HazeScatter,
+    HazeNoise,
+    HazeNoiseSize,
+    HazeNoiseSpeed,
+    BackgroundBlur,
     Ambient,
     Diffuse,
     Specular,
     Shininess,
     Metal,
     LightTransmission,
+    Reflection,
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2889,7 +2794,7 @@ impl BridgeAxisModes {
 
 /// A document rational as the integer pair the bridge carries.
 #[frb(ignore)]
-fn rational_of(r: lumit_core::time::Rational) -> BridgeRational {
+pub(crate) fn rational_of(r: lumit_core::time::Rational) -> BridgeRational {
     BridgeRational {
         num: r.num(),
         den: r.den(),
@@ -2949,7 +2854,19 @@ impl BridgeTransformProp {
             BridgeTransformProp::Metal => P::Metal,
             BridgeTransformProp::ShadowDarkness => P::ShadowDarkness,
             BridgeTransformProp::ShadowDiffusion => P::ShadowDiffusion,
+            BridgeTransformProp::HazeAmount => P::HazeAmount,
+            BridgeTransformProp::HazeDensity => P::HazeDensity,
+            BridgeTransformProp::HazeColourR => P::HazeColourR,
+            BridgeTransformProp::HazeColourG => P::HazeColourG,
+            BridgeTransformProp::HazeColourB => P::HazeColourB,
+            BridgeTransformProp::HazeFalloff => P::HazeFalloff,
+            BridgeTransformProp::HazeScatter => P::HazeScatter,
+            BridgeTransformProp::HazeNoise => P::HazeNoise,
+            BridgeTransformProp::HazeNoiseSize => P::HazeNoiseSize,
+            BridgeTransformProp::HazeNoiseSpeed => P::HazeNoiseSpeed,
+            BridgeTransformProp::BackgroundBlur => P::BackgroundBlur,
             BridgeTransformProp::LightTransmission => P::LightTransmission,
+            BridgeTransformProp::Reflection => P::Reflection,
         }
     }
 }
@@ -3017,6 +2934,17 @@ impl BridgeTransform {
                 height: read(&light.size[1]),
                 shadow_darkness: read(&light.shadow_darkness),
                 shadow_diffusion: read(&light.shadow_diffusion),
+                haze_amount: read(&light.haze.amount),
+                haze_density: read(&light.haze.density),
+                haze_colour_r: read(&light.haze.colour[0]),
+                haze_colour_g: read(&light.haze.colour[1]),
+                haze_colour_b: read(&light.haze.colour[2]),
+                haze_falloff: read(&light.haze.falloff),
+                haze_scatter: read(&light.haze.scatter),
+                haze_noise: read(&light.haze.noise),
+                haze_noise_size: read(&light.haze.noise_size),
+                haze_noise_speed: read(&light.haze.noise_speed),
+                background_blur: read(&light.environment.blur),
             });
         }
         if layer.is_3d() {
@@ -3041,6 +2969,7 @@ impl BridgeTransform {
                 shininess: read(&m.shininess),
                 metal: read(&m.metal),
                 light_transmission: read(&m.light_transmission),
+                reflection: read(&m.reflection),
             });
         }
         out
@@ -3073,6 +3002,7 @@ impl BridgeTransform {
             let [poi_x, poi_y, poi_z] = &mut light.point_of_interest;
             let [r, g, b] = &mut light.colour;
             let [width, height] = &mut light.size;
+            let [haze_r, haze_g, haze_b] = &mut light.haze.colour;
             for (to, from) in [
                 (poi_x, &c.poi_x),
                 (poi_y, &c.poi_y),
@@ -3089,6 +3019,17 @@ impl BridgeTransform {
                 (height, &c.height),
                 (&mut light.shadow_darkness, &c.shadow_darkness),
                 (&mut light.shadow_diffusion, &c.shadow_diffusion),
+                (&mut light.haze.amount, &c.haze_amount),
+                (&mut light.haze.density, &c.haze_density),
+                (haze_r, &c.haze_colour_r),
+                (haze_g, &c.haze_colour_g),
+                (haze_b, &c.haze_colour_b),
+                (&mut light.haze.falloff, &c.haze_falloff),
+                (&mut light.haze.scatter, &c.haze_scatter),
+                (&mut light.haze.noise, &c.haze_noise),
+                (&mut light.haze.noise_size, &c.haze_noise_size),
+                (&mut light.haze.noise_speed, &c.haze_noise_speed),
+                (&mut light.environment.blur, &c.background_blur),
             ] {
                 to.animation = from.animation_at(offset)?;
             }
@@ -3170,6 +3111,7 @@ impl BridgeTransform {
                 (&mut to.shininess, &m.shininess),
                 (&mut to.metal, &m.metal),
                 (&mut to.light_transmission, &m.light_transmission),
+                (&mut to.reflection, &m.reflection),
             ] {
                 to.animation = from.animation_at(offset)?;
             }
@@ -3492,7 +3434,7 @@ impl LayerReference {
                 .min();
             land(&mut added.effects, first)?;
             land(&mut added.nodes, first)?;
-            let mut graph = layer.graph;
+            let mut graph = layer.graph.clone();
             graph.nodes.extend(added.nodes);
             graph.edges.extend(added.edges);
             graph.layout.extend(added.layout);
@@ -3500,16 +3442,16 @@ impl LayerReference {
                 &mut added.effects,
                 &lumit_core::fx::builtins::wired_in(&graph),
             )?;
-            let mut effects = layer.effects;
+            let mut effects = layer.effects.clone();
             effects.extend(added.effects);
             graph.prune_rows(&effects);
             let op = lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
+                    lumit_core::fx::effects::particulate::set_effects(
+                        self.comp_id,
+                        &layer,
                         effects,
-                    },
+                    ),
                     lumit_core::ops::Op::SetLayerGraph {
                         comp: self.comp_id,
                         layer: self.layer_id,
@@ -4244,11 +4186,8 @@ impl LayerReference {
         // ponytail: the pin is stored at rest and holds nothing at this frame,
         // so pinning an *already deformed* puppet pulls that spot back to rest
         // rather than holding it where it was clicked. The upgrade is two keys
-        // on x/y — rest at the reference time, the clicked point at this frame —
-        // which is only worth writing when the ordinary flow (pins placed on the
-        // rest pose, as After Effects teaches) is not enough. Observable
-        // trigger: a pin added part-way through an animation making the puppet
-        // jump.
+        // on x/y, rest at the reference time and the clicked point at this frame.
+        // Trigger: a pin added part-way through an animation making the puppet jump.
         block.pins.push(lumit_core::puppet::PuppetPin::new(
             kind.write(),
             name,
@@ -5393,17 +5332,10 @@ impl LayerReference {
 
         // A retimed layer gets a keyframe *at the cut*, on both halves.
         //
-        // Both halves keep the whole map, so without this the two speed ramps
-        // stay welded together: editing one half's speed would bend the other
-        // half's curve, because they are the same curve. A key at the cut gives
-        // each half an end of its own to hold. It is inserted preserving the
-        // shape, so the cut itself changes nothing that plays — and it goes in
-        // *before* the clone, which is what puts it on both halves.
-        // **Only a layer that has actually been retimed**. Switching
-        // Retime on installs the identity map, and a map nobody has shaped
-        // needs no key at the cut: both halves play their source at their own
-        // clock whatever happens to the other. Keys appearing on a layer the
-        // user never retimed are keys they then have to notice and remove.
+        // Both halves keep the whole map, so a key at the cut stops one half's
+        // speed bending the other's. It keeps the shape, and goes in before the
+        // clone to land on both. Only on a layer actually retimed: a map nobody
+        // has shaped needs none, and the user would have to notice and remove it.
         let retimed = layer
             .retime
             .as_ref()
@@ -5412,9 +5344,8 @@ impl LayerReference {
         if let Some(retime) = head.retime.as_mut().filter(|_| retimed) {
             // Layer time, not comp time: keyframes live in the layer's own
             // clock, measured from its start offset.
-            // A subtraction that cannot overflow is still a subtraction that
-            // can: an unrepresentable time leaves the map alone rather than
-            // taking the cut down with it.
+            // An unrepresentable time leaves the map alone rather than taking
+            // the cut down with it.
             if let Ok(local) = t.0.checked_sub(head.start_offset.0) {
                 retime.insert_key_preserving_shape(local);
             }
@@ -5427,6 +5358,7 @@ impl LayerReference {
             effect.id = Uuid::now_v7();
         }
         tail.in_point = t;
+        lumit_render::passes::follow_copy(&*self.document()?, &layer, &mut tail);
 
         let mut ops = vec![lumit_core::ops::Op::SetLayerSpan {
             comp: self.comp_id,
@@ -5765,13 +5697,14 @@ impl LayerReference {
         use lumit_core::model::LayerKind;
         let layer = self.item()?;
         let id = match layer.kind {
-            LayerKind::Footage { item, .. } => item,
+            LayerKind::Footage { item, .. } | LayerKind::Model { item, .. } => item,
             LayerKind::Precomp { comp } => comp,
             LayerKind::Solid { def } => def,
             LayerKind::Text { .. }
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
+            | LayerKind::Mesh { .. }
             | LayerKind::Sequence { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => return Ok(None),
@@ -6120,9 +6053,9 @@ impl LayerReference {
         for effect in &mut copy.effects {
             effect.id = Uuid::now_v7();
         }
-        // A duplicate of a layer that was somebody's matte or parent must not
-        // inherit being pointed *at* — but it keeps what it points at itself.
+        // It isn't pointed *at* as its original was, but keeps what that points at.
         let new_id = copy.id;
+        lumit_render::passes::follow_copy(&*self.document()?, &self.item()?, &mut copy);
 
         self.commit(lumit_core::ops::Op::AddLayer {
             comp: self.comp_id,
@@ -6309,7 +6242,7 @@ impl LayerReference {
             .iter()
             .find(|l| l.id == self.layer_id)
             .ok_or(BridgeError::InvalidLayer)?;
-        Ok(motion_path_of(&comp, layer))
+        Ok(crate::motion_path::motion_path_of(&comp, layer))
     }
 
     /// The layer's source audio summarised across `[start_seconds,
@@ -7584,120 +7517,39 @@ impl LayerReference {
         self.with_instances(InstanceHome::Effects, edit)
     }
 
-    /// [`Self::with_effects`] for any of the four instance lists a param
-    /// command can land on — the layer's effect stack, its **styles**
-    /// (docs/impl/layer-styles.md §5), a **group header's** stack in this comp
-    /// (docs/impl/group-effects.md §6), or one **clip's** own rack
-    /// (docs/impl/audio-timeline.md §4).
-    ///
-    /// A style, a header effect and a clip effect are all `EffectInstance`s in
-    /// another list, so the only thing that differs between editing one and
-    /// editing an effect is which list is read and which op commits it. All
-    /// four live here, which is why no command below grows a branch of its own.
+    /// [`Self::with_effects`] for any list a param command can land on
+    /// ([`InstanceHome`]). Each holds `EffectInstance`s, so all that differs is
+    /// which list is read and which op commits it, and no command below grows
+    /// a branch of its own.
     #[frb(ignore)]
     pub(crate) fn with_instances(
         &self,
         home: InstanceHome,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
-        // A plugin on the list answers the edit before it is committed, so
-        // what it wrote lands in the same undo step.
-        let edit = |list: &mut Vec<EffectInstance>| {
-            let before = list.clone();
-            edit(list)?;
-            crate::api::track::settle(&before, list);
-            Ok(())
-        };
-        let op = match home {
-            InstanceHome::Effects | InstanceHome::Styles => {
-                let layer = self.item()?;
-                let mut list = if home == InstanceHome::Styles {
-                    layer.styles
-                } else {
-                    layer.effects
-                };
-                edit(&mut list)?;
-                if home == InstanceHome::Styles {
-                    lumit_core::ops::Op::SetLayerStyles {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
-                        styles: list,
-                    }
-                } else {
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
-                        effects: list,
-                    }
-                }
-            }
-            InstanceHome::Group(group) => {
-                let comp = self.composition()?;
-                let mut list = comp
-                    .groups
-                    .iter()
-                    .find(|g| g.id == group)
-                    .map(|g| g.effects.clone())
-                    .ok_or(BridgeError::InvalidEffect)?;
-                edit(&mut list)?;
-                lumit_core::ops::Op::SetGroupEffects {
-                    comp: self.comp_id,
-                    group,
-                    effects: list,
-                }
-            }
-            // Through `commit_clips`, like every other clip write, so the
-            // whole-list replace and the row's bar stay one undo step. The
-            // op's inverse clones every clip's stack, plugin state and all;
-            // ponytail: that is the ceiling, and reusing the untouched clips
-            // is the upgrade if an edit ever breaks the docs/13 budget.
-            InstanceHome::Clip(clip) => {
-                let (mut clips, index) = self.clips_and_index(clip)?;
-                edit(&mut clips[index].effects)?;
-                return self.commit_clips(clips);
-            }
-            // One instance, carried as a list of at most one so the edit
-            // closure is the same closure the other three homes take. An edit
-            // that empties the list clears the Inputs, which is what removing
-            // them means.
-            InstanceHome::GraphInputs => {
-                let mut list: Vec<EffectInstance> = self.item()?.graph_inputs.into_iter().collect();
-                edit(&mut list)?;
-                lumit_core::ops::Op::SetLayerGraphInputs {
-                    comp: self.comp_id,
-                    layer: self.layer_id,
-                    inputs: list.into_iter().next().map(Box::new),
-                }
-            }
-        };
-        let proj = self.project()?;
-        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store.commit(op).map_err(BridgeError::OpError)?;
-        Ok(())
+        self.with_instances_naming(home, edit, None)
     }
 
     /// **The one find-instance lookup** (docs/impl/layer-styles.md §5,
     /// docs/impl/group-effects.md §6): which list `instance` lives on.
     ///
-    /// The effect stack is searched first, then the style list, then this
-    /// layer's clips, then its own graph Inputs, then the comp's group headers.
-    /// Ids are unique across all five, so the order is only a statement about
-    /// which is the common case. `Effects` for an instance on none of them,
-    /// which leaves the caller's own "no such instance" error to be the one
-    /// the user sees rather than inventing a second one here.
+    /// The effect stack, the style list, a Model layer's materials, this
+    /// layer's clips, its graph Inputs, then the comp's group headers, ids
+    /// unique across them all. `Effects` for one on none of them, which leaves
+    /// the caller's own "no such instance" error to be the one the user sees.
     ///
-    /// The one exception to searching by id is a placed graph's Inputs
-    /// (docs/impl/node-graph-comp.md §5.3): a layer that has none is *offered*
-    /// a fresh instance, so the first commit carries an id no list holds yet
-    /// and [`is_graph_inputs`] recognises it by what it is bound to.
+    /// A placed graph's Inputs (docs/impl/node-graph-comp.md §5.3) a layer
+    /// hasn't got yet are *offered*, so the first commit carries an id no list
+    /// holds and [`is_graph_inputs`] recognises it by what it is bound to.
     ///
     /// Every param command — set a value, move a key, bypass, remove — routes
-    /// through this rather than asking whether its caller was a styles panel
-    /// or a group header's. That is the whole of what makes a style row's and
-    /// a header row's stopwatch, drag and expression the *same* code as an
-    /// effect row's (the shared route, grown its fourth arm).
+    /// through this, which is what makes a style's, a header's and a
+    /// material's rows the *same* code as an effect row's.
     #[frb(ignore)]
-    fn instance_home(&self, instance: &EffectInstance) -> Result<InstanceHome, BridgeError> {
+    pub(crate) fn instance_home(
+        &self,
+        instance: &EffectInstance,
+    ) -> Result<InstanceHome, BridgeError> {
         let id = instance.id;
         let layer = self.item()?;
         if layer.effects.iter().any(|e| e.id == id) {
@@ -7705,6 +7557,12 @@ impl LayerReference {
         }
         if layer.styles.iter().any(|s| s.id == id) {
             return Ok(InstanceHome::Styles);
+        }
+        if lumit_core::model_part::owns(layer.id, id) {
+            return Ok(InstanceHome::ModelRows);
+        }
+        if lumit_render::model_material::owns(&layer, std::slice::from_ref(instance)) {
+            return Ok(InstanceHome::Materials);
         }
         if let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind {
             if let Some(clip) = clips.iter().find(|c| c.effects.iter().any(|e| e.id == id)) {
@@ -7794,8 +7652,8 @@ impl LayerReference {
         // undo step, so the stack works without a trip to the node graph. Its
         // box starts open there too, showing every control.
         let layer = self.item()?;
-        let mut effects = layer.effects;
-        let mut graph = layer.graph;
+        let mut effects = layer.effects.clone();
+        let mut graph = layer.graph.clone();
         let before = effects.clone();
         effects.push(instance.clone());
         crate::api::track::settle(&before, &mut effects);
@@ -7808,11 +7666,11 @@ impl LayerReference {
         proj.store
             .commit(lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
+                    lumit_core::fx::effects::particulate::set_effects(
+                        self.comp_id,
+                        &layer,
                         effects,
-                    },
+                    ),
                     lumit_core::ops::Op::SetLayerGraph {
                         comp: self.comp_id,
                         layer: self.layer_id,
@@ -8047,6 +7905,7 @@ impl LayerReference {
         &self,
         effects: Vec<BridgeEffectInstance>,
         clip: Option<Uuid>,
+        light_names: Option<Vec<String>>,
     ) -> Result<(), BridgeError> {
         let staged: Vec<EffectInstance> = effects
             .iter()
@@ -8062,21 +7921,26 @@ impl LayerReference {
             (None, Some(clip)) => InstanceHome::Clip(clip),
             (None, None) => InstanceHome::Effects,
         };
-        self.with_instances(home, move |current| {
-            // A placed graph's Inputs are offered before they are adopted
-            // (docs/impl/node-graph-comp.md §5.3), so the first commit lands
-            // one instance where the document had none. Everywhere else a
-            // staged list must still name what the document names.
-            let adopting = home == InstanceHome::GraphInputs && current.is_empty();
-            let same_stack = adopting
-                || (current.len() == staged.len()
-                    && current.iter().zip(&staged).all(|(a, b)| a.id == b.id));
-            if !same_stack {
-                return Err(BridgeError::StaleEffectStack);
-            }
-            *current = staged;
-            Ok(())
-        })
+        let names = light_names.as_deref();
+        self.with_instances_naming(
+            home,
+            move |current| {
+                // A placed graph's Inputs are offered before they are adopted
+                // (docs/impl/node-graph-comp.md §5.3), so the first commit lands
+                // one instance where the document had none. Everywhere else a
+                // staged list must still name what the document names.
+                let adopting = home == InstanceHome::GraphInputs && current.is_empty();
+                let same_stack = adopting
+                    || (current.len() == staged.len()
+                        && current.iter().zip(&staged).all(|(a, b)| a.id == b.id));
+                if !same_stack {
+                    return Err(BridgeError::StaleEffectStack);
+                }
+                *current = staged;
+                Ok(())
+            },
+            names,
+        )
     }
 
     /// One clip's own effect stack as staged copies, exactly as
@@ -8129,17 +7993,53 @@ impl LayerReference {
         {
             return Err(BridgeError::UnknownEffectName);
         }
-        let comp = self.composition()?;
-        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(
-            &name,
-            f64::from(comp.width),
-            f64::from(comp.height),
-        )
-        .ok_or(BridgeError::UnknownEffectName)?;
+        // The clip's own picture is the raster its effects run on, so a
+        // Transform lands centred on that, not on the composition.
+        let (width, height) = self.clip_picture_size(clip)?;
+        let mut instance = lumit_core::fx::builtins::instantiate_for_raster(&name, width, height)
+            .ok_or(BridgeError::UnknownEffectName)?;
         lumit_core::fx::builtins::point_self_layer_params_at(&mut instance, self.layer_id);
         self.with_instances(InstanceHome::Clip(clip), move |effects| {
             effects.push(instance);
             Ok(())
+        })
+    }
+
+    /// How big clip `clip`'s picture is in its own pixels: its file's, its
+    /// composition's or its solid's size, and the composition's when that
+    /// cannot be told.
+    #[frb(ignore)]
+    fn clip_picture_size(&self, clip: Uuid) -> Result<(f64, f64), BridgeError> {
+        use lumit_core::sequence::ClipSource;
+        let comp = self.composition()?;
+        let own = (f64::from(comp.width), f64::from(comp.height));
+        let source = match &self.item()?.kind {
+            lumit_core::model::LayerKind::Sequence { clips } => {
+                clips.iter().find(|c| c.id == clip).map(|c| c.source)
+            }
+            _ => None,
+        };
+        let proj = self.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        Ok(match source {
+            Some(ClipSource::Footage(item)) => match doc.item(item) {
+                Some(lumit_core::model::ProjectItem::Footage(f)) => {
+                    let (_, w, h) =
+                        crate::api::composition::CompositionReference::footage_span_and_size(
+                            &state, f, &comp,
+                        );
+                    (w, h)
+                }
+                _ => own,
+            },
+            Some(ClipSource::Comp(id)) => doc
+                .comp(id)
+                .map_or(own, |c| (f64::from(c.width), f64::from(c.height))),
+            Some(ClipSource::Solid(id)) => doc
+                .solid(id)
+                .map_or(own, |s| (f64::from(s.width), f64::from(s.height))),
+            None => own,
         })
     }
 
@@ -8412,10 +8312,11 @@ impl LayerReference {
         let mut added = lumit_core::preset::group_instantiated(&preset, [x, y]);
 
         let layer = self.item()?;
-        let mut graph = layer.graph;
+        let mut graph = layer.graph.clone();
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
+        graph.ties.extend(added.ties);
         graph.groups.push(added.group);
         graph.groups.extend(added.inner);
         self.migrate_in(
@@ -8423,7 +8324,7 @@ impl LayerReference {
             &lumit_core::fx::builtins::wired_in(&graph),
         )?;
         let none_added = added.effects.is_empty();
-        let mut effects = layer.effects;
+        let mut effects = layer.effects.clone();
         effects.extend(added.effects);
         graph.prune_rows(&effects);
         let graph = lumit_core::ops::Op::SetLayerGraph {
@@ -8438,11 +8339,11 @@ impl LayerReference {
         } else {
             lumit_core::ops::Op::Batch {
                 ops: vec![
-                    lumit_core::ops::Op::SetLayerEffects {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
+                    lumit_core::fx::effects::particulate::set_effects(
+                        self.comp_id,
+                        &layer,
                         effects,
-                    },
+                    ),
                     graph,
                 ],
             }
@@ -8560,6 +8461,7 @@ impl LayerReference {
                         || [&a.selector.start, &a.selector.end, &a.selector.offset]
                             .into_iter()
                             .chain([&a.position_x, &a.position_y, &a.rotation, &a.scale_x])
+                            .chain([&a.position_z, &a.rotation_x, &a.rotation_y])
                             .chain([&a.scale_y, &a.opacity, &a.fill_r, &a.fill_g, &a.fill_b])
                             .any(animated)
                 })

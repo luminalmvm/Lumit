@@ -11,7 +11,7 @@
 // The frame is the dialog pattern's: title strip, body, footer.
 
 import 'dart:async';
-import 'dart:io' show File, FileSystemException, Platform;
+import 'dart:io' show File, FileSystemException;
 import 'dart:math' as math;
 import 'dart:typed_data' show Float32List;
 import 'dart:ui' show PointMode;
@@ -54,6 +54,8 @@ import 'settings_window_frb.dart';
 import 'sign_in_window.dart';
 import 'update_dialog_frb.dart';
 import 'welcome_frb.dart' show projectDisplayName;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The width both take, the column their labels sit in, and how tall the list
 /// of conflicts and the list of footage grow before they scroll.
@@ -2082,7 +2084,7 @@ class _ShareDialogState extends State<_ShareDialog> {
           SizedBox(
             width: personDiscSize + 8,
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: lumitIcon(LumitIcon.link,
                   size: personDiscSize,
                   color: lost ? t.warning : t.textMuted),
@@ -2186,7 +2188,7 @@ class _ShareDialogState extends State<_ShareDialog> {
               width: dialogCloseGlyph + 10,
               height: _listRow - 2,
               child: Align(
-                alignment: Alignment.centerRight,
+                alignment: AlignmentDirectional.centerEnd,
                 child: glyph.LumitIcon(
                   mark,
                   size: dialogCloseGlyph,
@@ -2467,7 +2469,7 @@ class _ShareDialogState extends State<_ShareDialog> {
               // both, and the buttons already say there is a link.
               child: shown || open
                   ? Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: open ? _tag(t, l10n.shareLinkNoPassword) : null)
                   : Container(
                       key: ValueKey<String>('$id-veiled'),
@@ -2495,7 +2497,7 @@ class _ShareDialogState extends State<_ShareDialog> {
             ),
             if (locked)
               Padding(
-                padding: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsetsDirectional.only(start: 6),
                 child: LumitTooltip(
                   key: const ValueKey('share-invite-locked'),
                   message:
@@ -2506,7 +2508,7 @@ class _ShareDialogState extends State<_ShareDialog> {
               ),
             if (locked && half)
               Padding(
-                padding: const EdgeInsets.only(left: 4),
+                padding: const EdgeInsetsDirectional.only(start: 4),
                 child: _tag(t, l10n.shareLinkLockEdit),
               ),
             const SizedBox(width: 8),
@@ -2614,7 +2616,7 @@ class _ShareDialogState extends State<_ShareDialog> {
       // Outside the list, so it is there to press without scrolling to it.
       if (shown.length < all.length)
         Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
@@ -2754,7 +2756,7 @@ class _ShareDialogState extends State<_ShareDialog> {
                       () => unawaited(_takeDown(note)))
                   : null),
           Padding(
-            padding: const EdgeInsets.only(left: personDiscSize + 8, top: 1),
+            padding: const EdgeInsetsDirectional.only(start: personDiscSize + 8, top: 1),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2800,7 +2802,7 @@ class _ShareDialogState extends State<_ShareDialog> {
           _whoRow(t, share,
               name: sitting.name, mine: sitting.mine, at: sitting.ended),
           Padding(
-            padding: const EdgeInsets.only(left: personDiscSize + 8, top: 1),
+            padding: const EdgeInsetsDirectional.only(start: personDiscSize + 8, top: 1),
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
@@ -3090,7 +3092,7 @@ class _ShareDialogState extends State<_ShareDialog> {
             SizedBox(
               height: _listRow,
               child: Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: Text(l10n.shareNobodyElse,
                     key: const ValueKey('share-nobody-else'),
                     style: t.small.copyWith(color: t.textMuted)),
@@ -3297,7 +3299,7 @@ class _PersonRowState extends State<_PersonRow> {
                             child: SizedBox(
                               height: _listRow,
                               child: Align(
-                                alignment: Alignment.centerRight,
+                                alignment: AlignmentDirectional.centerEnd,
                                 child: lumitIcon(
                                   LumitIcon.eye,
                                   size: 14,
@@ -3422,8 +3424,8 @@ class _ScrollListState extends State<_ScrollList> {
                   ScrollConfiguration.of(context).copyWith(scrollbars: false),
               child: SingleChildScrollView(
                 controller: _scroll,
-                padding: EdgeInsets.only(
-                    right: _above || _below ? widget.gutter : 0),
+                padding: EdgeInsetsDirectional.only(
+                    end: _above || _below ? widget.gutter : 0),
                 child: column,
               ),
             ),

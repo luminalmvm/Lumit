@@ -40,6 +40,8 @@ import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays, ViewerReach;
 import '../theme/theme.dart';
 import 'viewer_texture_controller.dart';
+import 'viewer_picture.dart'
+    if (dart.library.js_interop) 'viewer_picture_web.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith;
 import 'shape_entries.dart';
@@ -48,6 +50,7 @@ import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_follow.dart';
+import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_gizmo_3d.dart'
     show
@@ -67,6 +70,7 @@ import 'viewer_region.dart';
 import 'viewer_rotate.dart';
 import 'viewer_roto.dart';
 import 'viewer_rulers.dart';
+import 'viewer_shape3d.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
 import 'viewer_tool_cursor.dart';
@@ -314,8 +318,16 @@ class ViewerStage extends StatelessWidget {
         uiState.liveTransforms.value[a.layer.internallayerId] ??
         a.info.transform;
     final out = <LayerBox>[];
+    // An environment light is nowhere, and the picture it reads is never
+    // drawn, so neither has a box to pick or move.
+    final surround = [
+      for (final e in model.heldLayers)
+        if (e.info.light?.kind == BridgeLightKind.environment) e.info.light?.source
+    ];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
+      if (entry.info.light?.kind == BridgeLightKind.environment) continue;
+      if (surround.contains(entry.layer.internallayerId)) continue;
       // Nor does a layer that only makes a sound: a box the size of the comp
       // round nothing, and a click on the picture that picked it.
       if (!_drawsPicture(entry)) continue;
@@ -330,6 +342,10 @@ class ViewerStage extends StatelessWidget {
       final tf = transformOf(entry);
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
       final light = entry.info.kind == BridgeLayerKind.light;
+      final cube = uiState.layerBounds.modelBoxOf(entry,
+          revision: revision,
+          frame: uiState.playheadFrame.value,
+          outlined: outlined.contains(entry.layer.internallayerId.toString()));
       final map = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft,
           viewScale: viewScale,
@@ -383,13 +399,17 @@ class ViewerStage extends StatelessWidget {
             (map.projected &&
                 tf.positionX is! BridgeScalar_Expression &&
                 tf.positionY is! BridgeScalar_Expression),
-        // A light is a place, with nothing to scale or turn on the picture.
+        // A light is a place, with nothing to scale or turn on the picture,
+        // and a model's box has no flat side for the handles.
         scalable: !light &&
+            cube == null &&
             isStill(tf.scaleX) &&
             isStill(tf.scaleY) &&
             isStill(tf.rotation),
         rotationDegrees: rotation,
         marker: light,
+        cube: cube,
+        cubeFrame: uiState.playheadFrame.value,
         transform: tf,
         // The path a keyed position follows, for the layers whose outline is
         // drawn: asked once per layer per document revision and held. A 3D
@@ -790,7 +810,7 @@ class ViewerStage extends StatelessWidget {
                       view: view,
                       ask: ask,
                       ground: aids.ground,
-                      grid: !viewport || uiState.viewportWireframe(viewId),
+                      grid: !viewport || uiState.linesOnly(viewId),
                       axes: axes,
                       only: only,
                       frame: uiState.playheadFrame.value,
@@ -851,6 +871,7 @@ class ViewerStage extends StatelessWidget {
                   // The box picked on a node graph's canvas is what the Roto
                   // tools stroke on there.
                   uiState.compGraphNode,
+                  uiState.pickedPart,
                 ]),
                 builder: (context, _) {
                   final boxes = _boxes();
@@ -900,6 +921,19 @@ class ViewerStage extends StatelessWidget {
                           compSize.height.toDouble(),
                         ),
                         accent: t.accent,
+                        onChanged: onChanged,
+                      ),
+                      // The 3D shape tools: a click puts the shape there.
+                      ViewerShape3dLayer(
+                        active: uiState.tools.tool.group == ToolGroup.shape3d,
+                        tool: uiState.tools.tool,
+                        comp: comp,
+                        uiState: uiState,
+                        fitted: fitted,
+                        compSize: Size(
+                          compSize.width.toDouble(),
+                          compSize.height.toDouble(),
+                        ),
                         onChanged: onChanged,
                       ),
                       // The Type tool: a click makes or edits a text layer,
@@ -1004,6 +1038,16 @@ class ViewerStage extends StatelessWidget {
                         outline: t.surface0,
                         onChanged: onChanged,
                       ),
+                      // A picked part of a 3D model, over everything else that
+                      // takes the pointer, on its handles alone.
+                      if (uiState.pickedPart.value != null)
+                        ViewerPartGizmo(
+                          comp: comp,
+                          uiState: uiState,
+                          boxes: boxes,
+                          revision: uiState.model.heldRevision,
+                          onChanged: onChanged,
+                        ),
                     ],
                   );
                 },
@@ -1464,7 +1508,7 @@ final Map<UuidValue, bool> _pictured = {};
 /// and only once a layer: the engine answers from the probe it made at import,
 /// so the first ask is the one crossing and the rest are a lookup.
 bool _drawsPicture(BridgeLayerEntry entry) => switch (entry.info.kind) {
-      BridgeLayerKind.audio => false,
+      BridgeLayerKind.audio || BridgeLayerKind.bus => false,
       BridgeLayerKind.footage =>
         _pictured[entry.layer.internallayerId] ??= () {
           try {
@@ -1510,6 +1554,7 @@ BridgeLayerEntry? layerAtCompPoint(
     BridgeLayerKind.nullLayer,
     BridgeLayerKind.light,
     BridgeLayerKind.audio,
+    BridgeLayerKind.bus,
   };
   final byId = {
     for (final entry in model.layers) entry.layer.internallayerId: entry
@@ -1517,7 +1562,7 @@ BridgeLayerEntry? layerAtCompPoint(
   // What a pin points at was seen through the comp's own camera.
   late final List<double> rows = () {
     try {
-      return comp.viewProjection(frame: BigInt.from(frame), view: null);
+      return comp.viewProjection(frame: frame, view: null);
     } catch (_) {
       return flatView;
     }
@@ -1541,7 +1586,7 @@ BridgeLayerEntry? layerAtCompPoint(
           time: () => time,
           cameraPose: (camera) {
             try {
-              return camera.layer.cameraOwnPoseAt(frame: BigInt.from(frame));
+              return camera.layer.cameraOwnPoseAt(frame: frame);
             } catch (_) {
               return null;
             }
@@ -1752,20 +1797,25 @@ class _Picture extends StatelessWidget {
       valueListenable: uiState.textureOf(viewId),
       builder: (context, textureId, _) => ValueListenableBuilder<int>(
         valueListenable: uiState.previewTier,
-        builder: (context, tier, _) {
-          final picture = textureId != null
-              ? Texture(
-                  textureId: textureId,
-                  filterQuality: viewerPictureFilter(
-                    shownScale: shownScale,
-                    tier: tier,
-                    devicePixelRatio: dpr,
-                    smooth: uiState.workspace.smoothZoomedViewer,
-                  ),
-                )
-              : const SizedBox.expand();
-          return pictureChannelFilter(channel, picture);
-        },
+        builder: (context, tier, _) => ValueListenableBuilder<int?>(
+          valueListenable: uiState.draftView,
+          builder: (context, draft, _) {
+            final picture = textureId != null
+                ? viewerPicture(
+                    textureId,
+                    filterQuality: viewerPictureFilter(
+                      shownScale: shownScale,
+                      tier: tier,
+                      devicePixelRatio: dpr,
+                      // A draft reads as soft, never as blocks.
+                      smooth: uiState.workspace.smoothZoomedViewer ||
+                          draft == viewId,
+                    ),
+                  )
+                : const SizedBox.expand();
+            return pictureChannelFilter(channel, picture);
+          },
+        ),
       ),
     );
   }
@@ -1876,7 +1926,7 @@ class ViewerWireframeLayer extends StatefulWidget {
   final List<UuidValue>? only;
 
   final int frame;
-  final BigInt? revision;
+  final int? revision;
 
   /// The footage sizes the frontend has already probed. The engine's own probe
   /// lives on the worker and this call does not, so what is known travels with
@@ -1960,7 +2010,7 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
     }
     try {
       _wires = widget.comp.wireframes(
-        frame: BigInt.from(widget.frame),
+        frame: widget.frame,
         view: widget.view,
         ground: widget.ground,
         grid: widget.grid,

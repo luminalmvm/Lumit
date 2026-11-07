@@ -26,13 +26,16 @@
 // turns it into a sentence from the .arb. The service holds state, not copy.
 
 import 'dart:convert';
-import 'dart:ffi' show Abi;
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
 
 import 'download.dart';
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Where the official catalogue lives: one file on the `main` branch of the
 /// second repository, read straight rather than through an API, so there is no
@@ -314,10 +317,16 @@ class AddonService extends ChangeNotifier {
   /// installed, installed at another version, which the row reads as Update,
   /// or installed with its files gone, because installing it again is the one
   /// thing that mends that.
-  List<Addon> get available => [
-        for (final e in _entries)
-          if (e.kind != AddonKind.runtime && _worthOffering(e)) e
-      ];
+  ///
+  /// None when this machine has no runtime and the catalogue has none for it,
+  /// as on an Intel Mac, since a pack could only ever read Needs runtime.
+  List<Addon> get available =>
+      runtimeInstalled == null && runtimeOffered == null
+          ? const []
+          : [
+              for (final e in _entries)
+                if (e.kind != AddonKind.runtime && _worthOffering(e)) e
+            ];
 
   bool _worthOffering(Addon offer) {
     final here = installedById(offer.id);
@@ -666,7 +675,7 @@ class AddonService extends ChangeNotifier {
 /// `macos-aarch64`, `macos-x86_64` or `linux-x86_64`
 /// (docs/impl/addons.md §4). `Abi` is where Dart says both halves at once.
 String defaultPlatformKey() {
-  final parts = Abi.current().toString().split('_');
+  final parts = abiName().split('_');
   if (parts.length < 2) return parts.first;
   final architecture = switch (parts.last) {
     'x64' => 'x86_64',

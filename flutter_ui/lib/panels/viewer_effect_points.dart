@@ -8,7 +8,8 @@
 // With the Selection tool in hand a mark can be dragged: the point follows
 // the pointer through the same preview a row's drag uses, and the release
 // writes both halves as one undo step. Only the marks take the pointer, so the
-// rest of the picture behaves as before.
+// rest of the picture behaves as before. A point an expression works out is
+// drawn in the number colour, and neither it nor a wired one moves.
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
@@ -20,6 +21,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
 
+import '../state/comp_time.dart' show sampledExpression, timeOfFrame;
+import '../widgets/controls.dart' show ThemeScope;
 import 'effect_param_row_frb.dart'
     show
         EffectStackEditor,
@@ -60,8 +63,11 @@ class _Mark {
   final Size span;
   final Offset at;
 
+  /// An expression works out either half, so the mark is not dragged.
+  final bool driven;
+
   const _Mark(this.layer, this.effect, this.x, this.y, this.xWas, this.yWas,
-      this.span, this.at);
+      this.span, this.at, this.driven);
 
   String get key => '${layer.internallayerId}/$effect/$x';
 }
@@ -100,7 +106,9 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
   final EffectStackEditor _editor = EffectStackEditor();
 
   String? _hover;
-  bool _hoverWired = false;
+
+  /// The mark under the pointer is driven, by an expression or a wire.
+  bool _hoverDriven = false;
 
   /// The drag in flight: the mark, where the press was, the point it started
   /// from, and where it is now.
@@ -132,7 +140,7 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
             if (marks.isEmpty) return const SizedBox.shrink();
             final lit = [
               for (final m in marks)
-                if (m.key == _held?.key || (m.key == _hover && !_hoverWired))
+                if (m.key == _held?.key || (m.key == _hover && !_hoverDriven))
                   m.at
             ];
             return Stack(
@@ -141,7 +149,11 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _PointsPainter(
-                          [for (final m in marks) m.at], lit, widget.colour),
+                          [for (final m in marks) m.at],
+                          lit,
+                          [for (final m in marks) m.driven],
+                          widget.colour,
+                          ThemeScope.of(context).theme.port.number),
                     ),
                   ),
                 ),
@@ -161,12 +173,14 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
         width: gizmoAnchorSlop,
         height: gizmoAnchorSlop,
         child: MouseRegion(
-          cursor: m.key == _hover && !_hoverWired
-              ? SystemMouseCursors.move
-              : MouseCursor.defer,
+          cursor: m.key != _hover
+              ? MouseCursor.defer
+              : _hoverDriven
+                  ? SystemMouseCursors.forbidden
+                  : SystemMouseCursors.move,
           onEnter: (_) => setState(() {
             _hover = m.key;
-            _hoverWired = _wired(m);
+            _hoverDriven = m.driven || _wired(m);
           }),
           onExit: (_) => setState(() => _hover = null),
           child: GestureDetector(
@@ -293,8 +307,15 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
           BridgeScalar? held(String id) =>
               scalar(fx.values.where((v) => v.id == id).firstOrNull?.value);
           // What a drag has staged first, so the mark follows the picture.
-          double? at(String id) => scalarValueAt(
-              scalar(staged[(fx.id, id)]) ?? held(id), widget.comp, frame);
+          double? at(String id) {
+            final s = scalar(staged[(fx.id, id)]) ?? held(id);
+            return s is BridgeScalar_Expression
+                ? sampledExpression(s, timeOfFrame(widget.comp, frame),
+                    entry.layer, _ui.model.heldRevision,
+                    row: BridgeExpressionRow.effect(effect: fx.id, param: id))
+                : scalarValueAt(s, widget.comp, frame);
+          }
+
           final x = at(pair.x), y = at(pair.y);
           if (x == null || y == null) continue;
           out.add(_Mark(
@@ -309,6 +330,8 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
               fitted.left + x / span.width * fitted.width,
               fitted.top + y / span.height * fitted.height,
             ),
+            held(pair.x) is BridgeScalar_Expression ||
+                held(pair.y) is BridgeScalar_Expression,
           ));
         }
       }
@@ -322,14 +345,18 @@ class _PointsPainter extends CustomPainter {
 
   /// The marks under the pointer or in hand, drawn a touch heavier.
   final List<Offset> lit;
-  final Color colour;
 
-  const _PointsPainter(this.points, this.lit, this.colour);
+  /// Which of [points] an expression works out, drawn in [drivenColour].
+  final List<bool> driven;
+  final Color colour, drivenColour;
+
+  const _PointsPainter(
+      this.points, this.lit, this.driven, this.colour, this.drivenColour);
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final at in points) {
-      paintAnchorMark(canvas, at, colour);
+    for (var i = 0; i < points.length; i++) {
+      paintAnchorMark(canvas, points[i], driven[i] ? drivenColour : colour);
     }
     for (final at in lit) {
       canvas.drawCircle(
@@ -341,6 +368,8 @@ class _PointsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PointsPainter old) =>
       old.colour != colour ||
+      old.drivenColour != drivenColour ||
       !listEquals(old.points, points) ||
+      !listEquals(old.driven, driven) ||
       !listEquals(old.lit, lit);
 }

@@ -14,6 +14,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +27,7 @@ import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/name_direction.dart';
+import '../shell/settings_window_frb.dart' show showSettingsWindowFrb;
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
@@ -137,6 +139,53 @@ class ProjectBadge extends StatelessWidget {
   }
 }
 
+/// A badge waiting on something: its word breathes slowly while [on], as the
+/// file can take a while and nothing else on the row moves. Still with motion
+/// turned down.
+class _Breathing extends StatefulWidget {
+  final bool on;
+  final Widget child;
+
+  const _Breathing({required this.on, required this.child});
+
+  @override
+  State<_Breathing> createState() => _BreathingState();
+}
+
+class _BreathingState extends State<_Breathing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _beat = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  late final Animation<double> _opacity = _beat
+      .drive(CurveTween(curve: Curves.easeInOut))
+      .drive(Tween<double>(begin: 1, end: 0.5));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final moves =
+        widget.on && ThemeScope.of(context).motion.level == AnimationLevel.all;
+    if (moves && !_beat.isAnimating) {
+      _beat.repeat(reverse: true);
+    } else if (!moves && _beat.isAnimating) {
+      _beat.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _beat.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+        child: FadeTransition(opacity: _opacity, child: widget.child),
+      );
+}
+
 /// How wide [text] is on one line. Kept once measured, since rows ask on
 /// every build and a panel holds few different names and fewer badges.
 double _lineWidth(String text, TextStyle style, TextScaler scale) {
@@ -186,6 +235,18 @@ class ProjectRowFrb extends StatefulWidget {
   /// On disk, but the engine cannot decode it.
   final bool undecodable;
 
+  /// The pictures a 3D model names that are missing, shown in its badge's
+  /// tooltip.
+  final List<String> missingPictures;
+
+  /// Where a 3D model's trip through the user's Blender stands, null when it
+  /// needs none or is done.
+  final BridgeBlenderState? blender;
+
+  /// A press on its converting badge and on its stopped one.
+  final VoidCallback? onStopBlender;
+  final VoidCallback? onConvertAgain;
+
   /// Sound with no picture — the media probe's own answer, which is what picks
   /// the speaker glyph over the film one.
   final bool audio;
@@ -206,6 +267,9 @@ class ProjectRowFrb extends StatefulWidget {
   /// and nothing else: a node graph opens, drags and nests as any comp does.
   /// Handed in from the panel's cache, for the reason the name is.
   final bool nodeGraph;
+
+  /// A 3D model rather than footage that plays, which wears the cube.
+  final bool model;
 
   /// Whether any composition places this item — the `in use` badge.
   final bool inUse;
@@ -316,10 +380,15 @@ class ProjectRowFrb extends StatefulWidget {
     required this.depth,
     required this.missing,
     this.undecodable = false,
+    this.missingPictures = const [],
+    this.blender,
+    this.onStopBlender,
+    this.onConvertAgain,
     required this.audio,
     required this.label,
     required this.inherited,
     this.nodeGraph = false,
+    this.model = false,
     required this.inUse,
     required this.proxy,
     this.standIn = false,
@@ -574,12 +643,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     [for (final c in widget.holders) t.personColour(c)],
                     tint: 0.14,
                   ),
-            padding: EdgeInsets.only(
+            padding: EdgeInsetsDirectional.only(
               // Five levels at most, so a deep folder still leaves its rows
               // a name and room for the columns.
-              left: projectRowPadding +
+              start: projectRowPadding +
                   math.min(widget.depth, 5) * projectIndentPerDepth,
-              right: projectRowPadding,
+              end: projectRowPadding,
             ),
             child: Row(
               children: [
@@ -642,6 +711,14 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         feedback: _DragFeedbackFrb(
           name: dragged.length > 1 ? l10n.projectItemCount(dragged.length) : name,
         ),
+        child: row,
+      );
+    }
+    if (item case ItemReference_Solid(:final field0)) {
+      return Draggable<SolidDragData>(
+        data: SolidDragData(field0, widget.name),
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: _DragFeedbackFrb(name: widget.name, icon: LumitIcon.solid),
         child: row,
       );
     }
@@ -811,6 +888,23 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   Widget _nameAndBadges(LumitTheme t) {
     final id = projectItemId(item);
     final badges = [
+      // First, so a narrow column keeps it: the one thing the row is waiting
+      // on, or that wants fixing before the model can draw.
+      ...switch (widget.blender) {
+        BridgeBlenderState_Converting() => [
+            ('converting-$id', l10n.projectItemConverting, t.textMuted)
+          ],
+        BridgeBlenderState_NoBlender() => [
+            ('no-blender-$id', l10n.projectItemNoBlender, t.warning)
+          ],
+        BridgeBlenderState_Failed() || BridgeBlenderState_NoImporter() => [
+            ('blender-failed-$id', l10n.projectItemUndecodable, t.warning)
+          ],
+        BridgeBlenderState_Stopped() => [
+            ('stopped-$id', l10n.projectItemStopped, t.textMuted)
+          ],
+        null => const <(String, String, Color)>[],
+      },
       // Placed somewhere (§12A.3a). Before the missing badge, so a broken
       // file that is nonetheless *in* a comp reads left to right as "used,
       // and lost", which is the order those two facts matter in.
@@ -831,6 +925,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       if (widget.missing) ('relink-$id', l10n.projectItemMissing, t.warning),
       if (widget.undecodable)
         ('undecodable-$id', l10n.projectItemUndecodable, t.warning),
+      if (widget.missingPictures.isNotEmpty)
+        ('pictures-$id', l10n.projectItemMissing, t.warning),
     ];
     final name = _nameOrEditor(t);
     if (badges.isEmpty && widget.people.isEmpty) return name;
@@ -842,9 +938,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         // What is left past the name's floor goes to the people first, as
         // many as fit and never fewer than a count of them, and then to the
         // badges, in order, until one does not fit.
+        // A trip through Blender says why the model isn't drawing, so it's
+        // worth half the name's room. The tooltip still has the whole name.
+        final floor = widget.blender == null ? _nameFloor : _nameFloor / 2;
         final needs = widget.renaming
-            ? _nameFloor
-            : math.min(_nameFloor, _lineWidth(widget.name, t.body, scale));
+            ? floor
+            : math.min(floor, _lineWidth(widget.name, t.body, scale));
         var room = box.maxWidth - needs;
         const each = projectRowGap + _personDotSize;
         final marks =
@@ -917,9 +1016,61 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     ),
                   ),
                 )
-              else if (key.startsWith('undecodable-'))
+              else if (key.startsWith('no-blender-'))
+                // Straight to the row that fixes it.
                 LumitTooltip(
-                  message: l10n.tipProjectUndecodable,
+                  message: l10n.tipProjectNoBlender,
+                  child: GestureDetector(
+                    key: ValueKey<String>(key),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => showSettingsWindowFrb(context,
+                        row: l10n.settingsBlender),
+                    child: ProjectBadge(label: label, colour: colour),
+                  ),
+                )
+              else if (key.startsWith('converting-') ||
+                  key.startsWith('stopped-'))
+                // A press on it stops the conversion, or starts it again.
+                LumitTooltip(
+                  message: key.startsWith('stopped-')
+                      ? l10n.tipProjectConvertAgain
+                      : l10n.tipProjectStopConverting,
+                  child: HoverMark(
+                    swells: true,
+                    builder: (context, lit) => GestureDetector(
+                      key: ValueKey<String>(key),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: key.startsWith('stopped-')
+                          ? widget.onConvertAgain
+                          : widget.onStopBlender,
+                      child: _Breathing(
+                        on: key.startsWith('converting-'),
+                        child: ProjectBadge(
+                          label: label,
+                          colour:
+                              Color.lerp(colour, t.textPrimary, 0.35 * lit)!,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (key.startsWith('blender-failed-'))
+                LumitTooltip(
+                  message: switch (widget.blender) {
+                    BridgeBlenderState_Failed(:final reason) => reason,
+                    BridgeBlenderState_NoImporter() =>
+                      l10n.tipProjectNoImporter,
+                    _ => l10n.tipProjectUndecodable,
+                  },
+                  child: ProjectBadge(
+                      key: ValueKey<String>(key), label: label, colour: colour),
+                )
+              else if (key.startsWith('undecodable-') ||
+                  key.startsWith('pictures-'))
+                LumitTooltip(
+                  message: key.startsWith('pictures-')
+                      ? widget.missingPictures.join('\n')
+                      : l10n.tipProjectUndecodable,
                   child: ProjectBadge(
                       key: ValueKey<String>(key), label: label, colour: colour),
                 )
@@ -986,7 +1137,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     final fallback = projectDefaultLabel(item, audio: widget.audio);
     return switch (item) {
       ItemReference_Footage() => (
-          widget.audio ? LumitIcon.audioFile : LumitIcon.footage,
+          widget.model
+              ? LumitIcon.cube3d
+              : widget.audio
+                  ? LumitIcon.audioFile
+                  : LumitIcon.footage,
           t.labelColour(fallback),
         ),
       ItemReference_Folder() => (LumitIcon.folder, t.textMuted),

@@ -66,6 +66,7 @@ fn layer(name: &str, kind: LayerKind, out_s: i64) -> Layer {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -263,5 +264,81 @@ fn a_retimed_precomp_shows_the_frame_its_map_points_at() {
             None
         )),
         "an un-retimed Precomp still draws nothing past its comp's end"
+    );
+}
+
+/// **Flow on a slowed Precomp makes the frame between** two of the nested
+/// comp's frames, where it used to show the earlier one again.
+///
+/// The square steps on hold keys, one step a nested frame, as a drawing does.
+/// At half speed every other parent frame falls between two nested frames, and
+/// Flow puts the square halfway, whole and sharp: a crossfade would leave two
+/// faint squares and nothing fully lit.
+#[test]
+fn flow_on_a_slowed_precomp_makes_the_frame_between() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (doc, comp) = project(Some(retime(&[(0, 0.0), (2, 1.0)])));
+    // Big enough for the motion to be measured.
+    let (w, h) = (256, 144);
+    let mut doc = Arc::unwrap_or_clone(doc);
+    for item in &mut doc.items {
+        let c = match item {
+            ProjectItem::Composition(c) => c,
+            ProjectItem::Solid(s) => {
+                (s.width, s.height) = (32, 32);
+                continue;
+            }
+            _ => continue,
+        };
+        (c.width, c.height) = (w, h);
+        for l in &mut c.layers {
+            match l.kind {
+                LayerKind::Solid { .. } => {
+                    l.transform.position_x.animation = Animation::Keyframed(
+                        (0..i64::from(FPS))
+                            .map(|k| Keyframe {
+                                time: Rational::new(k, i64::from(FPS)).unwrap(),
+                                value: 40.0 + 16.0 * k as f64,
+                                interp_in: SideInterp::Hold,
+                                interp_out: SideInterp::Hold,
+                            })
+                            .collect(),
+                    );
+                    l.transform.position_y = Property::fixed(72.0);
+                }
+                LayerKind::Precomp { .. } => {
+                    l.interpolation = lumit_core::retime::Interpolation::Flow(
+                        lumit_core::retime::FlowParams::default(),
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+    let doc = Arc::new(doc);
+    // Where the square is, and how much of it is fully lit.
+    let mut at = |frame: u64| {
+        let rgba = r.render_rgba(&doc, comp, frame, 1.0).expect("the render").0;
+        let (mut sum, mut n, mut whole) = (0.0, 0.0, 0);
+        for (i, px) in rgba.chunks_exact(4).enumerate() {
+            let v = f64::from(px[0]);
+            sum += (i % w as usize) as f64 * v;
+            n += v;
+            whole += usize::from(px[0] > 240);
+        }
+        (sum / n.max(1.0), whole)
+    };
+    // Parent frames 2 and 4 are nested frames 1 and 2; frame 3 is between.
+    let ((before, lit_before), (between, lit_between), (after, _)) = (at(2), at(3), at(4));
+    assert!(
+        (between - (before + after) / 2.0).abs() < 1.0,
+        "the square sits halfway: {before} {between} {after}"
+    );
+    assert!(
+        lit_between * 10 >= lit_before * 8,
+        "and is whole, not a crossfade: {lit_between} of {lit_before} fully lit"
     );
 }

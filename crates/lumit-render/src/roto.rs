@@ -133,7 +133,7 @@ impl RotoKey {
         self.media.iter().map(|b| format!("{b:02x}")).collect()
     }
 
-    fn file_name(&self) -> String {
+    pub(crate) fn file_name(&self) -> String {
         let run: String = self.run.iter().map(|b| format!("{b:02x}")).collect();
         format!("{}-{run}.lrot", self.prefix())
     }
@@ -592,7 +592,7 @@ const MAGIC: &[u8; 7] = b"LUMROT\0";
 
 /// What one `.lrot` file holds.
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Record {
+pub(crate) struct Record {
     /// Repeated inside the file as well as in its name, so a collision or a
     /// renamed file is caught rather than believed.
     key: [u8; 32],
@@ -648,7 +648,7 @@ fn encode(key: RotoKey, run: &RotoRun) -> Option<Vec<u8>> {
 ///
 /// A propagated run is a few tens of kilobytes a frame; a thousand-frame run is
 /// tens of megabytes. 512 MiB is far past any run and still a bounded read.
-const MAX_SIDECAR_BYTES: u64 = 512 << 20;
+pub(crate) const MAX_SIDECAR_BYTES: u64 = 512 << 20;
 
 /// The widest or tallest matte a sidecar may claim, matching what a comp can
 /// actually be.
@@ -759,7 +759,7 @@ fn validate(record: &Record) -> bool {
 /// from the future, a body that will not parse, a body whose numbers do not
 /// hold together, or — when `key` is given — a stored key that is not the one
 /// asked for. Every refusal costs a re-propagation and nothing else.
-fn decode(bytes: &[u8], key: Option<RotoKey>) -> Option<Record> {
+pub(crate) fn decode(bytes: &[u8], key: Option<RotoKey>) -> Option<Record> {
     let body = sidecar::unframe(bytes, MAGIC, FORMAT_VERSION)?;
     // bincode reads counts out of the body and grows as it goes, so the body's
     // own length is the ceiling on what deserialising can allocate — which is
@@ -775,7 +775,7 @@ fn decode(bytes: &[u8], key: Option<RotoKey>) -> Option<Record> {
     }
 }
 
-fn record_to_run(record: Record) -> Option<RotoRun> {
+pub(crate) fn record_to_run(record: Record) -> Option<RotoRun> {
     let first = record.frames.first()?.frame;
     let last = record.frames.last()?.frame;
     Some(RotoRun {
@@ -796,7 +796,7 @@ fn read_sidecar(dir: &Path, key: RotoKey) -> Option<RotoRun> {
     record_to_run(decode(&bytes, Some(key))?)
 }
 
-fn write_sidecar(dir: &Path, key: RotoKey, run: &RotoRun) {
+pub(crate) fn write_sidecar(dir: &Path, key: RotoKey, run: &RotoRun) {
     if let Some(bytes) = encode(key, run) {
         sidecar::write(dir, &key.file_name(), &bytes);
     }
@@ -853,7 +853,7 @@ fn lendable(dir: &Path, key: RotoKey) -> HashMap<[u8; 32], (FrameRecord, Arc<str
 
 /// Where the sidecar lives. Overridable in tests, which must never write into
 /// the user's own cache folder — the shape [`crate::track`] uses.
-fn cache_dir() -> Option<PathBuf> {
+pub(crate) fn cache_dir() -> Option<PathBuf> {
     test_cache_dir().or_else(lumit_project::roto_cache_dir)
 }
 
@@ -1090,7 +1090,7 @@ fn finish(instance: Uuid, outcome: Option<Progress>) {
 
 /// The whole of one job, on the propagation thread: read the sidecar, and only
 /// if there is nothing there, propagate.
-fn run(job: RotoJob, cancel: &AtomicBool) {
+pub(crate) fn run(job: RotoJob, cancel: &AtomicBool) {
     let instance = job.instance;
     let key = job.key;
     let dir = cache_dir();

@@ -1,0 +1,63 @@
+---
+title: Part matte
+description: "Keeps only the parts of a Model layer or a 3D precomp picked in the Viewer."
+---
+
+Part matte is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Cuts the layer down to the parts picked from the Model layer, or the Precomp with 3D layers
+in it, named in **Source**, with soft edges, whichever way the parts move. A part is a node
+of a 3D model, each material of a node with more than one, or a whole 3D layer. With nothing
+picked, or any other Source, the picture is left alone.
+
+To grade one part, duplicate the layer and put a Part matte and the grade on the top copy.
+
+**Parts** reads **Missing** when none of the parts picked are in the Source any more, and the
+picture is left alone. A Part matte on a layer another effect names is not read: a row naming
+a Precomp reads its picture without its effects.
+
+Under motion blur a matte keeps the frame's sharp edge, drawn at one moment rather than across
+the shutter.
+
+:::note[Not read here]
+Motion blur, a Model layer's own effects, track mattes, blend modes and the gas of Smoke and
+fire, which it cuts with the rest of the picture.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Parts** | Text | A short line of text | Empty | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Source** | Layer | Any layer in the composition | This layer | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Parts**: the parts it keeps, by name, ticked in its list. The eyedropper picks one in the
+  Viewer. Shift adds another or takes one back out, and a pick of nothing lets them all go.
+- **Invert**: keep everything but those parts.
+- **Mix**: how much of the result replaces the original.
+- **Source**: the Model layer or Precomp to read.
+
+## Related
+
+- [Scene pass](/effects/utility/scene-pass/)
+- [Set matte](/effects/utility/set-matte/)
+- [3D](/use/camera/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

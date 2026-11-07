@@ -386,7 +386,7 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithTransformPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: box.layer,
           transform:

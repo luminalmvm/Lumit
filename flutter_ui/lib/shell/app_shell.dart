@@ -20,6 +20,8 @@ import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
 import 'package:lumit_flutter/shell/extension_install_frb.dart';
+import 'package:lumit_flutter/shell/look_fade.dart';
+import 'package:lumit_flutter/shell/style_import.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
@@ -48,6 +50,7 @@ import 'package:lumit_flutter/shell/window_frame.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart'
     show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/state/dock.dart';
@@ -61,6 +64,7 @@ import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
+import 'package:lumit_flutter/state/window_backdrop.dart';
 import 'package:lumit_flutter/theme/motion.dart';
 import 'package:lumit_flutter/theme/theme.dart' show AnimationLevel;
 import 'package:lumit_flutter/widgets/escape_ladder.dart';
@@ -121,16 +125,18 @@ class LumitAppNew extends StatelessWidget {
                   : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               wireStyle: uiState.workspace.interface.wireStyle,
-              child: Directionality(
-                textDirection: TextDirection.ltr,
-                child: _RoomPicture(
+              child: LookFade(
+                  workspace: uiState.workspace,
+                  child: _RoomPicture(
                   child: ColoredBox(
                   // Under Lantern the menu and toolbar bands sit on the room,
                   // the ground the cards stand in; the flat shapes keep the
                   // deepest surface.
-                  color: uiState.theme.tokens.roomed
-                      ? uiState.theme.room
-                      : uiState.theme.surface0,
+                  color: !uiState.theme.tokens.roomed
+                      ? uiState.theme.surface0
+                      : WindowBackdrop.showing
+                          ? WindowBackdrop.tint
+                          : uiState.theme.room,
                   // Settings → Interface → UI scale, the Flutter counterpart of
                   // egui's `set_pixels_per_point`: layout and hit-testing scale
                   // together (see widgets/ui_scale.dart).
@@ -148,7 +154,7 @@ class LumitAppNew extends StatelessWidget {
                   ),
                 ),
                 ),
-              ),
+                ),
             ),
           ),
         ),
@@ -392,6 +398,12 @@ class _LumitAppViewState extends State<LumitAppView> {
           installExtensionPackage(context, app, ui.extensions, package);
           return;
         }
+        final style = app.launchStyle;
+        if (style != null) {
+          app.launchStyle = null;
+          importStyle(context, app, ui, style);
+          return;
+        }
         maybeShowTourFrb(context, app, ui);
       });
     });
@@ -410,11 +422,12 @@ class _LumitAppViewState extends State<LumitAppView> {
     };
   }
 
-  /// A project or an extension package double-clicked, or an invite link
-  /// clicked in a browser, while Lumit is running. On macOS all three come to
-  /// this Lumit. Elsewhere a package always does, and the others when it is
-  /// kept running in the background. They are opened as File ▸ Open, the
-  /// install window and the Shared project window would.
+  /// A project, an extension package, a style, a preset or a theme
+  /// double-clicked, or an invite link clicked in a browser, while Lumit is
+  /// running. On macOS all of them come to this Lumit. Elsewhere all but a
+  /// project and a link always do, and those two when it is kept running in
+  /// the background. They are opened as File ▸ Open, the install window,
+  /// Import style, [openPresetOrTheme] and the Shared project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
@@ -425,6 +438,11 @@ class _LumitAppViewState extends State<LumitAppView> {
       installExtensionPackage(
           context, app, context.read<LumitUiState>().extensions, package);
     }
+    final style = stylePathFromArgs(asked);
+    if (style != null) {
+      importStyle(context, app, context.read<LumitUiState>(), style);
+    }
+    openPresetOrTheme(app, context.read<LumitUiState>(), asked);
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);
   }
@@ -551,6 +569,7 @@ class _LumitAppViewState extends State<LumitAppView> {
       onLayoutChanged: uiState.saveLayout,
       activePanel: uiState.activePane,
       maximised: uiState.maximisedPane,
+      uiScale: uiState.workspace.interface.uiScale,
     );
     // Toolbar position Left: the tools go on a rail flush to the window's
     // left edge, and the menu bar's line carries the options and the
@@ -567,7 +586,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (!rail) const LumitToolBarFrb(),
         Expanded(
           child: rail
-              ? Row(children: [
+              ? Row(textDirection: TextDirection.ltr, children: [
                   const LumitToolRailFrb(),
                   Expanded(child: dock),
                 ])
@@ -601,9 +620,11 @@ class _LumitAppViewState extends State<LumitAppView> {
 
   /// A camera tool in hand over the Viewer gets After Effects' F and
   /// Ctrl+Shift+F for Look at, ahead of what the keys mean elsewhere, and so
-  /// does a 3D viewport in front, which also frames everything on Shift+F.
+  /// does a 3D view or viewport in front, which also frames everything on
+  /// Shift+F.
   String? _cameraLook(LumitUiState ui, KeyEvent event) {
-    final viewport = ui.isViewport(ui.activeViewId);
+    final viewport = ui.isViewport(ui.activeViewId) ||
+        ui.viewPoseOf(ui.activeViewId) != null;
     if ((ui.tools.tool.group != ToolGroup.camera && !viewport) ||
         ui.activePanel != Panel.viewer) {
       return null;
@@ -870,7 +891,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       case 'layer.new.text' ||
             'layer.new.camera' ||
             'layer.new.adjustment' ||
-            'layer.new.null':
+            'layer.new.null' ||
+            'layer.new.card':
         if (comp == null) {
           handled = false;
         } else {
@@ -885,6 +907,10 @@ class _LumitAppViewState extends State<LumitAppView> {
               comp.addAdjustmentLayer(row: row);
             case 'layer.new.null':
               comp.addNullLayer(row: row);
+            case 'layer.new.card':
+              ui.setSelection([
+                comp.addCardLayer(row: row, frame: ui.playheadFrame.value),
+              ]);
           }
           state.notifyDocumentChanged();
         }
@@ -973,6 +999,25 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = cameraToView(state, ui);
       case 'viewer.3d.place':
         ui.requestViewerCamera(ViewerCameraCommand.placeOnSurface);
+      // How the view in front shows models.
+      case 'viewer.look.lines':
+        ui.toggleLines(ui.activeViewId);
+      case 'viewer.look.faces':
+        ui.setModelDisplay(ui.activeViewId,
+            faces: !ui.facesShown(ui.activeViewId));
+      case 'viewer.look.final':
+        ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.final_);
+      case 'viewer.look.shaded':
+        ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.shaded);
+      case 'viewer.look.wireframe':
+        ui.setModelDisplay(ui.activeViewId,
+            display: BridgeModelDisplay.wireframe);
+      case 'viewer.look.shaded_wire':
+        ui.setModelDisplay(ui.activeViewId,
+            display: BridgeModelDisplay.shadedWire);
+      case 'viewer.look.normals':
+        ui.setModelDisplay(ui.activeViewId,
+            display: BridgeModelDisplay.normals);
       // The panel under the pointer fills the window and comes back
       // (docs/07 §1.1's backtick). The keymap has always carried this; this is
       // where it finally does something.
@@ -1292,6 +1337,9 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
       case 'layer.centre' || 'layer.centre.anchor':
         handled = MenuEntry.pressAction(transformRows(state, ui), action);
+      case 'layer.project.from.camera':
+        handled =
+            MenuEntry.pressAction([projectFromCameraRow(state, ui)], action);
       case 'mask.feather' || 'mask.invert':
         handled =
             MenuEntry.pressAction(maskRows(context, state, ui), action);
@@ -1397,3 +1445,24 @@ bool _pressedOnce(String action) =>
       'viewer.controls.toggle',
       'viewer.snap.grid.toggle',
     }.contains(action);
+
+/// A preset or a theme double-clicked, as Lumit starts or while it runs. The
+/// preset goes onto the selected layer as Apply animation preset puts it, and
+/// the theme is taken in and used as Settings' Import does.
+Future<void> openPresetOrTheme(
+    LumitState app, LumitUiState ui, List<String> asked) async {
+  final preset = presetPathFromArgs(asked);
+  if (preset != null) {
+    final layer = ui.selectedLayer.value;
+    if (layer == null) {
+      app.postNotice(l10n.selectALayer);
+    } else {
+      await applyPresetFile(app, layer, preset);
+    }
+  }
+  final theme = themePathFromArgs(asked);
+  if (theme != null) {
+    final refusal = await ui.workspace.importThemeFile(theme);
+    if (refusal != null) app.postNotice(refusal, error: true);
+  }
+}

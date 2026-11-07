@@ -21,8 +21,9 @@
 // start work, in the two places somebody can be standing when they have not
 // started yet.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +47,8 @@ import 'menu_bar_frb.dart';
 import 'project_history_window.dart'
     show BackupStill, backupErrorText, noticeMissingFootage;
 import 'wordmark.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 // --- The drawing's measurements -------------------------------------------
 //
@@ -377,7 +380,7 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                     child: Padding(
                       padding: welcomeRecentRowPadding,
                       child: Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: Text(l10n.welcomeNoRecent, style: t.body),
                       ),
                     ),
@@ -670,7 +673,7 @@ class _WelcomeCardState extends State<_WelcomeCard> {
             borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
             border: Border.all(color: _hover ? t.hairlineStrong : t.hairline),
           ),
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(
             widget.title,
             style: t.bodyPrimary.copyWith(fontSize: 13),
@@ -771,15 +774,18 @@ class _RecentRowState extends State<_RecentRow> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    MiddleEllipsis(
-                      widget.detail ?? shortenHomePath(widget.path),
-                      style: t.mono.copyWith(
-                        fontSize: 9,
-                        color: t.textDisabled,
+                    // In the browser the path is a made-up folder.
+                    if (widget.detail != null || !kIsWeb) ...[
+                      const SizedBox(height: 2),
+                      MiddleEllipsis(
+                        widget.detail ?? shortenHomePath(widget.path),
+                        style: t.mono.copyWith(
+                          fontSize: 9,
+                          color: t.textDisabled,
+                        ),
+                        tip: widget.detail ?? widget.path,
                       ),
-                      tip: widget.detail ?? widget.path,
-                    ),
+                    ],
                   ],
                 ),
               ),

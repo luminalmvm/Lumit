@@ -50,6 +50,7 @@ pub(crate) fn carriage(
         clone,
         inset,
         sprite: None,
+        sim: lumit_core::fx::points::stepped::sim::wanted(e),
     }
 }
 
@@ -394,6 +395,9 @@ pub(crate) fn draw(
     aux: AuxSlot<'_>,
     trails: &Trails,
 ) -> Tex {
+    if trails.sim {
+        return crate::sim::draw(fx, ctx, input, w, h, p, aux, trails);
+    }
     let inst = P::read(p);
     let style = inst.draw_style();
     let px_scale = P::px_scale_of(p);

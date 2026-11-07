@@ -4,8 +4,9 @@
 //
 // On Windows Lumit's window has no title bar, and on Linux it has none once
 // that is switched on in Settings. The menu bar is its top line, the three
-// buttons a title bar would hold stand at that line's right end, and the
-// empty part of the line moves the window the way a title bar does. The
+// buttons a title bar would hold stand at that line's end (its left end in a
+// right to left language, as Windows puts them), and the empty part of the
+// line moves the window the way a title bar does. The
 // runner does the moving and the closing (windows/runner/flutter_window.cpp,
 // linux/runner/my_application.cc); this file draws the buttons and says what
 // was pressed.
@@ -18,7 +19,7 @@
 // macOS keeps its title bar. Its menus are in the system's bar, so Lumit has
 // no line of its own there to put the buttons in.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -27,16 +28,22 @@ import 'package:flutter/widgets.dart';
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../state/background.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 const MethodChannel _channel = MethodChannel('lumit/window');
 
 /// Whether Lumit draws the window's buttons itself here. Asked of the target
-/// platform, so a widget test draws none unless it says it is a desktop.
+/// platform, so a widget test draws none unless it says it is a desktop. In a
+/// browser the window is the browser's.
 bool get windowFrameDrawn =>
-    defaultTargetPlatform == TargetPlatform.windows ||
-    (defaultTargetPlatform == TargetPlatform.linux && _startedWithOwnTitleBar);
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.windows ||
+        (defaultTargetPlatform == TargetPlatform.linux &&
+            _startedWithOwnTitleBar));
 
 /// On Linux, the file whose being there turns Lumit's own title bar on. A file
 /// rather than a setting in the store, because the runner reads it before the
@@ -118,10 +125,10 @@ class WindowDragStrip extends StatelessWidget {
     if (!windowFrameDrawn) return child;
     return Stack(children: [
       child,
-      Positioned(
+      PositionedDirectional(
         top: 0,
-        left: 0,
-        right: windowButtonsWidth,
+        start: 0,
+        end: windowButtonsWidth,
         height: theme.density.menuBar,
         child: const WindowDragArea(),
       ),
@@ -129,7 +136,8 @@ class WindowDragStrip extends StatelessWidget {
   }
 }
 
-/// [child] as the window, with the window's buttons over its top right corner.
+/// [child] as the window, with the window's buttons over the end of its top
+/// line.
 class WindowFrame extends StatelessWidget {
   final LumitTheme theme;
   final Widget child;
@@ -141,9 +149,9 @@ class WindowFrame extends StatelessWidget {
     if (!windowFrameDrawn) return child;
     return Stack(children: [
       child,
-      Positioned(
+      PositionedDirectional(
         top: 0,
-        right: 0,
+        end: 0,
         height: theme.density.menuBar,
         child: _WindowButtons(theme: theme),
       ),
@@ -178,12 +186,43 @@ class _WindowButtonsState extends State<_WindowButtons>
   // A window cannot be maximised or put back without changing size, so this
   // catches every way it happens: the button, a snap, the keyboard.
   @override
-  void didChangeMetrics() => _ask('state');
+  void didChangeMetrics() {
+    _ask('state');
+    _place();
+  }
+
+  final _maximiseKey = GlobalKey();
+  Map<String, int>? _placed;
+
+  /// Tell the runner where the maximise button is, in physical pixels, when
+  /// that changes. Windows 11 opens its snap layouts over the button its own
+  /// hit test finds, and the runner answers that test.
+  void _place() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        final box =
+            _maximiseKey.currentContext?.findRenderObject() as RenderBox?;
+        if (!mounted || box == null || !box.attached) return;
+        final rect = MatrixUtils.transformRect(
+            box.getTransformTo(null), Offset.zero & box.size);
+        final scale = View.of(context).devicePixelRatio;
+        final placed = {
+          'left': (rect.left * scale).round(),
+          'top': (rect.top * scale).round(),
+          'right': (rect.right * scale).round(),
+          'bottom': (rect.bottom * scale).round(),
+        };
+        if (mapEquals(placed, _placed)) return;
+        _placed = placed;
+        _channel.invokeMethod<bool>('maximiseButton', placed).ignore();
+      });
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-        valueListenable: _maximised,
-        builder: (context, maximised, _) => Row(
+  Widget build(BuildContext context) {
+    _place();
+    return ListenableBuilder(
+      listenable: Listenable.merge([_maximised, maximiseHovered]),
+      builder: (context, _) {
+        final maximised = _maximised.value;
+        return Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -193,14 +232,14 @@ class _WindowButtonsState extends State<_WindowButtons>
               label: l10n.windowMinimise,
               onPressed: () => _ask('minimise'),
             ),
-            // ponytail: resting on this button does not open Windows 11's
-            // snap layouts. Windows shows them only over a button it finds by
-            // its own hit test, which would move the button's hover and press
-            // into the runner. Win+Z and dragging to a screen edge still snap.
+            // On Windows the runner takes this button's pointer and press,
+            // and says when it is hovered.
             _WindowButton(
+              key: _maximiseKey,
               theme: widget.theme,
               mark: maximised ? _Mark.windowRestore : _Mark.windowMaximise,
               label: maximised ? l10n.windowRestore : l10n.windowMaximise,
+              hovered: maximiseHovered.value,
               onPressed: () => _ask('maximise'),
             ),
             _WindowButton(
@@ -210,8 +249,10 @@ class _WindowButtonsState extends State<_WindowButtons>
               onPressed: () => _ask('close'),
             ),
           ],
-        ),
-      );
+        );
+      },
+    );
+  }
 }
 
 /// The four marks. Each style draws its own (tool/icons/glyphs.json, Window): Studio in the
@@ -250,11 +291,16 @@ class _WindowButton extends StatefulWidget {
   final String label;
   final VoidCallback onPressed;
 
+  /// Lit from outside, for a pointer Flutter does not see.
+  final bool hovered;
+
   const _WindowButton({
+    super.key,
     required this.theme,
     required this.mark,
     required this.label,
     required this.onPressed,
+    this.hovered = false,
   });
 
   @override
@@ -267,8 +313,9 @@ class _WindowButtonState extends State<_WindowButton> {
   @override
   Widget build(BuildContext context) {
     final t = widget.theme;
+    final hover = _hover || widget.hovered;
     // Close warns in the theme's own error colour, as the system's goes red.
-    final closing = _hover && widget.mark == _Mark.windowClose;
+    final closing = hover && widget.mark == _Mark.windowClose;
     // Lantern lights a round plate under the pointer, as it does for every
     // action. The flat styles light the button edge to edge.
     final round = t.tokens.roomed;
@@ -290,7 +337,7 @@ class _WindowButtonState extends State<_WindowButton> {
               decoration: BoxDecoration(
                 color: closing
                     ? t.error
-                    : _hover
+                    : hover
                         ? t.surface3
                         : null,
                 borderRadius:
@@ -303,7 +350,7 @@ class _WindowButtonState extends State<_WindowButton> {
                   // ink is the room's.
                   colour: closing
                       ? t.surface0
-                      : _hover
+                      : hover
                           ? t.textPrimary
                           : round
                               ? t.roomInk

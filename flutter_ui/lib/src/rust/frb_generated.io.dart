@@ -8,6 +8,7 @@ import 'api/addons.dart';
 import 'api/assets.dart';
 import 'api/audio.dart';
 import 'api/beats.dart';
+import 'api/blender.dart';
 import 'api/cache.dart';
 import 'api/colour.dart';
 import 'api/comp_graph.dart';
@@ -26,12 +27,16 @@ import 'api/interpret.dart';
 import 'api/keymap.dart';
 import 'api/layer.dart';
 import 'api/lens.dart';
+import 'api/model.dart';
+import 'api/model_rows.dart';
 import 'api/planes.dart';
 import 'api/presets.dart';
 import 'api/project.dart';
 import 'api/project_item.dart';
+import 'api/projection.dart';
 import 'api/retime.dart';
 import 'api/roto.dart';
+import 'api/routes.dart';
 import 'api/script.dart';
 import 'api/shape.dart';
 import 'api/share.dart';
@@ -39,8 +44,10 @@ import 'api/shell.dart';
 import 'api/solid.dart';
 import 'api/state.dart';
 import 'api/streams.dart';
+import 'api/styles.dart';
 import 'api/system.dart';
 import 'api/track.dart';
+import 'api/web_files.dart';
 import 'api/wire_tie.dart';
 import 'api/wireframes.dart';
 import 'dart:async';
@@ -107,6 +114,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeEffectInstance
       dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           dynamic raw);
+
+  @protected
+  int dco_decode_CastedPrimitive_i_64(dynamic raw);
+
+  @protected
+  int dco_decode_CastedPrimitive_u_64(dynamic raw);
+
+  @protected
+  int dco_decode_CastedPrimitive_usize(dynamic raw);
 
   @protected
   Map<String, String> dco_decode_Map_String_String_None(dynamic raw);
@@ -190,6 +206,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide dco_decode_box_autoadd_bridge_bezier_side(dynamic raw);
+
+  @protected
+  BridgeBlender dco_decode_box_autoadd_bridge_blender(dynamic raw);
+
+  @protected
+  BridgeBlenderState dco_decode_box_autoadd_bridge_blender_state(dynamic raw);
 
   @protected
   BridgeCameraAim dco_decode_box_autoadd_bridge_camera_aim(dynamic raw);
@@ -309,6 +331,19 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo dco_decode_box_autoadd_bridge_media_info(dynamic raw);
+
+  @protected
+  BridgeModelLook dco_decode_box_autoadd_bridge_model_look(dynamic raw);
+
+  @protected
+  BridgeModelPartPlace dco_decode_box_autoadd_bridge_model_part_place(
+      dynamic raw);
+
+  @protected
+  BridgeModelRows dco_decode_box_autoadd_bridge_model_rows(dynamic raw);
+
+  @protected
+  BridgeModelSettings dco_decode_box_autoadd_bridge_model_settings(dynamic raw);
 
   @protected
   BridgeMotionPath dco_decode_box_autoadd_bridge_motion_path(dynamic raw);
@@ -470,9 +505,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   FootageReference dco_decode_box_autoadd_footage_reference(dynamic raw);
 
   @protected
-  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
-
-  @protected
   ItemReference dco_decode_box_autoadd_item_reference(dynamic raw);
 
   @protected
@@ -480,6 +512,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   ProjectReference dco_decode_box_autoadd_project_reference(dynamic raw);
+
+  @protected
+  (int, int) dco_decode_box_autoadd_record_u_32_u_32(dynamic raw);
 
   @protected
   SolidReference dco_decode_box_autoadd_solid_reference(dynamic raw);
@@ -491,10 +526,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
-  BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+  int dco_decode_box_autoadd_u_8(dynamic raw);
 
   @protected
-  int dco_decode_box_autoadd_u_8(dynamic raw);
+  WebFileStat dco_decode_box_autoadd_web_file_stat(dynamic raw);
+
+  @protected
+  BridgeEnabledCond dco_decode_box_bridge_enabled_cond(dynamic raw);
 
   @protected
   BridgeAddon dco_decode_bridge_addon(dynamic raw);
@@ -558,6 +596,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide dco_decode_bridge_bezier_side(dynamic raw);
+
+  @protected
+  BridgeBlender dco_decode_bridge_blender(dynamic raw);
+
+  @protected
+  BridgeBlenderState dco_decode_bridge_blender_state(dynamic raw);
 
   @protected
   BridgeBoxSource dco_decode_bridge_box_source(dynamic raw);
@@ -1013,6 +1057,24 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMetadataField dco_decode_bridge_metadata_field(dynamic raw);
 
   @protected
+  BridgeModelDisplay dco_decode_bridge_model_display(dynamic raw);
+
+  @protected
+  BridgeModelLook dco_decode_bridge_model_look(dynamic raw);
+
+  @protected
+  BridgeModelPart dco_decode_bridge_model_part(dynamic raw);
+
+  @protected
+  BridgeModelPartPlace dco_decode_bridge_model_part_place(dynamic raw);
+
+  @protected
+  BridgeModelRows dco_decode_bridge_model_rows(dynamic raw);
+
+  @protected
+  BridgeModelSettings dco_decode_bridge_model_settings(dynamic raw);
+
+  @protected
   BridgeMotionKey dco_decode_bridge_motion_key(dynamic raw);
 
   @protected
@@ -1209,6 +1271,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScanStage dco_decode_bridge_scan_stage(dynamic raw);
 
   @protected
+  BridgeScenePart dco_decode_bridge_scene_part(dynamic raw);
+
+  @protected
   BridgeScopeTrace dco_decode_bridge_scope_trace(dynamic raw);
 
   @protected
@@ -1222,6 +1287,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSelectorShape dco_decode_bridge_selector_shape(dynamic raw);
+
+  @protected
+  BridgeSend dco_decode_bridge_send(dynamic raw);
 
   @protected
   BridgeSequenceRate dco_decode_bridge_sequence_rate(dynamic raw);
@@ -1369,6 +1437,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeStyleInfo dco_decode_bridge_style_info(dynamic raw);
 
   @protected
+  BridgeStyleOutcome dco_decode_bridge_style_outcome(dynamic raw);
+
+  @protected
   BridgeSwatch dco_decode_bridge_swatch(dynamic raw);
 
   @protected
@@ -1421,6 +1492,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeUnusedParam dco_decode_bridge_unused_param(dynamic raw);
+
+  @protected
+  BridgeUpAxis dco_decode_bridge_up_axis(dynamic raw);
 
   @protected
   BridgeVertex dco_decode_bridge_vertex(dynamic raw);
@@ -1501,6 +1575,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeEffectInstance>
       dco_decode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_CastedPrimitive_i_64(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
@@ -1688,6 +1765,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeMetadataField> dco_decode_list_bridge_metadata_field(dynamic raw);
 
   @protected
+  List<BridgeModelPart> dco_decode_list_bridge_model_part(dynamic raw);
+
+  @protected
   List<BridgeMotionKey> dco_decode_list_bridge_motion_key(dynamic raw);
 
   @protected
@@ -1740,6 +1820,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeScalar> dco_decode_list_bridge_scalar(dynamic raw);
+
+  @protected
+  List<BridgeScenePart> dco_decode_list_bridge_scene_part(dynamic raw);
+
+  @protected
+  List<BridgeSend> dco_decode_list_bridge_send(dynamic raw);
 
   @protected
   List<BridgeShaderGraphNode> dco_decode_list_bridge_shader_graph_node(
@@ -1859,9 +1945,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   Float64List dco_decode_list_prim_f_64_strict(dynamic raw);
 
   @protected
-  Int64List dco_decode_list_prim_i_64_strict(dynamic raw);
-
-  @protected
   List<int> dco_decode_list_prim_u_32_loose(dynamic raw);
 
   @protected
@@ -1884,6 +1967,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   OpenProgress dco_decode_open_progress(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_CastedPrimitive_i_64(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw);
 
   @protected
   RustStreamSink<BridgeLiveEvent>?
@@ -1928,6 +2017,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBeatGrid? dco_decode_opt_box_autoadd_bridge_beat_grid(dynamic raw);
+
+  @protected
+  BridgeBlender? dco_decode_opt_box_autoadd_bridge_blender(dynamic raw);
+
+  @protected
+  BridgeBlenderState? dco_decode_opt_box_autoadd_bridge_blender_state(
+      dynamic raw);
 
   @protected
   BridgeCameraAim? dco_decode_opt_box_autoadd_bridge_camera_aim(dynamic raw);
@@ -2014,6 +2110,17 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo? dco_decode_opt_box_autoadd_bridge_media_info(dynamic raw);
+
+  @protected
+  BridgeModelPartPlace? dco_decode_opt_box_autoadd_bridge_model_part_place(
+      dynamic raw);
+
+  @protected
+  BridgeModelRows? dco_decode_opt_box_autoadd_bridge_model_rows(dynamic raw);
+
+  @protected
+  BridgeModelSettings? dco_decode_opt_box_autoadd_bridge_model_settings(
+      dynamic raw);
 
   @protected
   BridgeMotionPath? dco_decode_opt_box_autoadd_bridge_motion_path(dynamic raw);
@@ -2110,9 +2217,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
 
   @protected
-  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
-
-  @protected
   ItemReference? dco_decode_opt_box_autoadd_item_reference(dynamic raw);
 
   @protected
@@ -2128,10 +2232,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
-  BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
+  int? dco_decode_opt_box_autoadd_u_8(dynamic raw);
 
   @protected
-  int? dco_decode_opt_box_autoadd_u_8(dynamic raw);
+  WebFileStat? dco_decode_opt_box_autoadd_web_file_stat(dynamic raw);
 
   @protected
   F64Array2? dco_decode_opt_f_64_array_2(dynamic raw);
@@ -2146,7 +2250,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<UuidValue>? dco_decode_opt_list_Uuid(dynamic raw);
 
   @protected
+  List<BridgeEffectInstanceInfo>?
+      dco_decode_opt_list_bridge_effect_instance_info(dynamic raw);
+
+  @protected
   List<BridgeFileComp>? dco_decode_opt_list_bridge_file_comp(dynamic raw);
+
+  @protected
+  List<BridgeScenePart>? dco_decode_opt_list_bridge_scene_part(dynamic raw);
 
   @protected
   List<CompositionReference>? dco_decode_opt_list_composition_reference(
@@ -2156,10 +2267,19 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw);
 
   @protected
+  Float64List? dco_decode_opt_list_prim_f_64_strict(dynamic raw);
+
+  @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
+
+  @protected
   ProjectReference dco_decode_project_reference(dynamic raw);
 
   @protected
   (String, String) dco_decode_record_string_string(dynamic raw);
+
+  @protected
+  (int, int) dco_decode_record_u_32_u_32(dynamic raw);
 
   @protected
   ScopedChange dco_decode_scoped_change(dynamic raw);
@@ -2184,6 +2304,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BigInt dco_decode_usize(dynamic raw);
+
+  @protected
+  WebFileStat dco_decode_web_file_stat(dynamic raw);
 
   @protected
   WorkerResponse dco_decode_worker_response(dynamic raw);
@@ -2220,6 +2343,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeEffectInstance
       sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_CastedPrimitive_i_64(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_CastedPrimitive_u_64(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_CastedPrimitive_usize(SseDeserializer deserializer);
 
   @protected
   Map<String, String> sse_decode_Map_String_String_None(
@@ -2311,6 +2443,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide sse_decode_box_autoadd_bridge_bezier_side(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBlender sse_decode_box_autoadd_bridge_blender(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBlenderState sse_decode_box_autoadd_bridge_blender_state(
       SseDeserializer deserializer);
 
   @protected
@@ -2456,6 +2596,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo sse_decode_box_autoadd_bridge_media_info(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelLook sse_decode_box_autoadd_bridge_model_look(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelPartPlace sse_decode_box_autoadd_bridge_model_part_place(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelRows sse_decode_box_autoadd_bridge_model_rows(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelSettings sse_decode_box_autoadd_bridge_model_settings(
       SseDeserializer deserializer);
 
   @protected
@@ -2657,9 +2813,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
-  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
-
-  @protected
   ItemReference sse_decode_box_autoadd_item_reference(
       SseDeserializer deserializer);
 
@@ -2669,6 +2822,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   ProjectReference sse_decode_box_autoadd_project_reference(
+      SseDeserializer deserializer);
+
+  @protected
+  (int, int) sse_decode_box_autoadd_record_u_32_u_32(
       SseDeserializer deserializer);
 
   @protected
@@ -2682,10 +2839,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
-  BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+  int sse_decode_box_autoadd_u_8(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_box_autoadd_u_8(SseDeserializer deserializer);
+  WebFileStat sse_decode_box_autoadd_web_file_stat(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeEnabledCond sse_decode_box_bridge_enabled_cond(
+      SseDeserializer deserializer);
 
   @protected
   BridgeAddon sse_decode_bridge_addon(SseDeserializer deserializer);
@@ -2757,6 +2919,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide sse_decode_bridge_bezier_side(SseDeserializer deserializer);
+
+  @protected
+  BridgeBlender sse_decode_bridge_blender(SseDeserializer deserializer);
+
+  @protected
+  BridgeBlenderState sse_decode_bridge_blender_state(
+      SseDeserializer deserializer);
 
   @protected
   BridgeBoxSource sse_decode_bridge_box_source(SseDeserializer deserializer);
@@ -3284,6 +3453,27 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeModelDisplay sse_decode_bridge_model_display(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelLook sse_decode_bridge_model_look(SseDeserializer deserializer);
+
+  @protected
+  BridgeModelPart sse_decode_bridge_model_part(SseDeserializer deserializer);
+
+  @protected
+  BridgeModelPartPlace sse_decode_bridge_model_part_place(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelRows sse_decode_bridge_model_rows(SseDeserializer deserializer);
+
+  @protected
+  BridgeModelSettings sse_decode_bridge_model_settings(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMotionKey sse_decode_bridge_motion_key(SseDeserializer deserializer);
 
   @protected
@@ -3506,6 +3696,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScanStage sse_decode_bridge_scan_stage(SseDeserializer deserializer);
 
   @protected
+  BridgeScenePart sse_decode_bridge_scene_part(SseDeserializer deserializer);
+
+  @protected
   BridgeScopeTrace sse_decode_bridge_scope_trace(SseDeserializer deserializer);
 
   @protected
@@ -3522,6 +3715,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeSelectorShape sse_decode_bridge_selector_shape(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeSend sse_decode_bridge_send(SseDeserializer deserializer);
 
   @protected
   BridgeSequenceRate sse_decode_bridge_sequence_rate(
@@ -3697,6 +3893,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeStyleInfo sse_decode_bridge_style_info(SseDeserializer deserializer);
 
   @protected
+  BridgeStyleOutcome sse_decode_bridge_style_outcome(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeSwatch sse_decode_bridge_swatch(SseDeserializer deserializer);
 
   @protected
@@ -3758,6 +3958,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeUnusedParam sse_decode_bridge_unused_param(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeUpAxis sse_decode_bridge_up_axis(SseDeserializer deserializer);
 
   @protected
   BridgeVertex sse_decode_bridge_vertex(SseDeserializer deserializer);
@@ -3845,6 +4048,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeEffectInstance>
       sse_decode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           SseDeserializer deserializer);
+
+  @protected
+  List<int> sse_decode_list_CastedPrimitive_i_64(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -4078,6 +4284,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeModelPart> sse_decode_list_bridge_model_part(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeMotionKey> sse_decode_list_bridge_motion_key(
       SseDeserializer deserializer);
 
@@ -4147,6 +4357,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   List<BridgeScalar> sse_decode_list_bridge_scalar(
       SseDeserializer deserializer);
+
+  @protected
+  List<BridgeScenePart> sse_decode_list_bridge_scene_part(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeSend> sse_decode_list_bridge_send(SseDeserializer deserializer);
 
   @protected
   List<BridgeShaderGraphNode> sse_decode_list_bridge_shader_graph_node(
@@ -4297,9 +4514,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   Float64List sse_decode_list_prim_f_64_strict(SseDeserializer deserializer);
 
   @protected
-  Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer);
-
-  @protected
   List<int> sse_decode_list_prim_u_32_loose(SseDeserializer deserializer);
 
   @protected
@@ -4323,6 +4537,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   OpenProgress sse_decode_open_progress(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_CastedPrimitive_i_64(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer);
 
   @protected
   RustStreamSink<BridgeLiveEvent>?
@@ -4373,6 +4593,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBeatGrid? sse_decode_opt_box_autoadd_bridge_beat_grid(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBlender? sse_decode_opt_box_autoadd_bridge_blender(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeBlenderState? sse_decode_opt_box_autoadd_bridge_blender_state(
       SseDeserializer deserializer);
 
   @protected
@@ -4474,6 +4702,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo? sse_decode_opt_box_autoadd_bridge_media_info(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelPartPlace? sse_decode_opt_box_autoadd_bridge_model_part_place(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelRows? sse_decode_opt_box_autoadd_bridge_model_rows(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeModelSettings? sse_decode_opt_box_autoadd_bridge_model_settings(
       SseDeserializer deserializer);
 
   @protected
@@ -4581,9 +4821,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
 
   @protected
-  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
-
-  @protected
   ItemReference? sse_decode_opt_box_autoadd_item_reference(
       SseDeserializer deserializer);
 
@@ -4602,10 +4839,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
-  BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
+  int? sse_decode_opt_box_autoadd_u_8(SseDeserializer deserializer);
 
   @protected
-  int? sse_decode_opt_box_autoadd_u_8(SseDeserializer deserializer);
+  WebFileStat? sse_decode_opt_box_autoadd_web_file_stat(
+      SseDeserializer deserializer);
 
   @protected
   F64Array2? sse_decode_opt_f_64_array_2(SseDeserializer deserializer);
@@ -4620,7 +4858,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<UuidValue>? sse_decode_opt_list_Uuid(SseDeserializer deserializer);
 
   @protected
+  List<BridgeEffectInstanceInfo>?
+      sse_decode_opt_list_bridge_effect_instance_info(
+          SseDeserializer deserializer);
+
+  @protected
   List<BridgeFileComp>? sse_decode_opt_list_bridge_file_comp(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeScenePart>? sse_decode_opt_list_bridge_scene_part(
       SseDeserializer deserializer);
 
   @protected
@@ -4632,11 +4879,21 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  Float64List? sse_decode_opt_list_prim_f_64_strict(
+      SseDeserializer deserializer);
+
+  @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
   ProjectReference sse_decode_project_reference(SseDeserializer deserializer);
 
   @protected
   (String, String) sse_decode_record_string_string(
       SseDeserializer deserializer);
+
+  @protected
+  (int, int) sse_decode_record_u_32_u_32(SseDeserializer deserializer);
 
   @protected
   ScopedChange sse_decode_scoped_change(SseDeserializer deserializer);
@@ -4661,6 +4918,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
+  WebFileStat sse_decode_web_file_stat(SseDeserializer deserializer);
 
   @protected
   WorkerResponse sse_decode_worker_response(SseDeserializer deserializer);
@@ -4698,6 +4958,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void
       sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           BridgeEffectInstance self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_CastedPrimitive_i_64(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_CastedPrimitive_usize(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_Map_String_String_None(
@@ -4788,6 +5057,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_blender(
+      BridgeBlender self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_blender_state(
+      BridgeBlenderState self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_camera_aim(
@@ -4936,6 +5213,22 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_media_info(
       BridgeMediaInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_model_look(
+      BridgeModelLook self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_model_part_place(
+      BridgeModelPartPlace self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_model_rows(
+      BridgeModelRows self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_model_settings(
+      BridgeModelSettings self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_motion_path(
@@ -5137,10 +5430,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       FootageReference self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_i_64(
-      PlatformInt64 self, SseSerializer serializer);
-
-  @protected
   void sse_encode_box_autoadd_item_reference(
       ItemReference self, SseSerializer serializer);
 
@@ -5153,6 +5442,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       ProjectReference self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_record_u_32_u_32(
+      (int, int) self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_solid_reference(
       SolidReference self, SseSerializer serializer);
 
@@ -5163,10 +5456,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+  void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer);
+  void sse_encode_box_autoadd_web_file_stat(
+      WebFileStat self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_bridge_enabled_cond(
+      BridgeEnabledCond self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_addon(BridgeAddon self, SseSerializer serializer);
@@ -5250,6 +5548,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_blender(BridgeBlender self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_blender_state(
+      BridgeBlenderState self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_box_source(
@@ -5842,6 +6147,30 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMetadataField self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_model_display(
+      BridgeModelDisplay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_look(
+      BridgeModelLook self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_part(
+      BridgeModelPart self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_part_place(
+      BridgeModelPartPlace self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_rows(
+      BridgeModelRows self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_model_settings(
+      BridgeModelSettings self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_motion_key(
       BridgeMotionKey self, SseSerializer serializer);
 
@@ -6095,6 +6424,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeScanStage self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_scene_part(
+      BridgeScenePart self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_scope_trace(
       BridgeScopeTrace self, SseSerializer serializer);
 
@@ -6112,6 +6445,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_selector_shape(
       BridgeSelectorShape self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_send(BridgeSend self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_sequence_rate(
@@ -6304,6 +6640,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeStyleInfo self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_style_outcome(
+      BridgeStyleOutcome self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_swatch(BridgeSwatch self, SseSerializer serializer);
 
   @protected
@@ -6372,6 +6712,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_unused_param(
       BridgeUnusedParam self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_up_axis(BridgeUpAxis self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_vertex(BridgeVertex self, SseSerializer serializer);
@@ -6467,6 +6810,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void
       sse_encode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           List<BridgeEffectInstance> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_CastedPrimitive_i_64(
+      List<int> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
@@ -6703,6 +7050,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeMetadataField> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_model_part(
+      List<BridgeModelPart> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_motion_key(
       List<BridgeMotionKey> self, SseSerializer serializer);
 
@@ -6773,6 +7124,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_scalar(
       List<BridgeScalar> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_scene_part(
+      List<BridgeScenePart> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_send(
+      List<BridgeSend> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_shader_graph_node(
@@ -6927,10 +7286,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       Float64List self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_prim_i_64_strict(
-      Int64List self, SseSerializer serializer);
-
-  @protected
   void sse_encode_list_prim_u_32_loose(
       List<int> self, SseSerializer serializer);
 
@@ -6958,6 +7313,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_open_progress(OpenProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_CastedPrimitive_i_64(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_CastedPrimitive_u_64(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_StreamSink_bridge_live_event_Sse(
@@ -7005,6 +7366,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_beat_grid(
       BridgeBeatGrid? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_blender(
+      BridgeBlender? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_blender_state(
+      BridgeBlenderState? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_camera_aim(
@@ -7105,6 +7474,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_media_info(
       BridgeMediaInfo? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_model_part_place(
+      BridgeModelPartPlace? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_model_rows(
+      BridgeModelRows? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_model_settings(
+      BridgeModelSettings? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_motion_path(
@@ -7210,10 +7591,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_i_64(
-      PlatformInt64? self, SseSerializer serializer);
-
-  @protected
   void sse_encode_opt_box_autoadd_item_reference(
       ItemReference? self, SseSerializer serializer);
 
@@ -7232,10 +7609,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_u_8(int? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_u_8(int? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_web_file_stat(
+      WebFileStat? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_f_64_array_2(F64Array2? self, SseSerializer serializer);
@@ -7251,8 +7629,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<UuidValue>? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_list_bridge_effect_instance_info(
+      List<BridgeEffectInstanceInfo>? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_list_bridge_file_comp(
       List<BridgeFileComp>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_bridge_scene_part(
+      List<BridgeScenePart>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_composition_reference(
@@ -7263,12 +7649,23 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       Float32List? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_list_prim_f_64_strict(
+      Float64List? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+      Uint8List? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_project_reference(
       ProjectReference self, SseSerializer serializer);
 
   @protected
   void sse_encode_record_string_string(
       (String, String) self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_u_32_u_32((int, int) self, SseSerializer serializer);
 
   @protected
   void sse_encode_scoped_change(ScopedChange self, SseSerializer serializer);
@@ -7294,6 +7691,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_web_file_stat(WebFileStat self, SseSerializer serializer);
 
   @protected
   void sse_encode_worker_response(

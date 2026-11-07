@@ -4,7 +4,8 @@
 #
 # Three things are *installed*: a Windows setup .exe, a macOS .dmg and a
 # Linux .flatpak — one per platform, and the Linux tarball is withdrawn. Linux
-# also gets an .AppImage, which runs as it is and replaces itself. Beside
+# also gets an .AppImage, which runs as it is and replaces itself, and macOS
+# gets a .dmg for each of Apple silicon and Intel. Beside
 # them rides the plain macOS .zip the in-place updater fetches, which is not an
 # installer and is not offered as a way to install. Windows updates run the
 # setup .exe again, silently. The setup .exe and the macOS .zip each get a
@@ -424,11 +425,18 @@ jobs:
           path: lumit-*-linux-x64.AppImage
           if-no-files-found: error
 
+  # One disk image per processor, as make-dmg.sh builds for the machine it is on.
+  # macos-15-intel rather than macos-26-intel, so the FFmpeg libraries it builds
+  # ask for the older macOS. GitHub retires it in 2027, and Homebrew stops running
+  # on Intel in or after September 2027, so the Intel build has an end date.
   macos-dmg:
-    name: macOS disk image
+    name: macOS disk image (${{ matrix.runner }})
     needs: plan
     if: needs.plan.outputs.version != ''
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        runner: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
     env:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
       # A step's `if` cannot read the `secrets` context, only `env`, so the
@@ -526,7 +534,7 @@ jobs:
           (cd flutter_ui && dart run tool/blockmap.dart ../packaging/macos/dist/*.zip)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: macos-dmg
+          name: macos-dmg-${{ runner.arch }}
           path: |
             packaging/macos/dist/*.dmg
             packaging/macos/dist/*.zip

@@ -288,7 +288,8 @@ pub enum Op {
     },
     /// Flip a layer between **Solid** and **Adjustment** — the one
     /// kind change the document has, and the whole of the Modes column's
-    /// adjustment toggle.
+    /// adjustment toggle. Also how a Model layer's settings change, its file
+    /// kept.
     ///
     /// **In plain terms.** An adjustment layer is a solid with its picture
     /// taken away: same span, same masks, same effect stack, but what the
@@ -604,6 +605,12 @@ pub enum Op {
         layer: Uuid,
         settings: crate::model::MaterialSettings,
     },
+    /// Replace a Text or Shape layer's Geometry options, as one undo step.
+    SetLayerGeometry {
+        comp: Uuid,
+        layer: Uuid,
+        geometry: Vec<Option<crate::model::EffectInstance>>,
+    },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (docs/03 §5.6).
     ///
@@ -641,6 +648,13 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         animation: Animation,
+    },
+    /// Replace where a layer's sound goes: its output bus and its sends, as
+    /// one value so undo puts the whole routing back.
+    SetLayerRoutes {
+        comp: Uuid,
+        layer: Uuid,
+        routes: crate::routes::AudioRoutes,
     },
     /// Choose which of its file's audio streams a layer sounds
     /// ([`crate::model::AudioStreams`]). Carries the whole choice, so undoing
@@ -958,9 +972,11 @@ impl Op {
             Op::SetCameraSettings { .. } => "Set camera settings",
             Op::SetLightSettings { .. } => "Set light settings",
             Op::SetMaterialSettings { .. } => "Set material settings",
+            Op::SetLayerGeometry { .. } => "Edit geometry options",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
+            Op::SetLayerRoutes { .. } => "Edit routing",
             Op::SetLayerAudioStreams { .. } => "Set audio streams",
             Op::SetMasterVolume { .. } => "Move master fader",
             Op::SetSoundMix { .. } => "Sound mix",
@@ -1055,9 +1071,11 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetLightSettings { comp, layer, .. }
         | Op::SetMaterialSettings { comp, layer, .. }
+        | Op::SetLayerGeometry { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
+        | Op::SetLayerRoutes { comp, layer, .. }
         | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
@@ -1126,6 +1144,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetCameraSolveLink { comp, .. }
         | Op::SetLayerVolume { comp, .. }
         | Op::SetLayerPan { comp, .. }
+        | Op::SetLayerRoutes { comp, .. }
         | Op::SetLayerAudioStreams { comp, .. }
         | Op::SetRetimeProperty { comp, .. }
         | Op::SetLayerInterpolation { comp, .. }
@@ -1626,16 +1645,17 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             // anything is written: a refused op leaves the document untouched.
             let convertible =
                 |k: &LayerKind| matches!(k, LayerKind::Solid { .. } | LayerKind::Adjustment);
-            if !convertible(kind) {
-                return Err(OpError::KindNotConvertible);
-            }
             let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
             let l = c
                 .layers
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            if !convertible(&l.kind) {
+            let same_model = matches!(
+                (&**kind, &l.kind),
+                (LayerKind::Model { item: a, .. }, LayerKind::Model { item: b, .. }) if a == b
+            );
+            if !same_model && !(convertible(kind) && convertible(&l.kind)) {
                 return Err(OpError::KindNotConvertible);
             }
             let previous = std::mem::replace(&mut l.kind, (**kind).clone());
@@ -2327,14 +2347,29 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            let m = &mut l.transform.material;
-            let previous = m.settings();
-            m.casts_shadows = settings.casts_shadows;
-            m.accepts_shadows = settings.accepts_shadows;
+            let previous = l.transform.material.set_settings(*settings);
             Ok(Op::SetMaterialSettings {
                 comp: *comp,
                 layer: *layer,
                 settings: previous,
+            })
+        }
+        Op::SetLayerGeometry {
+            comp,
+            layer,
+            geometry,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.transform.material.geometry, geometry.clone());
+            Ok(Op::SetLayerGeometry {
+                comp: *comp,
+                layer: *layer,
+                geometry: previous,
             })
         }
         Op::SetCameraSolveLink {
@@ -2410,6 +2445,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 animation: previous,
+            })
+        }
+        Op::SetLayerRoutes {
+            comp,
+            layer,
+            routes,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.audio_routes, routes.clone());
+            Ok(Op::SetLayerRoutes {
+                comp: *comp,
+                layer: *layer,
+                routes: previous,
             })
         }
         Op::SetLayerAudioStreams {
@@ -3021,7 +3074,8 @@ pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
         for layer in &comp.layers {
             let removed = if let LayerKind::Sequence { clips } = &layer.kind {
                 let lives = |s: &ClipSource| {
-                    let (ClipSource::Footage(id) | ClipSource::Comp(id)) = s;
+                    let (ClipSource::Footage(id) | ClipSource::Comp(id) | ClipSource::Solid(id)) =
+                        s;
                     !gone.contains(id)
                 };
                 // A clip goes with the item it shows; a take of a removed
@@ -3241,65 +3295,4 @@ pub fn unretimed_span(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod unretime_tests {
-    use super::*;
-    use crate::time::{Rational, SourceTime};
-
-    fn ct(secs: i64) -> CompTime {
-        CompTime(Rational::new(secs, 1).unwrap())
-    }
-    fn st(secs: i64) -> SourceTime {
-        SourceTime(Rational::new(secs, 1).unwrap())
-    }
-    fn dur(secs: i64) -> Duration {
-        Duration(Rational::new(secs, 1).unwrap())
-    }
-
-    /// Anchored part-way in, only what is left of the source is available.
-    #[test]
-    fn anchored_mid_source_runs_out_sooner() {
-        let (i, o, off) = unretimed_span(ct(10), ct(100), st(2), Some(dur(5))).unwrap();
-        assert_eq!(i, ct(10));
-        assert_eq!(o, ct(13), "three seconds of source were left");
-        assert_eq!(off, ct(8), "source zero sits two seconds before the in");
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod span_edit_tests {
-    use super::*;
-    use crate::time::Rational;
-
-    fn ct(secs: i64) -> CompTime {
-        CompTime(Rational::new(secs, 1).unwrap())
-    }
-
-    #[test]
-    fn move_in_shifts_the_whole_layer_to_the_playhead() {
-        // Layer visible [2,5), source-0 at comp 1; move its in point to 10.
-        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(10), SpanEdit::MoveIn).unwrap();
-        // In lands on the playhead; duration (3s) and the source-at-in are kept.
-        assert_eq!((i, o, off), (ct(10), ct(13), ct(9)));
-    }
-
-    #[test]
-    fn trim_moves_one_edge_and_keeps_the_offset() {
-        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(3), SpanEdit::TrimIn).unwrap();
-        assert_eq!((i, o, off), (ct(3), ct(5), ct(1)));
-        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(4), SpanEdit::TrimOut).unwrap();
-        assert_eq!((i, o, off), (ct(2), ct(4), ct(1)));
-    }
-
-    #[test]
-    fn a_degenerate_trim_is_rejected() {
-        // Trimming the in point to or past the out point would invert the span.
-        assert!(edit_layer_span(ct(2), ct(5), ct(1), ct(5), SpanEdit::TrimIn).is_none());
-        assert!(edit_layer_span(ct(2), ct(5), ct(1), ct(6), SpanEdit::TrimIn).is_none());
-        assert!(edit_layer_span(ct(2), ct(5), ct(1), ct(2), SpanEdit::TrimOut).is_none());
-        // A move never inverts (duration is preserved), even past comp 0.
-        let (i, o, _) = edit_layer_span(ct(2), ct(5), ct(1), ct(0), SpanEdit::MoveOut).unwrap();
-        assert!(i < o);
-    }
-}
+mod span_tests;

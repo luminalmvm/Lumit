@@ -628,7 +628,7 @@ void main() {
           reason: 'idle says nothing');
 
       state = BridgeExportState.running(
-          frame: BigInt.from(30), total: BigInt.from(120), encoder: 'x264');
+          frame: 30, total: 120, encoder: 'x264');
       statusLineExportStarted.value++;
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.textContaining('frame 30 of 120'), findsOneWidget);

@@ -200,7 +200,7 @@ class ViewerRotoLayer extends StatefulWidget {
   /// propagation lands — the three things that move what is drawn, and the only
   /// three that make it worth asking again.
   final int playheadFrame;
-  final BigInt? revision;
+  final int? revision;
   final int generation;
 
   final VoidCallback onChanged;
@@ -273,7 +273,7 @@ class _ViewerRotoLayerState extends State<ViewerRotoLayer> {
   /// What the last read was for.
   ({
     int frame,
-    BigInt? revision,
+    int? revision,
     int generation,
     UuidValue? effect,
     int view,

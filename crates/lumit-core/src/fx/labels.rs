@@ -36,6 +36,8 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     let schemas = super::catalogue::BUILTINS.iter().chain(
         super::styles::STYLE_DEFS
             .builtins()
+            .chain(crate::model_material::MATERIAL_DEFS.builtins())
+            .chain(crate::model_part::PART_DEFS.builtins())
             .map(super::registry::EffectDef::schema),
     );
     for schema in schemas {
@@ -76,6 +78,13 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for port in crate::graph::DERIVED_PORTS {
         out.insert(port.label.to_owned());
     }
+    // The built-in presets an effect's or a material's menu offers.
+    let materials = crate::model_material::MATERIAL_DEFS.builtins();
+    for def in super::catalogue::BUILTIN_DEFS.iter().chain(materials) {
+        for preset in def.presets() {
+            out.insert(preset.name.to_owned());
+        }
+    }
     for def in super::catalogue::BUILTIN_DEFS.iter() {
         let signature = def.signature();
         for port in signature.inputs().iter().chain(signature.outputs()) {
@@ -88,6 +97,9 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for mode in crate::model::BlendMode::ALL {
         out.insert(mode.name().to_owned());
     }
+    out.extend(crate::extrude::FACES.map(str::to_owned));
+    // A 3D shape's one material.
+    out.insert("Surface".to_owned());
     out
 }
 

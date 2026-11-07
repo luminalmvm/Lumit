@@ -2,12 +2,12 @@
 // project, picked, from the Scripts folder or dropped on the window.
 
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/src/rust/api/script.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -17,7 +17,10 @@ import '../state/settings.dart' show ScriptEvent;
 import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'menu_bar_frb.dart' show MenuEntry;
 import 'script_dialog_frb.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Run the `.js` or `.jsx` file at [path] on the open project, or one picked
 /// when there is none.
@@ -323,4 +326,52 @@ class _ScriptLogState extends State<_ScriptLog> {
       ],
     );
   }
+}
+
+/// File ▸ Scripts: each script in the Scripts folder, a submenu for each
+/// folder inside it, then Run script… and the folder itself. Read from disk
+/// as the menu opens.
+List<MenuEntry> scriptRows(
+    BuildContext context, LumitState app, LumitUiState ui) {
+  final folder = scriptsFolderIn(ui.workspace.scriptsFolder);
+  var scripts = const <String>[];
+  try {
+    if (folder != null) scripts = listScripts(folder: folder);
+  } catch (_) {}
+  VoidCallback? run(String path) => app.project == null
+      ? null
+      : () => runScriptFrb(context, app, ui,
+          path: '$folder${Platform.pathSeparator}'
+              '${path.replaceAll('/', Platform.pathSeparator)}');
+
+  // A folder's scripts come together in the list, so each run of paths
+  // under one name is that folder's submenu.
+  List<MenuEntry> rows(List<String> paths, String under) {
+    final out = <MenuEntry>[];
+    for (var i = 0; i < paths.length;) {
+      final slash = paths[i].indexOf('/');
+      if (slash < 0) {
+        out.add(MenuEntry(paths[i], run('$under${paths[i]}')));
+        i++;
+        continue;
+      }
+      final name = paths[i].substring(0, slash + 1);
+      final inside = <String>[];
+      for (; i < paths.length && paths[i].startsWith(name); i++) {
+        inside.add(paths[i].substring(name.length));
+      }
+      out.add(MenuEntry.submenu(
+          name.substring(0, slash), rows(inside, '$under$name')));
+    }
+    return out;
+  }
+
+  return [
+    ...rows(scripts, ''),
+    if (scripts.isNotEmpty) MenuEntry.divider(),
+    MenuEntry(l10n.menuRunScript,
+        app.project == null ? null : () => runScriptFrb(context, app, ui)),
+    MenuEntry(l10n.menuOpenScriptsFolder,
+        folder == null ? null : () => revealInFolder(path: folder)),
+  ];
 }

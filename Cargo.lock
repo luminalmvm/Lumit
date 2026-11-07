@@ -225,10 +225,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
+
+[[package]]
+name = "bevy_mikktspace"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bff34eb29ff4b8a8688bc7299f14fb6b597461ca80fec03ed7d22939ab33e48f"
 
 [[package]]
 name = "bincode"
@@ -314,6 +326,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitvec"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddcec3d12c579d40898fe0a9a358a803c23e9c52ca3c425707f81c9436211837"
+dependencies = [
+ "funty",
+ "radium",
+ "tap",
+ "wyz",
+]
+
+[[package]]
 name = "blake2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -349,6 +373,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "blosc-src"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9046dd58971db0226346fde214143d16a6eb12f535b5320d0ea94fcea420631"
+dependencies = [
+ "cc",
+ "lz4-sys",
 ]
 
 [[package]]
@@ -1246,6 +1280,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
+name = "funty"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
+
+[[package]]
 name = "futures"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1361,9 +1401,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1373,8 +1415,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1393,6 +1437,12 @@ dependencies = [
  "log",
  "xml-rs",
 ]
+
+[[package]]
+name = "glam"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5418c17512bdf42730f9032c74e1ae39afc408745ebb2acf72fbc4691c17945"
 
 [[package]]
 name = "glam"
@@ -1433,6 +1483,42 @@ dependencies = [
  "slotmap",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "gltf"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3ce1918195723ce6ac74e80542c5a96a40c2b26162c1957a5cd70799b8cacf7"
+dependencies = [
+ "byteorder",
+ "gltf-json",
+ "lazy_static",
+ "serde_json",
+]
+
+[[package]]
+name = "gltf-derive"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14070e711538afba5d6c807edb74bcb84e5dbb9211a3bf5dea0dfab5b24f4c51"
+dependencies = [
+ "inflections",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
+name = "gltf-json"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6176f9d60a7eab0a877e8e96548605dedbde9190a7ae1e80bbcc1c9af03ab14"
+dependencies = [
+ "gltf-derive",
+ "serde",
+ "serde_derive",
+ "serde_json",
 ]
 
 [[package]]
@@ -1510,6 +1596,7 @@ version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
 dependencies = [
+ "bytemuck",
  "cfg-if",
  "crunchy",
  "zerocopy",
@@ -1747,9 +1834,22 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
+ "image-webp",
  "moxcms",
  "num-traits",
  "png",
+ "zune-core",
+ "zune-jpeg",
+]
+
+[[package]]
+name = "image-webp"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
+dependencies = [
+ "byteorder-lite",
+ "quick-error 2.0.1",
 ]
 
 [[package]]
@@ -1761,6 +1861,12 @@ dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
 ]
+
+[[package]]
+name = "inflections"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a257582fdcde896fd96463bf2d40eefea0580021c0712a0e2b028b60b47a837a"
 
 [[package]]
 name = "inout"
@@ -2047,18 +2153,22 @@ dependencies = [
  "parking_lot",
  "realfft",
  "thiserror 2.0.18",
+ "wasm-bindgen",
+ "web-time",
 ]
 
 [[package]]
 name = "lumit-bench"
 version = "0.10.2"
 dependencies = [
+ "glam 0.29.3",
  "lumit-audio",
  "lumit-core",
  "lumit-gpu",
  "lumit-media",
  "lumit-project",
  "lumit-render",
+ "lumit-scene",
  "serde",
  "serde_json",
  "uuid",
@@ -2079,6 +2189,7 @@ dependencies = [
  "lumit-budget",
  "lz4_flex",
  "tempfile",
+ "web-time",
 ]
 
 [[package]]
@@ -2105,6 +2216,7 @@ version = "0.10.2"
 dependencies = [
  "arc-swap",
  "blake3",
+ "getrandom 0.3.4",
  "half",
  "hex",
  "i_overlay",
@@ -2173,13 +2285,15 @@ dependencies = [
  "ash",
  "bytemuck",
  "core-foundation",
- "glam",
+ "glam 0.29.3",
  "half",
+ "js-sys",
  "lumit-budget",
  "lumit-core",
  "lumit-eval",
  "lumit-gpu",
  "lumit-ingress",
+ "lumit-scene",
  "metal",
  "naga",
  "objc",
@@ -2188,6 +2302,9 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
+ "web-time",
  "wgpu",
  "windows 0.58.0",
 ]
@@ -2213,6 +2330,7 @@ name = "lumit-ingress"
 version = "0.10.2"
 dependencies = [
  "thiserror 2.0.18",
+ "web-time",
 ]
 
 [[package]]
@@ -2234,10 +2352,14 @@ dependencies = [
  "libloading 0.8.9",
  "lumit-ingress",
  "miniz_oxide",
+ "png",
  "rsmpeg",
  "serde",
  "tempfile",
  "thiserror 2.0.18",
+ "wasm-bindgen",
+ "web-time",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2258,6 +2380,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "web-time",
  "zip",
 ]
 
@@ -2324,6 +2447,7 @@ dependencies = [
  "criterion",
  "directories",
  "lumit-core",
+ "lumit-ingress",
  "serde",
  "serde_json",
  "tempfile",
@@ -2343,7 +2467,7 @@ dependencies = [
  "bincode",
  "blake3",
  "bytemuck",
- "glam",
+ "glam 0.29.3",
  "half",
  "lumit-audio",
  "lumit-budget",
@@ -2359,6 +2483,7 @@ dependencies = [
  "lumit-project",
  "lumit-render",
  "lumit-roto",
+ "lumit-scene",
  "lumit-text",
  "lumit-track",
  "lz4_flex",
@@ -2368,6 +2493,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "uuid",
+ "web-time",
  "wgpu",
 ]
 
@@ -2381,6 +2507,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-scene"
+version = "0.10.2"
+dependencies = [
+ "base64",
+ "bevy_mikktspace",
+ "glam 0.29.3",
+ "gltf",
+ "half",
+ "image",
+ "lumit-ingress",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "ufbx",
+ "vdb-rs",
+ "windows-registry",
+]
+
+[[package]]
 name = "lumit-script"
 version = "0.10.2"
 dependencies = [
@@ -2389,11 +2534,13 @@ dependencies = [
  "lumit-import",
  "lumit-ingress",
  "lumit-peer",
+ "lumit-text",
  "rquickjs",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "web-time",
  "widestring",
 ]
 
@@ -2417,6 +2564,7 @@ dependencies = [
  "snow",
  "thiserror 2.0.18",
  "uuid",
+ "web-time",
 ]
 
 [[package]]
@@ -2448,6 +2596,7 @@ version = "0.10.2"
 dependencies = [
  "flutter_rust_bridge",
  "interprocess",
+ "js-sys",
  "libc",
  "libloading 0.8.9",
  "lumit-aplug",
@@ -2468,6 +2617,7 @@ dependencies = [
  "lumit-peer",
  "lumit-project",
  "lumit-render",
+ "lumit-scene",
  "lumit-script",
  "lumit-share",
  "lumit-text",
@@ -2477,7 +2627,20 @@ dependencies = [
  "serde_json",
  "tempfile",
  "uuid",
+ "wasm-bindgen",
+ "web-sys",
+ "web-time",
  "windows 0.58.0",
+]
+
+[[package]]
+name = "lz4-sys"
+version = "1.11.1+lz4-1.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bd8c0d6c6ed0cd30b3652886bb8711dc4bb01d637a68105a3d5158039b418e6"
+dependencies = [
+ "cc",
+ "libc",
 ]
 
 [[package]]
@@ -3192,6 +3355,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
+name = "quick-error"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
+
+[[package]]
 name = "quick-xml"
 version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3220,6 +3389,12 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "radium"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
 name = "rand"
@@ -3585,7 +3760,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
 dependencies = [
  "fnv",
- "quick-error",
+ "quick-error 1.2.3",
  "tempfile",
  "wait-timeout",
 ]
@@ -3898,6 +4073,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tap"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4102,6 +4283,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
+name = "ufbx"
+version = "0.11.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "260522f1eb74139f0e78b29dd82a58e5437d728c5498024a39e5af7282694240"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4146,6 +4336,24 @@ dependencies = [
  "serde_core",
  "sha1_smol",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "vdb-rs"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddd7c7f05c3fffea2ea595d9645b81ca7c0fc53c739992b1145ed478cd01f400"
+dependencies = [
+ "bitflags 2.13.0",
+ "bitvec",
+ "blosc-src",
+ "bytemuck",
+ "byteorder",
+ "flate2",
+ "glam 0.24.2",
+ "half",
+ "log",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -4574,6 +4782,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-registry"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
+dependencies = [
+ "windows-link",
+ "windows-result 0.4.1",
+ "windows-strings 0.5.1",
+]
+
+[[package]]
 name = "windows-result"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4781,6 +5000,15 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "wyz"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
+dependencies = [
+ "tap",
+]
 
 [[package]]
 name = "xml-rs"

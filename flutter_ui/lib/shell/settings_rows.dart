@@ -18,8 +18,15 @@
 // values beside them say.
 
 import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 
+import '../l10n/strings.dart';
+import '../state/ui_state.dart';
 import '../theme/theme.dart';
+import '../widgets/controls.dart';
+import '../state/files.dart' if (dart.library.js_interop) '../state/files_web.dart'
+    show forgetUnused, storageUsed;
+import 'settings_account.dart' show askBefore;
 
 /// A row's height, and the numbers that make it up (docs/15 §12A.4/§12A.6: a
 /// dialog row is 30 under both densities). A row carrying a live readout under
@@ -67,7 +74,7 @@ Widget settingsSection(
             padding: const EdgeInsets.fromLTRB(
                 settingsRowPadding, 12, settingsRowPadding, 4),
             child: Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: Text(t.kickerCase(title), style: t.kicker),
             ),
           ),
@@ -111,7 +118,7 @@ Widget settingsRow(
                 ),
                 const SizedBox(width: settingsRowGap),
                 Expanded(
-                  child: Align(alignment: Alignment.centerLeft, child: control),
+                  child: Align(alignment: AlignmentDirectional.centerStart, child: control),
                 ),
                 for (final (i, action) in actions.indexed) ...[
                   SizedBox(width: i == 0 ? settingsRowGap : 8),
@@ -130,3 +137,81 @@ Widget settingsRow(
           ),
       ],
     );
+
+/// A size in bytes, in megabytes or, from one up, gigabytes.
+String byteSize(int bytes) {
+  final b = bytes.toDouble();
+  if (b >= 1 << 30) {
+    return '${(b / (1 << 30)).toStringAsFixed(1)} ${l10n.unitGb}';
+  }
+  return '${(b / (1 << 20)).toStringAsFixed(0)} ${l10n.unitMb}';
+}
+
+/// How much the browser keeps for Lumit, once it has said, and a Clear that
+/// forgets the files no recent project uses.
+Widget storageKept(LumitTheme t) => StatefulBuilder(
+      builder: (context, setState) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FutureBuilder<int?>(
+            future: storageUsed(),
+            builder: (context, used) => Text(
+                switch (used.data) {
+                  null => '',
+                  // To a tenth, since settings and a few projects come to
+                  // less than one.
+                  final bytes when bytes < 1 << 30 =>
+                    '${(bytes / (1 << 20)).toStringAsFixed(1)} ${l10n.unitMb}',
+                  final bytes => byteSize(bytes),
+                },
+                style: t.body),
+          ),
+          const SizedBox(width: 8),
+          HouseButton(
+            key: const ValueKey('settings-browser-forget'),
+            small: true,
+            onPressed: () async {
+              final recent = Provider.of<LumitUiState>(context, listen: false)
+                  .workspace
+                  .recentProjects;
+              if (!await askBefore(context, l10n.settingsBrowserForget,
+                  l10n.settingsBrowserForgetYes)) {
+                return;
+              }
+              await forgetUnused(recent);
+              setState(() {});
+            },
+            child: Text(l10n.clear, style: t.small),
+          ),
+        ],
+      ),
+    );
+
+/// A size in bytes as a whole number of megabytes, without the unit.
+String mibText(int bytes) => (bytes / (1 << 20)).toStringAsFixed(0);
+
+/// The settings the browser build leaves out, by name. Each needs an account,
+/// a server, another program or the machine's own folders, and a page has
+/// none of them.
+Set<String> get settingsNotInPage => {
+      l10n.settingsShareUpLimit,
+      l10n.settingsShareDownLimit,
+      l10n.settingsKeepRunning,
+      l10n.settingsOpenAtSignIn,
+      l10n.settingsDiscordStatus,
+      l10n.settingsLiveEndpoint,
+      l10n.settingsScriptsFolder,
+      l10n.settingsScriptAfterExport,
+      l10n.settingsScriptAfterOpen,
+      l10n.settingsScriptAfterSave,
+      l10n.settingsAutomaticUpdates,
+      l10n.settingsNightlyBuilds,
+      l10n.settingsNightlyIcon,
+      l10n.settingsThisVersion,
+      l10n.settingsOwnTitleBar,
+      l10n.settingsPluginsOnCard,
+      l10n.settingsWhere,
+      l10n.settingsAppliesTo,
+      l10n.settingsStylesFolder,
+      l10n.settingsIconsFolder,
+    };

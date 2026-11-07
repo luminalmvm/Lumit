@@ -2159,22 +2159,33 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     }
     let centre = samples[SHAKE_MB_SAMPLES / 2];
 
-    for (name, edge, mix) in [
-        ("smear-transparent", 0u32, 1.0f32),
-        ("smear-repeat", 1, 1.0),
-        ("smear-mirror-mixed", 2, 0.7),
+    // The last case shakes the channels apart and crops, which the same
+    // kernel does by feeding each tap to some channels and moving the edges.
+    for (name, edge, mix, apart) in [
+        ("smear-transparent", 0u32, 1.0f32, false),
+        ("smear-repeat", 1, 1.0, false),
+        ("smear-mirror-mixed", 2, 0.7, false),
+        ("channels-crop-mirror", 2, 1.0, true),
     ] {
         use lumit_core::fx::effects::shake::{Shake, ShakeDef, Shaken};
+        use lumit_core::fx::params::Value;
         use lumit_core::fx::{params::Params, registry::EffectDef, registry::EffectMetadata};
-        let bag = shake_bag(centre, edge, mix, Some(samples));
+        let mut bag = shake_bag(centre, edge, mix, Some(samples));
+        if apart {
+            bag.push((Shake::DERIVED_SPLIT, Value::Bool(true)));
+            bag.push((Shake::CROP_LEFT, Value::Float(20.0)));
+            bag.push((Shake::CROP_BOTTOM, Value::Float(15.0)));
+        }
         let p = Params::new(&bag);
         let mut cpu = img.clone();
         ShakeDef.apply_cpu(&mut cpu, w, h, p);
 
         // The exact `gpufx` mapping: the bag → `packed` → each sub-frame's
         // shared affine → transform op → one tap of the averaging kernel.
-        let Shaken::Blurred {
+        let Shaken::Taps {
             samples: packed_samples,
+            split,
+            crop,
             ..
         } = Shake::read(p).packed(Shake::derived_of(p))
         else {
@@ -2187,8 +2198,9 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         let mut taps = [ShakeMbTap {
             m: [1.0, 0.0, 0.0, 1.0],
             off: [0.0, 0.0],
+            channels: 7,
         }; SHAKE_MB_SAMPLES];
-        for (t, s) in taps.iter_mut().zip(packed_samples.iter()) {
+        for (i, (t, s)) in taps.iter_mut().zip(packed_samples.iter()).enumerate() {
             let (anchor, position, scale, rotation) =
                 lumit_core::fx::maths::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
             let (m, off, _opacity) = lumit_core::fx::maths::transform_op(
@@ -2199,12 +2211,17 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
                 lumit_core::fx::maths::NO_SKEW,
                 1.0,
             );
-            *t = ShakeMbTap { m, off };
+            *t = ShakeMbTap {
+                m,
+                off,
+                channels: Shaken::tap_channels(i, SHAKE_MB_SAMPLES, split),
+            };
         }
         let op = ShakeMbOp {
             taps,
             count: SHAKE_MB_SAMPLES as u32,
             edge,
+            crop: Shaken::crop_px(crop, w, h),
             mix,
         };
         let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -2242,8 +2259,13 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
     let mut taps = [ShakeMbTap {
         m: [1.0, 0.0, 0.0, 1.0],
         off: [0.0, 0.0],
+        channels: 7,
     }; SHAKE_MB_SAMPLES];
-    taps[0] = ShakeMbTap { m, off };
+    taps[0] = ShakeMbTap {
+        m,
+        off,
+        channels: 7,
+    };
     let single = fx.shake_mb(
         &ctx,
         &tex,
@@ -2254,6 +2276,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
             taps,
             count: 1,
             edge: 1,
+            crop: [0, 0, w, h],
             mix: 1.0,
         },
     );
@@ -2763,22 +2786,38 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
         // Centres are raster pixels (px@comp, resolved to this raster): the
         // middle of the 32x24 corpus, and a point three tenths across and
         // seven tenths down it.
-        for (centre, amount, spin, mix) in [
-            ([16.0f32, 12.0f32], 6.0f32, true, 1.0f32),
-            ([16.0, 12.0], 6.0, false, 1.0),
-            ([9.6, 16.8], 9.5, true, 0.6),
-            ([9.6, 16.8], 9.5, false, 0.6),
-            ([16.0, 12.0], 0.0, true, 1.0),
+        for (centre, amount, kind, mix) in [
+            ([16.0f32, 12.0f32], 6.0f32, 1u32, 1.0f32),
+            ([16.0, 12.0], 6.0, 0, 1.0),
+            ([9.6, 16.8], 9.5, 1, 0.6),
+            ([9.6, 16.8], 9.5, 0, 0.6),
+            ([16.0, 12.0], 0.0, 1, 1.0),
+            ([9.6, 16.8], 9.5, 2, 0.6),
+            ([16.0, 12.0], 40.0, 2, 1.0),
         ] {
             let mut cpu = img.clone();
-            lumit_core::fx::cpu::blur_radial(&mut cpu, w, h, centre, amount, spin, edge, mix);
+            match kind {
+                2 => lumit_core::fx::effects::radial_blur::rays(
+                    &mut cpu, w, h, centre, amount, edge, mix,
+                ),
+                _ => lumit_core::fx::cpu::blur_radial(
+                    &mut cpu,
+                    w,
+                    h,
+                    centre,
+                    amount,
+                    kind == 1,
+                    edge,
+                    mix,
+                ),
+            }
 
             let tex = upload_linear_f32(&ctx, &img, w, h);
             let op = RadialBlurOp {
                 centre_px: centre,
                 amount_px: amount,
                 taps: lumit_core::fx::cpu::radial_blur_taps(amount),
-                spin,
+                kind,
                 edge,
                 mix,
             };
@@ -2787,11 +2826,11 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
 
             let worst = worst_f16_ulp(&cpu, &gpu);
             eprintln!(
-                "radial blur e={edge} c={centre:?} a={amount} spin={spin}: worst {worst} ulp"
+                "radial blur e={edge} c={centre:?} a={amount} kind={kind}: worst {worst} ulp"
             );
             assert!(
                 worst <= 2,
-                "edge {edge} centre {centre:?} amount {amount} spin {spin} mix {mix}: \
+                "edge {edge} centre {centre:?} amount {amount} kind {kind} mix {mix}: \
                      worst {worst} fp16 ULP"
             );
             if amount == 0.0 && mix == 1.0 {
@@ -6466,7 +6505,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
 
         let op = lighting_op(&surface, &m, &lights, None);
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.lighting(&ctx, &tex, w, h, &op, None);
+        let out = fx.lighting(&ctx, &tex, w, h, &op, None, None, None);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = cpu
@@ -6483,7 +6522,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the light must actually do something");
         }
 
-        let out2 = fx.lighting(&ctx, &tex, w, h, &op, None);
+        let out2 = fx.lighting(&ctx, &tex, w, h, &op, None, None, None);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "{name}: the lighting pass must be bit-stable");
     }
@@ -6739,6 +6778,10 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         accepts_shadows: ShadowMode::Only,
         ..takes
     };
+    let back = ShadingSurface {
+        normal: floor.normal.map(|n| -n),
+        ..floor
+    };
     let adds = ShadingMaterial { base: 1.0, ..takes };
     let very_wide = ShadingLight {
         shadow_diffusion: SPREAD,
@@ -6760,7 +6803,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         encoded: true,
         ..takes
     };
-    let encoded_only = ShadingMaterial {
+    let enc_only = ShadingMaterial {
         accepts_shadows: ShadowMode::Only,
         ..encoded
     };
@@ -6772,17 +6815,12 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         ("half", floor, takes, vec![half], None),
         ("sun", floor, takes, vec![spot, sun], None),
         ("only", floor, only, vec![diffused, sun], None),
+        ("only, from behind", back, only, vec![diffused, sun], None),
         ("adds", floor, adds, vec![spot], None),
         ("unlit", floor, unlit, vec![diffused, sun], None),
         ("unlit only", floor, unlit_only, vec![spot], None),
         ("encoded", floor, encoded, vec![diffused], None),
-        (
-            "encoded only",
-            floor,
-            encoded_only,
-            vec![diffused, sun],
-            None,
-        ),
+        ("encoded only", floor, enc_only, vec![diffused, sun], None),
         ("far reaching only", floor, only, vec![wide], None),
         ("own", card_surface, takes, vec![spot, sun], Some(0)),
     ] {
@@ -6806,7 +6844,7 @@ fn wgsl_shadows_match_the_cpu_oracle() {
 
         let op = lighting_op(&surface, &m, &lights, own);
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.lighting(&ctx, &tex, w, h, &op, Some(casters));
+        let out = fx.lighting(&ctx, &tex, w, h, &op, Some(casters), None, None);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         // Against the pixel's own size where it is bright: the squares are
         // read through the card's own filtering, which is a little coarser
@@ -10586,6 +10624,7 @@ fn wgsl_bezier_warp_matches_the_cpu_oracle() {
             pts: p.pts,
             steps: p.steps,
             mix: p.mix,
+            frame: p.frame,
         }
     };
     for (name, b) in [
@@ -13355,7 +13394,7 @@ fn the_matte_scales_the_radial_blur_amount() {
             centre_px: centre,
             amount_px: amount,
             taps: lumit_core::fx::cpu::radial_blur_taps(amount),
-            spin,
+            kind: u32::from(spin),
             edge,
             mix,
         };
@@ -14303,8 +14342,9 @@ fn the_matte_scales_the_shake_displacement() {
     let mut taps = [ShakeMbTap {
         m: [1.0, 0.0, 0.0, 1.0],
         off: [0.0, 0.0],
+        channels: 7,
     }; SHAKE_MB_SAMPLES];
-    let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0]); SHAKE_MB_SAMPLES];
+    let mut ops = [([1.0f32, 0.0, 0.0, 1.0], [0.0f32, 0.0], 7); SHAKE_MB_SAMPLES];
     for ((t, o), s) in taps.iter_mut().zip(ops.iter_mut()).zip(samples.iter()) {
         let (anchor, position, scale, rot) =
             lumit_core::fx::maths::shake_affine(w, h, s.offset_px, s.rotation_deg, s.zoom);
@@ -14316,13 +14356,19 @@ fn the_matte_scales_the_shake_displacement() {
             lumit_core::fx::maths::NO_SKEW,
             1.0,
         );
-        *t = ShakeMbTap { m, off };
-        *o = (m, off);
+        *t = ShakeMbTap {
+            m,
+            off,
+            channels: 7,
+        };
+        *o = (m, off, 7);
     }
+    let crop = [0, 0, w, h];
     let mbop = ShakeMbOp {
         taps,
         count: SHAKE_MB_SAMPLES as u32,
         edge,
+        crop,
         mix,
     };
     check_matte_claim(
@@ -14333,9 +14379,9 @@ fn the_matte_scales_the_shake_displacement() {
             h,
             img: &img,
             cpu: &|px, mt| {
-                lumit_core::fx::cpu::transform_average_matted(px, w, h, &ops, edge, mix, mt);
+                lumit_core::fx::cpu::transform_average_matted(px, w, h, &ops, edge, crop, mix, mt);
             },
-            plain: &|px| lumit_core::fx::cpu::transform_average(px, w, h, &ops, edge, mix),
+            plain: &|px| lumit_core::fx::cpu::transform_average(px, w, h, &ops, edge, crop, mix),
             gpu: &|t, mt| fx.shake_mb(&ctx, t, w, h, mt, &mbop),
             tol: 2e-2,
         },
@@ -14654,6 +14700,7 @@ fn the_matte_scales_the_bezier_warp_bend() {
         pts: p.pts,
         steps: p.steps,
         mix: p.mix,
+        frame: p.frame,
     };
     check_matte_claim(
         &ctx,
@@ -16371,6 +16418,10 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
     broad.scale = 40.0;
     let mut tight = base;
     tight.scale = 4.0;
+    let mut digital = base;
+    digital.style = 1;
+    let mut streaks = base;
+    streaks.style = 2;
 
     for (name, mood, mix) in [
         ("default", base, 1.0f32),
@@ -16384,6 +16435,8 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
         ("drifted", drifted, 1.0),
         ("broad", broad, 1.0),
         ("tight", tight, 1.0),
+        ("digital", digital, 1.0),
+        ("streaks", streaks, 1.0),
         ("mixed", strong, 0.6),
         ("mix-zero", strong, 0.0),
     ] {
@@ -16399,6 +16452,7 @@ fn wgsl_mood_lighting_matches_the_cpu_oracle() {
             turbulent: p.field.turbulent,
             cycle: p.field.cycle,
             inv_scale: p.inv_scale,
+            block: p.block,
             z: p.z,
             intensity: p.intensity,
             light: p.light,
@@ -16483,6 +16537,7 @@ fn the_matte_scales_the_mood_lighting() {
         turbulent: p.field.turbulent,
         cycle: p.field.cycle,
         inv_scale: p.inv_scale,
+        block: p.block,
         z: p.z,
         intensity: p.intensity,
         light: p.light,

@@ -1463,6 +1463,9 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // An Audio layer wears the speaker the audible switch wears, so
       // a row that only makes sound says so in the same glyph twice.
       BridgeLayerKind.audio => LumitIcon.audio,
+      // A bus is where the sound of several rows meets, as wires meet at a
+      // node.
+      BridgeLayerKind.bus => LumitIcon.nodes,
       BridgeLayerKind.solid => LumitIcon.solid,
       // An adjustment layer is a comp-sized effect container, and the set has
       // its own mark for one — a half-filled circle. It used to borrow the
@@ -1470,6 +1473,7 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // that has no colour of its own at all.
       BridgeLayerKind.adjustment => LumitIcon.adjustment,
       BridgeLayerKind.nullLayer => LumitIcon.nullLayer,
+      BridgeLayerKind.model || BridgeLayerKind.mesh => LumitIcon.cube3d,
     };
 
 /// The cache bar: a thin stripe under the time ruler showing which frames are
@@ -1596,7 +1600,7 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
       _tiers = frames <= 0
           ? Uint8List(0)
           : widget.comp.cachedFrames(
-              frames: BigInt.from(frames),
+              frames: frames,
               scale: scale,
             );
       _readFrames = frames;
@@ -1905,7 +1909,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _heard = at;
     // After the seek, which stops playback first: the engine only sounds a
     // scrub while the transport is stopped.
-    widget.comp.audioScrub(frame: BigInt.from(at));
+    widget.comp.audioScrub(frame: at);
   }
 
   /// Where a drag on the ruler lands: the pointer's own frame, taken to the

@@ -398,7 +398,7 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
     return SizedBox(
       width: _cellWidth,
       child: Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: GestureDetector(
           key: ValueKey<String>(keyName),
           behavior: HitTestBehavior.opaque,

@@ -25,7 +25,10 @@ pub fn samples(
     natural: (f32, f32),
     context: Arc<ExpressionContext>,
 ) -> Vec<MbSample> {
-    if !layer.switches.motion_blur {
+    // A model blurs in the mesh pass, from its own placements (model::draw),
+    // and particles in the scene along their own paths.
+    let model = lumit_core::extrude::draws_mesh(layer) || crate::realise::scene::in_scene(layer);
+    if !layer.switches.motion_blur || model {
         return Vec::new();
     }
     let blur = comp.motion_blur;

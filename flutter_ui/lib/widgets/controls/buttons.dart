@@ -481,7 +481,7 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
             child: Padding(
-                padding: const EdgeInsets.only(right: 6), child: mark(lit)),
+                padding: const EdgeInsetsDirectional.only(end: 6), child: mark(lit)),
           ),
           TextSpan(text: label),
         ]),
@@ -600,8 +600,8 @@ class _HouseToggleState extends State<HouseToggle> {
             ),
             // The knob slides as paint alone, so nothing is laid out again
             // while it crosses.
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(left: _inset),
+            alignment: AlignmentDirectional.centerStart,
+            padding: const EdgeInsetsDirectional.only(start: _inset),
             child: AnimatedSlide(
               duration: scope.motion.toggle.duration,
               curve: scope.motion.toggle.curve,

@@ -5267,10 +5267,6 @@
   "@playbackEveryFrame": {
     "description": "Playback setting: show every frame at full resolution, however long it takes."
   },
-  "popOutPanelBlocked": "Қолжетімсіз",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
-  },
   "precompose": "Pre-compose",
   "@precompose": {
     "description": "Title and button: put the selected layers inside a new composition."

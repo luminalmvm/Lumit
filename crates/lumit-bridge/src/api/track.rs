@@ -87,14 +87,15 @@ pub enum BridgeTrackFailure {
     Tracking,
     /// Too little in the picture held still enough to follow.
     NoFeatures,
-    /// The camera only turned: there is no position to solve and no depth to
-    /// recover (docs/impl/tracking.md §4's sixth deviation).
+    /// The camera only turned: there is no position or depth to solve.
     RotationOnly,
     /// The shot carries a camera move the solver could not stand behind.
     NoSolve,
     /// The quad's contents are not one flat surface, or move against
     /// themselves.
     NotPlanar,
+    /// More than the graphics card has room for.
+    TooBig,
 }
 
 /// Everything the Camera track's status row draws, in one crossing.
@@ -113,13 +114,14 @@ pub struct BridgeTrackStatus {
     pub mean_error: f64,
     pub points: u32,
     /// How many frames of the clip carry a solved camera. The span always
-    /// starts at the clip's first frame — the analysis tracks the source from
-    /// its beginning and can only stop early, never start late — so this and
+    /// starts where the analysis started, the clip's first frame or the Frames
+    /// row's, and can only stop early, never start late, so this and
     /// `clip_frames` are the whole of the bar the panel draws.
     pub frames: u32,
-    /// How many frames the clip has. `frames < clip_frames` is a **partial**
-    /// track: the shot could not be followed all the way through, and what was
-    /// solved is the part before it stopped carrying
+    /// How many frames the clip has, or the Frames row's span of it.
+    /// `frames < clip_frames` is a **partial** track: the shot could not be
+    /// followed all the way through, and what was solved is the part before it
+    /// stopped carrying
     /// ([`lumit_render::track::Solved::is_partial`]).
     pub clip_frames: u32,
 }
@@ -232,11 +234,10 @@ fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
     use lumit_track::solve::SolveError;
     match why {
         AnalysisError::Unreadable => BridgeTrackFailure::Unreadable,
-        // A cancelled run is reported as `Cancelled`, never as a failure, so
-        // this arm is unreachable through `progress`. It is spelled out rather
-        // than caught by a wildcard so that adding a variant to the engine's
-        // enum is a compile error here instead of a silent "could not solve".
+        // A cancelled run never reaches here. It is spelled out so a new variant
+        // of the engine's is a compile error, not a silent "could not solve".
         AnalysisError::Cancelled => BridgeTrackFailure::NoSolve,
+        AnalysisError::TooBig => BridgeTrackFailure::TooBig,
         AnalysisError::NoFrames => BridgeTrackFailure::NoFrames,
         AnalysisError::Tracking(_) => BridgeTrackFailure::Tracking,
         AnalysisError::Solve(SolveError::NoTracks | SolveError::NoKeyframes) => {
@@ -383,12 +384,18 @@ pub fn fire_effect_action(
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
+    // What the effect's Frames row limits an analysis to, if it has one.
+    let span = layer
+        .composition()
+        .ok()
+        .and_then(|comp| lumit_core::planes::source_span(fx, Some(&item), &comp));
     // The Roto brush's two go the same way, and so do the Planar
     // track's four: one doorway, so a press is one crossing whichever effect
     // made it.
     if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
-        let range = crate::api::roto::analysis_range(&layer, fx);
-        return crate::api::roto::press(crate::api::roto::layer_source(&layer), fx, &param, range);
+        let source = crate::api::roto::layer_source(&layer);
+        let range = crate::api::roto::analysis_range(&source, span);
+        return crate::api::roto::press(source, fx, &param, range);
     }
     // Extract channels' one button, through the same doorway (docs/08 §3.97):
     // read the layer's file again and rebuild the four dropdowns from what it
@@ -422,7 +429,7 @@ pub fn fire_effect_action(
                     }
                 }
                 .ok_or(BridgeError::NotFootage)?;
-                match lumit_render::track::request(job) {
+                match lumit_render::track::request(job.within(span)) {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
                 }
@@ -451,7 +458,7 @@ pub fn fire_effect_action(
                     ),
                 }
                 .ok_or(BridgeError::NotFootage)?;
-                match lumit_render::track::request(job) {
+                match lumit_render::track::request(job.within(span)) {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
                 }
@@ -459,8 +466,8 @@ pub fn fire_effect_action(
             _ => Err(BridgeError::InvalidParam),
         };
     }
-    // Bake points' two. The bake reads the document as it stands now.
-    if fx.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+    // Bake points' two, and a simulation's. The bake reads the document as it stands now.
+    if lumit_core::fx::effects::smoke::bakes_a_walk(&fx.effect.match_name) {
         return match param.as_str() {
             CANCEL => {
                 lumit_render::track::cancel(effect);
@@ -473,8 +480,13 @@ pub fn fire_effect_action(
                     .map_err(|_| BridgeError::ReadFailed)?
                     .store
                     .snapshot();
-                let asked =
-                    lumit_render::track::request_bake(doc, layer.comp_id, layer.layer_id, effect);
+                let asked = crate::project_cache::press(
+                    &project,
+                    doc,
+                    layer.comp_id,
+                    layer.layer_id,
+                    effect,
+                );
                 match asked {
                     lumit_render::track::Requested::Started => Ok(()),
                     _ => Err(BridgeError::AnalysisBusy),
@@ -486,13 +498,9 @@ pub fn fire_effect_action(
     // And the planes tier's two, on the one predicate `lumit_core::planes`
     // owns rather than a list of names here (docs/impl/addons.md §6.1).
     if lumit_core::planes::task_of(fx).is_some() {
-        let range = crate::api::roto::analysis_range(&layer, fx);
-        return crate::api::planes::press(
-            crate::api::roto::layer_source(&layer),
-            fx,
-            &param,
-            range,
-        );
+        let source = crate::api::roto::layer_source(&layer);
+        let range = crate::api::roto::analysis_range(&source, span);
+        return crate::api::planes::press(source, fx, &param, range);
     }
     if matches!(fx.effect.namespace, EffectNamespace::Ofx) {
         return press_plugin(layer, effect, param, frame.unwrap_or(0));
@@ -518,7 +526,7 @@ pub fn fire_effect_action(
                 _ => lumit_render::track::job_for_precomp(&snapshot(&layer)?, &item, true),
             }
             .ok_or(BridgeError::NotFootage)?;
-            match lumit_render::track::request(job) {
+            match lumit_render::track::request(job.within(span)) {
                 lumit_render::track::Requested::Started => Ok(()),
                 _ => Err(BridgeError::AnalysisBusy),
             }
@@ -792,8 +800,22 @@ pub(crate) fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
 /// it — and they start at the pose captured here, which is that lane's nought.
 #[frb(sync)]
 pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, BridgeError> {
-    let comp = tracked.composition()?;
-    let mut layer = crate::edits::fresh_camera(&comp, "Camera".into(), Some(tracked.layer_id));
+    let layer = solved_camera_layer(&tracked.composition()?, tracked.layer_id);
+    let id = layer.id;
+    tracked.commit(lumit_core::ops::Op::AddLayer {
+        comp: tracked.comp_id,
+        index: 0,
+        layer: Box::new(layer),
+    })?;
+    Ok(LayerReference::new(tracked.project_id, tracked.comp_id, id))
+}
+
+/// A Camera layer of `comp` following the solve of layer `tracked`.
+pub(crate) fn solved_camera_layer(
+    comp: &lumit_core::model::Composition,
+    tracked: Uuid,
+) -> lumit_core::model::Layer {
+    let mut layer = crate::edits::fresh_camera(comp, "Camera".into(), Some(tracked));
     // The layer arrives already linked, so `Op::SetCameraSolveLink` — which is
     // where the base is normally captured — is never applied to it. Captured
     // here instead, off the layer that is about to be added, which is the same
@@ -805,13 +827,7 @@ pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, Brid
     {
         *correction_base = base.map(Box::new);
     }
-    let id = layer.id;
-    tracked.commit(lumit_core::ops::Op::AddLayer {
-        comp: tracked.comp_id,
-        index: 0,
-        layer: Box::new(layer),
-    })?;
-    Ok(LayerReference::new(tracked.project_id, tracked.comp_id, id))
+    layer
 }
 
 /// Bake a solve-linked camera into keyframes and sever the link.
@@ -901,51 +917,7 @@ pub fn add_layer_at_points(
     use lumit_core::ops::AutoFolderKind;
 
     let comp = tracked.composition()?;
-    let media = tracked_media(&tracked).ok_or(BridgeError::NotFootage)?;
-    let at = lumit_render::track::point_centroid(media, &tracks).ok_or(BridgeError::NoSolve)?;
-
-    // The camera the layer is turned to face: the active one at this frame,
-    // with its link followed, so a null made under a derived camera faces the
-    // motion that is actually being drawn.
-    let doc = {
-        let proj = tracked.project()?;
-        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-        state.store.snapshot()
-    };
-    let t = comp
-        .frame_rate
-        .time_of_frame(frame)
-        .map_err(|_| BridgeError::InvalidTime)?;
-    let facing = doc.comp(tracked.comp_id).map_or((0.0, 0.0, 0.0), |c| {
-        lumit_render::track::camera_pose(&doc, c, t.0.to_f64()).rotation_deg
-    });
-    // The solve's points sit in the space of the camera it drives, so a
-    // parented camera takes them with it.
-    let at = doc
-        .comp(tracked.comp_id)
-        .and_then(|c| {
-            let camera = c.active_camera(t.0.to_f64()).filter(|l| {
-                matches!(l.kind, lumit_core::model::LayerKind::Camera { solve_link: Some(id), .. } if id == tracked.layer_id)
-            })?;
-            let at = t.0.to_f64();
-            let context = lumit_core::model::comp_context(&doc, c, at);
-            let read = lumit_core::model::context_reader(&context, at);
-            lumit_core::model::parent_space(c, camera, at, &read, lumit_render::track::solves_for(&doc))
-        })
-        .map_or(at, |space| {
-            let p = space.point((at[0], at[1], at[2]));
-            [p.0, p.1, p.2]
-        });
-
-    let transform = TransformGroup {
-        position_x: Property::fixed(at[0]),
-        position_y: Property::fixed(at[1]),
-        position_z: Property::fixed(at[2]),
-        rotation_x: Property::fixed(facing.0),
-        rotation_y: Property::fixed(facing.1),
-        rotation: Property::fixed(facing.2),
-        ..TransformGroup::default()
-    };
+    let (transform, doc) = crate::api::projection::placed_at_points(&tracked, &tracks, frame)?;
 
     let mut ops = Vec::new();
     let (name, kind, transform) = if solid {
@@ -1012,7 +984,7 @@ pub fn add_layer_at_points(
 
 /// The media item a layer carrying an enabled Camera track reads, or `None` for
 /// any layer that is not one.
-fn tracked_media(layer: &LayerReference) -> Option<Uuid> {
+pub(crate) fn tracked_media(layer: &LayerReference) -> Option<Uuid> {
     lumit_core::track::tracked_source_id(&layer.item().ok()?)
 }
 // Which layer of a composition is the tracked one is deliberately **not** a
@@ -1083,12 +1055,12 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     };
     // Track points files its progress under its own id too, so the one status
     // answers for both.
-    use lumit_core::fx::effects::{bake_points, track_points};
+    use lumit_core::fx::effects::track_points;
     let Some(inst) = item.effects.iter().find(|e| {
         e.id == effect
             && (e.effect.match_name == lumit_core::track::PLANAR_TRACK
                 || e.effect.match_name == track_points::MATCH_NAME
-                || e.effect.match_name == bake_points::MATCH_NAME)
+                || lumit_core::fx::effects::smoke::bakes_a_walk(&e.effect.match_name))
     }) else {
         return status;
     };
@@ -1128,20 +1100,12 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     }
     // A bake this instance may read. Fewer frames than the span is one a
     // budget stopped early.
-    let bake = || {
-        if inst.effect.match_name != bake_points::MATCH_NAME {
-            return None;
-        }
-        let project = layer.project().ok()?;
-        let doc = project.read().ok()?.store.snapshot();
-        bake_points::usable(&doc, doc.comp(layer.comp_id)?, &item, inst)
-    };
-    if let Some(baked) = bake() {
+    if let Some((frames, span)) = crate::project_cache::reading(&layer, &item, inst, effect) {
         if status.stage == BridgeTrackStage::Idle {
             status.stage = BridgeTrackStage::Done;
         }
-        status.frames = u32::try_from(baked.frames.len()).unwrap_or(u32::MAX);
-        status.clip_frames = baked.span;
+        status.frames = frames;
+        status.clip_frames = span;
     }
     // Done with nothing to read: the rows have changed since, and the effect
     // is drawing without that answer. A Planar track always has its own.

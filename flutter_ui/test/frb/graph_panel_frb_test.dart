@@ -885,7 +885,7 @@ void main() {
       await tester.pumpAndSettle();
       expect([for (final e in layer.getEffects()) e.getInfo().name],
           ['blur', 'exposure']);
-      expect(comp.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(comp.documentRevision(), was + 1, reason: 'one op');
 
       await tester.drag(find.byKey(const ValueKey<String>('drag-driver')),
           const Offset(300, 350),
@@ -902,7 +902,7 @@ void main() {
       expect(Offset(place.x, place.y),
           from + const Offset(300, 350) - canvas,
           reason: 'the driver sits where it was let go');
-      expect(comp.documentRevision(), was + BigInt.two, reason: 'one op');
+      expect(comp.documentRevision(), was + 2, reason: 'one op');
     });
   });
 }
