@@ -85,6 +85,7 @@ import 'easing_curve.dart';
 import 'key_block.dart';
 import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
+import 'graph_lens_guides.dart' show GraphLensSwitch;
 import 'graph_maths.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
 import 'graph_box_lanes.dart';
@@ -5014,10 +5015,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 // stood on the lane bar, in the same order.
                 strip: !_graph,
                 lens: _graph ? _graphLens : null,
-                onLens: (lens) => setState(() {
-                  _graphLens = lens;
-                  _publishEasingClaim();
-                }),
                 breakHandles: _graphBreakHandles,
                 onToggleBreakHandles: () => setState(
                     () => _graphBreakHandles = !_graphBreakHandles),
@@ -5197,6 +5194,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     magnet: _magnet,
                                     snapTargets: snap,
                                     lens: _graphLens,
+                                    playhead: ui.playheadFrame,
                                     autoFit: _graphAutoFit,
                                     onAutoFitOff: () =>
                                         setState(() => _graphAutoFit = false),
@@ -5244,6 +5242,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 handPanLayer(ui.tools, t,
                     (d) => _graphPane.currentState?.panBy(d),
                     top: t.density.ruler),
+                // Which graph is drawn: Value, Speed or Acceleration, in the
+                // graph's top right corner — under the Layers / Graph switch
+                // and beside the value gutter, over the view and not the
+                // scrolling canvas.
+                Positioned(
+                  top: t.density.ruler + 4,
+                  right: graphGutterWidth + 6,
+                  child: GraphLensSwitch(
+                    lens: _graphLens,
+                    onLens: (lens) => setState(() {
+                      _graphLens = lens;
+                      _publishEasingClaim();
+                    }),
+                  ),
+                ),
                 ],
                 ),
               ),
