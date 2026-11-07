@@ -2986,17 +2986,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     ),
                   ]
                 : [
+                    if (installed.broken) ...[
+                      Text(l10n.settingsAddonsBroken,
+                          style: t.small.copyWith(color: t.warning)),
+                      const SizedBox(width: 8),
+                    ],
                     _licenceLink(t, installed),
-                    HouseButton(
-                      key: const ValueKey('settings-addon-runtime-load'),
-                      small: true,
-                      onPressed: service.busy ||
-                              service.runtime.state == RuntimeState.loaded
-                          ? null
-                          : () => unawaited(service.runtimeLoad()),
-                      child: Text(l10n.settingsAddonsLoad, style: t.small),
-                    ),
-                    const SizedBox(width: 8),
                     HouseButton(
                       key: const ValueKey('settings-addon-runtime-remove'),
                       small: true,
@@ -3051,7 +3046,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// What the runtime is doing, in one line. A library that would not load says
   /// so in its own words, which is the one place they are shown untranslated.
   String _runtimeLine(RuntimeStatus status) => switch (status.state) {
-        // The Install and Load buttons already say these two.
+        // The row's own buttons already say these two.
         RuntimeState.missing || RuntimeState.present => '',
         RuntimeState.loaded =>
           l10n.settingsAddonsStateLoaded(status.provider, status.version),
