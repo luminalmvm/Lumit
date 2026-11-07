@@ -670,6 +670,7 @@ pub fn collect_comp_jobs(
                         lumit_core::pixels::frame_pick(st, fps, src_frames, blend_on, sample_fps);
                     Some(CompJob {
                         layer: layer.id,
+                        at: t,
                         item,
                         source: media_source(doc, item, media),
                         source_frame,
@@ -933,6 +934,7 @@ pub fn collect_comp_jobs(
                 if probe.slates() {
                     jobs.push(CompJob {
                         layer: layer.id,
+                        at: t,
                         item: *item,
                         source: media_source(doc, *item, media),
                         source_frame: 0,
@@ -1084,6 +1086,7 @@ pub fn collect_comp_jobs(
                 };
                 jobs.push(CompJob {
                     layer: layer.id,
+                    at: t,
                     item: *item,
                     source: media_source(doc, *item, media),
                     source_frame,
@@ -1234,6 +1237,7 @@ fn collect_graph_jobs(
                     jobs.push(CompJob {
                         channels: None,
                         layer: *id,
+                        at: t,
                         item: *item,
                         source: media_source(doc, *item, media),
                         source_frame: 0,
@@ -1267,6 +1271,7 @@ fn collect_graph_jobs(
                 jobs.push(CompJob {
                     channels: None,
                     layer: *id,
+                    at: t,
                     item: *item,
                     source: media_source(doc, *item, media),
                     source_frame,
@@ -1366,7 +1371,7 @@ pub fn plan_comp_frame_held(
     let mut jobs = Vec::new();
     let mut visited = vec![comp.id];
     collect_comp_jobs(&ctx, comp, t, &[], &mut jobs, &mut visited, false);
-    jobs
+    crate::placed::merged(jobs)
 }
 
 /// Whether two decode plans ask for exactly the same pixels — the test a live
@@ -1382,6 +1387,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
     a.len() == b.len()
         && a.iter().zip(b).all(|(x, y)| {
             x.layer == y.layer
+                && x.at.to_bits() == y.at.to_bits()
                 && x.item == y.item
                 && x.source_frame == y.source_frame
                 && x.target_width == y.target_width
@@ -1403,7 +1409,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
 impl Cut {
     /// What this asks for, as numbers that compare and hash: which kind, the
     /// offset or the gain, and the other clip's own content name.
-    fn name(&self) -> (u8, u64, Option<u128>) {
+    pub(crate) fn name(&self) -> (u8, u64, Option<u128>) {
         match self {
             Cut::Neighbour(o, job) => (0, f64::from(*o).to_bits(), Some(job.source_key())),
             Cut::Moment(o, job) => (1, o.to_bits(), job.as_ref().map(CompJob::source_key)),

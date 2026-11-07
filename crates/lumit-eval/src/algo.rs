@@ -63,4 +63,6 @@
 /// * 34: a row reading a Precomp layer sees that layer's own paint and effects.
 /// * 35: a Precomp layer and a motion blurred layer are multiplied by their
 ///   alpha once, where their soft edges and see-through parts came out dark.
-pub const ALGO_VERSION: u32 = 35;
+/// * 36: a comp shown at two times in one frame draws its footage at both, where
+///   both drew one and the wrong picture could be banked under the other's name.
+pub const ALGO_VERSION: u32 = 36;

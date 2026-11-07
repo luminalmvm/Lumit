@@ -35,6 +35,10 @@ pub struct Request {
 /// One layer's decode job inside a comp render request.
 pub struct CompJob {
     pub layer: Uuid,
+    /// The time of the walk of its comp that asked for this. A comp shown at
+    /// two times in a frame wants its layers at both (`crate::placed`). Not
+    /// in [`Self::source_key`], which names the pixels and not who asked.
+    pub at: f64,
     pub item: Uuid,
     /// One media file, or the numbered run of stills this item is —
     /// whichever it is, the decode worker opens it the same way.
@@ -153,6 +157,11 @@ pub type FlowFieldData = (Vec<f32>, Vec<f32>, Vec<f32>);
 
 pub struct CompLayerPixels {
     pub layer: Uuid,
+    /// [`CompJob::at`].
+    pub at: f64,
+    /// This layer for other walks of its comp in this frame, each at its own
+    /// [`Self::at`]. Empty unless a comp is shown at two times (`crate::placed`).
+    pub elsewhere: Vec<CompLayerPixels>,
     pub width: u32,
     pub height: u32,
     /// The decoded frame, held behind a handle so the build can share it
@@ -278,6 +287,7 @@ fn weigh(layers: &[CompLayerPixels]) -> u64 {
             rgba.saturating_add(temporal)
                 .saturating_add(flow)
                 .saturating_add(shutter)
+                .saturating_add(weigh(&l.elsewhere))
         })
         .fold(0u64, u64::saturating_add)
 }
@@ -1644,6 +1654,8 @@ fn decode_comp(
                     s.offset,
                     Some(Box::new(CompLayerPixels {
                         layer: job.layer,
+                        at: job.at,
+                        elsewhere: Vec::new(),
                         width,
                         height,
                         rgba: Arc::new(rgba),
@@ -1758,6 +1770,8 @@ fn decode_comp(
         }
         layers.push(CompLayerPixels {
             layer: job.layer,
+            at: job.at,
+            elsewhere: Vec::new(),
             width,
             height,
             rgba: Arc::new(rgba),
@@ -1778,7 +1792,7 @@ fn decode_comp(
         comp,
         frame,
         media_epoch,
-        layers,
+        layers: crate::placed::fold(layers),
         render_cost: decode_started.elapsed(),
         // Charged by the pool, which is the thing that holds the ledger. The
         // free function stays free of it so a test can decode without one.
@@ -1796,6 +1810,8 @@ mod tests {
     fn pixels(bytes: usize) -> CompLayerPixels {
         CompLayerPixels {
             layer: Uuid::nil(),
+            at: 0.0,
+            elsewhere: Vec::new(),
             width: 4,
             height: 4,
             rgba: Arc::new(vec![0u8; bytes]),
@@ -1913,6 +1929,7 @@ mod tests {
         };
         let job = || CompJob {
             layer,
+            at: 0.0,
             item,
             source: lumit_media::sequence::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
             source_frame: 0,
