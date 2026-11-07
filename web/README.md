@@ -51,7 +51,7 @@ for the newest release and points the three buttons at its assets:
 
 - `lumit-<version>-windows-x64-setup.exe`
 - `lumit-<version>-linux-x64.flatpak`
-- `lumit-<version>-macos-arm64.dmg`
+- `lumit-<version>-macos-arm64.dmg`, and `-macos-x86_64.dmg` for the Intel link under it
 
 So **tagging a release updates the site with no deploy** - `.github/workflows/release.yml`
 builds and publishes on any `v*` tag, and the download page picks it up on next load.
