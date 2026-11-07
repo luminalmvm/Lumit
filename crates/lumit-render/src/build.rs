@@ -1495,7 +1495,12 @@ fn resolve_layer_fx(
         context.clone(),
     );
     if layer.styles.is_empty() {
-        return (ids, ops);
+        let still = ops.iter().all(|op| op.def.leaves_picture(op.params));
+        return if still {
+            Default::default()
+        } else {
+            (ids, ops)
+        };
     }
     let outers = lumit_core::fx::styles::outer_prefix(&layer.styles);
     let (outer, interior) = layer.styles.split_at(outers);

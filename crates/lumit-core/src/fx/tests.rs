@@ -4608,16 +4608,18 @@ fn an_old_shake_is_carried_over_and_shakes_the_same() {
     assert_eq!(carried.effect.version, 1);
     assert_eq!(noise_of(&carried), noise_of(&new));
 
-    // An Amplitude of 0 cannot be divided by, so that shake stays on version
-    // 2 and still twists. A fresh one at 0 does nothing.
+    // A still Amplitude of 0 cannot be divided by, so that shake comes in as
+    // 30 with no X or Y and twists as it did. A fresh one at 0 does nothing.
     old.effect.version = 2;
     set(&mut old, &[("amplitude", 0.0)]);
     let carried = migrated(&old);
-    assert_eq!(carried.effect.version, 2);
-    let effects::shake::Shaken::Plain { wobble, .. } = shake_packed(&carried, 0.4, 1000.0) else {
-        panic!("a plain shake");
+    assert_eq!(carried.effect.version, 3);
+    let plain = |e: &crate::model::EffectInstance| match shake_packed(e, 0.4, 1000.0) {
+        effects::shake::Shaken::Plain { wobble, .. } => wobble,
+        other => panic!("a plain shake, not {other:?}"),
     };
-    assert_ne!(wobble.rotation_deg, 0.0);
+    assert_ne!(plain(&carried).rotation_deg, 0.0);
+    assert_eq!(plain(&carried), plain(&old));
     set(&mut new, &[("amplitude", 0.0)]);
     let effects::shake::Shaken::Plain { wobble, .. } = shake_packed(&new, 0.4, 1000.0) else {
         panic!("a plain shake");
