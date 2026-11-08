@@ -186,7 +186,7 @@ final Map<UuidValue, _OutlineRowState> _rowsOnScreen = {};
 
 /// The layer menu for [layer] at [position], from anywhere a layer is shown:
 /// its bar, the Hierarchy, the picture. The row's own menu when the row is on
-/// screen, so Rename is on it, and the same menu without Rename when not.
+/// screen, and the same menu when not, whose Rename brings the row into view.
 /// [view] is the calling panel's own rows.
 Future<void> showLayerRowMenu(
     BuildContext context, UuidValue layer, Offset position,
@@ -200,12 +200,21 @@ Future<void> showLayerRowMenu(
       .firstOrNull;
   if (entry == null) return Future.value();
   return showLayerMenuFrb(context,
-      layer: entry.layer, position: position, view: view);
+      layer: entry.layer,
+      position: position,
+      onRename: layerRowRename(layer),
+      view: view);
 }
 
-/// What Rename runs for [layer], or null while its row isn't on screen to type
-/// the name into.
+/// Set by the Timeline while it is up: scroll [layer]'s row into view and
+/// open its name there.
+void Function(UuidValue layer)? renameLayerInView;
+
+/// What Rename runs for [layer]: the name opens on its row, which the
+/// Timeline scrolls to first when it is out of view. Null with no Timeline.
 VoidCallback? layerRowRename(UuidValue layer) {
+  final reveal = renameLayerInView;
+  if (reveal != null) return () => reveal(layer);
   final row = _rowsOnScreen[layer];
   if (row == null) return null;
   return () {
@@ -289,6 +298,11 @@ class _OutlineRowState extends State<OutlineRow> {
     widget.renameRequest.addListener(_maybeRename);
     lumitPopupUp.addListener(_menuGone);
     _rowsOnScreen[layer.internallayerId] = this;
+    // A Rename asked for while this row was out of view opens as it comes in.
+    if (widget.renameRequest.value == layer.internallayerId &&
+        !widget.entry.info.switches.locked) {
+      _rename = TextEditingController(text: widget.entry.info.name);
+    }
   }
 
   @override

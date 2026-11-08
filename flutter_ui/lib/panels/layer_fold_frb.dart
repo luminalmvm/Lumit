@@ -972,6 +972,9 @@ enum RevealFilter {
 
   /// Anything that differs from what a freshly made layer carries.
   modified,
+
+  /// The property rows picked in the Timeline, and nothing else.
+  picked,
 }
 
 /// The rows of [rows] that [filter] admits, and the headings that lead down to
@@ -991,11 +994,14 @@ enum RevealFilter {
 /// on its own is treated as a possible container, so the mask row above a keyed
 /// feather survives on the same rule the Effects heading does — one rule, not
 /// one per kind of heading.
+/// [picked] and [layerId] say which rows [RevealFilter.picked] keeps.
 List<LayerFoldRow> revealFoldRows(
   List<LayerFoldRow> rows,
   RevealFilter filter, {
   double compWidth = 0,
   double compHeight = 0,
+  String layerId = '',
+  Set<String> picked = const {},
 }) {
   final keep = List<bool>.filled(rows.length, false);
   // The depth of the shallowest row kept since here, or null while nothing has
@@ -1010,8 +1016,10 @@ List<LayerFoldRow> revealFoldRows(
     final row = rows[i];
     final container = need != null && row.depth < need;
     if (!container &&
-        !foldRowRevealed(row, filter,
-            compWidth: compWidth, compHeight: compHeight)) {
+        !(filter == RevealFilter.picked
+            ? picked.contains(foldRowPath(layerId, row))
+            : foldRowRevealed(row, filter,
+                compWidth: compWidth, compHeight: compHeight))) {
       continue;
     }
     keep[i] = true;
@@ -1122,8 +1130,9 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
 /// parameter, the Volume — and those are compared with it. The rest exist only
 /// because somebody made them: an effect applied, a mask drawn, a stroke
 /// painted, a Retime switched on, a shape drawn, a text animator added. A row
-/// like that *is* the modification, whatever its numbers say, which is the
-/// same call the engine makes for the groups (`reveal_groups`).
+/// like that *is* the modification, which is the same call the engine makes
+/// for the groups (`reveal_groups`). The numbers under it are compared with
+/// what it was made with.
 bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
     switch (row) {
       FoldTransformRow(:final group, :final transform) => group.axes.any((a) {
@@ -1152,22 +1161,92 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
       // alone, so its name shows and the untouched parameters under it do not.
       FoldGroupRow(:final path) =>
         effectIdOfPath(path) != null || styleIdOfPath(path) != null,
+      // The shape is the mask itself, and a point's own width is there only
+      // because somebody switched it on. The rest have a fresh value.
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        switch (value) {
+          MaskValue.path || MaskValue.vertexFeather => true,
+          MaskValue.opacity => _differs(mask.opacity, 100),
+          _ => _differs(maskScalarOf(mask, value, vertex), 0),
+        },
+      FoldStrokeValueRow(:final stroke, :final value) => _differs(
+          strokeScalarOf(stroke, value), value == StrokeValue.end ? 100 : 0),
+      FoldPuppetValueRow(:final pin, :final value) => _differs(
+          puppetScalarOf(pin, value),
+          switch (value) {
+            PuppetValue.rotation => 0,
+            PuppetValue.scale => 100,
+            _ => null,
+          }),
+      FoldAnimatorValueRow(:final animator, :final value) => _differs(
+          textAnimatorScalarOf(animator, value), textAnimatorDefault(value)),
+      FoldShapeValueRow(:final value) => value == ShapeValue.path ||
+          _differs(row.scalar, shapeValueDefault(value)),
       FoldRetimeRow() ||
       FoldFlowRow() ||
       FoldMaskRow() ||
-      FoldMaskValueRow() ||
       FoldStrokeRow() ||
-      FoldStrokeValueRow() ||
       FoldPuppetPinRow() ||
-      FoldPuppetValueRow() ||
       FoldShapeRow() ||
       FoldShapeModifierRow() ||
       FoldShapeGroupRow() ||
-      FoldShapeValueRow() ||
-      FoldShapePaintRow() ||
-      FoldAnimatorValueRow() =>
+      FoldShapePaintRow() =>
         true,
       FoldWaveformRow() || FoldSettingRow() => false,
+    };
+
+/// Whether [scalar] reads other than [fresh], the value it is made with. A
+/// value with no fresh one to compare, a pin's place or a shape's size, says
+/// nothing, as the Anchor does.
+bool _differs(BridgeScalar scalar, double? fresh) => switch (scalar) {
+      _ when fresh == null => false,
+      BridgeScalar_Static(:final field0) => (field0 - fresh).abs() > 1e-6,
+      _ => true,
+    };
+
+/// What a shape's number is made with: an item's own, and a modifier's as the
+/// Add menu puts one down. Null where that depends on the art, a size or a
+/// centre, or where nothing is put down until somebody picks one.
+double? shapeValueDefault(ShapeValue value) => switch (value) {
+      ShapeValue.opacity ||
+      ShapeValue.gradientStartOpacity ||
+      ShapeValue.gradientEndOpacity ||
+      ShapeValue.gradientStopOpacity ||
+      ShapeValue.trimEnd ||
+      ShapeValue.repeatScale ||
+      ShapeValue.repeatStartOpacity ||
+      ShapeValue.repeatEndOpacity ||
+      ShapeValue.deformScale ||
+      ShapeValue.taperStart ||
+      ShapeValue.taperEnd =>
+        100,
+      ShapeValue.roundness ||
+      ShapeValue.shapeRotation ||
+      ShapeValue.outerRoundness ||
+      ShapeValue.innerRoundness ||
+      ShapeValue.trimStart ||
+      ShapeValue.trimOffset ||
+      ShapeValue.dashOffset ||
+      ShapeValue.repeatOffset ||
+      ShapeValue.repeatAnchorX ||
+      ShapeValue.repeatAnchorY ||
+      ShapeValue.repeatPositionY ||
+      ShapeValue.repeatRotation ||
+      ShapeValue.twistRotation ||
+      ShapeValue.twistAxis ||
+      ShapeValue.deformEvolution ||
+      ShapeValue.deformSeed ||
+      ShapeValue.taperEase =>
+        0,
+      ShapeValue.taperStartLength || ShapeValue.taperEndLength => 50,
+      ShapeValue.repeatCopies => 3,
+      ShapeValue.deformDetail => 4,
+      ShapeValue.offsetPath ||
+      ShapeValue.twistAngle ||
+      ShapeValue.deformAmount ||
+      ShapeValue.smoothAmount =>
+        10,
+      _ => null,
     };
 
 /// What a transform axis reads on a layer nobody has touched, or null for an

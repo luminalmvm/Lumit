@@ -402,6 +402,7 @@ MenuEntry addExpressionRow(
               comp: comp,
               layer: layer,
               row: first.expressionRow,
+              decimals: expressionDecimals(first),
               onCommit: (next) {
                 // An expression goes on every picked row. Taking one off
                 // leaves a number, which is only the first row's to hold.

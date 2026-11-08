@@ -52,6 +52,7 @@ import 'light_rows_frb.dart';
 import 'param_row_menu.dart';
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 import '../state/expression_language.dart' show PropertyRef;
+import 'expression_editor.dart' show expressionAsKeys;
 import 'property_link.dart';
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
@@ -1009,15 +1010,15 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       return EffectParamRowExpression(
           value: scalar,
           row: BridgeExpressionRow.transform(axis.prop),
+          decimals: axis.decimals,
           set: (value) {
             final field = (value as BridgeEffectValue_Float).field0;
 
-            if (field is BridgeScalar_Expression) {
-              _commitExpression(axis.prop, field);
-            }
-
+            // An expression, edited or baked into keys, or a number.
             if (field is BridgeScalar_Static) {
               _commit(axis.prop, field.field0);
+            } else {
+              _commitExpression(axis.prop, field);
             }
           },
           setLive: (value) {
@@ -1457,6 +1458,18 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                   scalar: read(widget.transform, expression.first),
                   time: timeOfFrame(widget.comp, playhead.value),
                   layer: widget.layer)),
+      convertExpression: expression.length != 1
+          ? null
+          : () {
+              final prop = expression.first;
+              final keys = expressionAsKeys(_ui,
+                  expression:
+                      read(widget.transform, prop) as BridgeScalar_Expression,
+                  comp: widget.comp,
+                  layer: widget.layer,
+                  row: BridgeExpressionRow.transform(prop));
+              if (keys != null) _commitExpression(prop, keys);
+            },
       graphPath: expression.isEmpty
           ? transformGroupPath(
               widget.layer.internallayerId.toString(), group)

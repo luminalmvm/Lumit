@@ -33,7 +33,9 @@ again. In the Timeline the expression is written along the property's lane, and 
 there opens the editor across the lane.
 
 **Remove expression**, in the editor and in the row's right-click menu, goes back to a
-plain value. The property keeps the number it was showing. The same menu lists
+plain value. The property keeps the number it was showing. **Convert to keyframes**, beside
+it, puts a keyframe on every frame of the layer in place of the expression, each holding
+the number it came to. The same menu lists
 **JavaScript** and **Rhai**, with the expression's language marked.
 
 **Animation ▸ Add expression** opens the same editor for the property rows selected in the
@@ -70,8 +72,8 @@ choice.
 | **Window ▸ Panels ▸ Expressions** | In the dropdown at the left of the bottom bar |
 | An Expression box in the node graph | In the same dropdown, under **Edit expression…** |
 
-A new expression starts in Rhai. **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ New expressions
-are written in** changes that. An expression imported from After Effects arrives as JavaScript.
+A new expression starts in JavaScript. **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ New
+expressions are written in** changes that. An expression imported from After Effects arrives as JavaScript.
 
 The text is coloured for the language it is set to, and run in that language whatever it
 says. `7 / 2` is `3` in Rhai and `3.5` in JavaScript.
@@ -177,10 +179,10 @@ expressions.
 - **Save** stores the script and its language under the name in the name field. A name
   already in the list is replaced.
 - Right-click an entry for **Apply**, **Rename…**, **Duplicate** and **Delete**.
-- **Wiggle**, **Loop**, **Bounce** and **Grow over time** come with Lumit, after your own.
-  **Duplicate** keeps one as yours to change.
-- **Apply** puts the script on every property row selected in the Timeline, in the language
-  the dropdown shows. Double-clicking an entry does the same.
+- **Wiggle**, **Loop**, **Bounce** and **Grow over time** come with Lumit, after your own,
+  in JavaScript. **Duplicate** keeps one as yours to change.
+- **Apply** puts the script on every property row selected in the Timeline, named under the
+  editor, in the language the dropdown shows. Double-clicking an entry does the same.
 - **Export…** writes every saved expression to one file. **Import…** adds a file's
   expressions to yours. A name you already have for a different script or language is kept,
   and the new one gets a number after it.

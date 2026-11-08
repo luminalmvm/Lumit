@@ -37,7 +37,8 @@ import '../panels/layer_fold_frb.dart';
 import '../panels/light_rows_frb.dart'
     show LayerSetting, layerSettings, orientChoices, orientLabel;
 import '../panels/shape_entries.dart';
-import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
+import '../panels/timeline_mask_rows_frb.dart'
+    show maskModeLabel, maskWith, pickedMasks;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, hasThreeDSwitch, read, transformGroups;
 import '../panels/viewer_layer_map.dart' show panBehindPosition;
@@ -163,74 +164,101 @@ VoidCallback? onSelection(
   return null;
 }
 
-/// Layer ▸ Mask: what to do to the mask whose row is picked.
-///
-/// Every row is dead — the whole submenu greys — until a mask row is selected
-/// in the Timeline, because "the mask" is otherwise a guess. The seven modes
-/// stand as rows with a tick rather than behind a *Mode* flyout: picking one is
-/// one gesture either way, and a tick beside the mode in force says which it is
-/// without opening anything.
-List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) {
-  final picked = pickedMask(ui);
+/// Every mask the Mask rows act on, with the layer each is on: the masks
+/// picked by their own rows, the set Cut and Delete take, or else the one
+/// whose value row is picked.
+List<({LayerReference layer, BridgeMask mask})> pickedMaskSet(
+    LumitUiState ui) {
+  final own = [
+    for (final (layer, ids) in pickedMasks(ui))
+      for (final entry in ui.model.layers)
+        if (entry.layer.internallayerId == layer.internallayerId)
+          for (final mask in entry.info.masks)
+            if (ids.contains(mask.id)) (layer: entry.layer, mask: mask),
+  ];
+  if (own.isNotEmpty) return own;
+  final one = pickedMask(ui);
+  return one == null ? const [] : [one];
+}
 
-  void write(BridgeMask next) {
-    if (picked == null) return;
-    try {
-      picked.layer.setMask(mask: next);
-      app.notifyDocumentChanged();
-    } catch (_) {
-      // The mask or its layer went away under the open menu.
-    }
+/// Layer ▸ Mask: what to do to the picked masks, every one of them, as one
+/// undo step.
+///
+/// Every row is dead, and the whole submenu greys, until a mask row is
+/// selected in the Timeline, because "the mask" is otherwise a guess. A mode
+/// is ticked when every picked mask has it.
+List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) {
+  final picked = pickedMaskSet(ui);
+  final none = picked.isEmpty;
+
+  void writeAll(BridgeMask? Function(BridgeMask) change) {
+    final writes = [
+      for (final p in picked)
+        if (change(p.mask) case final next?) (p.layer, next),
+    ];
+    if (writes.isEmpty) return;
+    asOneUndoStep(app.project, () {
+      for (final (layer, next) in writes) {
+        try {
+          layer.setMask(mask: next);
+        } catch (_) {
+          // The mask or its layer went away under the open menu.
+        }
+      }
+    });
+    app.notifyDocumentChanged();
   }
 
   Future<void> ask({
     required String title,
-    required BridgeScalar current,
+    required BridgeScalar Function(BridgeMask) current,
     required double max,
     required BridgeMask Function(BridgeMask, BridgeScalar) put,
   }) async {
-    if (picked == null) return;
+    if (none) return;
     final comp = ui.selectedComp;
+    final frame = ui.playheadFrame.value;
     final asked = await askNumberFrb(
       context: context,
       title: title,
-      value: scalarValueAt(current, ui.playheadFrame.value / ui.model.fps),
+      value: scalarValueAt(current(picked.first.mask), frame / ui.model.fps),
       min: 0,
       max: max,
     );
     if (asked == null || comp == null) return;
-    write(put(
-      picked.mask,
-      scalarWithValueAt(current, asked, comp, ui.playheadFrame.value),
-    ));
+    writeAll((m) => put(m, scalarWithValueAt(current(m), asked, comp, frame)));
   }
 
+  final inverted = !none && picked.every((p) => p.mask.inverted);
   return [
     MenuEntry.submenu(l10n.menuMaskMode, [
       for (final mode in BridgeMaskMode.values)
         MenuEntry(
           maskModeLabel(mode),
-          picked == null
+          // A mask already in this mode makes no write.
+          none
               ? null
-              : () {
-                  // The mode it has already makes no undo step.
-                  if (picked.mask.mode != mode) {
-                    write(maskWith(picked.mask, mode: mode));
-                  }
-                },
-          checked: picked?.mask.mode == mode,
+              : () => writeAll(
+                  (m) => m.mode == mode ? null : maskWith(m, mode: mode)),
+          checked: !none && picked.every((p) => p.mask.mode == mode),
         ),
     ]),
     // Null with nothing picked, like every row above it: an enabled row that
     // did nothing when pressed said "there is no mask" only to whoever pressed
-    // it twice, where a greyed one says it before the click.
+    // it twice, where a greyed one says it before the click. Mixed, it
+    // inverts the rest.
     MenuEntry.toggle(
       l10n.tipInverted,
-      picked == null
+      none
           ? null
-          : () => write(maskWith(picked.mask, inverted: !picked.mask.inverted)),
+          : () => writeAll((m) => m.inverted == !inverted
+              ? null
+              : maskWith(m, inverted: !inverted)),
       action: 'mask.invert',
-      checked: () => pickedMask(ui)?.mask.inverted ?? false,
+      checked: () {
+        final now = pickedMaskSet(ui);
+        return now.isNotEmpty && now.every((p) => p.mask.inverted);
+      },
     ),
     // Feather and expansion are layer pixels off one signed-distance field,
     // and opacity is a per cent. Both are animatable, so a typed number lands
@@ -238,11 +266,11 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
     // flattening the curve.
     MenuEntry(
       l10n.menuMaskFeather,
-      picked == null
+      none
           ? null
           : () => ask(
                 title: l10n.maskFeather,
-                current: picked.mask.feather,
+                current: (m) => m.feather,
                 max: 10000,
                 put: (m, v) => maskWith(m, feather: v),
               ),
@@ -250,11 +278,11 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
     ),
     MenuEntry(
       l10n.menuMaskOpacity,
-      picked == null
+      none
           ? null
           : () => ask(
                 title: l10n.maskOpacity,
-                current: picked.mask.opacity,
+                current: (m) => m.opacity,
                 max: 100,
                 put: (m, v) => maskWith(m, opacity: v),
               ),
@@ -270,9 +298,23 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
 /// shape item's — so the two live under one heading, as the specification
 /// names them.
 List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
-  final mask = pickedMask(ui);
-  final shape = mask == null ? pickedShape(ui) : null;
+  final masks = pickedMaskSet(ui);
+  final shape = masks.isEmpty ? pickedShape(ui) : null;
   final comp = ui.selectedComp;
+
+  // Each picked mask, as one undo step, the way the Mask rows write.
+  VoidCallback eachMask(
+          void Function(LayerReference layer, BridgeMask mask) run) =>
+      () {
+        asOneUndoStep(app.project, () {
+          for (final m in masks) {
+            try {
+              run(m.layer, m.mask);
+            } catch (_) {}
+          }
+        });
+        app.notifyDocumentChanged();
+      };
 
   // The playhead's *time* is asked for inside the press, never while the row
   // is drawn: the bar is rebuilt on a selection change, and a composition that
@@ -280,15 +322,9 @@ List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
   // way to being drawn (the rule the dead-reference test holds).
   VoidCallback? toggle() {
     if (comp == null) return null;
-    if (mask != null) {
-      return () {
-        try {
-          mask.layer.toggleMaskPathKey(
-              id: mask.mask.id,
-              time: comp.timeOfFrame(frame: ui.playheadFrame.value));
-          app.notifyDocumentChanged();
-        } catch (_) {}
-      };
+    if (masks.isNotEmpty) {
+      return eachMask((layer, mask) => layer.toggleMaskPathKey(
+          id: mask.id, time: comp.timeOfFrame(frame: ui.playheadFrame.value)));
     }
     if (shape != null) {
       return () {
@@ -306,23 +342,31 @@ List<MenuEntry> maskAndShapePathRows(LumitState app, LumitUiState ui) {
   // A drawn path can be opened and closed; a rectangle or a star is made
   // from its numbers and is always closed.
   final drawn = shape?.item.primitive == null ? shape : null;
-  final id = mask?.mask.id ?? drawn?.item.id;
-  final layer = mask?.layer ?? drawn?.layer;
-  final closed = mask?.mask.closed ?? drawn?.item.closed ?? true;
+  final closed = masks.isNotEmpty
+      ? masks.every((m) => m.mask.closed)
+      : drawn?.item.closed ?? true;
   return [
     MenuEntry(l10n.menuTogglePathKey, toggle()),
     MenuEntry.toggle(
       l10n.menuPathClosed,
-      id == null || layer == null
-          ? null
-          : () {
-              try {
-                layer.setPathClosed(id: id, closed: !closed);
-                app.notifyDocumentChanged();
-              } catch (_) {}
-            },
-      checked: () =>
-          pickedMask(ui)?.mask.closed ?? pickedShape(ui)?.item.closed ?? false,
+      masks.isNotEmpty
+          ? eachMask((layer, mask) =>
+              layer.setPathClosed(id: mask.id, closed: !closed))
+          : drawn == null
+              ? null
+              : () {
+                  try {
+                    drawn.layer
+                        .setPathClosed(id: drawn.item.id, closed: !closed);
+                    app.notifyDocumentChanged();
+                  } catch (_) {}
+                },
+      checked: () {
+        final now = pickedMaskSet(ui);
+        return now.isNotEmpty
+            ? now.every((m) => m.mask.closed)
+            : pickedShape(ui)?.item.closed ?? false;
+      },
     ),
   ];
 }

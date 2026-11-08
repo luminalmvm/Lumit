@@ -1716,6 +1716,7 @@ List<MenuSection> lumitMenus(
               (RevealFilter.keyframed, 'reveal.animated'),
               (RevealFilter.animated, null),
               (RevealFilter.modified, 'reveal.changed'),
+              (RevealFilter.picked, null),
             ])
               MenuEntry(
                 switch (reveal.$1) {
@@ -1724,8 +1725,13 @@ List<MenuSection> lumitMenus(
                   RevealFilter.animated =>
                     l10n.menuRevealPropertiesWithAnimation,
                   RevealFilter.modified => l10n.menuRevealAllModifiedProperties,
+                  RevealFilter.picked => l10n.menuRevealSelectedProperties,
                 },
-                comp == null ? null : () => ui.requestRevealFilter(reveal.$1),
+                comp == null ||
+                        (reveal.$1 == RevealFilter.picked &&
+                            ui.selectedProperties.value.isEmpty)
+                    ? null
+                    : () => ui.requestRevealFilter(reveal.$1),
                 action: reveal.$2,
               ),
           ]

@@ -376,11 +376,12 @@ typedef TimelineFoldRows = ({
   VoidCallback? expand,
   VoidCallback? collapse,
   ValueChanged<RevealFilter>? reveal,
+  bool anyPicked,
 });
 
 /// The fold rows, on the ground's menu and the headings' alike.
 List<Widget> timelineFoldRows(TimelineFoldRows fold, VoidCallback close) {
-  Widget row(String id, String text, String action, VoidCallback? run) =>
+  Widget row(String id, String text, String? action, VoidCallback? run) =>
       MenuRow(
         key: ValueKey<String>('tl-$id'),
         enabled: run != null,
@@ -399,6 +400,8 @@ List<Widget> timelineFoldRows(TimelineFoldRows fold, VoidCallback close) {
           'reveal.animated', () => reveal(RevealFilter.keyframed)),
       row('reveal-changed', l10n.menuRevealAllModifiedProperties,
           'reveal.changed', () => reveal(RevealFilter.modified)),
+      row('reveal-picked', l10n.menuRevealSelectedProperties, null,
+          fold.anyPicked ? () => reveal(RevealFilter.picked) : null),
     ],
   ];
 }
@@ -455,6 +458,17 @@ Future<void> showTimelineMoreMenu(
           key: const ValueKey('tl-paste'),
           onPressed: () => close('paste'),
           child: MenuLabel(l10n.menuPaste, action: 'edit.paste')),
+      MenuRow(
+          key: const ValueKey('tl-select-all'),
+          onPressed: () => close('select-all'),
+          child: MenuLabel(l10n.menuSelectAll, action: 'edit.select.all')),
+      MenuRow(
+          key: const ValueKey('tl-deselect-all'),
+          enabled: ui.selectedLayerIds.isNotEmpty,
+          onPressed: () => close('deselect-all'),
+          child: MenuLabel(l10n.menuDeselectAll,
+              action: 'edit.deselect.all',
+              enabled: ui.selectedLayerIds.isNotEmpty)),
       const MenuDivider(),
       if (fold != null) ...[
         ...timelineFoldRows(fold, () => close(null)),
@@ -496,6 +510,11 @@ Future<void> showTimelineMoreMenu(
   switch (picked) {
     case 'paste':
       pasteSelectionFrb(app, ui, comp, ui.selectedLayer.value);
+    // What the Edit menu's two rows run.
+    case 'select-all':
+      ui.setSelection(comp.getLayers());
+    case 'deselect-all':
+      ui.clearSelection();
     case 'razor':
       onToggleRazor?.call();
     case 'work-in' || 'work-out':

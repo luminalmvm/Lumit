@@ -753,9 +753,11 @@ class Workspace extends ChangeNotifier {
       savedExpressionLanguages[name] ?? BridgeExpressionLanguage.rhai;
 
   /// The language a new expression starts in, wherever one is made: a row's
-  /// Set expression, Animation ▸ Add expression, the Expressions panel's New.
+  /// Set expression, Animation ▸ Add expression, the Expressions panel's New,
+  /// a link. JavaScript until Settings says otherwise, as the starters and a
+  /// link to an effect's row can only be written in it.
   BridgeExpressionLanguage defaultExpressionLanguage =
-      BridgeExpressionLanguage.rhai;
+      BridgeExpressionLanguage.javaScript;
 
   void setDefaultExpressionLanguage(BridgeExpressionLanguage language) {
     defaultExpressionLanguage = language;
@@ -2458,8 +2460,9 @@ class Workspace extends ChangeNotifier {
             if (key is String && value == 'javascript')
               key: BridgeExpressionLanguage.javaScript,
       });
-    defaultExpressionLanguage =
-        expressionLanguageOfId(j['default_expression_language']);
+    defaultExpressionLanguage = j['default_expression_language'] == 'rhai'
+        ? BridgeExpressionLanguage.rhai
+        : BridgeExpressionLanguage.javaScript;
     recentColours
       ..clear()
       ..addAll([

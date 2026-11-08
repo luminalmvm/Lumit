@@ -112,6 +112,7 @@ import '../widgets/smooth_zoom.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'waveform_frb.dart';
 import 'timeline_group_row_frb.dart';
+import 'timeline_outline_row_frb.dart' show renameLayerInView;
 import 'transform_rows_frb.dart';
 import 'viewer_tool_cursor.dart' show handPanLayer;
 
@@ -730,6 +731,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       expand: ids.any((id) => !_isOpen(id)) ? _expandLayers : null,
       collapse: ids.any(_isOpen) ? _collapseLayers : null,
       reveal: _ui?.requestRevealFilter,
+      anyPicked: _selectedProperties.isNotEmpty,
     );
   }
 
@@ -1890,6 +1892,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The fold row the next build brings into view.
   String? _foldToShow;
 
+  /// The layer row the next build brings into view.
+  String? _layerToShow;
+
+  /// Rename from a menu anywhere: the row comes into view if it is out of
+  /// it, and opens its name as it builds.
+  void _renameInView(UuidValue layer) {
+    if (!mounted) return;
+    // Set afresh, so a second Rename on the same layer is heard.
+    _renameRequest.value = null;
+    _renameRequest.value = layer;
+    setState(() => _layerToShow = layer.toString());
+  }
+
   /// Bring the fold row at [path] into view, a short glide so its place in the
   /// tree stays readable.
   void _scrollToFold(List<LayerRow> rows, String path) {
@@ -2204,6 +2219,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// draws every heading it keeps as open, so these are the exceptions.
   final Set<String> _revealShut = {};
 
+  /// The rows picked when Reveal selected properties ran, which it keeps
+  /// while the pick moves on.
+  Set<String> _revealPicked = const {};
+
   /// The comp's size when the last **modified** reveal was run, kept for the
   /// builds after it: that reveal asks whether a layer has been moved, and
   /// unmoved means the middle of the comp — a fact about the document that a
@@ -2222,6 +2241,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   @override
   void initState() {
     super.initState();
+    renameLayerInView = _renameInView;
     _zoomMotion = SmoothZoom(vsync: this, initial: 1, min: 1, max: 64)
       ..addListener(_onZoomTick);
     _vOutline.addListener(() => _followScroll(_vOutline, _vLane));
@@ -3551,10 +3571,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// qualify" could disagree with what the filter then keeps, and a layer
   /// opened onto no rows is an empty fold-out.
   void _revealFiltered(LumitUiState ui, RevealFilter filter) {
+    final picked = filter == RevealFilter.picked;
+    if (picked) {
+      if (_selectedProperties.isEmpty) return;
+      _revealPicked = {..._selectedProperties};
+    }
     final selected = ui.selectedLayers.value;
-    final ids = {
-      for (final layer in selected) layer.internallayerId.toString()
-    };
+    // The picked rows' own layers, for the picked rows.
+    final ids = picked
+        ? {
+            for (final path in _revealPicked)
+              if (layerIdOfPath(path) case final id?) id,
+          }
+        : {for (final layer in selected) layer.internallayerId.toString()};
     final entries = ids.isEmpty
         ? ui.model.layers
         : [
@@ -3573,9 +3602,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       for (final entry in entries) {
         final id = entry.layer.internallayerId.toString();
         // Every reveal starts from the layers closed, so it shows exactly what
-        // it says rather than adding to whatever was already open.
+        // it says rather than adding to whatever was already open. The picked
+        // rows stay picked.
         _shutLayerDeep(id);
-        _dropSelectionUnder(id);
+        if (!picked) _dropSelectionUnder(id);
       }
       // Built the way the panel is about to build them, so "does this layer
       // show anything" is answered by the rows themselves. Heights are not
@@ -3594,6 +3624,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           for (final entry in entries)
             entry.layer.internallayerId.toString(): filter
         },
+        revealPicked: _revealPicked,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight,
       );
@@ -3674,6 +3705,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   @override
   void dispose() {
+    if (renameLayerInView == _renameInView) renameLayerInView = null;
     _mixRetry?.cancel();
     _itemChanges?.cancel();
     _share.roster.removeListener(_onRoster);
@@ -4471,6 +4503,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
         revealShut: _revealShut,
+        revealPicked: _revealPicked,
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
@@ -4481,6 +4514,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       });
     }
     _shownRows = rows;
+    if (_layerToShow case final id?) {
+      _layerToShow = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToLayer(id);
+      });
+    }
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,

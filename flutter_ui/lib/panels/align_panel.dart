@@ -152,7 +152,7 @@ class AlignPanel extends StatelessWidget {
                   : () => ui.requestArrange(distribute: axis, gaps: true)),
         ];
     showMenuEntriesAt(context, at, [
-      MenuEntry.submenu(l10n.alignSelection, [
+      MenuEntry.submenu(l10n.alignMenu, [
         align(l10n.viewerAlignLeft, 0, null),
         align(l10n.viewerAlignCentre, 0.5, null),
         align(l10n.viewerAlignRight, 1, null),

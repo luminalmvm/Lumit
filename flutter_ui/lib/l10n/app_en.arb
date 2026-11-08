@@ -7702,6 +7702,14 @@
   "@maskExpansion": {
     "description": "Row label under a mask: how far its shape is grown or shrunk, in layer pixels."
   },
+  "maskCopyPath": "Copy path",
+  "@maskCopyPath": {
+    "description": "Item in a mask's Path row right-click menu: keep the shape the mask shows at the playhead, to put on another mask."
+  },
+  "maskPastePath": "Paste path",
+  "@maskPastePath": {
+    "description": "Item in a mask's Path row right-click menu: give this mask the copied shape, as a key at the playhead when its shape is keyed."
+  },
   "maskFeather": "Feather",
   "@maskFeather": {
     "description": "Row label under a mask: the width of its soft edge, in layer pixels."
@@ -8279,6 +8287,10 @@
   "menuRevealAllModifiedProperties": "Reveal all modified properties",
   "@menuRevealAllModifiedProperties": {
     "description": "Menu item."
+  },
+  "menuRevealSelectedProperties": "Reveal selected properties",
+  "@menuRevealSelectedProperties": {
+    "description": "Menu item in the Reveal group: open the property rows selected in the Timeline on each of their layers and fold away every other row."
   },
   "menuRevealPropertiesWithAnimation": "Reveal properties with animation",
   "@menuRevealPropertiesWithAnimation": {
@@ -9432,6 +9444,10 @@
   "removeExpression": "Remove expression",
   "@removeExpression": {
     "description": "Context-menu item on a property's expression editor: go back to a plain value, keeping the number the expression was showing."
+  },
+  "expressionConvertToKeyframes": "Convert to keyframes",
+  "@expressionConvertToKeyframes": {
+    "description": "Row menu item and expression editor button on a property driven by an expression: replace it with one keyframe a frame across the layer, each holding the number the expression came to there."
   },
   "rename": "Rename",
   "@rename": {
@@ -11578,6 +11594,10 @@
   "alignSelection": "Selection",
   "@alignSelection": {
     "description": "Align panel: heading over the buttons that line the selected layers up with each other. Also the Viewer menu row that opens the same six."
+  },
+  "alignMenu": "Align",
+  "@alignMenu": {
+    "description": "Align panel's right-click menu: the submenu whose rows line the selected layers up with each other, read as Align ▸ Left."
   },
   "alignDistributeAcross": "Distribute across",
   "@alignDistributeAcross": {

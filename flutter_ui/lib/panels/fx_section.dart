@@ -64,6 +64,21 @@ double fxLabelWidthFor(double width) {
       .clamp(88.0, 200.0);
 }
 
+/// The label column of a row [width] wide. Beside a [compact] control a long
+/// name widens it into the room the control leaves, and a short one keeps the
+/// column's edge.
+Widget _labelBox(double width, Widget name, double? compact) {
+  final column = fxLabelWidthFor(width);
+  final most = compact == null
+      ? column
+      : width - fxKeyColumnWidth - 10 - compact;
+  if (most <= column) return SizedBox(width: column, child: name);
+  return ConstrainedBox(
+    constraints: BoxConstraints(minWidth: column, maxWidth: most),
+    child: IntrinsicWidth(child: name),
+  );
+}
+
 /// Says whether the pointer is over the row around it, for the marks that stay
 /// quiet until then. A listenable, so a row lighting up repaints those marks and
 /// nothing else on it.
@@ -896,6 +911,9 @@ class _FxRenameFieldState extends State<FxRenameField> {
 /// below still line up on it.
 ///
 /// [rowEnd] stands where a navigator would, on a row with none.
+///
+/// [compactControl] is how wide a small control is, a checkbox, on a row
+/// whose label may then take what the control column has spare.
 Widget fxTwoColumnRow({
   required BuildContext context,
   required Widget name,
@@ -905,6 +923,7 @@ Widget fxTwoColumnRow({
   Widget? lane,
   Widget? rowEnd,
   Widget? trailing,
+  double? compactControl,
 }) {
   final height = fxRowHeight(ThemeScope.of(context).theme);
   final strip = FxKeyStripScope.widthOf(context);
@@ -942,8 +961,7 @@ Widget fxTwoColumnRow({
                           child: keyframeControls),
                 ),
                 const SizedBox(width: 4),
-                SizedBox(
-                    width: fxLabelWidthFor(constraints.maxWidth), child: name),
+                _labelBox(constraints.maxWidth, name, compactControl),
                 // A long name ends short of its value rather than against it.
                 Expanded(
                   child: Padding(

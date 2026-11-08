@@ -706,8 +706,8 @@ Widget projectPreviewCard(
   /// A right press on the card, which is the item's own menu.
   ValueChanged<Offset>? onMenu,
 
-  /// A press on the uses line, which reveals them.
-  VoidCallback? onUses,
+  /// A press on the uses line, which reveals them, at where it landed.
+  ValueChanged<Offset>? onUses,
 }) =>
     GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -747,7 +747,7 @@ Widget _previewContent(
   ValueChanged<int?>? onScrub,
   VoidCallback? onPlaySound,
   bool soundPlaying = false,
-  VoidCallback? onUses,
+  ValueChanged<Offset>? onUses,
 }) {
   final type = switch (item) {
     ItemReference_Footage() => l10n.projectTypeFootage,
@@ -967,7 +967,7 @@ String? _previewCodecs(
 }
 
 /// "Used twice", which takes you to those uses when there are any.
-Widget _usesLine(LumitTheme t, int uses, VoidCallback? onUses) {
+Widget _usesLine(LumitTheme t, int uses, ValueChanged<Offset>? onUses) {
   Widget line(double lit) => Text(l10n.projectUsedCount(uses),
       key: const ValueKey('project-info-uses'),
       style: projectMetaStyle(t).copyWith(
@@ -980,7 +980,7 @@ Widget _usesLine(LumitTheme t, int uses, VoidCallback? onUses) {
     child: HoverMark(
       builder: (context, lit) => GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onUses,
+        onTapUp: (d) => onUses(d.globalPosition),
         child: line(lit),
       ),
     ),

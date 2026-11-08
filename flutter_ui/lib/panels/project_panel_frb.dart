@@ -79,6 +79,7 @@ import 'project_chrome_frb.dart';
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
 import 'project_row_frb.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 export 'project_chrome_frb.dart';
 export 'project_columns_frb.dart';
@@ -1657,8 +1658,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       onPlaySound: sound ? () => _toggleSound(item) : null,
       soundPlaying: sound && _soundId == id,
       onMenu: (at) => _itemMenu(item, at),
-      onUses: () => revealInComposition(
-          Provider.of<LumitUiState>(context, listen: false), item),
+      onUses: (at) => _revealUses(item, at),
     );
   }
 
@@ -1668,6 +1668,31 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
 
   /// How many places use each item, for the card.
   final Map<String, int> _uses = {};
+
+  /// The card's uses line: the composition that shows [item], or a list to
+  /// pick from when there are several.
+  void _revealUses(ItemReference item, Offset at) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final comps = compsUsing(item);
+    if (comps.length < 2) {
+      revealInComposition(ui, item);
+      return;
+    }
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        for (final (comp, name) in comps)
+          MenuRow(
+            onPressed: () {
+              close(null);
+              revealInComposition(ui, item, comp: comp);
+            },
+            child: Text(name, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+    );
+  }
 
   int _usesOf(ItemReference item) {
     try {

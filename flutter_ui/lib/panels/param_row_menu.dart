@@ -37,6 +37,7 @@ class ParamMenu {
     this.setExpression,
     this.axisExpressions = const [],
     this.removeExpression,
+    this.convertExpression,
     this.graphPath,
     this.host,
     this.onCurves = false,
@@ -88,6 +89,9 @@ class ParamMenu {
   /// out for one number.
   final List<({String axis, VoidCallback set})> axisExpressions;
   final VoidCallback? removeExpression;
+
+  /// The expression baked into a key a frame, across the layer.
+  final VoidCallback? convertExpression;
 
   /// The row's path in the Timeline's selection.
   final String? graphPath;
@@ -267,6 +271,12 @@ List<Widget> paramLastRows(
         noteSetExpression();
         set();
       }, action: 'expression.add', tickColumn: tickColumn),
+    if (menu.convertExpression case final convert?)
+      _row('param-menu-convert-expression', l10n.expressionConvertToKeyframes,
+          () {
+        close();
+        convert();
+      }, tickColumn: tickColumn),
     if (menu.removeExpression case final remove?)
       _row('param-menu-no-expression', l10n.removeExpression, () {
         close();
@@ -563,9 +573,16 @@ List<Widget> _rows(BuildContext context, ParamMenu menu, VoidCallback done) {
               ],
             ),
           ),
-          child: MenuLabel(l10n.menuAddExpression),
+          // The chord puts one on every axis of the row.
+          child: MenuLabel(l10n.menuAddExpression, action: 'expression.add'),
         ),
       if (menu.drive case final drive?) ..._driveRows(context, drive, done),
+      if (menu.convertExpression case final convert?)
+        _row('param-menu-convert-expression',
+            l10n.expressionConvertToKeyframes, () {
+          done();
+          convert();
+        }),
       if (menu.removeExpression case final remove?)
         _row('param-menu-no-expression', l10n.removeExpression, () {
           done();

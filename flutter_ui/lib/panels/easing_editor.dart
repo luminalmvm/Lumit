@@ -625,23 +625,27 @@ class _EasingEditorState extends State<EasingEditor>
               onPressed: () => _showMore(t, button),
             ),
           ),
-          // The name of the tile under the pointer, else of the shape in the box.
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _gap),
-              child: ValueListenableBuilder<String?>(
-                valueListenable: _hoveredTile,
-                builder: (context, hovered, _) => Text(
-                  hovered ?? _curveName ?? '',
-                  key: const ValueKey('easing-name-label'),
-                  textAlign: TextAlign.end,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.small.copyWith(color: t.textMuted),
+          // The name of the tile under the pointer, else of the shape in the
+          // box. A narrow panel leaves it out: the picked tile says it.
+          if (width < 280)
+            const Spacer()
+          else
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: _gap),
+                child: ValueListenableBuilder<String?>(
+                  valueListenable: _hoveredTile,
+                  builder: (context, hovered, _) => Text(
+                    hovered ?? _curveName ?? '',
+                    key: const ValueKey('easing-name-label'),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.small.copyWith(color: t.textMuted),
+                  ),
                 ),
               ),
             ),
-          ),
           if (widget.onClose != null) ...[
             HouseButton(
               small: true,

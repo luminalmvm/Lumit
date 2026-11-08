@@ -525,6 +525,7 @@ List<LayerRow> layerRows({
   Map<String, Map<String, DrivenParam>> driven = const {},
   Map<String, RevealFilter> reveal = const {},
   Set<String> revealShut = const {},
+  Set<String> revealPicked = const {},
   Map<String, GroupHeader> groupHeaders = const {},
   double compWidth = 0,
   double compHeight = 0,
@@ -544,7 +545,10 @@ List<LayerRow> layerRows({
         ? built
         : withHeadingsShut(
             revealFoldRows(built, filter,
-                compWidth: compWidth, compHeight: compHeight),
+                compWidth: compWidth,
+                compHeight: compHeight,
+                layerId: id,
+                picked: revealPicked),
             revealShut);
     final isOpen = filter != null ? fold.isNotEmpty : open.contains(id);
     out.add(LayerRow(

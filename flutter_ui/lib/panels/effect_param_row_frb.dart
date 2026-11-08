@@ -447,6 +447,8 @@ class EffectParamRowFrb extends StatelessWidget {
           grows: riders.isNotEmpty,
           rowEnd: driven == null ? null : _drivenWord(t, id),
           trailing: _linkMark(scalars),
+          // A checkbox and its reset arrow.
+          compactControl: param.kind is BridgeParamKind_Bool ? 40 : null,
           // The keyframe strip's lane: the same channels and write the
           // stopwatch has, so a key moved there is committed as one added here.
           lane: scalars == null || driven != null
@@ -634,12 +636,14 @@ class EffectParamRowFrb extends StatelessWidget {
     };
     final numeric = scalars != null && expression == null && driven == null;
     final float = param.kind is! BridgeParamKind_Colour;
-    final playhead =
-        Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final playhead = ui.playheadFrame;
     double read(BridgeScalar s) =>
         sampledScalar(s, timeOfFrame(comp, playhead.value));
     return ParamMenu(
-      linkTo: _linkRef,
+      // Named as Paste link runs, so a layer or effect renamed since the copy
+      // is written under its name now.
+      linkTo: (link) => _linkRef(link, ui.model.byId(ownerLayerId)),
       linkFrom: _link(scalars),
       keys: numeric ? keys : null,
       reset: driven != null || fallback == null
@@ -680,6 +684,9 @@ class EffectParamRowFrb extends StatelessWidget {
                   scalar: expression,
                   time: timeOfFrame(comp, playhead.value),
                   layer: currentLayer!)))),
+      convertExpression: expression == null || currentLayer == null
+          ? null
+          : () => _convertExpression(ui, expression),
       graphPath: scalars == null
           ? null
           : rowPath ??
@@ -744,12 +751,14 @@ class EffectParamRowFrb extends StatelessWidget {
 
   /// What this row is to an expression written elsewhere: the effect on the
   /// layer's stack by its heading name, and the row by its label. A driver's
-  /// row and a clip's effect have no name an expression can reach.
-  PropertyRef? _linkRef(PropertyLink link) {
+  /// row and a clip's effect have no name an expression can reach. [now] is
+  /// the layer as the document holds it, when that is known.
+  PropertyRef? _linkRef(PropertyLink link, [BridgeLayerEntry? now]) {
     if (link.from.contains(_linkKey)) return null;
-    final entry = ownerLayers
-        .where((e) => e.layer.internallayerId == ownerLayerId)
-        .firstOrNull;
+    final entry = now ??
+        ownerLayers
+            .where((e) => e.layer.internallayerId == ownerLayerId)
+            .firstOrNull;
     if (entry == null) return null;
     for (final fx in entry.info.effects) {
       if (fx.id == effectId) {
@@ -770,6 +779,16 @@ class EffectParamRowFrb extends StatelessWidget {
       }
     }
     return null;
+  }
+
+  /// [expression] baked into a key a frame across the layer.
+  void _convertExpression(LumitUiState ui, BridgeScalar_Expression expression) {
+    final keys = expressionAsKeys(ui,
+        expression: expression,
+        comp: comp,
+        layer: currentLayer!,
+        row: BridgeExpressionRow.effect(effect: effectId, param: param.id));
+    if (keys != null) _set(BridgeEffectValue.float(keys));
   }
 
   (UuidValue, UuidValue, String) get _linkKey =>
@@ -905,6 +924,7 @@ class EffectParamRowFrb extends StatelessWidget {
         frame: frame,
         layer: owner,
         row: BridgeExpressionRow.effect(effect: effectId, param: param.id),
+        decimals: param.kind is BridgeParamKind_Int ? 0 : 2,
         set: _set,
         setLive: _setLive,
       );
@@ -3762,6 +3782,7 @@ class EffectParamRowExpression extends StatefulWidget {
       required this.setLive,
       required this.layer,
       this.row,
+      this.decimals = 2,
       super.key});
   final BridgeScalar_Expression value;
   final CompositionReference comp;
@@ -3772,6 +3793,9 @@ class EffectParamRowExpression extends StatefulWidget {
 
   /// The row the expression sits on, so it reads its own number of a point.
   final BridgeExpressionRow? row;
+
+  /// How many decimals the row's value field shows, and so the number here.
+  final int decimals;
 
   @override
   State<EffectParamRowExpression> createState() =>
@@ -3911,6 +3935,7 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
       comp: widget.comp,
       layer: widget.layer,
       row: widget.row,
+      decimals: widget.decimals,
       fresh: fresh,
       onLive: (draft) => setLive(BridgeEffectValue.float(draft)),
       onCommit: (next) => set(BridgeEffectValue.float(next)),
@@ -3933,7 +3958,7 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
     // A broken expression's number is drawn in red, and says why when
     // pointed at.
     final Widget readout = Text(
-      _value.toStringAsPrecision(6),
+      _value.toStringAsFixed(widget.decimals),
       style: t.mono.copyWith(color: fault == null ? t.textMuted : t.error),
       softWrap: false,
       overflow: TextOverflow.ellipsis,
@@ -3949,6 +3974,19 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
             },
             child: MenuLabel(l10n.expressionEdit,
                 ticked: false),
+          ),
+          MenuRow(
+            onPressed: () {
+              close();
+              final keys = expressionAsKeys(
+                  Provider.of<LumitUiState>(context, listen: false),
+                  expression: widget.value,
+                  comp: widget.comp,
+                  layer: widget.layer,
+                  row: widget.row);
+              if (keys != null) widget.set(BridgeEffectValue.float(keys));
+            },
+            child: MenuLabel(l10n.expressionConvertToKeyframes, ticked: false),
           ),
           MenuRow(
             onPressed: () {
@@ -4013,9 +4051,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
                         " = ",
                         style: t.body.copyWith(color: t.textMuted),
                       ),
-                      // Six significant figures can run to twelve characters
-                      // ("1.00000e+16"), which is wider than this readout: it
-                      // gives way rather than striping the row.
+                      // A large number is wider than this readout: it gives
+                      // way rather than striping the row.
                       Flexible(
                         child: fault == null
                             ? readout

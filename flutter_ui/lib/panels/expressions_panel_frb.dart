@@ -33,6 +33,7 @@ import '../widgets/autofill.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import 'effect_param_row_frb.dart' show ExpressionTextEditingController;
+import 'expression_editor.dart' show expressionDecimals;
 import 'graph_channels.dart';
 import 'graph_edits.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
@@ -70,8 +71,8 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   String? _picked;
 
   /// The language the text in the editor is written in. It is saved with the
-  /// text and applied with it.
-  BridgeExpressionLanguage _language = BridgeExpressionLanguage.rhai;
+  /// text and applied with it. Settings' choice to begin with.
+  late BridgeExpressionLanguage _language;
 
   /// The property the editor is showing, when it is showing one. What is
   /// typed is written to it on clicking away.
@@ -217,14 +218,28 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     _follow();
   }
 
-  /// What the text comes to at the playhead, or why it comes to nothing,
-  /// worked out about the property it is for. Named when the editor is
-  /// showing that property's own.
+  /// The property the text is for, which is where Apply writes, then what the
+  /// text comes to at the playhead or why it comes to nothing.
   Widget _readout(LumitTheme t, LumitUiState ui) {
-    final on = _linked ?? _targets(ui).firstOrNull;
+    final targets = _targets(ui);
+    final on = _linked ?? targets.firstOrNull;
     final comp = ui.selectedComp;
-    if (on == null || comp == null || _code.text.trim().isEmpty) {
-      return const SizedBox.shrink();
+    if (on == null || comp == null) return const SizedBox.shrink();
+    final more = _linked == null && targets.length > 1
+        ? ' +${targets.length - 1}'
+        : '';
+    final name = TextSpan(
+      text: '${on.label}$more  ',
+      style: t.small.copyWith(color: t.textMuted),
+    );
+    if (_code.text.trim().isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+        child: Text.rich(name,
+            key: const ValueKey('expr-readout'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
+      );
     }
     final time = timeOfFrame(comp, ui.playheadFrame.value);
     final layer = on.entry.layer;
@@ -244,11 +259,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
       child: Text.rich(
         TextSpan(children: [
-          if (_linked != null)
-            TextSpan(
-              text: '${on.label}  ',
-              style: t.small.copyWith(color: t.textMuted),
-            ),
+          name,
           fault != null
               ? TextSpan(text: fault, style: t.small.copyWith(color: t.error))
               : TextSpan(
@@ -258,7 +269,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                     layer: layer,
                     held: on.scalar,
                     row: on.expressionRow,
-                  ).toStringAsPrecision(6)}',
+                  ).toStringAsFixed(expressionDecimals(on))}',
                   style: t.mono.copyWith(color: t.textMuted),
                 ),
         ]),
@@ -395,7 +406,8 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   }
 
   /// The few that come with Lumit, so the list has something to start from.
-  /// Written in JavaScript, the language with the words for them.
+  /// Written in JavaScript whatever Settings names: each reads the property's
+  /// own `value` or its keys, and Rhai can read neither.
   static List<(String, String)> get _starters => [
         (l10n.expressionStarterWiggle, 'wiggle(2, 20)'),
         (l10n.expressionStarterLoop, 'loopOut("cycle")'),

@@ -348,6 +348,10 @@ Future<void> showProjectMenuFrb({
   };
   final picked = targets ?? [item];
   final several = picked.length > 1;
+  // Where Reveal in composition can go: a list of them when there are two.
+  final usedIn = several || item is ItemReference_Folder
+      ? const <(CompositionReference, String)>[]
+      : compsUsing(item);
   // Something picked can go in the open comp, which can't hold itself.
   final placeable = openComp != null &&
       picked.any((target) => switch (target) {
@@ -408,9 +412,27 @@ Future<void> showProjectMenuFrb({
             if (item is! ItemReference_Folder) ...[
               row(_ProjectMenuAction.addToComp, l10n.projectAddToComp,
                   key: 'add-to-comp', enabled: placeable),
-              row(_ProjectMenuAction.revealInComp,
-                  l10n.projectRevealInComposition,
-                  key: 'reveal-in-comp', enabled: !several && _used(item)),
+              if (usedIn.length > 1)
+                SubmenuRow(
+                  key: const ValueKey('project-menu-reveal-in-comp'),
+                  closeParent: () => close(null),
+                  submenu: (dismiss) => _flyout([
+                    for (final (comp, compName) in usedIn)
+                      MenuRow(
+                        onPressed: () {
+                          dismiss();
+                          close(null);
+                          revealInComposition(ui, item, comp: comp);
+                        },
+                        child: Text(compName, overflow: TextOverflow.ellipsis),
+                      ),
+                  ]),
+                  child: Text(l10n.projectRevealInComposition),
+                )
+              else
+                row(_ProjectMenuAction.revealInComp,
+                    l10n.projectRevealInComposition,
+                    key: 'reveal-in-comp', enabled: usedIn.isNotEmpty),
             ],
             if (isFootage) ...[
               row(_ProjectMenuAction.newCompFromSelection,
@@ -1090,25 +1112,38 @@ String _filePathOf(FootageReference footage) {
   }
 }
 
-/// Whether anything shows [item]. Read as a menu opens, never in a build.
-bool _used(ItemReference item) {
+/// The compositions that show [item], each with its name, in the order its
+/// uses come. Read as a menu opens, never in a build.
+List<(CompositionReference, String)> compsUsing(ItemReference item) {
+  final out = <(CompositionReference, String)>[];
   try {
-    return item.uses() > 0;
+    for (final use in item.usedBy()) {
+      final comp = CompositionReference(
+          internalproject: use.internalprojectId,
+          internalid: use.internalcompId);
+      if (out.any((c) => c.$1 == comp)) continue;
+      out.add((comp, comp.getSettings().name));
+    }
   } catch (_) {
-    return false;
+    // The project closed as the menu opened.
   }
+  return out;
 }
 
-/// Open the first composition that shows [item], with the layers there that
-/// show it selected, and front the Timeline. False when nothing does.
-bool revealInComposition(LumitUiState ui, ItemReference item) {
+/// Open [comp], or the first composition that shows [item], with the layers
+/// there that show it selected, and front the Timeline. False when nothing
+/// does.
+bool revealInComposition(LumitUiState ui, ItemReference item,
+    {CompositionReference? comp}) {
   final List<LayerReference> uses;
   try {
     uses = item.usedBy();
   } catch (_) {
     return false;
   }
-  final first = uses.firstOrNull;
+  final first = uses
+      .where((l) => comp == null || l.internalcompId == comp.internalid)
+      .firstOrNull;
   if (first == null) return false;
   ui.setSelectedComp(CompositionReference(
       internalproject: first.internalprojectId,
