@@ -157,6 +157,8 @@ an ordinary layer picker: Audio level's and Beat trigger's **Audio** row, Layer 
 
 A driven parameter's row in Effect Controls names the driver in place of a value. Its
 keyframes are overridden while the wire is there, and come back when it is pulled.
+**Drive with** on a parameter's right-click menu wires one from the row, see
+[Effects](/use/effects/#edit-the-parameters).
 
 ## Wires and their colours
 
@@ -192,7 +194,8 @@ different producer above it on each.
 
 Selecting exactly one effect, a box here or a heading in Effect Controls, puts an **at
 &lt;effect&gt;** chip over the Viewer's picture. Turn it on and the Viewer renders the
-composition with that layer's stack stopping there.
+composition with that layer's stack stopping there. **View here** on a box's right-click
+menu and the eye at the right of the Node panel's header do the same.
 
 ## The Nodes workspace
 
@@ -205,7 +208,9 @@ picked box's parameter rows.
 
 The Node panel's header shows the picked box's name and, when wires drive any of its rows,
 how many: **2 driven**. With no box picked it reads **Pick a node on the graph.**, and on a
-box with no rows **This box has nothing to set.**
+box with no rows **This box has nothing to set.** A double-click on a row of its index
+opens the effect in Effect Controls. **Ctrl+F** opens a filter in the header that keeps
+the rows whose names match.
 
 :::note[What the graph does not draw]
 A layer's graph draws no branch and no merge: it is the layer's effect stack, seen as boxes.

@@ -95,6 +95,8 @@ Future<void> showGraphBoxMenu(
   bool canSaveGroup = true,
   VoidCallback? onUngroup,
   bool canUngroup = true,
+  bool? viewHere,
+  VoidCallback? onViewHere,
   VoidCallback? onReveal,
   VoidCallback? onDisconnectAll,
   VoidCallback? onDelete,
@@ -125,6 +127,9 @@ Future<void> showGraphBoxMenu(
             action: 'layer.ungroup', enabled: canUngroup),
       ],
       [
+        // The Viewer's "at" chip, from the box itself. Ticked while the
+        // picture stops here.
+        _Row('view-here', l10n.graphViewHere, onViewHere, ticked: viewHere),
         _Row('reveal', l10n.graphRevealEffect, onReveal),
         _Row('disconnect-all', l10n.graphDisconnectAll, onDisconnectAll),
       ],

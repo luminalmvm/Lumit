@@ -28,6 +28,15 @@ A clip on a Sequence layer carries an effect stack of its own. See
 Select the layer and open the **Effect Controls** panel. Every parameter there can be
 animated: turn on its stopwatch to begin. See [Keyframes](/use/keyframes/).
 
+Right-click a parameter and choose **Drive with** to wire a driver onto it: **Wiggle**,
+**Audio level** or **Beat trigger** on a number, **Colour cycle** on a colour, or an
+**Expression** box. Each is one undo step. The row then names the driver, and a click on
+that word opens it in the Node panel. **Drive with ▸ Remove driver** takes the wire and its
+boxes away. On a transform row, **Wiggle** writes an expression.
+
+**Ctrl+F** opens a filter in the panel's header that keeps the rows whose names match.
+An effect's heading has **Reveal in node graph**.
+
 ## Order matters
 
 Effects run in stack order. An exposure ahead of a glow does not look like a glow ahead of an

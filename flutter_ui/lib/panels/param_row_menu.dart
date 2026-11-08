@@ -7,11 +7,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
+import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show addExpressionRow;
 import '../widgets/controls.dart';
+import 'drive_chain.dart';
 import 'graph_channels.dart' show graphChannels;
 import 'keyframe_controls_frb.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
@@ -32,7 +37,12 @@ class ParamMenu {
     this.graphPath,
     this.host,
     this.onCurves = false,
+    this.drive,
   });
+
+  /// What Drive with can wire onto this row. Null on a row that takes no
+  /// driver at all.
+  final DriveRow? drive;
 
   /// [setExpression] works on the picked property's curve, so it's left out
   /// on a row the graph has no curve for.
@@ -69,6 +79,38 @@ class ParamMenu {
   /// The row's path in the Timeline's selection.
   final String? graphPath;
 }
+
+/// The row as a socket on its layer's graph, for Drive with: which instance
+/// and port it is, whether it takes a colour, and the number it shows with
+/// its range, so a drive starts from the value that was there.
+///
+/// A transform row has no socket, so it leaves [instance] null and gives
+/// [wiggle], which writes the wobble as an expression instead.
+class DriveRow {
+  final LayerReference layer;
+  final UuidValue? instance;
+  final String port;
+  final bool colour;
+  /// The number the row shows, read when the menu opens rather than at
+  /// every build.
+  final double Function() current;
+  final double low;
+  final double high;
+  final VoidCallback? wiggle;
+
+  const DriveRow({
+    required this.layer,
+    this.instance,
+    this.port = '',
+    this.colour = false,
+    this.current = _nought,
+    this.low = 0,
+    this.high = 100,
+    this.wiggle,
+  });
+}
+
+double _nought() => 0;
 
 /// Pick out the numbers in pasted text, whichever way they were separated.
 List<double> numbersIn(String text) => [
@@ -225,6 +267,165 @@ List<Widget> paramLastRows(
   ];
 }
 
+/// Drive with ▸: the drivers this row can take, each staged and wired as one
+/// undo step, and Remove driver while a wire feeds the row. Read from the
+/// graph as the menu opens, never in a build.
+List<Widget> _driveRows(
+    BuildContext context, DriveRow drive, VoidCallback done) {
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final app = Provider.of<LumitState>(context, listen: false);
+  void changed() {
+    app.notifyDocumentChanged();
+    ui.model.refresh();
+  }
+
+  // A transform row: the wobble as an expression, and nothing else fits.
+  if (drive.instance == null) {
+    final wiggle = drive.wiggle;
+    if (wiggle == null) return const [];
+    return [
+      SubmenuRow(
+        key: const ValueKey<String>('param-menu-drive'),
+        closeParent: done,
+        submenu: (dismiss) => FloatSurface(
+          width: 150,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _row('param-menu-drive-wiggle', engineLabel('Wiggle'), () {
+                dismiss();
+                wiggle();
+              }),
+            ],
+          ),
+        ),
+        child: MenuLabel(l10n.paramMenuDriveWith),
+      ),
+    ];
+  }
+
+  final BridgeLayerGraph graph;
+  try {
+    graph = drive.layer.getGraph();
+  } catch (_) {
+    return const [];
+  }
+  final node = graphNodeWithId(graph, drive.instance!);
+  // A clip's or a group's effect has no box on the layer's graph.
+  if (node == null) return const [];
+  final target = BridgeInputRef.param(node: node, port: drive.port);
+  final wired = wiredInto(graph, target) != null;
+
+  void stage(DriveKind kind, {UuidValue? listenTo}) {
+    final ok = stageDrive(
+      layer: drive.layer,
+      target: target,
+      kind: kind,
+      current: drive.current(),
+      low: drive.low,
+      high: drive.high,
+      listenTo: listenTo,
+      colour: drive.colour,
+    );
+    if (!ok) {
+      sayDriveRefused(context);
+      return;
+    }
+    changed();
+    if (kind == DriveKind.expression) {
+      editDriveExpression(context, drive.layer, target);
+    }
+  }
+
+  // What a sound driver listens to: the mix, or one layer that can carry
+  // sound.
+  final sources = [
+    for (final e in ui.model.heldLayers)
+      if (const {
+        BridgeLayerKind.footage,
+        BridgeLayerKind.audio,
+        BridgeLayerKind.sequence,
+        BridgeLayerKind.precomp,
+        BridgeLayerKind.bus,
+      }.contains(e.info.kind))
+        (e.info.name, e.layer.internallayerId),
+  ];
+  Widget listening(String key, String label, DriveKind kind, VoidCallback close) =>
+      SubmenuRow(
+        key: ValueKey<String>('param-menu-drive-$key'),
+        closeParent: close,
+        submenu: (dismiss) => FloatSurface(
+          width: 180,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _row('param-menu-drive-$key-comp', l10n.driveWholeComposition, () {
+                dismiss();
+                stage(kind);
+              }),
+              if (sources.isNotEmpty) const MenuDivider(),
+              for (final (name, id) in sources)
+                _row('param-menu-drive-$key-$id', name, () {
+                  dismiss();
+                  stage(kind, listenTo: id);
+                }),
+            ],
+          ),
+        ),
+        child: MenuLabel(label),
+      );
+
+  return [
+    SubmenuRow(
+      key: const ValueKey<String>('param-menu-drive'),
+      closeParent: done,
+      submenu: (dismiss) => FloatSurface(
+        width: 160,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!drive.colour) ...[
+              _row('param-menu-drive-wiggle', engineLabel('Wiggle'), () {
+                dismiss();
+                stage(DriveKind.wiggle);
+              }),
+              listening('audio', engineLabel('Audio level'),
+                  DriveKind.audioLevel, dismiss),
+              listening('beat', engineLabel('Beat trigger'),
+                  DriveKind.beatTrigger, dismiss),
+            ],
+            if (drive.colour)
+              _row('param-menu-drive-cycle', engineLabel('Colour cycle'), () {
+                dismiss();
+                stage(DriveKind.colourCycle);
+              }),
+            _row('param-menu-drive-expression', '${engineLabel('Expression')}…',
+                () {
+              dismiss();
+              stage(DriveKind.expression);
+            }),
+            if (wired) ...[
+              const MenuDivider(),
+              _row('param-menu-drive-remove', l10n.driveRemove, () {
+                dismiss();
+                if (removeDriveFrom(drive.layer, target)) {
+                  changed();
+                } else {
+                  sayDriveRefused(context);
+                }
+              }),
+            ],
+          ],
+        ),
+      ),
+      child: MenuLabel(l10n.paramMenuDriveWith),
+    ),
+  ];
+}
+
 /// The groups in order, with the menu divider between those that have rows.
 List<Widget> menuGroups(List<List<Widget>> groups) {
   final out = <Widget>[];
@@ -332,6 +533,7 @@ List<Widget> _rows(BuildContext context, ParamMenu menu, VoidCallback done) {
           ),
           child: MenuLabel(l10n.setExpression),
         ),
+      if (menu.drive case final drive?) ..._driveRows(context, drive, done),
       if (menu.removeExpression case final remove?)
         _row('param-menu-no-expression', l10n.removeExpression, () {
           done();

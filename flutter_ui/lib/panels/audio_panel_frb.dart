@@ -37,6 +37,7 @@ import '../widgets/controls.dart';
 import 'audio_meters_feed.dart';
 import 'audio_routes_frb.dart';
 import 'clip_fade_popover.dart' show FadeCurveGlyph;
+import 'drive_chain.dart' show stageAudioChain;
 import 'graph_maths.dart' show rationalSeconds;
 import 'keyframe_controls_frb.dart';
 import 'param_row_menu.dart';
@@ -1299,87 +1300,21 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// Audio level's Source row, the entry that reads one named layer. A number
-  /// because a Choice row crosses the bridge as its index.
-  static const int _sourceLayer = 1;
-
-  /// Stage the template: three drivers, three wires, one `setGraph` — so the
-  /// whole gesture is one undo step and the Graph panel shows exactly what
-  /// was built. An occupied target socket is re-routed rather than doubled,
-  /// the same rule a hand-drawn wire follows.
+  /// Stage the template through the shared chain: three drivers, three wires,
+  /// one `setGraph`, so the whole gesture is one undo step and the Graph panel
+  /// shows exactly what was built.
   void _stageChain({
     required BridgeInputRef target,
     required bool inverted,
     UuidValue? listenTo,
   }) {
-    final layer = widget.entry.layer;
-    final BridgeLayerGraph graph;
-    final BridgeEffectInstance level, remap, smooth;
-    try {
-      graph = layer.getGraph();
-      level = layer.newDriver(name: 'audio_level');
-      remap = layer.newDriver(name: 'remap');
-      smooth = layer.newDriver(name: 'smooth');
-    } catch (_) {
-      _sayChainRefused();
-      return;
-    }
-    if (listenTo != null) {
-      level.setValue(id: 'audio', value: BridgeEffectValue.layer(listenTo));
-      // Naming a layer is half of it: the Source row is what says which of the
-      // node's three readings it takes (docs/impl/audio-nodes.md §3), and it
-      // starts on the whole composition.
-      level.setValue(
-          id: 'source', value: const BridgeEffectValue.choice(_sourceLayer));
-    }
-    // A practical loudness window: RMS of finished music rarely clears 0.3,
-    // so the chain reaches its far end on real material rather than only on
-    // full scale.
-    remap.setValue(
-        id: 'in_high',
-        value: const BridgeEffectValue.float(BridgeScalar.static_(0.3)));
-    if (inverted) {
-      // The duck: silence in → 0 dB out, loud in → the floor. −18 dB is a
-      // clearly-under bed that is still audibly there; the Remap is an
-      // ordinary box, retunable on the graph.
-      remap.setValue(
-          id: 'out_low',
-          value: const BridgeEffectValue.float(BridgeScalar.static_(0.0)));
-      remap.setValue(
-          id: 'out_high',
-          value: const BridgeEffectValue.float(BridgeScalar.static_(-18.0)));
-    }
-    BridgeGraphEdge wire(
-            BridgeEffectInstance from, String port, BridgeInputRef to) =>
-        BridgeGraphEdge(
-          from: BridgeOutputRef.driver(node: from.id(), port: port),
-          to: to,
-        );
-    final edges = [...graph.wiring.edges]
-      ..removeWhere((e) => e.to == target)
-      ..addAll([
-        wire(level, 'amplitude',
-            BridgeInputRef.param(node: BridgeNodeRef.driver(remap.id()), port: 'value')),
-        wire(remap, 'value',
-            BridgeInputRef.param(node: BridgeNodeRef.driver(smooth.id()), port: 'value')),
-        wire(smooth, 'value', target),
-      ]);
-    try {
-      layer.setGraph(
-        drivers: [...layer.getGraphDrivers(), level, remap, smooth],
-        wiring: BridgeGraphWiring(
-          edges: edges,
-          // No positions passed for the new boxes: the Graph panel auto-places
-          // what has no entry, exactly as it does for a fresh layer.
-          layout: graph.wiring.layout,
-          exposed: graph.wiring.exposed,
-          groups: graph.wiring.groups,
-          // Ducking wires a driver in; it does not touch whether the
-          // layer's own output is plugged in.
-          outUnwired: graph.wiring.outUnwired,
-        ),
-      );
-    } catch (_) {
+    final ok = stageAudioChain(
+      layer: widget.entry.layer,
+      target: target,
+      inverted: inverted,
+      listenTo: listenTo,
+    );
+    if (!ok) {
       _sayChainRefused();
       return;
     }

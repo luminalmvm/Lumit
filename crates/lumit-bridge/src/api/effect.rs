@@ -1059,7 +1059,7 @@ fn own_slot(
 /// the app down for from inside an FFI call, where a panic unwinds across the
 /// language boundary rather than into a handler, so the samplers below fall
 /// back to the un-driven value instead.
-fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::model::Document>> {
+pub(crate) fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::model::Document>> {
     let projects = PROJECTS.read().ok()?;
     let project = projects.get(&layer.project_id)?.clone();
     drop(projects);

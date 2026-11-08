@@ -63,6 +63,8 @@ import 'graph_panel.dart'
     show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
 import 'levels_display_frb.dart' show LevelsDisplayFrb, levelsChannels;
 import 'placeholder.dart';
+import '../state/dock.dart' show Panel;
+import 'row_filter.dart';
 import 'plane_display_frb.dart';
 import 'roto_display_frb.dart';
 import 'flare_window.dart';
@@ -129,6 +131,23 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   Map<String, ({String driver, BridgePortType type, bool noStream})> _driven =
       const {};
 
+  /// The row filter Ctrl+F opens in the header, the one Effect controls has.
+  final RowFilter _filter = RowFilter();
+
+  void _onSearchRequested() {
+    if (_ui?.searchRequestIsFor(Panel.node) ?? false) _filter.show();
+  }
+
+  void _onFilter() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _filter.addListener(_onFilter);
+  }
+
   /// The node graph box the panel is drawing, when the fronted composition is
   /// a node graph, and the Input declaration behind it. Read at the same three
   /// moments the instance is, and never in a build.
@@ -181,6 +200,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     ui.graphNode.addListener(_reload);
     ui.compGraphNode.addListener(_reload);
     ui.model.addListener(_reload);
+    ui.panelSearchRequest.addListener(_onSearchRequested);
     _reload();
   }
 
@@ -189,11 +209,13 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     _ui?.graphNode.removeListener(_reload);
     _ui?.compGraphNode.removeListener(_reload);
     _ui?.model.removeListener(_reload);
+    _ui?.panelSearchRequest.removeListener(_onSearchRequested);
   }
 
   @override
   void dispose() {
     _unbind();
+    _filter.dispose();
     // A held tick would fire into a panel that is gone.
     _driverPreview.cancel();
     _stack.clear();
@@ -793,6 +815,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             crumb: _compName,
             onCrumb: _toIndex,
             onMenu: (at) => _askMenu(compNodeKey(box.id), at),
+            viewHere: ui.viewerGraphPoint != null,
           ),
           Expanded(child: _boxFace(ui, comp, box)),
         ],
@@ -851,6 +874,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             enabled: picked.info.enabled,
             onEnabled: (on) => _setEnabled(picked, on),
             onMenu: (at) => _askMenu(key, at),
+            // A driver makes no picture to stop at.
+            viewHere: !picked.driver &&
+                (picked.graph
+                    ? ui.viewerGraphPoint != null
+                    : ui.viewerPrefixPoint != null),
           ),
           Expanded(child: _rows(context, ui, picked, layer, playhead)),
         ],
@@ -928,6 +956,13 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               key: ValueKey<String>('node-index-${graphNodeKey(n.node)}'),
               behavior: HitTestBehavior.opaque,
               onTap: () => ui.graphNode.value = n.node,
+              // An effect's rows are a card in Effect controls as well, and
+              // a double-click goes there.
+              onDoubleTap: switch (n.node) {
+                BridgeNodeRef_Effect(:final field0) when _layer != null => () =>
+                    ui.revealEffectCard(_layer!, field0),
+                _ => null,
+              },
               child: Container(
                 height: t.density.laneRow,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -985,8 +1020,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     bool? enabled,
     ValueChanged<bool>? onEnabled,
     void Function(Offset at)? onMenu,
+    bool viewHere = false,
   }) {
     final t = ThemeScope.of(context).theme;
+    final ui = _ui;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onSecondaryTapUp:
@@ -1028,6 +1065,14 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 child: Text('›', style: t.body.copyWith(color: t.textMuted)),
               ),
             ],
+            // The row filter's well takes the name's place while it is up.
+            if (_filter.open)
+              Expanded(
+                flex: 2,
+                child: rowFilterWell(context, _filter,
+                    key: const ValueKey('node-filter')),
+              )
+            else
             Expanded(
               flex: 2,
               child: Text(
@@ -1043,6 +1088,26 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 key: const ValueKey('node-driven-count'),
                 style: t.kicker,
               ),
+            // The Viewer's "at" chip from here: the picture stopping at this
+            // box. The accent says it is in force, as the chip does.
+            if (viewHere && ui != null) ...[
+              const SizedBox(width: 6),
+              ValueListenableBuilder<bool>(
+                valueListenable: ui.atSelectedEffect,
+                builder: (context, on, _) => LumitTooltip(
+                  message: l10n.tipViewerAtEffect,
+                  child: HouseButton(
+                    key: const ValueKey('node-view-here'),
+                    small: true,
+                    frameless: true,
+                    padding: const EdgeInsets.all(1),
+                    onPressed: () => ui.setAtSelectedEffect(!on),
+                    child: glyph.LumitIcon(LumitIcons.visible,
+                        size: iconSize, colour: on ? t.accent : t.textMuted),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1066,8 +1131,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // nested Node graph box's Input rows arrive that way, as they do in
     // Effect controls.
     final params = [
-      ...cachedListParameters(picked.info.name),
-      ...picked.info.derivedParams,
+      for (final p in [
+        ...cachedListParameters(picked.info.name),
+        ...picked.info.derivedParams,
+      ])
+        if (_filter.matches(engineLabel(p.label))) p,
     ];
 
     // **A point is one row, here as everywhere**. An `_x`/`_y` pair of

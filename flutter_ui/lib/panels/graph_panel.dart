@@ -1364,7 +1364,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     // The Node panel's index of boxes asks for a pick the same way the
     // canvas publishes one.
     ui.graphNode.addListener(_onGraphNodeAsked);
+    ui.frameBoxRequest.addListener(_onFrameAsked);
     ui.graphBoxMenuAsk.addListener(_onBoxMenuAsked);
+    // A reveal that opened this panel asked before it was listening: the
+    // pick and the framing are answered once the canvas has drawn.
+    if (ui.graphNode.value != null || ui.frameBoxRequest.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onGraphNodeAsked();
+        _onFrameAsked();
+      });
+    }
     // **Ctrl+Space with this panel focused adds to the graph**. The
     // shell's console applies to the selected layer; the same key over this
     // canvas opens the same popover wearing the canvas's own list. Chained the
@@ -1481,6 +1490,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     _ui?.selectAllRequest.removeListener(_onSelectAllRequested);
     _ui?.graphNode.removeListener(_onGraphNodeAsked);
     _ui?.graphBoxMenuAsk.removeListener(_onBoxMenuAsked);
+    _ui?.frameBoxRequest.removeListener(_onFrameAsked);
     if (_ui?.deleteClaim == _deleteClaim) {
       _ui!.deleteClaim = _priorDeleteClaim;
     }
@@ -2284,24 +2294,34 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         final id? => () => _reveal(_layer!, id),
         null => null,
       },
+      // The picture stops at an effect box or the Source; a driver and the
+      // Layer out make no point to stop at. The right-click has picked the box,
+      // so the chip's point is this one.
+      viewHere: ui.viewerPrefixPoint == null ? null : ui.atSelectedEffect.value,
+      onViewHere: ui.viewerPrefixPoint == null
+          ? null
+          : () => ui.setAtSelectedEffect(!ui.atSelectedEffect.value),
       onDisconnectAll: wired ? _disconnectPicked : null,
       onDelete: derived ? null : _deleteSelected,
     );
   }
 
-  /// Reveal in Effect controls: the panel is opened where the layout has it
-  /// shut, fronted, and handed the effect to pick and scroll to.
-  void _reveal(LayerReference layer, UuidValue effect) {
-    final ui = _ui;
-    if (ui == null) return;
-    if (!panelVisible(ui.split, Panel.effectControls)) {
-      setPanelVisible(ui.split, Panel.effectControls, true);
-      ui.workspace.touch();
-    }
-    ui.frontPanel(Panel.effectControls);
-    ui.setEffectSelection(layer, [effect]);
-    ui.revealEffect.value = effect;
+  /// Reveal in Effect controls: the shell opens the panel, fronts it and
+  /// hands it the effect to pick and scroll to.
+  void _reveal(LayerReference layer, UuidValue effect) =>
+      _ui?.revealEffectCard(layer, effect);
+
+  /// An effect's Reveal in node graph: the box is brought to the middle of the
+  /// canvas on the next layout, at the zoom in force.
+  void _onFrameAsked() {
+    final node = _ui?.frameBoxRequest.value;
+    if (!mounted || node == null || _showsCompGraph) return;
+    _ui!.frameBoxRequest.value = null;
+    setState(() => _frameKey = graphNodeKey(node));
   }
+
+  /// The box the next layout centres on, or null.
+  String? _frameKey;
 
   /// A socket's menu: its wire off, and the box's unused sockets shown or
   /// hidden. The chain's wires are the effect list and are not stored, so
@@ -3536,6 +3556,23 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     _viewport = size;
     final cut = GraphCutFade.cuts(
         size, [for (final b in layout.boxes) b.rect], _pan, _zoom);
+    if (_frameKey case final key? when layout.byKey.containsKey(key)) {
+      _frameKey = null;
+      _frameNext = false;
+      final box = layout.byKey[key]!.rect;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // At rest, not at the zoom a framed-all graph left: the box is what
+        // was asked for, readable.
+        // A quarter in from the left, with the box's chain running on to the
+        // right: a box's card is wider than its collapsed face, so centring
+        // the card pushed the face to the edge.
+        setState(() {
+          _zoom = 1;
+          _pan = Offset(size.width / 4 - box.left, size.height / 2 - box.center.dy);
+        });
+      });
+    }
     if (_frameNext && layout.boxes.isNotEmpty) {
       _frameNext = false;
       // A graph that fits at rest opens at rest; one that spills past the

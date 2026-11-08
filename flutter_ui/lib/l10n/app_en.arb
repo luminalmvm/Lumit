@@ -15144,6 +15144,10 @@
   "@graphOpenComp": {
     "description": "Node graph canvas: right-click row on a Read box of a composition that opens that composition, as a double-click does."
   },
+  "graphViewHere": "View here",
+  "@graphViewHere": {
+    "description": "Right-click row on a box of the node graph: the Viewer shows the picture with this layer's stack stopping at this box, as the chip over the picture does. Ticked while in force; a second press shows the finished picture again."
+  },
   "graphRevealEffect": "Reveal in Effect controls",
   "@graphRevealEffect": {
     "description": "Graph panel: right-click row on an effect box that fronts the Effect controls panel with that effect picked."
@@ -18860,6 +18864,10 @@
   "@fxMenuMove": {
     "description": "Effect heading's right-click menu: the submenu that moves the effect up, down, to the top or to the bottom of the stack."
   },
+  "fxMenuRevealGraph": "Reveal in node graph",
+  "@fxMenuRevealGraph": {
+    "description": "Right-click menu on an effect's heading, in Effect controls and the Timeline: fronts the Graph panel with this effect's box picked and in view. The pair of the box menu's Reveal in Effect controls."
+  },
   "fxMenuManual": "Manual page",
   "@fxMenuManual": {
     "description": "Effect heading's right-click menu: opens this effect's page in the online manual."
@@ -18907,6 +18915,26 @@
   "paramMenuRevealInGraph": "Reveal in graph",
   "@paramMenuRevealInGraph": {
     "description": "Right-click menu on a property row: pick the property in the Timeline and show its curve in the graph."
+  },
+  "tipLinkProperty": "Drag onto the property to follow",
+  "@tipLinkProperty": {
+    "description": "Tooltip of the small link mark at the end of a property row (shown on hover) and in the expression editor's footer: dragging it onto another property row writes an expression that reads that property."
+  },
+  "paramMenuDriveWith": "Drive with",
+  "@paramMenuDriveWith": {
+    "description": "Right-click menu on a property row: the submenu that wires a driver (Wiggle, Audio level, Beat trigger, Colour cycle, Expression) onto the row's socket in the node graph, as one undo step."
+  },
+  "driveWholeComposition": "Whole composition",
+  "@driveWholeComposition": {
+    "description": "Drive with ▸ Audio level or Beat trigger: the first entry of the list of what to listen to, the mix of every layer, followed by one entry per layer."
+  },
+  "driveRemove": "Remove driver",
+  "@driveRemove": {
+    "description": "Drive with submenu on a row a wire feeds: takes the wire off and deletes the driver boxes that fed only it."
+  },
+  "driveNotBuilt": "The driver could not be wired.",
+  "@driveNotBuilt": {
+    "description": "Notice when Drive with fails: the engine refused the new driver boxes or their wires, and nothing was written."
   },
   "curveAddPoint": "Add point",
   "@curveAddPoint": {

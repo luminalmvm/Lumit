@@ -18,6 +18,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../state/expression_language.dart' show PropertyRef;
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -25,6 +26,7 @@ import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
 import 'layer_fold_frb.dart' show hasFlow;
 import 'light_rows_frb.dart' show feedsEnvironment;
+import 'property_link.dart' show LinkDrop;
 import 'timeline_extras_frb.dart';
 import 'timeline_layer_menu_frb.dart';
 import 'timeline_timings.dart';
@@ -942,7 +944,11 @@ class _OutlineRowState extends State<OutlineRow> {
         onCancel: _cancelRename,
       );
     }
-    return GestureDetector(
+    // A property link dropped on the name writes the layer alone.
+    return LinkDrop(
+      ref: (link) => PropertyRef.layer(info.name,
+          sameLayer: link.layer == layer.internallayerId),
+      child: GestureDetector(
       key: ValueKey<String>('tl-name-$id'),
       behavior: HitTestBehavior.opaque,
       onDoubleTap: _openLayer,
@@ -968,6 +974,7 @@ class _OutlineRowState extends State<OutlineRow> {
             ],
           ]),
         ),
+      ),
       ),
     );
   }

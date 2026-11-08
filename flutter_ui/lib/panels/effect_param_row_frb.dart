@@ -27,7 +27,8 @@ import 'package:lumit_flutter/src/rust/api/colour.dart'
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
-import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
+import 'package:lumit_flutter/src/rust/api/graph.dart'
+    show BridgeInputRef, BridgeNodeRef, BridgeOutputRef_Driver, BridgePortType;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/services.dart' show HardwareKeyboard, rootBundle;
@@ -35,6 +36,8 @@ import 'package:flutter/services.dart' show HardwareKeyboard, rootBundle;
 import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
+import '../state/dock.dart' show Panel;
+import 'drive_chain.dart' show driveRange, graphNodeWithId, wiredInto;
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/comp_model.dart';
@@ -58,6 +61,7 @@ import 'graph_panel.dart' show portColour;
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart' show effectPath;
 import 'param_row_menu.dart';
+import 'property_link.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 
 /// Where a **logarithmic** slider's thumb sits, and what it is worth there.
@@ -430,7 +434,9 @@ class EffectParamRowFrb extends StatelessWidget {
       // same fixed height ([fxRowHeight]), and padding on top of that would
       // eat into the room the controls sit in. A row with riders may grow, so
       // they have a second line to drop onto when the panel is narrow.
-      return ParamRowMenu(
+      return LinkDrop(
+        ref: _linkRef,
+        child: ParamRowMenu(
         menu: menu,
         child: fxTwoColumnRow(
           context: context,
@@ -439,6 +445,7 @@ class EffectParamRowFrb extends StatelessWidget {
           control: control,
           grows: riders.isNotEmpty,
           rowEnd: driven == null ? null : _drivenWord(t, id),
+          trailing: _linkMark(scalars),
           // The keyframe strip's lane: the same channels and write the
           // stopwatch has, so a key moved there is committed as one added here.
           lane: scalars == null || driven != null
@@ -451,6 +458,7 @@ class EffectParamRowFrb extends StatelessWidget {
                           r: next[0], g: next[1], b: next[2], a: next[3]))
                       : BridgeEffectValue.float(next.single)),
                 ),
+        ),
         ),
       );
     }
@@ -558,7 +566,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// the two it is.
   Widget _drivenWord(LumitTheme t, UuidValue id) {
     final it = driven!;
-    return Text(
+    final word = Text(
       it.noStream ? l10n.graphNoStream : l10n.graphDriven,
       key: it.noStream
           ? ValueKey<String>('fx-no-stream-$id-${param.id}')
@@ -569,6 +577,41 @@ class EffectParamRowFrb extends StatelessWidget {
           letterSpacing: 0.54,
           color: it.noStream ? t.warning : portColour(t, it.type)),
     );
+    // The word is the way to the driver: a click fronts the Node panel on
+    // the box feeding this row, read from the graph at the click.
+    return Builder(
+      builder: (context) => HoverMark(
+        cursor: SystemMouseCursors.click,
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey<String>('fx-driven-word-$id-${param.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _showDriver(context),
+          // A step off the value's unit rider, which ends against it.
+          child: Padding(
+            padding: const EdgeInsetsDirectional.only(start: 6),
+            child: Opacity(opacity: 0.8 + 0.2 * lit, child: word),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDriver(BuildContext context) {
+    final layer = currentLayer;
+    if (layer == null) return;
+    try {
+      final graph = layer.getGraph();
+      final node = graphNodeWithId(graph, effectId);
+      if (node == null) return;
+      final from =
+          wiredInto(graph, BridgeInputRef.param(node: node, port: param.id));
+      if (from case BridgeOutputRef_Driver(node: final driver)) {
+        Provider.of<LumitUiState>(context, listen: false)
+            .showNodeIn(Panel.node, layer, BridgeNodeRef.driver(driver));
+      }
+    } catch (_) {
+      // The layer has gone under the row; there is nothing to show.
+    }
   }
 
   /// What this row's right-click menu offers.
@@ -630,6 +673,22 @@ class EffectParamRowFrb extends StatelessWidget {
           : rowPath ??
               ParamRowPath.of(context) ??
               '${effectPath('$ownerLayerId', '$effectId')}/${param.id}',
+      // The row as a socket, for Drive with. The range decides how far a
+      // drive moves it, and the number showing is where it starts from.
+      drive: scalars == null || currentLayer == null
+          ? null
+          : () {
+              final (low, high) = driveRange(param.kind);
+              return DriveRow(
+                layer: currentLayer!,
+                instance: effectId,
+                port: param.id,
+                colour: !float,
+                current: () => float && driven == null ? read(scalars.first) : 0,
+                low: low,
+                high: high,
+              );
+            }(),
     );
   }
 
@@ -669,6 +728,50 @@ class EffectParamRowFrb extends StatelessWidget {
       };
     }
     return null;
+  }
+
+  /// What this row is to an expression written elsewhere: the effect on the
+  /// layer's stack by its heading name, and the row by its label. A driver's
+  /// row and a clip's effect have no name an expression can reach.
+  PropertyRef? _linkRef(PropertyLink link) {
+    final entry = ownerLayers
+        .where((e) => e.layer.internallayerId == ownerLayerId)
+        .firstOrNull;
+    if (entry == null) return null;
+    for (final fx in entry.info.effects) {
+      if (fx.id == effectId) {
+        return PropertyRef.row(
+          entry.info.name,
+          fx.customName ?? effectLabelOf(fx.name),
+          param.label,
+          sameLayer: link.layer == ownerLayerId,
+        );
+      }
+    }
+    return null;
+  }
+
+  /// The mark a link is dragged from, on a row that can hold an expression:
+  /// one number, not yet driven by a wire or an expression.
+  Widget? _linkMark(List<BridgeScalar>? scalars) {
+    if (scalars == null ||
+        scalars.length != 1 ||
+        driven != null ||
+        scalars.first is BridgeScalar_Expression ||
+        param.kind is BridgeParamKind_Colour ||
+        currentLayer == null) {
+      return null;
+    }
+    return LinkMark(
+      name: engineLabel(param.label),
+      link: PropertyLink(
+        layer: ownerLayerId,
+        write: (text, language) {
+          noteSetExpression(select: false);
+          _set(BridgeEffectValue.float(BridgeScalar.expression(text, language)));
+        },
+      ),
+    );
   }
 
   /// The row's reset arrow, there only while the value differs from what the
@@ -3707,8 +3810,11 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
     _fault = _faultNow();
     // Set expression was just chosen on this row, so the editor opens with it.
     if (tookSetExpression()) {
+      // A seeded number opens selected; a dropped reference keeps the caret
+      // after it.
+      final select = setExpressionSelects;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _edit(fresh: true);
+        if (mounted) _edit(fresh: select);
       });
     }
   }

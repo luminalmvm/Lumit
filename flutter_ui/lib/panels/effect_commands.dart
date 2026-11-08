@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/model.dart'
     show listMaterialPresets, materialPreset;
@@ -548,6 +549,14 @@ class EffectCommands {
                           .postNotice(l10n.couldNotOpenLink(url), error: true);
                     }
                   }, ticked: false),
+              ],
+              // The box on the layer's graph is this effect seen the other
+              // way; a style, a clip's or a group's effect has none.
+              [
+                if (onStack && !style && !material && !inputs)
+                  row('reveal-graph', l10n.fxMenuRevealGraph,
+                      () => ui.revealBox(layer, BridgeNodeRef.effect(info.id)),
+                      ticked: false),
               ],
               [
                 if (onFoldAll case final fold?) ...[

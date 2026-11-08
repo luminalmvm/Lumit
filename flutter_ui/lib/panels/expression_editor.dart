@@ -19,6 +19,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
@@ -27,6 +28,7 @@ import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show ExpressionTextEditingController;
 import 'graph_channels.dart';
 import 'graph_edits.dart';
+import 'property_link.dart';
 
 /// The narrowest the editor opens, however small the thing it opens over.
 const double _minWidth = 420;
@@ -60,10 +62,14 @@ Future<void> showExpressionEditor({
   await showLumitPopup<void>(
     context: context,
     position: over.topLeft,
+    // The footer's link mark is dragged onto rows behind the editor, so the
+    // rows must still feel the pointer while it is up.
+    hoverThrough: true,
     builder: (close) => _ExpressionEditor(
       width: math.max(over.width, _minWidth),
       value: value,
       fresh: fresh,
+      layerId: layer.internallayerId,
       sample: (scalar) => sampleScalarWithContext(
           scalar: scalar,
           time: time,
@@ -123,10 +129,14 @@ class _ExpressionEditor extends StatefulWidget {
   final VoidCallback onCancel;
   final VoidCallback onRemove;
 
+  /// The layer the expression is on, for the short form of a reference.
+  final UuidValue layerId;
+
   const _ExpressionEditor({
     required this.width,
     required this.value,
     required this.fresh,
+    required this.layerId,
     required this.sample,
     required this.fault,
     required this.onDraft,
@@ -166,6 +176,21 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
 
   /// The controller also speaks when only the caret moved, which is no change.
   void _changed() => _write(BridgeScalar_Expression(_text.text, _draft.field1));
+
+  /// A reference dropped from the footer's mark: in at the caret, or in place
+  /// of what is selected, with the caret after it.
+  void _insert(String reference) {
+    final v = _text.value;
+    final sel = v.selection.isValid
+        ? v.selection
+        : TextSelection.collapsed(offset: v.text.length);
+    final text = v.text.replaceRange(sel.start, sel.end, reference);
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: sel.start + reference.length),
+    );
+    _focus.requestFocus();
+  }
 
   void _write(BridgeScalar_Expression next) {
     if (next == _draft) return;
@@ -240,6 +265,18 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
                             softWrap: false,
                             overflow: TextOverflow.ellipsis,
                           ),
+                  ),
+                  // Dragged onto a property row, the reference lands at
+                  // the caret.
+                  LinkMark(
+                    key: const ValueKey('expression-editor-link'),
+                    always: true,
+                    name: l10n.setExpression,
+                    link: PropertyLink(
+                      layer: widget.layerId,
+                      language: _draft.field1,
+                      insert: _insert,
+                    ),
                   ),
                   HouseButton(
                     key: const ValueKey('expression-editor-remove'),

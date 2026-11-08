@@ -1651,6 +1651,15 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       canSaveGroup: canSaveGroup,
       onUngroup: ungroupPicked,
       canUngroup: groups.any((g) => g.members.any(picked.contains)),
+      // Every box that makes a picture but the Output, which is the picture
+      // the Viewer shows anyway. The right-click has picked the box, so the
+      // chip's point is this one.
+      viewHere: output || ui.viewerGraphPoint == null
+          ? null
+          : ui.atSelectedEffect.value,
+      onViewHere: output || ui.viewerGraphPoint == null
+          ? null
+          : () => ui.setAtSelectedEffect(!ui.atSelectedEffect.value),
       onDisconnectAll: wired ? _disconnectPicked : null,
       onDelete: output && picked.length == 1 ? null : _deleteSelected,
     );

@@ -896,6 +896,7 @@ Widget fxTwoColumnRow({
   bool grows = false,
   Widget? lane,
   Widget? rowEnd,
+  Widget? trailing,
 }) {
   final height = fxRowHeight(ThemeScope.of(context).theme);
   final strip = FxKeyStripScope.widthOf(context);
@@ -945,6 +946,9 @@ Widget fxTwoColumnRow({
                   ),
                 ),
                 if (end != null) end,
+                // The row's last thing, after the key navigator: the link
+                // mark, laid out always and shown on hover.
+                if (trailing != null) trailing,
               ],
             ),
           ),

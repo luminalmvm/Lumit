@@ -30,6 +30,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show toggleKeysAtPlayhead;
 import '../shell/menu_bar_frb.dart' show MenuEntry;
@@ -40,6 +41,7 @@ import '../state/timeline_columns.dart';
 import '../widgets/angle_dial.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'drive_chain.dart' show wiggleExpression;
 import 'graph_editor_frb.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
@@ -48,6 +50,8 @@ import 'layer_fold_frb.dart' show transformGroupPath;
 import 'light_rows_frb.dart';
 import 'param_row_menu.dart';
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
+import '../state/expression_language.dart' show PropertyRef;
+import 'property_link.dart';
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
 /// up down the card, which is what makes a stack of numbers readable.
@@ -523,7 +527,12 @@ class TransformRowsFrb extends StatelessWidget {
     this.rowHeight,
     this.rowPadding = const EdgeInsets.symmetric(vertical: 2),
     this.twoColumn = false,
+    this.filter = '',
   });
+
+  /// The panel's row filter, lowercase: only the groups whose name holds it
+  /// are drawn. Empty draws them all.
+  final String filter;
 
   /// One widget per transform row — for a caller that has to put each row in its
   /// own chrome (the Effect controls panel's hairline-separated rows). A
@@ -565,6 +574,10 @@ class TransformRowsFrb extends StatelessWidget {
         twoNode: twoNode,
         light: light,
         material: material)) {
+      if (filter.isNotEmpty &&
+          !engineLabel(group.label).toLowerCase().contains(filter)) {
+        continue;
+      }
       if (group.section != last) {
         last = group.section;
         options(group.section);
@@ -882,11 +895,15 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
             ],
           ],
         ),
+        trailing: _linkMark(group, transform),
       );
       final height = widget.rowHeight;
-      return ParamRowMenu(
-        menu: menu,
-        child: height == null ? row : SizedBox(height: height, child: row),
+      return LinkDrop(
+        ref: (link) => _linkRef(link, group, cells),
+        child: ParamRowMenu(
+          menu: menu,
+          child: height == null ? row : SizedBox(height: height, child: row),
+        ),
       );
     }
 
@@ -1405,6 +1422,34 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           ? transformGroupPath(
               widget.layer.internallayerId.toString(), group)
           : null,
+      // No socket on a transform, so Wiggle is written as an expression on
+      // every axis of the row, as one op. A tenth of a turn for a rotation, a
+      // tenth of the row's own range otherwise.
+      drive: group.colour || expression.isNotEmpty
+          ? null
+          : DriveRow(
+              layer: widget.layer,
+              wiggle: () {
+                final language = newExpressionLanguage(context);
+                final amount = _turnsIn3d(group) ||
+                        props.first == BridgeTransformProp.rotation
+                    ? 36.0
+                    : props.first == BridgeTransformProp.opacity ||
+                            props.first == BridgeTransformProp.scaleX
+                        ? 10.0
+                        : 50.0;
+                _throttle.cancel();
+                _clearLive();
+                widget.layer.setTransforms(props: props, values: [
+                  for (final (i, p) in props.indexed)
+                    BridgeScalar.expression(
+                        wiggleExpression(language, shown(p), amount, i),
+                        language),
+                ]);
+                setState(() => _staged = null);
+                widget.onChanged();
+              },
+            ),
     );
   }
 
@@ -1456,6 +1501,47 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         child: MenuLabel(l10n.transformAfterEffectsOrder, ticked: on),
       ),
     ];
+  }
+
+  /// What this row is to an expression written elsewhere: one property, or
+  /// the whole pair for a row of two.
+  PropertyRef? _linkRef(
+      PropertyLink link, TransformGroup group, List<TransformAxis> cells) {
+    if (group.colour) return null;
+    final name = _ui.model.byId(widget.layer.internallayerId)?.info.name;
+    if (name == null) return null;
+    return PropertyRef.transform(
+      name,
+      cells.first.prop,
+      whole: cells.length > 1,
+      sameLayer: link.layer == widget.layer.internallayerId,
+    );
+  }
+
+  /// The mark a link is dragged from: the reference lands on every axis of
+  /// the row as one op, and the editor opens on the first.
+  Widget? _linkMark(TransformGroup group, BridgeTransform transform) {
+    final props = [for (final axis in group.axes) axis.prop];
+    if (group.colour ||
+        props.any((p) => read(transform, p) is BridgeScalar_Expression)) {
+      return null;
+    }
+    return LinkMark(
+      name: engineLabel(group.label),
+      link: PropertyLink(
+        layer: widget.layer.internallayerId,
+        write: (text, language) {
+          _throttle.cancel();
+          _clearLive();
+          noteSetExpression(select: false);
+          widget.layer.setTransforms(props: props, values: [
+            for (final _ in props) BridgeScalar.expression(text, language),
+          ]);
+          setState(() => _staged = null);
+          widget.onChanged();
+        },
+      ),
+    );
   }
 
   void _commitExpression(BridgeTransformProp prop, BridgeScalar value) {

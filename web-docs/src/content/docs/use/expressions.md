@@ -43,6 +43,14 @@ Transform properties and effect parameters both take one. An effect's point take
 each half, and is then drawn as two rows. A colour does not yet, and the menu does not offer
 it there.
 
+## Follow another property
+
+Hover a property row and drag the link mark at its end onto another property row, in any
+panel. The editor opens on the dragged row with a reference to the dropped one, and the
+caret after it. A reference Rhai has no word for, an effect's row, is written in
+JavaScript. A drop on a layer's name in the Timeline writes the layer alone. The editor's
+footer has the same mark: dragged onto a row, the reference lands at the caret.
+
 ## Choose the language
 
 An expression is written in **JavaScript** or in **Rhai**, and each one keeps its own

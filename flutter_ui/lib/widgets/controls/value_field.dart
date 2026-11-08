@@ -134,10 +134,19 @@ const double wellTextSize = 11;
 const double barValueTextSize = 10;
 
 DateTime? _setExpressionAt;
+bool _setExpressionSelects = true;
 
 /// Set expression was chosen from a value's menu. The row the value turns
-/// into asks [tookSetExpression], and opens its editor when it was.
-void noteSetExpression() => _setExpressionAt = DateTime.now();
+/// into asks [tookSetExpression], and opens its editor when it was. A seeded
+/// number opens selected, so the first key replaces it; a dropped reference
+/// keeps the caret after it, which is [select] false.
+void noteSetExpression({bool select = true}) {
+  _setExpressionAt = DateTime.now();
+  _setExpressionSelects = select;
+}
+
+/// Whether the editor [tookSetExpression] opens should select its text.
+bool get setExpressionSelects => _setExpressionSelects;
 
 /// Whether Set expression was chosen a moment ago. It answers yes once.
 bool tookSetExpression() {

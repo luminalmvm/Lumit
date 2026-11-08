@@ -641,13 +641,16 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<int> panelSearchRequest = ValueNotifier(0);
 
   /// Ask the focused panel for its search box, and say whether there is one to
-  /// ask for. Only three panels have one (docs/07 §15); anywhere else the chord
-  /// is left alone rather than swallowed.
+  /// ask for. Three panels have one (docs/07 §15) and two more open a row
+  /// filter on the chord; anywhere else it is left alone rather than
+  /// swallowed.
   bool requestPanelSearch() {
     final panel = activePanel;
     if (panel != Panel.project &&
         panel != Panel.effectsAndPresets &&
-        panel != Panel.expressions) {
+        panel != Panel.expressions &&
+        panel != Panel.effectControls &&
+        panel != Panel.node) {
       return false;
     }
     panelSearchRequest.value++;
@@ -1867,6 +1870,46 @@ class LumitUiState extends ChangeNotifier {
   /// An effect the Effect controls panel is asked to scroll into view, by a
   /// box's Reveal in Effect controls. The panel clears it once it has.
   final ValueNotifier<UuidValue?> revealEffect = ValueNotifier(null);
+
+  /// Reveal in Effect controls: the panel is opened where the layout has it
+  /// shut, fronted, and handed the effect to pick and scroll to.
+  void revealEffectCard(LayerReference layer, UuidValue effect) {
+    if (!panelVisible(split, Panel.effectControls)) {
+      setPanelVisible(split, Panel.effectControls, true);
+      workspace.touch();
+    }
+    frontPanel(Panel.effectControls);
+    setEffectSelection(layer, [effect]);
+    revealEffect.value = effect;
+  }
+
+  /// A box the Graph panel is asked to bring into view, by an effect's Reveal
+  /// in node graph. The panel clears it once it has.
+  final ValueNotifier<BridgeNodeRef?> frameBoxRequest = ValueNotifier(null);
+
+  /// Reveal in node graph: the Graph panel is opened where the layout has it
+  /// shut, fronted on [layer], and the box is picked and brought into view.
+  void revealBox(LayerReference layer, BridgeNodeRef node) {
+    showNodeIn(Panel.graph, layer, node);
+    frameBoxRequest.value = null;
+    frameBoxRequest.value = node;
+  }
+
+  /// Front [panel] on [layer] with [node] picked: the Node panel for a driven
+  /// row's driver, the Graph panel for a box.
+  void showNodeIn(Panel panel, LayerReference layer, BridgeNodeRef node) {
+    if (!panelVisible(split, panel)) {
+      setPanelVisible(split, panel, true);
+      workspace.touch();
+    }
+    frontPanel(panel);
+    if (selectedLayer.value?.internallayerId != layer.internallayerId) {
+      setSelection([layer]);
+    }
+    // Set twice so a listener hears it even when the same box is asked for.
+    graphNode.value = null;
+    graphNode.value = node;
+  }
 
   /// The Custom shader whose **inner graph** the Graph panel is showing
   /// (docs/impl/custom-shader.md §4.2), or null when it shows the

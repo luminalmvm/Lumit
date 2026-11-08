@@ -100,6 +100,7 @@ import '../state/drag_payloads.dart';
 import 'effect_commands.dart';
 import 'param_row_menu.dart' show menuGroups;
 import 'placeholder.dart';
+import 'row_filter.dart';
 import 'flow_rows_frb.dart';
 import 'source_rows_frb.dart';
 import 'text_animator_rows_frb.dart';
@@ -440,9 +441,25 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   Map<String, ({String label, BridgeOutputRef? from})> _points = const {};
   LumitUiState? _boundUi;
 
+  /// The row filter Ctrl+F opens in the header. Its text narrows every card
+  /// to the rows whose names hold it.
+  final RowFilter _filter = RowFilter();
+
+  /// `Ctrl+F` over this panel: the filter well comes up with the cursor in it.
+  void _onSearchRequested() {
+    if (_boundUi?.searchRequestIsFor(Panel.effectControls) ?? false) {
+      _filter.show();
+    }
+  }
+
+  void _onFilter() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    _filter.addListener(_onFilter);
     // `Enter` renames the selected effect — registered on the
     // hardware keyboard like every panel command; stands down for modals,
     // focused fields, and whenever this panel is not the active one.
@@ -531,6 +548,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     ui.selectedLayer.addListener(_readDriven);
     ui.model.addListener(_readDriven);
     ui.revealEffect.addListener(_onReveal);
+    ui.panelSearchRequest.addListener(_onSearchRequested);
     // `Ctrl+A` here means every effect on the layer, not every layer
     // in the composition — the shell routes the chord to the focused panel.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
@@ -573,6 +591,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     _boundUi?.selectedLayer.removeListener(_readDriven);
     _boundUi?.model.removeListener(_readDriven);
     _boundUi?.revealEffect.removeListener(_onReveal);
+    _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
     if (_boundUi?.deleteClaim == _deleteClaim) {
       _boundUi!.deleteClaim = _priorDeleteClaim;
@@ -695,6 +714,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   @override
   void dispose() {
     _share?.roster.removeListener(_onRoster);
+    _filter.dispose();
     _unbindDriven();
     HardwareKeyboard.instance.removeHandler(_onKey);
     super.dispose();
@@ -1322,6 +1342,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           layerName: info.name,
           onAdd: addToLayer,
           onMenu: stackMenu,
+          filter: _filter.open
+              ? rowFilterWell(context, _filter, key: const ValueKey('fx-filter'))
+              : null,
         ),
         Expanded(
           // The keyframe strip beside the rows, spanning the layer's own in
@@ -1369,6 +1392,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // What the layer is made of comes before where it sits: a
                       // text layer's words are the first thing you want when
                       // you select one.
+                      // The filter names rows, and Source, Flow and the
+                      // Animators have none to name: they step aside while
+                      // it holds text.
+                      if (_filter.needle.isEmpty)
                       SourceRowsFrb(
                         key: ValueKey<String>(
                             'src-card-${layer.internallayerId}'),
@@ -1381,6 +1408,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // sits, because that is what it is: how the source is
                       // *sampled*. It shows itself only when the layer's
                       // flow switch is on.
+                      if (_filter.needle.isEmpty)
                       _AtPlayhead(
                         builder: (context, at) => FlowRowsFrb(
                           key: ValueKey<String>(
@@ -1418,6 +1446,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         onChanged: ui.model.refresh,
                         open: _isOpen('transform'),
                         onToggle: () => _toggle('transform'),
+                        filter: _filter.needle,
                       ),
                     ],
                     // **The letters, one at a time**, and outside the
@@ -1430,6 +1459,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // layer that is not a Text layer has no letters to animate.
                     // Its rows listen to the playhead one at a time, so the card
                     // itself does not have to.
+                    if (_filter.needle.isEmpty)
                     TextAnimatorRowsFrb(
                       key: ValueKey<String>(
                           'anim-card-${layer.internallayerId}'),
@@ -1708,6 +1738,22 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
     final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
+    // The row filter: a heading that holds the text keeps every row, a card
+    // with no row that does is left out altogether.
+    final needle = _filter.needle;
+    var filter = '';
+    if (needle.isNotEmpty) {
+      // The heading's name is looked up only while filtering: this runs for
+      // every card on every selection, and the catalogue walk is not free.
+      final heading = (fx.customName ?? graphName ?? effectLabelOf(fx.name))
+          .toLowerCase();
+      filter = heading.contains(needle) ? '' : needle;
+      if (filter.isNotEmpty &&
+          !params.any(
+              (p) => engineLabel(p.label).toLowerCase().contains(filter))) {
+        return const SizedBox.shrink();
+      }
+    }
     // An LFX effect with a page of its own, which the heading opens.
     final interface =
         !fixed && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
@@ -1747,6 +1793,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         _folds,
         _driven,
         _points,
+        filter,
         layer.internallayerId,
         comp.internalid,
         ui.workspace.themedEffectGraphs,
@@ -1767,7 +1814,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         style: style,
         inputs: inputs,
         material: material,
-        open: open,
+        // A card narrowed to the rows that match shows them, shut or not.
+        open: open || filter.isNotEmpty,
+        filter: filter,
         drawsRows: drawsRows,
         onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
         onFoldAll: (open) => _foldAll(
@@ -2125,11 +2174,15 @@ class _Header extends StatelessWidget {
 
   /// A right-click anywhere on the header, the add button included.
   final ValueChanged<Offset> onMenu;
+
+  /// The row filter's well, in the name's place while it is up.
+  final Widget? filter;
   const _Header({
     required this.layerName,
     this.clipOn,
     required this.onAdd,
     required this.onMenu,
+    this.filter,
   });
 
   @override
@@ -2155,6 +2208,9 @@ class _Header extends StatelessWidget {
           child: lumitIcon(LumitIcon.fx, size: iconSize, color: t.textMuted),
         ),
         const SizedBox(width: 6),
+        if (filter case final well?)
+          Expanded(child: well)
+        else
         Expanded(
           child: Row(
             children: [
@@ -2472,10 +2528,15 @@ class _EffectSection extends StatelessWidget {
   final double curvePlotSize;
   final ValueChanged<double>? onCurvePlotSize;
 
+  /// The panel's row filter, lowercase: only the rows whose names hold it are
+  /// drawn, and a group with none is left out. Empty draws every row.
+  final String filter;
+
   const _EffectSection({
     super.key,
     required this.info,
     this.graphName,
+    this.filter = '',
     required this.open,
     this.drawsRows = true,
     required this.onToggle,
@@ -2919,7 +2980,10 @@ class _EffectSection extends StatelessWidget {
     final hidden = info.hiddenRows.toSet();
     final params = [
       for (final p in _rows)
-        if (!hidden.contains(p.id)) p,
+        if (!hidden.contains(p.id) &&
+            (filter.isEmpty ||
+                engineLabel(p.label).toLowerCase().contains(filter)))
+          p,
     ];
     final groups = cachedListParameterGroups(info.name);
     final byFirstMember = <String, BridgeParamGroup>{};
@@ -3144,7 +3208,7 @@ class _EffectSection extends StatelessWidget {
           (group.collapsed ? tucked : rows).add(_ParamGroupSection(
             key: ValueKey<String>(path),
             label: group.label,
-            open: isGroupOpen(path, group.collapsed),
+            open: filter.isNotEmpty || isGroupOpen(path, group.collapsed),
             onToggle: () => onToggleGroup(path, group.collapsed),
             onReset: _resetRows(id, run),
             rows: foldRows(run),
@@ -3395,7 +3459,11 @@ class _TransformSection extends StatelessWidget {
     required this.onChanged,
     required this.open,
     required this.onToggle,
+    this.filter = '',
   });
+
+  /// The panel's row filter, handed to the rows.
+  final String filter;
 
   @override
   Widget build(BuildContext context) {
@@ -3417,6 +3485,7 @@ class _TransformSection extends StatelessWidget {
       onSeek: onSeek,
       onChanged: onChanged,
       twoColumn: true,
+      filter: filter,
     ).rows(context);
     return FxSection(
         title: engineLabel('Transform'),
