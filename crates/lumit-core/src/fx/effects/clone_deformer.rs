@@ -615,7 +615,7 @@ impl CloneDeformer {
             match copies {
                 Some(copies) => {
                     for copy in copies {
-                        cover(&mut c, w, h, &copy.contours, k, [0.0; 2], copy.opacity);
+                        cover(&mut c, w, h, &copy.contours, k, grow, copy.opacity);
                     }
                 }
                 None => {
@@ -629,7 +629,16 @@ impl CloneDeformer {
         match self.deformer {
             DEFORM_ALIGN => {
                 let bounds = match copies {
-                    Some(copies) => outline_bounds(copies.iter().flat_map(|c| &c.contours), k),
+                    Some(copies) => {
+                        outline_bounds(copies.iter().flat_map(|c| &c.contours), k).map(|b| {
+                            [
+                                b[0] + grow[0],
+                                b[1] + grow[1],
+                                b[2] + grow[0],
+                                b[3] + grow[1],
+                            ]
+                        })
+                    }
                     None => alpha_bounds(|i| rgba[i * 4 + 3], w, h),
                 };
                 if let Some(b) = bounds {
@@ -641,7 +650,8 @@ impl CloneDeformer {
                             (Some(copies), Some(_)) => {
                                 let mut c = vec![0.0; n];
                                 for copy in copies {
-                                    cover(&mut c, w, h, &copy.contours, k, d, copy.opacity);
+                                    let at = [d[0] + grow[0], d[1] + grow[1]];
+                                    cover(&mut c, w, h, &copy.contours, k, at, copy.opacity);
                                 }
                                 Some(c)
                             }
@@ -655,7 +665,7 @@ impl CloneDeformer {
                     // The rounded outline is drawn below; the colours stay.
                     finish(
                         rgba,
-                        Some(&outline_cover(reads, w, h, k)),
+                        Some(&outline_cover(reads, w, h, k, grow)),
                         before.as_deref(),
                         self.mix,
                     );
@@ -722,7 +732,7 @@ impl CloneDeformer {
         }
         // Worked out on the paths: the edge is the result's own.
         if vector && reads.result.is_some() {
-            edge = Some(outline_cover(reads, w, h, k));
+            edge = Some(outline_cover(reads, w, h, k, grow));
         }
         finish(rgba, edge.as_deref(), before.as_deref(), self.mix);
     }
@@ -769,10 +779,10 @@ impl CloneDeformer {
 }
 
 /// The result's outline as coverage at raster factor `k`.
-fn outline_cover(reads: &Reads<'_>, w: u32, h: u32, k: f32) -> Vec<f32> {
+fn outline_cover(reads: &Reads<'_>, w: u32, h: u32, k: f32, grow: [f32; 2]) -> Vec<f32> {
     let mut c = vec![0.0; (w * h) as usize];
     if let Some(result) = reads.result {
-        cover(&mut c, w, h, result, k, [0.0; 2], 1.0);
+        cover(&mut c, w, h, result, k, grow, 1.0);
     }
     c
 }
