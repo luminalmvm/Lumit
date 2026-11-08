@@ -1,0 +1,177 @@
+---
+title: Film
+description: "The picture shot on a film stock and printed, with halation, bloom, grain, gate weave and flicker."
+---
+
+Film is a [Stylise](/effects/#stylise) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Film exposes the picture onto a film stock through each of the stock's layers' measured
+colour sensitivity, develops it along the stock's curves, prints it on a print stock and
+shows the print in the light it was made for. Grey stays grey and at the same brightness;
+the stock decides the contrast, the colour and the highlights.
+
+Halation, bloom, grain, gate weave and flicker are parts of it, each with its own **On**
+switch.
+With **Film colour** off the picture keeps its own colour and tone and only the parts that
+are on are added.
+
+Grain, halation and bloom are sized on the film, so the **Format** decides how large they
+look: a smaller frame is enlarged more.
+
+The stocks and the model are from spektrafilm by Andrea Volpato
+([github.com/andreavolpato/spektrafilm](https://github.com/andreavolpato/spektrafilm)). The
+stock data is CC BY-SA 4.0.
+
+:::note[Not built yet]
+- Black and white stocks.
+- A camera white balance: a tungsten stock never turns blue in daylight.
+- Dust, hairs and scratches.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Stock** | Dropdown | Vision3 50D · Vision3 250D · Vision3 200T · Vision3 500T · Portra 160 · Portra 400 · Portra 800 · Ektar 100 · Gold 200 · Ultramax 400 · Fujicolor C200 · Fujicolor Pro 400H · Superia X-TRA 400 · Ektachrome 100 · Kodachrome 64 · Provia 100F · Velvia 100 | Vision3 500T | - |
+| **Format** | Dropdown | Super 8 · 16 mm · Super 16 · 35 mm · 35 mm stills · 65 mm | 35 mm | - |
+| **Exposure** | Slider | -4 to 4; down to -10 and up to 10 | 0 | - |
+| **Highlights** | Slider | 0 to 6; up to 12 | 0 | - |
+| **Film colour** | Checkbox | On or off | On | - |
+| **Push or pull** | Slider | -1 to 2 | 0 | - |
+| **Interlayer** | Slider | 0 to 200; up to 400 | 100 | Per cent |
+| **Print › On** | Checkbox | On or off | On | - |
+| **Print stock** | Dropdown | Vision 2383 · Vision Premier 2393 · Portra Endura paper · Crystal Archive paper | Vision 2383 | - |
+| **Brightness** | Slider | -2 to 2; down to -6 and up to 6 | 0 | - |
+| **Contrast** | Slider | 50 to 200; down to 10 and up to 400 | 100 | Per cent |
+| **Red** | Slider, whole numbers | -12 to 12; down to -48 and up to 48 | 0 | - |
+| **Green** | Slider, whole numbers | -12 to 12; down to -48 and up to 48 | 0 | - |
+| **Blue** | Slider, whole numbers | -12 to 12; down to -48 and up to 48 | 0 | - |
+| **Halation › On** | Checkbox | On or off | On | - |
+| **Halation › Amount** | Slider | 0 to 400; up to 4000 | 100 | Per cent |
+| **Halation › Size** | Slider | 25 to 400; down to 5 and up to 2000 | 100 | Per cent |
+| **Backing** | Dropdown | The stock's own · Strong · Weak · Removed | The stock's own | - |
+| **Bloom › On** | Checkbox | On or off | Off | - |
+| **Bloom › Amount** | Slider | 0 to 100 | 25 | Per cent |
+| **Bloom › Size** | Slider | 25 to 400; down to 5 and up to 2000 | 100 | Per cent |
+| **Grain › On** | Checkbox | On or off | On | - |
+| **Grain › Amount** | Slider | 0 to 400; up to 2000 | 100 | Per cent |
+| **Grain › Size** | Slider | 25 to 400; down to 5 and up to 2000 | 100 | Per cent |
+| **Colour** | Slider | 0 to 100 | 100 | Per cent |
+| **Animate** | Checkbox | On or off | On | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Gate weave › On** | Checkbox | On or off | Off | - |
+| **Gate weave › Amount** | Slider | 0 to 400; up to 2000 | 100 | Per cent |
+| **Speed** | Slider | 0.1 to 8; down to 0 and up to 50 | 1.5 | - |
+| **Flicker › On** | Checkbox | On or off | Off | - |
+| **Flicker › Amount** | Slider | 0 to 400; up to 2000 | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Negative** groups **Film colour**, **Push or pull**, **Interlayer**, and starts closed.
+- **Print** groups **On**, **Print stock**, **Brightness**, **Contrast**, **Red**, **Green**, **Blue**, and starts closed.
+- **Halation** groups **On**, **Amount**, **Size**, **Backing**.
+- **Bloom** groups **On**, **Amount**, **Size**, and starts closed.
+- **Grain** groups **On**, **Amount**, **Size**, **Colour**, **Animate**, **Seed**, and starts closed.
+- **Gate weave** groups **On**, **Amount**, **Speed**, and starts closed.
+- **Flicker** groups **On**, **Amount**, and starts closed.
+- **Push or pull** is editable while **Film colour** is on.
+- **Interlayer** is editable while **Film colour** is on.
+- **On** is editable while **Film colour** is on.
+- **Print stock** is editable while **On** is on.
+- **Brightness** is editable while **On** is on.
+- **Contrast** is editable while **On** is on.
+- **Red** is editable while **On** is on.
+- **Green** is editable while **On** is on.
+- **Blue** is editable while **On** is on.
+- **Amount** is editable while **On** is on.
+- **Size** is editable while **On** is on.
+- **Backing** is editable while **On** is on.
+- **Amount** is editable while **On** is on.
+- **Size** is editable while **On** is on.
+- **Amount** is editable while **On** is on.
+- **Size** is editable while **On** is on.
+- **Colour** is editable while **On** is on.
+- **Animate** is editable while **On** is on.
+- **Seed** is editable while **On** is on.
+- **Amount** is editable while **On** is on.
+- **Speed** is editable while **On** is on.
+- **Amount** is editable while **On** is on.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## Stocks
+
+| Stock | Kind |
+| --- | --- |
+| Vision3 50D, 250D, 200T, 500T | Motion picture negative |
+| Portra 160, 400, 800, Ektar 100, Gold 200, Ultramax 400 | Stills negative |
+| Fujicolor C200, Pro 400H, Superia X-TRA 400 | Stills negative |
+| Ektachrome 100, Kodachrome 64, Provia 100F, Velvia 100 | Slide |
+
+A slide is shown as it is and never printed.
+
+## What each control does
+
+- **Stock**: the film in the camera.
+- **Format**: how big the frame is on the film.
+- **Exposure**: stops of light on the negative.
+- **Highlights**: stops the brightest parts of the picture are lifted by, from just below
+  white, as if the camera had not clipped them.
+- **Film colour**: off keeps the picture's own colour and tone.
+- **Push or pull**: stops the negative is pushed or pulled in development. A push adds
+  contrast, a pull takes it away.
+- **Interlayer**: how hard each layer holds back the others and itself as it develops. It
+  sets the colour separation and the contrast at edges.
+Each part has an **On** switch at the top of its group.
+
+- **Print**: off shows a scan of the negative, inverted, instead of a print.
+- **Print stock**: what the negative is printed on: two motion picture print films and two
+  papers.
+- **Brightness**: stops brighter or darker the print is made.
+- **Contrast**: the print's contrast, per cent of the stock's own.
+- **Red**, **Green** and **Blue**: printer points, each a twelfth of a stop more of that
+  colour in the print.
+- **Halation**: light that passes through the film, bounces off its base and lands on the
+  red layer again, a red and orange glow round bright lights. **Amount** and **Size** are
+  how strong the glow is and how far it reaches.
+- **Backing**: the layer behind the film that stops the bounce. **Removed** glows the most.
+- **Bloom**: a diffusion filter on the lens. Highlights spread a soft glow and the shadows
+  lift. **Amount** is how much of the light is spread, **Size** how far.
+- **Grain**: the dye clouds the picture is made of, strongest where the stock's grain is.
+  **Amount** and **Size** are how strong the grain is and how large. **Colour** at 100 gives
+  each layer its own grain, at 0 all three the same grain.
+- **Animate**: on, the grain changes every frame.
+- **Seed**: which grain, weave and flicker are drawn.
+- **Gate weave**: the frame wanders a little in the gate. **Amount** is how far, **Speed**
+  how quickly.
+- **Flicker**: the exposure changes a little from frame to frame.
+- **Mix**: how much of the result replaces the original.
+
+## Presets
+
+The **Film** group in the [Effects & presets](/panels/effects-presets/) panel holds
+**Halation**, **Cinema 500T**, **Cinema 250D**, **Night lights**, **Super 16**, **Home
+movie**, **Portrait**, **Slide** and **Film grain**. **Halation** is Film with only its
+halation on and the backing removed.
+
+## Related
+
+- [Glow](/effects/stylise/glow/)
+- [Add grain](/effects/generate/add-grain/)
+- [Stylise](/effects/#stylise)

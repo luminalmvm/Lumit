@@ -385,6 +385,9 @@ pub struct BezierWarpOp {
     pub steps: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Where the frame sits on the raster, `[x, y, width, height]`. A zero
+    /// width is the whole raster.
+    pub frame: [f32; 4],
 }
 
 #[repr(C)]
@@ -396,6 +399,7 @@ struct BezierWarpParams {
     /// 1 = scale the bend from the straight frame by the matte.
     matte_on: f32,
     _pad1: u32,
+    frame: [f32; 4],
 }
 
 /// One resolved Warp (docs/08 §3.56). Mirrors
@@ -543,6 +547,11 @@ impl FxEngine {
                 steps: op.steps,
                 matte_on: f32::from(matte.is_some()),
                 _pad1: 0,
+                frame: if op.frame[2] > 0.0 {
+                    op.frame
+                } else {
+                    [0.0, 0.0, w as f32, h as f32]
+                },
             }),
         );
         out

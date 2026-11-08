@@ -22,6 +22,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
@@ -38,6 +39,7 @@ import '../panels/transform_rows_frb.dart'
     show TransformSection, hasThreeDSwitch, transformGroups;
 import '../panels/viewer_layer_map.dart' show panBehindPosition;
 import 'camera_settings_dialog.dart';
+import 'model_settings_dialog.dart';
 import 'layer_settings_frb.dart';
 import 'light_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
@@ -556,23 +558,23 @@ List<MenuEntry> axisModeRows(LumitState app, LumitUiState ui) {
 // Switches, markers, blend and matte
 // ---------------------------------------------------------------------------
 
-/// Layer ▸ Flow: optical flow on this layer, offered only on Footage, which is
-/// the only kind with source frames to interpolate between.
+/// Layer ▸ Flow: optical flow on this layer, offered on Footage and Precomp
+/// layers, the kinds with frames to make an in-between from ([hasFlow]).
 ///
 /// A ticked row rather than a [MenuEntry.toggle]: the tick says what the switch
 /// is, but this is a **document edit** and one is enough — the menu that stays
 /// open is for the panel switches, which are used several at a time.
 MenuEntry flowRow(LumitState app, LumitUiState ui) {
-  bool footage(BridgeLayerEntry e) => e.info.kind == BridgeLayerKind.footage;
+  bool flows(BridgeLayerEntry e) => hasFlow(e.info.kind);
   return MenuEntry(
     l10n.menuFlow,
     onSelection(
       app,
       ui,
       (entry) => entry.layer.setFlowEnabled(on_: !entry.info.flow),
-      when: footage,
+      when: flows,
     ),
-    checked: selectedEntries(ui).where(footage).firstOrNull?.info.flow ?? false,
+    checked: selectedEntries(ui).where(flows).firstOrNull?.info.flow ?? false,
   );
 }
 
@@ -680,6 +682,95 @@ VoidCallback? _lightWindow(BuildContext context, LumitState app,
   };
 }
 
+/// Layer ▸ Project from camera: a picture on every material of the Model layers
+/// selected, greyed until there is a camera and a picture to use.
+MenuEntry projectFromCameraRow(LumitState app, LumitUiState ui) {
+  final selected = [
+    for (final entry in selectedEntries(ui)) entry.layer.internallayerId,
+  ];
+  final frame = ui.playheadFrame.value;
+  return MenuEntry(
+    l10n.menuProjectFromCamera,
+    onSelection(
+      app,
+      ui,
+      (entry) =>
+          entry.layer.projectFromCamera(selected: selected, frame: frame),
+      when: (entry) =>
+          entry.info.kind == BridgeLayerKind.model &&
+          entry.layer.canProjectFromCamera(selected: selected, frame: frame),
+    ),
+    action: 'layer.project.from.camera',
+  );
+}
+
+/// Layer ▸ Model settings: the Model layer's window again, greyed until one is
+/// picked.
+MenuEntry modelSettingsRow(BuildContext context, LumitUiState ui) => MenuEntry(
+      l10n.modelSettings,
+      _modelWindow(
+          context,
+          selectedEntries(ui)
+              .where((entry) => entry.info.kind == BridgeLayerKind.model)
+              .firstOrNull),
+    );
+
+/// Layer ▸ Edit in Blender: the picked Model layer's .blend in Blender's own
+/// window, greyed for any other layer. Read as the menu opens.
+MenuEntry editInBlenderRow(LumitUiState ui) {
+  final picked = selectedEntries(ui)
+      .where((entry) => entry.info.kind == BridgeLayerKind.model)
+      .firstOrNull;
+  ItemReference? source;
+  var path = '';
+  try {
+    source = picked?.layer.getSourceItem();
+    if (source case ItemReference_Footage(:final field0)) {
+      path = field0.filePath();
+    }
+  } catch (_) {
+    // The project closed as the menu opened.
+  }
+  return MenuEntry(
+    l10n.menuEditInBlender,
+    switch (source) {
+      ItemReference_Footage(:final field0)
+          when path.toLowerCase().endsWith('.blend') =>
+        () => field0.editInBlender(),
+      _ => null,
+    },
+  );
+}
+
+/// Layer ▸ Create cameras and lights: keyed layers from what the picked Model
+/// layer's file holds, greyed when it holds neither.
+MenuEntry modelLayersRow(LumitState app, LumitUiState ui) {
+  final picked = selectedEntries(ui)
+      .where((entry) => entry.info.modelRows?.holdsLights ?? false)
+      .firstOrNull;
+  return MenuEntry(
+    l10n.menuCreateCamerasLights,
+    picked == null
+        ? null
+        : () {
+            try {
+              final made = picked.layer.createLayersFromModel(
+                  cameraName: l10n.modelCameraName,
+                  lightName: l10n.modelLightName);
+              if (made > 0) app.notifyDocumentChanged();
+            } catch (_) {
+              // The layer went away under the menu: nothing to make.
+            }
+          },
+  );
+}
+
+/// Opens [picked]'s Model settings, or null where there is none to open.
+VoidCallback? _modelWindow(BuildContext context, BridgeLayerEntry? picked) {
+  if (picked == null) return null;
+  return () => showModelSettingsFrb(context: context, layer: picked.layer);
+}
+
 /// Layer ▸ Layer settings: a light's or a camera's own window on those, as
 /// After Effects opens them, and the layer's name and source on the rest.
 Future<void> layerSettingsOf(BuildContext context, LumitState app,
@@ -687,9 +778,11 @@ Future<void> layerSettingsOf(BuildContext context, LumitState app,
   final entry = ui.model.layers
       .where((e) => e.layer.internallayerId == layer.internallayerId)
       .firstOrNull;
-  final own = entry?.info.light != null
-      ? _lightWindow(context, app, ui, entry)
-      : _cameraWindow(context, app, ui, entry);
+  final own = entry?.info.kind == BridgeLayerKind.model
+      ? _modelWindow(context, entry)
+      : entry?.info.light != null
+          ? _lightWindow(context, app, ui, entry)
+          : _cameraWindow(context, app, ui, entry);
   if (own != null) {
     own();
     return;
@@ -865,7 +958,7 @@ List<MenuEntry> arrangeRows(LumitState app, LumitUiState ui) {
             try {
               all[i]
                   .layer
-                  .reorder(newIndex: BigInt.from(up ? 0 : all.length - 1));
+                  .reorder(newIndex: up ? 0 : all.length - 1);
             } catch (_) {}
           }
           return;
@@ -882,7 +975,7 @@ List<MenuEntry> arrangeRows(LumitState app, LumitUiState ui) {
             continue;
           }
           try {
-            all[i].layer.reorder(newIndex: BigInt.from(to));
+            all[i].layer.reorder(newIndex: to);
             taken.add(to);
           } catch (_) {
             taken.add(i);
@@ -942,12 +1035,13 @@ bool shiftSelectedLayers(LumitState app, LumitUiState ui, int frames) {
 }
 
 /// The kinds with a picture to gate another layer with — everything except the
-/// four that draw no pixels at all.
+/// kinds that draw no pixels at all.
 bool _gates(BridgeLayerEntry entry) => switch (entry.info.kind) {
       BridgeLayerKind.camera ||
       BridgeLayerKind.light ||
       BridgeLayerKind.nullLayer ||
-      BridgeLayerKind.audio =>
+      BridgeLayerKind.audio ||
+      BridgeLayerKind.bus =>
         false,
       _ => true,
     };

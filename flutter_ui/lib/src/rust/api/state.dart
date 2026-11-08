@@ -20,7 +20,7 @@ import 'share.dart';
 import 'solid.dart';
 part 'state.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
+// These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `phase_fraction`, `report_phase`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
@@ -173,7 +173,7 @@ class BridgeEffectTiming {
 /// graphics card at each node so a millisecond means the work rather than the
 /// paperwork.
 class BridgeFrameProfile {
-  final BigInt frame;
+  final int frame;
 
   /// The whole frame, wall-clock, including the stages no layer owns.
   final double totalMs;
@@ -384,7 +384,7 @@ class BridgePrefixPoint {
 class BridgeRenderProgress {
   /// Which frame this is about, so a report that arrives after the playhead
   /// has moved on can be recognised as stale rather than drawn.
-  final BigInt frame;
+  final int frame;
 
   /// The stage's wire code — 0 planning, 1 decoding, 2 building, 3
   /// compositing, 4 presenting ([`lumit_render::profile::RenderStage::code`]).
@@ -439,7 +439,7 @@ class BridgeRenderProgress {
 /// each small by construction.
 class BridgeRenderedFrame {
   /// Which frame of the source this is (0 for a thumbnail's poster frame).
-  final BigInt frame;
+  final int frame;
   final int width;
   final int height;
 
@@ -506,7 +506,7 @@ class BridgeSampledPixels {
 
   /// Which frame this is of, so a window that arrives after the playhead has
   /// moved on can be recognised as stale rather than drawn.
-  final BigInt frame;
+  final int frame;
 
   /// Which Viewer view the read was taken in.
   final int view;
@@ -595,12 +595,12 @@ class BridgeScopeTrace {
 class BridgeSharedFrameInfo {
   /// The NT `HANDLE` value. `u64` because a Windows handle is 64-bit; it
   /// reaches Dart as a `BigInt`.
-  final BigInt handle;
+  final int handle;
 
   /// Which frame of the composition this is. The frontend does not track this
   /// itself: a picture that says which frame it is needs no bookkeeping to
   /// place — the frontend paints it and moves the playhead there.
-  final BigInt frame;
+  final int frame;
   final int width;
   final int height;
 
@@ -680,7 +680,7 @@ class BridgeSharedFrameInfoLinux {
   /// Which frame of the composition this is. The frontend does not track this
   /// itself: a picture that says which frame it is needs no bookkeeping to
   /// place — the frontend paints it and moves the playhead there.
-  final BigInt frame;
+  final int frame;
   final int width;
   final int height;
   final int stride;
@@ -690,7 +690,7 @@ class BridgeSharedFrameInfoLinux {
   final int drmFourcc;
 
   /// The DRM modifier (`DRM_FORMAT_MOD_LINEAR` = 0 on the linear-tiling path).
-  final BigInt modifier;
+  final int modifier;
 
   /// The render node of the card the buffer is on, or `None` when the driver
   /// does not say.

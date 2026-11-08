@@ -17,11 +17,13 @@
 // it does.
 
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:lumit_flutter/panels/easing_curve.dart';
 
 import 'workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// One shape the user kept: what they called it, and the curve.
 class SavedEasing {

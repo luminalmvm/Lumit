@@ -18,6 +18,7 @@
 // model. The bridge is only crossed when a gesture commits — one write per
 // channel, batched per layer, so a drag stays one undo step per property.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -48,6 +49,7 @@ import 'graph_channels.dart';
 import 'graph_clipboard.dart';
 import 'graph_edits.dart';
 import 'graph_key_fields.dart';
+import 'graph_lens_guides.dart';
 import 'graph_painters.dart';
 import 'key_ease_fields.dart';
 import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
@@ -109,6 +111,11 @@ class GraphEditorFrb extends StatefulWidget {
   final List<SnapTarget> snapTargets;
 
   final GraphLens lens;
+
+  /// The playhead. Set, the acceleration graph reads each curve's number at
+  /// it in the corner. Null leaves the corner empty, as a pane built alone in
+  /// a test.
+  final ValueListenable<int>? playhead;
 
   /// Auto-fit: the vertical range follows the curves (docs/07 §5.3). Off, the
   /// range is the user's — the wheel pans it and the value-zoom wheel zooms it.
@@ -174,6 +181,7 @@ class GraphEditorFrb extends StatefulWidget {
     required this.magnet,
     this.snapTargets = const [],
     required this.lens,
+    this.playhead,
     required this.autoFit,
     this.onAutoFitOff,
     this.vegas = false,
@@ -350,7 +358,7 @@ class _HandleDrag {
   /// when the gesture began. Together they let `Shift` hold the speed exactly
   /// where it started while the key moves in time.
   double rawDy = 0;
-  double startSpeed = 0;
+  double startSpeed;
 
   /// An envelope point's drag: the speed the pointer's travel asks for before
   /// the every-frame guide takes it, where the pointer last was, and whether
@@ -387,7 +395,8 @@ class _HandleDrag {
     required this.height,
     required this.startPx,
     this.dotOnly = false,
-  }) : startInfluence = influence;
+  })  : startInfluence = influence,
+        startSpeed = speed;
 }
 
 /// A `Shift` drag on the curve between two keys, as in After Effects: moving
@@ -683,6 +692,24 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// Re-frame the curves now (`F`, docs/07 §5.3): in manual mode the fitted
   /// range becomes the manual one; in auto mode the next build fits anyway.
   void fitNow() => setState(() => _manual.remove(widget.lens));
+
+  /// The turning points over this pane's curves ([GraphLensGuidesPainter]).
+  GraphLensGuidesPainter _guidesPainter(
+          LumitTheme t, (double, double) range, double paneWidth) =>
+      GraphLensGuidesPainter(
+        channels: widget.channels,
+        shownKeys: [
+          for (final c in widget.channels) _shownKeys(c, painting: true)
+        ],
+        envelope: [for (final c in widget.channels) isEnvelope(c)],
+        lens: widget.lens,
+        axis: widget.axis,
+        fps: widget.fps,
+        range: range,
+        palette: t.curve,
+        viewportLeft: _viewportLeft,
+        viewportWidth: _viewportWidth(paneWidth),
+      );
 
   /// The stretch of time a fit should show, in seconds: the selected keys, or
   /// every key when fewer than two moments are picked. Null when there is no
@@ -1657,7 +1684,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
     // An envelope point is dragged in per cent, which is what its axis reads.
     if (isEnvelope(channel)) {
-      drag.speed = drag.asked = envelopeSpeeds(channel.keys)[index];
+      drag.speed =
+          drag.asked = drag.startSpeed = envelopeSpeeds(channel.keys)[index];
     }
     setState(() {
       _handleDrag = drag;
@@ -1759,6 +1787,22 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         // as the curve leaves, or reaches, its key. The side's speed stays
         // put and its influence moves, as far as an influence can go. `Shift`
         // keeps the influence while the key moves in time.
+        if (!drag.dotOnly) {
+          // Its influence handle: the reach sideways is the influence, as in
+          // the speed lens; the side's speed stays as it is.
+          if (nb != null) {
+            final dt = (rationalSeconds(nb.time) - keyTime).abs();
+            if (dt > 1e-9) {
+              drag.influence = ((drag.isOut
+                          ? pointerTime - keyTime
+                          : keyTime - pointerTime) /
+                      dt)
+                  .clamp(1e-3, 1.0)
+                  .toDouble();
+            }
+          }
+          return;
+        }
         drag.rawDx += dx;
         drag.rawDy += dy;
         drag.influence = drag._constrained && drag._horizontal
@@ -2050,7 +2094,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // Every keyframe *time* stays exactly put, so a beat already
     // synced stays synced — the covenant this whole feature is built around.
     if (isEnvelope(drag.channel)) {
-      return setEnvelopeSpeed(keys, drag.index, drag.speed);
+      return setEnvelopeSpeed(keys, drag.index, drag.shownSpeed);
     }
     // An acceleration dot writes its one side, and only once its influence
     // has moved: sliding the key in time leaves both sides as they were.
@@ -2071,8 +2115,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             keys[i],
       ];
     }
-    final dragged = BridgeSideInterp.bezier(
-        BridgeBezierSide(speed: drag.speed, influence: drag.influence));
+    // A dot under `Shift` going sideways keeps the speed it started at: the
+    // curve and the commit read what the dot is drawn at.
+    final dragged = BridgeSideInterp.bezier(BridgeBezierSide(
+        speed: drag.dotOnly ? drag.shownSpeed : drag.speed,
+        influence: drag.influence));
     final partner = drag.mirrored
         ? BridgeSideInterp.bezier(BridgeBezierSide(
             speed: drag.partnerSpeed, influence: drag.partnerInfluence))
@@ -2258,6 +2305,75 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       );
       return;
     }
+    if (widget.lens == GraphLens.acceleration && !channel.isPath) {
+      // The acceleration graph's box: the frame and value, then each side's
+      // acceleration at the key, typed to reshape that side. A path key holds a
+      // shape, so it has no value to type or motion to write.
+      final hasIn = _neighbour(keys, index, false) != null;
+      final hasOut = _neighbour(keys, index, true) != null;
+      // The keys the box's last motion put between this key and its end. The
+      // next motion takes their place.
+      var between = 0;
+      KeyBoxReading? afterMotion(
+          ({List<BridgeKeyframe> keys, int between})? written) {
+        if (written == null) return null;
+        between = written.between;
+        return _keyBoxReading(written.keys, index);
+      }
+
+      await showKeyAccelerationPopover(
+        context: context,
+        position: position,
+        fps: widget.fps,
+        frame: frame,
+        value: key.value,
+        minFrame: lower,
+        maxFrame: upper,
+        accelerationIn:
+            hasIn ? sideAccelerationAtKey(keys, index, isOut: false) : null,
+        accelerationOut:
+            hasOut ? sideAccelerationAtKey(keys, index, isOut: true) : null,
+        startSpeed: hasOut ? sideSpeedAtKey(keys, index, isOut: true) : 0,
+        next: hasOut
+            ? (
+                frame: keyFrame(keys[index + 1], widget.fps),
+                value: keys[index + 1].value
+              )
+            : null,
+        unit: graphChannelUnit(channel) ?? '',
+        onFrameValue: (frame, value) {
+          // Through the value graph's own write, with each side's influence
+          // as it stands, so only the frame and the value move.
+          final current = _keyNow(channel.id, index);
+          if (current == null) return null;
+          if (channel.clampToBounds(value) != value) return null;
+          final written = _applyKeyFields(channel.id, index,
+              frame: frame,
+              value: value,
+              inPercent: (sideInfluence(current.interpIn) * 100).round(),
+              outPercent: (sideInfluence(current.interpOut) * 100).round());
+          return written == null ? null : _keyBoxReading(written, index);
+        },
+        onAcceleration: (isOut, target) {
+          final written =
+              _applyKeyAcceleration(channel.id, index, isOut, target);
+          return written == null ? null : _keyBoxReading(written, index);
+        },
+        onProfile: (peakSpeed, accelEnd, cruiseEnd, end) =>
+            afterMotion(_applySpeedProfile(channel.id, index, between,
+                peakSpeed: peakSpeed,
+                accelEnd: accelEnd,
+                cruiseEnd: cruiseEnd,
+                end: end)),
+        onGravity: (startSpeed, acceleration, endFrame, endValue) =>
+            afterMotion(_applyConstantAcceleration(channel.id, index, between,
+                startSpeed: startSpeed,
+                acceleration: acceleration,
+                endFrame: endFrame,
+                endValue: endValue)),
+      );
+      return;
+    }
     await showKeyFieldsPopover(
       context: context,
       position: position,
@@ -2283,8 +2399,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// The channel is looked up **by id at the moment of the write**, never held
   /// by the popover: a channel is a snapshot of the read model, and a box that
   /// kept the one it opened with would write its second edit on top of a curve
-  /// that no longer exists.
-  void _applyKeyFields(
+  /// that no longer exists. Hands back the keys it wrote, or null when it wrote
+  /// nothing.
+  List<BridgeKeyframe>? _applyKeyFields(
     String channelId,
     int index, {
     required double frame,
@@ -2295,12 +2412,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     for (final channel in widget.channels) {
       if (channel.id != channelId) continue;
       final keys = channel.keys;
-      if (index < 0 || index >= keys.length) return;
+      if (index < 0 || index >= keys.length) return null;
       final key = keys[index];
       final f = frame.clamp(0.0, widget.frames.toDouble());
       for (var i = 0; i < keys.length; i++) {
         if (i != index && (keyFrame(keys[i], widget.fps) - f).abs() < 1e-9) {
-          return;
+          return null;
         }
       }
       // A side is rewritten only when its own number changed: giving a side an
@@ -2314,24 +2431,167 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       if ((sideInfluence(key.interpOut) * 100).round() != outPercent) {
         interpOut = sideWithInfluence(keys, index, true, outPercent.toDouble());
       }
-      commitChannelEdits({
-        channel: BridgeScalar.keyframed([
-          for (var i = 0; i < keys.length; i++)
-            if (i == index)
-              BridgeKeyframe(
-                time: timeOfSubframe(f, widget.fpsNum, widget.fpsDen),
-                value: value,
-                interpIn: interpIn,
-                interpOut: interpOut,
-              )
-            else
-              keys[i],
-        ]),
-      });
+      final written = [
+        for (var i = 0; i < keys.length; i++)
+          if (i == index)
+            BridgeKeyframe(
+              time: timeOfSubframe(f, widget.fpsNum, widget.fpsDen),
+              value: value,
+              interpIn: interpIn,
+              interpOut: interpOut,
+            )
+          else
+            keys[i],
+      ];
+      commitChannelEdits({channel: BridgeScalar.keyframed(written)});
       widget.onChanged();
-      return;
+      return written;
     }
+    return null;
   }
+
+  /// What the box on the key at [index] reads from [keys].
+  KeyBoxReading _keyBoxReading(List<BridgeKeyframe> keys, int index) {
+    final hasOut = index + 1 < keys.length;
+    final at = keyFrame(keys[index], widget.fps);
+    final gap = widget.magnet ? 1.0 : 0.01;
+    final latest = hasOut
+        ? keyFrame(keys[index + 1], widget.fps) - gap
+        : widget.frames.toDouble();
+    return (
+      accelerationIn:
+          index > 0 ? sideAccelerationAtKey(keys, index, isOut: false) : null,
+      accelerationOut:
+          hasOut ? sideAccelerationAtKey(keys, index, isOut: true) : null,
+      maxFrame: latest < at ? at : latest,
+    );
+  }
+
+  /// The key at [index] of the channel [channelId] as the graph holds it now —
+  /// looked up by id, since a box outlives the snapshot it opened on.
+  BridgeKeyframe? _keyNow(String channelId, int index) {
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final keys = channel.keys;
+      return index >= 0 && index < keys.length ? keys[index] : null;
+    }
+    return null;
+  }
+
+  /// Give one side of a key the acceleration [target] at the key
+  /// ([sideForAcceleration]): its influence first, its speed where the
+  /// influence cannot reach it. Looked up by id at the moment of the write, as
+  /// [_applyKeyFields] does. Hands back the keys it wrote, or null when it wrote
+  /// nothing.
+  List<BridgeKeyframe>? _applyKeyAcceleration(
+      String channelId, int index, bool isOut, double target) {
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final keys = channel.keys;
+      if (index < 0 || index >= keys.length) return null;
+      final side =
+          sideForAcceleration(keys, index, isOut: isOut, target: target);
+      if (side == null) return null;
+      final key = keys[index];
+      final written = [
+        for (var i = 0; i < keys.length; i++)
+          if (i == index)
+            BridgeKeyframe(
+              time: key.time,
+              value: key.value,
+              interpIn: isOut ? key.interpIn : side,
+              interpOut: isOut ? side : key.interpOut,
+            )
+          else
+            keys[i],
+      ];
+      commitChannelEdits({channel: BridgeScalar.keyframed(written)});
+      widget.onChanged();
+      return written;
+    }
+    return null;
+  }
+
+  /// Write a motion from the key at [index], from what [solve] makes of the
+  /// channel's keys. The [between] keys the box's last motion put after this
+  /// one go first, so typing again replaces that motion and leaves no keys
+  /// behind. Hands back the keys written and how many now sit between, or null
+  /// where nothing was written: the end would leave the composition, cross the
+  /// key after the next, or go past the parameter's hard range.
+  ({List<BridgeKeyframe> keys, int between})? _applyMotion(
+      String channelId,
+      int index,
+      int between,
+      double endFrame,
+      List<BridgeKeyframe>? Function(List<BridgeKeyframe> keys) solve) {
+    if (endFrame > widget.frames) return null;
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final before = [
+        ...channel.keys.take(index + 1),
+        ...channel.keys.skip(index + 1 + between),
+      ];
+      final keys = solve(before);
+      if (keys == null) return null;
+      if (keys.any((k) => channel.clampToBounds(k.value) != k.value)) {
+        return null;
+      }
+      commitChannelEdits({channel: BridgeScalar.keyframed(keys)});
+      widget.onChanged();
+      final hadEnd = index + 1 < before.length;
+      return (
+        keys: keys,
+        between: keys.length - before.length - (hadEnd ? 0 : 1),
+      );
+    }
+    return null;
+  }
+
+  /// From the key at [index], a speed profile ([keysWithSpeedProfile]): up
+  /// from rest to [peakSpeed] by the frame [accelEnd], held to [cruiseEnd],
+  /// down to rest at [end]. Frames may fall between frames, so each stretch is
+  /// exact.
+  ({List<BridgeKeyframe> keys, int between})? _applySpeedProfile(
+      String channelId, int index, int between,
+      {required double peakSpeed,
+      required double accelEnd,
+      required double cruiseEnd,
+      required double end}) {
+    BridgeRational at(double frame) =>
+        timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
+    return _applyMotion(
+        channelId,
+        index,
+        between,
+        end,
+        (keys) => keysWithSpeedProfile(keys, index,
+            peakSpeed: peakSpeed,
+            accelEnd: at(accelEnd),
+            cruiseEnd: at(cruiseEnd),
+            end: at(end)));
+  }
+
+  /// From the key at [index], a stretch of constant [acceleration] from
+  /// [startSpeed] to [endValue] at [endFrame]
+  /// ([keysWithConstantAcceleration]): the key after it moves to the end, or
+  /// one is added. The end may fall between frames, so the parabola is met
+  /// exactly.
+  ({List<BridgeKeyframe> keys, int between})? _applyConstantAcceleration(
+      String channelId, int index, int between,
+      {required double startSpeed,
+      required double acceleration,
+      required double endFrame,
+      required double endValue}) =>
+      _applyMotion(
+          channelId,
+          index,
+          between,
+          endFrame,
+          (keys) => keysWithConstantAcceleration(keys, index,
+              startSpeed: startSpeed,
+              acceleration: acceleration,
+              endTime: timeOfSubframe(endFrame, widget.fpsNum, widget.fpsDen),
+              endValue: endValue));
 
   /// Write a typed speed, and a typed frame, onto one envelope point.
   ///
@@ -2695,6 +2955,24 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   ),
                 ),
               ),
+              // The turning points, as hollow rings over the curves. Their own
+              // layer, repainted by the scroll as the curves are.
+              if (widget.lens != GraphLens.value)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation:
+                          widget.hScroll ?? const AlwaysStoppedAnimation(0),
+                      builder: (context, _) => ClipRect(
+                        child: CustomPaint(
+                          key: const ValueKey<String>('graph-lens-guides'),
+                          painter:
+                              _guidesPainter(t, range, constraints.maxWidth),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               Positioned.fill(
                 child: MarqueeSelect(
                   key: const ValueKey('graph-marquee'),
@@ -2755,6 +3033,45 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               // The live readout, beside the key in hand (§6.2).
               ..._valueHint(range, height, constraints.maxWidth),
               ..._speedHint(range, height),
+              // The corner, in the acceleration graph only: every curve's
+              // acceleration at the playhead, pinned to the view's left edge.
+              if (widget.playhead case final playhead?
+                  when widget.lens == GraphLens.acceleration)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([
+                        playhead,
+                        if (widget.hScroll case final h?) h,
+                      ]),
+                      builder: (context, _) => Stack(
+                        children: [
+                          Positioned(
+                            left: _viewportLeft + 6,
+                            top: 4,
+                            child: GraphLensReadout(
+                              key: const ValueKey<String>('graph-lens-readout'),
+                              channels: widget.channels,
+                              shownKeys: [
+                                for (final c in widget.channels)
+                                  _shownKeys(c, painting: true)
+                              ],
+                              envelope: [
+                                for (final c in widget.channels) isEnvelope(c)
+                              ],
+                              fps: widget.fps,
+                              frame: playhead.value,
+                              palette: t.curve,
+                              style: t.mono
+                                  .copyWith(fontSize: 10, color: t.textPrimary),
+                              ground: t.surface0.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               // Over the live pane rather than instead of it, so the grid and
               // the axis stay readable behind the invitation to fill them.
               if (widget.channels.isEmpty)
@@ -3007,9 +3324,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   List<Widget> _valueHint(
       (double, double) range, double height, double paneWidth) {
-    if (widget.lens != GraphLens.value || widget.selectedKeys.length != 1) {
-      return const [];
-    }
+    if (widget.selectedKeys.length != 1) return const [];
     final id = widget.selectedKeys.first;
     final hash = id.lastIndexOf('#');
     if (hash < 0) return const [];
@@ -3018,6 +3333,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final channelId = id.substring(0, hash);
     for (final channel in widget.channels) {
       if (channel.id != channelId) continue;
+      // An envelope point has its own box. This pill's ease box would write
+      // curved sides, and an envelope's are always the chord.
+      if (isEnvelope(channel)) return const [];
       final keys = _shownKeys(channel);
       if (index < 0 || index >= keys.length) return const [];
       final key = keys[index];
@@ -3034,16 +3352,23 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           key: const ValueKey<String>('graph-value-hint'),
           left: left,
           top: point.dy + 6,
+          // The speed and acceleration graphs read the frame alone: the value
+          // and the influences are the value graph's numbers.
           child: HintPill(
-            text: l10n.graphKeyHint(
-              keyFrame(key, widget.fps).round(),
-              graphNumberText(value),
-              (sideInfluence(key.interpIn) * 100).round(),
-              (sideInfluence(key.interpOut) * 100).round(),
-            ),
+            text: widget.lens == GraphLens.value
+                ? l10n.graphKeyHint(
+                    keyFrame(key, widget.fps).round(),
+                    graphNumberText(value),
+                    (sideInfluence(key.interpIn) * 100).round(),
+                    (sideInfluence(key.interpOut) * 100).round(),
+                  )
+                : l10n.graphKeyFrame(keyFrame(key, widget.fps).round()),
             // The readout is also the way in: a click on it opens the key's
-            // speed and influence as wells, writing as they are typed.
-            onTap: (at) => _openKeyEaseAt(channel, index, at),
+            // speed and influence as wells, writing as they are typed — in the
+            // acceleration graph, the box that types its accelerations.
+            onTap: (at) => widget.lens == GraphLens.acceleration
+                ? _openKeyFields(channel, index, at)
+                : _openKeyEaseAt(channel, index, at),
           ),
         ),
       ];
@@ -3184,7 +3509,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   if (box is RenderBox) {
                     _updateHandleDrag(
                         box.globalToLocal(d.globalPosition), range, height,
-                        dx: d.delta.dx);
+                        dx: d.delta.dx, dy: d.delta.dy);
                   }
                 }
               },
@@ -3337,17 +3662,21 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       return (e.time, e.value);
     }
     // An envelope point has no influence handle: its sides are always the
-    // chord, which is what keeps the lines between points straight. An
-    // acceleration dot is its own handle: up and down moves the influence.
-    if (isEnvelope(channel) || widget.lens == GraphLens.acceleration) {
+    // chord, which is what keeps the lines between points straight.
+    if (isEnvelope(channel)) return null;
+    // A held span has no curve for an influence to shape.
+    if (keys[isOut ? index : index - 1].interpOut is BridgeSideInterp_Hold) {
       return null;
     }
-    // Speed lens: the influence handle reaches horizontally from the dot.
+    // Speed and acceleration lenses: the influence handle reaches
+    // horizontally from the dot, as far as the influence goes.
     final keyTime = rationalSeconds(key.time);
     final dt = (rationalSeconds(nb.time) - keyTime).abs();
-    final speed = sideSpeedAtKey(keys, index, isOut: isOut);
+    final y = widget.lens == GraphLens.acceleration
+        ? sideAccelerationAtKey(keys, index, isOut: isOut)
+        : sideSpeedAtKey(keys, index, isOut: isOut);
     final reach = sideInfluence(side) * dt;
-    return (isOut ? keyTime + reach : keyTime - reach, speed);
+    return (isOut ? keyTime + reach : keyTime - reach, y);
   }
 }
 
@@ -3361,7 +3690,7 @@ const double graphGutterWidth = 34;
 /// An expression's curve across a span, held until the document or the span
 /// moves, so a scroll repainting the graph asks the engine nothing.
 List<double> _expressionCurve(GraphChannel channel, BridgeRational start,
-    BridgeRational end, int samples, BigInt? revision) {
+    BridgeRational end, int samples, int? revision) {
   if (_curvesRevision != revision || _curves.length >= 64) {
     _curves.clear();
     _curvesRevision = revision;
@@ -3383,7 +3712,7 @@ List<double> _expressionCurve(GraphChannel channel, BridgeRational start,
 }
 
 final Map<Object, List<double>> _curves = {};
-BigInt? _curvesRevision;
+int? _curvesRevision;
 
 class _GraphPainter extends CustomPainter {
   final List<GraphChannel> channels;

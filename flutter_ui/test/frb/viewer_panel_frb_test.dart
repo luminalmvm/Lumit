@@ -82,7 +82,7 @@ BridgeSampledPixels wholePicture({int width = 100, int height = 50}) {
     height: height,
     x: centreX,
     y: centreY,
-    frame: BigInt.zero,
+    frame: 0,
     view: 0,
     layerAlone: false,
   );
@@ -1961,7 +1961,11 @@ void main() {
               kind: BridgeLightKind.spot,
               falloff: BridgeLightFalloff.none,
               twoNode: true,
-              castsShadows: false));
+              castsShadows: false,
+              inAir: false,
+              noisy: false,
+              source: null,
+              background: false));
       set(beam, {
         BridgeTransformProp.positionZ: -300,
         BridgeTransformProp.rotation: -15,
@@ -1991,9 +1995,9 @@ void main() {
           rotationX: -10,
           rotationY: 25,
           rotationZ: 0);
-      final rows = comp.viewProjection(frame: BigInt.zero, view: view);
+      final rows = comp.viewProjection(frame: 0, view: view);
       final marks = comp.wireframes(
-          frame: BigInt.zero,
+          frame: 0,
           view: view,
           ground: false,
           grid: false,
@@ -2008,7 +2012,7 @@ void main() {
           byId,
           (e) => e.info.transform,
           (s, _, __) => (s as BridgeScalar_Static).field0,
-          cameraPose: (c) => c.layer.cameraOwnPoseAt(frame: BigInt.zero),
+          cameraPose: (c) => c.layer.cameraOwnPoseAt(frame: 0),
         )!;
         final m = parent.storage;
         final w = [

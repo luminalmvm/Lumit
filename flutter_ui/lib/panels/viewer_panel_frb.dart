@@ -83,6 +83,8 @@ import 'viewer_camera.dart' show altNavigates;
 import 'viewer_compare.dart';
 import 'viewer_deck.dart';
 import 'viewer_rulers.dart' show viewerRulerBand;
+import 'viewer_picture.dart'
+    if (dart.library.js_interop) 'viewer_picture_web.dart';
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
 import 'viewer_zoom.dart';
@@ -849,7 +851,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             uiState: ui,
             fitted: fitted,
             pictureRect: canvas,
-            showPicture: !(viewport && widget.view.wireframeOnly),
+            showPicture: !ui.linesOnly(widget.view.engineId),
             grid: ui.viewerGrid,
             overlays: ui.viewerOverlays,
             pictureKey: _pictureKey,
@@ -1394,7 +1396,7 @@ class _FootagePicture extends StatelessWidget {
         valueListenable: uiState.textureOf(view.engineId),
         builder: (context, textureId, _) => textureId == null
             ? const SizedBox.expand()
-            : pictureChannelFilter(view.channel, Texture(textureId: textureId)),
+            : pictureChannelFilter(view.channel, viewerPicture(textureId)),
       );
 }
 

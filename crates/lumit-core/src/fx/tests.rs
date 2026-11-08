@@ -105,7 +105,7 @@ fn resolve_migrated<T: EffectMetadata>(
 /// The resolved bag of a one-effect migrated stack, in push order — for the
 /// assertions that are about the *bag* rather than about the declared struct: a
 /// derived value, or how many entries an effect resolves to at all.
-fn resolve_bag(
+pub(crate) fn resolve_bag(
     effects: &[EffectInstance],
     lt: f64,
     diag_px: f32,
@@ -321,6 +321,7 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -413,6 +414,7 @@ fn accumulation_shutter_offsets_cover_the_layers_beneath() {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -2097,7 +2099,7 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(rb.packed(), ([300.0, 700.0], 150.0, true, 1, 1.0));
+    assert_eq!(rb.packed(), ([300.0, 700.0], 150.0, 1, 1, 1.0));
 
     // The Type choice flips Spin/Zoom; Edges is honoured (Mirror = 2).
     for p in &mut radial.params {
@@ -2115,7 +2117,7 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         &MarkerContext::NONE,
     );
     let (_, _, spin, edge, _) = rb.packed();
-    assert!(!spin, "Type 1 is Zoom");
+    assert_eq!(spin, 0, "Type 1 is Zoom");
     assert_eq!(edge, 2, "Edges Mirror is honoured");
     // An out-of-range Choice clamps to Mirror rather than falling back, exactly
     // as the old arm's `(*c).min(2)` did.
@@ -2609,7 +2611,7 @@ fn cpu_shake_motion_blur_off_is_the_plain_shake_and_on_smears() {
     assert!(
         matches!(
             shake_packed(&smeared, 0.4, 1000.0),
-            effects::shake::Shaken::Blurred { .. }
+            effects::shake::Shaken::Taps { .. }
         ),
         "motion blur on carries sub-frames"
     );
@@ -2840,6 +2842,7 @@ fn marker_rig(
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -2892,6 +2895,7 @@ fn beat_ctx(beats: &[f64], fps: f64) -> MarkerContext {
     MarkerContext {
         beats: beats.to_vec(),
         fps,
+        cues: Vec::new(),
     }
 }
 
@@ -4542,6 +4546,91 @@ fn beams_percent_length_converts_against_its_own_run() {
     );
 }
 
+// An old shake renders as it did: its Phase is turned round (version 2) and
+// its twist and zoom rows divided by Amplitude / 30 (version 3). A fresh one
+// at Amplitude 0 holds still.
+#[test]
+fn an_old_shake_is_carried_over_and_shakes_the_same() {
+    let noise_of = |inst: &crate::model::EffectInstance| {
+        let packed = shake_packed(inst, 0.4, 1000.0);
+        format!("{packed:?}")
+    };
+    let set = |inst: &mut crate::model::EffectInstance, rows: &[(&str, f64)]| {
+        for p in &mut inst.params {
+            if let Some((_, v)) = rows.iter().find(|(id, _)| p.id == *id) {
+                p.value = EffectValue::Float(Property::fixed(*v));
+            }
+        }
+    };
+    let migrated = |inst: &crate::model::EffectInstance| {
+        let mut effects = vec![inst.clone()];
+        migrate_in(&mut effects, (1920.0, 1080.0), (1920.0, 1080.0), &|_, _| {
+            false
+        });
+        effects.remove(0)
+    };
+    let mut old = instantiate("shake").unwrap();
+    old.effect.version = 1;
+    set(
+        &mut old,
+        &[
+            ("amplitude", 60.0),
+            ("phase", 0.3),
+            ("rotation", 4.0),
+            ("z_amp", 10.0),
+        ],
+    );
+    let mut new = old.clone();
+    new.effect.version = 3;
+    set(
+        &mut new,
+        &[
+            ("amplitude", 60.0),
+            ("phase", -0.3),
+            ("rotation", 2.0),
+            ("z_amp", 5.0),
+        ],
+    );
+    let carried = migrated(&old);
+    assert_eq!(carried.effect.version, 3);
+    assert_eq!(noise_of(&carried), noise_of(&new));
+
+    // A Phase an expression drives stays on version 1 and reads as before.
+    let mut scripted = old.clone();
+    for p in &mut scripted.params {
+        if p.id == "phase" {
+            p.value = EffectValue::Float(Property {
+                animation: crate::anim::Animation::Expression("0.3".into()),
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+    let carried = migrated(&scripted);
+    assert_eq!(carried.effect.version, 1);
+    assert_eq!(noise_of(&carried), noise_of(&new));
+
+    // A still Amplitude of 0 cannot be divided by, so that shake comes in as
+    // 30 with no X or Y and twists as it did. A fresh one at 0 does nothing.
+    old.effect.version = 2;
+    set(&mut old, &[("amplitude", 0.0)]);
+    let carried = migrated(&old);
+    assert_eq!(carried.effect.version, 3);
+    let plain = |e: &crate::model::EffectInstance| match shake_packed(e, 0.4, 1000.0) {
+        effects::shake::Shaken::Plain { wobble, .. } => wobble,
+        other => panic!("a plain shake, not {other:?}"),
+    };
+    assert_ne!(plain(&carried).rotation_deg, 0.0);
+    assert_eq!(plain(&carried), plain(&old));
+    set(&mut new, &[("amplitude", 0.0)]);
+    let effects::shake::Shaken::Plain { wobble, .. } = shake_packed(&new, 0.4, 1000.0) else {
+        panic!("a plain shake");
+    };
+    assert_eq!(
+        (wobble.offset_px, wobble.rotation_deg, wobble.zoom),
+        ([0.0; 2], 0.0, 1.0)
+    );
+}
+
 // Card wipe's Transition width was a per cent of the frame measured along
 // whichever axis Flip order runs, so its conversion reads the
 // instance's own order: 25 % is 480 pixels across a 1920 frame going left to
@@ -5153,6 +5242,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -5313,7 +5403,17 @@ fn every_enablement_rule_names_a_parameter_of_its_kind() {
             // A rule pointed at the wrong kind of parameter can never fire —
             // `param_enabled` leaves the row live rather than locking it
             // unreachably — so the mistake has to be caught here.
-            match rule.cond {
+            let mut cond = rule.cond;
+            while let EnabledCond::Or(other, then) = cond {
+                let is_bool = s
+                    .params
+                    .iter()
+                    .any(|p| p.id == other && matches!(p.kind, ParamKind::Bool { .. }));
+                assert!(is_bool, "{}: `{other}` is not a Bool", s.match_name);
+                cond = *then;
+            }
+            match cond {
+                EnabledCond::Or(..) => {}
                 EnabledCond::BoolIs(_) => assert!(
                     matches!(on, ParamKind::Bool { .. }),
                     "{}: `{}` is read as a Bool but is not one",
@@ -5398,6 +5498,7 @@ fn dof_greys_the_rows_its_switches_take_over() {
     // A fresh instance: no depth layer, so everything that reads one is greyed,
     // and Use focus point is off, so the point is greyed and the distance is
     // live.
+    use crate::fx::enabled::param_enabled;
     assert!(param_enabled(&e, "focus"));
     for id in [
         "depth_channel",
@@ -6118,6 +6219,7 @@ pub(crate) fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -6309,8 +6411,8 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 4,
-        "Scanlines, the two flares and Transform points are the four today"
+        declaring, 6,
+        "Scanlines, the two flares, Transform points, Energy line and Depth points are the six today"
     );
 }
 
@@ -6584,6 +6686,10 @@ fn every_parameter_declares_a_unit() {
             ("crop", "feather"),
             ("glow", "radius"),
             ("shake", "amplitude"),
+            ("jolt", "blur_amount"),
+            ("jolt", "origin_x"),
+            ("jolt", "origin_y"),
+            ("jolt", "slide_amount"),
             ("block_glitch", "block_size"),
             ("block_glitch", "block_amount"),
             ("block_glitch", "channel_offset"),
@@ -6686,6 +6792,15 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
+            ("energy_line", "start_x"),
+            ("energy_line", "start_y"),
+            ("energy_line", "end_x"),
+            ("energy_line", "end_y"),
+            ("energy_line", "core_size"),
+            ("energy_line", "glow_size"),
+            ("energy_line", "core_distortion"),
+            ("energy_line", "glow_distortion"),
+            ("energy_line", "distortion_size"),
             // Particulate (px@comp through a particle system): eleven, all
             // px@comp, and every one of them has to follow the raster or a
             // half-resolution preview would show a different picture from the
@@ -6712,6 +6827,13 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "size"),
             ("particulate", "speed_min"),
             ("particulate", "speed_max"),
+            ("particulate", "field_x"),
+            ("particulate", "field_y"),
+            ("particulate", "field_z"),
+            ("particulate", "field_radius"),
+            ("particulate", "attractor"),
+            ("particulate", "vortex"),
+            ("particulate", "sphere"),
             ("particulate", "gravity"),
             ("particulate", "wind_x"),
             ("particulate", "wind_y"),
@@ -6719,6 +6841,7 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
             ("particulate", "edge_margin"),
+            ("particulate", "ground_height"),
             ("particulate", "flock_radius"),
             ("particulate", "spark_speed"),
             // Grid: every length in a lattice — the gaps between
@@ -6865,6 +6988,7 @@ fn every_parameter_declares_a_unit() {
             ("planar_track", "point2_x"),
             ("planar_track", "point2_y"),
             ("planar_track", "region"),
+            ("depth_points", "point_size"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -7421,7 +7545,7 @@ fn every_effect_carries_a_matte_row() {
             s.category,
             FxCategory::Controls | FxCategory::Audio | FxCategory::Compositing
         ) || s.category.is_driver()
-            || matches!(s.match_name, "camera_track" | "planar_track")
+            || matches!(s.match_name, "camera_track" | "planar_track" | "smoke")
         {
             assert_eq!(
                 s.matte,
@@ -7449,12 +7573,8 @@ fn every_effect_carries_a_matte_row() {
         // ordinary auxiliary-layer carriage that `layer_input` is the predicate
         // for.
         //
-        // **Roto brush**: the same answer as Set matte's, arrived at
-        // from the other side. What this effect applies IS a coverage — the
-        // matte its propagation solved for this source frame — so a second
-        // picture saying how much of it happens here would be a coverage laid
-        // over a coverage, and the honest place to say "not there" is another
-        // stroke.
+        // **Roto brush**: what it applies IS a coverage, so a second picture
+        // saying how much of it happens here would be a coverage over a coverage.
         //
         // **Depth**: the third of that family. What it draws is a reading of
         // the picture underneath - how far away every pixel is, as a model saw
@@ -7462,17 +7582,22 @@ fn every_effect_carries_a_matte_row() {
         // not a thing a measurement has an answer to. Where a reading is wanted
         // in part of the frame, the effect that consumes it takes the matte.
         //
-        // **Remove background**: Set matte's answer and the Roto brush's, on
-        // the tier Depth is on. What it applies IS the coverage a model made of
-        // this frame, so a second picture saying how much of it happens here
-        // would be a coverage over a coverage, and the honest way to keep part
-        // of the background is a mask on the layer.
+        // **Remove background**: the Roto brush's answer.
+        //
+        // **Scene pass** is a reading, as Depth is, and **Part matte** a coverage.
         //
         // Anything else that wants to opt out is argued for here, in these
         // words, before it may.
         if matches!(
             s.match_name,
-            "matte_key" | "set_matte" | "roto_brush" | "depth" | "remove_background"
+            "matte_key"
+                | "set_matte"
+                | "roto_brush"
+                | "depth"
+                | "remove_background"
+                | "depth_points"
+                | "scene_pass"
+                | "part_matte"
         ) {
             assert_eq!(
                 s.matte,
@@ -7489,8 +7614,8 @@ fn every_effect_carries_a_matte_row() {
             // and is the auxiliary layer the render threads to it.
             assert_eq!(
                 s.layer_input().is_some(),
-                s.match_name == "set_matte",
-                "{} — Set matte keeps its source on the layer-input carriage",
+                matches!(s.match_name, "set_matte" | "depth_points" | "scene_pass" | "part_matte"),
+                "{}: Set matte keeps its source on the layer-input carriage, as Depth points does its depth",
                 s.match_name
             );
             assert_eq!(
@@ -7591,6 +7716,7 @@ fn every_effect_carries_a_matte_row() {
                 | "venetian_blinds"
                 | "iris_wipe"
                 | "card_wipe"
+                | "luma_fade"
                 // Scatter: the matte is *where the points go*, which is
                 // as deep inside an effect's own maths as a matte gets — it
                 // decides the set rather than fading the picture that set drew.
@@ -7668,10 +7794,11 @@ fn every_effect_carries_a_matte_row() {
         // channel choices), Vector blur (its three), the Lens flare (source
         // detection) and Scatter, which reads **alpha and only alpha** — carry
         // none, and the seam leaves their matte raw. Set matte used to be one
-        // more, and carries no Matte row at all now.
+        // more, and carries no Matte row at all now. Luma fade reads the matte's
+        // luminance itself, as it reads its own picture's.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter"
+            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter" | "luma_fade"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(
@@ -8530,12 +8657,12 @@ fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
 // ---------------------------------------------------------------------------
 
 use crate::fx::effects::particulate::Particulate;
-use crate::fx::points::{self, EmitterShape, PointsStream, Schedule};
+use crate::fx::points::{self, emitter::EmitterShape, PointsStream, Schedule};
 use crate::mask::MaskPolyline;
 
 /// A Particulate instance with its declared defaults, and `edits` applied —
 /// the shape every test below starts from.
-fn particulate(edits: &[(&str, EffectValue)]) -> EffectInstance {
+pub(crate) fn particulate(edits: &[(&str, EffectValue)]) -> EffectInstance {
     let mut e = instantiate("particulate").expect("Particulate is declared");
     for (id, value) in edits {
         let p = e
@@ -8548,7 +8675,7 @@ fn particulate(edits: &[(&str, EffectValue)]) -> EffectInstance {
     e
 }
 
-fn fixed(v: f64) -> EffectValue {
+pub(crate) fn fixed(v: f64) -> EffectValue {
     EffectValue::Float(Property::fixed(v))
 }
 
@@ -9967,10 +10094,13 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
         (4, EmitterShape::MaskPath),
         (5, EmitterShape::EllipseOutline),
         (6, EmitterShape::RectangleOutline),
+        (7, EmitterShape::Box),
+        (8, EmitterShape::Sphere),
+        (9, EmitterShape::Layer),
     ] {
         assert_eq!(EmitterShape::from_code(code), shape, "code {code}");
     }
-    assert_eq!(EmitterShape::OPTIONS.len(), 7);
+    assert_eq!(EmitterShape::OPTIONS.len(), 10);
     // A filled ellipse still fills: the interior draw is the one that was
     // there, and the outline is a different code entirely.
     let inside = outline_stream(2);
@@ -9987,6 +10117,8 @@ fn adding_the_outline_shapes_moved_no_existing_code() {
         "a filled ellipse put {on_ring} of {} particles exactly on its rim",
         inside.len()
     );
+    // With no frame to fill, a Layer emitter gives birth to nothing.
+    assert!(outline_stream(9).position.is_empty());
 }
 
 // ------------------------------------------------ the third axis
@@ -10843,203 +10975,6 @@ fn pixel_sort_moves_pixels_only_inside_their_own_span() {
     assert_eq!(of(5000.0), cpu::PIXEL_SORT_MAX_SPAN);
     assert_eq!(of(0.0), 1);
     assert_eq!(of(300.0), 300);
-}
-
-/// **A collider's walk lands in one place however it is reached**: a frame
-/// stepped to from a kept state is the frame walked from the in point, which
-/// is what lets an export match the Viewer, and so is one told to stop part
-/// way and asked again. And the floor holds. A flock and sparks land in one
-/// place too.
-#[test]
-fn a_stepped_frame_is_the_walk_from_the_start() {
-    use crate::fx::points::stepped::{stop_when, stream_at, Collider, Inputs, SAME, SPARK_ID};
-    use std::sync::atomic::{AtomicU32, Ordering};
-    let e = particulate(&[
-        ("gravity", fixed(900.0)),
-        ("emit_rate", fixed(400.0)),
-        ("turbulence_amount", fixed(30.0)),
-    ]);
-    let floor = 700.0f32;
-    let inputs = |e: &EffectInstance, lt: f64, floor: Option<f32>| {
-        let bag = resolve_bag(
-            std::slice::from_ref(e),
-            lt,
-            1000.0,
-            1.0,
-            &MarkerContext::NONE,
-        );
-        let collider = floor.map(|y| Collider::new(vec![[[0.0, y], [1920.0, y]]], SAME, false));
-        Some(Inputs::new(
-            Particulate::read(Params::new(&bag)),
-            [1920.0, 1080.0],
-            MaskPolyline::default(),
-            collider,
-        ))
-    };
-    let at = |lt: f64| inputs(&e, lt, Some(floor));
-    let dt = 1.0 / 30.0;
-    let key = |n: u8| [n; 32];
-    // Walked whole, under a name nothing else uses.
-    let whole = stream_at(key(201), 43.0 * dt, dt, &at).expect("a walk");
-    // Walked past it first, so the frame is three steps on from a kept one.
-    stream_at(key(202), 45.0 * dt, dt, &at).expect("a walk");
-    let resumed = stream_at(key(202), 43.0 * dt, dt, &at).expect("a walk");
-    assert!(!whole.is_empty(), "nothing was born");
-    assert_eq!(whole, resumed, "a kept walk landed somewhere else");
-    // Stopped after ten steps, then asked again.
-    static ASKED: AtomicU32 = AtomicU32::new(0);
-    fn tenth() -> bool {
-        ASKED.fetch_add(1, Ordering::Relaxed) >= 10
-    }
-    let before = stop_when(Some(tenth));
-    let stopped = stream_at(key(203), 43.0 * dt, dt, &at);
-    stop_when(before);
-    assert!(stopped.is_none(), "a walk told to stop carried on");
-    let again = stream_at(key(203), 43.0 * dt, dt, &at).expect("a walk");
-    assert_eq!(whole, again, "a stopped walk went on somewhere else");
-    assert!(
-        whole.position.iter().all(|p| p[1] <= floor + 0.01),
-        "a particle went through the floor"
-    );
-
-    // A flock with nothing to hit, and sparks off a floor that kills.
-    let rows = [("emit_rate", fixed(400.0)), ("initial_speed", fixed(150.0))];
-    let flock = particulate(
-        &[
-            &rows[..],
-            &[
-                ("separation", fixed(60.0)),
-                ("alignment", fixed(50.0)),
-                ("cohesion", fixed(40.0)),
-            ],
-        ]
-        .concat(),
-    );
-    let sparks = particulate(&[
-        ("gravity", fixed(900.0)),
-        ("emit_rate", fixed(400.0)),
-        ("on_contact", EffectValue::Choice(3)),
-        ("sparks", fixed(8.0)),
-    ]);
-    let plain = particulate(&rows);
-    let walk = |e: &EffectInstance, floor: Option<f32>, n: u8| {
-        let at = |lt: f64| inputs(e, lt, floor);
-        let whole = stream_at(key(n), 43.0 * dt, dt, &at).expect("a walk");
-        stream_at(key(n + 1), 45.0 * dt, dt, &at).expect("a walk");
-        let resumed = stream_at(key(n + 1), 43.0 * dt, dt, &at).expect("a walk");
-        assert_eq!(whole, resumed, "a kept walk landed somewhere else");
-        whole
-    };
-    let flocked = walk(&flock, None, 204);
-    assert_ne!(
-        flocked,
-        walk(&plain, None, 206),
-        "the flock steered nothing"
-    );
-    let sparked = walk(&sparks, Some(floor), 208);
-    assert!(
-        sparked.id.iter().any(|&id| id & SPARK_ID != 0),
-        "nothing threw sparks"
-    );
-}
-
-/// **A collider turned against the particles in 3D is a surface**: a floor
-/// tilted flat under them holds them up, and one facing the way they do is
-/// walls.
-#[test]
-fn a_collider_turned_in_3d_is_a_surface() {
-    use crate::anim::Property;
-    use crate::fx::points::stepped::{stream_at, Collider, Inputs};
-    use crate::model::*;
-    use crate::time::{Duration, FrameRate, Rational};
-
-    let solid = SolidDef {
-        id: uuid::Uuid::now_v7(),
-        name: "Solid".into(),
-        colour: LinearColour::BLACK,
-        width: 1920,
-        height: 1080,
-        extra: serde_json::Map::new(),
-    };
-    let item = ProjectItem::Solid(solid.clone());
-    let mut comp = Composition {
-        graph: None,
-        master_volume_db: 0.0,
-        lighting: Default::default(),
-        sound_mix: false,
-        groups: Vec::new(),
-        beat_grid: None,
-        id: uuid::Uuid::now_v7(),
-        name: "Scene".into(),
-        width: 1920,
-        height: 1080,
-        frame_rate: FrameRate::new(30, 1).unwrap(),
-        duration: Duration(Rational::new(5, 1).unwrap()),
-        background: LinearColour::BLACK,
-        work_area: None,
-        layers: Vec::new(),
-        markers: Vec::new(),
-        motion_blur: MotionBlur::default(),
-        extra: serde_json::Map::new(),
-    };
-    let layer = |comp: &Composition| {
-        let mut l = crate::comp_graph::read_layer(uuid::Uuid::now_v7(), &item, comp).unwrap();
-        l.switches.three_d = true;
-        l
-    };
-    let owner = layer(&comp);
-    let facing = layer(&comp);
-    // Laid flat, a little below the emitter.
-    let mut floor = layer(&comp);
-    floor.transform.rotation_x = Property::fixed(-90.0);
-    floor.transform.position_y = Property::fixed(800.0);
-    comp.layers = vec![owner.clone(), facing.clone(), floor.clone()];
-    let mut doc = Document::new();
-    doc.items.push(item.clone());
-    doc.items.push(ProjectItem::Composition(comp.clone()));
-    let context = ExpressionContext {
-        document: Arc::new(doc.clone()),
-        comp: Some(comp.id),
-        layer: Some(owner.id),
-        comp_time: 0.0,
-        current_depth: 0,
-        inputs: None,
-    };
-    let walls = Collider::of(&doc, &comp, &owner, &facing, 0.0, &context);
-    let surface = Collider::of(&doc, &comp, &owner, &floor, 0.0, &context);
-    assert!(format!("{walls:?}").contains("surface: false"));
-    assert!(format!("{surface:?}").contains("surface: true"));
-
-    let e = particulate(&[
-        ("gravity", fixed(900.0)),
-        ("emit_rate", fixed(300.0)),
-        ("position_y", fixed(500.0)),
-        ("turbulence_amount", fixed(0.0)),
-    ]);
-    // Trails off, and the walk is the collider's alone.
-    assert!(!crate::fx::points::stepped::trails(&comp, &e));
-    let at = |lt: f64| {
-        let bag = resolve_bag(
-            std::slice::from_ref(&e),
-            lt,
-            1000.0,
-            1.0,
-            &MarkerContext::NONE,
-        );
-        Some(Inputs::new(
-            Particulate::read(Params::new(&bag)),
-            [1920.0, 1080.0],
-            MaskPolyline::default(),
-            Some(surface.clone()),
-        ))
-    };
-    let dt = 1.0 / 30.0;
-    let held = stream_at([231; 32], 40.0 * dt, dt, &at).expect("a walk");
-    assert!(!held.is_empty(), "nothing was born");
-    assert!(
-        held.position.iter().all(|p| p[1] <= 800.01),
-        "a particle went through the floor"
-    );
 }
 
 /// The per-copy columns `drive_rows` writes replace Scale,

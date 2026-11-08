@@ -72,7 +72,7 @@ class _AboutWindow extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerEnd,
             child: HouseButton(
               key: const ValueKey('about-close'),
               small: true,

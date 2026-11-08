@@ -43,14 +43,18 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/styles.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -143,11 +147,16 @@ Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
     switch (_extensionOf(path)) {
       case 'lum':
         isProject = true;
+      // A zipped style folder is the window's to take in.
+      case 'zip' when styleReadPackage(path: path) is BridgeStyleOutcome_Ready:
+        break;
       case 'aep':
       case 'zip':
         isAe = true;
-      // An extension package, which the window offers to install.
+      // An extension package, which the window offers to install, and a
+      // style, which it takes in.
       case 'lfx':
+      case 'lumstyle':
         break;
       default:
         media.add(path);
@@ -180,7 +189,8 @@ class ProjectPanelFrb extends StatefulWidget {
   State<ProjectPanelFrb> createState() => _ProjectPanelFrbState();
 }
 
-class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
+class _ProjectPanelFrbState extends State<ProjectPanelFrb>
+    with WidgetsBindingObserver {
   bool _missingOnly = false;
 
   /// The live search needle (docs/07 §3.1): lowercase, empty means "show all".
@@ -223,6 +233,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _changes = state.onChange.listen((event) {
       if (event.items) _documentChanged();
     });
+    WidgetsBinding.instance.addObserver(this);
     _searchController.addListener(() {
       final needle = _searchController.text.trim().toLowerCase();
       if (needle != _search) setState(() => _search = needle);
@@ -382,7 +393,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (ui.cutClaim == _cutClaim) ui.cutClaim = _priorCut;
       if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _priorPaste;
     }
+    WidgetsBinding.instance.removeObserver(this);
     _changes?.cancel();
+    _blenderPoll?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
     _rowPicks.dispose();
@@ -595,6 +608,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// every other entry here, so it is asked once per document change and never
   /// in a rebuild: the budget test expects a hover to cost nothing.
   final Map<String, BridgeProxy?> _proxies = {};
+
+  /// Which footage items are 3D models, asked once per document change.
+  final Map<String, bool> _models = {};
 
   /// The project-wide *use proxies* switch, cached with the rest: it is
   /// a document read, so a rebuild must never ask for it again.
@@ -825,6 +841,95 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// Footage the engine found on disk but cannot decode, by id.
   final Set<String> _undecodable = {};
 
+  /// The pictures each 3D model names that are missing or won't read.
+  final Map<String, List<String>> _pictures = {};
+
+  /// Where each 3D model's trip through Blender stands, while it isn't done.
+  final Map<String, BridgeBlenderState> _blender = {};
+
+  /// The 3D models asked after on a timer: read and still being read, or
+  /// waiting on Blender.
+  final Map<String, FootageReference> _watched = {};
+  final Set<String> _reading = {};
+  Timer? _blenderPoll;
+
+  /// Back in front, a 3D model may have been saved over elsewhere, so each is
+  /// checked again, and one being converted shows it.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    _missing.removeWhere((id, _) => _models[id] ?? false);
+    _bookRebuild();
+  }
+
+  /// Look at each watched model's Blender state, and stop watching the ones
+  /// with nothing left to happen.
+  void _pollBlender() {
+    for (final MapEntry(key: id, value: footage) in _watched.entries.toList()) {
+      BridgeBlenderState? state;
+      try {
+        state = footage.blenderState();
+      } catch (_) {
+        state = null;
+      }
+      if (state != _blender[id]) {
+        if (state == null) {
+          _blender.remove(id);
+        } else {
+          _blender[id] = state;
+        }
+        // A timer tick, so nothing else is drawing a frame to wait for.
+        if (mounted) setState(() {});
+      }
+      // No Blender stays watched, so picking one in Settings shows here.
+      final settled = state == null ||
+          state is BridgeBlenderState_Failed ||
+          state is BridgeBlenderState_NoImporter ||
+          state is BridgeBlenderState_Stopped;
+      if (settled && !_reading.contains(id)) _watched.remove(id);
+    }
+    if (_watched.isEmpty) {
+      _blenderPoll?.cancel();
+      _blenderPoll = null;
+    }
+    if (mounted) {
+      Provider.of<LumitUiState>(context, listen: false).modelTrouble.value =
+          switch (_blender.values.firstOrNull) {
+        BridgeBlenderState_Converting() => l10n.projectItemConverting,
+        BridgeBlenderState_NoBlender() => l10n.projectItemNoBlender,
+        BridgeBlenderState_Stopped() => l10n.projectItemStopped,
+        null => null,
+        _ => l10n.projectItemUndecodable,
+      };
+    }
+  }
+
+  void _stopBlender(ItemReference item) {
+    if (item is! ItemReference_Footage) return;
+    try {
+      item.field0.stopBlender();
+    } catch (_) {
+      // The item has gone, and the conversion was stopped with it.
+    }
+    _pollBlender();
+  }
+
+  /// Stopped, it converts again: the row is asked after as if it were new, and
+  /// the Viewer asks for its frame, which starts it there too.
+  void _convertAgain(ItemReference item) {
+    if (item is! ItemReference_Footage) return;
+    try {
+      item.field0.convertAgain();
+    } catch (_) {
+      return;
+    }
+    final id = projectItemId(item);
+    _blender.remove(id);
+    _missing.remove(id);
+    _bookRebuild();
+    Provider.of<LumitUiState>(context, listen: false).requestFrame();
+  }
+
   /// Bumped whenever the document changes, to key the thumbnail futures so a
   /// relink re-decodes rather than showing the stale picture. The frb equivalent
   /// of v0's `documentEpoch`.
@@ -840,9 +945,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return DropTarget(
       onDragEntered: (_) => setState(() => _dropHover = true),
       onDragExited: (_) => setState(() => _dropHover = false),
-      onDragDone: (details) {
+      onDragDone: (details) async {
         setState(() => _dropHover = false);
-        _dropped([for (final f in details.files) f.path]);
+        _dropped(await droppedPaths(details.files));
       },
       // Painted over the panel rather than behind it, for the reason the row
       // target gives: the panel draws its own fill, and a drop with no
@@ -1136,10 +1241,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         depth: row.depth,
         missing: missing,
         undecodable: _undecodable.contains(id),
+        missingPictures: [for (final n in _pictures[id] ?? const <String>[]) engineLabel(n)],
+        blender: _blender[id],
+        onStopBlender: () => _stopBlender(item),
+        onConvertAgain: () => _convertAgain(item),
         audio: audio,
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
         nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
+        model: _models[id] ??= _isModel(item),
         inUse: _used[id] ??= _isUsed(item),
         proxy: _proxies.putIfAbsent(
             id,
@@ -1538,6 +1648,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Whether this item is a node graph composition. False for every other
   /// kind, and for a comp that has gone from under the panel.
+  bool _isModel(ItemReference item) {
+    if (item case ItemReference_Footage(:final field0)) {
+      try {
+        return field0.isModel();
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   bool _isNodeGraph(ItemReference item) {
     if (item case ItemReference_Composition(:final field0)) {
       try {
@@ -1657,6 +1778,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   }
 
   void _documentChanged() {
+    // An item deleted, or a project closed, takes its conversion with it.
+    if (_watched.isNotEmpty) {
+      Provider.of<LumitState>(context, listen: false)
+          .project
+          ?.stopUnusedBlenders();
+    }
     setState(() {
       _epoch++;
       _missing.clear();
@@ -1671,6 +1798,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _names.clear();
       _nodeGraphs.clear();
       _proxies.clear();
+      _models.clear();
       _useProxies = null;
       _dropThumbs();
       _dropScrub();
@@ -1744,6 +1872,30 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             // throws. Nothing is missing in a document that is gone, and the
             // panel is about to be rebuilt from the new one.
           }).catchError((_) {});
+          if (_models[id] ??= _isModel(item)) {
+            // The old names stay until the new answer lands, so the badge
+            // doesn't blink on every edit.
+            // Reading a model Blender converts takes a while, so it is
+            // watched until that is done.
+            _watched[id] = item.field0;
+            _reading.add(id);
+            _blenderPoll ??= Timer.periodic(
+                const Duration(milliseconds: 500), (_) => _pollBlender());
+            item.field0.getModelMissing().whenComplete(() {
+              _reading.remove(id);
+              if (mounted) _pollBlender();
+            }).then((names) {
+              if (!mounted) return;
+              final had = _pictures[id];
+              if (names.isEmpty ? had == null : listEquals(had, names)) return;
+              if (names.isEmpty) {
+                _pictures.remove(id);
+              } else {
+                _pictures[id] = names;
+              }
+              _bookRebuild();
+            }).catchError((_) {});
+          }
         }
       }
       if (item is ItemReference_Folder) {

@@ -88,9 +88,9 @@ tab:on          { background: var(--accent) 35%; }
 <Shot file="make-style-harbour.jpg" caption="The Harbour style above, over Lantern."/>
 
 A style is a `.lumstyle` file in the styles folder, or in a folder of its own inside it
-beside its pictures. **Settings ▸ Appearance ▸ Your styles** shows where the folder is:
-`%APPDATA%\lumit\styles` on Windows and `~/.config/lumit/styles` on macOS and Linux. Each
-style is listed in **Shape** under the three built in. Lumit redraws when a style's file is
+beside its pictures and fonts. **Settings ▸ Appearance ▸ Your styles ▸ Show folder** opens the
+folder: `%APPDATA%\lumit\styles` on Windows and `~/.config/lumit/styles` on macOS and Linux.
+Each style is listed in **Shape** under the three built in. Lumit redraws when a style's file is
 saved.
 
 `@base` is the built-in style it starts from: `studio`, `desk` or `lantern`. A line Lumit
@@ -111,14 +111,30 @@ cannot read is skipped, and **Your styles** shows the first, such as
 | `--stroke-weight` | The icons' line weight |
 | `--label-case` | `caps`, `lower` or `sentence` |
 | `--title-centred`, `--header-dot`, `--roomed`, `--tabular-numbers` | `true` or `false` |
-| `--sans`, `--mono` | The two typefaces, by name, from those installed on the computer or bundled with Lumit |
+| `--sans`, `--mono` | The two typefaces, by name: installed on the computer, bundled with Lumit, or carried by the style |
 | `--kicker-tracking` | The spacing of panel labels |
 | `--room` | A colour, or a picture as `url("room.jpg")` |
 | `--room-blur` | How far a room picture is blurred |
 | `--icons` | A folder of icons, as `url("icons")`. See [Make an icon set](/make/icons/). |
+| `--backdrop` | `tint` or `blur`. See [See-through windows](#see-through-windows). |
 
 A colour from the colour scheme, such as `--accent` or `--surface1`, set here replaces the
 scheme's while the style is in use. `var(--name)` reads any variable or colour.
+
+### Fonts
+
+`@font-face` carries a typeface in the style's folder, and `--sans` or `--mono` names it.
+
+```css
+@font-face { font-family: "Fira Sans"; src: url("fonts/FiraSans-Regular.ttf"), url("fonts/FiraSans-Medium.ttf"); }
+:root      { --sans: "Fira Sans"; }
+```
+
+- `src` takes one file or several, one for each weight. A variable font holds every weight in one.
+- TTF and OTF are read. WOFF and WOFF2 are not.
+- The base's typeface stands in until the style's has loaded.
+- A font travels with the style when it is shared, so its licence must allow that. The SIL
+  Open Font License does.
 
 ### Rules
 
@@ -192,15 +208,42 @@ A blurred part's shadow is drawn round it and never under it. **Reduce transpare
 **Settings ▸ Appearance** draws every part solid and blurs nothing.
 
 :::note
-Panels paint their own fills inside the box, so the glass shows round them. A typeface is
-named, not carried in a file.
+Panels paint their own fills inside the box, so the glass shows round them.
 :::
+
+## See-through windows
+
+`--backdrop` makes the window see-through wherever the room is. `tint` takes the colour of the
+desktop, softly. `blur` blurs whatever is behind the window.
+
+```css
+:root { --backdrop: blur; --room: #0b0b0e 30%; }
+pane  { background: #16161a 62%; border: 1 #ffffff26; }
+```
+
+The room is clear, or the colour `--room` gives it. A style with a backdrop is roomed unless it
+sets `--roomed: false`.
+
+| System | `tint` | `blur` |
+| --- | --- | --- |
+| Windows 11 | Mica | Acrylic |
+| Windows 10 | Blur | Blur |
+| macOS | Window background | HUD |
+| Linux, KDE Plasma | Blur | Blur |
+
+The window stays solid with **Reduce transparency** on, with transparency switched off in
+Windows or macOS, and on Linux desktops other than KDE Plasma.
 
 ## Sharing
 
-A colour scheme travels as its `.lumtheme` file, read by **Your themes ▸ Import…**. A style
-travels as its `.lumstyle` file, or as its folder with its pictures and icons, put in the
-styles folder.
+A colour scheme travels as its `.lumtheme` file, read by **Your themes ▸ Import…**.
+
+A style travels as one `.lumstyle` file. **Your styles ▸ Make a package** packs the style in
+use into one, with the pictures, icons and fonts in its folder. A style is taken in by a
+double-click, a drop on the window or **Your styles ▸ Import…**, and is in use at once.
+**Undo** on the status line puts the look before it back. A zipped style folder is read too,
+and a style file in a folder of its own name comes with the folder. A style of the same name
+is replaced after a question.
 
 ## Related
 

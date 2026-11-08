@@ -77,6 +77,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -995,7 +996,8 @@ fn near(a: [f32; 4], b: [f32; 4]) -> bool {
 }
 
 /// **A box keeps what lands past the frame.** A plate twice the graph's size,
-/// scaled to a quarter, shows all of it and not just the middle that fitted.
+/// scaled to a quarter, shows all of it and not just the middle that fitted,
+/// and so does a picture a Corner pin pulled out to that size.
 /// Taking a lens bend away pushes the corners out of the frame, and putting it
 /// back brings them in again rather than leaving them empty.
 #[test]
@@ -1042,7 +1044,28 @@ fn a_box_keeps_the_picture_past_the_frame() {
     );
     // A quarter of 128 is 32 wide, from 16 to 48. The middle 64 alone would
     // have been 16 wide, from 24 to 40.
-    assert!(lit(&mut r, chain(COMP * 2, vec![quarter]), 18, COMP / 2));
+    assert!(lit(
+        &mut r,
+        chain(COMP * 2, vec![quarter.clone()]),
+        18,
+        COMP / 2
+    ));
+    // Pinned out to twice the frame, then a quarter, is the same 32 wide.
+    let (lo, hi) = (-f64::from(COMP / 2), f64::from(COMP * 3 / 2));
+    let pin = effect(
+        "corner_pin",
+        &[
+            ("upper_left_x", lo),
+            ("upper_left_y", lo),
+            ("upper_right_x", hi),
+            ("upper_right_y", lo),
+            ("lower_left_x", lo),
+            ("lower_left_y", hi),
+            ("lower_right_x", hi),
+            ("lower_right_y", hi),
+        ],
+    );
+    assert!(lit(&mut r, chain(COMP, vec![pin, quarter]), 18, COMP / 2));
 
     let lens = |reverse: bool| {
         let mut inst = effect(

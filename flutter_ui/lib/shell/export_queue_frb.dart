@@ -35,6 +35,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -176,7 +177,7 @@ class _ExportQueueState extends State<_ExportQueue> {
               ? SizedBox(
                   height: exportQueueRow,
                   child: Align(
-                    alignment: Alignment.centerLeft,
+                    alignment: AlignmentDirectional.centerStart,
                     child: Text(l10n.exportQueueEmpty,
                         key: const ValueKey('export-queue-empty'),
                         style: t.body.copyWith(color: t.textMuted)),
@@ -366,7 +367,7 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// Every other row is handed back as it is: there is no file to show yet.
   /// The remove mark still takes its own click, being the deeper of the two.
   Widget _opensFolder(BridgeExportQueueItem item, Widget row) =>
-      item.state is! BridgeExportQueueState_Done
+      item.state is! BridgeExportQueueState_Done || kIsWeb
           ? row
           : LumitTooltip(
               message: l10n.tipOpenFolder,
@@ -491,7 +492,7 @@ class _ExportQueueState extends State<_ExportQueue> {
   String _status(BridgeExportQueueItem item) => switch (item.state) {
         BridgeExportQueueState_Waiting() => l10n.exportQueueWaiting,
         BridgeExportQueueState_Running(:final total, :final encoder)
-            when total == BigInt.zero =>
+            when total == 0 =>
           l10n.exportPreparing(encoder),
         BridgeExportQueueState_Running(
           :final frame,
@@ -510,3 +511,19 @@ class _ExportQueueState extends State<_ExportQueue> {
 /// pattern's (§12A.4).
 const EdgeInsets exportBodyPaddingForQueue =
     EdgeInsets.fromLTRB(14, 10, 14, 12);
+
+/// How long a running export has left, in words for the strip, or null while
+/// there is too little to go on.
+///
+/// It is frames done over time taken since the strip first saw the export, so
+/// it follows the average speed and one slow frame does not move it. Nothing
+/// is said for the first five seconds, when that average is mostly noise.
+String? exportTimeLeft(
+    {required int done, required int left, required Duration taken}) {
+  if (done <= 0 || left <= 0 || taken < const Duration(seconds: 5)) return null;
+  final minutes = (taken.inMilliseconds / 60000 * left / done).round();
+  if (minutes < 1) return l10n.exportLeftUnderMinute;
+  return minutes < 120
+      ? l10n.exportLeftMinutes('$minutes')
+      : l10n.exportLeftHours('${(minutes / 60).round()}');
+}

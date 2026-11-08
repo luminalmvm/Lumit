@@ -28,9 +28,6 @@ half = "2"
 parking_lot = "0.12"
 # The fan-out `multiThread` runs on, on a pool of its own.
 rayon = "1"
-# The bundle binary is a plain DLL/dylib opened at run time; libloading is the
-# portable `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
-libloading = "0.8"
 # The quirks table is data, not code (docs/12 §2.5), so it is a JSON file the
 # crate embeds and parses. The same derives put the control protocol's messages
 # on the wire (`ipc::proto`).
@@ -43,6 +40,12 @@ uuid = { version = "1", features = ["v7"] }
 # The control plane: length-prefixed `bincode` over a duplex local socket —
 # a named pipe on Windows, a Unix socket elsewhere (docs/impl/ofx-host.md §4).
 bincode = "1"
+
+# The browser build has no plugins: nothing to open, no second process.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The bundle binary is a plain DLL/dylib opened at run time; libloading is the
+# portable `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
+libloading = "0.8"
 interprocess = "2"
 # The frame plane: the shared-memory ring. `memmap2` is `CreateFileMapping` +
 # `MapViewOfFile` on Windows and `mmap` on Unix — the two calls the note names,

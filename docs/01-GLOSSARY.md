@@ -11,6 +11,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Asset** | Anything in the Project panel: footage, audio, sequences, stills, comps |
 | **Footage item** | An asset pointing at a media file. Lumit never changes the file |
 | **Interpretation** | How a footage item's file is read: its alpha, frame rate, fields, pixel aspect ratio, loop and colour. Kept on the item. The verb is **interpret** |
+| **3D model** | A footage item pointing at a glTF, GLB, FBX or OBJ file: meshes, materials and pictures. Never just *model*, which a **Model pack** holds |
 | **File layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Audio stream** | One of the sounds a media file carries side by side, such as the game and the microphone of a screen recording. A file arrives with all of them mixed on one layer or clip unless Settings says otherwise. To **split** gives each a row of its own, to **merge** puts them back on one. Not *audio track* |
@@ -37,7 +38,17 @@ composites over it.
 | **Adjustment layer** | Applies its effects to everything below. Also a switch any drawing layer can carry |
 | **Layer group** | A header row folding layers together in the Timeline. Organisation only, the render never reads it |
 | **Audio layer** | An audio item, or footage's audio |
+| **Bus layer** | Sound routed to it from other layers, through its own effects and Volume. A layer's **output** goes to the master or a bus, and a **send** copies its sound to a bus, before or after its Volume |
 | **Camera**, **Light** layers | 3D viewpoint and light. Only affect 3D layers |
+| **Model layer** | A 3D model in the comp's 3D space. Always 3D. Its **Model settings** (Up axis, Units, Fit to comp) set how big it is, so its Scale stays 100%. Its **Materials** rows change the file's materials on the layer |
+| **Take** | One embedded animation in a 3D model's file. A Model layer's **Take** row picks it by name |
+| **Part** | One node of a 3D model's file, listed under its Model layer. Only a part with a changed row is saved |
+| **Smoke and fire** | An effect that turns a 3D layer into a box of simulated gas, which the volumetric walk draws. A `.vdb` file opens as a Model layer with no faces and draws the same way. |
+| **Depth points** | An effect that draws a shot as points in the comp's 3D space, each on its ray from a camera, placed by the depth from Analyse or a Depth layer |
+| **Geometry options** | A Text or Shape layer's Extrusion depth and bevel, which make its outline a solid in the comp's 3D space, with **Front**, **Bevel**, **Side** and **Back** materials |
+| **Card** | A flat Model layer with no 3D model behind it, made by **Layer ▸ New ▸ Card** or **Create card** |
+| **Projected from** | A material row naming the Camera layer whose view lays its Base colour layer on a Model layer, in place of the model's uvs. Never *camera mapping* |
+| **3D shape** | A cube, sphere, cylinder, cone, torus, plane or pyramid Lumit makes itself, in the comp's 3D space. Its **Geometry options** are its size and key like any row, and its **Surface** is a material. `LayerKind::Mesh` in code |
 
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
@@ -112,6 +123,8 @@ Not interchangeable.
 | **Blend mode** | How a layer composites over what's below |
 | **Effect** | One operation in a layer's **effect stack**, or one box in a node graph |
 | **Source layer** | Another layer an effect reads as an input, such as the one Emit from image takes its points from |
+| **Scene pass** | What a 3D precomp knows about its pixels, handed to effects: **Normals**, **Position**, **Part id** and **Depth** |
+| **Part** | A node of a 3D model, each material of a node with more than one, or a whole 3D layer, as a scene pass counts them. Its number comes from its layer and its names. **Part matte** keeps the parts picked |
 | **Driver** | A node that makes a value rather than a picture and drives a parameter through a wire |
 | **Read**, **Input**, **Output** nodes | Bring an item in, take a value or picture from outside, the one picture the graph shows |
 | **Merge**, **Switch**, **Time offset** nodes | A over B, pick one input, show the input at another time |
@@ -123,8 +136,11 @@ Not interchangeable.
 | **Shapes** | Paths on a wire: a Read box hands out the paths of the shape layers in the comp it reads |
 | **Collide with** | A layer whose shapes and masks Particulate's particles hit. With one set, each frame's particles are worked out from the frame before |
 | **Flock** | Particulate's particles steering by their neighbours: apart, the same way, together. Worked out from the frame before, as Collide with is |
-| **Sparks** | Small particles Particulate throws out where one of its particles dies. Worked out from the frame before |
+| **Sparks** | Small particles Particulate throws out as one of its particles dies, hits something or flies. Worked out from the frame before |
+| **Simulate** | Particulate worked out step by step on the graphics card, up to its Max particles, under fields and what it hits. Saved as kept states, or baked to the project's cache |
 | **Trails** | Particulate drawing each frame's particles over the picture it kept from the frame before, faded, zoomed and turned, so they leave smears |
+| **Volumetric light** | A light seen in the air it shines through: its beam, the shafts 3D layers cut in it, its glow |
+| **Environment light** | A light from a picture of everything round the scene, an HDRI, that lights 3D layers and models and can show behind them. Its picture is its **Source** layer |
 | **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
 | **OCIO config** | An OpenColorIO config a project can name |
 

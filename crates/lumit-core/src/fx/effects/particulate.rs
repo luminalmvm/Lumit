@@ -28,306 +28,21 @@
 //! *visible* is the layer's own 3D switch and the composition's camera, which
 //! the renderer threads in beside the birth schedule.
 
-use crate::fx::points::{self, Emitter, EmitterShape, Forces, ParticleLook, PointsParams};
+use crate::fx::points::emitter::{Emitter, EmitterShape};
+use crate::fx::points::{self, Forces, ParticleLook, PointsParams};
 use crate::fx::{
     builtins::MAP_PLACEMENT_OPTIONS, cpu, params::CurvePoints, params::ParamId, params::Params,
     params::Value, registry::EffectDef, registry::EffectMetadata, registry::ResolveCx,
-    registry::Signature, schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
-    schema::ParamGroup, schema::Port, schema::PortType,
+    registry::Signature, schema::EffectSchema, schema::Port, schema::PortType,
 };
 use lumit_fx_macros::Effect;
+
+pub mod rows;
 
 /// Particulate's declared **data** output: the same particles it
 /// draws, offered as a stream. Teal, like every geometry socket, and drawn from
 /// the signature rather than from anything Particulate-specific at the seam.
 const POINTS_OUT: &[Port] = &[Port::new("points", "Points", PortType::Points)];
-
-const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGroup {
-    ParamGroup {
-        label,
-        params,
-        collapsed: false,
-        visible_when: None,
-        visible_when_lens_elements: None,
-    }
-}
-
-/// The kickers particulate.md §2 lists its controls under, and the ones added
-/// since. None starts closed: every one of them holds a control someone
-/// reaches for on the first day.
-pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
-    group(
-        "Emitter",
-        &[
-            "shape",
-            "position_x",
-            "position_y",
-            "position_z",
-            "width",
-            "height",
-            "depth",
-            "emitter_angle",
-            "path_from",
-            "mask_path",
-            "density_layer",
-            "density_layer_placement",
-            "emit_rate",
-            "direction",
-            "direction_z",
-            "spread",
-            "spread_z",
-            "initial_speed",
-            "speed_jitter",
-        ],
-    ),
-    group(
-        "Bursts",
-        &["burst", "burst_count", "burst_interval", "trigger"],
-    ),
-    group(
-        "Particle",
-        &[
-            "life",
-            "life_jitter",
-            "size",
-            "size_jitter",
-            "size_over_life",
-            "opacity_over_life",
-            "colour",
-            "end_colour",
-            "rotation",
-            "rotation_jitter",
-            "spin",
-            "align_to_motion",
-        ],
-    ),
-    group(
-        "Variation",
-        &[
-            "size_by",
-            "opacity_by",
-            "colour_by",
-            "speed_min",
-            "speed_max",
-        ],
-    ),
-    group(
-        "Forces",
-        &[
-            "gravity",
-            "wind_x",
-            "wind_y",
-            "wind_z",
-            "drag",
-            "turbulence_amount",
-            "turbulence_scale",
-            "turbulence_speed",
-        ],
-    ),
-    group("Edges", &["edge", "edge_margin"]),
-    group(
-        "Collide",
-        &["collide_with", "on_contact", "bounciness", "friction"],
-    ),
-    group(
-        "Flock",
-        &["separation", "alignment", "cohesion", "flock_radius"],
-    ),
-    group(
-        "Sparks",
-        &["sparks", "spark_speed", "spark_life", "spark_size"],
-    ),
-    group("Trails", &["persistence", "zoom", "turn"]),
-    group(
-        "Render",
-        &[
-            "mode",
-            "feather",
-            "sprite_layer",
-            "streak_length",
-            "particle_blend",
-            "max_particles",
-        ],
-    ),
-];
-
-/// Each render mode's own control, live only in that mode.
-///
-/// Wind's dependence on Drag is deliberately **not** here: a row that means
-/// nothing while a *number* beside it is zero is not one of the three shapes
-/// [`EnabledCond`] carries, and inventing a fourth for one row would be
-/// growing the panel's affordance set into a scripting surface. The Wind rows
-/// say it in their descriptions instead, which is where particulate.md §2 puts
-/// it.
-pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
-    EnabledWhen {
-        param: "feather",
-        on: "mode",
-        cond: EnabledCond::ChoiceIs(0),
-    },
-    EnabledWhen {
-        param: "sprite_layer",
-        on: "mode",
-        cond: EnabledCond::ChoiceIs(1),
-    },
-    EnabledWhen {
-        param: "streak_length",
-        on: "mode",
-        cond: EnabledCond::ChoiceIs(2),
-    },
-    // Each burst row means something only in the bursts that read it.
-    EnabledWhen {
-        param: "burst_count",
-        on: "burst",
-        cond: EnabledCond::ChoiceIsNot(0),
-    },
-    EnabledWhen {
-        param: "burst_interval",
-        on: "burst",
-        cond: EnabledCond::ChoiceIs(2),
-    },
-    EnabledWhen {
-        param: "trigger",
-        on: "burst",
-        cond: EnabledCond::ChoiceIs(3),
-    },
-    EnabledWhen {
-        param: "edge_margin",
-        on: "edge",
-        cond: EnabledCond::ChoiceIsNot(0),
-    },
-    // Following the shape leaves no mask to choose.
-    EnabledWhen {
-        param: "mask_path",
-        on: "path_from",
-        cond: EnabledCond::ChoiceIsNot(1),
-    },
-    // The step reads no pictures, so a collider, a flock or sparks leave
-    // births even, and their particles are drawn over the picture one by one.
-    EnabledWhen {
-        param: "particle_blend",
-        on: "separation",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "particle_blend",
-        on: "alignment",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "particle_blend",
-        on: "cohesion",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "particle_blend",
-        on: "sparks",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer",
-        on: "separation",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer",
-        on: "alignment",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer",
-        on: "cohesion",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer",
-        on: "sparks",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer_placement",
-        on: "separation",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer_placement",
-        on: "alignment",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer_placement",
-        on: "cohesion",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer_placement",
-        on: "sparks",
-        cond: EnabledCond::Nought,
-    },
-    // A kept picture is drawn from the driver walk's stream, which reads no
-    // pictures either.
-    EnabledWhen {
-        param: "particle_blend",
-        on: "persistence",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer",
-        on: "persistence",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "density_layer_placement",
-        on: "persistence",
-        cond: EnabledCond::Nought,
-    },
-    EnabledWhen {
-        param: "particle_blend",
-        on: "collide_with",
-        cond: EnabledCond::LayerUnset,
-    },
-    EnabledWhen {
-        param: "density_layer",
-        on: "collide_with",
-        cond: EnabledCond::LayerUnset,
-    },
-    EnabledWhen {
-        param: "density_layer_placement",
-        on: "collide_with",
-        cond: EnabledCond::LayerUnset,
-    },
-    EnabledWhen {
-        param: "on_contact",
-        on: "collide_with",
-        cond: EnabledCond::LayerSet,
-    },
-    EnabledWhen {
-        param: "bounciness",
-        on: "collide_with",
-        cond: EnabledCond::LayerSet,
-    },
-    EnabledWhen {
-        param: "bounciness",
-        on: "on_contact",
-        cond: EnabledCond::ChoiceIs(0),
-    },
-    EnabledWhen {
-        param: "friction",
-        on: "collide_with",
-        cond: EnabledCond::LayerSet,
-    },
-    // Only a particle that carries on along the surface slows on it.
-    EnabledWhen {
-        param: "friction",
-        on: "on_contact",
-        cond: EnabledCond::ChoiceIsNot(2),
-    },
-    EnabledWhen {
-        param: "friction",
-        on: "on_contact",
-        cond: EnabledCond::ChoiceIsNot(3),
-    },
-];
 
 /// Particulate's controls (particulate.md §2).
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -345,10 +60,42 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
     // The layer's local time joins the cache key, the standard rule for a
     // seeded effect (docs/08 §1.3).
     seeded = true,
-    groups = PARTICULATE_GROUPS,
-    enabled_when = PARTICULATE_ENABLED_WHEN,
+    groups = rows::PARTICULATE_GROUPS,
+    enabled_when = rows::PARTICULATE_ENABLED_WHEN,
 )]
 pub struct Particulate {
+    /// Works each frame's particles out from the frame before on the graphics
+    /// card, up to Max particles ([`points::sim`]). Turbulence becomes a flow
+    /// the particles are pushed about by, and the rows below come alive.
+    #[toggle(label = "Simulate", default = false)]
+    pub simulate: bool,
+
+    /// How many times a frame the particles move. More keeps fast ones honest.
+    #[counter(
+        label = "Sub-steps",
+        min = 1,
+        max = 8,
+        default = 2,
+        hard_min = 1,
+        hard_max = 8,
+        unit = Raw
+    )]
+    pub sub_steps: i32,
+
+    /// Bake the simulation to the project's cache.
+    #[action(label = "Bake")]
+    pub bake: (),
+
+    /// Stop a running bake.
+    #[action(label = "Cancel")]
+    pub cancel: (),
+
+    /// The particles live in the comp's 3D space, carried by the layer's
+    /// placement and drawn through the camera, so 3D layers pass in front of
+    /// and behind them.
+    #[toggle(label = "In the scene", default = false)]
+    pub in_scene: bool,
+
     /// Where particles are born. Area shapes emit uniformly over their
     /// interior, Line along its segment, Mask path along the arc-length
     /// polyline.
@@ -403,6 +150,11 @@ pub struct Particulate {
     /// path. An empty polyline emits nothing — the documented no-op.
     #[mask_path(label = "Mask path")]
     pub mask_path: bool,
+
+    /// The layer a Layer emitter gives birth from, where its picture is
+    /// bright.
+    #[layer(label = "Emitter layer")]
+    pub emitter_layer: bool,
 
     /// A picture births follow: a particle is born where it is bright, inside
     /// the emitter's shape. Unset, births fill the shape evenly as before.
@@ -630,6 +382,48 @@ pub struct Particulate {
     )]
     pub speed_max: f32,
 
+    /// Where the Attractor, Vortex and Sphere sit, px@comp.
+    #[slider(label = "Field x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
+    pub field_x: f32,
+
+    /// See [`field_x`](Self::field_x).
+    #[slider(label = "Field y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
+    pub field_y: f32,
+
+    /// See [`field_x`](Self::field_x).
+    #[slider(label = "Field z", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub field_z: f32,
+
+    /// How far the three reach, px@comp.
+    #[slider(
+        label = "Field radius",
+        min = 1.0,
+        max = 2000.0,
+        default = 400.0,
+        hard_min = 1.0,
+        unit = Px
+    )]
+    pub field_radius: f32,
+
+    /// How hard particles are pulled to the field's middle, px@comp per
+    /// second². Below nought it pushes them away.
+    #[slider(min = -5000.0, max = 5000.0, default = 0.0, unit = Px)]
+    pub attractor: f32,
+
+    /// How fast particles are swept round the field's middle, px@comp per
+    /// second. Below nought they go the other way.
+    #[slider(min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub vortex: f32,
+
+    /// The line the Vortex turns about.
+    #[choice(label = "Vortex axis", options = ["X", "Y", "Z"], default = 1)]
+    pub vortex_axis: u32,
+
+    /// How hard particles are thrown out of a ball of the field's radius,
+    /// px@comp per second².
+    #[slider(min = 0.0, max = 20000.0, default = 0.0, hard_min = 0.0, unit = Px)]
+    pub sphere: f32,
+
     /// px@comp per second², positive down.
     #[slider(min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub gravity: f32,
@@ -709,6 +503,24 @@ pub struct Particulate {
     /// where they have been. Unset, nothing changes.
     #[layer(label = "Collide with")]
     pub collide_with: bool,
+
+    /// Particles hit every 3D layer in the comp, as well as Collide with.
+    #[toggle(label = "All 3D layers", default = false)]
+    pub collide_all: bool,
+
+    /// Particles hit the floor the 3D views draw.
+    #[toggle(label = "Ground", default = false)]
+    pub ground: bool,
+
+    /// How far above that floor they hit it, px@comp.
+    #[slider(
+        label = "Ground height",
+        min = -2000.0,
+        max = 2000.0,
+        default = 0.0,
+        unit = Px
+    )]
+    pub ground_height: f32,
 
     /// What a particle does when it hits.
     #[choice(label = "On contact", options = *points::Contact::OPTIONS, default = 0)]
@@ -796,6 +608,11 @@ pub struct Particulate {
     )]
     pub sparks: f32,
 
+    /// When a particle throws its sparks: all at once as it dies, each time it
+    /// hits something, or that many each second as it goes.
+    #[choice(label = "Sparks from", options = ["Death", "Bounce", "Flight"], default = 0)]
+    pub sparks_from: u32,
+
     /// How fast sparks fly out, px@comp per second.
     #[slider(
         label = "Spark speed",
@@ -806,6 +623,18 @@ pub struct Particulate {
         unit = Px
     )]
     pub spark_speed: f32,
+
+    /// How much of its parent's speed a spark starts with, per cent.
+    #[slider(
+        label = "Spark inherit",
+        min = 0.0,
+        max = 100.0,
+        default = 0.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub spark_inherit: f32,
 
     /// How long a spark lasts, seconds.
     #[slider(
@@ -945,6 +774,17 @@ impl Particulate {
     #[must_use]
     pub fn px_scale_of(p: Params<'_>) -> f32 {
         p.float(Self::DERIVED_PX_SCALE, 1.0)
+    }
+
+    /// The layer row births are weighted by: a Layer emitter's own layer, or
+    /// the Density layer.
+    #[must_use]
+    pub fn density_row(&self) -> &'static str {
+        if self.shape == 9 {
+            "emitter_layer"
+        } else {
+            "density_layer"
+        }
     }
 
     /// The bundle the closed forms read (docs/impl/effect-registry.md §2.4) —
@@ -1106,5 +946,44 @@ impl EffectDef for ParticulateDef {
     /// pixels this frame is drawn at.
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
         push(Particulate::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
+    }
+}
+
+/// The op that gives `layer` in `comp` the effect stack `effects`. An effect
+/// arriving that draws in the scene, by any route, puts a 2D layer in 3D in the
+/// same step, so its switch, gizmo and views agree with where it draws.
+#[must_use]
+pub fn set_effects(
+    comp: uuid::Uuid,
+    layer: &crate::model::Layer,
+    effects: Vec<crate::model::EffectInstance>,
+) -> crate::ops::Op {
+    use crate::ops::Op;
+    let before: Vec<_> = layer
+        .effects
+        .iter()
+        .filter(|e| rows::is_scene(e))
+        .map(|e| e.id)
+        .collect();
+    let into_3d = !layer.switches.three_d
+        && effects.iter().any(|e| {
+            (rows::is_scene(e) && !before.contains(&e.id))
+                || (super::smoke::is_smoke(e) && !layer.effects.iter().any(|b| b.id == e.id))
+        });
+    let set = Op::SetLayerEffects {
+        comp,
+        layer: layer.id,
+        effects,
+    };
+    if !into_3d {
+        return set;
+    }
+    let three_d = Op::SetLayerThreeD {
+        comp,
+        layer: layer.id,
+        three_d: true,
+    };
+    Op::Batch {
+        ops: vec![set, three_d],
     }
 }

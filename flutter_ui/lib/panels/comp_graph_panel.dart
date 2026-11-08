@@ -371,7 +371,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     if (!mounted || ui == null || ui.activePanel != widget.host) {
       return _priorDeleteClaim?.call() ?? false;
     }
-    return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
+    return tieDelete() ||
+        _deleteSelected() ||
+        (_priorDeleteClaim?.call() ?? false);
   }
 
   bool _consoleClaim() {
@@ -766,7 +768,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
               home: InstanceHome.graph(
                 widget.comp,
                 draw: (staged) => widget.comp.renderFrameWithGraphPreview(
-                  frame: BigInt.from(ui.playheadFrame.value),
+                  frame: ui.playheadFrame.value,
                   scale: ui.viewerScale,
                   instances: staged,
                 ),
@@ -797,7 +799,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           home: InstanceHome.graph(
             widget.comp,
             draw: (staged) => widget.comp.renderFrameWithGraphPreview(
-              frame: BigInt.from(ui.playheadFrame.value),
+              frame: ui.playheadFrame.value,
               scale: ui.viewerScale,
               instances: staged,
             ),
@@ -805,7 +807,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           effect: effect,
           param: param,
           comp: widget.comp,
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           onApplied: () {
             ui.model.refresh();
             _reload();
@@ -887,7 +889,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     _preview.request(() {
       try {
         widget.comp.renderFrameWithGraphPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           instances: _instancesWith(node, values),
         );
@@ -1663,6 +1665,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       [for (final (w, _, _) in _tieWires(layout)) w];
 
   @override
+  List<TieWire> tieWiresNow() => _wiresOf(_layout());
+
+  @override
   Offset get noteSpot => graphClearSpot(
         _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
         [for (final b in _layout().boxes) b.rect],
@@ -1763,14 +1768,13 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
     final at = (_positions[drag.key] ?? box.rect.topLeft) +
         Offset(box.rect.width / 2, box.rect.height / 2);
+    // Measured along each wire as its ties route it.
+    final wires = _wiresOf(layout);
     for (final edge in graph.wiring.edges) {
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
-      if (graphWireDistance(ends.$1, ends.$2, at,
-              wires: _ui!.workspace.interface.wireStyle) >
-          graphWireGrab) {
-        continue;
-      }
+      final wire = (key: tieWireKey(_toKey(edge), edge.toPort), from: ends.$1, to: ends.$2);
+      if (tieWireDistance(wire, at, wires) > graphWireGrab) continue;
       final into = _freeSocket(box, ends.$3, isInput: true);
       final outOf = _freeSocket(box, ends.$3, isInput: false);
       if (into != null && outOf != null) {
@@ -1810,7 +1814,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
-    final socket = layout.socketAt(at);
+    // Ctrl and a press on a point is a press on the socket its wires leave.
+    final socket =
+        layout.socketAt(tieWireFrom(event, at, _wiresOf(layout)) ?? at);
     // A group's bar, unless a socket is poking out over it.
     if (groupDown(event, at, (drag) => _nodeDrag = drag,
         unless: socket != null)) {
@@ -1996,6 +2002,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
+      tieWireLanded();
       final landed = layout.snapAt(at, (s) => _accepts(flight.from, s)) ??
           layout.socketAt(at);
       if (flight.detached case final held?) {
@@ -2309,7 +2316,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           },
           onPointerSignal: _wheel,
           behavior: HitTestBehavior.opaque,
-          child: ClipRect(
+          child: tieCursorRegion(ClipRect(
             child: Container(
               key: const ValueKey('comp-graph-canvas'),
               color: t.surface0,
@@ -2411,7 +2418,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                 ],
               ),
             ),
-          ),
+          )),
         ),
       ),
       handPanLayer(_ui!.tools, t, (d) => setState(() => _pan += d)),
@@ -2452,7 +2459,7 @@ class _CompWirePainter extends CustomPainter {
     paintTiedWires(canvas, wires, ties,
         pan: pan, zoom: zoom, style: wireStyle, theme: theme);
     if (flight case final f?) {
-      _wire(canvas, f.$1, f.$2, dragged, dashes: true);
+      _wire(canvas, ties.via ?? f.$1, f.$2, dragged, dashes: true);
     }
   }
 

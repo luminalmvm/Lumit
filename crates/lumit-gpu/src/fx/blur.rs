@@ -115,8 +115,8 @@ pub struct RadialBlurOp {
     pub amount_px: f32,
     /// Evenly spaced taps along the ray (Zoom) or its perpendicular (Spin).
     pub taps: i32,
-    /// True = Spin (tangent direction), false = Zoom (radial direction).
-    pub spin: bool,
+    /// 1 = Spin (tangent direction), 0 = Zoom (radial direction), 2 = Rays.
+    pub kind: u32,
     /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
@@ -129,7 +129,7 @@ struct RadialBlurParams {
     centre: [f32; 2],
     amount: f32,
     taps: i32,
-    spin: u32,
+    kind: u32,
     edge: u32,
     mix_amt: f32,
     /// 1 = scale Amount by the matte.
@@ -608,7 +608,7 @@ impl FxEngine {
                 centre: op.centre_px,
                 amount: op.amount_px,
                 taps: op.taps,
-                spin: u32::from(op.spin),
+                kind: op.kind,
                 edge: op.edge,
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
@@ -871,7 +871,7 @@ impl FxEngine {
     /// The halo at Falloff 0: shrunk onto a grid, blurred there by the shared
     /// gaussian read 6σ out, and scaled back up. The CPU reference is
     /// `cpu::glow_gaussian`.
-    fn glow_gaussian(
+    pub(super) fn glow_gaussian(
         &self,
         ctx: &GpuContext,
         bright: &wgpu::Texture,
@@ -880,16 +880,6 @@ impl FxEngine {
         g: &GlowGaussianOp,
     ) -> wgpu::Texture {
         let [cw, ch] = g.grid;
-        let grid = |axis: u32| GlowExpParams {
-            step: g.step,
-            lambda: 0.0,
-            weight: 1.0,
-            axis,
-            first: 1,
-            taps: 0,
-            reach: 0.0,
-            _pad: 0.0,
-        };
         let blur = |dir: [f32; 2]| BlurParams {
             dir,
             radius: g.reach,
@@ -899,6 +889,46 @@ impl FxEngine {
             matte_on: 0.0,
             _pad0: 0.0,
             field: [[0.0; 4]; 3],
+        };
+        // A grid as fine as the picture is the picture: the tent and the
+        // scale-up would copy it there and back, texel for texel.
+        if g.step <= 1.0 {
+            let tmp = work_texture(ctx, w, h, "fx-glow-tmp");
+            let halo = work_texture(ctx, w, h, "fx-glow-halo");
+            let p = blur([1.0, 0.0]);
+            self.dispatch(
+                ctx,
+                &self.blur,
+                bright,
+                bright,
+                &tmp,
+                w,
+                h,
+                bytemuck::bytes_of(&p),
+            );
+            let p = blur([0.0, 1.0]);
+            self.dispatch(
+                ctx,
+                &self.blur,
+                &tmp,
+                &tmp,
+                &halo,
+                w,
+                h,
+                bytemuck::bytes_of(&p),
+            );
+            ctx.recycle(tmp);
+            return halo;
+        }
+        let grid = |axis: u32| GlowExpParams {
+            step: g.step,
+            lambda: 0.0,
+            weight: 1.0,
+            axis,
+            first: 1,
+            taps: 0,
+            reach: 0.0,
+            _pad: 0.0,
         };
         let (across, across_p) = (work_texture(ctx, cw, h, "fx-glow-across"), grid(0));
         let (coarse, coarse_p) = (work_texture(ctx, cw, ch, "fx-glow-coarse"), grid(1));
@@ -966,7 +996,7 @@ impl FxEngine {
     /// The halo for a Falloff above 0: each exponential is shrunk onto its
     /// own grid, convolved there, and added back up at full size. The CPU
     /// reference is `cpu::glow_exponential`.
-    fn glow_exponential(
+    pub(super) fn glow_exponential(
         &self,
         ctx: &GpuContext,
         bright: &wgpu::Texture,

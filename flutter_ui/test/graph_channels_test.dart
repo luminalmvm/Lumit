@@ -4,7 +4,6 @@
 // and the block tools all fell through with the keys still there. Pure, so it
 // is checked against a stub entry rather than the engine.
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/graph_channels.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
@@ -31,6 +30,7 @@ BridgeLayerEntry entry({required BridgeScalar volumeDb}) {
     ),
     info: BridgeLayerInfo(
       pitchFollowsSpeed: false,
+      sends: const [],
       collapseForced: false,
       volumeDb: volumeDb,
       pan: const BridgeScalar.static_(0),
@@ -58,7 +58,7 @@ BridgeLayerEntry entry({required BridgeScalar volumeDb}) {
       ),
       inFrame: 0,
       outFrame: 10,
-      clipFrames: Int64List(0),
+      clipFrames: const [],
       clips: const [],
       transform: BridgeTransform(
         anchorX: const BridgeScalar.static_(0),

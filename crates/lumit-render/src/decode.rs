@@ -918,35 +918,32 @@ fn decode(
     // One layer of a layered image file, or an Illustrator document: the
     // file's own reader again, since ffmpeg only ever opens the flattened
     // picture of the one and can't open the other.
-    if let Some(out) = lumit_media::read_own(&req.source, req.frame, req.target_width) {
-        let out = out.map_err(|e| e.to_string())?;
-        cache.insert(
-            cache_key,
-            CachedFrame {
-                width: out.width,
-                height: out.height,
-                rgba: out.rgba.clone(),
-                format: out.format,
-                once: false,
-                stamp,
-            },
-        );
+    let stood_in = lumit_media::stand_ins();
+    let (out, frame, keep) = match lumit_media::read_own(&req.source, req.frame, req.target_width) {
+        Some(out) => (out.map_err(|e| e.to_string())?, req.frame, true),
+        None => {
+            let dec = decoders
+                .open(req.item, &req.source)
+                .map_err(|e| e.to_string())?;
+            let frame = req.frame.min(dec.frame_count().saturating_sub(1));
+            let out = dec
+                .frame_or_stand_in(frame, req.target_width)
+                .map_err(|e| e.to_string())?;
+            (out, frame, !cfg!(target_arch = "wasm32"))
+        }
+    };
+    // A stand-in is never kept, or the frame itself would never be asked
+    // for again. The browser build's footage is kept where the page left it.
+    if !keep || lumit_media::stand_ins() != stood_in {
         return Ok(FramePixels {
             width: out.width,
             height: out.height,
             rgba: out.rgba,
             format: out.format,
-            frame: req.frame,
+            frame,
             item: req.item,
         });
     }
-    let dec = decoders
-        .open(req.item, &req.source)
-        .map_err(|e| e.to_string())?;
-    let frame = req.frame.min(dec.frame_count().saturating_sub(1));
-    let out = dec
-        .frame_rgba(frame, req.target_width)
-        .map_err(|e| e.to_string())?;
     cache.insert(
         cache_key,
         CachedFrame {
@@ -1460,7 +1457,7 @@ fn decode_comp(
     media_epoch: u64,
     progress: &dyn Fn(usize),
 ) -> Result<CompFrame, String> {
-    let decode_started = std::time::Instant::now();
+    let decode_started = web_time::Instant::now();
     let mut layers = Vec::with_capacity(jobs.len());
     for (i, job) in jobs.iter().enumerate() {
         let req = Request {

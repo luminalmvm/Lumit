@@ -11,47 +11,14 @@
 //
 // A light that casts shadows is dimmed by every caster between it and the
 // texel: the ray back towards the light meets each caster's plane, and the
-// caster's square is read there, softer from a smaller level for diffusion.
+// caster's square is read there, softer from a smaller level for diffusion,
+// and each model's shadow map (shadow_core.wgsl, prepended).
 
 const MAX_LIT_LIGHTS: u32 = 8u;
-const MAX_SHADOW_CASTERS: u32 = 16u;
-const INV_TWO_PI: f32 = 0.15915494;
-const SHADOW_GAP: f32 = 0.5;
-const SHADOW_OPAQUE: f32 = 1e-3;
-
-struct Light {
-    // Four corners of the emitting rectangle in comp pixels. c0.w = 1 for a
-    // light from before it had rows; the other three w are unused.
-    c0: vec4<f32>,
-    c1: vec4<f32>,
-    c2: vec4<f32>,
-    c3: vec4<f32>,
-    // rgb = scene-linear colour with intensity folded in, w = falloff px.
-    colour: vec4<f32>,
-    // xyz = spot axis, w = cos(half-angle) or < -1 for "not a spot".
-    axis: vec4<f32>,
-    // x = kind (0 point or spot, 1 area, 2 parallel, 3 ambient),
-    // y = falloff (0 none, 1 smooth, 2 inverse square clamped),
-    // z = radius px, w = cos of the feather's inner angle.
-    flags: vec4<f32>,
-    // x = shadow darkness 0..1, y = the widest soft edge on a caster px, z =
-    // which casters can shade this layer, one bit each, w = how far that
-    // edge can stretch on a caster turned from the light.
-    shadow: vec4<f32>,
-};
-
-struct Caster {
-    // xyz = the picture's top-left corner, w = Light transmission.
-    origin: vec4<f32>,
-    // xyz = its full width and height as edges in comp pixels.
-    u: vec4<f32>,
-    v: vec4<f32>,
-    // Where the picture sits in its square: corner, width and height.
-    place: vec4<f32>,
-};
 
 struct Params {
-    // xyz = comp-space position of texel (0,0).
+    // xyz = comp-space position of texel (0,0), w = how much of an
+    // environment it reflects.
     origin: vec4<f32>,
     // xyz = comp-space step per texel in x / in y.
     du: vec4<f32>,
@@ -68,7 +35,7 @@ struct Params {
     // w = this layer's own caster, or -1.
     base: vec4<f32>,
     // x = how many casters, y = the side of their squares, z = 1 for a layer
-    // that takes no light, only shadows.
+    // that takes no light, only shadows, w = 1 for particles in the scene.
     casters_head: vec4<f32>,
     lights: array<Light, 8>,
     casters: array<Caster, 16>,
@@ -79,165 +46,38 @@ struct Params {
 @group(0) @binding(3) var<uniform> p: Params;
 @group(0) @binding(4) var squares: texture_2d_array<f32>;
 @group(0) @binding(5) var square_sampler: sampler;
+// Particles in the scene: one over clip w at each texel, nought where none is.
+// Their place is `origin + (du·x + dv·y + normal) / that`.
+@group(0) @binding(6) var points_depth: texture_2d<f32>;
 
-// Unit vector, or the zero vector when the input is too short to have a
-// direction — the caller checks for zero rather than dividing by nothing.
-fn normalise(a: vec3<f32>) -> vec3<f32> {
-    let len = length(a);
-    if (len < 1e-6) {
-        return vec3<f32>(0.0);
+// How much of a light reaches a particle in the scene, lit as a small ball
+// seen whole: the share of it lit as the camera sees it, so one lit from
+// behind fades to a rim rather than going out.
+fn ball(pos: vec3<f32>, l: Light) -> f32 {
+    var to_light = light_centre(l) - pos;
+    if (u32(l.flags.x + 0.5) == 2u) {
+        to_light = -l.axis.xyz;
     }
-    return a / len;
+    let ld = normalise(to_light);
+    let seen = 0.5 + 0.5 * dot(normalise(p.eye.xyz - pos), ld);
+    return irradiance(pos, ld, l) * seen;
 }
 
-fn corner(l: Light, i: u32) -> vec3<f32> {
-    if (i == 0u) { return l.c0.xyz; }
-    if (i == 1u) { return l.c1.xyz; }
-    if (i == 2u) { return l.c2.xyz; }
-    return l.c3.xyz;
+// The light reaching `pos`, a plane's or a particle's.
+fn lit_by(pos: vec3<f32>, l: Light) -> f32 {
+    if (p.casters_head.w > 0.5) {
+        return ball(pos, l);
+    }
+    return irradiance(pos, p.normal.xyz, l);
 }
-
-// The cosine-weighted fraction of the hemisphere above `pos` that the
-// rectangle covers, clipped to the horizon first (Sutherland-Hodgman against
-// one plane; a convex quad keeps at most five corners).
-fn rect_form_factor(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
-    var poly: array<vec3<f32>, 8>;
-    var count: u32 = 0u;
-    for (var i: u32 = 0u; i < 4u; i = i + 1u) {
-        let a = corner(l, i) - pos;
-        let b = corner(l, (i + 1u) % 4u) - pos;
-        let da = dot(a, n);
-        let db = dot(b, n);
-        if (da >= 0.0 && count < 8u) {
-            poly[count] = a;
-            count = count + 1u;
-        }
-        if ((da >= 0.0) != (db >= 0.0) && count < 8u) {
-            let t = da / (da - db);
-            poly[count] = a + (b - a) * t;
-            count = count + 1u;
-        }
-    }
-    if (count < 3u) {
-        return 0.0;
-    }
-    var sum: f32 = 0.0;
-    for (var i: u32 = 0u; i < count; i = i + 1u) {
-        let a = normalise(poly[i]);
-        let b = normalise(poly[(i + 1u) % count]);
-        if (all(a == vec3<f32>(0.0)) || all(b == vec3<f32>(0.0))) {
-            return 0.0;
-        }
-        let edge = normalise(cross(a, b));
-        if (all(edge == vec3<f32>(0.0))) {
-            continue;
-        }
-        sum = sum + acos(clamp(dot(a, b), -1.0, 1.0)) * dot(edge, n);
-    }
-    // Magnitude, not the signed sum — see the oracle: the sign is only the
-    // corner winding, and a light here emits from both faces.
-    return min(abs(sum * INV_TWO_PI), 1.0);
-}
-
-fn light_centre(l: Light) -> vec3<f32> {
-    return (l.c0.xyz + l.c1.xyz + l.c2.xyz + l.c3.xyz) * 0.25;
-}
-
-// The sRGB curve, carried through nought, as lumit_core::lighting::encode.
-fn encode(x: vec3<f32>) -> vec3<f32> {
-    let v = abs(x);
-    let e = select(1.055 * pow(v, vec3<f32>(1.0 / 2.4)) - 0.055, v * 12.92, v <= vec3<f32>(0.0031308));
-    return sign(x) * e;
-}
-
-fn decode(x: vec3<f32>) -> vec3<f32> {
-    let v = abs(x);
-    let d = select(pow((v + 0.055) / 1.055, vec3<f32>(2.4)), v / 12.92, v <= vec3<f32>(0.04045));
-    return sign(x) * d;
-}
-
-// Matches lumit_core::lighting::smoothstep, including its degenerate branch —
-// WGSL's own smoothstep is undefined when the edges are equal.
-fn soft_step(edge0: f32, edge1: f32, x: f32) -> f32 {
-    if (edge1 <= edge0) {
-        return select(0.0, 1.0, x >= edge1);
-    }
-    let t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
-    return t * t * (3.0 - 2.0 * t);
-}
-
-// Full strength out to the radius, then the chosen falloff.
-fn reach(d: f32, l: Light) -> f32 {
-    let mode = u32(l.flags.y + 0.5);
-    let r = l.flags.z;
-    if (mode == 0u || d <= r) {
-        return 1.0;
-    }
-    if (mode == 1u) {
-        let legacy = l.c0.w > 0.5;
-        let falloff_px = l.colour.w;
-        if (falloff_px <= 0.0) {
-            return select(0.0, 1.0, legacy && r <= 0.0);
-        }
-        let t = clamp(1.0 - (d - r) / falloff_px, 0.0, 1.0);
-        return select(t * t * (3.0 - 2.0 * t), t * t, legacy);
-    }
-    return (r / d) * (r / d);
-}
-
-// How much of the light is left at `pos` after its falloff and its cone, or
-// zero where none arrives; `to_light` is set to the way it arrives from.
-fn arrival(pos: vec3<f32>, l: Light, to_light: ptr<function, vec3<f32>>) -> f32 {
-    let kind = u32(l.flags.x + 0.5);
-    if (kind == 3u) {
-        return 0.0;
-    }
-    let centre = light_centre(l);
-    *to_light = centre - pos;
-    var r: f32 = 1.0;
-    if (kind == 2u) {
-        *to_light = -l.axis.xyz;
-    } else {
-        r = reach(length(*to_light), l);
-    }
-    if (r <= 0.0) {
-        return 0.0;
-    }
-
-    let cone_cos = l.axis.w;
-    var cone: f32 = 1.0;
-    if (cone_cos >= -1.0 && kind != 2u) {
-        let dir = normalise(pos - centre);
-        if (all(dir == vec3<f32>(0.0))) {
-            return 0.0;
-        }
-        cone = soft_step(cone_cos, l.flags.w, dot(dir, l.axis.xyz));
-    }
-    if (cone <= 0.0) {
-        return 0.0;
-    }
-    return r * cone;
-}
-
-fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
-    var to_light = vec3<f32>(0.0);
-    let strength = arrival(pos, l, &to_light);
-    if (strength <= 0.0) {
-        return 0.0;
-    }
-    var e: f32;
-    if (u32(l.flags.x + 0.5) == 1u) {
-        e = rect_form_factor(pos, n, l);
-    } else {
-        let dir = normalise(to_light);
-        if (all(dir == vec3<f32>(0.0))) {
-            e = 0.0;
-        } else {
-            e = max(dot(n, dir), 0.0);
-        }
-    }
-    return e * strength;
-}
+@group(0) @binding(8) var maps: texture_depth_2d_array;
+@group(0) @binding(9) var map_sampler: sampler_comparison;
+@group(0) @binding(10) var<uniform> shadow_maps: ShadowMaps;
+// The comp's environment (environment_core.wgsl, prepended).
+@group(0) @binding(11) var env_irradiance_cube: texture_cube<f32>;
+@group(0) @binding(12) var env_specular_cube: texture_cube<f32>;
+@group(0) @binding(13) var env_sampler: sampler;
+@group(0) @binding(14) var<uniform> environment: Environment;
 
 // Blinn-Phong, as lumit_core::lighting::highlight.
 fn highlight(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
@@ -261,97 +101,6 @@ fn highlight(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
     return pow(max(dot(n, h), 0.0), p.material.w) * strength;
 }
 
-// The square at `at`, its empty edge held beyond it, as the oracle's
-// ShadowCaster::sample.
-fn square_at(i: u32, at: vec2<f32>, lod: f32) -> vec4<f32> {
-    return textureSampleLevel(squares, square_sampler, at, i, lod);
-}
-
-// How much of the light gets past the casters to `pos`, per channel, before
-// the shadow's darkness, as lumit_core::lighting::transmitted. Only the
-// casters in the light's mask can reach this layer.
-fn transmitted(pos: vec3<f32>, l: Light) -> vec3<f32> {
-    var through = vec3<f32>(1.0);
-    let kind = u32(l.flags.x + 0.5);
-    if (kind == 3u) {
-        return through;
-    }
-    var dir = light_centre(l) - pos;
-    var bounded = true;
-    if (kind == 2u) {
-        dir = -l.axis.xyz;
-        bounded = false;
-    }
-    let reach = length(dir);
-    if (reach < 1e-6) {
-        return through;
-    }
-    let count = min(u32(p.casters_head.x), MAX_SHADOW_CASTERS);
-    let mask = u32(l.shadow.z + 0.5);
-    let size = p.casters_head.y;
-    for (var i: u32 = 0u; i < count; i = i + 1u) {
-        if (((mask >> i) & 1u) == 0u) {
-            continue;
-        }
-        let c = p.casters[i];
-        let n = cross(c.u.xyz, c.v.xyz);
-        let den = dot(dir, n);
-        if (abs(den) < 1e-12) {
-            continue;
-        }
-        let t = dot(c.origin.xyz - pos, n) / den;
-        if (t * reach <= SHADOW_GAP || (bounded && t >= 1.0)) {
-            continue;
-        }
-        let rel = pos + dir * t - c.origin.xyz;
-        let cu = cross(c.v.xyz, n);
-        let cv = cross(n, c.u.xyz);
-        let du = dot(c.u.xyz, cu);
-        let dv = dot(c.v.xyz, cv);
-        if (abs(du) < 1e-12 || abs(dv) < 1e-12) {
-            continue;
-        }
-        let uv = vec2<f32>(dot(rel, cu) / du, dot(rel, cv) / dv);
-        let at = c.place.xy + uv * c.place.zw;
-        // As soft as the caster is far along from here to the light.
-        var along = t;
-        if (!bounded) {
-            along = min(t / max(length(light_centre(l) - pos), 1.0), 1.0);
-        }
-        let spread = l.shadow.y * along;
-        // Stretched the way the caster turns from the light.
-        let facing = max(abs(den / (reach * length(n))), 1e-3);
-        let ku = dot(dir, c.u.xyz) / (reach * max(length(c.u.xyz), 1e-6) * facing);
-        let kv = dot(dir, c.v.xyz) / (reach * max(length(c.v.xyz), 1e-6) * facing);
-        let st = min(sqrt(1.0 + vec2<f32>(ku * ku, kv * kv)), vec2<f32>(l.shadow.w));
-        let texels = spread * c.place.z * size / max(length(c.u.xyz), 1e-6);
-        let edge = texels * st / size;
-        if (any(at < -edge) || any(at > 1.0 + edge)) {
-            continue;
-        }
-        var s: vec4<f32>;
-        if (texels * max(st.x, st.y) < 0.5) {
-            s = square_at(i, at, 0.0);
-        } else {
-            // Never further apart than a texel of the level read, the level
-            // for the radius between the two ways.
-            let g = sqrt(st.x * st.y);
-            let lod = log2(texels * g);
-            let last = f32(textureNumLevels(squares) - 1u);
-            let off = min(texels * g, exp2(min(lod, last))) * 0.5 / (g * size) * st;
-            s = 0.25 * (square_at(i, at + vec2<f32>(-off.x, -off.y), lod)
-                + square_at(i, at + vec2<f32>(off.x, -off.y), lod)
-                + square_at(i, at + vec2<f32>(-off.x, off.y), lod)
-                + square_at(i, at + vec2<f32>(off.x, off.y), lod));
-        }
-        through = through * clamp(1.0 - s.a + c.origin.w * s.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
-        if (all(through < vec3<f32>(SHADOW_OPAQUE))) {
-            break;
-        }
-    }
-    return through;
-}
-
 @compute @workgroup_size(8, 8)
 fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -361,15 +110,24 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = textureLoad(src, xy, 0);
     let live = u32(p.normal.w);
-    if (live == 0u) {
+    let surround = environment.colour.w > 0.5;
+    if (live == 0u && !surround) {
         textureStore(dst, xy, o);
         return;
     }
     let f = vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5);
-    let pos = p.origin.xyz + p.du.xyz * f.x + p.dv.xyz * f.y;
+    var pos = p.origin.xyz + p.du.xyz * f.x + p.dv.xyz * f.y;
+    if (p.casters_head.w > 0.5) {
+        let iw = textureLoad(points_depth, xy, 0).r;
+        if (iw <= 0.0) {
+            textureStore(dst, xy, o);
+            return;
+        }
+        pos = p.origin.xyz + (p.du.xyz * f.x + p.dv.xyz * f.y + p.normal.xyz) / iw;
+    }
     let encoded = p.base.y > 0.5;
     let accepts = u32(p.base.z + 0.5);
-    let takes = accepts != 0u && p.casters_head.x > 0.5;
+    let takes = accepts != 0u && (p.casters_head.x > 0.5 || shadow_maps.head.x > 0.5);
     if (p.casters_head.z > 0.5 || accepts == 2u) {
         // Unlit, or showing only its shadows, so only the shadows touch it:
         // each light that falls here dims it by what its casters stopped.
@@ -379,10 +137,13 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
                 break;
             }
             let l = p.lights[i];
-            if (!takes || l.shadow.x <= 0.0 || irradiance(pos, p.normal.xyz, l) <= 0.0) {
+            // Either face of a layer takes a shadow. A particle has no faces.
+            if (!takes || l.shadow.x <= 0.0 || (lit_by(pos, l) <= 0.0
+                && (p.casters_head.w > 0.5 || irradiance(pos, -p.normal.xyz, l) <= 0.0))) {
                 continue;
             }
-            dim = dim * (1.0 - l.shadow.x * (1.0 - transmitted(pos, l)));
+            let through = transmitted(pos, l) * mapped(pos, p.normal.xyz, l);
+            dim = dim * (1.0 - l.shadow.x * (1.0 - through));
         }
         if (accepts == 2u) {
             // Just the shadow, in the colour a caster lets through.
@@ -400,7 +161,9 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
         return;
     }
-    var gain = vec3<f32>(p.base.x);
+    // An environment surrounds everything, so with one a layer starts from
+    // black, as a model does.
+    var gain = vec3<f32>(select(p.base.x, 0.0, surround));
     var shine = vec3<f32>(0.0);
     let diffuse = p.material.y;
     for (var i: u32 = 0u; i < MAX_LIT_LIGHTS; i = i + 1u) {
@@ -413,11 +176,11 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
             gain = gain + p.material.x * colour;
             continue;
         }
-        let lit = irradiance(pos, p.normal.xyz, l);
+        let lit = lit_by(pos, l);
         let e = diffuse * lit;
         var left = vec3<f32>(1.0);
         if (takes && l.shadow.x > 0.0 && lit > 0.0) {
-            left = 1.0 - l.shadow.x * (1.0 - transmitted(pos, l));
+            left = 1.0 - l.shadow.x * (1.0 - transmitted(pos, l) * mapped(pos, p.normal.xyz, l));
         }
         gain = gain + e * colour * left;
         if (p.material.z > 0.0) {
@@ -425,6 +188,20 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
     let metal = p.eye.w;
+    if (surround) {
+        // The environment on a model's shading: Ambient takes its matte
+        // light, Reflection is how much of it the layer reflects, tinted by
+        // the layer as a metal is, and Shininess how sharply. Seen from
+        // either side.
+        let v = normalise(p.eye.xyz - pos);
+        let n = select(p.normal.xyz, -p.normal.xyz, dot(p.normal.xyz, v) < 0.0);
+        let k = clamp(p.origin.w, 0.0, 1.0);
+        let roughness = 1.0 - clamp(p.material.w / 100.0, 0.0, 1.0);
+        let matte = env_irradiance(env_irradiance_cube, env_sampler, environment, n);
+        let mirror = env_radiance(env_specular_cube, env_sampler, environment, reflect(-v, n), roughness);
+        let e = matte * p.material.x * (1.0 - k) + mirror * k;
+        gain = gain + select(e, encode(e), encoded);
+    }
     let lit = max(shine, vec3<f32>(0.0));
     let g = max(gain + metal * lit, vec3<f32>(0.0));
     if (encoded) {

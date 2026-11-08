@@ -8,6 +8,7 @@ project(runner LANGUAGES CXX)
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME}
   "main.cc"
+  "backdrop.cc"
   "extension_views.cc"
   "gpu_offload.cc"
   "my_application.cc"
@@ -42,5 +43,10 @@ target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::EGL PkgConfig::GLES)
 # the GTK 3 build of it, since that is the GTK the Flutter embedder uses.
 pkg_check_modules(WEBKIT REQUIRED IMPORTED_TARGET webkit2gtk-4.1)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WEBKIT)
+
+# KWin's blur behind a see-through window, asked for over Wayland
+# (backdrop.cc).
+pkg_check_modules(WAYLAND REQUIRED IMPORTED_TARGET wayland-client)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::WAYLAND)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

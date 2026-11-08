@@ -183,6 +183,30 @@
   "@lightAmbient": {
     "description": "Light type: light from everywhere at once, with no place or direction."
   },
+  "lightEnvironment": "Environment",
+  "@lightEnvironment": {
+    "description": "Light type: light from a picture of everything round the scene, such as an HDRI."
+  },
+  "layerRowEnvironmentSource": "source",
+  "@layerRowEnvironmentSource": {
+    "description": "Timeline layer row, small word after the name: an Environment light reads this layer's picture, so the layer itself is never drawn and its eye switch does nothing. Lower case, one word."
+  },
+  "lightSource": "Source",
+  "@lightSource": {
+    "description": "Environment light row: the layer whose picture surrounds the scene and lights it."
+  },
+  "lightShowInBackground": "Show in background",
+  "@lightShowInBackground": {
+    "description": "Environment light row, a checkbox: draw the surrounding picture behind everything, as the camera sees it."
+  },
+  "materialReflection": "Reflection",
+  "@materialReflection": {
+    "description": "Material options row on a 3D layer: how much of an Environment light it reflects, as a percentage."
+  },
+  "lightBackgroundBlur": "Background blur",
+  "@lightBackgroundBlur": {
+    "description": "Environment light row: how soft the surrounding picture is where it shows behind everything, as a percentage."
+  },
   "lightIntensity": "Intensity",
   "@lightIntensity": {
     "description": "Light row: how bright the light is, as a percentage."
@@ -222,6 +246,30 @@
   "lightSettings": "Light settings",
   "@lightSettings": {
     "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
+  },
+  "modelSettings": "Model settings",
+  "@modelSettings": {
+    "description": "Layer menu item, and the title of the window it opens: how a 3D model sits in its Model layer. The window also opens when a 3D model is dropped into a comp."
+  },
+  "modelUpAxis": "Up axis",
+  "@modelUpAxis": {
+    "description": "Model settings row: which of the 3D model file's axes points up, Y or Z."
+  },
+  "modelFitToComp": "Fit to comp",
+  "@modelFitToComp": {
+    "description": "Model settings row, a checkbox: size the 3D model to fill the composition and centre it."
+  },
+  "modelUnits": "Units",
+  "@modelUnits": {
+    "description": "Model settings row: how big the 3D model is, as comp pixels for each metre of the model."
+  },
+  "modelPixelsPerMetre": "px per metre",
+  "@modelPixelsPerMetre": {
+    "description": "Unit after the Units number in Model settings: comp pixels for each metre of the 3D model."
+  },
+  "keyLightName": "Key light",
+  "@keyLightName": {
+    "description": "The name of the light a first 3D model dropped into a composition with no lights brings with it, the main light that shows the model's shape. Beside it comes an Ambient light."
   },
   "lightLayerName": "{kind} light",
   "@lightLayerName": {
@@ -264,6 +312,10 @@
   "@acceptsShadows": {
     "description": "Material options row: whether shadows fall on the layer."
   },
+  "holdout": "Holdout",
+  "@holdout": {
+    "description": "Material options switch on a Model layer: it shows what is under its 3D layers in its place, so it hides what is behind it."
+  },
   "shadowsOn": "On",
   "@shadowsOn": {
     "description": "Casts shadows or Accepts shadows: yes."
@@ -279,6 +331,38 @@
   "lightShadowDiffusion": "Shadow diffusion",
   "@lightShadowDiffusion": {
     "description": "Light row: how soft the shadows the light casts are, in pixels."
+  },
+  "lightVolumetric": "Volumetric",
+  "@lightVolumetric": {
+    "description": "Light row: how much the light shows in the air, as a beam or a glow, as a percentage. Nought shows none."
+  },
+  "lightHazeDensity": "Haze density",
+  "@lightHazeDensity": {
+    "description": "Light row: how thick the air the light shows in is, as a percentage."
+  },
+  "lightHazeColour": "Haze colour",
+  "@lightHazeColour": {
+    "description": "Light row: the colour the air tints the light it shows, as a colour swatch."
+  },
+  "lightHeightFalloff": "Height falloff",
+  "@lightHeightFalloff": {
+    "description": "Light row: how quickly the air the light shows in thins out above the ground, as a percentage. Nought keeps it even everywhere."
+  },
+  "lightForwardScatter": "Forward scatter",
+  "@lightForwardScatter": {
+    "description": "Light row: how much brighter the light shows in the air when looking towards it than away from it, as a percentage."
+  },
+  "lightNoise": "Noise",
+  "@lightNoise": {
+    "description": "Light row: how patchy the air the light shows in is, as a percentage."
+  },
+  "lightNoiseSize": "Noise size",
+  "@lightNoiseSize": {
+    "description": "Light row: how wide the patches in the air are, in pixels."
+  },
+  "lightNoiseSpeed": "Noise speed",
+  "@lightNoiseSpeed": {
+    "description": "Light row: how fast the patches in the air drift, in pixels a second."
   },
   "materialLightTransmission": "Light transmission",
   "@materialLightTransmission": {
@@ -488,6 +572,10 @@
   "@foldPuppet": {
     "description": "Heading in a layer's fold-out, over its puppet pins."
   },
+  "foldInputs": "Inputs",
+  "@foldInputs": {
+    "description": "Heading in a layer's fold-out and in the Effect controls panel, over the Inputs of the node graph the layer places."
+  },
   "foldStyles": "Styles",
   "@foldStyles": {
     "description": "Heading in a layer's fold-out and in the Effect controls panel, over the layer styles it wears."
@@ -495,6 +583,10 @@
   "fxAddGrain": "Add grain",
   "@fxAddGrain": {
     "description": "Effect name in the Add effect menu — lays film grain on the picture."
+  },
+  "fxAllAtOnce": "All at once",
+  "@fxAllAtOnce": {
+    "description": "Effect controls — a control on Energy line: an option of Paths: every path lights together, each on its own."
   },
   "fxAltitude": "Altitude",
   "@fxAltitude": {
@@ -515,6 +607,10 @@
   "fxBevelStyle": "Bevel style",
   "@fxBevelStyle": {
     "description": "A Bevel and emboss layer style's Bevel style parameter: where the relief sits relative to the shape's edge."
+  },
+  "fxBlueBlade": "Blue blade",
+  "@fxBlueBlade": {
+    "description": "Effect controls — a Preset option on Energy line: a blue blade of light with a white core."
   },
   "fxBottomToTop": "Bottom to top",
   "@fxBottomToTop": {
@@ -539,6 +635,14 @@
   "fxCameraTrack": "Camera track",
   "@fxCameraTrack": {
     "description": "Effect name in the Add effect menu — solves the camera motion of a tracked shot."
+  },
+  "fxCamera": "Camera",
+  "@fxCamera": {
+    "description": "Effect controls: on Depth points, the Camera layer the points line up from."
+  },
+  "fxDepthPoints": "Depth points",
+  "@fxDepthPoints": {
+    "description": "An effect's name: a shot drawn as points in 3D space from its depth."
   },
   "fxCancel": "Cancel",
   "@fxCancel": {
@@ -604,13 +708,25 @@
   "@fxCoreColour": {
     "description": "Effect controls — a control on Lightning: the filament's colour."
   },
+  "fxCoreDistortion": "Core distortion",
+  "@fxCoreDistortion": {
+    "description": "Effect controls — a control on Energy line: how far the noise pushes the core about, in pixels."
+  },
   "fxCoreRadius": "Core radius",
   "@fxCoreRadius": {
     "description": "Effect controls — a control on Lightning: how thick the bright filament is."
   },
+  "fxCoreSoftness": "Core softness",
+  "@fxCoreSoftness": {
+    "description": "Effect controls — a control on Energy line: how much of the core's width its edge fades over."
+  },
   "fxCornerPin": "Corner pin",
   "@fxCornerPin": {
     "description": "Effect name in the Add effect menu — the picture pulled onto four points."
+  },
+  "fxCrackle": "Crackle",
+  "@fxCrackle": {
+    "description": "Effect controls — an option of Energy line's noise Type: a fast, jagged noise."
   },
   "fxCreateCornerPin": "Create corner pin",
   "@fxCreateCornerPin": {
@@ -624,9 +740,45 @@
   "@fxDown": {
     "description": "Option of a Bevel and emboss layer style's Direction: the relief reads as carved in."
   },
+  "fxDrawAlong": "Draw along",
+  "@fxDrawAlong": {
+    "description": "Effect controls — a control on Energy line: what the light is drawn along: a line, a mask, a shape's paths or text."
+  },
   "fxEdge": "Edge",
   "@fxEdge": {
     "description": "Option of an Inner glow layer style's Source: the glow grows in from the shape's edge."
+  },
+  "fxElectric": "Electric",
+  "@fxElectric": {
+    "description": "Effect controls — a Preset option on Energy line: a thin, crackling violet arc."
+  },
+  "fxEndSize": "End size",
+  "@fxEndSize": {
+    "description": "Effect controls — a control on Energy line: the core's width at the end of the lit stretch, as a share of Core size."
+  },
+  "fxEnergy": "Energy",
+  "@fxEnergy": {
+    "description": "Effect controls — a Preset option on Energy line: a teal light with a gently moving glow."
+  },
+  "fxEnergyLine": "Energy line",
+  "@fxEnergyLine": {
+    "description": "Effect name in the Add effect menu — draws a hot core of light with a glow along a line, a mask, a shape or text."
+  },
+  "fxEveryMask": "Every mask",
+  "@fxEveryMask": {
+    "description": "Effect controls — a control on Energy line: on, the light runs along all of the layer's masks."
+  },
+  "fxEvolutionSpeed": "Evolution speed",
+  "@fxEvolutionSpeed": {
+    "description": "Effect controls — a control on Energy line: how fast the distortion noise changes, a second."
+  },
+  "fxFire": "Fire",
+  "@fxFire": {
+    "description": "Effect controls — a Preset option on Energy line: an orange flame that rises off the line."
+  },
+  "fxFlickerSpeed": "Flicker speed",
+  "@fxFlickerSpeed": {
+    "description": "Effect controls — a control on Energy line: how many times a second the light dips."
   },
   "fxFlowResolution": "Flow resolution",
   "@fxFlowResolution": {
@@ -635,6 +787,22 @@
   "fxFlowSmoothness": "Flow smoothness",
   "@fxFlowSmoothness": {
     "description": "Effect controls — a control on Roto brush: how strongly the optical flow is regularised."
+  },
+  "fxFromX": "From x",
+  "@fxFromX": {
+    "description": "Effect controls — a control on Energy line: where the line starts, across, in pixels."
+  },
+  "fxFromY": "From y",
+  "@fxFromY": {
+    "description": "Effect controls — a control on Energy line: where the line starts, down, in pixels."
+  },
+  "fxGlowDistortion": "Glow distortion",
+  "@fxGlowDistortion": {
+    "description": "Effect controls — a control on Energy line: how far the noise pushes the glow about, in pixels."
+  },
+  "fxGlowFalloff": "Glow falloff",
+  "@fxGlowFalloff": {
+    "description": "Effect controls — a control on Energy line: how much of the glow is sent far out rather than kept near the core."
   },
   "fxGradientOverlay": "Gradient overlay",
   "@fxGradientOverlay": {
@@ -656,6 +824,10 @@
   "@fxHighlightOpacity": {
     "description": "A Bevel and emboss layer style's Highlight opacity: how strong the lit face is, per cent."
   },
+  "fxIce": "Ice",
+  "@fxIce": {
+    "description": "Effect controls — a Preset option on Energy line: a pale cyan tube."
+  },
   "fxInnerBevel": "Inner bevel",
   "@fxInnerBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits inside the shape's edge."
@@ -672,9 +844,13 @@
   "@fxInside": {
     "description": "Option of a Stroke layer style's Position: the stroke's thickness sits inside the layer's edge."
   },
+  "fxLaser": "Laser",
+  "@fxLaser": {
+    "description": "Effect controls — a Preset option on Energy line: a thin red beam with a tight glow."
+  },
   "fxLayer": "Layer",
   "@fxLayer": {
-    "description": "Effect controls: the Audio level driver's source dropdown entry that measures one named layer of the mix."
+    "description": "Effect controls: the Audio level driver's source dropdown entry that measures one named layer of the mix. Also an option of Shape on Particulate: particles are born from another layer's picture."
   },
   "fxLayerKnocksOutShadow": "Layer knocks out shadow",
   "@fxLayerKnocksOutShadow": {
@@ -692,6 +868,18 @@
   "@fxNative": {
     "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at the source's own size."
   },
+  "fxNeon": "Neon",
+  "@fxNeon": {
+    "description": "Effect controls — a Preset option on Energy line: a pink neon tube."
+  },
+  "fxNoiseSize": "Noise size",
+  "@fxNoiseSize": {
+    "description": "Effect controls — a control on Energy line: the size of the distortion noise's swirls, in pixels."
+  },
+  "fxOneAfterAnother": "One after another",
+  "@fxOneAfterAnother": {
+    "description": "Effect controls — a control on Energy line: an option of Paths: each path lights after the one before."
+  },
   "fxOuterBevel": "Outer bevel",
   "@fxOuterBevel": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: the relief sits outside the shape's edge."
@@ -704,6 +892,10 @@
   "@fxOutside": {
     "description": "Option of a Stroke layer style's Position: the stroke's thickness sits outside the layer's edge."
   },
+  "fxPaths": "Paths",
+  "@fxPaths": {
+    "description": "Effect controls — a control on Energy line: whether several paths light one after another or all at once."
+  },
   "fxPillowEmboss": "Pillow emboss",
   "@fxPillowEmboss": {
     "description": "Option of a Bevel and emboss layer style's Bevel style: relief raised inside the edge and carved outside it."
@@ -712,6 +904,30 @@
   "@fxFollow": {
     "description": "Effect controls — a control on Planar track: whether the analysis follows a flat surface, one point, or two points. Also on Points along path and Particulate: whether the points follow one of the layer’s masks or a Shape layer’s own paths."
   },
+  "fxPlasma": "Plasma",
+  "@fxPlasma": {
+    "description": "Effect controls — a Preset option on Energy line: a violet light in curling smoke."
+  },
+  "fxPreset": "Preset",
+  "@fxPreset": {
+    "description": "Effect controls — a control on Energy line: a look to start from; picking one sets the look controls."
+  },
+  "fxRedBlade": "Red blade",
+  "@fxRedBlade": {
+    "description": "Effect controls — a Preset option on Energy line: a red blade of light that crackles a little."
+  },
+  "fxSmoke": "Smoke",
+  "@fxSmoke": {
+    "description": "Effect controls — an option of Energy line's noise Type: curling, smoke-like noise."
+  },
+  "fxSolar": "Solar",
+  "@fxSolar": {
+    "description": "Effect controls — a Preset option on Energy line: a wide golden glow."
+  },
+  "fxStartSize": "Start size",
+  "@fxStartSize": {
+    "description": "Effect controls — a control on Energy line: the core's width at the start of the lit stretch, as a share of Core size."
+  },
   "fxSurface": "Surface",
   "@fxSurface": {
     "description": "Option of a Planar track's Follow control: the four corners are followed as one flat surface."
@@ -719,6 +935,18 @@
   "fxOnePoint": "One point",
   "@fxOnePoint": {
     "description": "Option of a Planar track's Follow control: one small region is followed, giving a position and nothing else."
+  },
+  "fxToX": "To x",
+  "@fxToX": {
+    "description": "Effect controls — a control on Energy line: where the line ends, across, in pixels."
+  },
+  "fxToxic": "Toxic",
+  "@fxToxic": {
+    "description": "Effect controls — a Preset option on Energy line: an acid green light that crackles."
+  },
+  "fxToY": "To y",
+  "@fxToY": {
+    "description": "Effect controls — a control on Energy line: where the line ends, down, in pixels."
   },
   "fxTwoPoints": "Two points",
   "@fxTwoPoints": {
@@ -1107,6 +1335,18 @@
   "fxSrgb": "sRGB",
   "@fxSrgb": {
     "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
+  },
+  "fxSrgbCurve": "sRGB curve",
+  "@fxSrgbCurve": {
+    "description": "Effect name in the Add effect menu — puts the picture onto the sRGB curve, or takes it back off, so a grade made on the encoded picture sees the numbers it was made on."
+  },
+  "fxLinearToSrgb": "Linear to sRGB",
+  "@fxLinearToSrgb": {
+    "description": "Effect controls — a Direction option on sRGB curve: from linear light onto the sRGB curve."
+  },
+  "fxSrgbToLinear": "sRGB to linear",
+  "@fxSrgbToLinear": {
+    "description": "Effect controls — a Direction option on sRGB curve: from the sRGB curve back to linear light."
   },
   "fxStar": "Star",
   "@fxStar": {
@@ -1720,6 +1960,10 @@
     "description": "A file type in the system's file dialogues: an exported set of shortcuts."
   },
   "fileTypePreset": "Lumit effect preset",
+  "fileTypeMaterialPreset": "Lumit material preset",
+  "@fileTypeMaterialPreset": {
+    "description": "Save dialogue: the file type of a saved preset for a 3D model's material."
+  },
   "@fileTypePreset": {
     "description": "A file type in the system's file dialogues: a saved .lumfx effect stack."
   },
@@ -1907,6 +2151,71 @@
   "foldContents": "Contents",
   "@foldContents": {
     "description": "Heading in a layer's fold-out, over what a shape layer is made of."
+  },
+  "foldAnimation": "Animation",
+  "@foldAnimation": {
+    "description": "Heading in a Model layer's fold-out, over the rows that play its 3D model's embedded take."
+  },
+  "foldParts": "Parts",
+  "@foldParts": {
+    "description": "Heading in a Model layer's fold-out, over the node tree of its 3D model's file."
+  },
+  "menuCreateCamerasLights": "Create cameras and lights",
+  "@menuCreateCamerasLights": {
+    "description": "Layer menu item: makes keyed Camera and Light layers from what the selected Model layer's file holds."
+  },
+  "modelCameraName": "Camera",
+  "@modelCameraName": {
+    "description": "The name a Camera layer made from a 3D model gets when the file gives its camera none."
+  },
+  "modelLightName": "Light",
+  "@modelLightName": {
+    "description": "The name a Light layer made from a 3D model gets when the file gives its light none."
+  },
+  "fxAnimation": "Animation",
+  "@fxAnimation": {
+    "description": "Effect controls and the Timeline: the row on a Model layer that picks which of its 3D model's takes plays."
+  },
+  "fxFreeze": "Freeze",
+  "@fxFreeze": {
+    "description": "Timeline: a choice on a Model layer's Loop row. Holds the take's first and last poses past its ends."
+  },
+  "fxPart": "Part",
+  "@fxPart": {
+    "description": "Timeline: the name a part of a 3D model goes by when its file gives it none."
+  },
+  "fxRotationX": "Rotation x",
+  "@fxRotationX": {
+    "description": "Timeline: a row on a part of a 3D model. How far it is turned about the layer's x axis."
+  },
+  "fxRotationY": "Rotation y",
+  "@fxRotationY": {
+    "description": "Timeline: a row on a part of a 3D model. How far it is turned about the layer's y axis."
+  },
+  "fxRotationZ": "Rotation z",
+  "@fxRotationZ": {
+    "description": "Timeline: a row on a part of a 3D model. How far it is turned about the layer's z axis."
+  },
+  "fxVisible": "Visible",
+  "@fxVisible": {
+    "description": "Timeline: a row on a part of a 3D model, nought to hide it and one to show it, which can be keyed."
+  },
+  "modelTakeMissing": "{name} (missing)",
+  "@modelTakeMissing": {
+    "description": "Timeline: a Model layer's Take row, for a take the 3D model's file no longer has. {name} is the take's name, from the file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "fxTake": "Take",
+  "@fxTake": {
+    "description": "Timeline: the row on a Model layer that picks which of its 3D model's takes plays."
+  },
+  "modelTooLargeToMove": "Skins and morph targets, too large for this graphics card",
+  "@modelTooLargeToMove": {
+    "description": "Project panel, in the list of what a 3D model is missing: the model is too large for this card to pose, so it draws at rest."
   },
   "foldMasks": "Masks",
   "@foldMasks": {
@@ -2200,6 +2509,79 @@
     "description": "Why a line of a style file was skipped: it names a setting Lumit doesn't have.",
     "placeholders": {"name": {"type": "String"}}
   },
+  "styleFontNeeds": "@font-face needs a font-family and a src",
+  "@styleFontNeeds": {
+    "description": "Why a style file's @font-face rule was skipped: it is missing the family name or the url of the font file. Keep @font-face, font-family and src as they are."
+  },
+  "styleFontMissing": "can't find {file}",
+  "@styleFontMissing": {
+    "description": "Why a font a style names wasn't loaded: there's no file of that name in the style's folder.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleFontKind": "{file} isn't a TTF or OTF font",
+  "@styleFontKind": {
+    "description": "Why a font a style names wasn't loaded: the file is another kind, such as WOFF. Keep TTF and OTF as they are.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "settingsStylesMakePackage": "Make a package",
+  "@settingsStylesMakePackage": {
+    "description": "Settings window, Appearance, Your styles: the button that packs the style in use, with its pictures, icons and fonts, into one .lumstyle file to share."
+  },
+  "settingsStylesShowFolder": "Show folder",
+  "@settingsStylesShowFolder": {
+    "description": "Settings window, Appearance, Your styles: the button that opens the folder Lumit reads styles from in the file manager."
+  },
+  "fileTypeStyle": "Lumit style",
+  "@fileTypeStyle": {
+    "description": "The file type a style is saved and opened as, in the system's file dialogue."
+  },
+  "styleInUse": "Using {name}",
+  "@styleInUse": {
+    "description": "Status line, after a style is imported, double-clicked or dropped on the window: it is now the style in use. {name} is the style's name.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleUndo": "Undo",
+  "@styleUndo": {
+    "description": "Status line: the action beside \"Using {name}\" that puts back the style that was in use before."
+  },
+  "styleReplace": "Replace the style {name}?",
+  "@styleReplace": {
+    "description": "Asked when a style being imported has the same name as one already in the styles folder.",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "styleReplaceYes": "Replace",
+  "@styleReplaceYes": {
+    "description": "The button that answers yes to \"Replace the style {name}?\"."
+  },
+  "styleNotOne": "{file} isn't a style",
+  "@styleNotOne": {
+    "description": "Status line: the file imported, double-clicked or dropped is neither a style file nor a style's folder packed into one.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleTooLarge": "{file} is too large to be a style",
+  "@styleTooLarge": {
+    "description": "Status line: a style package holds more files or bytes than Lumit takes.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleUnsafe": "{file} has a file that would land outside its folder",
+  "@styleUnsafe": {
+    "description": "Status line: a style package was refused because a file in it, or a link, points outside the style's own folder.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "styleFailed": "{file} couldn't be put in the styles folder",
+  "@styleFailed": {
+    "description": "Status line: a style's files couldn't be written, for instance because the folder is read-only.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "stylePackaged": "Saved {file}",
+  "@stylePackaged": {
+    "description": "Status line, after Make a package: the style's package was written. {file} is its file name.",
+    "placeholders": {"file": {"type": "String"}}
+  },
+  "stylePackageOverItself": "A package can't be saved over its own style",
+  "@stylePackageOverItself": {
+    "description": "Status line, after Make a package: the place chosen for the package is the style's own file, which it would replace."
+  },
   "styleChoice": "Style's choice",
   "@styleChoice": {
     "description": "Settings window, Appearance: the option in the Viewer bars and Toolbar position dropdowns that leaves the arrangement to the chosen interface style."
@@ -2263,6 +2645,14 @@
   "formatHevc": "HEVC video (.mp4)",
   "@formatHevc": {
     "description": "Export format. HEVC and .mp4 are technical names and stay as they are."
+  },
+  "formatVp9": "VP9 video (.webm)",
+  "@formatVp9": {
+    "description": "Export format, offered in the browser version only. VP9 and .webm are technical names and stay as they are."
+  },
+  "formatAv1": "AV1 video (.webm)",
+  "@formatAv1": {
+    "description": "Export format, offered in the browser version only. AV1 and .webm are technical names and stay as they are."
   },
   "formatMp4Picker": "MP4 video",
   "@formatMp4Picker": {
@@ -2663,6 +3053,14 @@
   "fxCorners": "Corners",
   "@fxCorners": {
     "description": "Effect controls — a Placement option on Points along path: one point on each vertex of the mask."
+  },
+  "fxWindDirection": "Wind direction",
+  "@fxWindDirection": {
+    "description": "Effect controls — a control on Energy line: which way the distortion noise is carried, in degrees; 0 is up."
+  },
+  "fxWindSpeed": "Wind speed",
+  "@fxWindSpeed": {
+    "description": "Effect controls — a control on Energy line: how fast the distortion noise is carried, in pixels a second."
   },
   "fxWrap": "Wrap",
   "@fxWrap": {
@@ -3820,6 +4218,82 @@
   "@fxSparkSize": {
     "description": "Effect controls — a control on Particulate: how big a spark is, as a percentage of the particle it came from."
   },
+  "fxSimulation": "Simulation",
+  "@fxSimulation": {
+    "description": "Effect controls: a group of Particulate controls that work particles out step by step on the graphics card."
+  },
+  "fxNeedsSimulate": "Needs Simulate",
+  "@fxNeedsSimulate": {
+    "description": "Effect controls: tooltip on a greyed Particulate row that only works with Simulate on."
+  },
+  "fxFields": "Fields",
+  "@fxFields": {
+    "description": "Effect controls: a group of Particulate controls: the Attractor, Vortex and Sphere and where they sit."
+  },
+  "fxSimulate": "Simulate",
+  "@fxSimulate": {
+    "description": "Effect controls: a switch on Particulate that works each frame out from the frame before on the graphics card."
+  },
+  "fxSubSteps": "Sub-steps",
+  "@fxSubSteps": {
+    "description": "Effect controls: a control on Particulate: how many times a frame the particles move."
+  },
+  "fxFieldX": "Field x",
+  "@fxFieldX": {
+    "description": "Effect controls: a control on Particulate: where the Attractor, Vortex and Sphere sit, across."
+  },
+  "fxFieldY": "Field y",
+  "@fxFieldY": {
+    "description": "Effect controls: a control on Particulate: where the Attractor, Vortex and Sphere sit, down."
+  },
+  "fxFieldZ": "Field z",
+  "@fxFieldZ": {
+    "description": "Effect controls: a control on Particulate: where the Attractor, Vortex and Sphere sit, in depth."
+  },
+  "fxFieldRadius": "Field radius",
+  "@fxFieldRadius": {
+    "description": "Effect controls: a control on Particulate: how far the Attractor, Vortex and Sphere reach."
+  },
+  "fxAttractor": "Attractor",
+  "@fxAttractor": {
+    "description": "Effect controls: a control on Particulate: how hard particles are pulled to a point."
+  },
+  "fxVortexAxis": "Vortex axis",
+  "@fxVortexAxis": {
+    "description": "Effect controls: a control on Particulate: the line the Vortex turns about."
+  },
+  "fxAll3dLayers": "All 3D layers",
+  "@fxAll3dLayers": {
+    "description": "Effect controls: a switch on Particulate: particles hit every 3D layer in the comp."
+  },
+  "fxGround": "Ground",
+  "@fxGround": {
+    "description": "Effect controls: a switch on Particulate: particles hit the floor the 3D views draw."
+  },
+  "fxGroundHeight": "Ground height",
+  "@fxGroundHeight": {
+    "description": "Effect controls: a control on Particulate: how far above the floor particles hit it."
+  },
+  "fxSparksFrom": "Sparks from",
+  "@fxSparksFrom": {
+    "description": "Effect controls: a control on Particulate: when a particle throws its sparks."
+  },
+  "fxSparkInherit": "Spark inherit",
+  "@fxSparkInherit": {
+    "description": "Effect controls: a control on Particulate: how much of its parent's speed a spark starts with."
+  },
+  "fxDeath": "Death",
+  "@fxDeath": {
+    "description": "Effect controls: an option of Sparks from on Particulate: a particle throws its sparks as it dies."
+  },
+  "fxFlight": "Flight",
+  "@fxFlight": {
+    "description": "Effect controls: an option of Sparks from on Particulate: a particle throws its sparks all the way along."
+  },
+  "fxAxisZ": "Z",
+  "@fxAxisZ": {
+    "description": "Effect controls: the third axis, as an option."
+  },
   "fxTrails": "Trails",
   "@fxTrails": {
     "description": "Effect controls — a group heading on Particulate: the controls for keeping each frame's picture, so particles leave smears behind them."
@@ -3871,6 +4345,10 @@
   "fxEmitterAngle": "Emitter angle",
   "@fxEmitterAngle": {
     "description": "Effect controls — a control on Particulate: rotates the shape particles are born along."
+  },
+  "fxEmitterLayer": "Emitter layer",
+  "@fxEmitterLayer": {
+    "description": "Effect controls — a control on Particulate: the layer whose picture particles are born from when Shape is Layer."
   },
   "fxEndColour": "End colour",
   "@fxEndColour": {
@@ -3931,6 +4409,10 @@
   "fxAccumulationMotionBlur": "Accumulation motion blur",
   "@fxAccumulationMotionBlur": {
     "description": "Effect name in the Add effect menu and the Effect controls panel — the slow, whole-scene motion blur that re-renders everything below at several sub-frame moments and averages them."
+  },
+  "fxFocalLength": "Focal length",
+  "@fxFocalLength": {
+    "description": "Effect controls: a control on Camera track: the lens length in millimetres, such as 50. 0 leaves the track to work it out."
   },
   "fxFeatureDensity": "Feature density",
   "@fxFeatureDensity": {
@@ -4128,6 +4610,10 @@
   "@fxInitialSpeed": {
     "description": "Effect controls — a control on Particulate: how fast a particle is travelling the moment it is born."
   },
+  "fxInTheScene": "In the scene",
+  "@fxInTheScene": {
+    "description": "Effect controls — a switch on Particulate: the particles live in the composition's 3D space, so 3D layers pass in front of and behind them."
+  },
   "fxInput": "Input",
   "@fxInput": {
     "description": "Graph panel — the name of the socket a box takes its picture in by. Also the trim in dB on the way into Limiter."
@@ -4255,6 +4741,22 @@
   "fxCrop": "Crop",
   "@fxCrop": {
     "description": "Effect name in the Add effect menu: takes the picture away past four edges, each set from its own side. The crop half of Vegas's Pan/Crop."
+  },
+  "fxLumaFade": "Luma fade",
+  "@fxLumaFade": {
+    "description": "Effect name in the Add effect menu — fades the picture away in order of brightness, darkest first."
+  },
+  "fxLumaReveal": "Luma reveal",
+  "@fxLumaReveal": {
+    "description": "A built-in preset in Luma fade's menu: the layer appears in order of brightness over a second from the playhead, with a soft edge."
+  },
+  "fxLumaHide": "Luma hide",
+  "@fxLumaHide": {
+    "description": "A built-in preset in Luma fade's menu: the layer goes away in order of brightness over a second from the playhead, with a soft edge."
+  },
+  "fxHardHide": "Hard hide",
+  "@fxHardHide": {
+    "description": "A built-in preset in Luma fade's menu: the layer goes away in order of brightness over a second from the playhead, with a hard edge."
   },
   "fxLuminance": "Luminance",
   "@fxLuminance": {
@@ -4668,6 +5170,54 @@
   "@fxYEdges": {
     "description": "Effect controls — a control on Shake: what fills the border the shake reveals at the top and bottom, apart from the sides."
   },
+  "fxRedAmount": "Red amount",
+  "@fxRedAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the red channel shakes, × the whole shake."
+  },
+  "fxRedPhase": "Red phase",
+  "@fxRedPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the red channel's shake runs behind the rest."
+  },
+  "fxGreenAmount": "Green amount",
+  "@fxGreenAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the green channel shakes, × the whole shake."
+  },
+  "fxGreenPhase": "Green phase",
+  "@fxGreenPhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the green channel's shake runs behind the rest."
+  },
+  "fxBlueAmount": "Blue amount",
+  "@fxBlueAmount": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how far the blue channel shakes, × the whole shake."
+  },
+  "fxBluePhase": "Blue phase",
+  "@fxBluePhase": {
+    "description": "Effect controls — a control in Shake's Channels twirl: seconds the blue channel's shake runs behind the rest."
+  },
+  "fxRandomRate": "Random rate",
+  "@fxRandomRate": {
+    "description": "Effect controls — a control in Shake's Channels twirl: how fast each colour channel's own wobble moves, × Frequency."
+  },
+  "fxChannels": "Channels",
+  "@fxChannels": {
+    "description": "Effect controls — the twirl on Shake that shakes the red, green and blue channels apart."
+  },
+  "fxCropLeft": "Crop left",
+  "@fxCropLeft": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the left before shaking."
+  },
+  "fxCropRight": "Crop right",
+  "@fxCropRight": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the width cut from the right before shaking."
+  },
+  "fxCropTop": "Crop top",
+  "@fxCropTop": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the top before shaking."
+  },
+  "fxCropBottom": "Crop bottom",
+  "@fxCropBottom": {
+    "description": "Effect controls — a control in Shake's Crop twirl: per cent of the height cut from the bottom before shaking."
+  },
   "fxSame": "Same",
   "@fxSame": {
     "description": "Effect controls — the Y edges option on Shake that follows the Edges control."
@@ -4856,6 +5406,46 @@
   "@fxFullOff": {
     "description": "Effect controls — an option on Set channels' four channel pickers: the channel is 0 everywhere."
   },
+  "fxScenePass": "Scene pass",
+  "@fxScenePass": {
+    "description": "Effect name in the Add effect menu: shows what a 3D precomp knows about its pixels, such as which way they face, in place of its picture."
+  },
+  "fxPartMatte": "Part matte",
+  "@fxPartMatte": {
+    "description": "Effect name in the Add effect menu: keeps only the parts of a 3D precomp that were picked."
+  },
+  "fxPass": "Pass",
+  "@fxPass": {
+    "description": "Effect controls: a control on Scene pass choosing what it shows."
+  },
+  "fxNormals": "Normals",
+  "@fxNormals": {
+    "description": "Effect controls: an option on Scene pass's Pass, which way each pixel faces."
+  },
+  "fxPartId": "Part id",
+  "@fxPartId": {
+    "description": "Effect controls: an option on Scene pass's Pass, each part of the 3D precomp in a flat colour of its own."
+  },
+  "fxParts": "Parts",
+  "@fxParts": {
+    "description": "Effect controls: a row on Part matte naming the parts it keeps."
+  },
+  "fxPartsMissing": "Missing",
+  "@fxPartsMissing": {
+    "description": "Effect controls: Part matte's Parts row when none of the parts it kept are in its source any more."
+  },
+  "fxPartsSomeMissing": "{names}, {count} missing",
+  "@fxPartsSomeMissing": {
+    "description": "Effect controls: Part matte's Parts row when some of the parts it kept are no longer in its source. {names} is the parts still there, {count} how many have gone.",
+    "placeholders": {
+      "names": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "tipPickParts": "Pick parts",
+  "@tipPickParts": {
+    "description": "Tooltip on the eyedropper that picks a part of a 3D precomp in the Viewer. Shift adds another. One or two words."
+  },
   "fxSetMatte": "Set matte",
   "@fxSetMatte": {
     "description": "Effect name in the Add effect menu — takes another layer's channel as this layer's transparency."
@@ -4871,6 +5461,74 @@
   "fxShake": "Shake",
   "@fxShake": {
     "description": "Effect controls — the name of an effect."
+  },
+  "fxJolt": "Jolt",
+  "@fxJolt": {
+    "description": "Effect name in the Add effect menu: sudden random hits that kick the picture and let it settle."
+  },
+  "fxForward": "Forward",
+  "@fxForward": {
+    "description": "Effect controls, Jolt: a Time Direction option. Each time hit jumps ahead."
+  },
+  "fxBackward": "Backward",
+  "@fxBackward": {
+    "description": "Effect controls, Jolt: a Time Direction option. Each time hit jumps back."
+  },
+  "fxTimeStutter": "Time stutter",
+  "@fxTimeStutter": {
+    "description": "A built-in preset in Jolt's menu: the layer jumps a few frames ahead or back about three times a second."
+  },
+  "fxSeparateTiming": "Separate timing",
+  "@fxSeparateTiming": {
+    "description": "Effect controls, Jolt: a switch. On the Random trigger each kind of hit keeps its own time instead of all landing together."
+  },
+  "fxJoltsOnly": "Jolts only",
+  "@fxJoltsOnly": {
+    "description": "Effect controls: a switch on Jolt. When on, the layer shows only while a jolt is on it."
+  },
+  "fxMarkers": "Markers",
+  "@fxMarkers": {
+    "description": "Effect controls: a Trigger option on Jolt. A jolt fires on each of the layer's markers and the composition's markers that are not beats."
+  },
+  "fxBeats": "Beats",
+  "@fxBeats": {
+    "description": "Effect controls: a Trigger option on Jolt. A jolt fires on each of the composition's beat markers."
+  },
+  "fxBlur": "Blur",
+  "@fxBlur": {
+    "description": "Effect controls: a group heading and switch on Jolt. Each hit blurs the picture."
+  },
+  "fxAspect": "Aspect",
+  "@fxAspect": {
+    "description": "Effect controls: a control in Jolt's Blur group. 0 blurs evenly, higher only sideways, lower only up and down."
+  },
+  "fxBrighter": "Brighter",
+  "@fxBrighter": {
+    "description": "Effect controls: a Direction option in Jolt's Light group. Each hit brightens the picture."
+  },
+  "fxDarker": "Darker",
+  "@fxDarker": {
+    "description": "Effect controls: a Direction option in Jolt's Light group. Each hit darkens the picture."
+  },
+  "fxRandomOrigin": "Random origin",
+  "@fxRandomOrigin": {
+    "description": "Effect controls: a control in Jolt's Scale group. How far each hit's origin wanders from where it is set."
+  },
+  "fxCameraKick": "Camera kick",
+  "@fxCameraKick": {
+    "description": "A built-in preset in Jolt's menu: about once a second the picture is knocked downwards, as if the camera was struck, with a blur along the knock."
+  },
+  "fxGlitchHit": "Glitch hit",
+  "@fxGlitchHit": {
+    "description": "A built-in preset in Jolt's menu: quick sideways hits with the colour channels pulled apart and a random colour."
+  },
+  "fxLightFlicker": "Light flicker",
+  "@fxLightFlicker": {
+    "description": "A built-in preset in Jolt's menu: quick hits of light only, brighter and darker."
+  },
+  "fxBeatPulse": "Beat pulse",
+  "@fxBeatPulse": {
+    "description": "A built-in preset in Jolt's menu: a hit of scale, blur and light on each beat marker of the composition."
   },
   "fxShape": "Shape",
   "@fxShape": {
@@ -5320,6 +5978,10 @@
   "@fxSpeedJitter": {
     "description": "Effect controls — a control on Particulate: how much particle speeds differ from one another."
   },
+  "fxSphere": "Sphere",
+  "@fxSphere": {
+    "description": "Effect controls — an option of Shape on Particulate: particles are born anywhere inside a ball."
+  },
   "fxSpin": "Spin",
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."
@@ -5462,7 +6124,7 @@
   },
   "fxTrail": "Trail",
   "@fxTrail": {
-    "description": "Effect controls — the name of the Trail effect, which draws where every point of a points stream has been, fading with age."
+    "description": "Effect controls — a switch on Smoke and fire that leaves the gas behind when the box moves. Also the name of the Trail effect, which draws where every point of a points stream has been, fading with age."
   },
   "fxTransform": "Transform",
   "@fxTransform": {
@@ -5900,6 +6562,10 @@
   "@keyCameraTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "key3dShapeTool": "3D shape tool",
+  "@key3dShapeTool": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The toolbar tool that puts a cube, sphere and so on in the comp."
+  },
   "keyCompositionSettings": "Composition settings",
   "@keyCompositionSettings": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6031,6 +6697,10 @@
   "keyNewAdjustmentLayer": "New Adjustment layer",
   "@keyNewAdjustmentLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyNewCardLayer": "New Card layer",
+  "@keyNewCardLayer": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A card is a flat Model layer with no 3D model behind it."
   },
   "keyNewCameraLayer": "New Camera layer",
   "@keyNewCameraLayer": {
@@ -6580,6 +7250,34 @@
   "@keyPlaceTheSelectedLayersOnASurface": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyShowModelsAsTheyExport": "Show models as they export",
+  "@keyShowModelsAsTheyExport": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsShaded": "Show models shaded",
+  "@keyShowModelsShaded": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsAsWireframes": "Show models as wireframes",
+  "@keyShowModelsAsWireframes": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsShadedWithWire": "Show models shaded with wire",
+  "@keyShowModelsShadedWithWire": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowModelsNormals": "Show models' normals",
+  "@keyShowModelsNormals": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keyShowOrHideFaceOrientation": "Show or hide face orientation",
+  "@keyShowOrHideFaceOrientation": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
+  "keySwitchWireframeOnOrOff": "Switch wireframe on or off",
+  "@keySwitchWireframeOnOrOff": {
+    "description": "Settings window, Keymap page: the name of a command that changes how the Viewer view in front draws 3D models: Final, Shaded, Wireframe, Shaded with wire, Normals or Face orientation."
+  },
   "keyResetThe3dView": "Reset the 3D view",
   "@keyResetThe3dView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6961,6 +7659,10 @@
   "@menuAdjustment": {
     "description": "Menu item."
   },
+  "menuShape3d": "3D shape",
+  "@menuShape3d": {
+    "description": "Layer > New submenu: cubes, spheres and other solid shapes the app makes itself, drawn in the comp’s 3D space."
+  },
   "menuAnimateText": "Animate text",
   "@menuAnimateText": {
     "description": "Menu item."
@@ -6992,6 +7694,10 @@
   "menuBlendingMode": "Blending mode",
   "@menuBlendingMode": {
     "description": "Menu item."
+  },
+  "menuCard": "Card",
+  "@menuCard": {
+    "description": "Layer > New menu item: a flat Model layer that needs no file."
   },
   "menuCamera": "Camera",
   "@menuCamera": {
@@ -7895,7 +8601,7 @@
   },
   "tipViewportWireframe": "Lines only",
   "@tipViewportWireframe": {
-    "description": "Tooltip on the switch under a 3D viewport's corner axes that draws the view as outlines on the ground, with no picture."
+    "description": "Tooltip on the switch under a 3D viewport's corner axes that draws the view as lines: models as the edges of their triangles, every other layer as its outline."
   },
   "viewportPersp": "Persp",
   "@viewportPersp": {
@@ -8083,6 +8789,10 @@
   "@previewRendering": {
     "description": "What the Viewer is doing, when no more precise stage is known. This is the internal picture-making sense, not writing a file — Lumit says 'export' for that."
   },
+  "previewSimulating": "Simulating",
+  "@previewSimulating": {
+    "description": "Viewer: the progress bar's word while a particle simulation is being worked out up to the frame asked for."
+  },
   "previewShowing": "Showing",
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
@@ -8212,6 +8922,47 @@
   "projectItemMissing": "missing",
   "@projectItemMissing": {
     "description": "Warning beside a footage item whose file cannot be found on disk. Lower case on purpose — it sits in a line of facts."
+  },
+  "projectItemConverting": "converting",
+  "@projectItemConverting": {
+    "description": "Project panel row badge, beside the item name: this 3D model is being turned into a form Lumit reads by the user's Blender, which takes a while the first time. Lower case, one word, like the other row badges."
+  },
+  "projectItemNoBlender": "no Blender",
+  "@projectItemNoBlender": {
+    "description": "Warning badge beside a 3D model in the Project panel that opens through Blender (a .blend, USD, Alembic file) when no Blender was found on this computer. Blender is a product name; keep it as it is. Lower case first word, like the other row badges. Clicking it opens Settings at the Blender row."
+  },
+  "exportModelsUnread": "Can't read {names}",
+  "@exportModelsUnread": {
+    "description": "Export dialog, a warning line in the Composition group: these 3D models in the comp can't be read right now (no Blender, or the conversion failed or was stopped), so the export leaves them out or draws the last version read. {names} is their file names, comma separated.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "projectItemStopped": "stopped",
+  "@projectItemStopped": {
+    "description": "Project panel row badge, beside a 3D model: its conversion through the user's Blender was stopped by hand, so nothing draws until it is converted again. Lower case, one word, like the other row badges."
+  },
+  "tipProjectStopConverting": "Stop",
+  "@tipProjectStopConverting": {
+    "description": "Tooltip on the converting badge of a Project panel 3D model. Clicking the badge stops Blender converting the file."
+  },
+  "tipProjectConvertAgain": "Convert again",
+  "@tipProjectConvertAgain": {
+    "description": "Tooltip on the stopped badge of a Project panel 3D model. Clicking the badge starts converting the file through Blender again."
+  },
+  "tipProjectNoImporter": "Can't open",
+  "@tipProjectNoImporter": {
+    "description": "Tooltip on the unreadable badge of a Project panel 3D model whose file type the Blender found has no importer for, as with Collada files on Blender 5. Blender is a product name; keep it as it is."
+  },
+  "tipProjectNoBlender": "Choose Blender",
+  "@tipProjectNoBlender": {
+    "description": "Tooltip on the no Blender badge of a Project panel 3D model. Clicking the badge opens Settings at the Blender row."
+  },
+  "menuEditInBlender": "Edit in Blender",
+  "@menuEditInBlender": {
+    "description": "Layer menu and Project panel context menu item: opens the selected Model layer's or item's .blend file in Blender, the separate 3D program. Blender is a product name; keep it as it is."
   },
   "projectItemUndecodable": "unreadable",
   "@projectItemUndecodable": {
@@ -8353,6 +9104,10 @@
   "savePresetEllipsis": "Save preset…",
   "@savePresetEllipsis": {
     "description": "Button that writes the current effect stack to a file."
+  },
+  "effectPresets": "Presets",
+  "@effectPresets": {
+    "description": "Effect controls: the menu row on an effect that opens the list of built-in presets it ships with. Picking one sets the effect."
   },
   "saved": "Saved",
   "@saved": {
@@ -10544,6 +11299,34 @@
   "@toolShapeStar": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "shape3dCube": "Cube",
+  "@shape3dCube": {
+    "description": "A 3D shape: a box. Names the toolbar tool, the Layer > New > 3D shape row and nothing else."
+  },
+  "shape3dSphere": "Sphere",
+  "@shape3dSphere": {
+    "description": "A 3D shape: a ball. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCylinder": "Cylinder",
+  "@shape3dCylinder": {
+    "description": "A 3D shape: a round can. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dCone": "Cone",
+  "@shape3dCone": {
+    "description": "A 3D shape: a cone. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dTorus": "Torus",
+  "@shape3dTorus": {
+    "description": "A 3D shape: a ring like a doughnut. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPlane": "Plane",
+  "@shape3dPlane": {
+    "description": "A 3D shape: a flat card. Toolbar tool and Layer > New > 3D shape row."
+  },
+  "shape3dPyramid": "Pyramid",
+  "@shape3dPyramid": {
+    "description": "A 3D shape: a four-sided pyramid. Toolbar tool and Layer > New > 3D shape row."
+  },
   "toolSize": "Size",
   "@toolSize": {
     "description": "Toolbar options strip — label beside the brush size field."
@@ -11145,6 +11928,30 @@
   "@viewerViewFree": {
     "description": "Entry in the Viewer bar's 3D view menu, offered only in a 3D viewport: the viewport's own viewpoint, moved with the mouse and kept with the session."
   },
+  "viewerDisplayFinal": "Final",
+  "@viewerDisplayFinal": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn lit by the composition's own lights, as they export. The default through the composition's camera."
+  },
+  "viewerDisplayShaded": "Shaded",
+  "@viewerDisplayShaded": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn in a fixed studio light of the view's own, whatever lights the composition has. The default in fixed and custom views."
+  },
+  "viewerDisplayWireframe": "Wireframe",
+  "@viewerDisplayWireframe": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn as the edges of their triangles, and every other layer as its outline."
+  },
+  "viewerDisplayShadedWire": "Shaded with wire",
+  "@viewerDisplayShadedWire": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn shaded, with the edges of their triangles over them."
+  },
+  "viewerDisplayNormals": "Normals",
+  "@viewerDisplayNormals": {
+    "description": "Entry in the Viewer bar's 3D view menu: models are drawn with the direction each point faces as colour. Normals is the 3D term for those directions."
+  },
+  "viewerDisplayFaces": "Face orientation",
+  "@viewerDisplayFaces": {
+    "description": "Switch in the Viewer bar's 3D view menu: tints the front of each model face blue and its back red, to find faces turned the wrong way."
+  },
   "menuOpenIn3dViewport": "Open in new 3D viewport",
   "@menuOpenIn3dViewport": {
     "description": "Last row of the Viewer bar's 3D view menu: open a 3D viewport beside this Viewer, looking at the same composition."
@@ -11319,6 +12126,34 @@
   "@cutBypassEffects": {
     "description": "Cut timeline, right-click on a clip that has effects of its own: a ticked row that turns them all off without removing them."
   },
+  "insertBus": "Insert bus",
+  "@insertBus": {
+    "description": "Audio timeline, right-click on the empty ground below the rows: adds a bus, a track whose effects and volume work on the sound routed to it."
+  },
+  "audioRouteOutput": "Output",
+  "@audioRouteOutput": {
+    "description": "Audio timeline, right-click on a track's name: opens the list of where the track's sound goes, the master or a bus."
+  },
+  "audioRouteMaster": "Master",
+  "@audioRouteMaster": {
+    "description": "Audio timeline, Output submenu: the track's sound goes straight to the composition's master volume, not through a bus."
+  },
+  "audioRouteSendTo": "Send to",
+  "@audioRouteSendTo": {
+    "description": "Audio timeline, right-click on a track's name: a list of buses, each ticked if a copy of the track's sound is sent to it. Picking one adds or removes the send."
+  },
+  "audioSends": "Sends",
+  "@audioSends": {
+    "description": "Audio timeline: the heading under a track listing how much of its sound is sent to each bus."
+  },
+  "audioSendPre": "Pre",
+  "@audioSendPre": {
+    "description": "Audio timeline, a send row: short for pre-fader. The send is taken before the track's volume and pan. Click to switch to Post. Keep it very short."
+  },
+  "audioSendPost": "Post",
+  "@audioSendPost": {
+    "description": "Audio timeline, a send row: short for post-fader. The send is taken after the track's volume and pan. Click to switch to Pre. Keep it very short."
+  },
   "insertAudioLayer": "Insert audio layer",
   "@insertAudioLayer": {
     "description": "Cut and Audio timelines, right-click on the empty ground below the rows: adds an empty layer for sound clips."
@@ -11394,6 +12229,14 @@
   "cutPanEnvelope": "Pan envelope",
   "@cutPanEnvelope": {
     "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
+  },
+  "envelopePointSet": "Set value…",
+  "@envelopePointSet": {
+    "description": "Cut timeline — envelope point menu: type the value for this point in a small field."
+  },
+  "envelopeThin": "Thin points",
+  "@envelopeThin": {
+    "description": "Cut timeline — envelope menu: take away the points the curve does not need."
   },
   "envelopePointReset": "Reset",
   "@envelopePointReset": {
@@ -11857,6 +12700,18 @@
   "@fxMoodLighting": {
     "description": "Effect name in the Add effect menu — pools of coloured light laid over the picture, and a firmer contrast under them."
   },
+  "fxAmorphous": "Amorphous",
+  "@fxAmorphous": {
+    "description": "Effect controls — a Style option on Mood lighting: soft round pools of light."
+  },
+  "fxDigital": "Digital",
+  "@fxDigital": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light broken into square blocks."
+  },
+  "fxStreaks": "Streaks",
+  "@fxStreaks": {
+    "description": "Effect controls — a Style option on Mood lighting: the pools of light stretched sideways into long bands."
+  },
   "fxMoreOptions": "More options",
   "@fxMoreOptions": {
     "description": "Effect controls — a collapsible group heading on Shadow highlight."
@@ -12080,6 +12935,58 @@
   "fxTimeOffset": "Time offset",
   "@fxTimeOffset": {
     "description": "Node graph box name - shows its input picture at another time, shifted by its Offset in seconds."
+  },
+  "fxTimewarp": "Timewarp",
+  "@fxTimewarp": {
+    "description": "Effect name in the Add effect menu: shows the layer at another time, by a speed or a keyframed source frame, with the frames between made from the motion."
+  },
+  "fxAdjustTimeBy": "Adjust time by",
+  "@fxAdjustTimeBy": {
+    "description": "Effect controls, Timewarp: whether a Speed or a Source frame says what time is shown."
+  },
+  "fxSourceFrame": "Source frame",
+  "@fxSourceFrame": {
+    "description": "Effect controls, Timewarp: the frame of the layer shown now. Keyframed, it remaps time."
+  },
+  "fxWholeFrames": "Whole frames",
+  "@fxWholeFrames": {
+    "description": "Effect controls, Timewarp: a Method option. Between two frames the earlier one is held."
+  },
+  "fxFrameMix": "Frame mix",
+  "@fxFrameMix": {
+    "description": "Effect controls, Timewarp: a Method option. Between two frames the two are crossfaded."
+  },
+  "fxPixelMotion": "Pixel motion",
+  "@fxPixelMotion": {
+    "description": "Effect controls, Timewarp: a Method option. The frame between two is made from the motion measured between them."
+  },
+  "fxInputRate": "Input rate",
+  "@fxInputRate": {
+    "description": "Effect controls, Timewarp: frames a second the layer is counted in. 0 is the composition's rate."
+  },
+  "fxMotionGroup": "Motion",
+  "@fxMotionGroup": {
+    "description": "Effect controls, Timewarp: the heading over the controls for measuring motion."
+  },
+  "fxHalfSpeed": "Half speed",
+  "@fxHalfSpeed": {
+    "description": "A built-in preset in Timewarp's menu: the layer plays at half speed, the frames between made from the motion."
+  },
+  "fxQuarterSpeed": "Quarter speed",
+  "@fxQuarterSpeed": {
+    "description": "A built-in preset in Timewarp's menu: the layer plays at a quarter of its speed, measured closely."
+  },
+  "fxSlowMotionWithBlur": "Slow motion with blur",
+  "@fxSlowMotionWithBlur": {
+    "description": "A built-in preset in Timewarp's menu: slow motion with motion blur along the measured motion."
+  },
+  "fxSpeedRamp": "Speed ramp",
+  "@fxSpeedRamp": {
+    "description": "A built-in preset in Timewarp's menu: from the playhead the layer slows to a fifth of its speed for a second, then speeds up again."
+  },
+  "fxFastForwardBlur": "Fast forward blur",
+  "@fxFastForwardBlur": {
+    "description": "A built-in preset in Timewarp's menu: four times as fast, each frame smeared along its motion."
   },
   "fxMerge": "Merge",
   "@fxMerge": {
@@ -12596,6 +13503,10 @@
       }
     }
   },
+  "aeGeometryOptionsCarried": "The geometry options were imported",
+  "@aeGeometryOptionsCarried": {
+    "description": "Import report: a Text or Shape layer's extrusion and bevel in After Effects came across."
+  },
   "aeShadowSwitchKeyed": "The shadow setting kept its first key",
   "@aeShadowSwitchKeyed": {
     "description": "Import report row reason. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
@@ -12938,6 +13849,10 @@
   "@trackCreateNull": {
     "description": "Button over the Viewer's picture when solved points are selected: puts a Null layer at their average position."
   },
+  "trackCreateCard": "Create card",
+  "@trackCreateCard": {
+    "description": "Button over the Viewer's picture when solved points are selected: puts a flat Model layer at their average position with the shot projected on it from the solved camera."
+  },
   "trackCreateSolid": "Create solid",
   "@trackCreateSolid": {
     "description": "Button over the Viewer's picture when solved points are selected: puts a Solid layer at their average position."
@@ -13149,6 +14064,18 @@
   "settingsAutosaveKeep": "Copies kept",
   "@settingsAutosaveKeep": {
     "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
+  },
+  "settingsBrowserStorage": "Kept in this browser",
+  "@settingsBrowserStorage": {
+    "description": "Settings window, Autosave, browser version only: the name of the row that shows how much space this browser is using to keep Lumit's settings, projects and spare copies on this computer."
+  },
+  "settingsBrowserForget": "Forget the files no recent project uses?",
+  "@settingsBrowserForget": {
+    "description": "Settings window, Autosave, browser version only: the question asked after pressing Clear on the Kept in this browser row. Yes forgets the files opened in the browser that no project in the Recent list uses, and the browser's caches. Settings, spare copies and recent projects stay."
+  },
+  "settingsBrowserForgetYes": "Forget",
+  "@settingsBrowserForgetYes": {
+    "description": "Settings window, browser version only: the button that confirms forgetting the files no recent project uses."
   },
   "settingsPagePreviewAndCache": "Preview and cache",
   "@settingsPagePreviewAndCache": {
@@ -15161,11 +16088,7 @@
   },
   "popOutPanel": "Pop out",
   "@popOutPanel": {
-    "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
-  "popOutPanelBlocked": "Not available",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
+    "description": "The right-click menu on a panel's tab: the row that moves the Viewer into a separate window of its own, which can be dragged to another monitor. Closing that window puts the Viewer back where it was."
   },
   "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
   "@settingsEffectGraphsUseThemeColour": {
@@ -16013,6 +16936,10 @@
   "@histSetLightSettings": {
     "description": "Undo history entry: a light's type, falloff, aim or shadows were changed."
   },
+  "histEditGeometryOptions": "Edit geometry options",
+  "@histEditGeometryOptions": {
+    "description": "Undo history entry: a Text or Shape layer's Geometry options, or a face's material, was changed."
+  },
   "histSetMaterialSettings": "Set material settings",
   "@histSetMaterialSettings": {
     "description": "Undo history entry: whether a layer casts or accepts shadows was changed."
@@ -16091,6 +17018,10 @@
   },
   "histEditPan": "Edit pan",
   "@histEditPan": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histEditRouting": "Edit routing",
+  "@histEditRouting": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histSetAudioStreams": "Set audio streams",
@@ -16312,6 +17243,27 @@
   "@startupFailedBody": {
     "description": "The line under the 'Lumit could not start' heading, above the error text and the path of the diagnostics file."
   },
+  "webNoGraphicsCard": "This browser didn't give Lumit a graphics card. Lumit needs WebGPU.",
+  "@webNoGraphicsCard": {
+    "description": "Shown instead of the editor in the browser build when WebGPU gives no graphics card."
+  },
+  "webCannotDecode": "This browser can't open that file.",
+  "@webCannotDecode": {
+    "description": "Status line notice in the browser build when an imported video or sound file can't be decoded by the browser."
+  },
+  "webFilesAskAgain": "{count, plural, =1{1 file needs access again} other{{count} files need access again}}",
+  "@webFilesAskAgain": {
+    "description": "Status line notice in the browser build, after a project opens whose video or sound files the browser will only let Lumit read again once the person allows it. Beside it is the Allow access button.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "webAllowAccess": "Allow access",
+  "@webAllowAccess": {
+    "description": "Button beside the status line notice in the browser build that asks the browser for permission to read the project's video and sound files again."
+  },
   "audioChainNotBuilt": "The audio chain could not be built on this layer.",
   "@audioChainNotBuilt": {
     "description": "One line in the status bar at the bottom of the window, after the Audio panel's 'Drive with audio…' or 'Lower behind…' button was pressed and the chain of driver boxes it stages could not be made or wired. Calm, not an error."
@@ -16353,6 +17305,30 @@
   "tipAccelerationGraph": "Acceleration graph",
   "@tipAccelerationGraph": {
     "description": "Tooltip: show how fast the speed changes. One or two words."
+  },
+  "graphStartSpeed": "Start speed",
+  "@graphStartSpeed": {
+    "description": "Timeline, Graph mode, acceleration graph, under Gravity: the label beside the field holding the speed the value leaves the keyframe at, in the property's unit per second. 0 means it starts at rest, as an object that starts to fall; below 0 it is thrown the other way."
+  },
+  "graphSpeedProfile": "Speed profile",
+  "@graphSpeedProfile": {
+    "description": "Timeline, Graph mode, acceleration graph: one of two options on a small switch in a keyframe's box. From this keyframe the value speeds up from rest, holds a steady speed, then slows down to rest again. Shown in small capitals."
+  },
+  "graphGravity": "Gravity",
+  "@graphGravity": {
+    "description": "Timeline, Graph mode, acceleration graph: the other option on the switch in a keyframe's box. From this keyframe the value moves with a constant acceleration, its speed growing, like an object falling. Shown in small capitals."
+  },
+  "graphCruiseSpeed": "Cruise speed",
+  "@graphCruiseSpeed": {
+    "description": "Timeline, Graph mode, acceleration graph, under Speed profile: the label beside the field holding the steady speed the value holds between speeding up and slowing down, in the property's unit per second."
+  },
+  "graphBoxRefused": "That doesn't fit, so nothing was written.",
+  "@graphBoxRefused": {
+    "description": "Timeline, Graph mode, acceleration graph: a short line in a keyframe's box when what was just typed cannot be done, such as a motion that would run past the end of the composition. Nothing has changed in the project."
+  },
+  "graphDeceleration": "Deceleration",
+  "@graphDeceleration": {
+    "description": "Timeline, Graph mode, acceleration graph, under Speed profile: the label beside the field holding how much the speed drops every second at the end, as it slows down to rest, in the property's unit per second squared."
   },
   "fxOcioColourSpaceTransform": "OCIO colour space transform",
   "@fxOcioColourSpaceTransform": {
@@ -16898,10 +17874,6 @@
   "settingsAddonsRemove": "Remove",
   "@settingsAddonsRemove": {
     "description": "Settings window, Addons: the button that deletes an installed addon from this machine."
-  },
-  "settingsAddonsLoad": "Load now",
-  "@settingsAddonsLoad": {
-    "description": "Settings window, Addons: the button that loads the runtime straight away, to see whether it works on this machine."
   },
   "settingsAddonsNeedsRuntime": "Needs the runtime",
   "@settingsAddonsNeedsRuntime": {
@@ -22179,6 +23151,30 @@
   "@settingsGroupScripts": {
     "description": "Settings window: heading over a group of rows, the Scripts folder and the script run after each event."
   },
+  "settingsGroup3dModels": "3D models",
+  "@settingsGroup3dModels": {
+    "description": "Settings window: heading over the rows about opening 3D model files, such as which Blender converts the files Lumit has no reader for."
+  },
+  "settingsBlender": "Blender",
+  "@settingsBlender": {
+    "description": "Settings window: row naming the Blender program that 3D model files Lumit cannot read itself (.blend, USD, Alembic) are converted with. A product name; keep it as it is. Its buttons choose another program or go back to the one found."
+  },
+  "settingsBlenderNotFound": "Not found",
+  "@settingsBlenderNotFound": {
+    "description": "Settings window: under the Blender row when no Blender was found on this computer."
+  },
+  "settingsBlenderFound": "{version} · {path}",
+  "@settingsBlenderFound": {
+    "description": "Settings window: under the Blender row, the version and program file of the Blender found, as in 5.2.3 followed by the path to blender.exe.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "settingsScriptAfterExport": "Export finished",
   "@settingsScriptAfterExport": {
     "description": "Settings window: the name of one setting, the script from the Scripts folder run each time an export finishes. Its choices are the scripts and None."
@@ -22833,7 +23829,7 @@
   },
   "fxBox": "Box",
   "@fxBox": {
-    "description": "Effect controls: an option of Shape on Falloff."
+    "description": "Effect controls: an option of Shape on Falloff, and of Shape on Particulate, where particles are born anywhere inside a box."
   },
   "fxSweep": "Sweep",
   "@fxSweep": {
@@ -23341,5 +24337,462 @@
   "fxFadeCurve": "Fade curve",
   "@fxFadeCurve": {
     "description": "Effect controls — Time loop: the fade at an even pace or eased."
+  },
+  "fxFilm": "Film",
+  "@fxFilm": {
+    "description": "Effect name in the Add effect menu: the picture shot on a film stock and printed, with halation, grain and the rest as parts that turn on and off."
+  },
+  "fxStock": "Stock",
+  "@fxStock": {
+    "description": "Effect controls: Film's choice of the film stock in the camera."
+  },
+  "fxFormat": "Format",
+  "@fxFormat": {
+    "description": "Effect controls: Film's choice of how big the frame is on the film, which sets how big its grain and halation look."
+  },
+  "fxSuper8": "Super 8",
+  "@fxSuper8": {
+    "description": "Effect controls: a Format on Film: the Super 8 home movie gauge."
+  },
+  "fx16Mm": "16 mm",
+  "@fx16Mm": {
+    "description": "Effect controls: a Format on Film: the 16 mm gauge."
+  },
+  "fxSuper16": "Super 16",
+  "@fxSuper16": {
+    "description": "Effect controls: a Format on Film: the Super 16 gauge."
+  },
+  "fx35Mm": "35 mm",
+  "@fx35Mm": {
+    "description": "Effect controls: a Format on Film: a 35 mm motion picture frame."
+  },
+  "fx35MmStills": "35 mm stills",
+  "@fx35MmStills": {
+    "description": "Effect controls: a Format on Film: the larger frame a 35 mm stills camera exposes."
+  },
+  "fx65Mm": "65 mm",
+  "@fx65Mm": {
+    "description": "Effect controls: a Format on Film: the 65 mm gauge."
+  },
+  "fxNegative": "Negative",
+  "@fxNegative": {
+    "description": "Effect controls: a group of rows on Film about the negative and its development."
+  },
+  "fxFilmColour": "Film colour",
+  "@fxFilmColour": {
+    "description": "Effect controls: a switch on Film. Off keeps the picture's own colour and adds only grain, halation and the other parts."
+  },
+  "fxPushOrPull": "Push or pull",
+  "@fxPushOrPull": {
+    "description": "Effect controls: Film's stops of push (more contrast) or pull (less) in development."
+  },
+  "fxInterlayer": "Interlayer",
+  "@fxInterlayer": {
+    "description": "Effect controls: how hard each of the film's layers holds back the others as it develops, per cent."
+  },
+  "fxPrint": "Print",
+  "@fxPrint": {
+    "description": "Effect controls: a group and a switch on Film: printing the negative onto print stock."
+  },
+  "fxPrintStock": "Print stock",
+  "@fxPrintStock": {
+    "description": "Effect controls: Film's choice of what the negative is printed on."
+  },
+  "fxHalation": "Halation",
+  "@fxHalation": {
+    "description": "Effect controls: a group and a switch on Film: light bouncing off the film's base back into it, a red glow round bright lights."
+  },
+  "fxBacking": "Backing",
+  "@fxBacking": {
+    "description": "Effect controls: Film's choice of the layer behind the film that stops halation."
+  },
+  "fxTheStockSOwn": "The stock's own",
+  "@fxTheStockSOwn": {
+    "description": "Effect controls: a Backing on Film: whatever the chosen stock has."
+  },
+  "fxStrong": "Strong",
+  "@fxStrong": {
+    "description": "Effect controls: a Backing on Film: one that stops most of the bounce."
+  },
+  "fxWeak": "Weak",
+  "@fxWeak": {
+    "description": "Effect controls: a Backing on Film: one that lets more of the bounce through."
+  },
+  "fxRemoved": "Removed",
+  "@fxRemoved": {
+    "description": "Effect controls: a Backing on Film: the backing taken off, which glows the most."
+  },
+  "fxGateWeave": "Gate weave",
+  "@fxGateWeave": {
+    "description": "Effect controls: a group and a switch on Film: the frame wandering a little in the camera's gate."
+  },
+  "fxVision350D": "Vision3 50D",
+  "@fxVision350D": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3250D": "Vision3 250D",
+  "@fxVision3250D": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3200T": "Vision3 200T",
+  "@fxVision3200T": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision3500T": "Vision3 500T",
+  "@fxVision3500T": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra160": "Portra 160",
+  "@fxPortra160": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra400": "Portra 400",
+  "@fxPortra400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxPortra800": "Portra 800",
+  "@fxPortra800": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxEktar100": "Ektar 100",
+  "@fxEktar100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxGold200": "Gold 200",
+  "@fxGold200": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxUltramax400": "Ultramax 400",
+  "@fxUltramax400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxFujicolorC200": "Fujicolor C200",
+  "@fxFujicolorC200": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxFujicolorPro400H": "Fujicolor Pro 400H",
+  "@fxFujicolorPro400H": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxSuperiaXTRA400": "Superia X-TRA 400",
+  "@fxSuperiaXTRA400": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxEktachrome100": "Ektachrome 100",
+  "@fxEktachrome100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxKodachrome64": "Kodachrome 64",
+  "@fxKodachrome64": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxProvia100F": "Provia 100F",
+  "@fxProvia100F": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVelvia100": "Velvia 100",
+  "@fxVelvia100": {
+    "description": "Effect controls: a Stock on Film. The name of a real film stock, so it stays as it is in every language."
+  },
+  "fxVision2383": "Vision 2383",
+  "@fxVision2383": {
+    "description": "Effect controls: a Print stock on Film: a motion picture print film. A product name, so it stays as it is in every language."
+  },
+  "fxVisionPremier2393": "Vision Premier 2393",
+  "@fxVisionPremier2393": {
+    "description": "Effect controls: a Print stock on Film: a motion picture print film. A product name, so it stays as it is in every language."
+  },
+  "fxPortraEnduraPaper": "Portra Endura paper",
+  "@fxPortraEnduraPaper": {
+    "description": "Effect controls: a Print stock on Film: a photographic paper. Keep the product name as it is and translate the word for paper."
+  },
+  "fxCrystalArchivePaper": "Crystal Archive paper",
+  "@fxCrystalArchivePaper": {
+    "description": "Effect controls: a Print stock on Film: a photographic paper. Keep the product name as it is and translate the word for paper."
+  },
+  "fxOn": "On",
+  "@fxOn": {
+    "description": "Effect controls: the switch at the top of one of Film's parts (Print, Halation, Bloom, Grain, Gate weave, Flicker) that turns that part on."
+  },
+  "modelMaterialNumbered": "Material {number}",
+  "@modelMaterialNumbered": {
+    "description": "Heading of a Model layer's material row, in the Effect controls panel and the Timeline, when the 3D model file gives that material no name. {number} counts its materials from 1.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "fxMaterial": "Material",
+  "@fxMaterial": {
+    "description": "Effect controls and the Timeline: the name a 3D model's material goes by when its file gives it none."
+  },
+  "fxBaseColour": "Base colour",
+  "@fxBaseColour": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material."
+  },
+  "fxBaseColourLayer": "Base colour layer",
+  "@fxBaseColourLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture stands in for the base colour."
+  },
+  "menuProjectFromCamera": "Project from camera",
+  "@menuProjectFromCamera": {
+    "description": "Layer menu and command palette: sets every material of the selected Model layers to read a picture from a camera, rather than on the model's own uvs."
+  },
+  "fxProjectedFrom": "Projected from",
+  "@fxProjectedFrom": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The Camera layer its base colour layer is projected from, rather than read on the model's own uvs. None leaves it on the uvs."
+  },
+  "fxProjectionTime": "Projection time",
+  "@fxProjectionTime": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Whether the projecting camera and its picture follow the playhead (Follow) or stop at one frame (Hold)."
+  },
+  "fxHoldFrame": "Hold frame",
+  "@fxHoldFrame": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The comp frame the projecting camera and its picture stop at."
+  },
+  "fxMetallic": "Metallic",
+  "@fxMetallic": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material."
+  },
+  "fxEmissionColour": "Emission colour",
+  "@fxEmissionColour": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. The colour of light the surface gives off."
+  },
+  "fxEmissionStrength": "Emission strength",
+  "@fxEmissionStrength": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material."
+  },
+  "fxEmissionLayer": "Emission layer",
+  "@fxEmissionLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture glows on the surface."
+  },
+  "fxOpacityLayer": "Opacity layer",
+  "@fxOpacityLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's brightness says how much of the surface shows."
+  },
+  "fxNormalStrength": "Normal strength",
+  "@fxNormalStrength": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. How strongly the normal map bumps the surface."
+  },
+  "fxTransmission": "Transmission",
+  "@fxTransmission": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. How much light passes through, as through glass."
+  },
+  "fxIor": "IOR",
+  "@fxIor": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Index of refraction, how much glass bends what is behind it. Usually left as IOR."
+  },
+  "fxCoat": "Coat",
+  "@fxCoat": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. A clear varnish layer over the surface."
+  },
+  "fxCoatRoughness": "Coat roughness",
+  "@fxCoatRoughness": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. How rough the clear varnish over the surface is."
+  },
+  "fxNormalLayer": "Normal layer",
+  "@fxNormalLayer": {
+    "description": "Effect controls and the Timeline: a row on a Model layer's material. Which layer's picture is used as the surface's normal map."
+  },
+  "fxChrome": "Chrome",
+  "@fxChrome": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxGold": "Gold",
+  "@fxGold": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxBrushedMetal": "Brushed metal",
+  "@fxBrushedMetal": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxFrostedGlass": "Frosted glass",
+  "@fxFrostedGlass": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxPlastic": "Plastic",
+  "@fxPlastic": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxRubber": "Rubber",
+  "@fxRubber": {
+    "description": "Effect controls: a material preset in a material's Presets menu."
+  },
+  "fxEmissive": "Emissive",
+  "@fxEmissive": {
+    "description": "Effect controls: a material preset in a material's Presets menu. A material that glows."
+  },
+  "fxCells64": "64",
+  "@fxCells64": {
+    "description": "Effect controls: an option of Resolution on Smoke and fire: 64 cells along the box's longest side."
+  },
+  "fxCells96": "96",
+  "@fxCells96": {
+    "description": "Effect controls: an option of Resolution on Smoke and fire: 96 cells along the box's longest side."
+  },
+  "fxCells128": "128",
+  "@fxCells128": {
+    "description": "Effect controls: an option of Resolution on Smoke and fire: 128 cells along the box's longest side."
+  },
+  "fxModelLayer": "Model layer",
+  "@fxModelLayer": {
+    "description": "Effect controls: an option of Emit from on Smoke and fire: gas comes from the surface of a Model layer."
+  },
+  "fxTurbulence": "Turbulence",
+  "@fxTurbulence": {
+    "description": "Effect controls: a control on Smoke and fire: how much the gas is broken up into small swirls."
+  },
+  "fxCollision": "Collision",
+  "@fxCollision": {
+    "description": "Effect controls: the heading on Smoke and fire over what the gas goes round."
+  },
+  "fxPresetCandle": "Candle",
+  "@fxPresetCandle": {
+    "description": "Effect controls: a preset of Smoke and fire: a small steady flame."
+  },
+  "fxPresetTorch": "Torch",
+  "@fxPresetTorch": {
+    "description": "Effect controls: a preset of Smoke and fire: a narrow hard flame."
+  },
+  "fxPresetExplosion": "Explosion",
+  "@fxPresetExplosion": {
+    "description": "Effect controls: a preset of Smoke and fire: a burst of fuel that rises as a fireball."
+  },
+  "fxSmokeAndFire": "Smoke and fire",
+  "@fxSmokeAndFire": {
+    "description": "Effect controls: the name of the effect that turns a 3D layer into a box of simulated smoke and fire."
+  },
+  "fxResolution": "Resolution",
+  "@fxResolution": {
+    "description": "Effect controls: a control on Smoke and fire: how many cells the box has along its longest side."
+  },
+  "fxEmitFrom": "Emit from",
+  "@fxEmitFrom": {
+    "description": "Effect controls: a control on Smoke and fire: what the gas comes from."
+  },
+  "fxLayersBox": "Layer's box",
+  "@fxLayersBox": {
+    "description": "Effect controls: an option of Emit from on Smoke and fire: gas comes from a patch on the floor of the layer's own box."
+  },
+  "fxParticlesFromALayer": "Particles from a layer",
+  "@fxParticlesFromALayer": {
+    "description": "Effect controls: an option of Emit from on Smoke and fire: gas comes from where another layer's particles are."
+  },
+  "fxEmitLayer": "Emit layer",
+  "@fxEmitLayer": {
+    "description": "Effect controls: a control on Smoke and fire: the Particulate layer or Model layer the gas comes from."
+  },
+  "fxEmitterSize": "Emitter size",
+  "@fxEmitterSize": {
+    "description": "Effect controls: a control on Smoke and fire: how wide the patch on the box's floor is."
+  },
+  "fxFuel": "Fuel",
+  "@fxFuel": {
+    "description": "Effect controls: a control on Smoke and fire: how much there is to burn where the gas starts."
+  },
+  "fxBuoyancy": "Buoyancy",
+  "@fxBuoyancy": {
+    "description": "Effect controls: a control on Smoke and fire: how hard heat pushes the gas up."
+  },
+  "fxVorticity": "Vorticity",
+  "@fxVorticity": {
+    "description": "Effect controls: a control on Smoke and fire: how much the curls in the gas are kept alive."
+  },
+  "fxDissipation": "Dissipation",
+  "@fxDissipation": {
+    "description": "Effect controls: a control on Smoke and fire: how fast smoke thins and heat fades."
+  },
+  "fxSmokeColour": "Smoke colour",
+  "@fxSmokeColour": {
+    "description": "Effect controls: a control on Smoke and fire: the smoke's colour, as light falling on it shows it."
+  },
+  "fxFireBrightness": "Fire brightness",
+  "@fxFireBrightness": {
+    "description": "Effect controls: a control on Smoke and fire: how much light hot gas gives."
+  },
+  "fxFireColour": "Fire colour",
+  "@fxFireColour": {
+    "description": "Effect controls: a control on Smoke and fire: the fire's colour at its coolest."
+  },
+  "fxFireCore": "Fire core",
+  "@fxFireCore": {
+    "description": "Effect controls: a control on Smoke and fire: the fire's colour at its hottest."
+  },
+  "fxShadowStrength": "Shadow strength",
+  "@fxShadowStrength": {
+    "description": "Effect controls: a control on Smoke and fire: how dark the smoke's shadows are, on itself and on what is under it."
+  },
+  "bakeTooBig": "Not enough video memory",
+  "@bakeTooBig": {
+    "description": "Bake status line on Smoke and fire when the grid at this Resolution does not fit on the graphics card, so no smoke is drawn."
+  },
+  "foldMaterials": "Materials",
+  "@foldMaterials": {
+    "description": "Heading in a Model layer's fold-out and in the Effect controls panel, over a group of rows for each material in its 3D model."
+  },
+  "fxGeometryOptions": "Geometry options",
+  "@fxGeometryOptions": {
+    "description": "Heading in a Text or Shape layer's fold-out and in the Effect controls panel, over how its outline is made solid."
+  },
+  "fxExtrusionDepth": "Extrusion depth",
+  "@fxExtrusionDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: how far back its outline reaches, in pixels."
+  },
+  "fxBevelDepth": "Bevel depth",
+  "@fxBevelDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: how far in and how far back its bevel goes, in pixels."
+  },
+  "fxBevelSegments": "Bevel segments",
+  "@fxBevelSegments": {
+    "description": "Row in a Text or Shape layer's Geometry options: how many steps a rounded bevel is made of."
+  },
+  "fxSliceStart": "Slice start",
+  "@fxSliceStart": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape starts, so part of it can be cut away."
+  },
+  "fxSliceEnd": "Slice end",
+  "@fxSliceEnd": {
+    "description": "Row in a 3D shape’s Geometry options: the angle round its axis where the shape ends."
+  },
+  "fxTopRadius": "Top radius",
+  "@fxTopRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its top is. Nought makes a point."
+  },
+  "fxBottomRadius": "Bottom radius",
+  "@fxBottomRadius": {
+    "description": "Row in a cone’s Geometry options: how wide its base is."
+  },
+  "fxPipeRadius": "Pipe radius",
+  "@fxPipeRadius": {
+    "description": "Row in a torus’s Geometry options: how thick the ring is."
+  },
+  "fxPipeSegments": "Pipe segments",
+  "@fxPipeSegments": {
+    "description": "Row in a torus’s Geometry options: how many steps make the round of its ring’s thickness."
+  },
+  "fxCornerSegments": "Corner segments",
+  "@fxCornerSegments": {
+    "description": "Row in a 3D plane’s Geometry options: how many steps make each rounded corner."
+  },
+  "fxHoleBevelDepth": "Hole bevel depth",
+  "@fxHoleBevelDepth": {
+    "description": "Row in a Text or Shape layer's Geometry options: a hole's bevel as a share of the Bevel depth, as in the middle of an o."
+  },
+  "fxBevelAngular": "Angular",
+  "@fxBevelAngular": {
+    "description": "Bevel style: a flat slope."
+  },
+  "fxBevelConvex": "Convex",
+  "@fxBevelConvex": {
+    "description": "Bevel style: rounded over."
+  },
+  "fxBevelConcave": "Concave",
+  "@fxBevelConcave": {
+    "description": "Bevel style: scooped out."
+  },
+  "fxFaceBevel": "Bevel",
+  "@fxFaceBevel": {
+    "description": "Name of a Text or Shape layer's material for its bevel, beside Front, Side and Back."
   }
 }

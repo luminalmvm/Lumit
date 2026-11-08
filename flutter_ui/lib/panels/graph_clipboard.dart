@@ -288,6 +288,34 @@ LumitClipGroup _transformClipGroup(
         l10n.lightShadowDiffusion,
         l10n.unitPixels
       ),
+    BridgeTransformProp.hazeAmount => (l10n.lightVolumetric, l10n.unitPercent),
+    BridgeTransformProp.hazeDensity => (
+        l10n.lightHazeDensity,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.hazeColourR ||
+    BridgeTransformProp.hazeColourG ||
+    BridgeTransformProp.hazeColourB =>
+      (l10n.lightHazeColour, ''),
+    BridgeTransformProp.hazeFalloff => (
+        l10n.lightHeightFalloff,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.hazeScatter => (
+        l10n.lightForwardScatter,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.hazeNoise => (l10n.lightNoise, l10n.unitPercent),
+    BridgeTransformProp.hazeNoiseSize => (l10n.lightNoiseSize, l10n.unitPixels),
+    BridgeTransformProp.hazeNoiseSpeed => (
+        l10n.lightNoiseSpeed,
+        l10n.unitPerSecond(l10n.unitPixels)
+      ),
+    BridgeTransformProp.backgroundBlur => (
+        l10n.lightBackgroundBlur,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.reflection => (l10n.materialReflection, l10n.unitPercent),
     BridgeTransformProp.lightTransmission => (
         l10n.materialLightTransmission,
         l10n.unitPercent
@@ -491,6 +519,9 @@ void _matchOnLayer(
     final info = source.entry.info;
     final from = source.entry.layer.internallayerId.toString();
     if (source.effect case final fx? when seen.add('${fx.id}')) {
+      // A placed graph's Inputs are found by their path alone. There is only
+      // one, so there is no id to swap and nothing to add.
+      if (isUnderPath(inputsPath(from), source.path)) continue;
       final style = isUnderPath(stylesPath(from), source.path);
       List<String> ofKind(List<BridgeEffectInstanceInfo> list) => [
             for (final e in list)

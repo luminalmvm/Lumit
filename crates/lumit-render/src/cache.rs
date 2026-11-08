@@ -199,6 +199,23 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
     }
 
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
+        // A 3D model is never probed, so it is named by its file as it is on
+        // disk now, or a model saved over would keep its old frames.
+        if let Some(lumit_core::model::ProjectItem::Footage(f)) = self.doc.item(item) {
+            let path = f.media.on_disk();
+            if lumit_scene::is_model(path) {
+                let stamp = lumit_media::sequence::MediaSource::file(path)
+                    .stamped()
+                    .stamp;
+                let chosen = lumit_scene::blender::choices();
+                // The moment names the frame only if the file has takes to show.
+                let frame = match crate::model::known_still(self.doc, item) {
+                    true => 0,
+                    false => lt.to_bits(),
+                };
+                return Some((format!("model#{path}#{stamp:?}#{chosen}"), frame));
+            }
+        }
         // The same proxy resolution point the decode planner goes through
         // (`crate::source::effective_media`), and for the reason the key
         // exists at all: the name of a frame has to say which file its pixels
@@ -352,7 +369,9 @@ impl NestedKeyer for NestedKeys<'_> {
         if self.quality.draft {
             return None;
         }
+        // Named the way this thread shows models, as the frame around it is.
         frame_key_at(self.doc, nested, lt, self.quality, self.probes)
+            .map(crate::model::named_as_shown)
     }
 
     fn nested_key_with(
@@ -522,6 +541,7 @@ mod tests {
                 audio_streams: Default::default(),
                 adjustment: false,
                 pitch_follows_speed: false,
+                audio_routes: Default::default(),
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,

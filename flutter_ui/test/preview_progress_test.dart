@@ -14,7 +14,7 @@ BridgeRenderProgress _report(
   bool done = false,
 }) =>
     BridgeRenderProgress(
-      frame: BigInt.from(frame),
+      frame: frame,
       stage: stage,
       fraction: fraction,
       done: done,

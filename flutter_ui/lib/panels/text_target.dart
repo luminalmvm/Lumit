@@ -117,7 +117,7 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
       try {
         ui.liveText.value = {layer.internallayerId: document};
         comp.renderFrameWithTextPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: layer,
           document: document,
@@ -138,7 +138,7 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
     if (target.layers.isEmpty || comp == null) return;
     try {
       comp.renderFrameWithTextPreview(
-        frame: BigInt.from(ui.playheadFrame.value),
+        frame: ui.playheadFrame.value,
         scale: ui.viewerScale,
         layer: target.layers.first,
         document: target.held,
@@ -218,7 +218,7 @@ Widget textCell(LumitTheme t, String label, Widget control) => SizedBox(
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Expanded(child: Align(alignment: Alignment.centerLeft, child: control)),
+          Expanded(child: Align(alignment: AlignmentDirectional.centerStart, child: control)),
           const SizedBox(width: 10),
         ],
       ),

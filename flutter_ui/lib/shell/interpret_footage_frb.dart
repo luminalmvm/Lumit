@@ -753,7 +753,7 @@ class _InterpretBodyState extends State<_InterpretBody> {
   Widget _tick(LumitTheme t, String key, String label, bool value,
           ValueChanged<bool>? onChanged) =>
       Padding(
-        padding: const EdgeInsets.only(left: _labelColumn + 10),
+        padding: const EdgeInsetsDirectional.only(start: _labelColumn + 10),
         child: SizedBox(
           height: 26,
           child: GestureDetector(

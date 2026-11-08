@@ -13,15 +13,16 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../panels/light_rows_frb.dart';
-import '../state/app_state.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import '../widgets/layer_picker.dart';
 import 'camera_settings_dialog.dart'
     show
         cameraDialogWidth,
@@ -154,6 +155,10 @@ Future<void> newLightFrb({
           falloff: BridgeLightFalloff.none,
           twoNode: true,
           castsShadows: false,
+          inAir: false,
+          noisy: false,
+          source: null,
+          background: false,
         ),
         intensity: 100,
         colour: [1, 1, 1],
@@ -166,11 +171,24 @@ Future<void> newLightFrb({
         shadowDarkness: 100,
         shadowDiffusion: 0,
       );
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final layers = comp.getModel().layers;
+  // An environment starts from the selected layer, when that's footage or a
+  // precomp. Anything else selected is more likely to be there to be lit.
+  final selected = ui.selectedLayer.value?.internallayerId;
+  final picture = layers.where((l) =>
+      l.layer.internallayerId == selected &&
+      (l.info.kind == BridgeLayerKind.footage ||
+          l.info.kind == BridgeLayerKind.precomp) &&
+      canSurround(l));
+  if (start.settings.source == null && picture.isNotEmpty) {
+    start.settings = lightSettingsWith(start.settings, source: (selected,));
+  }
   final picked = await showLumitModal<(_LightValues, String)>(
     context: context,
     id: 'light-settings',
-    builder: (close) =>
-        _LightSettingsBody(values: start, name: null, onDone: close),
+    builder: (close) => _LightSettingsBody(
+        values: start, name: null, layers: layers, onDone: close),
   );
   if (picked == null) return;
   final (values, name) = picked;
@@ -185,6 +203,10 @@ Future<void> newLightFrb({
     layer.setTransforms(props: props, values: scalars);
     if (name.isNotEmpty) layer.rename(name: name);
   });
+  // A view on Shaded ignores the comp's lights, and this one is there to see.
+  if (values.settings.kind == BridgeLightKind.environment) {
+    ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.final_);
+  }
   onDone?.call();
 }
 
@@ -200,12 +222,15 @@ Future<bool> showLightSettingsFrb({
   required double compHeight,
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
+  final layers =
+      Provider.of<LumitUiState>(context, listen: false).model.layers;
   final picked = await showLumitModal<(_LightValues, String)>(
     context: context,
     id: 'light-settings',
     builder: (close) => _LightSettingsBody(
       values: _LightValues.of(settings, channels),
       name: name,
+      layers: layers,
       onDone: close,
     ),
   );
@@ -242,11 +267,15 @@ class _LightSettingsBody extends StatefulWidget {
   /// The light's name, or null for a light still to be made, whose name
   /// follows its type until it is typed over.
   final String? name;
+
+  /// The comp's layers, which an environment's picture is picked from.
+  final List<BridgeLayerEntry> layers;
   final void Function((_LightValues, String)?) onDone;
 
   const _LightSettingsBody({
     required this.values,
     required this.name,
+    required this.layers,
     required this.onDone,
   });
 
@@ -305,6 +334,33 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
           ),
         ),
         _section(t, l10n.lightOptions, [
+          if (kind == BridgeLightKind.environment) ...[
+            _row(
+                t,
+                l10n.lightSource,
+                LayerPicker(
+                  key: const ValueKey('light-source'),
+                  layers: widget.layers,
+                  value: _s.source,
+                  empty: l10n.none,
+                  missing: l10n.missingLayer,
+                  offered: canSurround,
+                  onChanged: (id) => setState(() =>
+                      _v.settings = lightSettingsWith(_s, source: (id,))),
+                )),
+            _row(
+                t,
+                l10n.lightShowInBackground,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: HouseCheckbox(
+                    key: const ValueKey('light-background'),
+                    value: _s.background,
+                    onChanged: (on) => setState(() =>
+                        _v.settings = lightSettingsWith(_s, background: on)),
+                  ),
+                )),
+          ],
           _row(t, l10n.lightColour, _colourRow(t)),
           _row(
               t,
@@ -349,7 +405,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                 t,
                 l10n.transformPointOfInterest,
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseCheckbox(
                     key: const ValueKey('light-aim'),
                     value: _s.twoNode,
@@ -357,13 +413,14 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                         _v.settings = lightSettingsWith(_s, twoNode: on)),
                   ),
                 )),
-          // An ambient light comes from nowhere, so it casts nothing.
-          if (kind != BridgeLightKind.ambient) ...[
+          // An ambient or environment light comes from nowhere, so it casts
+          // nothing.
+          if (lightCasts(kind)) ...[
             _row(
                 t,
                 l10n.castsShadows,
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseCheckbox(
                     key: const ValueKey('light-shadows'),
                     value: _s.castsShadows,
@@ -422,7 +479,10 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
         onChanged: (k) => setState(() {
           // A new light's name follows its type until it is typed over.
           final was = _kindName;
-          _v.settings = lightSettingsWith(_s, kind: k);
+          // A new environment shows its picture, which is what it's made for.
+          final shown = widget.name == null && k == BridgeLightKind.environment;
+          _v.settings =
+              lightSettingsWith(_s, kind: k, background: shown || _s.background);
           if (widget.name == null && _name.text == was) _name.text = _kindName;
         }),
         width: cameraWell + 60,
@@ -444,7 +504,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
     if (c == null) return _animated(t, 'colour');
     final exact = PickedColour(c[0], c[1], c[2]);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: ColourSwatchButton(
         key: const ValueKey('light-colour'),
         colour: exact.clipped,
@@ -509,7 +569,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
 
   /// What an animated channel shows where its well would be.
   Widget _animated(LumitTheme t, String id) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: Text(
           l10n.animated,
           key: ValueKey<String>('light-$id-animated'),
@@ -546,7 +606,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(t.kickerCase(title), style: t.kicker),
                     ),
                   ),

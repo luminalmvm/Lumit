@@ -52,6 +52,8 @@ import '../icons/lumit_icon.dart' as glyph_set;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/model_settings_dialog.dart'
+    show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../state/comp_model.dart';
 import '../state/dock.dart';
@@ -83,8 +85,10 @@ import 'easing_curve.dart';
 import 'key_block.dart';
 import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
+import 'graph_lens_guides.dart' show GraphLensSwitch;
 import 'graph_maths.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
+import 'graph_box_lanes.dart';
 import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
@@ -95,6 +99,7 @@ import 'spectral_lane_frb.dart';
 import 'stagger.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart' show modelPartPath, modelPartReveal;
 import 'shape_entries.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import '../widgets/share_marks.dart';
@@ -274,7 +279,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// and a layer's Retime are both one edit away from changing, so the bounds
   /// are taken again whenever the document moves — and never in between, which
   /// is what keeps a rebuild free of bridge calls.
-  BigInt? _boundsRevision;
+  int? _boundsRevision;
 
   /// The comp those bounds were taken on. The master fader and the mix mark
   /// read beside them are the comp's own, and fronting another comp moves no
@@ -609,7 +614,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// region's band in the lanes and the graph follows its flag by listening,
   /// not by this panel rebuilding on every pointer move.
   final ValueNotifier<MarkerPreview?> _markerPreview = ValueNotifier(null);
-  BigInt? _workRevision;
+  int? _workRevision;
   CompositionReference? _workComp;
 
   /// One layer's bounds, from what its kind can be asked cheaply.
@@ -712,6 +717,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // so dropping it alone would leave the list holding what was let go.
       ui.clearSelection();
       _selectedProperties.clear();
+      _publishPickedPart();
       _laneKeySelection.clear();
       _graphKeySelection.clear();
       _highlighted = null;
@@ -1157,10 +1163,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final hash = id.lastIndexOf('#');
         if (hash <= 0) continue;
         final path = id.substring(0, hash);
+        final index = int.tryParse(id.substring(hash + 1));
+        if (index == null) continue;
         for (final channel in channels) {
-          if (channel.path == path) {
-            (out['${channel.id}${id.substring(hash)}'] ??= [])
-                .add(person.colour);
+          if (channel.path != path) continue;
+          if (channel.ownKeyIndex(index) case final own?) {
+            (out['${channel.id}#$own'] ??= []).add(person.colour);
           }
         }
       }
@@ -1391,6 +1399,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishRowSelection();
     _publishLaneKeys();
     if (_graph) setState(() {});
+    _publishPickedPart();
   }
 
   /// The other direction: an effect picked in the Effect controls panel lights
@@ -1562,16 +1571,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The keys picked on [path]'s row, by index, in whichever view is up. A
   /// graph key on either axis of a row counts for the row, as a lane key does.
   Set<int> _keysPickedOn(String path) {
-    final rows = _graph
-        ? {
-            for (final c in graphChannels(
-                layers: Provider.of<LumitUiState>(context, listen: false)
-                    .model
-                    .layers,
-                selected: [path]))
-              c.id
-          }
-        : {path};
+    final channels = graphChannels(
+        layers: Provider.of<LumitUiState>(context, listen: false).model.layers,
+        selected: [path]);
+    // An index means the same key on each axis only while they are keyed
+    // together. Apart, a value edit is the ordinary edit at the playhead.
+    if (channels.any((c) =>
+        c.scalar is BridgeScalar_Keyframed &&
+        c.rowKeys != null &&
+        c.rowKeys!.length != c.keys.length)) {
+      return const {};
+    }
+    final rows = _graph ? {for (final c in channels) c.id} : {path};
     return {
       for (final id in _graph ? _graphKeySelection : _laneKeySelection)
         if (id.lastIndexOf('#') case final hash
@@ -1793,8 +1804,60 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final id = layerId.toString();
         _setOpen(id, true);
         _open.addAll(_revealPaths(id, entry, action));
+        // A part opens with its row picked and in view.
+        if (action.startsWith('reveal.part/')) {
+          final path =
+              modelPartPath(id, action.substring('reveal.part/'.length));
+          _selectedProperties
+            ..clear()
+            ..add(path);
+          _foldToShow = path;
+          _publishPickedPart();
+        }
       }
     });
+  }
+
+  /// Tell the Viewer which part of a 3D model the last picked row is on, for
+  /// its handles.
+  void _publishPickedPart() {
+    final path = _selectedProperties.lastOrNull;
+    final segments = path?.split('/') ?? const <String>[];
+    _ui?.pickedPart.value = segments.length >= 3 && segments[1] == 'parts'
+        ? (layer: UuidValue.fromString(segments[0]), part: segments[2])
+        : null;
+  }
+
+  /// The fold row the next build brings into view.
+  String? _foldToShow;
+
+  /// Bring the fold row at [path] into view, a short glide so its place in the
+  /// tree stays readable.
+  void _scrollToFold(List<LayerRow> rows, String path) {
+    var y = 0.0;
+    for (final row in rows) {
+      var at = y + row.rowHeight + (row.sequenceExtra ?? 0);
+      for (final fold in row.foldRows) {
+        if (foldRowPath(row.id, fold) == path) {
+          if (!_vOutline.hasClients) return;
+          final view = _vOutline.position;
+          // Enough for the part's own rows under it.
+          final block = row.rowHeight * 11;
+          if (at >= view.pixels &&
+              at + block <= view.pixels + view.viewportDimension) {
+            return;
+          }
+          // A row or two of what is above it stays on screen.
+          final to = (at - row.rowHeight * 2).clamp(0.0, view.maxScrollExtent);
+          _vOutline.animateTo(to,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut);
+          return;
+        }
+        at += row.rowHeight;
+      }
+      y += row.height;
+    }
   }
 
   /// Which fold paths a reveal key opens under [id]. Empty means the layer's
@@ -1828,6 +1891,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         entry.info.effects.isEmpty ? const [] : [effectsPath(id)],
       'reveal.masks' => entry.info.masks.isEmpty ? const [] : [masksPath(id)],
       'reveal.volume' => [audioPath(id)],
+      _ when action.startsWith('reveal.part/') => switch (entry.info.modelRows) {
+          final rows? =>
+            modelPartReveal(id, rows, action.substring('reveal.part/'.length)),
+          null => const [],
+        },
       _ => const [],
     };
   }
@@ -2302,9 +2370,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final hash = id.lastIndexOf('#');
       if (hash <= 0) continue;
       final path = id.substring(0, hash);
-      final index = id.substring(hash + 1);
+      final index = int.tryParse(id.substring(hash + 1));
+      if (index == null) continue;
       for (final channel in channels) {
-        if (channel.path == path) out.add('${channel.id}#$index');
+        if (channel.path != path) continue;
+        if (channel.ownKeyIndex(index) case final own?) {
+          out.add('${channel.id}#$own');
+        }
       }
     }
     return out;
@@ -4121,30 +4193,42 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           LayoutBuilder(builder: (context, box) {
             // No zoom here, so the frames span the panel's width.
             final axis = TimelineAxis(frames: frames, width: box.maxWidth);
-            return SizedBox(
-              height: t.density.ruler,
-              child: Stack(
-                children: [
-                  TimelineRuler(
-                    comp: comp,
-                    axis: axis,
-                    fps: ui.model.fps,
-                    height: t.density.ruler,
-                    work: work,
-                    onSeek: (f) =>
-                        ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
-                    onWorkArea: (span) {
-                      comp.setWorkArea(span: span);
-                      setState(() {});
-                    },
-                    onWorkPreview: (span) => _workPreview.value = span,
-                    onMarkersChanged: () => setState(() {}),
-                    cache: TimelineCacheBar(
-                        comp: comp, axis: axis, revision: _cacheRevision!),
-                  ),
-                  PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
-                ],
-              ),
+            // The picked box's keyed rows hang under the ruler on its axis,
+            // and the playhead runs down through both.
+            return Stack(
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: t.density.ruler,
+                      child: TimelineRuler(
+                        comp: comp,
+                        axis: axis,
+                        fps: ui.model.fps,
+                        height: t.density.ruler,
+                        work: work,
+                        onSeek: (f) => ui
+                            .scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
+                        onWorkArea: (span) {
+                          comp.setWorkArea(span: span);
+                          setState(() {});
+                        },
+                        onWorkPreview: (span) => _workPreview.value = span,
+                        onMarkersChanged: () => setState(() {}),
+                        cache: TimelineCacheBar(
+                            comp: comp,
+                            axis: axis,
+                            revision: _cacheRevision!),
+                      ),
+                    ),
+                    GraphBoxLanes(
+                        comp: comp, frames: frames, width: box.maxWidth),
+                  ],
+                ),
+                PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
+              ],
             );
           }),
           Expanded(child: CompGraphPanel(comp: comp, host: Panel.timeline)),
@@ -4253,6 +4337,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
+    if (_foldToShow case final path?) {
+      _foldToShow = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToFold(rows, path);
+      });
+    }
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,
@@ -4319,7 +4409,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // payload type and this drop honestly takes two.
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (details) =>
-                details.data is FootageDragData || details.data is CompDragData,
+                details.data is FootageDragData ||
+                details.data is CompDragData ||
+                details.data is SolidDragData,
             onAcceptWithDetails: (details) {
               // Where the pointer let go, not the top of the stack: dropping
               // between two layers means "here", and a stack that ignores it
@@ -4331,17 +4423,24 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // The files land on the row they were dropped on, in the
                   // order the panel lists them, as one undo step. Several lie
                   // end to end, and Shift stacks them all at the start.
-                  comp.addFootageLayers(
+                  final placed = comp.addFootageLayers(
                       footage: footage,
                       asSequence: _videoAsSequence(context),
                       row: at,
                       arrival: ui.streamsArrival,
-                      endToEnd: !HardwareKeyboard.instance.isShiftPressed);
+                      endToEnd: !HardwareKeyboard.instance.isShiftPressed,
+                      lightNames: modelLightNames());
+                  // A 3D model asks how it sits as it lands.
+                  showDroppedModelSettingsFrb(context, placed);
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
                   // the drop simply does nothing.
                   try {
                     comp.addPrecompLayer(comp: dropped, row: at);
+                  } catch (_) {}
+                case SolidDragData(:final solid):
+                  try {
+                    comp.addSolidItemLayer(solid: solid, row: at);
                   } catch (_) {}
               }
               ui.model.refresh();
@@ -4975,10 +5074,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 // stood on the lane bar, in the same order.
                 strip: !_graph,
                 lens: _graph ? _graphLens : null,
-                onLens: (lens) => setState(() {
-                  _graphLens = lens;
-                  _publishEasingClaim();
-                }),
                 breakHandles: _graphBreakHandles,
                 onToggleBreakHandles: () => setState(
                     () => _graphBreakHandles = !_graphBreakHandles),
@@ -5158,6 +5253,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     magnet: _magnet,
                                     snapTargets: snap,
                                     lens: _graphLens,
+                                    playhead: ui.playheadFrame,
                                     autoFit: _graphAutoFit,
                                     onAutoFitOff: () =>
                                         setState(() => _graphAutoFit = false),
@@ -5205,6 +5301,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 handPanLayer(ui.tools, t,
                     (d) => _graphPane.currentState?.panBy(d),
                     top: t.density.ruler),
+                // Which graph is drawn: Value, Speed or Acceleration, in the
+                // graph's top right corner — under the Layers / Graph switch
+                // and beside the value gutter, over the view and not the
+                // scrolling canvas.
+                Positioned(
+                  top: t.density.ruler + 4,
+                  right: graphGutterWidth + 6,
+                  child: GraphLensSwitch(
+                    lens: _graphLens,
+                    onLens: (lens) => setState(() {
+                      _graphLens = lens;
+                      _publishEasingClaim();
+                    }),
+                  ),
+                ),
                 ],
                 ),
               ),
@@ -5322,7 +5433,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       hScroll: _hLane,
                       onClipPreview: (entry, clip, keys) =>
                           comp.renderFrameWithClipRetime(
-                        frame: BigInt.from(ui.playheadFrame.value),
+                        frame: ui.playheadFrame.value,
                         scale: 1.0,
                         layer: entry.layer,
                         clip: clip.id,

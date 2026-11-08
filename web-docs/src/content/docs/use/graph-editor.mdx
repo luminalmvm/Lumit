@@ -20,7 +20,7 @@ The graph editor draws a property as a line of value, or rate of change, against
 | **Acceleration graph** | How fast the speed changes, in the property's unit per second squared. |
 
 All three show the same underlying data. Editing one affects the others. **Value**,
-**Speed** and **Acceleration** at the bottom of the graph editor switch between them.
+**Speed** and **Acceleration** in the graph's top right corner switch between them.
 
 The scope button at the bottom steps through **Selected curves**, **Layer curves** and
 **Composition curves**: the selected properties, every animated property of the selected
@@ -59,7 +59,26 @@ has been copied.
 
 In the acceleration graph each keyframe has an in dot and an out dot. Dragging a dot up or
 down changes that side's influence and keeps its speed, as far as the influence can reach.
-Dragging it sideways moves the keyframe in time.
+Dragging it sideways moves the keyframe in time. A selected keyframe's handle sets that side's
+influence and keeps its speed.
+
+Hollow rings in the speed and acceleration graphs mark where a curve turns. The acceleration
+graph reads each curve's acceleration at the playhead in its corner.
+
+Double-click a keyframe in the acceleration graph to type its numbers:
+
+- **Frame** and **Value**: where the keyframe sits.
+- **In** and **Out**: the acceleration each side has at the keyframe, in the property's unit per
+  second squared.
+- **Speed profile**: from rest, speeds up by **Acceleration** to **Cruise speed**, holds it, and
+  slows by **Deceleration** to rest at the end **Value** or **Frame**. A keyframe marks the end
+  of each stretch.
+- **Gravity**: leaves at **Start speed** and changes speed by a constant **Acceleration**, to the
+  end **Value** or **Frame**.
+
+Speed profile and Gravity make the next keyframe the end, or add one. Typing another number
+replaces the motion. Lumit refuses a motion that passes the end of the composition, the
+keyframe after the next, or the property's range, and the box says so.
 
 ## Retime in the graph editor
 

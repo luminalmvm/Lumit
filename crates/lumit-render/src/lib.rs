@@ -56,29 +56,48 @@ pub mod colour;
 pub mod decode;
 pub mod diskio;
 pub mod draw;
+mod environment;
 pub mod export;
 pub mod export_defaults;
 pub mod export_presets;
+pub mod extrude;
 /// How a baked per-frame analysis reads a clip, shared by the tiers that do.
 pub mod frames;
 pub mod fxops;
 /// The GPU dispatch table for migrated effects (docs/impl/effect-registry.md §2.5).
 pub mod gpufx;
 mod gpufx_crop;
+mod gpufx_film;
+mod gpufx_jolt;
+mod gpufx_luma_fade;
+mod gpufx_particulate;
+mod gpufx_srgb_curve;
+mod gpufx_timewarp;
 mod grid_lines;
+mod haze;
 pub mod headless;
 pub mod media_index;
+pub mod model;
+pub mod model_extract;
+pub mod model_layer;
+pub mod model_material;
+pub mod model_motion;
+pub mod passes;
+pub mod placement;
 pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame
 /// (docs/impl/addons.md §6.1).
 pub mod planes;
 pub mod prefetch;
 pub mod profile;
+mod projection;
 pub mod proxy;
 pub mod puppet;
 pub mod realise;
 pub mod roto;
+pub mod sent;
 mod sidecar;
+pub mod sim;
 pub mod source;
 pub mod standin;
 pub mod track;

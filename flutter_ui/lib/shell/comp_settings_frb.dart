@@ -30,6 +30,7 @@
 //   kept its own seconds — which looked exactly like the layers speeding up or
 //   slowing down.
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -41,6 +42,7 @@ import 'package:lumit_flutter/src/rust/api/streams.dart'
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 
 import '../icons/icons.dart';
@@ -51,6 +53,7 @@ import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'model_settings_dialog.dart';
 
 /// The frame the drawing gives this dialog, and its row — a 110px label column
 /// with 12 after it, in rows of 30. Not the Export dialog's: each drawing
@@ -244,7 +247,8 @@ Future<CompositionReference?> showNewCompositionFrb({
   // hand falls back to it, which is the same name either way.
   final name =
       nodeGraph ? project.nextNodeGraphName() : project.nextCompName();
-  return showLumitModal<CompositionReference>(
+  var placed = const <LayerReference>[];
+  final made = await showLumitModal<CompositionReference>(
     context: context,
     id: 'new-comp',
     builder: (close) => _CompSettingsBody(
@@ -275,17 +279,24 @@ Future<CompositionReference?> showNewCompositionFrb({
             comp.setLightingLikeAfterEffects(on_: true);
           }
           // A node graph has no layers, so nothing is dropped on this door.
-          comp.addFootageLayers(
+          placed = comp.addFootageLayers(
               footage: footage,
               asSequence: asSequence,
               arrival: arrival,
-              endToEnd: endToEnd);
+              endToEnd: endToEnd,
+              lightNames: modelLightNames());
         });
         close(comp);
       },
       onCancel: () => close(null),
     ),
   );
+  // A 3D model asks how it sits as it lands, as on a comp's Timeline. Not
+  // waited for, so the new comp is shown behind it.
+  if (made != null && context.mounted) {
+    unawaited(showDroppedModelSettingsFrb(context, placed));
+  }
+  return made;
 }
 
 /// The longer of two exact durations, compared by cross-multiplication so no
@@ -509,7 +520,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                 t,
                 l10n.compLightsLikeAfterEffects,
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseCheckbox(
                     key: const ValueKey('comp-lights-ae'),
                     value: on,
@@ -630,6 +641,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
           Text(
             aspectRatioLabel(_width, _height),
             key: const ValueKey('comp-aspect'),
+            textDirection: TextDirection.ltr,
             style: dialogMono(t),
           ),
         ],
@@ -832,7 +844,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 4),
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: Text(t.kickerCase(title), style: t.kicker),
                     ),
                   ),

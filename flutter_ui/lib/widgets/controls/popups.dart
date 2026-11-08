@@ -169,7 +169,12 @@ Future<T?> showLumitPopup<T>({
   bool hoverThrough = false,
 }) {
   final overlay = Overlay.of(context);
-  final anchor = overlayLocal(context, position);
+  var anchor = overlayLocal(context, position);
+  // Right to left, the anchor is the popup's top right corner, and one hung
+  // from a control's left edge hangs from its right edge instead. The popup
+  // takes the direction of the panel it opened from.
+  final direction = Directionality.maybeOf(context) ?? TextDirection.ltr;
+  final rtl = direction == TextDirection.rtl;
   final completer = Completer<T?>();
   final flipped = ValueNotifier<bool>(false);
   late OverlayEntry entry;
@@ -193,9 +198,16 @@ Future<T?> showLumitPopup<T>({
   // opened at the pointer, never on top of either. A flyout is only pulled
   // up as far as fits, so it stays beside its row.
   double? above;
+  final opener = context.findRenderObject();
+  if (rtl && opener is RenderBox && opener.attached && opener.hasSize) {
+    final at = opener.localToGlobal(Offset.zero);
+    if ((position.dx - at.dx).abs() <= 1) {
+      anchor = overlayLocal(
+          context, Offset(at.dx + opener.size.width, position.dy));
+    }
+  }
   if (parentDepth < 0) {
     above = anchor.dy;
-    final opener = context.findRenderObject();
     if (opener is RenderBox && opener.attached && opener.hasSize) {
       final at = opener.localToGlobal(Offset.zero);
       final gap = position.dy - (at.dy + opener.size.height);
@@ -245,20 +257,25 @@ Future<T?> showLumitPopup<T>({
           ),
           Positioned.fill(
             child: CustomSingleChildLayout(
-              delegate: _PopupLayout(anchor, above: above, flipped: flipped),
+              delegate: _PopupLayout(anchor,
+                  above: above, flipped: flipped, rtl: rtl),
               // Scrolls only when it has to: a shorter popup shrink-wraps and
               // behaves exactly as before.
               child: SingleChildScrollView(
                 child: _PopupScope(
                   depth: depth,
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: flipped,
-                    child: builder(close),
-                    builder: (_, up, child) => _PopupEntrance(
-                      flyout: depth > 0,
-                      still: takesOver,
-                      up: up,
-                      child: child!,
+                  child: Directionality(
+                    textDirection: direction,
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: flipped,
+                      child: builder(close),
+                      builder: (_, up, child) => _PopupEntrance(
+                        flyout: depth > 0,
+                        still: takesOver,
+                        up: up,
+                        rtl: rtl,
+                        child: child!,
+                      ),
                     ),
                   ),
                 ),
@@ -348,12 +365,14 @@ class _PopupEntrance extends StatelessWidget {
   /// Placed above its anchor for want of room below, so it comes up from
   /// under rather than down onto the control that opened it.
   final bool up;
+  final bool rtl;
   final Widget child;
 
   const _PopupEntrance({
     required this.flyout,
     required this.still,
     required this.up,
+    required this.rtl,
     required this.child,
   });
 
@@ -370,7 +389,7 @@ class _PopupEntrance extends StatelessWidget {
       scale: motion.popupScale,
       // Grown from the corner it is anchored at, which is the control that
       // opened it.
-      alignment: up ? Alignment.bottomLeft : Alignment.topLeft,
+      alignment: Alignment(rtl ? 1 : -1, up ? 1 : -1),
       leads: true,
       child: child,
     );
@@ -398,7 +417,11 @@ class _PopupLayout extends SingleChildLayoutDelegate {
   /// below. Told after the frame it is laid out in, so the entrance turns
   /// from its second frame, while it is still clear.
   final ValueNotifier<bool>? flipped;
-  const _PopupLayout(this.anchor, {this.above, this.flipped});
+
+  /// Whether [anchor] is the popup's top right corner rather than its left.
+  final bool rtl;
+  const _PopupLayout(this.anchor,
+      {this.above, this.flipped, this.rtl = false});
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
@@ -422,15 +445,19 @@ class _PopupLayout extends SingleChildLayoutDelegate {
       SchedulerBinding.instance.addPostFrameCallback((_) => flip.value = up);
     }
     final top = up ? over - childSize.height : anchor.dy;
+    final left = rtl ? anchor.dx - childSize.width : anchor.dx;
     return Offset(
-      anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
+      left.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
       top.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
     );
   }
 
   @override
   bool shouldRelayout(_PopupLayout old) =>
-      old.anchor != anchor || old.above != above || old.flipped != flipped;
+      old.anchor != anchor ||
+      old.above != above ||
+      old.flipped != flipped ||
+      old.rtl != rtl;
 }
 
 /// A tooltip that honours Settings → Interface → Show tooltips app-wide —
@@ -546,13 +573,14 @@ class _HoverTipState extends State<_HoverTip> {
         : Provider.of<LumitUiState?>(context, listen: false)
             ?.keymap
             .chordFor(action);
-    // The chord reads as a menu row's does: small and muted.
+    // The chord reads as a menu row's does: small and muted. Isolated left
+    // to right, so a right to left tip keeps Shift+= as it is.
     final says = chord == null
         ? Text(widget.message, style: t.body)
         : Text.rich(
             TextSpan(text: widget.message, children: [
               TextSpan(
-                text: '  $chord',
+                text: '  \u2066$chord\u2069',
                 style: t.small.copyWith(color: t.textMuted),
               ),
             ]),

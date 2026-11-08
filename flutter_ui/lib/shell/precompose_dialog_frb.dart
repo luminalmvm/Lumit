@@ -265,7 +265,7 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
           // Indented under the choices above: it qualifies the new composition
           // they make, rather than standing beside them as a third choice.
           Padding(
-            padding: const EdgeInsets.only(left: 22),
+            padding: const EdgeInsetsDirectional.only(start: 22),
             child: _check(
               t,
               key: 'precompose-adjust-duration',

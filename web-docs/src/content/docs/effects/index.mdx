@@ -44,7 +44,7 @@ Soften, focus, and detail lift.
 | --- | --- |
 | [Gaussian blur](/effects/blur-sharpen/gaussian-blur/) | Basic, simple blur. |
 | [Directional blur](/effects/blur-sharpen/directional-blur/) | A streak along one angle, for impact frames and speed. |
-| [Radial blur](/effects/blur-sharpen/radial-blur/) | A spin or a zoom about a centre point. |
+| [Radial blur](/effects/blur-sharpen/radial-blur/) | A spin, a zoom or one-way rays about a centre point. |
 | [Unsharp mask](/effects/blur-sharpen/unsharp-mask/) | A radius-controlled detail lift. |
 | [Sharpen](/effects/blur-sharpen/sharpen/) | The simple, basic sharpen. |
 | [Depth of field](/effects/blur-sharpen/depth-of-field/) | A lens blur driven by a depth pass, with a real iris. |
@@ -70,6 +70,7 @@ Colour grading and correction.
 | [Hue shift](/effects/colour/hue-shift/) | Only adjust hue. |
 | [Contrast](/effects/colour/contrast/) | Increase or reduce contrast. |
 | [Gamma](/effects/colour/gamma/) | Lift or lower mid-tones. |
+| [sRGB curve](/effects/colour/srgb-curve/) | Put a layer onto the sRGB curve, or take it back off. |
 | [Temperature](/effects/colour/temperature/) | Warm and cool shift. |
 | [LUT](/effects/colour/lut/) | Apply a LUT from a .cube file. |
 | [OCIO colour space transform](/effects/colour/ocio-colour-space-transform/) | Convert a layer between two colour spaces of the project's OCIO config. |
@@ -102,6 +103,7 @@ Warps, reshapes, twists, and glitches.
 | [RGB split](/effects/distortion/rgb-split/) | Offset the colour channels. |
 | [Chromatic aberration](/effects/distortion/chromatic-aberration/) | Radial colour fringing. |
 | [Shake](/effects/distortion/shake/) | Seeded camera wobble. |
+| [Jolt](/effects/distortion/jolt/) | Sudden random hits of blur, colour, light, scale and slide. |
 | [Block glitch](/effects/distortion/block-glitch/) | Tear the picture into blocks. |
 | [Scanlines](/effects/distortion/scanlines/) | CRT line pattern. |
 | [Datamosh](/effects/distortion/datamosh/) | Melt frames together. |
@@ -141,6 +143,7 @@ Generate textures, colours, and gradients.
 | [Add grain](/effects/generate/add-grain/) | Lays film grain over the picture. |
 | [Scribble](/effects/generate/scribble/) | Fills a mask with pencil strokes. |
 | [Stroke](/effects/generate/stroke/) | Draws a stroke along a mask . |
+| [Energy line](/effects/generate/energy-line/) | Draws a hot core of light with a glow along a line, a mask, a shape or text. |
 | [Particulate](/effects/generate/particulate/) | A particle system: many small things born, carried about, and fading. |
 | [Grid](/effects/generate/grid/) | A lattice of points drawn as discs, or a grid of lines. |
 | [Scatter](/effects/generate/scatter/) | Throws points at the picture and keeps the ones that land on something. |
@@ -161,6 +164,8 @@ Generate textures, colours, and gradients.
 | [Relax points](/effects/generate/relax-points/) | Pushes a stream's points apart until they stop overlapping. |
 | [Flow points](/effects/generate/flow-points/) | Carries a stream's points along a field over time. |
 | [Bake points](/effects/generate/bake-points/) | Writes the points wired into it to disk and hands the written points on. |
+| [Depth points](/effects/generate/depth-points/) | Draws a shot as points in 3D space, pushed back by its depth. |
+| [Smoke and fire](/effects/generate/smoke-and-fire/) | Turns a 3D layer into a box of simulated smoke and fire, lit by the comp's lights. |
 
 {/* END GENERATED */}
 
@@ -178,6 +183,7 @@ Add elements to existing footage.
 | [Glow](/effects/stylise/glow/) | Bloom the picture's bright areas. |
 | [Lens flare](/effects/stylise/lens-flare/) | A flare traced through a real lens. |
 | [Lens dirt](/effects/stylise/lens-dirt/) | Dust, smudges and water on the lens, lit by the bright parts of the picture. |
+| [Film](/effects/stylise/film/) | The picture shot on a film stock and printed, with halation, bloom, grain, gate weave and flicker. |
 | [Drop shadow](/effects/stylise/drop-shadow/) | Casts a copy of the layer's own shape behind it. |
 | [Roughen edges](/effects/stylise/roughen-edges/) | Chews the outline of a shape with fractal noise. |
 | [Median](/effects/stylise/median/) | Replaces every pixel with the median value of its neighbours. |
@@ -202,6 +208,7 @@ Effects that read other frames, or rely on time.
 | [Posterize time](/effects/temporal/posterize-time/) | Hold time on a coarser time grid. |
 | [Accumulation motion blur](/effects/temporal/accumulation-motion-blur/) | Re-render the scene below at sub-frame moments and average them. Slow, and correct. |
 | [Motion blur](/effects/temporal/motion-blur/) | Smear each pixel along motion in footage. |
+| [Timewarp](/effects/temporal/timewarp/) | Shows the layer at another time, at a speed or a keyframed frame. |
 
 {/* END GENERATED */}
 
@@ -218,6 +225,7 @@ Transition between other layers.
 | [Venetian blinds](/effects/transition/venetian-blinds/) | Closes the frame with slats. |
 | [Iris wipe](/effects/transition/iris-wipe/) | Opens a polygon from the middle of the frame. |
 | [Card wipe](/effects/transition/card-wipe/) | Turns the frame away as a grid of cards. |
+| [Luma fade](/effects/transition/luma-fade/) | Fades the layer away in order of brightness, darkest first. |
 
 {/* END GENERATED */}
 
@@ -233,6 +241,8 @@ Useful tools for specific tasks.
 | [Crop](/effects/utility/crop/) | Takes the picture away past four edges. |
 | [Matte key](/effects/utility/matte-key/) | Pull a green or blue screen to transparency, with despill. |
 | [Set matte](/effects/utility/set-matte/) | Takes a channel of another layer as transparency. |
+| [Scene pass](/effects/utility/scene-pass/) | Shows which way a Model layer's or a 3D precomp's pixels face, where they are, or which part they belong to. |
+| [Part matte](/effects/utility/part-matte/) | Keeps only the parts of a Model layer or a 3D precomp picked in the Viewer. |
 | [Set channels](/effects/utility/set-channels/) | Every output channel told which channel of which layer it comes from. |
 | [Broadcast safe](/effects/utility/broadcast-safe/) | Measures and displays illegal pixels. |
 | [Camera track](/effects/utility/camera-track/) | Works out how the camera moved in a shot. |

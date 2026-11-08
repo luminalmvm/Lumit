@@ -99,6 +99,7 @@ const List<ToolGroup> toolBarOrder = [
   ToolGroup.anchor,
   ToolGroup.razor,
   ToolGroup.shape,
+  ToolGroup.shape3d,
   ToolGroup.pen,
   ToolGroup.type,
   ToolGroup.paint,
@@ -265,7 +266,7 @@ class LumitTopLineToolsFrb extends StatelessWidget {
                 Expanded(
                   child: Stack(children: [
                     const Positioned.fill(child: WindowDragArea()),
-                    Align(alignment: Alignment.centerRight, child: options),
+                    Align(alignment: AlignmentDirectional.centerEnd, child: options),
                   ]),
                 ),
               ] else
@@ -311,7 +312,7 @@ Widget? _toolOptions(LumitTheme t, LumitUiState ui, {required double height}) {
     t,
     'tool-options-pill',
     Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       widthFactor: 1,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -659,7 +660,7 @@ class _ToolOptions extends StatelessWidget {
             onChanged: (v) => tools.brushSize = v,
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsetsDirectional.only(end: 6),
             child: LumitTooltip(
               message: l10n.tipBrushShape,
               child: Row(
@@ -688,7 +689,7 @@ class _ToolOptions extends StatelessWidget {
             onChanged: (v) => tools.brushHardness = v,
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsetsDirectional.only(end: 6),
             child: LumitTooltip(
               message: l10n.tipBrushPressure,
               child: Row(
@@ -778,7 +779,7 @@ class _Number extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Padding(
-      padding: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsetsDirectional.only(end: 6),
       child: LumitTooltip(
         message: tip,
         child: Row(
@@ -1414,6 +1415,7 @@ MouseCursor viewerCursorFor(ToolMode tool) => switch (tool) {
       // doing, and their overlays ask for the same pointer, adding only
       // decoration beside it — the badge, the brush ring.
       _ => tool.group == ToolGroup.shape ||
+              tool.group == ToolGroup.shape3d ||
               tool.group == ToolGroup.pen ||
               tool.group == ToolGroup.paint ||
               tool.group == ToolGroup.roto ||

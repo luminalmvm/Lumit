@@ -515,16 +515,17 @@ Future<void> _showLayerMenu(
 /// the four interpolations — and nothing after them, since the owner removed
 /// Reverse, Copy and Paste at playhead from the bar (2026-08-31).
 /// In **graph view** it is the graph's own commands (docs/07 §5.3): the eases,
-/// the tangent modes, the value/speed lens and the auto-fit toggle. Every
+/// the tangent modes and the auto-fit toggle (the graph is chosen in its own
+/// corner, [GraphLensSwitch]). Every
 /// button keeps the face, the tooltip and the widget key it had on the lane
 /// bar — this is a move, not a redesign.
 class KeyCommandStrip extends StatelessWidget {
   /// Set in **Layers mode**: the keyframe strip.
   final bool strip;
 
-  /// Set in graph view; null leaves the graph's own commands out.
+  /// The graph drawn, set in graph view; null leaves the graph's own commands
+  /// out. Which one is chosen in the graph's corner ([GraphLensSwitch]).
   final GraphLens? lens;
-  final ValueChanged<GraphLens>? onLens;
 
   /// Break handles: on, a handle drag in the graph moves one side only.
   final bool breakHandles;
@@ -547,7 +548,6 @@ class KeyCommandStrip extends StatelessWidget {
     super.key,
     this.strip = false,
     this.lens,
-    this.onLens,
     this.breakHandles = false,
     this.onToggleBreakHandles,
     this.onInterp,
@@ -734,28 +734,14 @@ class KeyCommandStrip extends StatelessWidget {
               // interpolations are the whole of the bar.
             ],
             if (lens != null) ...[
-              // Which graph is drawn comes first and never folds, so it is in
-              // reach however narrow the outline is.
-              wordItem('graph-lens-value', l10n.clipboardValueColumn,
-                  l10n.tipValueGraph,
-                  gap: 0,
-                  keep: true,
-                  on: lens == GraphLens.value,
-                  onPressed: () => onLens?.call(GraphLens.value)),
-              wordItem('graph-lens-speed', l10n.graphSpeed, l10n.tipSpeedGraph,
-                  keep: true,
-                  on: lens == GraphLens.speed,
-                  onPressed: () => onLens?.call(GraphLens.speed)),
-              wordItem('graph-lens-acceleration', l10n.graphAcceleration,
-                  l10n.tipAccelerationGraph,
-                  keep: true,
-                  on: lens == GraphLens.acceleration,
-                  onPressed: () => onLens?.call(GraphLens.acceleration)),
+              // Which graph is drawn is chosen in the graph's own corner, under
+              // the Layers / Graph switch ([GraphLensSwitch]).
+              //
               // The selected keys' easing, one click each — the F9 family's
               // buttons (docs/07 §5.3).
               wordItem('graph-interp-linear', l10n.easeLinear,
                   l10n.tipLinearKeyframes,
-                  gap: 12,
+                  gap: 0,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.linear())),
               wordItem('graph-interp-bezier', l10n.easeEasy, l10n.tipEasyEase,

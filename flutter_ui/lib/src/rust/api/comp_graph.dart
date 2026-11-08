@@ -26,7 +26,7 @@ class BridgeBoxSource {
   /// `None` where the file will not read: it is offline, or carries no
   /// video. Footage is wired in either way, which is what the caller needs
   /// to tell that from a box with nothing behind it.
-  final PlatformInt64? frame;
+  final int? frame;
 
   /// The file's own picture size, in pixels. Nought where it will not read.
   final int width;

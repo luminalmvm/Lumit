@@ -11,13 +11,15 @@
 //   sentence.** That is the whole point of the shape: the engine's English is
 //   a fallback, not the text on screen.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 
 import 'frb_test_support.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A small, complete config: one space that is not the reference, one display
 /// with one view, and the roles the resolution walk reads.

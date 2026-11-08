@@ -7,11 +7,13 @@
 // which is the round trip that matters: what a user saves today has to still be
 // there after a restart.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A settings file of this test's own: saving a workspace writes beside it, and
 /// the real store is machine state a test must not reach.

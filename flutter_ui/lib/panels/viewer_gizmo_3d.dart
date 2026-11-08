@@ -298,8 +298,8 @@ Vec3 rotationMatching(
 }
 
 /// What part of the handles a press is on: the centre ring moves across
-/// the screen.
-enum GizmoKind { arrow, plane, ring, screen }
+/// the screen, and a knob past an arrow scales along the layer's own axis.
+enum GizmoKind { arrow, plane, ring, screen, scale }
 
 /// A part and its axis: 0, 1, 2 for x, y and z. A plane is named for the
 /// axis it does not move along, so plane 2 is the XY square.
@@ -328,18 +328,23 @@ class Gizmo3d {
   /// How far in parent space an arrow reaches.
   final double unit;
 
+  /// The layer's own axes its scale knobs sit on, empty where it has none.
+  final List<Vec3> own;
+
   Gizmo3d._(this.rows, this.origin, this.viewScale, this.at, this.axes,
-      this.turns, this.viewX, this.viewY, this.viewZ, this.unit);
+      this.turns, this.viewX, this.viewY, this.viewZ, this.unit, this.own);
 
   /// The handles of [map]'s layer at [at] in its parent's space, null where
   /// that point is behind the eye. [local] are the axes Local mode points
-  /// along, and [turns] the ones the rings turn about there.
+  /// along, and [turns] the ones the rings turn about there. With [scales]
+  /// the layer gets a scale knob on each of its [local] axes.
   static Gizmo3d? of(
     ViewerLayerMap map, {
     required Vec3 at,
     required List<Vec3> local,
     List<Vec3>? turns,
     required GizmoAxes mode,
+    bool scales = false,
   }) {
     if (!map.projected) return null;
     final rows = map.parentRows;
@@ -366,6 +371,44 @@ class Gizmo3d {
       vy,
       vz,
       gizmoArrowLength / perUnit,
+      scales ? [for (final a in local) _unit(a)] : const [],
+    );
+  }
+
+  /// Handles at [at] in [map]'s layer's own pixels, on its own axes, for what
+  /// lives in that space: a part of a 3D model. [turns] are the axes the rings
+  /// turn about. Null where that point is behind the eye.
+  static Gizmo3d? inLayer(ViewerLayerMap map,
+      {required Vec3 at, required List<Vec3> turns}) {
+    if (!map.projected) return null;
+    final r = map.parentRows;
+    final o = map.inParent(0, 0, 0);
+    final ends = [map.inParent(1, 0, 0), map.inParent(0, 1, 0), map.inParent(0, 0, 1)];
+    double through(int k, Vec3 p) =>
+        r[k * 4] * p.$1 + r[k * 4 + 1] * p.$2 + r[k * 4 + 2] * p.$3 + r[k * 4 + 3];
+    final rows = [
+      for (var k = 0; k < 3; k++) ...[
+        for (final e in ends) through(k, e) - through(k, o),
+        through(k, o),
+      ],
+    ];
+    final view = screenAxes(rows, at);
+    if (view == null) return null;
+    final (vx, vy, vz, perScreen) = view;
+    final perUnit = map.viewScale * perScreen;
+    if (perUnit < 1e-12) return null;
+    return Gizmo3d._(
+      rows,
+      map.origin,
+      map.viewScale,
+      at,
+      const [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
+      [for (final a in turns) _unit(a)],
+      vx,
+      vy,
+      vz,
+      gizmoArrowLength / perUnit,
+      const [],
     );
   }
 
@@ -432,6 +475,19 @@ class Gizmo3d {
             when w > viewerNear &&
                 (tip - centre).distance > gizmoArrowLength * 0.2 =>
           tip,
+        _ => null,
+      },
+  ];
+
+  /// Each scale knob, a little past the arrows on the layer's own axes, null
+  /// where that axis points at the eye or past it.
+  late final List<Offset?> knobs = [
+    for (final a in own)
+      switch (project(_plus(at, _times(a, unit * _knobAt)))) {
+        (final knob, final w)
+            when w > viewerNear &&
+                (knob - centre).distance > gizmoArrowLength * 0.2 =>
+          knob,
         _ => null,
       },
   ];
@@ -545,6 +601,12 @@ class Gizmo3d {
     if (((point - centre).distance - gizmoScreenRing).abs() < 4) {
       return (kind: GizmoKind.screen, axis: 2);
     }
+    for (var i = 0; i < knobs.length; i++) {
+      final knob = knobs[i];
+      if (knob != null && (point - knob).distance < gizmoReach) {
+        return (kind: GizmoKind.scale, axis: i);
+      }
+    }
     for (var i = 0; i < 3; i++) {
       final tip = tips[i];
       if (tip == null) continue;
@@ -614,6 +676,15 @@ class Gizmo3d {
       _across(axes[(normal + 1) % 3], axes[(normal + 2) % 3], from, to,
           step: step);
 
+  /// How many times longer a drag from [from] to [to] on knob [axis] makes
+  /// that axis, measured from the handles' centre. Null where the pointer
+  /// has no place on the axis.
+  double? scaleBy(int axis, Offset from, Offset to) {
+    final a = _along(own[axis], from), b = _along(own[axis], to);
+    if (a == null || b == null || a.abs() < 1e-9) return null;
+    return b / a;
+  }
+
   /// The move a drag makes across the screen at the handles' depth.
   Vec3? onScreen(Offset from, Offset to) => _across(viewX, viewY, from, to);
 
@@ -663,6 +734,9 @@ class Gizmo3d {
     return t.distance < 1e-9 ? Offset.zero : t / t.distance;
   }
 }
+
+/// Where the scale knobs sit, as parts of an arrow.
+const double _knobAt = 1.2;
 
 double _snapped(double v, double? step) =>
     step == null ? v : (v / step).roundToDouble() * step;
@@ -750,7 +824,8 @@ List<double>? _inverse3(List<double> m) {
 /// Draw [gizmo]: its arrows, squares and centre ring, or with [turning] its
 /// rings, each axis in its colour and the centre ring in [neutral]. [hot] is
 /// the part under the pointer, drawn stronger, and [held] the one being
-/// dragged, which is then all that is drawn.
+/// dragged, which is then all that is drawn. [tint] draws every part in one
+/// colour, for handles an expression drives.
 void paintGizmo3d(
   Canvas canvas,
   Gizmo3d gizmo, {
@@ -759,7 +834,9 @@ void paintGizmo3d(
   required Color outline,
   GizmoPick? hot,
   GizmoPick? held,
+  Color? tint,
 }) {
+  Color colourOf(int i) => tint ?? gizmoAxisColours[i];
   bool shows(GizmoKind kind, int axis) =>
       held == null || (held.kind == kind && held.axis == axis);
   bool lit(GizmoKind kind, int axis) =>
@@ -779,7 +856,7 @@ void paintGizmo3d(
       for (final run in gizmo.rings[i]) {
         final path = Path()..addPolygon(run, false);
         canvas.drawPath(path, stroke(outline, width + 1.8));
-        canvas.drawPath(path, stroke(gizmoAxisColours[i], width));
+        canvas.drawPath(path, stroke(colourOf(i), width));
       }
     }
     return;
@@ -792,15 +869,32 @@ void paintGizmo3d(
     canvas.drawPath(
         path,
         Paint()
-          ..color = gizmoAxisColours[i]
+          ..color = colourOf(i)
               .withValues(alpha: lit(GizmoKind.plane, i) ? 0.7 : 0.35));
-    canvas.drawPath(path, stroke(gizmoAxisColours[i], 1));
+    canvas.drawPath(path, stroke(colourOf(i), 1));
   }
   if (shows(GizmoKind.screen, 2)) {
     final width = lit(GizmoKind.screen, 2) ? 2.6 : 1.4;
     canvas.drawCircle(
         gizmo.centre, gizmoScreenRing, stroke(outline, width + 1.8));
-    canvas.drawCircle(gizmo.centre, gizmoScreenRing, stroke(neutral, width));
+    canvas.drawCircle(
+        gizmo.centre, gizmoScreenRing, stroke(tint ?? neutral, width));
+  }
+  for (var i = 0; i < gizmo.knobs.length; i++) {
+    final knob = gizmo.knobs[i];
+    if (knob == null || !shows(GizmoKind.scale, i)) continue;
+    // A thin stem from where the arrow ends, so the knob reads as a handle
+    // on the axis and not as another plane's square.
+    final (from, w) =
+        gizmo.project(_plus(gizmo.at, _times(gizmo.own[i], gizmo.unit)));
+    if (w > viewerNear) {
+      canvas.drawLine(from, knob, stroke(outline, 2.8));
+      canvas.drawLine(from, knob, stroke(gizmoAxisColours[i], 1));
+    }
+    final side = lit(GizmoKind.scale, i) ? 10.0 : 8.0;
+    final rect = Rect.fromCenter(center: knob, width: side, height: side);
+    canvas.drawRect(rect, stroke(outline, 1.8));
+    canvas.drawRect(rect, Paint()..color = gizmoAxisColours[i]);
   }
   // The arrow seen most end on is drawn first, so the others cross over it.
   final order = [0, 1, 2]
@@ -820,8 +914,8 @@ void paintGizmo3d(
       ..close();
     canvas.drawLine(gizmo.centre, base, stroke(outline, width + 1.8));
     canvas.drawPath(head, stroke(outline, 1.8));
-    canvas.drawLine(gizmo.centre, base, stroke(gizmoAxisColours[i], width));
-    canvas.drawPath(head, Paint()..color = gizmoAxisColours[i]);
+    canvas.drawLine(gizmo.centre, base, stroke(colourOf(i), width));
+    canvas.drawPath(head, Paint()..color = colourOf(i));
   }
 }
 

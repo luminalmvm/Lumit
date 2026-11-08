@@ -743,6 +743,7 @@ pub mod modifier;
 mod modifier_tests;
 pub mod primitive;
 mod raster;
+pub mod solid;
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;

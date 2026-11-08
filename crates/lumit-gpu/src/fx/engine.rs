@@ -290,7 +290,7 @@ impl FxEngine {
                            name: &'static str,
                            entry: &'static str| {
             let (device, layout, shader) = (ctx.device.clone(), layout.clone(), shader.clone());
-            crate::Compiling::start(move || {
+            crate::compiling::Compiling::start(move || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(name),
                     layout: Some(&layout),
@@ -432,6 +432,8 @@ impl FxEngine {
             "fx-venetian-blinds",
         );
         let iris_wipe_mod = module(include_str!("../fx_iriswipe.wgsl"), "fx-iris-wipe");
+        let luma_fade_mod = module(include_str!("../fx_lumafade.wgsl"), "fx-luma-fade");
+        let srgb_curve_mod = module(include_str!("../fx_srgbcurve.wgsl"), "fx-srgb-curve");
         // The per-card shuffle is the shared hash, so the noise core is
         // prepended exactly as Fractal noise's and Roughen edges' are.
         let card_wipe_mod = module(
@@ -440,6 +442,7 @@ impl FxEngine {
         );
         let transform_mod = module(include_str!("../fx_transform.wgsl"), "fx-transform");
         let shake_mb_mod = module(include_str!("../fx_shake_mb.wgsl"), "fx-shake-mb");
+        let jolt_mod = module(include_str!("../fx_jolt.wgsl"), "fx-jolt");
         let glow_mod = module(include_str!("../fx_glow.wgsl"), "fx-glow");
         let glow_exp_mod = module(include_str!("../fx_glow_exp.wgsl"), "fx-glow-exp");
         let block_glitch_mod = module(include_str!("../fx_block_glitch.wgsl"), "fx-block-glitch");
@@ -577,8 +580,11 @@ impl FxEngine {
         );
         let iris_wipe = pipeline(&iris_wipe_mod, "fx-iris-wipe", "iris_wipe");
         let card_wipe = pipeline(&card_wipe_mod, "fx-card-wipe", "card_wipe");
+        let luma_fade = pipeline(&luma_fade_mod, "fx-luma-fade", "luma_fade");
+        let srgb_curve = pipeline(&srgb_curve_mod, "fx-srgb-curve", "srgb_curve");
         let transform = pipeline(&transform_mod, "fx-transform", "transform");
         let shake_mb = pipeline(&shake_mb_mod, "fx-shake-mb", "shake_mb");
+        let jolt = pipeline(&jolt_mod, "fx-jolt", "jolt");
         let glow_bright = pipeline(&glow_mod, "fx-glow-bright", "glow_bright");
         let glow_combine = pipeline(&glow_mod, "fx-glow", "glow_combine");
         let glow_exp_down = pipeline(&glow_exp_mod, "fx-glow-exp-down", "glow_exp_down");
@@ -642,6 +648,7 @@ impl FxEngine {
             particulate_draw: particulate.draw,
             particulate_blend: particulate.blend,
             lens_flare,
+            kept: Default::default(),
             blur: blur.wait(),
             dir_blur: dir_blur.wait(),
             vector_blur: vector_blur.wait(),
@@ -669,6 +676,7 @@ impl FxEngine {
             vignette: vignette.wait(),
             exposure: exposure.wait(),
             lighting: lighting.wait(),
+            haze: super::volumetric::HazeSlot::start(ctx),
             ground: ground.wait(),
             temperature: temperature.wait(),
             invert: invert.wait(),
@@ -730,8 +738,11 @@ impl FxEngine {
             venetian_blinds: venetian_blinds.wait(),
             iris_wipe: iris_wipe.wait(),
             card_wipe: card_wipe.wait(),
+            luma_fade: luma_fade.wait(),
+            srgb_curve: srgb_curve.wait(),
             transform: transform.wait(),
             shake_mb: shake_mb.wait(),
+            jolt: jolt.wait(),
             glow_bright: glow_bright.wait(),
             glow_combine: glow_combine.wait(),
             glow_exp_down: glow_exp_down.wait(),
@@ -756,7 +767,15 @@ impl FxEngine {
             custom_shader: super::custom_shader::CustomShaderPipelines::new(ctx),
             lens_blur: Default::default(),
             lens_dirt: Default::default(),
+            film: Default::default(),
+            particulate_scene: Default::default(),
+            particulate_sim: Default::default(),
+            smoke: Default::default(),
+            depth_points: Default::default(),
             sprite_flare: Default::default(),
+            energy_line: super::energy_line::LazyEnergyLine::spawn(ctx),
+            mesh: Default::default(),
+            environment: Default::default(),
             layout,
             adjust_layout,
             mb_layout,

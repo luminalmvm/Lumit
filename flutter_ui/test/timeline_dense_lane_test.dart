@@ -17,7 +17,6 @@ import 'dart:ui' as ui;
 
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/panels/key_block.dart';
@@ -48,6 +47,7 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
     ),
     info: BridgeLayerInfo(
       pitchFollowsSpeed: false,
+      sends: const [],
       collapseForced: false,
       volumeDb: const BridgeScalar.static_(0),
       pan: const BridgeScalar.static_(0),
@@ -75,7 +75,7 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
       ),
       inFrame: 0,
       outFrame: 200,
-      clipFrames: Int64List(0),
+      clipFrames: const [],
       clips: const [],
       transform: transform ?? _still,
       axisModes: const BridgeAxisModes(

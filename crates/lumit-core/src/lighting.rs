@@ -1,38 +1,20 @@
 //! Shading layers with the comp's Light layers.
 //!
-//! **In plain terms.** A Light layer is a shape that emits: a point, a
-//! cone, or — the one that matters — a rectangle, a softbox. This module works
-//! out how much of that light lands on each pixel of a layer, so a piece of
-//! footage can be lit by a softbox you placed and keyframed rather than by a
-//! gradient you painted.
+//! A Light layer is a shape that emits: a point, a cone or a rectangle. This
+//! module works out how much of that light lands on each pixel of a layer.
 //!
-//! The whole thing rests on one old and rather lovely piece of geometry. To
-//! know how brightly a flat surface is lit by a flat glowing rectangle, you do
-//! not need to fire rays at it. There is a closed-form answer: stand at the
-//! point being lit, look up, and measure how much of your sky the rectangle
-//! covers — weighted for the fact that light arriving at a glancing angle
-//! spreads over more surface and so counts for less. That measurement is a sum
-//! of one term per edge of the rectangle, and the sum is exact. Four edges,
-//! four terms, done — no sampling, no noise, no render time worth the name.
-//!
-//! (The term of art is the *diffuse form factor*, and the same integral is the
-//! identity-matrix case of Linearly Transformed Cosines — Heitz et al. 2016 —
-//! which is how one would later add roughness and specular highlights. The
-//! matrix tables that would need are deliberately not here: the diffuse case
-//! ships alone.)
-//!
-//! Two decisions worth knowing before reading the code:
+//! How brightly a flat surface is lit by a flat glowing rectangle has an exact
+//! answer, the *diffuse form factor*: stand at the point being lit and measure
+//! how much of the sky the rectangle covers, weighted for the glancing angle.
+//! It is one term per edge, with no sampling or noise.
 //!
 //! - **Light adds, it does not replace.** The result multiplies the picture by
 //!   `1 + light`, so a layer that no light reaches is untouched and a comp with
 //!   no lights renders byte-for-byte as it did before this existed. Physical
 //!   shading would multiply by the light alone and plunge everything unlit into
 //!   black, which is the correct answer to a question no compositor is asking.
-//! - **The surface is the layer's own plane.** A 2.5D compositor has no
-//!   per-pixel normals and inventing them from luminance is a quality cliff, so
-//!   every pixel of a layer shares one normal: the direction its plane faces.
-//!   For a softbox raking across footage that is exactly right, and it is the
-//!   honest answer rather than a guess.
+//! - **The surface is the layer's own plane.** Every pixel of a layer shares one
+//!   normal, the direction its plane faces.
 
 /// How many lights one layer can be shaded by in a single pass. Beyond this
 /// the nearest are kept — a budget, not a limit on the model (docs/13).
@@ -176,7 +158,7 @@ impl ShadingMaterial {
 
 const INV_TWO_PI: f32 = 0.159_154_94;
 
-fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+pub(crate) fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
@@ -188,18 +170,18 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+pub(crate) fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
-fn length(a: [f32; 3]) -> f32 {
+pub(crate) fn length(a: [f32; 3]) -> f32 {
     dot(a, a).sqrt()
 }
 
 /// Unit vector, or `None` when the input is too short to have a direction —
 /// which is a real case here (a light passing exactly through the point it
 /// lights), and one that must not divide by zero.
-fn normalise(a: [f32; 3]) -> Option<[f32; 3]> {
+pub(crate) fn normalise(a: [f32; 3]) -> Option<[f32; 3]> {
     let len = length(a);
     if len < 1e-6 || !len.is_finite() {
         return None;
@@ -211,11 +193,8 @@ fn normalise(a: [f32; 3]) -> Option<[f32; 3]> {
 /// covers, cosine-weighted — the diffuse form factor, in 0..1 where 1 would be
 /// a light filling the entire sky.
 ///
-/// The rectangle is first clipped to the horizon: the part of a light that has
-/// sunk below the surface cannot light it, and including it would give a
-/// nonsense (often negative) answer. That clip is the reason for the loop
-/// below rather than a flat four-term sum, and it is why the polygon can come
-/// out with five corners.
+/// The rectangle is first clipped to the horizon, as a light below the surface
+/// cannot light it, which is why the polygon can come out with five corners.
 #[must_use]
 pub fn rect_form_factor(p: [f32; 3], n: [f32; 3], corners: &[[f32; 3]; 4]) -> f32 {
     // Sutherland–Hodgman against the single plane through `p` facing `n`. A
@@ -275,7 +254,7 @@ pub fn rect_form_factor(p: [f32; 3], n: [f32; 3], corners: &[[f32; 3]; 4]) -> f3
 /// Which way `light` arrives at `p` from, and how much of it is left there
 /// after its falloff and its cone, as the two factors. `None` where none of it
 /// arrives, and for an ambient light, which comes from nowhere.
-fn arrival(p: [f32; 3], light: &ShadingLight) -> Option<([f32; 3], f32, f32)> {
+pub(crate) fn arrival(p: [f32; 3], light: &ShadingLight) -> Option<([f32; 3], f32, f32)> {
     let centre = light.centre();
     let to_light = match light.kind {
         ShadingKind::Ambient => return None,
@@ -602,7 +581,7 @@ impl ShadowCaster {
 /// How much of `light` gets past the casters to `p`, per channel, before the
 /// shadow's darkness. `own` is the layer being shaded, which never shades
 /// itself.
-fn transmitted(
+pub(crate) fn transmitted(
     p: [f32; 3],
     light: &ShadingLight,
     casters: &[ShadowCaster],
@@ -746,6 +725,7 @@ pub fn shade_with_shadows(
         return;
     }
     let takes = m.accepts_shadows != ShadowMode::Off && !casters.is_empty();
+    let back = s.normal.map(|n| -n);
     for y in 0..h {
         for x in 0..w {
             let Some(px) = rgba
@@ -768,7 +748,11 @@ pub fn shade_with_shadows(
                 // stopped.
                 let mut dim = [1.0f32; 3];
                 for l in lights.iter().take(MAX_LIT_LIGHTS) {
-                    if !takes || l.shadow_darkness <= 0.0 || irradiance(p, s.normal, l) <= 0.0 {
+                    // Either face takes a shadow.
+                    if !takes
+                        || l.shadow_darkness <= 0.0
+                        || (irradiance(p, s.normal, l) <= 0.0 && irradiance(p, back, l) <= 0.0)
+                    {
                         continue;
                     }
                     let t = transmitted(p, l, casters, own);
@@ -1235,10 +1219,10 @@ mod tests {
     /// A card halfway between a light and a floor shades the floor under it
     /// and nowhere else, by its darkness. A red card letting light through
     /// tints it red, the card never shades itself, a floor showing only
-    /// shadows is black under the card, red under the red one, and clear
-    /// beside it, and an unlit one is only darkened. Diffusion leaves the
-    /// shadow of a card just off the floor hard and softens one further up,
-    /// as in After Effects.
+    /// shadows is black under the card whichever way it faces, red under the
+    /// red one, and clear beside it, and an unlit one is only darkened.
+    /// Diffusion leaves the shadow of a card just off the floor hard and
+    /// softens one further up.
     #[test]
     fn a_card_casts_its_shadow_on_the_floor_beneath_it() {
         use crate::model::{LightFalloff, ShadowMode};
@@ -1327,6 +1311,18 @@ mod tests {
         let red = card([1.0, 0.0, 0.0], 1.0);
         let px = lit(&only, &light, &[red], None);
         assert_eq!(&px[..4], &[1.0, 0.0, 0.0, 1.0], "red gets through");
+        let back = ShadingSurface {
+            normal: [0.0, 0.0, 1.0],
+            ..floor
+        };
+        let mut px = [0.5, 0.5, 0.5, 1.0].repeat(2);
+        let casters = std::slice::from_ref(&white);
+        shade_with_shadows(&mut px, 2, 1, &back, &only, &[light], casters, None);
+        assert_eq!(
+            px,
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            "its back to the light"
+        );
 
         // Accepts lights off: left as it is, but still in the shadow.
         let unlit = ShadingMaterial { unlit: true, ..m };

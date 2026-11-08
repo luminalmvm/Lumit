@@ -824,15 +824,20 @@ Widget fxTwoColumnRow({
                   child: keyframeControls == null
                       ? null
                       : Align(
-                          alignment: Alignment.centerLeft,
+                          alignment: AlignmentDirectional.centerStart,
                           child: keyframeControls),
                 ),
                 const SizedBox(width: 4),
                 SizedBox(
                     width: fxLabelWidthFor(constraints.maxWidth), child: name),
+                // A long name ends short of its value rather than against it.
                 Expanded(
-                  child:
-                      Align(alignment: Alignment.centerLeft, child: control),
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.only(start: 6),
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: control),
+                  ),
                 ),
               ],
             ),
@@ -899,16 +904,16 @@ Widget fxGroupHeaderRow(
       final strip = FxKeyStripScope.widthOf(context);
       return Container(
         height: fxRowHeight(t),
-        margin: EdgeInsets.only(right: strip),
+        margin: EdgeInsetsDirectional.only(end: strip),
         child: LayoutBuilder(
           builder: (context, constraints) => Row(
             children: [
               SizedBox(
                 width: fxKeyColumnWidth,
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 1),
+                    padding: const EdgeInsetsDirectional.only(start: 1),
                     child: TwirlTurn(
                       open: open,
                       child: lumitIcon(

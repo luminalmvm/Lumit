@@ -8,14 +8,17 @@
 //! ([`crate::script::hold`]), so it never lands inside a script's undo step,
 //! and Stop on the busy card reaches a `script_run`.
 
+// Nothing here runs in the browser build, which keeps only its shape.
+#![cfg_attr(target_arch = "wasm32", allow(unused))]
+
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 use lumit_script::Host;
 use serde_json::Value;
+use web_time::{Duration, Instant};
 
 use crate::api::{
     project::ProjectReference,
@@ -39,7 +42,9 @@ const CARD_WAIT: Duration = Duration::from_secs(5);
 /// Where the interface says the busy card for a program's script is up.
 static SHOWN: Mutex<Option<SyncSender<()>>> = Mutex::new(None);
 
-/// The endpoint while it is on.
+/// The endpoint while it is on. Never on in the browser build, which has no
+/// other programs to talk to.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 struct Live {
     stop: Arc<AtomicBool>,
     /// Lets go of the program that is connected.
@@ -55,6 +60,7 @@ impl Live {
         self.stop.store(true, Ordering::Relaxed);
         self.run.store(true, Ordering::Relaxed);
         // Gone at once, so no program finds a name nobody answers.
+        #[cfg(not(target_arch = "wasm32"))]
         lumit_script::live::remove(&self.file, &self.secret);
     }
 }
@@ -64,6 +70,12 @@ static LIVE: Mutex<Option<Live>> = Mutex::new(None);
 /// Start listening, in place of any endpoint already on. `tell` hears who
 /// connects and what they do, and answers false when nobody is listening.
 /// False when it could not start.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn start(_tell: impl Fn(BridgeLiveEvent) -> bool + Send + 'static) -> bool {
+    false
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn start(tell: impl Fn(BridgeLiveEvent) -> bool + Send + 'static) -> bool {
     stop();
     let Some(file) = lumit_project::live_endpoint_file() else {
@@ -125,6 +137,7 @@ pub(crate) fn disconnect() {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn serve(
     listener: &interprocess::local_socket::Listener,
     secret: &lumit_peer::Secret,
@@ -166,6 +179,7 @@ fn serve(
 }
 
 /// The reply to one line from the program.
+#[cfg(not(target_arch = "wasm32"))]
 fn answer<'a>(
     line: &str,
     host: &mut Option<AppHost<'a>>,

@@ -48,7 +48,7 @@ BridgeSampledPixels windowOf(
     height: height,
     x: cx,
     y: cy,
-    frame: BigInt.zero,
+    frame: 0,
     view: 0,
     layerAlone: layerAlone,
   );
@@ -87,6 +87,18 @@ void main() {
       expect(sampleFromWindow(w, 1, 39, 20).r, closeTo(1.0, 1e-9),
           reason: 'one pixel left of the centre is on the white side');
       expect(sampleFromWindow(w, 1, 45, 25).r, closeTo(0.0, 1e-9));
+    });
+  });
+
+  group('a part pick', () {
+    // A click on a part's blended edge names no part, and landing there used
+    // to let every pick go.
+    test('takes the nearest part when the pixel under it names none', () {
+      final window = windowOf((x, y) => x < 38 ? [0, 0, 7] : [9, 9, 9]);
+      String? known(int part) => part == 7 ? 'Visor' : null;
+      expect(partNear(window, 36, 20, known), 7);
+      expect(partNear(window, 39, 20, known), 7);
+      expect(partNear(window, 45, 20, known), 0);
     });
   });
 

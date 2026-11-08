@@ -91,3 +91,14 @@ class ThemeScope extends InheritedWidget {
       old.showTooltips != showTooltips ||
       old.wireStyle != wireStyle;
 }
+
+/// The outermost overlay in the window [context] is drawn in. A popped-out
+/// panel sits in the tree under the main window, whose overlay is the root
+/// one, but what it opens has to open in its own window.
+OverlayState? rootOverlayOf(BuildContext context) {
+  final root = Overlay.maybeOf(context, rootOverlay: true);
+  if (root == null || View.maybeOf(root.context) == View.maybeOf(context)) {
+    return root;
+  }
+  return Overlay.maybeOf(context);
+}

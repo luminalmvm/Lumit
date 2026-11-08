@@ -46,7 +46,7 @@ import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
-import 'graph_maths.dart' show keyframeAmong;
+import 'graph_maths.dart' show keyframeAmong, rowKeysOf;
 
 /// The zone value [editPickedKeys] sets: the picked keys' indices, and
 /// whether the number was typed.
@@ -392,20 +392,15 @@ class KeyframeControlsFrb extends StatelessWidget {
     this.valuesAt,
   });
 
-  /// The row's first animation, which is what the navigator reads.
-  ///
-  /// A multi-axis row keys every axis at the same times, so its axes agree about
-  /// *where* the keys are even when they disagree about the values. Reading one
-  /// is therefore enough to draw the diamonds and find the neighbours.
-  BridgeScalar get _lead => scalars.first;
-
   List<BridgeKeyframe> _keysOf(BridgeScalar scalar) => switch (scalar) {
         BridgeScalar_Keyframed(:final field0) => field0,
         BridgeScalar_Static() => const [],
         BridgeScalar_Expression() => const [],
       };
 
-  List<BridgeKeyframe> get _keys => _keysOf(_lead);
+  /// Where the row has keys, which is what the navigator reads: the same
+  /// times its lane draws, whichever axes hold them.
+  List<BridgeKeyframe> get _keys => rowKeysOf(scalars);
 
   /// True when *any* axis is animated. A row half-animated by the graph editor
   /// still shows its stopwatch lit, because turning it off is then the useful

@@ -2,7 +2,9 @@
 // `lumit_project::cache_dir`, worked out without the bridge so the fault log
 // and the updater still work when the engine is the thing that broke.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Lumit's cache folder as the engine's `ProjectDirs` names it:
 /// `%LOCALAPPDATA%\Lumit\Lumit\cache`, `~/Library/Caches/dev.Lumit.Lumit` or

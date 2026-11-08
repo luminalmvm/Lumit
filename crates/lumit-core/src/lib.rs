@@ -12,12 +12,17 @@ pub mod camera;
 pub mod comp_graph;
 /// The layer and asset defaults every front end builds from.
 pub mod edits;
+/// The Environment light: a picture of everything round the scene.
+pub mod environment;
 pub mod expression;
+pub mod extrude;
 pub mod fx;
 /// The layer driver graph: the additive wiring beside the effect stack.
 pub mod graph;
 /// Layer groups: the Timeline's organisational fold over a run of layers.
 pub mod group;
+/// Volumetric light: a Light layer seen in the air it shines through.
+pub mod haze;
 pub mod interpretation;
 /// The largest picture the renderer makes, and saying when one was cut to it.
 pub mod largest_picture;
@@ -26,7 +31,11 @@ pub mod linalg;
 pub mod lut;
 pub mod markers;
 pub mod mask;
+pub mod mesh_shape;
 pub mod model;
+pub mod model_layer;
+pub mod model_material;
+pub mod model_part;
 /// Occlusion culling: the full-frame opaque layer that hides what is under it.
 pub mod occlusion;
 pub mod ops;
@@ -35,12 +44,15 @@ pub mod pixels;
 /// The planes tier's document half: which effects ask a model for a plane of
 /// depth or coverage, and the stamp that names one frame's answer.
 pub mod planes;
+/// Flow on a Precomp layer: the two nested frames a moment sits between.
+pub mod precomp_flow;
 pub mod preset;
 /// Puppet: the mesh over a layer's own silhouette and the as-rigid-as-possible
 /// deformer over it.
 pub mod puppet;
 pub mod retime;
 pub mod roto;
+pub mod routes;
 pub mod sequence;
 pub mod shape;
 /// Shared projects: what an edit touched, and merging edits made apart.
@@ -51,4 +63,5 @@ pub mod text;
 pub mod time;
 /// The solve link: a Camera layer driven by a tracked layer.
 pub mod track;
+pub mod view_camera;
 pub mod wire_tie;

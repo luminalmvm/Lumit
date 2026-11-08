@@ -52,6 +52,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -71,6 +72,8 @@ import 'dialog_frame.dart';
 import 'export_queue_frb.dart';
 import 'settings_window_frb.dart';
 import 'status_line_frb.dart';
+
+part 'export_formats.dart';
 
 /// The frame the drawing gives this dialog.
 const double exportDialogWidth = 640;
@@ -223,51 +226,6 @@ enum ExportSection { output, time, picture, colour, audio, metadata }
 
 /// How much of the composition to write.
 enum _Span { workArea, wholeComp, custom }
-
-/// One output format: the engine key, the reading label, and the file
-/// extension its picker filters on.
-class _Format {
-  final String key;
-  final String label;
-  final String extension;
-  final String pickerLabel;
-  final ExportOutputType type;
-  const _Format(
-      this.key, this.label, this.extension, this.pickerLabel, this.type);
-}
-
-/// H.264 first because it is the delivery default; the sequences and the
-/// sound-only containers after it, because they are the specialist choices.
-List<_Format> get _formats => [
-      _Format('h264', l10n.formatH264, 'mp4', l10n.formatMp4Picker,
-          ExportOutputType.video),
-      _Format('hevc', l10n.formatHevc, 'mp4', l10n.formatMp4Picker,
-          ExportOutputType.video),
-      _Format('prores_proxy', l10n.formatProRes422Proxy, 'mov',
-          l10n.formatMovPicker, ExportOutputType.video),
-      _Format('prores_lt', l10n.formatProRes422Lt, 'mov',
-          l10n.formatMovPicker, ExportOutputType.video),
-      _Format('prores_422', l10n.formatProRes422, 'mov',
-          l10n.formatMovPicker, ExportOutputType.video),
-      _Format('prores_hq', l10n.formatProRes422Hq, 'mov',
-          l10n.formatMovPicker, ExportOutputType.video),
-      _Format('prores_4444', l10n.formatProRes4444, 'mov',
-          l10n.formatMovPicker, ExportOutputType.video),
-      _Format('prores_4444xq', l10n.formatProRes4444Xq, 'mov',
-          l10n.formatMovPicker, ExportOutputType.video),
-      _Format('gif', l10n.formatGif, 'gif', l10n.formatGifPicker,
-          ExportOutputType.video),
-      _Format('png', l10n.formatPngSequence, 'png', l10n.formatPngPicker,
-          ExportOutputType.imageSequence),
-      _Format('tiff', l10n.formatTiffSequence, 'tiff', l10n.formatTiffPicker,
-          ExportOutputType.imageSequence),
-      _Format('exr', l10n.formatExrSequence, 'exr', l10n.formatExrPicker,
-          ExportOutputType.imageSequence),
-      _Format('m4a', l10n.formatM4a, 'm4a', l10n.formatM4aPicker,
-          ExportOutputType.audioOnly),
-      _Format('wav', l10n.formatWav, 'wav', l10n.formatWavPicker,
-          ExportOutputType.audioOnly),
-    ];
 
 /// One field written into the container, in the order the section lists them.
 /// The five classic fields are prefilled with their own names; a field of one's
@@ -454,6 +412,9 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// of, in a shared project. Empty everywhere else.
   List<BridgeFootageLack> _lacking = const [];
 
+  /// The 3D models this comp draws that can't be read right now.
+  List<String> _unread = const [];
+
   /// What the export does about [_lacking]: one of the three below, or the
   /// number of the person whose computer does the export instead.
   int _footage = _footageAsItIs;
@@ -637,6 +598,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     _scroll.addListener(_spy);
     try {
       _lacking = widget.comp.shareLacking();
+      _unread = widget.comp.unreadModels();
     } catch (_) {
       // No engine to ask, as in a widget test.
     }
@@ -1056,7 +1018,8 @@ class _ExportDialogState extends State<_ExportDialog> {
             t,
             l10n.exportType,
             Row(children: [
-              for (final type in ExportOutputType.values) _typeChip(t, type),
+              for (final type in ExportOutputType.values)
+                if (_formats.any((f) => f.type == type)) _typeChip(t, type),
             ]),
           ),
           _columns(
@@ -1087,20 +1050,23 @@ class _ExportDialogState extends State<_ExportDialog> {
                   tip: _path,
                 ),
               ),
-              const SizedBox(width: 6),
-              // A floor rather than a width: a longer word for Browse grows
-              // the button instead of wrapping.
-              ConstrainedBox(
-                constraints: const BoxConstraints(
-                    minWidth: exportButtonWidth,
-                    minHeight: dialogControlHeight,
-                    maxHeight: dialogControlHeight),
-                child: HouseButton(
-                  key: const ValueKey('export-choose'),
-                  onPressed: _choose,
-                  child: Text(l10n.exportBrowse, style: t.body),
+              // A page has no folders: the browser asks where as it starts.
+              if (!kIsWeb) ...[
+                const SizedBox(width: 6),
+                // A floor rather than a width: a longer word for Browse grows
+                // the button instead of wrapping.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                      minWidth: exportButtonWidth,
+                      minHeight: dialogControlHeight,
+                      maxHeight: dialogControlHeight),
+                  child: HouseButton(
+                    key: const ValueKey('export-choose'),
+                    onPressed: _choose,
+                    child: Text(l10n.exportBrowse, style: t.body),
+                  ),
                 ),
-              ),
+              ],
             ]),
           ),
           // The drawing's dropdown is two ticks instead: *when done* is two
@@ -1134,7 +1100,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         // already says it is global. The extra 12 is the groups' own inner
         // inset, so Preset's label and controls share the exact left edges
         // of every row below it.
-        padding: const EdgeInsets.fromLTRB(
+        padding: const EdgeInsetsDirectional.fromSTEB(
             dialogPadding + 12, exportPresetStripGap, dialogPadding, 0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1269,6 +1235,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       ExportSection.output,
       l10n.exportGroupComposition,
       [
+        if (_unread.isNotEmpty)
+          _warning(t, l10n.exportModelsUnread(_unread.join(', ')),
+              key: const ValueKey('export-models-unread')),
         _columns(
           _row(
             t,
@@ -1784,7 +1753,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             const SizedBox(width: 8),
             Flexible(
               child: Align(
-                alignment: Alignment.centerRight,
+                alignment: AlignmentDirectional.centerEnd,
                 child: Text(
                   l10n.exportFinalSize('$width', '$height'),
                   key: const ValueKey('export-final-size'),
@@ -2312,7 +2281,7 @@ class _ExportDialogState extends State<_ExportDialog> {
           ValueChanged<int> set, int limit) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
         Padding(
-          padding: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsetsDirectional.only(end: 4),
           child: Text(mark,
               style: dialogMono(t)
                   .copyWith(color: _picture ? null : t.textDisabled)),
@@ -2345,7 +2314,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       Container(
         key: key,
         height: dialogControlHeight,
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: t.surface0,
@@ -2440,8 +2409,8 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   void _watchFootage(LumitState app, {required bool start}) {
     if (!mounted) return;
-    int percent(BigInt done, BigInt total) =>
-        total == BigInt.zero ? 0 : (done.toInt() * 100 / total.toInt()).round();
+    int percent(int done, int total) =>
+        total == 0 ? 0 : (done * 100 / total).round();
     void failed(String why) {
       _waitTimer?.cancel();
       setState(() {
@@ -2478,7 +2447,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         case BridgeShareFetching_Working(:final done, :final total):
           // Nothing has crossed while the others' computers are still
           // making what was asked for.
-          text = total == BigInt.zero
+          text = total == 0
               ? l10n.exportFootageMaking
               : l10n.exportFootageFetching(percent(done, total));
         case BridgeShareFetching_Queued():
@@ -2495,15 +2464,15 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   /// A factual line under a group's rows, in the label column's own indent.
   Widget _reading(LumitTheme t, String text, {Key? key}) => Padding(
-        padding: const EdgeInsets.only(
-            left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
+        padding: const EdgeInsetsDirectional.only(
+            start: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
         child: Text(text, key: key, style: dialogMono(t)),
       );
 
   /// A line the user has to act on, where a reading would go.
   Widget _warning(LumitTheme t, String text, {Key? key}) => Padding(
-        padding: const EdgeInsets.only(
-            left: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
+        padding: const EdgeInsetsDirectional.only(
+            start: exportLabelColumn + exportRowGap, top: 2, bottom: 4),
         child: Text(text, key: key, style: t.small),
       );
 
@@ -2518,7 +2487,7 @@ class _ExportDialogState extends State<_ExportDialog> {
         behavior: HitTestBehavior.opaque,
         onTap: () => _setFormat(_formats.firstWhere((f) => f.type == type)),
         child: Container(
-          margin: const EdgeInsets.only(right: dialogTabGap),
+          margin: const EdgeInsetsDirectional.only(end: dialogTabGap),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
@@ -2653,6 +2622,15 @@ class _ExportDialogState extends State<_ExportDialog> {
             codec: _format.key,
             projectPath: project) ??
         _path;
+    // A page has no folders, so only the name is chosen here.
+    if (kIsWeb) {
+      _path ??= exportPreset(
+              preset: _preset,
+              compName: _compName,
+              template: defaults.filenameTemplate)
+          .defaultName
+          .replaceFirst(RegExp(r'\.[A-Za-z0-9]+$'), '.${_format.extension}');
+    }
   }
 
   /// *Set as default*: remember the preset and the format in force as what the

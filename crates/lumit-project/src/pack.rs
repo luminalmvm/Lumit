@@ -48,8 +48,8 @@ pub type Progress<'a> = &'a mut dyn FnMut(u64, u64) -> bool;
 pub struct PackSource {
     pub item: Uuid,
     /// The file the item's reference names, then the rest of its numbered run
-    /// when the item is an image sequence, or the look-up tables a colour
-    /// config names. Never empty. A file below the first one's folder keeps
+    /// when the item is an image sequence, the files a 3D model pulls in, or
+    /// the look-up tables a colour config names. Never empty. A file below the first one's folder keeps
     /// its path from there.
     pub files: Vec<PathBuf>,
 }

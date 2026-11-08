@@ -215,7 +215,7 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     _lastArrival = arrived;
     final t = ThemeScope.of(context).theme;
     comp.renderScope(
-      frame: BigInt.from(frame),
+      frame: frame,
       scale: state.measuredScale,
       kind: _kind.index,
       colours: scopeColoursFor(t, themed: state.workspace.themedScopes),

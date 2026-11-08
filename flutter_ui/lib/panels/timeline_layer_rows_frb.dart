@@ -22,12 +22,14 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
+import 'audio_routes_frb.dart' show writeSend;
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
 import 'effect_param_row_frb.dart';
 import 'viewer_effect_points.dart' show pickForPoint;
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart' show setModelPartShown;
 import 'light_rows_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
@@ -484,7 +486,8 @@ class FoldRow extends StatelessWidget {
         :final label,
         :final open,
         :final enabled,
-        :final named
+        :final named,
+        :final shown
       ) =>
         HoverMark(
           builder: (_, lit) => GestureDetector(
@@ -528,6 +531,18 @@ class FoldRow extends StatelessWidget {
                     id: path,
                     on: enabled,
                     onChanged: (on) => onSetEnabled!(path, on),
+                  ),
+                  const SizedBox(width: 2),
+                ],
+                if (shown != null) ...[
+                  fxEnableSwitch(
+                    id: path,
+                    on: shown,
+                    onChanged: (on) {
+                      final part = path.split('/').last;
+                      setModelPartShown(layer, part, on);
+                      onChanged();
+                    },
                   ),
                   const SizedBox(width: 2),
                 ],
@@ -685,6 +700,33 @@ class FoldRow extends StatelessWidget {
             onEditProperty(path);
             onChanged();
           },
+        ),
+      FoldSendRow(:final send, :final bus) => _VolumeRow(
+          comp: comp,
+          layer: layer,
+          scalar: send.level,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
+          onChanged: () {
+            onEditProperty(path);
+            onChanged();
+          },
+          label: bus,
+          rowKey: 'tl-send-${send.bus}',
+          write: (v) => writeSend(layer, send.bus, level: v),
+          // Before or after the layer's Volume and Pan.
+          trailing: HouseButton(
+            key: ValueKey<String>('tl-send-pre-${send.bus}'),
+            small: true,
+            frameless: true,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            onPressed: () {
+              writeSend(layer, send.bus, pre: !send.pre);
+              onChanged();
+            },
+            child: Text(send.pre ? l10n.audioSendPre : l10n.audioSendPost),
+          ),
         ),
       FoldRetimeRow(:final scalar) => RetimeRow(
           comp: comp,
@@ -867,6 +909,18 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     super.dispose();
   }
 
+  void _resetMaterialRow(FoldEffectParamRow row) {
+    for (final instance in widget.layer.getMaterials()) {
+      if (instance.id() != row.info.id) continue;
+      try {
+        widget.layer.resetMaterialRow(material: instance, param: row.param.id);
+      } catch (_) {
+        // The material went away under the press; nothing to put back.
+      }
+    }
+    widget.onChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final row = widget.row;
@@ -888,6 +942,10 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     };
     return EffectParamRowFrb(
       key: ValueKey<String>('tl-fx-${row.info.id}-${row.param.id}'),
+      // A part's Visible row, which reads as a tick until it is keyed.
+      asTick: row.model && row.param.id == 'visible',
+      // A material row goes back to its file's value.
+      onReset: row.material ? () => _resetMaterialRow(row) : null,
       effectId: row.info.id,
       param: row.param,
       valueColumn: widget.valueColumn,
@@ -920,6 +978,11 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
         setState(() {});
         widget.onChanged();
       },
+      onWritePair: (effect, values) {
+        _editor.writeAll(widget.layer, effect, values);
+        setState(() {});
+        widget.onChanged();
+      },
       onLive: (effect, param, value) {
         _pick(ui, param);
         setState(() {
@@ -933,11 +996,11 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     );
   }
 
-  /// A style's, a group header's or a clip's row is not on the layer's own
-  /// stack, so it has no point on the picture to pick.
+  /// A style's, an Input's, a group header's or a clip's row is not on the
+  /// layer's own stack, so it has no point on the picture to pick.
   void _pick(LumitUiState ui, String param) {
     final row = widget.row;
-    if (!row.style && !row.driver && row.group == null && row.clip == null) {
+    if (!row.style && !row.inputs && !row.driver && row.group == null && row.clip == null) {
       pickForPoint(ui, widget.layer, row.info, param);
     }
   }
@@ -1121,6 +1184,12 @@ class _VolumeRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
+  /// A send's row is this one with its own name, writer and Pre button.
+  final String? label;
+  final ValueChanged<BridgeScalar>? write;
+  final Widget? trailing;
+  final String rowKey;
+
   const _VolumeRow({
     required this.comp,
     required this.layer,
@@ -1129,6 +1198,10 @@ class _VolumeRow extends StatefulWidget {
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
+    this.label,
+    this.write,
+    this.trailing,
+    this.rowKey = 'tl-volume',
   });
 
   @override
@@ -1166,15 +1239,17 @@ class _VolumeRowState extends State<_VolumeRow> {
               scalars: [scalar],
               comp: widget.comp,
               onSeek: widget.onSeek,
-              rowKey: 'tl-volume',
+              rowKey: widget.rowKey,
               onWrite: (next) {
-                widget.layer.setVolumeDb(value: next.single);
+                _write(next.single);
                 widget.onChanged();
               },
             ),
             const SizedBox(width: 4),
             Expanded(
-                child: Text(t.propertyCase(l10n.volume), style: t.body)),
+                child: Text(widget.label ?? t.propertyCase(l10n.volume),
+                    style: t.body)),
+            if (widget.trailing != null) widget.trailing!,
             SizedBox(
               width: widget.valueColumn.width,
               // Animated: the change lands in the key under the playhead (or
@@ -1182,7 +1257,7 @@ class _VolumeRowState extends State<_VolumeRow> {
               // staged so the whole gesture is one undo step.
               child: animated
                   ? KeyedValueField(
-                      fieldKey: const ValueKey('tl-volume-db'),
+                      fieldKey: ValueKey('${widget.rowKey}-db'),
                       value: value,
                       min: -60,
                       max: 12,
@@ -1192,7 +1267,7 @@ class _VolumeRowState extends State<_VolumeRow> {
                       onCommit: (v) => _commitAt(scalar, v, frame),
                     )
                   : DragValueField(
-                      key: const ValueKey('tl-volume-db'),
+                      key: ValueKey('${widget.rowKey}-db'),
                       value: value,
                       // The engine's own range (docs/09 §6): silence to a
                       // +12 dB boost.
@@ -1215,10 +1290,12 @@ class _VolumeRowState extends State<_VolumeRow> {
     );
   }
 
+  void _write(BridgeScalar value) => widget.write != null
+      ? widget.write!(value)
+      : widget.layer.setVolumeDb(value: value);
+
   void _commitAt(BridgeScalar scalar, num value, int frame) {
-    widget.layer.setVolumeDb(
-      value: scalarWithValueAt(scalar, value.toDouble(), widget.comp, frame),
-    );
+    _write(scalarWithValueAt(scalar, value.toDouble(), widget.comp, frame));
     setState(() => _staged = null);
     widget.onChanged();
   }

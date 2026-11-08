@@ -540,8 +540,8 @@ fn abandon(staging: &Path, why: MlError) -> MlError {
 
 /// Enough to tell two staging folders apart, including one a dead build left.
 fn nonce() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map_or(0, |since| since.as_nanos())
 }
 

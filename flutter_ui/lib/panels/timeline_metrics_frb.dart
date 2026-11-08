@@ -432,7 +432,8 @@ bool audioTimelineDims(BridgeLayerEntry entry, {required bool hasPicture}) =>
 /// standing for the mix rather than every layer of it. A footage row with
 /// sound is a picture row too, and stays where it is.
 bool soundMixFolds(BridgeLayerEntry entry) =>
-    entry.info.kind == BridgeLayerKind.audio;
+    entry.info.kind == BridgeLayerKind.audio ||
+    entry.info.kind == BridgeLayerKind.bus;
 
 /// The layers a timeline panel lists (docs/07 §4.8, docs/impl/audio-timeline.md
 /// §5).

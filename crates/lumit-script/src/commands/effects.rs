@@ -10,17 +10,17 @@ use lumit_core::fx::{self, schema::FxCategory, schema::ParamSchema};
 use lumit_core::model::{
     Composition, EffectInstance, EffectNamespace, EffectParam, EffectValue, Layer,
 };
-use lumit_core::ops::Op;
 use lumit_core::store::DocumentStore;
 use lumit_core::time::Rational;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::{
-    animation_json, bad, commit, expressed, find_comp, find_layer, keyed, present, underneath,
-    Ease, Interp, KeyArgs, LayerArgs, Named, Side, Values,
+use super::keys::{
+    animation_json, expressed, keyed, underneath, Ease, Interp, KeyArgs, Named, Side, Values,
 };
+use super::layers::LayerArgs;
+use super::{bad, commit, find_comp, find_layer, present};
 use crate::{Host, ScriptError};
 
 /// The name an effect shows: its own, or its effect's.
@@ -219,11 +219,9 @@ pub(super) fn add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     effects.push(instance);
     commit(
         store,
-        vec![Op::SetLayerEffects {
-            comp: comp.id,
-            layer: layer.id,
-            effects,
-        }],
+        vec![fx::effects::particulate::set_effects(
+            comp.id, layer, effects,
+        )],
     )?;
     let mut answer = now(store, comp.id, layer.id, id)?;
     if let Some(ae) = ae {
@@ -321,11 +319,9 @@ pub(super) fn set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
     let id = e.id;
     commit(
         store,
-        vec![Op::SetLayerEffects {
-            comp: comp.id,
-            layer: layer.id,
-            effects,
-        }],
+        vec![fx::effects::particulate::set_effects(
+            comp.id, layer, effects,
+        )],
     )?;
     now(store, comp.id, layer.id, id)
 }

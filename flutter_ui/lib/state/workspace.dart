@@ -5,7 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math';
 import 'dart:ui';
 
@@ -18,12 +18,17 @@ import 'package:lumit_flutter/src/rust/api/effect.dart'
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../theme/style_sheet.dart';
+import '../theme/theme_file.dart' show readThemeFile;
+import 'window_backdrop.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import '../theme/theme_tokens.dart' show applyTokens;
 import 'dock.dart';
 import 'expression_language.dart';
+import 'landed.dart';
 import 'settings.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// How the Viewer is looking at one composition: exposure in stops and whether
 /// the tone map is engaged. A record rather than a class because it is two
@@ -640,14 +645,40 @@ class Workspace extends ChangeNotifier {
       );
     }
     final style = activeStyle;
-    if (style != null) themeShape = style.base;
+    if (style != null) {
+      themeShape = style.base;
+      // Its own fonts, if it has any. Those loaded before are in use at once.
+      // A font that can't be read redraws only for its line in Settings,
+      // and only once, though the folder is read every time the window
+      // comes back.
+      unawaited(style.loadFonts().then((loaded) {
+        if (!identical(activeStyle, style)) return;
+        final said = style.problems.join('\n');
+        if (loaded) {
+          beforeLookChange?.call();
+          recompose();
+        } else if (said != _saidProblems) {
+          recompose();
+        }
+        _saidProblems = said;
+      }));
+    }
     // Under the person's own icons: the style's.
     IconStyle.under = [if (style?.iconFolder case final icons?) icons];
     IconStyle.reload();
   }
 
+  /// The style's problems as Settings last showed them.
+  String _saidProblems = '';
+
+  /// Called just before the look changes as a whole: a style or shape
+  /// picked, a style's fonts arriving, the window turning see-through. The
+  /// shell fades from the look as it was (shell/look_fade.dart).
+  VoidCallback? beforeLookChange;
+
   /// Use the person's own style called [name].
   void setCustomStyle(String name) {
+    beforeLookChange?.call();
     customStyle = name;
     reloadStyles();
     save();
@@ -909,6 +940,9 @@ class Workspace extends ChangeNotifier {
 
   /// The folder File > Scripts lists, or empty for Lumit's own.
   String scriptsFolder = '';
+
+  /// The Blender picked in Settings, or empty to use the one found.
+  String blenderPath = '';
 
   /// The script run after each event, by its path in the Scripts folder.
   /// None is set at first.
@@ -1321,19 +1355,36 @@ class Workspace extends ChangeNotifier {
     StyleSheet.current = style;
     StyleSheet.solid = interface.reduceTransparency;
     final shape = style?.tokens();
+    final backdrop =
+        StyleSheet.solid ? Backdrop.none : style?.backdrop ?? Backdrop.none;
+    // Going solid, the room is solid in this frame, before the material
+    // behind it goes, so nothing black shows between the two.
+    if (backdrop == Backdrop.none) WindowBackdrop.showing = false;
     // A style's own colours, if it sets any, go over the scheme.
-    LumitTheme dressed(LumitTheme t) {
-      if (style == null) return t;
-      final own = applyTokens(t, style.colours(t));
-      // A room picture shows through wherever the room is painted.
-      final picture = style.roomPicture;
-      return picture == null || StyleSheet.solid || !File(picture).existsSync()
-          ? own
-          : own.copyWith(room: const Color(0x00000000));
+    LumitTheme dressed(LumitTheme t) =>
+        style == null ? t : applyTokens(t, style.colours(t));
+    // A room picture shows through wherever the room is painted, and so does
+    // a see-through window, clear unless the style tints the room. Last, so
+    // the Room setting can't paint over either.
+    LumitTheme seen(LumitTheme t) {
+      WindowBackdrop.tint = const Color(0x00000000);
+      final picture = style?.roomPicture;
+      if (picture != null && !StyleSheet.solid && File(picture).existsSync()) {
+        return t.copyWith(room: const Color(0x00000000));
+      }
+      if (style != null && WindowBackdrop.showing) {
+        // The window's root paints the style's tint once. Painted by every
+        // part that stands on the room, it would build up where they overlap.
+        WindowBackdrop.tint =
+            style.colours(t)['room'] ?? const Color(0x00000000);
+        return t.copyWith(room: const Color(0x00000000));
+      }
+      return t;
     }
     if (_preview != null) {
-      _theme =
-          _withRoom(_preview!.copyWith(tokens: shape, density: density));
+      _theme = seen(
+          _withRoom(_preview!.copyWith(tokens: shape, density: density)));
+      _askBackdrop(backdrop);
       notifyListeners();
       return;
     }
@@ -1347,16 +1398,27 @@ class Workspace extends ChangeNotifier {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
       // a choice the user made in the editor.
-      _theme = _withRoom(dressed(
-          custom.build(themeShape).copyWith(tokens: shape, density: density)));
+      _theme = seen(_withRoom(dressed(
+          custom.build(themeShape).copyWith(tokens: shape, density: density))));
     } else {
-      _theme = _withRoom(dressed(LumitTheme.forScheme(
+      _theme = seen(_withRoom(dressed(LumitTheme.forScheme(
         looking?.scheme ?? colorScheme,
         themeShape,
         accentOverride: _lookingAccent ?? accentOverride,
-      ).copyWith(tokens: shape, density: density)));
+      ).copyWith(tokens: shape, density: density))));
     }
+    _askBackdrop(backdrop);
     notifyListeners();
+  }
+
+  /// The window behind it all, dark or light as the theme is. Its answer
+  /// comes back to [recompose] when it changes.
+  void _askBackdrop(Backdrop kind) {
+    WindowBackdrop.onChange ??= () {
+      beforeLookChange?.call();
+      recompose();
+    };
+    WindowBackdrop.want(kind, dark: _theme.mode == ThemeMode2.dark);
   }
 
   /// The room Lantern's cards stand in, from the setting: the theme's own
@@ -1458,6 +1520,26 @@ class Workspace extends ChangeNotifier {
     return name;
   }
 
+  /// Take in the theme file at [path] and select it. Why it was refused, or
+  /// null when it went in.
+  Future<String?> importThemeFile(String path) async {
+    final String text;
+    try {
+      text = await File(path).readAsString();
+    } catch (_) {
+      return l10n.keymapFileUnreadable;
+    }
+    final file = path.split(RegExp(r'[\\/]')).last;
+    final read = readThemeFile(text,
+        name: file.contains('.')
+            ? file.substring(0, file.lastIndexOf('.'))
+            : file);
+    final theme = read.theme;
+    if (theme == null) return read.refusal;
+    importCustomTheme(theme);
+    return null;
+  }
+
   /// Rename one of the user's themes, keeping its place in the list and the
   /// selection on it. Returns the name it now has — [to] when that was free,
   /// else [to] with a number after it — or null when [from] is not a saved
@@ -1521,6 +1603,12 @@ class Workspace extends ChangeNotifier {
   /// Choose the folder File > Scripts lists, or empty for Lumit's own.
   void setScriptsFolder(String path) {
     scriptsFolder = path;
+    settingsChanged();
+  }
+
+  /// Pick the Blender 3D models open with, or empty to use the one found.
+  void setBlenderPath(String path) {
+    blenderPath = path;
     settingsChanged();
   }
 
@@ -1612,6 +1700,7 @@ class Workspace extends ChangeNotifier {
   }
 
   void setShape(ThemeShape s) {
+    beforeLookChange?.call();
     themeShape = s;
     customStyle = null;
     recompose();
@@ -1914,8 +2003,10 @@ class Workspace extends ChangeNotifier {
   /// this does not notify listeners.
   void rememberProject(String path) {
     lastProjectPath = path;
+    // In the browser every open is a new folder, so the name is the file.
     recentProjects
-      ..remove(path)
+      ..removeWhere((p) =>
+          p == path || kIsWeb && p.split('/').last == path.split('/').last)
       ..insert(0, path);
     _recentOpened[path] = DateTime.now().toIso8601String();
     if (recentProjects.length > maxRecentProjects) {
@@ -2076,6 +2167,7 @@ class Workspace extends ChangeNotifier {
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
         'scripts_folder': scriptsFolder,
+        'blender_path': blenderPath,
         'event_scripts': {
           for (final MapEntry(:key, :value) in eventScripts.entries)
             key.name: value,
@@ -2202,6 +2294,7 @@ class Workspace extends ChangeNotifier {
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     projectTemplate = j['project_template'] as String? ?? '';
     scriptsFolder = j['scripts_folder'] as String? ?? '';
+    blenderPath = j['blender_path'] as String? ?? '';
     eventScripts.clear();
     if (j['event_scripts'] case final Map<String, dynamic> scripts) {
       for (final MapEntry(:key, :value) in scripts.entries) {
@@ -2517,7 +2610,7 @@ class Workspace extends ChangeNotifier {
   static Future<Image?> compStill(CompositionReference comp, int frame,
       {int maxEdge = projectThumbnailPixels}) async {
     final still =
-        await comp.thumbnail(frame: BigInt.from(frame), maxEdge: maxEdge);
+        await landed(() => comp.thumbnail(frame: frame, maxEdge: maxEdge));
     if (still == null || still.width == 0 || still.height == 0) return null;
     final decoded = Completer<Image>();
     decodeImageFromPixels(still.rgba, still.width, still.height,

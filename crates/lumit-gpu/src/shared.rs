@@ -617,7 +617,7 @@ const COPY_WAIT_LIMIT: std::time::Duration = std::time::Duration::from_millis(25
 /// `query` must have been created on the same device as `context`, and `End`
 /// must already have been called on it.
 unsafe fn wait_for_copy(context: &ID3D11DeviceContext, query: &ID3D11Query) {
-    let start = std::time::Instant::now();
+    let start = web_time::Instant::now();
     loop {
         // An event query's payload is a single BOOL. When the work is still in
         // flight the call returns S_FALSE and writes nothing — a *success*

@@ -72,8 +72,9 @@ struct Params {
 
     // Schedule and the frame.
     dt: f32,
-    _spare0: u32,
-    _spare1: u32,
+    // Seconds on from now the head is drawn at, the tail following it.
+    lead: f32,
+    _spare1: f32,
     frames: u32,
 
     candidates: u32,
@@ -389,7 +390,39 @@ fn pt_path_at(s_in: f32) -> vec2<f32> {
 // `w_die` is the draw through the emitter's Depth, filled uniformly: a
 // Point becomes a segment, an Ellipse a cylinder, a Rectangle a box. Line and
 // Mask path ignore it and stay on the plane.
+// A point on a model's surface, the triangle picked by area: `path` holds
+// three corners to a triangle, the first with the area of every triangle up
+// to and including it in w.
+fn pt_surface(u: f32, v: f32, w_die: f32) -> vec4<f32> {
+    let n = p.path_len / 3u;
+    let s = u * path[(n - 1u) * 3u].w;
+    // The first triangle whose running area passes s.
+    var lo = 0u;
+    var hi = n - 1u;
+    loop {
+        if (lo >= hi) { break; }
+        let mid = (lo + hi) / 2u;
+        if (path[mid * 3u].w <= s) { lo = mid + 1u; } else { hi = mid; }
+    }
+    let a = path[lo * 3u].xyz;
+    var b = v;
+    var c = w_die;
+    // Folded back into the triangle, so every point of it is as likely.
+    if (b + c > 1.0) {
+        b = 1.0 - b;
+        c = 1.0 - c;
+    }
+    return vec4<f32>(a + (path[lo * 3u + 1u].xyz - a) * b + (path[lo * 3u + 2u].xyz - a) * c, 1.0);
+}
+
 fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
+    // A Layer emitter on a Model layer gives birth on its surface.
+    if (p.shape == 10u) {
+        if (p.path_len < 3u) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        return pt_surface(u, v, w_die);
+    }
     if (p.shape == 4u) {
         if (p.path_len < 2u) {
             return vec4<f32>(0.0, 0.0, 0.0, 0.0);
@@ -398,12 +431,20 @@ fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
         // the emitter's own place and turn do not move it.
         return vec4<f32>(pt_path_at(u * p.path_total), p.em_z, 1.0);
     }
+    if (p.shape == 9u) {
+        // A Layer emitter fills the frame, as the mask path does already placed,
+        // and with no picture to read gives birth to nothing.
+        if (p.density == 0u) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        return vec4<f32>(u * p.target_w, v * p.target_h, p.em_z, 1.0);
+    }
     let a = radians(p.em_angle);
     let s = sin(a);
     let c = cos(a);
     var local = vec2<f32>(0.0, 0.0);
     var depth = (w_die - 0.5) * p.em_depth;
-    if (p.shape >= 5u) {
+    if (p.shape == 5u || p.shape == 6u) {
         // The two outline shapes. The host flattened the emitter's own
         // outline into the very buffer a mask path uses, in the emitter's local
         // frame, so the walk is the same walk and the turn and the placement
@@ -417,8 +458,16 @@ fn pt_birth_point(u: f32, v: f32, w_die: f32) -> vec4<f32> {
         let r = sqrt(max(u, 0.0));
         let ang = v * 6.28318530717958647692;
         local = vec2<f32>(0.5 * p.em_wh.x * r * cos(ang), 0.5 * p.em_wh.y * r * sin(ang));
-    } else if (p.shape == 3u) {
+    } else if (p.shape == 3u || p.shape == 7u) {
         local = vec2<f32>((u - 0.5) * p.em_wh.x, (v - 0.5) * p.em_wh.y);
+    } else if (p.shape == 8u) {
+        // == the CPU's ball: the cube root for the radius, an even height.
+        let r = 0.5 * p.em_wh.x * pow(max(u, 0.0), 1.0 / 3.0);
+        let up = 1.0 - 2.0 * v;
+        let round = sqrt(max(1.0 - up * up, 0.0));
+        let ang = w_die * 6.28318530717958647692;
+        local = vec2<f32>(r * round * cos(ang), r * round * sin(ang));
+        depth = r * up;
     }
     return vec4<f32>(
         p.em_pos.x + local.x * c - local.y * s,
@@ -700,6 +749,64 @@ fn pt_blocks() {
     args[3] = 0u;
 }
 
+// One particle into slot `dst` of the stream: `look` is the birth whose dice it
+// looks like, and `scale` multiplies its size.
+fn pt_write(
+    dst: u32,
+    id: vec2<u32>,
+    look: vec2<u32>,
+    age: f32,
+    life: f32,
+    speed_out: vec3<f32>,
+    head: vec3<f32>,
+    tail: vec3<f32>,
+    scale: f32,
+) {
+    let lo = look.x;
+    let hi = look.y;
+    let u = clamp(age / life, 0.0, 1.0);
+    let fast = length(speed_out);
+    let size = scale * pt_jitter(p.size, p.size_jitter, pt_die(lo, hi, A_SIZE))
+        * pt_curve(pt_drive(p.size_by, u, fast, lo, hi, A_RANDOM_SIZE), 0u);
+    let alpha = p.colour.a
+        * pt_curve(pt_drive(p.opacity_by, u, fast, lo, hi, A_RANDOM_OPACITY), CURVE_TABLE);
+    // Premultiplied, and the blend to End colour is in working space.
+    let toward = pt_drive(p.colour_by, u, fast, lo, hi, A_RANDOM_COLOUR);
+    let tint = p.colour.rgb + (p.end_colour.rgb - p.colour.rgb) * toward;
+    let colour = vec4<f32>(tint * alpha, alpha);
+
+    var rot = radians(p.rotation);
+    if (p.align != 0u) {
+        // In the layer's plane: a rotation is one angle in the picture the
+        // sprite is stamped into, which has no depth axis to turn about.
+        rot = atan2(speed_out.y, speed_out.x) + rot;
+    }
+    // The per-particle rotation spread, from the seed hash like every
+    // other die, so two sprites born together do not point the same way.
+    rot = rot + (pt_die(lo, hi, A_ROTATION) - 0.5) * radians(p.rotation_jitter)
+        + radians(p.spin) * age;
+
+    let cap = p.cap;
+    stream[r_pos(cap) + dst * 3u] = bitcast<u32>(head.x);
+    stream[r_pos(cap) + dst * 3u + 1u] = bitcast<u32>(head.y);
+    stream[r_pos(cap) + dst * 3u + 2u] = bitcast<u32>(head.z);
+    stream[r_speed(cap) + dst * 3u] = bitcast<u32>(speed_out.x);
+    stream[r_speed(cap) + dst * 3u + 1u] = bitcast<u32>(speed_out.y);
+    stream[r_speed(cap) + dst * 3u + 2u] = bitcast<u32>(speed_out.z);
+    stream[r_age(cap) + dst] = bitcast<u32>(age);
+    stream[r_life(cap) + dst] = bitcast<u32>(life);
+    stream[r_size(cap) + dst] = bitcast<u32>(size);
+    stream[r_rot(cap) + dst] = bitcast<u32>(rot);
+    // Half precision, as particulate.md §4 declares the colour region.
+    stream[r_colour(cap) + dst * 2u] = pack2x16float(colour.rg);
+    stream[r_colour(cap) + dst * 2u + 1u] = pack2x16float(colour.ba);
+    stream[r_id(cap) + dst * 2u] = id.x;
+    stream[r_id(cap) + dst * 2u + 1u] = id.y;
+    stream[r_tail(cap) + dst * 3u] = bitcast<u32>(tail.x);
+    stream[r_tail(cap) + dst * 3u + 1u] = bitcast<u32>(tail.y);
+    stream[r_tail(cap) + dst * 3u + 2u] = bitcast<u32>(tail.z);
+}
+
 // ---------------------------------------------------------------- pass 4
 
 @compute @workgroup_size(64)
@@ -745,35 +852,18 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     let d = pt_turbulence(p0, phase, age);
     let d_next = pt_turbulence(p0, phase, age + p.eps);
     let d_prev = pt_turbulence(p0, phase, age - p.eps);
-    let u = clamp(age / life, 0.0, 1.0);
     let speed_out = m.vel + (d_next - d_prev) / (2.0 * p.eps);
-    let fast = length(speed_out);
-    let size = pt_jitter(p.size, p.size_jitter, pt_die(lo, hi, A_SIZE))
-        * pt_curve(pt_drive(p.size_by, u, fast, lo, hi, A_RANDOM_SIZE), 0u);
-    let alpha = p.colour.a
-        * pt_curve(pt_drive(p.opacity_by, u, fast, lo, hi, A_RANDOM_OPACITY), CURVE_TABLE);
-    // Premultiplied, and the blend to End colour is in working space.
-    let toward = pt_drive(p.colour_by, u, fast, lo, hi, A_RANDOM_COLOUR);
-    let tint = p.colour.rgb + (p.end_colour.rgb - p.colour.rgb) * toward;
-    let colour = vec4<f32>(tint * alpha, alpha);
-
-    var rot = radians(p.rotation);
-    if (p.align != 0u) {
-        // In the layer's plane: a rotation is one angle in the picture the
-        // sprite is stamped into, which has no depth axis to turn about.
-        rot = atan2(speed_out.y, speed_out.x) + rot;
-    }
-    // The per-particle rotation spread, from the seed hash like every
-    // other die, so two sprites born together do not point the same way.
-    rot = rot + (pt_die(lo, hi, A_ROTATION) - 0.5) * radians(p.rotation_jitter)
-        + radians(p.spin) * age;
 
     var head = m.pos + d;
+    if (p.lead != 0.0) {
+        let on = max(age + p.lead, 0.0);
+        head = pt_integrate(p0, v0, on).pos + pt_turbulence(p0, phase, on);
+    }
     var tail = head;
     if (p.tail > 0.0) {
         // Where it was a Streak length ago — the same closed form at an earlier
         // age, never a remembered position.
-        let back = max(age - p.tail, 0.0);
+        let back = max(age + p.lead - p.tail, 0.0);
         let mb = pt_integrate(p0, v0, back);
         tail = mb.pos + pt_turbulence(p0, phase, back);
     }
@@ -789,25 +879,7 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
         head = w;
     }
 
-    let cap = p.cap;
-    stream[r_pos(cap) + dst * 3u] = bitcast<u32>(head.x);
-    stream[r_pos(cap) + dst * 3u + 1u] = bitcast<u32>(head.y);
-    stream[r_pos(cap) + dst * 3u + 2u] = bitcast<u32>(head.z);
-    stream[r_speed(cap) + dst * 3u] = bitcast<u32>(speed_out.x);
-    stream[r_speed(cap) + dst * 3u + 1u] = bitcast<u32>(speed_out.y);
-    stream[r_speed(cap) + dst * 3u + 2u] = bitcast<u32>(speed_out.z);
-    stream[r_age(cap) + dst] = bitcast<u32>(age);
-    stream[r_life(cap) + dst] = bitcast<u32>(life);
-    stream[r_size(cap) + dst] = bitcast<u32>(size);
-    stream[r_rot(cap) + dst] = bitcast<u32>(rot);
-    // Half precision, as particulate.md §4 declares the colour region.
-    stream[r_colour(cap) + dst * 2u] = pack2x16float(colour.rg);
-    stream[r_colour(cap) + dst * 2u + 1u] = pack2x16float(colour.ba);
-    stream[r_id(cap) + dst * 2u] = lo;
-    stream[r_id(cap) + dst * 2u + 1u] = hi;
-    stream[r_tail(cap) + dst * 3u] = bitcast<u32>(tail.x);
-    stream[r_tail(cap) + dst * 3u + 1u] = bitcast<u32>(tail.y);
-    stream[r_tail(cap) + dst * 3u + 2u] = bitcast<u32>(tail.z);
+    pt_write(dst, vec2<u32>(lo, hi), vec2<u32>(lo, hi), age, life, speed_out, head, tail, 1.0);
 }
 
 // ---------------------------------------------------------------- the draw

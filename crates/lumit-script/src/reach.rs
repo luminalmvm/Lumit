@@ -95,6 +95,7 @@ fn device(name: &str) -> bool {
 /// The folder a script at `script` may read and write in: its own, unless
 /// that is the root of a drive or the home folder itself, which would open
 /// up everything. Its subfolders come with it.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(crate) fn script_folder(script: &Path) -> Option<PathBuf> {
     let folder = std::path::absolute(script).ok()?.parent()?.to_path_buf();
     let real = folder.canonicalize().ok()?;

@@ -4,36 +4,51 @@
 // Timeline's fold-out and the Effect controls card.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
+import '../state/ui_state.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
+import '../widgets/layer_picker.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
 
 /// One choice row.
 enum LayerSetting {
   lightType,
+  lightSource,
+  lightBackground,
   lightFalloff,
   lightCastsShadows,
   castsShadows,
   acceptsShadows,
+  holdout,
   acceptsLights;
 
   /// The heading the row sits under.
   TransformSection get section => switch (this) {
-        lightType || lightFalloff || lightCastsShadows =>
+        lightType ||
+        lightSource ||
+        lightBackground ||
+        lightFalloff ||
+        lightCastsShadows =>
           TransformSection.light,
-        castsShadows || acceptsShadows || acceptsLights =>
+        castsShadows || acceptsShadows || holdout || acceptsLights =>
           TransformSection.material,
       };
 
   String get label => switch (this) {
         lightType => l10n.lightType,
+        lightSource => l10n.lightSource,
+        lightBackground => l10n.lightShowInBackground,
         lightFalloff => l10n.lightFalloff,
         lightCastsShadows || castsShadows => l10n.castsShadows,
         acceptsShadows => l10n.acceptsShadows,
+        holdout => l10n.holdout,
         acceptsLights => l10n.switchAcceptsLights,
       };
 }
@@ -45,12 +60,17 @@ const BridgeLightSettings plainLight = BridgeLightSettings(
   falloff: BridgeLightFalloff.none,
   twoNode: false,
   castsShadows: false,
+  inAir: false,
+  noisy: false,
+  source: null,
+  background: false,
 );
 
 /// The same for a material, on After Effects' defaults.
 const BridgeMaterialSettings plainMaterial = BridgeMaterialSettings(
   castsShadows: BridgeShadowMode.off,
   acceptsShadows: BridgeShadowMode.on_,
+  holdout: false,
 );
 
 /// The choice rows a layer shows, in order.
@@ -69,24 +89,53 @@ List<LayerSetting> layerSettings({
           kind != BridgeLayerKind.nullLayer) ...[
         LayerSetting.castsShadows,
         LayerSetting.acceptsShadows,
+        if (kind == BridgeLayerKind.model || kind == BridgeLayerKind.mesh)
+          LayerSetting.holdout,
         LayerSetting.acceptsLights,
       ],
     ];
   }
   final s = light ?? plainLight;
+  final surround = s.kind == BridgeLightKind.environment;
   return [
     LayerSetting.lightType,
+    if (surround) ...[LayerSetting.lightSource, LayerSetting.lightBackground],
     if (lightFallsOff(s.kind)) LayerSetting.lightFalloff,
-    // An ambient light comes from nowhere, so it has nowhere to cast from.
-    if (s.kind != BridgeLightKind.ambient) LayerSetting.lightCastsShadows,
+    // Ambient and environment light come from no one place, so they have
+    // nowhere to cast from.
+    if (lightCasts(s.kind)) LayerSetting.lightCastsShadows,
   ];
 }
+
+/// Whether layer [l] has a picture an Environment light can read. A model, a
+/// light or an adjustment doesn't, whatever else it draws.
+bool canSurround(BridgeLayerEntry l) => switch (l.info.kind) {
+      BridgeLayerKind.footage ||
+      BridgeLayerKind.sequence ||
+      BridgeLayerKind.solid ||
+      BridgeLayerKind.precomp ||
+      BridgeLayerKind.text ||
+      BridgeLayerKind.shape =>
+        l.layer.hasPicture(),
+      _ => false,
+    };
+
+/// Whether layer [id] is an Environment light's picture, and so never drawn.
+bool feedsEnvironment(List<BridgeLayerEntry> stack, UuidValue id) =>
+    stack.any((e) =>
+        e.info.light?.kind == BridgeLightKind.environment &&
+        e.info.light?.source == id);
 
 /// Whether a light of this kind weakens with distance.
 bool lightFallsOff(BridgeLightKind kind) =>
     kind == BridgeLightKind.point ||
     kind == BridgeLightKind.spot ||
     kind == BridgeLightKind.area;
+
+/// Whether a light of this kind comes from somewhere a shadow can be cast
+/// from.
+bool lightCasts(BridgeLightKind kind) =>
+    kind != BridgeLightKind.ambient && kind != BridgeLightKind.environment;
 
 /// Whether a light of this kind has a direction to aim.
 bool lightAims(BridgeLightKind kind) =>
@@ -100,6 +149,7 @@ String lightKindLabel(BridgeLightKind kind) => switch (kind) {
       BridgeLightKind.area => l10n.lightArea,
       BridgeLightKind.parallel => l10n.lightParallel,
       BridgeLightKind.ambient => l10n.lightAmbient,
+      BridgeLightKind.environment => l10n.lightEnvironment,
     };
 
 String shadowModeLabel(BridgeShadowMode mode) => switch (mode) {
@@ -122,12 +172,18 @@ BridgeLightSettings lightSettingsWith(
   BridgeLightFalloff? falloff,
   bool? twoNode,
   bool? castsShadows,
+  (UuidValue?,)? source,
+  bool? background,
 }) =>
     BridgeLightSettings(
       kind: kind ?? s.kind,
       falloff: falloff ?? s.falloff,
       twoNode: twoNode ?? s.twoNode,
       castsShadows: castsShadows ?? s.castsShadows,
+      inAir: s.inAir,
+      noisy: s.noisy,
+      source: source == null ? s.source : source.$1,
+      background: background ?? s.background,
     );
 
 /// One choice row. Each pick is one op, so one undo step.
@@ -161,11 +217,13 @@ class LayerSettingRowFrb extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final s = light ?? plainLight;
     final m = material ?? plainMaterial;
-    void shadows({BridgeShadowMode? casts, BridgeShadowMode? accepts}) {
+    void shadows(
+        {BridgeShadowMode? casts, BridgeShadowMode? accepts, bool? holdout}) {
       layer.setMaterialSettings(
         settings: BridgeMaterialSettings(
           castsShadows: casts ?? m.castsShadows,
           acceptsShadows: accepts ?? m.acceptsShadows,
+          holdout: holdout ?? m.holdout,
         ),
       );
       onChanged();
@@ -186,6 +244,27 @@ class LayerSettingRowFrb extends StatelessWidget {
           label: lightKindLabel,
           onChanged: (k) => write(lightSettingsWith(s, kind: k)),
         ),
+      // Any layer of the comp with a picture, read as a panorama.
+      LayerSetting.lightSource => LayerPicker(
+          key: key,
+          dense: valueColumn != null,
+          layers: Provider.of<LumitUiState>(context, listen: false)
+              .model
+              .layers,
+          value: s.source,
+          empty: l10n.none,
+          missing: l10n.missingLayer,
+          offered: canSurround,
+          onChanged: (id) => write(lightSettingsWith(s, source: (id,))),
+        ),
+      LayerSetting.lightBackground => Align(
+          alignment: Alignment.centerLeft,
+          child: HouseCheckbox(
+            key: key,
+            value: s.background,
+            onChanged: (on) => write(lightSettingsWith(s, background: on)),
+          ),
+        ),
       LayerSetting.lightFalloff => BareDropdown<BridgeLightFalloff>(
           key: key,
           dense: valueColumn != null,
@@ -195,7 +274,7 @@ class LayerSettingRowFrb extends StatelessWidget {
           onChanged: (f) => write(lightSettingsWith(s, falloff: f)),
         ),
       LayerSetting.lightCastsShadows => Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: HouseCheckbox(
             key: key,
             value: s.castsShadows,
@@ -218,9 +297,17 @@ class LayerSettingRowFrb extends StatelessWidget {
           label: shadowModeLabel,
           onChanged: (v) => shadows(accepts: v),
         ),
+      LayerSetting.holdout => Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: HouseCheckbox(
+            key: key,
+            value: m.holdout,
+            onChanged: (on) => shadows(holdout: on),
+          ),
+        ),
       // The same switch as the layer's right-click item, one op a click.
       LayerSetting.acceptsLights => Align(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: HouseCheckbox(
             key: key,
             value: acceptsLights,
@@ -246,7 +333,7 @@ class LayerSettingRowFrb extends StatelessWidget {
         Expanded(child: name),
         SizedBox(
           width: col.width,
-          child: Align(alignment: Alignment.centerLeft, child: control),
+          child: Align(alignment: AlignmentDirectional.centerStart, child: control),
         ),
         SizedBox(width: col.rightInset),
       ],

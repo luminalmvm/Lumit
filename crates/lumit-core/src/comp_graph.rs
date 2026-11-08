@@ -282,13 +282,13 @@ fn is_driver(inst: &EffectInstance) -> bool {
 }
 
 /// Whether this catalogue entry is offered in a node graph's console (§5.1).
-///
-/// Layer points is the one that is not: it taps another *layer's* first
-/// producer, and a graph has no layers, so the box could only ever hand out the
-/// empty stream. Inside a graph the wire is the tap.
+/// A graph has no layers, so never the three that read one.
 #[must_use]
 pub fn offered_in_graph(match_name: &str) -> bool {
-    match_name != crate::fx::drivers::layer_points::MATCH_NAME
+    !matches!(
+        match_name,
+        crate::fx::drivers::layer_points::MATCH_NAME | "scene_pass" | "part_matte"
+    )
 }
 
 /// The sockets `node` draws, as inputs and outputs (§1.4).
@@ -1158,6 +1158,7 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: crate::retime::Interpolation::default(),
         parked_flow: None,

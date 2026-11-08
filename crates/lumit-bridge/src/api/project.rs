@@ -229,12 +229,7 @@ impl ProjectReference {
 
     #[frb(sync)]
     pub fn close(&self) -> Result<(), BridgeError> {
-        // A shared project stops being shared when it closes.
-        crate::api::share::stop(self.id);
-        // And another Lumit may open its file.
-        crate::claim::release(self.id);
-        // Clips copied in the Cut workspace name this project's items.
-        crate::api::cut::forget_copied(self.id);
+        crate::closing::let_go(self);
         // One registry at a time, never nested — the lock order rule in
         // `state.rs`. The state's last strong reference is usually the one
         // removed here; binding it keeps the drop (and the worker channel's

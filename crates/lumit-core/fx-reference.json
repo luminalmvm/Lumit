@@ -333,7 +333,8 @@
           "default": 0,
           "options": [
             "Spin",
-            "Zoom"
+            "Zoom",
+            "Rays"
           ],
           "dividers_after": []
         },
@@ -2751,6 +2752,106 @@
         "meaning": "pulls Gamma toward 1 per pixel: white applies the full Gamma, grey a gentler curve, black none"
       },
       "matte_role": "own"
+    },
+    {
+      "slug": "srgb-curve",
+      "match_name": "srgb_curve",
+      "label": "sRGB curve",
+      "version": 1,
+      "category": "Colour",
+      "category_slug": "colour",
+      "params": [
+        {
+          "id": "direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Linear to sRGB",
+            "sRGB to linear"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "strength"
     },
     {
       "slug": "temperature",
@@ -5231,7 +5332,7 @@
       "slug": "shake",
       "match_name": "shake",
       "label": "Shake",
-      "version": 1,
+      "version": 3,
       "category": "Distortion",
       "category_slug": "distortion",
       "params": [
@@ -5522,6 +5623,87 @@
           "slider_max": 360.0
         },
         {
+          "id": "red_amount",
+          "label": "Red amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": -4.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "red_phase",
+          "label": "Red phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "green_amount",
+          "label": "Green amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": -4.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "green_phase",
+          "label": "Green phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "blue_amount",
+          "label": "Blue amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": -4.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "blue_phase",
+          "label": "Blue phase",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "rgb_randomness",
+          "label": "Randomness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 4.0
+        },
+        {
+          "id": "rgb_freq",
+          "label": "Random rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "motion_blur",
           "label": "Motion blur",
           "kind": "bool",
@@ -5587,6 +5769,50 @@
             "Mirror"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "crop_left",
+          "label": "Crop left",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "crop_right",
+          "label": "Crop right",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "crop_top",
+          "label": "Crop top",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "crop_bottom",
+          "label": "Crop bottom",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
         },
         {
           "id": "seed",
@@ -5731,11 +5957,35 @@
           "collapsed": true
         },
         {
+          "label": "Channels",
+          "params": [
+            "red_amount",
+            "red_phase",
+            "green_amount",
+            "green_phase",
+            "blue_amount",
+            "blue_phase",
+            "rgb_randomness",
+            "rgb_freq"
+          ],
+          "collapsed": true
+        },
+        {
           "label": "Motion blur",
           "params": [
             "motion_blur",
             "mb_amount",
             "mb_samples"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Crop",
+          "params": [
+            "crop_left",
+            "crop_right",
+            "crop_top",
+            "crop_bottom"
           ],
           "collapsed": true
         }
@@ -5745,6 +5995,484 @@
         "meaning": "scales the shake's displacement per pixel, read where the pixel lands: white moves it the full Amplitude and Rotation amount, grey less, black leaves it still, so a soft matte turns the shove into a warp"
       },
       "matte_role": "own"
+    },
+    {
+      "slug": "jolt",
+      "match_name": "jolt",
+      "label": "Jolt",
+      "version": 1,
+      "category": "Distortion",
+      "category_slug": "distortion",
+      "params": [
+        {
+          "id": "amount",
+          "label": "Amount",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "trigger",
+          "label": "Trigger",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Random",
+            "Markers",
+            "Beats"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "separate",
+          "label": "Separate timing",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ease_in",
+          "label": "Ease in",
+          "kind": "float",
+          "unit": "frames",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 12.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "ease_out",
+          "label": "Ease out",
+          "kind": "float",
+          "unit": "frames",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 24.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Transparent",
+            "Repeat",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "jolts_only",
+          "label": "Jolts only",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "blur_on",
+          "label": "Blur",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "blur_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 500.0
+        },
+        {
+          "id": "blur_aspect",
+          "label": "Aspect",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0,
+          "hard_min": -100.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour_on",
+          "label": "Colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "colour_amount",
+          "label": "Amount",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "colour",
+          "label": "Tint",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.9,
+            0.05,
+            0.35,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "random_hue",
+          "label": "Random hue",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 25.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "light_on",
+          "label": "Light",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "light_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0,
+          "hard_max": 10.0
+        },
+        {
+          "id": "light_direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Brighter",
+            "Darker",
+            "Both"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "scale_on",
+          "label": "Scale",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "scale_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 50.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "origin_x",
+          "label": "Origin x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "origin_y",
+          "label": "Origin y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "random_origin",
+          "label": "Random origin",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "slide_on",
+          "label": "Slide",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "slide_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "px",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "slide_direction",
+          "label": "Direction",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "spread",
+          "label": "Spread",
+          "kind": "slider",
+          "unit": "degrees",
+          "default": 180.0,
+          "slider_min": 0.0,
+          "slider_max": 180.0,
+          "hard_min": 0.0,
+          "hard_max": 180.0
+        },
+        {
+          "id": "rgb_split",
+          "label": "RGB split",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "time_on",
+          "label": "Time",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "time_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "frames",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0,
+          "hard_max": 240.0
+        },
+        {
+          "id": "time_direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Both",
+            "Forward",
+            "Backward"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "rate",
+            "separate"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "trigger",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "Blur",
+          "params": [
+            "blur_on",
+            "blur_amount",
+            "blur_aspect"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Colour",
+          "params": [
+            "colour_on",
+            "colour_amount",
+            "colour",
+            "random_hue"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Light",
+          "params": [
+            "light_on",
+            "light_amount",
+            "light_direction"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Scale",
+          "params": [
+            "scale_on",
+            "scale_amount",
+            "origin_x",
+            "origin_y",
+            "random_origin"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Slide",
+          "params": [
+            "slide_on",
+            "slide_amount",
+            "slide_direction",
+            "spread",
+            "rgb_split"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Time",
+          "params": [
+            "time_on",
+            "time_amount",
+            "time_direction"
+          ],
+          "collapsed": true
+        }
+      ],
+      "matte_role": "strength"
     },
     {
       "slug": "block-glitch",
@@ -10920,6 +11648,541 @@
       "matte_role": "own"
     },
     {
+      "slug": "energy-line",
+      "match_name": "energy_line",
+      "label": "Energy line",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "preset",
+          "label": "Preset",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Custom",
+            "Blue blade",
+            "Red blade",
+            "Neon",
+            "Ice",
+            "Electric",
+            "Fire",
+            "Energy",
+            "Plasma",
+            "Ghost",
+            "Toxic",
+            "Solar",
+            "Laser"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "source",
+          "label": "Draw along",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Line",
+            "Mask",
+            "Shape",
+            "Text"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "start_x",
+          "label": "From x",
+          "kind": "float",
+          "unit": "px",
+          "default": 480.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "start_y",
+          "label": "From y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "end_x",
+          "label": "To x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1440.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "end_y",
+          "label": "To y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "mask_path",
+          "label": "Mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "all_masks",
+          "label": "Every mask",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "paths",
+          "label": "Paths",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "One after another",
+            "All at once"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "start",
+          "label": "Start",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "end",
+          "label": "End",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "offset",
+          "label": "Offset",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "core_size",
+          "label": "Core size",
+          "kind": "float",
+          "unit": "px",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "core_softness",
+          "label": "Core softness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "core_colour",
+          "label": "Core colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "halo",
+          "label": "Halo",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "start_size",
+          "label": "Start size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "end_size",
+          "label": "End size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_colour",
+          "label": "Glow colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.06,
+            0.28,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "glow_intensity",
+          "label": "Glow intensity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_size",
+          "label": "Glow size",
+          "kind": "float",
+          "unit": "px",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_falloff",
+          "label": "Glow falloff",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "flicker",
+          "label": "Flicker",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "flicker_speed",
+          "label": "Flicker speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 12.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_type",
+          "label": "Type",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Smooth",
+            "Smoke",
+            "Crackle"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "core_distortion",
+          "label": "Core distortion",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "glow_distortion",
+          "label": "Glow distortion",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "distortion_size",
+          "label": "Noise size",
+          "kind": "float",
+          "unit": "px",
+          "default": 60.0,
+          "slider_min": 4.0,
+          "slider_max": 400.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "distortion_detail",
+          "label": "Detail",
+          "kind": "int",
+          "unit": "raw",
+          "default": 3,
+          "slider_min": 1.0,
+          "slider_max": 6.0,
+          "hard_min": 1.0,
+          "hard_max": 6.0
+        },
+        {
+          "id": "distortion_speed",
+          "label": "Evolution speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "wind_direction",
+          "label": "Wind direction",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": -180.0,
+          "slider_max": 180.0
+        },
+        {
+          "id": "wind_speed",
+          "label": "Wind speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "composite_on_original",
+          "label": "Composite on original",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "start_x",
+            "start_y",
+            "end_x",
+            "end_y"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "mask_path",
+            "all_masks"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "paths"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        {
+          "label": "Core",
+          "params": [
+            "core_size",
+            "core_softness",
+            "core_colour",
+            "halo",
+            "start_size",
+            "end_size"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Glow",
+          "params": [
+            "glow_colour",
+            "glow_intensity",
+            "glow_size",
+            "glow_falloff"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Flicker",
+          "params": [
+            "flicker",
+            "flicker_speed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Distortion",
+          "params": [
+            "distortion_type",
+            "core_distortion",
+            "glow_distortion",
+            "distortion_size",
+            "distortion_detail",
+            "distortion_speed",
+            "wind_direction",
+            "wind_speed"
+          ],
+          "collapsed": true
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "particulate",
       "match_name": "particulate",
       "label": "Particulate",
@@ -10927,6 +12190,43 @@
       "category": "Generate",
       "category_slug": "generate",
       "params": [
+        {
+          "id": "simulate",
+          "label": "Simulate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "sub_steps",
+          "label": "Sub-steps",
+          "kind": "int",
+          "unit": "raw",
+          "default": 2,
+          "slider_min": 1.0,
+          "slider_max": 8.0,
+          "hard_min": 1.0,
+          "hard_max": 8.0
+        },
+        {
+          "id": "bake",
+          "label": "Bake",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "in_scene",
+          "label": "In the scene",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
         {
           "id": "shape",
           "label": "Shape",
@@ -10940,7 +12240,10 @@
             "Rectangle",
             "Mask path",
             "Ellipse outline",
-            "Rectangle outline"
+            "Rectangle outline",
+            "Box",
+            "Sphere",
+            "Layer"
           ],
           "dividers_after": []
         },
@@ -11027,6 +12330,13 @@
           "kind": "mask_path",
           "unit": "raw",
           "self_default": true
+        },
+        {
+          "id": "emitter_layer",
+          "label": "Emitter layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
         },
         {
           "id": "density_layer",
@@ -11358,6 +12668,84 @@
           "hard_min": 0.0
         },
         {
+          "id": "field_x",
+          "label": "Field x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "field_y",
+          "label": "Field y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "field_z",
+          "label": "Field z",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "field_radius",
+          "label": "Field radius",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 1.0,
+          "slider_max": 2000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "attractor",
+          "label": "Attractor",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -5000.0,
+          "slider_max": 5000.0
+        },
+        {
+          "id": "vortex",
+          "label": "Vortex",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "vortex_axis",
+          "label": "Vortex axis",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "X",
+            "Y",
+            "Z"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "sphere",
+          "label": "Sphere",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20000.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "gravity",
           "label": "Gravity",
           "kind": "float",
@@ -11464,6 +12852,29 @@
           "self_default": false
         },
         {
+          "id": "collide_all",
+          "label": "All 3D layers",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ground",
+          "label": "Ground",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "ground_height",
+          "label": "Ground height",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
           "id": "on_contact",
           "label": "On contact",
           "kind": "choice",
@@ -11554,6 +12965,19 @@
           "hard_max": 50.0
         },
         {
+          "id": "sparks_from",
+          "label": "Sparks from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Death",
+            "Bounce",
+            "Flight"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "spark_speed",
           "label": "Spark speed",
           "kind": "float",
@@ -11562,6 +12986,17 @@
           "slider_min": 0.0,
           "slider_max": 2000.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "spark_inherit",
+          "label": "Spark inherit",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
         },
         {
           "id": "spark_life",
@@ -11786,8 +13221,19 @@
       ],
       "groups": [
         {
+          "label": "Simulation",
+          "params": [
+            "simulate",
+            "sub_steps",
+            "bake",
+            "cancel"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Emitter",
           "params": [
+            "in_scene",
             "shape",
             "position_x",
             "position_y",
@@ -11798,6 +13244,7 @@
             "emitter_angle",
             "path_from",
             "mask_path",
+            "emitter_layer",
             "density_layer",
             "density_layer_placement",
             "emit_rate",
@@ -11850,6 +13297,20 @@
           "collapsed": false
         },
         {
+          "label": "Fields",
+          "params": [
+            "field_x",
+            "field_y",
+            "field_z",
+            "field_radius",
+            "attractor",
+            "vortex",
+            "vortex_axis",
+            "sphere"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Forces",
           "params": [
             "gravity",
@@ -11875,6 +13336,9 @@
           "label": "Collide",
           "params": [
             "collide_with",
+            "collide_all",
+            "ground",
+            "ground_height",
             "on_contact",
             "bounciness",
             "friction"
@@ -11895,7 +13359,9 @@
           "label": "Sparks",
           "params": [
             "sparks",
+            "sparks_from",
             "spark_speed",
+            "spark_inherit",
             "spark_life",
             "spark_size"
           ],
@@ -11943,6 +13409,194 @@
           "value": 2
         },
         {
+          "param": "emitter_layer",
+          "on": "shape",
+          "cond": "choice_is",
+          "value": 9
+        },
+        {
+          "param": "density_layer",
+          "on": "shape",
+          "cond": "choice_is_not",
+          "value": 9
+        },
+        {
+          "param": "collide_with",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "separation",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "alignment",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "cohesion",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "sparks",
+          "on": "in_scene",
+          "cond": "or",
+          "value": {
+            "cond": "bool_is",
+            "or": "simulate",
+            "value": false
+          }
+        },
+        {
+          "param": "persistence",
+          "on": "in_scene",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "persistence",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "density_layer",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "sub_steps",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "attractor",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "vortex",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "vortex_axis",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "sphere",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_x",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_y",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_z",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "field_radius",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bake",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "cancel",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "collide_all",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground_height",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "sparks_from",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "spark_inherit",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "ground_height",
+          "on": "ground",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
           "param": "burst_count",
           "on": "burst",
           "cond": "choice_is_not",
@@ -11975,82 +13629,112 @@
         {
           "param": "particle_blend",
           "on": "separation",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "alignment",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "cohesion",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "sparks",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "separation",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "alignment",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "cohesion",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "sparks",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "separation",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "alignment",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "cohesion",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "sparks",
-          "cond": "nought"
-        },
-        {
-          "param": "particle_blend",
-          "on": "persistence",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer",
-          "on": "persistence",
-          "cond": "nought"
-        },
-        {
-          "param": "density_layer_placement",
-          "on": "persistence",
-          "cond": "nought"
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
         },
         {
           "param": "particle_blend",
           "on": "collide_with",
-          "cond": "layer_unset"
+          "cond": "or",
+          "value": {
+            "cond": "layer_unset",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "density_layer",
+          "on": "separation",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "alignment",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "cohesion",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer",
+          "on": "sparks",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "separation",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "alignment",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "cohesion",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "sparks",
+          "cond": "nought"
+        },
+        {
+          "param": "particle_blend",
+          "on": "persistence",
+          "cond": "or",
+          "value": {
+            "cond": "nought",
+            "or": "simulate",
+            "value": null
+          }
+        },
+        {
+          "param": "density_layer",
+          "on": "persistence",
+          "cond": "nought"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "persistence",
+          "cond": "nought"
         },
         {
           "param": "density_layer",
@@ -12065,23 +13749,50 @@
         {
           "param": "on_contact",
           "on": "collide_with",
-          "cond": "layer_set"
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
         },
         {
           "param": "bounciness",
           "on": "collide_with",
-          "cond": "layer_set"
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
+        },
+        {
+          "param": "friction",
+          "on": "collide_with",
+          "cond": "or",
+          "value": {
+            "cond": "or",
+            "or": "ground",
+            "value": {
+              "cond": "layer_set",
+              "or": "collide_all",
+              "value": null
+            }
+          }
         },
         {
           "param": "bounciness",
           "on": "on_contact",
           "cond": "choice_is",
           "value": 0
-        },
-        {
-          "param": "friction",
-          "on": "collide_with",
-          "cond": "layer_set"
         },
         {
           "param": "friction",
@@ -14474,6 +16185,19 @@
           "slider_min": 0.0,
           "slider_max": 500.0,
           "hard_min": 0.0
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
         },
         {
           "id": "analyse",
@@ -20808,6 +22532,254 @@
       "matte_role": "own"
     },
     {
+      "slug": "timewarp",
+      "match_name": "timewarp",
+      "label": "Timewarp",
+      "version": 1,
+      "category": "Temporal",
+      "category_slug": "temporal",
+      "params": [
+        {
+          "id": "adjust",
+          "label": "Adjust time by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Speed",
+            "Source frame"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": -400.0,
+          "slider_max": 400.0,
+          "hard_min": -10000.0,
+          "hard_max": 10000.0
+        },
+        {
+          "id": "source_frame",
+          "label": "Source frame",
+          "kind": "float",
+          "unit": "frames",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 300.0
+        },
+        {
+          "id": "method",
+          "label": "Method",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Whole frames",
+            "Frame mix",
+            "Pixel motion"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "quality",
+          "label": "Quality",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Draft",
+            "Normal",
+            "High"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "smoothness",
+          "label": "Smoothness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "motion_blur",
+          "label": "Motion blur",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "shutter_angle",
+          "label": "Shutter angle",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 180.0,
+          "slider_min": 0.0,
+          "slider_max": 720.0,
+          "hard_min": 0.0,
+          "hard_max": 3600.0
+        },
+        {
+          "id": "samples",
+          "label": "Samples",
+          "kind": "float",
+          "unit": "raw",
+          "default": 16.0,
+          "slider_min": 2.0,
+          "slider_max": 64.0,
+          "hard_min": 2.0,
+          "hard_max": 64.0
+        },
+        {
+          "id": "input_rate",
+          "label": "Input rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 120.0,
+          "hard_min": 0.0,
+          "hard_max": 1000.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "speed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "adjust",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "source_frame"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "adjust",
+            "values": [
+              1
+            ]
+          }
+        },
+        {
+          "label": "Motion",
+          "params": [
+            "quality",
+            "smoothness"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Motion blur",
+          "params": [
+            "motion_blur",
+            "shutter_angle",
+            "samples"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Input",
+          "params": [
+            "input_rate"
+          ],
+          "collapsed": true
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "matte-key",
       "match_name": "matte_key",
       "label": "Matte key",
@@ -21198,6 +23170,131 @@
       "matte_role": "none"
     },
     {
+      "slug": "scene-pass",
+      "match_name": "scene_pass",
+      "label": "Scene pass",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "pass",
+          "label": "Pass",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normals",
+            "Position",
+            "Part id",
+            "Depth"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "space",
+          "label": "Space",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Comp",
+            "Camera"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": true
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "part-matte",
+      "match_name": "part_matte",
+      "label": "Part matte",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "parts",
+          "label": "Parts",
+          "kind": "text",
+          "unit": "raw",
+          "default": ""
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": true
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "set-channels",
       "match_name": "set_channels",
       "label": "Set channels",
@@ -21539,11 +23636,34 @@
           "dividers_after": []
         },
         {
+          "id": "focal_length",
+          "label": "Focal length",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 300.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "use_masks",
           "label": "Use masks",
           "kind": "bool",
           "unit": "raw",
           "default": true
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
         },
         {
           "id": "show_points",
@@ -21744,6 +23864,19 @@
           "kind": "bool",
           "unit": "raw",
           "default": true
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
         }
       ],
       "groups": [],
@@ -21931,6 +24064,577 @@
         }
       ],
       "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "depth-points",
+      "match_name": "depth_points",
+      "label": "Depth points",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "analyse",
+          "label": "Analyse",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "depth_layer",
+          "label": "Depth layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "camera",
+          "label": "Camera",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "amount",
+          "label": "Depth",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 190.0,
+          "hard_min": 0.0,
+          "hard_max": 190.0
+        },
+        {
+          "id": "point_size",
+          "label": "Point size",
+          "kind": "float",
+          "unit": "px",
+          "default": 2.0,
+          "slider_min": 1.0,
+          "slider_max": 20.0,
+          "hard_min": 1.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density",
+          "label": "Density",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "analyse",
+          "on": "depth_layer",
+          "cond": "layer_unset"
+        },
+        {
+          "param": "frames",
+          "on": "depth_layer",
+          "cond": "layer_unset"
+        }
+      ],
+      "matte_role": "none"
+    },
+    {
+      "slug": "smoke-and-fire",
+      "match_name": "smoke",
+      "label": "Smoke and fire",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "simulate",
+          "label": "Simulate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "sub_steps",
+          "label": "Sub-steps",
+          "kind": "int",
+          "unit": "raw",
+          "default": 1,
+          "slider_min": 1.0,
+          "slider_max": 8.0,
+          "hard_min": 1.0,
+          "hard_max": 8.0
+        },
+        {
+          "id": "bake",
+          "label": "Bake",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "resolution",
+          "label": "Resolution",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "64",
+            "96",
+            "128"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "emit_from",
+          "label": "Emit from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Layer's box",
+            "Particles from a layer",
+            "Model layer"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "emit_layer",
+          "label": "Emit layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "emit_size",
+          "label": "Emitter size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "density",
+          "label": "Density",
+          "kind": "float",
+          "unit": "percent",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "temperature",
+          "label": "Temperature",
+          "kind": "float",
+          "unit": "percent",
+          "default": 70.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "fuel",
+          "label": "Fuel",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "expansion",
+          "label": "Expansion",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "buoyancy",
+          "label": "Buoyancy",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": -100.0,
+          "slider_max": 200.0
+        },
+        {
+          "id": "turbulence",
+          "label": "Turbulence",
+          "kind": "float",
+          "unit": "percent",
+          "default": 30.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "vorticity",
+          "label": "Vorticity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 30.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "dissipation",
+          "label": "Dissipation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 35.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "wind_across",
+          "label": "Wind x",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "wind_vertical",
+          "label": "Wind y",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "wind_depth",
+          "label": "Wind z",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1000.0,
+          "slider_max": 1000.0
+        },
+        {
+          "id": "trail",
+          "label": "Trail",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "collide_with",
+          "label": "Collide with",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "collide_all",
+          "label": "All 3D layers",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "smoke_colour",
+          "label": "Smoke colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.18,
+            0.18,
+            0.19,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "fire_brightness",
+          "label": "Fire brightness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "fire_colour",
+          "label": "Fire colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.15,
+            0.008,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 16.0
+        },
+        {
+          "id": "fire_core",
+          "label": "Fire core",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            3.0,
+            1.3,
+            0.12,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 16.0
+        },
+        {
+          "id": "shadow_strength",
+          "label": "Shadow strength",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        }
+      ],
+      "groups": [
+        {
+          "label": "Simulation",
+          "params": [
+            "simulate",
+            "sub_steps",
+            "bake",
+            "cancel",
+            "resolution"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Emitter",
+          "params": [
+            "emit_from",
+            "emit_layer",
+            "emit_size",
+            "density",
+            "temperature",
+            "fuel",
+            "expansion"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Motion",
+          "params": [
+            "buoyancy",
+            "turbulence",
+            "vorticity",
+            "dissipation",
+            "wind_across",
+            "wind_vertical",
+            "wind_depth",
+            "trail"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Collision",
+          "params": [
+            "collide_with",
+            "collide_all"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Look",
+          "params": [
+            "smoke_colour",
+            "fire_brightness",
+            "fire_colour",
+            "fire_core",
+            "shadow_strength"
+          ],
+          "collapsed": false
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "emit_layer",
+          "on": "emit_from",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "emit_size",
+          "on": "emit_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "sub_steps",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "resolution",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "emit_from",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "emit_layer",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "emit_size",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "temperature",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "fuel",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "expansion",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "buoyancy",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "vorticity",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "turbulence",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "dissipation",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "wind_across",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "wind_vertical",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "wind_depth",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "trail",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "collide_with",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "collide_all",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bake",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "cancel",
+          "on": "simulate",
+          "cond": "bool_is",
+          "value": true
+        }
+      ],
       "matte_role": "none"
     },
     {
@@ -25494,6 +28198,648 @@
       "matte_role": "strength"
     },
     {
+      "slug": "film",
+      "match_name": "film",
+      "label": "Film",
+      "version": 1,
+      "category": "Stylise",
+      "category_slug": "stylise",
+      "params": [
+        {
+          "id": "stock",
+          "label": "Stock",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 3,
+          "options": [
+            "Vision3 50D",
+            "Vision3 250D",
+            "Vision3 200T",
+            "Vision3 500T",
+            "Portra 160",
+            "Portra 400",
+            "Portra 800",
+            "Ektar 100",
+            "Gold 200",
+            "Ultramax 400",
+            "Fujicolor C200",
+            "Fujicolor Pro 400H",
+            "Superia X-TRA 400",
+            "Ektachrome 100",
+            "Kodachrome 64",
+            "Provia 100F",
+            "Velvia 100"
+          ],
+          "dividers_after": [
+            3,
+            12
+          ]
+        },
+        {
+          "id": "format",
+          "label": "Format",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 3,
+          "options": [
+            "Super 8",
+            "16 mm",
+            "Super 16",
+            "35 mm",
+            "35 mm stills",
+            "65 mm"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "exposure",
+          "label": "Exposure",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -4.0,
+          "slider_max": 4.0,
+          "hard_min": -10.0,
+          "hard_max": 10.0
+        },
+        {
+          "id": "highlights",
+          "label": "Highlights",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 6.0,
+          "hard_min": 0.0,
+          "hard_max": 12.0
+        },
+        {
+          "id": "colour",
+          "label": "Film colour",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "push",
+          "label": "Push or pull",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -1.0,
+          "slider_max": 2.0,
+          "hard_min": -1.0,
+          "hard_max": 2.0
+        },
+        {
+          "id": "interlayer",
+          "label": "Interlayer",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "print",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "print_stock",
+          "label": "Print stock",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Vision 2383",
+            "Vision Premier 2393",
+            "Portra Endura paper",
+            "Crystal Archive paper"
+          ],
+          "dividers_after": [
+            1
+          ]
+        },
+        {
+          "id": "print_brightness",
+          "label": "Brightness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -2.0,
+          "slider_max": 2.0,
+          "hard_min": -6.0,
+          "hard_max": 6.0
+        },
+        {
+          "id": "contrast",
+          "label": "Contrast",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 50.0,
+          "slider_max": 200.0,
+          "hard_min": 10.0,
+          "hard_max": 400.0
+        },
+        {
+          "id": "red",
+          "label": "Red",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -48.0,
+          "hard_max": 48.0
+        },
+        {
+          "id": "green",
+          "label": "Green",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -48.0,
+          "hard_max": 48.0
+        },
+        {
+          "id": "blue",
+          "label": "Blue",
+          "kind": "int",
+          "unit": "raw",
+          "default": 0,
+          "slider_min": -12.0,
+          "slider_max": 12.0,
+          "hard_min": -48.0,
+          "hard_max": 48.0
+        },
+        {
+          "id": "halation",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "halation_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 4000.0
+        },
+        {
+          "id": "halation_size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 5.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "backing",
+          "label": "Backing",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "The stock's own",
+            "Strong",
+            "Weak",
+            "Removed"
+          ],
+          "dividers_after": [
+            0
+          ]
+        },
+        {
+          "id": "bloom",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "bloom_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 25.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "bloom_size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 5.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "grain",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "grain_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "grain_size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 5.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "grain_colour",
+          "label": "Colour",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "animate",
+          "label": "Animate",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "weave",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "weave_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "weave_speed",
+          "label": "Speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.5,
+          "slider_min": 0.1,
+          "slider_max": 8.0,
+          "hard_min": 0.0,
+          "hard_max": 50.0
+        },
+        {
+          "id": "flicker",
+          "label": "On",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "flicker_amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 400.0,
+          "hard_min": 0.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Negative",
+          "params": [
+            "colour",
+            "push",
+            "interlayer"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Print",
+          "params": [
+            "print",
+            "print_stock",
+            "print_brightness",
+            "contrast",
+            "red",
+            "green",
+            "blue"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Halation",
+          "params": [
+            "halation",
+            "halation_amount",
+            "halation_size",
+            "backing"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Bloom",
+          "params": [
+            "bloom",
+            "bloom_amount",
+            "bloom_size"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Grain",
+          "params": [
+            "grain",
+            "grain_amount",
+            "grain_size",
+            "grain_colour",
+            "animate",
+            "seed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Gate weave",
+          "params": [
+            "weave",
+            "weave_amount",
+            "weave_speed"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Flicker",
+          "params": [
+            "flicker",
+            "flicker_amount"
+          ],
+          "collapsed": true
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "push",
+          "on": "colour",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "interlayer",
+          "on": "colour",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "print",
+          "on": "colour",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "print_stock",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "print_brightness",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "contrast",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "red",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "green",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "blue",
+          "on": "print",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "halation_amount",
+          "on": "halation",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "halation_size",
+          "on": "halation",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "backing",
+          "on": "halation",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bloom_amount",
+          "on": "bloom",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "bloom_size",
+          "on": "bloom",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "grain_amount",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "grain_size",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "grain_colour",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "animate",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "seed",
+          "on": "grain",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "weave_amount",
+          "on": "weave",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "weave_speed",
+          "on": "weave",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "flicker_amount",
+          "on": "flicker",
+          "cond": "bool_is",
+          "value": true
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "drop-shadow",
       "match_name": "drop_shadow",
       "label": "Drop shadow",
@@ -26523,6 +29869,19 @@
       "category": "Stylise",
       "category_slug": "stylise",
       "params": [
+        {
+          "id": "style",
+          "label": "Style",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Amorphous",
+            "Digital",
+            "Streaks"
+          ],
+          "dividers_after": []
+        },
         {
           "id": "intensity",
           "label": "Intensity",
@@ -27636,6 +30995,125 @@
       "matte": {
         "param": "matte",
         "meaning": "scales Completion per pixel: the cards have turned further where the matte is bright, and it is asked per pixel, so a card can be half flipped and half standing"
+      },
+      "matte_role": "own"
+    },
+    {
+      "slug": "luma-fade",
+      "match_name": "luma_fade",
+      "label": "Luma fade",
+      "version": 1,
+      "category": "Transition",
+      "category_slug": "transition",
+      "params": [
+        {
+          "id": "completion",
+          "label": "Completion",
+          "kind": "slider",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "softness",
+          "label": "Softness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "matte_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "matte_placement",
+          "on": "matte",
+          "cond": "layer_set"
+        }
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "is where the brightness is read from: the darkest parts of the matte go first, and with no matte set the layer fades by its own brightness"
       },
       "matte_role": "own"
     },

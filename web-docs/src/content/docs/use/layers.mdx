@@ -31,6 +31,7 @@ the top layer composites over everything below it.
 | **Null layer** | Invisible and transform-only. Used to drive other layers. |
 | **[Camera layer](/use/camera/)** | A 3D viewpoint. Affects layers with the 3D switch on. |
 | **Light layer** | A source of light: **Point**, **Spot** or **Area**. Shades layers with Accepts lights on. |
+| **[3D shape](#3d-shapes)** | A cube, sphere, cylinder, cone, torus, plane or pyramid, drawn in the comp's 3D space. |
 | **[Audio layer](/use/audio/)** | Sound with no picture. Made by placing an audio file, or by **Add audio only** on an item that has a picture too. |
 
 ## Order and selection
@@ -190,10 +191,12 @@ The export dialogue can be told to write guide layers anyway.
 are set before it is made. A new light stands in front of the composition, aimed at its
 centre; an area light starts at a fifth of the composition. **Layer ▸ Light settings** opens
 the window again for the selected light. A keyframed option reads **animated** there and is
-left alone.
+left alone. The first 3D model dropped into a composition with no lights brings an
+**Ambient light** and a **Key light** with it.
 
 A light is placed by its ordinary transform, so it animates and parents like anything
-else. Which layers it shades is per layer: **Accepts lights**, on by default, in a 3D
+else. A layer takes light on its front, so a floor lies flat at X rotation -90. Which layers
+it shades is per layer: **Accepts lights**, on by default, in a 3D
 layer's **Material options** and on the layer's right-click menu in the Timeline.
 
 A light adds to the picture, so a layer no light reaches is left as it is. **Like After
@@ -206,8 +209,16 @@ linearised.
 **Light options**, inside the light's Transform group, holds its own rows:
 
 - **Light type**: **Point**, **Spot**, **Area**, **Parallel** (every ray runs the same way,
-  along the light's aim) or **Ambient** (light from everywhere, with no place or direction).
-- **Intensity**: how bright the light is, as a percentage. Below 0 it takes light away.
+  along the light's aim), **Ambient** (light from everywhere, with no place or direction) or
+  **Environment** (light from a picture of everything round the scene).
+- **Source**, on an environment light: the layer whose picture surrounds the scene, read as
+  a panorama twice as wide as it is tall: footage, a sequence, a solid, a precomp, text or a
+  shape. A new one from Light settings starts on the selected footage or precomp, shown in
+  the background, and switches the view it was added from to **Final**.
+- **Show in background**, on an environment light: draws the picture behind everything, as
+  the camera sees it. **Background blur** softens it there.
+- **Intensity**: how bright the light is, as a percentage. Below 0 it takes light away,
+  except an environment light, which stops at 0.
 - **Colour**: the colour of the light.
 - **Cone angle** and **Cone feather**, on a spot: the cone's full angle, and how much of its
   edge fades.
@@ -216,40 +227,92 @@ linearised.
   light keeps its full strength, and **Falloff distance** how far past it a smooth falloff
   takes to fade out.
 - **Casts shadows**: whether the light casts the shadows of layers that cast them. An ambient
-  light casts none.
+  or environment light casts none.
 - **Shadow darkness** and **Shadow diffusion**, while it casts: how dark its shadows are, and
   how soft their edges get with the distance from the layer casting them.
+- **Volumetric**: how much the light shows in the air, as a beam or a glow, seen from every
+  3D view. At nought it shows none. While it casts shadows, 3D layers that cast cut shafts
+  in it, tinted by any light they let through. An ambient or environment light has none.
+- **Haze density**, **Haze colour**, **Height falloff**, **Forward scatter** and **Noise**,
+  while Volumetric is above nought or keyed: how thick the air is, the colour it tints the
+  light, how fast it thins above the ground (the floor the 3D views draw, through the
+  comp's middle), how much brighter the light shows looking towards it, and how patchy the
+  air is. **Noise size** and **Noise speed**, while Noise is above nought or keyed: how big
+  its patches are and how fast they drift.
 
 Every row but the type and the falloff can be keyframed. **Point of interest**, in Light
 settings, aims a spot, parallel or area light at a point rather than by its rotation; the
 point's row then shows under Transform, and the rotation rows turn the light from there.
+
+An environment light lights 3D layers and models from every side, and its **Orientation**
+and **Rotation** turn the picture. It has no place, so it has no Position. Only the topmost
+environment light in a composition lights it, and a layer it lights starts from black. A
+model's occlusion map darkens the light it takes from one. The Ambient and Key light a first
+model brings stay on beside it. The fixed 3D views leave the background out. A view's looks
+other than **Final** ignore the light. A layer it reads is never drawn, its row says **source**
+and its eye does nothing.
+
+The 3D layers and models in a collapsed precomp take the lights of the composition it sits in.
 
 **Material options**, beside Transform on a 3D layer, sets how it takes the lights:
 
 - **Casts shadows**: **Off**, **On**, or **Only**, which casts the shadow without drawing
   the layer.
 - **Accepts shadows**: **Off**, **On**, or **Only**, which draws nothing but the shadows that
-  fall on it, in the colour of any light a layer lets through. In **Normal** they multiply
-  what is under the layer, so a coloured shadow tints footage exactly.
+  fall on it, on either face, in the colour of any light a layer lets through. In **Normal**
+  they multiply what is under the layer, so a coloured shadow tints footage exactly. Where
+  lights add, a shadow removes only that light's share, so a white layer shows none: use
+  **Only** or a darker Solid.
 - **Light transmission**, while it casts: how much of the light passing through the layer
   takes its colour rather than stopping.
+- **Holdout**, on a Model layer: draws what is under its run of 3D layers in its place, with
+  any shadows it takes, hiding what is behind it.
 - **Accepts lights**: whether the lights shade it. Shadows still fall on it when this is off.
 - **Ambient**: how much of the ambient lights it takes.
 - **Diffuse**: how much of the other lights it takes.
 - **Specular intensity**: how bright the highlight a light makes on it is.
 - **Specular shininess**: how small and hard that highlight is.
 - **Metal**: how much the highlight takes the layer's own colour rather than the light's.
+- **Reflection**: how much of an environment light it reflects, tinted by the layer, as sharp
+  as **Specular shininess**. At the default shininess a full reflection is nearly matte.
+
+Under an environment light, **Ambient** is how much of its light the layer takes.
 
 A layer in a project saved before materials existed has no highlight until its **Specular
 intensity** is raised.
 
 3D layers separated by a 2D or adjustment layer don't shade each other. Up to 16 layers in
-each run of 3D layers cast shadows, those nearest the layers they shade.
+each run of 3D layers cast shadows, those nearest the layers they shade. A Model layer's
+shadow reaches every 3D layer and model, and cuts shafts in the haze.
 
 :::note[Not built yet]
 Motion blur on a moving layer's shadow. A track matte or a precomp's masks in the shadow it
-casts.
+casts. Shadows from an environment light. An environment light on particles in the 3D scene,
+or inside a collapsed precomp.
 :::
+
+## 3D shapes
+
+**Layer ▸ New ▸ 3D shape** adds a **Cube**, **Sphere**, **Cylinder**, **Cone**, **Torus**,
+**Plane** or **Pyramid** at the composition's centre. The **3D shape** tool (`Shift+D`) on the
+toolbar adds the one in hand where the Viewer is clicked. A 3D shape is always 3D, casts
+shadows and, in a composition with no lights, brings an **Ambient light** and a **Key light**.
+
+Its **Geometry options** are its size, in pixels, and key like any row:
+
+| Shape | Rows |
+| --- | --- |
+| Cube | **Width**, **Height**, **Depth**, **Bevel**, **Bevel segments** |
+| Sphere | **Radius**, **Segments**, **Slice start**, **Slice end** |
+| Cylinder | **Radius**, **Height**, **Segments**, **Bevel**, **Bevel segments**, **Slice start**, **Slice end** |
+| Cone | **Top radius**, **Bottom radius**, **Height**, **Segments**, **Bevel**, **Bevel segments**, **Slice start**, **Slice end** |
+| Torus | **Radius**, **Pipe radius**, **Segments**, **Pipe segments**, **Slice start**, **Slice end** |
+| Plane | **Width**, **Height**, **Corner radius**, **Corner segments** |
+
+**Slice start** and **Slice end** are angles round the shape's upright axis, and the cut faces
+are filled. Below 12 segments the sides are flat, so a cone with 4 is a pyramid. **Surface**
+has the rows of a [3D model's material](/use/importing/#3d-models), with its presets. A
+parametric mesh imported from After Effects becomes a 3D shape.
 
 ## Parenting
 

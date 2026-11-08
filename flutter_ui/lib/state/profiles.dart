@@ -19,7 +19,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -30,6 +30,8 @@ import 'account.dart';
 import 'custom_easings.dart';
 import 'secret_store.dart';
 import 'workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The groups a profile's settings fall into. Each can be left out of sync on
 /// its own, and the names are what the server files them under.

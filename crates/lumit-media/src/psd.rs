@@ -190,8 +190,8 @@ impl PsdLayer {
     ///
     /// An adjustment layer's block is kept as its first 16 bit numbers by
     /// place, so `post/0` is Posterize's levels, and the block's own key
-    /// answers when the block is there at all. Exposure keeps its stops as
-    /// `expA/0`, and Curves count from after their first byte.
+    /// answers when the block is there at all. Exposure keeps its stops, offset
+    /// and gamma as `expA/0` to `expA/2`, and Curves count from after their first byte.
     #[must_use]
     pub fn number(&self, path: &str) -> Option<f64> {
         match self.note(path)? {
@@ -255,7 +255,7 @@ pub fn is_psd(path: &Path) -> bool {
 
 /// The document's size and layer list. No pixels are read.
 pub fn open(path: &Path) -> Result<PsdDocument, MediaError> {
-    let mut r = Reader::new(BufReader::new(std::fs::File::open(path)?))?;
+    let mut r = Reader::new(BufReader::new(lumit_ingress::files::open(path)?))?;
     parse(&mut r, &mut Budget::new(LIMITS))
 }
 
@@ -264,7 +264,7 @@ pub fn open(path: &Path) -> Result<PsdDocument, MediaError> {
 /// `index` counts through [`PsdDocument::layers`]. A record with no picture
 /// reads as an empty frame, and an adjustment layer reads as where it acts.
 pub fn read_layer(path: &Path, index: u32) -> Result<DecodedFrame, MediaError> {
-    let mut r = Reader::new(BufReader::new(std::fs::File::open(path)?))?;
+    let mut r = Reader::new(BufReader::new(lumit_ingress::files::open(path)?))?;
     read_layer_from(&mut r, index)
 }
 
@@ -771,11 +771,13 @@ fn layer_record<R: Read + Seek>(
                 adjustment = true;
                 let name: String = key.iter().map(|b| char::from(*b)).collect();
                 if &key == b"expA" {
-                    // A version, then the exposure in stops.
+                    // A version, then the stops, the offset and the gamma.
                     if len >= 6 {
                         r.u16()?;
-                        let stops = f64::from(f32::from_be_bytes(r.array()?));
-                        notes.push((format!("{name}/0"), Note::Number(stops)));
+                        for i in 0..((len - 2) / 4).min(3) {
+                            let n = f64::from(f32::from_be_bytes(r.array()?));
+                            notes.push((format!("{name}/{i}"), Note::Number(n)));
+                        }
                     }
                 } else {
                     // Curves open with a byte that is set when they are drawn

@@ -33,6 +33,31 @@
      "body": "<path d=\"M8 2.5l5.5 4-2 6.5h-7l-2-6.5z\"/>"
     },
     {
+     "name": "Sphere",
+     "comment": "3D shapes. A ball with its equator's near half.",
+     "body": "<circle cx=\"8\" cy=\"8\" r=\"5.5\"/><path d=\"M2.5 8a5.5 2 0 0 0 11 0\"/>"
+    },
+    {
+     "name": "Cylinder",
+     "body": "<ellipse cx=\"8\" cy=\"4\" rx=\"4.5\" ry=\"1.5\"/><path d=\"M3.5 4v8a4.5 1.5 0 0 0 9 0V4\"/>"
+    },
+    {
+     "name": "Cone",
+     "body": "<path d=\"M3.5 12L8 2.5l4.5 9.5\"/><path d=\"M3.5 12a4.5 1.5 0 0 0 9 0\"/>"
+    },
+    {
+     "name": "Torus",
+     "body": "<ellipse cx=\"8\" cy=\"8\" rx=\"6\" ry=\"3.5\"/><path d=\"M5 7.5c1.5 1.2 4.5 1.2 6 0M6 8.3c1-.7 3-.7 4 0\"/>"
+    },
+    {
+     "name": "Plane",
+     "body": "<path d=\"M5 4.5h9l-3 7H2z\"/>"
+    },
+    {
+     "name": "Pyramid",
+     "body": "<path d=\"M8 2.5l5.5 8.5L8 13.5 2.5 11z\"/><path d=\"M8 2.5v11\"/>"
+    },
+    {
      "name": "Pen",
      "body": "<path d=\"M8 2l4 4-4.5 6.5L4 14l1.5-3.5z\"/><circle cx=\"7.8\" cy=\"8.7\" r=\"1\"/><path d=\"M5.5 10.5l2.3-1.8\"/>"
     },

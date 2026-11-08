@@ -949,3 +949,146 @@ fn a_keyed_path_moves_the_layers_picture_with_it() {
     let placed = crate::model::placement(&layer, 2.0, &read);
     assert_eq!((placed.anchor.0, placed.anchor.1), (-230.0, -230.0));
 }
+
+/// Making a repeater's copies real keeps the picture, whatever the copies are
+/// made of, and takes the repeater away. Asked for one that isn't there, it
+/// leaves the contents alone.
+#[test]
+fn expanding_a_repeater_keeps_the_picture() {
+    use super::expand;
+    let same = |contents: &[ShapeEntry], what: &str| {
+        let out = expand::all_expanded(contents, 0.0);
+        assert!(
+            !format!("{out:?}").contains("Repeat("),
+            "{what}: still there"
+        );
+        for t in [0.0, 0.5] {
+            let drawn = |c: &[ShapeEntry]| rasterise_contents(c, 120, 60, 0.0, 0.0, 120.0, 60.0, t);
+            let (before, after) = (drawn(contents), drawn(&out));
+            let worst = before.iter().zip(&after).map(|(a, b)| a.abs_diff(*b));
+            let worst = worst.max().unwrap_or(0);
+            assert!(worst <= 2, "{what} at {t}: off by {worst}");
+            assert!(before.iter().any(|v| *v > 0), "{what}: nothing drawn");
+        }
+    };
+    let key = |secs: i64, value: f64| crate::anim::Keyframe {
+        time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+        value,
+        interp_in: crate::anim::SideInterp::Linear,
+        interp_out: crate::anim::SideInterp::Linear,
+    };
+    // Smaller and fainter each time, so the outline and the fade are baked too.
+    let fading = || {
+        ModifierKind::Repeat(Repeater {
+            scale: Property::fixed(90.0),
+            end_opacity: Property::fixed(50.0),
+            ..repeater(3.0, 30.0)
+        })
+    };
+
+    let mut outlined = item(square(4.0, 4.0, 12.0));
+    outlined.stroke = Some([0.0, 1.0, 0.0, 1.0].map(Property::fixed));
+    outlined.stroke_width.animation =
+        crate::anim::Animation::Keyframed(vec![key(0, 2.0), key(1, 4.0)]);
+    outlined.dashes = vec![Property::fixed(3.0)];
+    outlined.dash_offset = Property::fixed(1.0);
+    same(&with(outlined, vec![fading()]), "an outline and its dashes");
+
+    let mut ramp = item(square(4.0, 4.0, 12.0));
+    ramp.gradient = 1;
+    ramp.gradient_start_x = Property::fixed(4.0);
+    ramp.gradient_end_x = Property::fixed(16.0);
+    same(&with(ramp, vec![fading()]), "a gradient");
+
+    let mut morph = item(square(4.0, 4.0, 12.0));
+    morph.path_keys = vec![
+        shape_key(0, &square(4.0, 4.0, 12.0)),
+        shape_key(1, &square(4.0, 4.0, 20.0)),
+    ];
+    same(&with(morph, vec![fading()]), "shape keys");
+
+    let primitive: primitive::ShapePrimitive = serde_json::from_value(serde_json::json!({
+        "kind": 0, "position_x": 10.0, "position_y": 10.0, "width": 12.0, "height": 12.0,
+    }))
+    .expect("a rectangle");
+    let mut made = item(primitive.path_at(0.0));
+    made.primitive = Some(primitive);
+    same(&with(made, vec![fading()]), "a parametric shape");
+
+    let mut joined = item(square(8.0, 8.0, 12.0));
+    joined.combine = 1;
+    let run = vec![
+        ShapeEntry::Item(item(square(4.0, 4.0, 8.0))),
+        ShapeEntry::Item(joined),
+        modifier(fading()),
+    ];
+    same(&run, "a combined run");
+
+    let trimmed = vec![
+        ShapeEntry::Item(item(square(4.0, 4.0, 12.0))),
+        modifier(trim(0.0, 50.0)),
+        modifier(ModifierKind::Repeat(repeater(2.0, 30.0))),
+    ];
+    same(&trimmed, "a trim above it");
+
+    // A row of three in a group, repeated by a row of two below it.
+    let row = modifier::ShapeGroup::new(
+        "Row",
+        with(
+            item(square(2.0, 2.0, 8.0)),
+            vec![ModifierKind::Repeat(repeater(3.0, 12.0))],
+        ),
+    );
+    let down = ModifierKind::Repeat(Repeater {
+        position_y: Property::fixed(20.0),
+        ..repeater(2.0, 0.0)
+    });
+    let grid = vec![ShapeEntry::Group(row.clone()), modifier(down)];
+    same(&grid, "a grid");
+    let cells = |c: &[ShapeEntry]| format!("{c:?}").matches("ShapeItem {").count();
+    assert_eq!(cells(&expand::all_expanded(&grid, 0.0)), 6);
+
+    // One repeater inside its group, with what sits below it left alone.
+    let ShapeEntry::Modifier(inner) = &row.entries[1] else {
+        panic!("the row's repeater");
+    };
+    let below = ShapeEntry::Item(item(square(2.0, 40.0, 8.0)));
+    let beside = vec![ShapeEntry::Group(row.clone()), below.clone()];
+    let out = expand::expanded(&beside, inner.id, 0.0).expect("it is there");
+    assert_eq!(cells(&out), 4);
+    let missing = Uuid::now_v7();
+    assert!(expand::expanded(&beside, missing, 0.0).is_none());
+    assert!(expand::split(&beside, missing, 0.0).is_none());
+
+    // Split, each copy is a list of its own and together they draw the same.
+    // The first keeps the item it came from, and only it keeps what's below.
+    let parts = expand::split_all(&grid, 0.0);
+    assert_eq!(parts.len(), 6);
+    let covered = |rgba: &[u8]| -> Vec<bool> { rgba.chunks(4).map(|p| p[3] > 0).collect() };
+    let drawn = |c: &[ShapeEntry]| rasterise_contents(c, 120, 60, 0.0, 0.0, 120.0, 60.0, 0.0);
+    let mut all = vec![false; 120 * 60];
+    for part in &parts {
+        for (a, b) in all.iter_mut().zip(covered(&drawn(part))) {
+            *a |= b;
+        }
+    }
+    assert_eq!(all, covered(&drawn(&grid)));
+    let parts = expand::split(&beside, inner.id, 0.0).expect("it is there");
+    assert_eq!(
+        parts.iter().map(|p| cells(p)).collect::<Vec<_>>(),
+        [2, 1, 1]
+    );
+    let names: Vec<&str> = parts
+        .iter()
+        .flatten()
+        .filter_map(|e| match e {
+            ShapeEntry::Group(g) => g.entries.first(),
+            _ => None,
+        })
+        .filter_map(|e| match e {
+            ShapeEntry::Item(i) => Some(i.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(names, ["Rectangle", "Rectangle 2", "Rectangle 3"]);
+}

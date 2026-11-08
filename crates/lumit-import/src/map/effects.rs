@@ -100,10 +100,19 @@ fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
             return Some(mapped);
         }
     }
+    if let Some(mapped) = super::fx_jolt::claim(conv, path, node) {
+        return Some(mapped);
+    }
     if let Some(mapped) = super::fx_colour::claim(conv, path, node) {
         return Some(mapped);
     }
     if let Some(mapped) = super::fx_grid::claim(conv, path, node) {
+        return Some(mapped);
+    }
+    if let Some(mapped) = super::fx_luma_fade::claim(conv, path, node) {
+        return Some(mapped);
+    }
+    if let Some(mapped) = super::fx_timewarp::claim(conv, path, node) {
         return Some(mapped);
     }
     super::fx_distort::claim(conv, path, node)

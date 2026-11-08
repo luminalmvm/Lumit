@@ -60,6 +60,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeWheelAction;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -71,7 +72,7 @@ import 'package:lumit_flutter/widgets/drag_escape.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'transform_rows_frb.dart' show read;
-import 'viewer_gizmo.dart' show LayerBox, layerAtPoint;
+import 'viewer_gizmo.dart' show LayerBox, layerAndDepthAt, layerAtPoint;
 import 'viewer_gizmo_3d.dart'
     show Vec3, compToParent, eulerYxz, rotationMatching;
 import 'viewer_layer_map.dart' show viewerNear;
@@ -686,6 +687,7 @@ bool altNavigates(LumitUiState ui, {bool viewport = false}) {
           ToolGroup.rotate ||
           ToolGroup.anchor ||
           ToolGroup.razor ||
+          ToolGroup.shape3d ||
           ToolGroup.type:
       return viewport ||
           ui.model.heldLayers.any((e) =>
@@ -862,7 +864,7 @@ bool writeCameraPose(
     // A parented camera's own values are in its parent's space, so the
     // engine carries the pose back there and that is what is written.
     final own = layer.cameraOwnAim(
-      frame: BigInt.from(frame),
+      frame: frame,
       aim: BridgeCameraAim(
         pose: viewOfPose(pose),
         poiX: pose.pointOfInterest.$1,
@@ -1072,6 +1074,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   Offset _dollyAt = Offset.zero;
   double _framed = 0;
 
+  /// The last point a navigation turned round that was under the pointer.
+  (double, double, double)? _lastPivot;
+
   /// The orbit's pivot while no drag runs, held against what moves it so a
   /// hover walks no boxes.
   Object? _idleKey;
@@ -1157,7 +1162,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   /// making both of them, dozens of times a second, to re-answer a question
   /// only an edit or the playhead can change.
   ({LayerReference layer, CameraPose pose, BridgeTransform transform})? _held;
-  BigInt? _heldRevision;
+  int? _heldRevision;
   int? _heldFrame;
 
   /// Whether the active camera was passed over because an expression places
@@ -1262,7 +1267,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       // their own do not carry, and the point of interest is in the comp too.
       BridgeCameraAim? evaluated;
       try {
-        evaluated = entry.layer.cameraAimAt(frame: BigInt.from(frame));
+        evaluated = entry.layer.cameraAimAt(frame: frame);
       } catch (_) {
         // The layer went away between the model and the read.
       }
@@ -1319,6 +1324,28 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
       child: Stack(
         children: [
           Positioned.fill(child: widget.active ? _tools() : _navigation()),
+          // Asked of the engine once per comp and revision, and frames ask too.
+          ListenableBuilder(
+            listenable: Listenable.merge([ui, ui.modelTrouble]),
+            builder: (context, _) {
+              final models = ui.holdsModels(widget.viewId);
+              final display = ui.displayOf(widget.viewId);
+              final trouble = ui.modelTrouble.value;
+              return Positioned(
+                top: viewLookInset,
+                left: viewLookInset,
+                child: ViewLookTag(
+                  look: [
+                    if (models && trouble != null) trouble,
+                    if (models && display != BridgeModelDisplay.final_)
+                      display.title,
+                    if (models && ui.facesShown(widget.viewId))
+                      l10n.viewerDisplayFaces,
+                  ].join(' · '),
+                ),
+              );
+            },
+          ),
           if (seen != null)
             Positioned(
               top: viewCubeInset,
@@ -1326,7 +1353,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
               child: ViewerViewCube(
                 rotation: (seen.rotationX, seen.rotationY, seen.rotationZ),
                 ortho: ui.viewportOrtho(widget.viewId),
-                wireframe: _surface?.wireframeOnly ?? false,
+                wireframe: ui.displayOf(widget.viewId) ==
+                    BridgeModelDisplay.wireframe,
                 onSnap: _snapTo,
                 onOrbitStart: _cubeOrbitStart,
                 onOrbit: _cubeOrbit,
@@ -1339,8 +1367,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
                     distance: orthoDistance(widget.compSize),
                   );
                 },
-                onWireframe: () => ui.setViewportWireframe(
-                    widget.viewId, !(_surface?.wireframeOnly ?? false)),
+                onWireframe: () => ui.toggleLines(widget.viewId),
               ),
             ),
           // How fast a flight goes, for a moment after the wheel sets it.
@@ -2328,14 +2355,16 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   Offset _toPicture(Offset at) => (at - widget.fitted.topLeft) / _scale;
 
   /// The nearest 3D layer under [at] seen through [pose]: where the pointer
-  /// meets it, and its depth over the zoom. A light is its own point.
+  /// meets it, and its depth over the zoom. A light is its own point, and a
+  /// model is met where the engine finds its triangles, not its box.
   ({(double, double, double) point, double depth})? _hitAt(
       Offset at, CameraPose pose) {
-    final hit = layerAtPoint(widget.boxes(), at);
+    final found = layerAndDepthAt(widget.boxes(), at, exact: true);
+    final hit = found?.box;
     if (hit == null || !hit.map.projected) return null;
     final m = hit.map;
     final on = hit.marker ? m.toScreen(m.ax, m.ay) : at;
-    final w = hit.marker ? m.depthOf(m.ax, m.ay) : m.depthAt(at);
+    final w = found!.depth.isFinite ? found.depth : null;
     if (w == null || w <= viewerNear) return null;
     return (
       point: pointUnder(pose, _toPicture(on), widget.compSize, w),
@@ -2361,11 +2390,13 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     return picked ?? _middleOf(boxes, pose);
   }
 
-  /// What a navigation turns round: what is under [at], else the middle of
-  /// the selection, else the middle of the scene.
+  /// What a navigation turns round: what is under [at], else what it turned
+  /// round last, else the middle of the selection, else of the scene. Empty
+  /// space never swings the view somewhere nobody pointed.
   (double, double, double)? _navPivot(Offset? at, CameraPose pose) {
     final hit = at == null ? null : _hitAt(at, pose)?.point;
-    if (hit != null) return hit;
+    if (hit != null) return _lastPivot = hit;
+    if (_lastPivot case final last?) return last;
     final boxes = widget.boxes();
     final selected = widget.uiState.selectedLayerIds;
     return _middleOf(boxes.where((b) => selected.contains(b.id)), pose) ??
@@ -2408,6 +2439,17 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
         take(box, box.map.ax, box.map.ay);
         continue;
       }
+      // A model by the eight corners of its box.
+      final c = box.cube;
+      for (var i = 0; c != null && i + 2 < c.length; i += 3) {
+        final p = box.map.inParent(c[i], c[i + 1], c[i + 2]);
+        final w = box.map.parentDepthOf(p.$1, p.$2, p.$3);
+        if (w.abs() < 1e-9) continue;
+        out.add(pointUnder(pose,
+            _toPicture(box.map.parentToScreen(p.$1, p.$2, p.$3)),
+            widget.compSize, w));
+      }
+      if (c != null) continue;
       final s = box.bounds;
       take(box, 0, 0);
       take(box, s.width, 0);
@@ -2450,9 +2492,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     switch (command) {
       case ViewerCameraCommand.lookAtSelected ||
             ViewerCameraCommand.lookAtAll:
+        // With nothing selected, everything is the selection.
         final selected = widget.uiState.selectedLayerIds;
         final boxes = widget.boxes().where((b) =>
             command == ViewerCameraCommand.lookAtAll ||
+            selected.isEmpty ||
             selected.contains(b.id));
         final points = _cornersOf(boxes, target.pose);
         // A view, not a camera, takes in the cameras as well when it frames
@@ -2463,7 +2507,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
             try {
               final eye = e.layer
                   .cameraAimAt(
-                      frame: BigInt.from(widget.uiState.playheadFrame.value))
+                      frame: widget.uiState.playheadFrame.value)
                   ?.pose;
               if (eye != null) points.add((eye.x, eye.y, eye.z));
             } catch (_) {

@@ -123,7 +123,7 @@ pub struct PlaneDraw {
 
 /// A depth-of-field depth input packaged for the compositor (docs/impl/
 /// layer-input.md §2): the referenced layer's **source** pixels, ready for
-/// [`crate::fxops::render_layer_input`] to resample into the consuming layer's
+/// [`crate::fxops::layer_input::render_layer_input`] to resample into the consuming layer's
 /// working raster. The referenced layer is rendered source-only (its own
 /// effect stack is not applied), exactly as a matte source is — so a depth
 /// reference can never recurse into another effect, and the preview and export
@@ -285,12 +285,26 @@ pub struct NestedInputDraw {
     pub key: Option<u128>,
     /// How many of the comp's pixels make a metre, off its camera.
     pub px_per_metre: f64,
-    /// Draw the comp's 3D layers as distance from its camera instead of its
-    /// picture: what a lens effect's Depth row reads from a Precomp.
-    pub scene_depth: bool,
+    /// What to draw of the comp's 3D layers instead of its picture: their
+    /// distance from its camera, for a lens effect's Depth row, or another
+    /// pass, for a Scene pass or a Part matte. `None` is its picture.
+    pub read: Option<lumit_core::fx::effects::scene_pass::SceneRead>,
     /// Also hand over the 3D layers themselves, for rays to meet: a Depth row
     /// naming its own layer's precomp, on an effect that traces rays.
     pub trace_layers: bool,
+    /// The strokes painted on the Precomp layer itself, and when to read them.
+    pub paint: Vec<lumit_core::paint::PaintStroke>,
+    pub paint_time: f64,
+}
+
+impl NestedInputDraw {
+    /// Whether it reads as distance from its camera rather than a picture.
+    pub(crate) fn reads_depth(&self) -> bool {
+        use lumit_core::fx::effects::scene_pass::PassKind;
+        self.read
+            .as_ref()
+            .is_some_and(|r| r.pass == PassKind::Depth)
+    }
 }
 
 /// One node graph's picture as plain data (docs/impl/node-graph-comp.md §2.3):
@@ -407,6 +421,15 @@ pub enum GraphStep {
     },
 }
 
+/// The frame after, for a Precomp on Flow, and how far towards it the picture
+/// sits. The realiser makes the picture from the motion between the two.
+pub struct NestedFlow {
+    pub draws: Vec<CompLayerDraw>,
+    pub camera: Option<lumit_core::model::CameraPose>,
+    pub phase: f32,
+    pub params: lumit_core::retime::FlowParams,
+}
+
 /// Where a draw's pixels come from: decoded/synthesised bytes, a nested
 /// comp realised recursively on the GPU (Precomp layers), or a node graph
 /// walked box by box.
@@ -463,6 +486,9 @@ pub enum DrawSource {
         /// is read at. Meaningless — and unread — when `paint` is
         /// empty.
         paint_time: f64,
+        /// A Precomp on Flow between two frames: the frame after. `draws`
+        /// is then the frame before. `None` on every other.
+        flow: Option<Box<NestedFlow>>,
     },
     /// An adjustment layer's staging point (docs/06 §1.5): no pixels of its
     /// own — the draw's `fx` runs on the composite of every draw before it,
@@ -474,6 +500,15 @@ pub enum DrawSource {
     /// so the Precomp layer arm, the matte arm and the layer-input arm all
     /// reach it through the calls they already make.
     Graph(Box<GraphDraw>),
+    /// Volumetric light and smoke (`crate::haze`): the comp's lights that show
+    /// in the air and its boxes of smoke, laid over everything below it once that
+    /// is composited.
+    Haze(crate::haze::HazeLights),
+    /// A Model layer's 3D model, for the mesh pass.
+    Model(Box<crate::model::ModelDraw>),
+    /// The comp's Environment light (`crate::environment`), at the head of
+    /// its list.
+    Environment(Box<crate::environment::EnvironmentDraw>),
 }
 
 /// The below-stack re-rendered at a held/sample time for a temporal adjustment
@@ -775,4 +810,76 @@ pub struct CompLayerDraw {
         Option<lumit_core::model::CameraPose>,
         Option<i32>,
     )>,
+    /// What a Particulate in the scene takes from the comp beyond its rows.
+    /// `None` on every other layer.
+    pub in_scene: Option<crate::realise::scene::Carried>,
+}
+
+impl CompLayerDraw {
+    /// A draw that covers the whole comp and stands for none of its layers:
+    /// the haze's and the environment's.
+    pub(crate) fn over_comp(comp: &lumit_core::model::Composition, source: DrawSource) -> Self {
+        let (w, h) = (comp.width as f32, comp.height as f32);
+        Self {
+            layer: comp.id,
+            source,
+            natural_size: (w, h),
+            position: (w * 0.5, h * 0.5),
+            anchor: (w * 0.5, h * 0.5),
+            scale: (100.0, 100.0),
+            rotation_deg: 0.0,
+            opacity: 100.0,
+            z: 0.0,
+            rotation_x_deg: 0.0,
+            rotation_y_deg: 0.0,
+            three_d: false,
+            ends_run: false,
+            matte: None,
+            blend: lumit_gpu::composite::Blend::Normal,
+            mask_cov: None,
+            pre: None,
+            fx: Default::default(),
+            fx_ids: Vec::new(),
+            neighbours: Vec::new(),
+            flow_fields: Vec::new(),
+            colour_tables: Vec::new(),
+            dof_inputs: Vec::new(),
+            mattes: Vec::new(),
+            mask_paths: Vec::new(),
+            roto_mattes: Vec::new(),
+            planes: Vec::new(),
+            points_schedules: Vec::new(),
+            flare_lens_files: Vec::new(),
+            graph_fx: Vec::new(),
+            fx_ref_width: None,
+            fx_input_key: None,
+            mb: Vec::new(),
+            lights: Vec::new(),
+            material: Default::default(),
+            temporal_below: None,
+            accumulation_below: None,
+            flow_below: Vec::new(),
+            in_scene: None,
+        }
+    }
+}
+
+impl CompLayerDraw {
+    /// Whether its picture's colour already has its alpha in it: all but a
+    /// source's own pixels, which come with theirs apart.
+    pub(crate) fn premultiplied(&self) -> bool {
+        !matches!(self.source, DrawSource::Pixels { .. })
+    }
+
+    /// Whether this draw reads the comp's picture away from its own pixels,
+    /// so a frame with it can't be drawn as a cropped region: an adjustment
+    /// layer, the haze, the environment, a motion-blurred layer, or a 3D
+    /// model's glass.
+    pub(crate) fn needs_whole_frame(&self) -> bool {
+        matches!(
+            self.source,
+            DrawSource::Adjust | DrawSource::Haze(_) | DrawSource::Environment(_)
+        ) || !self.mb.is_empty()
+            || crate::model_layer::glass(self).is_some()
+    }
 }

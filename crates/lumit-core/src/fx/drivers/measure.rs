@@ -243,10 +243,15 @@ pub fn layer_rect(
             Shown::One { clip, .. } | Shown::Two { incoming: clip, .. } => match clip.source {
                 ClipSource::Footage(item) => footage(item),
                 ClipSource::Comp(id) => doc.comp(id).and_then(|c| frame(c.width, c.height)),
+                ClipSource::Solid(id) => doc.solid(id).and_then(|s| frame(s.width, s.height)),
             },
         },
         LayerKind::Adjustment => frame(comp.width, comp.height),
-        LayerKind::Null | LayerKind::Camera { .. } | LayerKind::Light { .. } => None,
+        LayerKind::Null
+        | LayerKind::Camera { .. }
+        | LayerKind::Light { .. }
+        | LayerKind::Model { .. }
+        | LayerKind::Mesh { .. } => None,
     }
 }
 

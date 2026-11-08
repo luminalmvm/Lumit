@@ -55,7 +55,9 @@
 use crate::fx::cpu::{curve_at, CURVE_TABLE};
 use crate::fx::noise::{hash01, value3};
 use crate::mask::MaskPolyline;
+use emitter::{birth_point, outline_polyline, Emitter};
 
+pub mod emitter;
 pub mod stepped;
 pub mod trails;
 
@@ -329,174 +331,6 @@ pub struct DrawStyle {
     /// run as a second pass: for a premultiplied `over`, scaling the source's
     /// coverage by the Mix **is** the dissolve, exactly.
     pub mix: f32,
-}
-
-/// Where a particle is born.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EmitterShape {
-    /// Every particle from one point.
-    Point,
-    /// Uniformly along a segment of `width`, centred on the position.
-    Line,
-    /// Uniformly over the interior of an ellipse of `width` × `height`.
-    Ellipse,
-    /// Uniformly over the interior of a rectangle of `width` × `height`.
-    Rectangle,
-    /// Uniformly along the arc length of a mask path. An **empty
-    /// polyline emits nothing** — the documented no-op, degrade and never
-    /// fault (14-ENGINEERING-RULES §4).
-    MaskPath,
-    /// Uniformly along an ellipse's **outline**, by arc length.
-    EllipseOutline,
-    /// Uniformly along a rectangle's **outline**, by arc length.
-    RectangleOutline,
-}
-
-impl EmitterShape {
-    /// The Choice option labels, in code order.
-    ///
-    /// The two outline shapes are **appended**, not slotted in beside the areas
-    /// they hollow out: a Choice is stored as its index, so inserting
-    /// one would silently turn every saved Mask path emitter into something
-    /// else. The dropdown reads in code order and the panel is the poorer for
-    /// it by one line, which is the price of a document that still means what
-    /// it said.
-    pub const OPTIONS: &'static [&'static str] = &[
-        "Point",
-        "Line",
-        "Ellipse",
-        "Rectangle",
-        "Mask path",
-        "Ellipse outline",
-        "Rectangle outline",
-    ];
-
-    /// The shape for a stored Choice index; anything unknown is a Point, which
-    /// is the declared default (a document from a newer build is rendered, not
-    /// refused).
-    #[must_use]
-    pub const fn from_code(code: u32) -> Self {
-        match code {
-            1 => EmitterShape::Line,
-            2 => EmitterShape::Ellipse,
-            3 => EmitterShape::Rectangle,
-            4 => EmitterShape::MaskPath,
-            5 => EmitterShape::EllipseOutline,
-            6 => EmitterShape::RectangleOutline,
-            _ => EmitterShape::Point,
-        }
-    }
-
-    /// Whether this shape emits along an **outline** the host flattens for it:
-    /// the two shapes that walk a polyline of their own rather than filling an
-    /// interior.
-    #[must_use]
-    pub const fn is_outline(self) -> bool {
-        matches!(
-            self,
-            EmitterShape::EllipseOutline | EmitterShape::RectangleOutline
-        )
-    }
-}
-
-/// How many chords an ellipse's outline is flattened into.
-///
-/// The vertices sit **on** the true ellipse, so the only error is the chord
-/// cutting the corner between two of them: `r · (1 − cos(π/N))`, which at 128
-/// is three parts in ten thousand — a twentieth of a pixel on a four-hundred
-/// pixel emitter, and well inside the 10⁻⁵-of-range agreement the two render
-/// paths owe each other. Walking that polyline by arc length is
-/// **exactly** what a Mask path emitter already does, which is why there is one
-/// walk in this engine and not two.
-const OUTLINE_SEGMENTS: usize = 128;
-
-/// The emitter's own outline as a closed polyline in its **local** frame —
-/// centred on the origin, unturned — or an empty one for every shape that fills
-/// an interior instead.
-///
-/// Local rather than absolute, because [`birth_point`] then turns and places it
-/// with the same two lines every other area shape uses: an outline is a
-/// rectangle or an ellipse that has been hollowed out, not a path the user drew
-/// somewhere.
-///
-/// Both render paths call **this** function — the CPU reference once per
-/// evaluation, the GPU host once per frame on its way into the kernel's path
-/// buffer — so the two cannot come to flatten the same ellipse differently.
-#[must_use]
-pub fn outline_polyline(e: &Emitter) -> MaskPolyline {
-    let (hw, hh) = (0.5 * e.width, 0.5 * e.height);
-    let mut points: Vec<[f32; 2]> = match e.shape {
-        EmitterShape::EllipseOutline => (0..=OUTLINE_SEGMENTS)
-            .map(|i| {
-                let a = i as f32 / OUTLINE_SEGMENTS as f32 * std::f32::consts::TAU;
-                let (s, c) = a.sin_cos();
-                [hw * c, hh * s]
-            })
-            .collect(),
-        EmitterShape::RectangleOutline => {
-            vec![[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh], [-hw, -hh]]
-        }
-        _ => return MaskPolyline::default(),
-    };
-    // A degenerate extent is a shape with nowhere to walk; one point is not a
-    // polyline, so it is given a second coincident one and every birth lands on
-    // the emitter's centre — degrade, never fault (14-ENGINEERING-RULES §4).
-    if points.len() < 2 {
-        points = vec![[0.0, 0.0], [0.0, 0.0]];
-    }
-    let mut arc = Vec::with_capacity(points.len());
-    let mut total = 0.0f32;
-    arc.push(0.0);
-    for w in points.windows(2) {
-        total += (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
-        arc.push(total);
-    }
-    MaskPolyline {
-        points,
-        arc,
-        closed: true,
-        feather: 0.0,
-        expansion: 0.0,
-        corners: Vec::new(),
-    }
-}
-
-/// How particles are born: where, how often, and which way they leave.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Emitter {
-    pub shape: EmitterShape,
-    /// px@comp (or raster px — the caller's own scale; see [`evaluate`]).
-    /// Three coordinates: `z` is towards the camera, positive away
-    /// from it, and zero is the layer's own plane.
-    pub position: [f32; 3],
-    /// The extents Line, Ellipse and Rectangle are drawn to.
-    pub width: f32,
-    pub height: f32,
-    /// The extent **through** the layer's plane: Point becomes a
-    /// segment along `z`, Ellipse a cylinder and Rectangle a box, each filled
-    /// uniformly. Line and Mask path stay planar — a mask path is where the
-    /// user drew it, and a line is one dimension by name.
-    pub depth: f32,
-    /// Rotation of the emitter's own shape about `position`, degrees. Turns the
-    /// shape in its own plane; `depth` runs through that plane and is not
-    /// turned by it.
-    pub angle_deg: f32,
-    /// Launch direction in the layer's plane, degrees; −90 is up.
-    pub direction_deg: f32,
-    /// Launch **elevation** out of that plane, degrees. Zero is the
-    /// plane itself, which is what every project saved before the axis existed
-    /// reads as.
-    pub direction_z_deg: f32,
-    /// The cone about `direction_deg`, degrees.
-    pub spread_deg: f32,
-    /// The cone about `direction_z_deg`, degrees — the elevation's own spread,
-    /// separate so that a full 360° in-plane spread stays a disc of directions
-    /// rather than quietly becoming a sphere.
-    pub spread_z_deg: f32,
-    /// Speed at birth, px per second.
-    pub speed: f32,
-    /// Per-particle speed spread, `0..=1`.
-    pub speed_jitter: f32,
 }
 
 /// What moves a particle along its Size, Opacity or Colour change: its age,
@@ -1851,7 +1685,7 @@ impl ScheduleCache {
 
 /// Which per-particle draw is being made. A particle is a pure function of its
 /// birth index, and these separate the dice it rolls (particulate.md §3.1).
-mod attr {
+pub mod attr {
     pub const EMIT_U: u32 = 0;
     pub const EMIT_V: u32 = 1;
     pub const DIRECTION: u32 = 2;
@@ -1933,7 +1767,7 @@ pub fn draw(seed: u32, birth: u64, attribute: u32) -> f32 {
 }
 
 /// A per-particle spread about `base`: `±amount` of it, never below zero.
-fn jitter(base: f32, amount: f32, u: f32) -> f32 {
+pub fn jitter(base: f32, amount: f32, u: f32) -> f32 {
     (base * (1.0 + amount * (2.0 * u - 1.0))).max(0.0)
 }
 
@@ -2091,7 +1925,7 @@ fn drive_speed(speed: f32, range: [f32; 2]) -> f32 {
 }
 
 /// Which way and how fast particle `b` leaves the emitter.
-fn launch(p: &PointsParams, b: u64) -> [f32; 3] {
+pub fn launch(p: &PointsParams, b: u64) -> [f32; 3] {
     let e = &p.emitter;
     let dir = e.direction_deg.to_radians()
         + (draw(p.seed, b, attr::DIRECTION) - 0.5) * e.spread_deg.to_radians();
@@ -2151,66 +1985,6 @@ fn look_of(p: &PointsParams, b: u64, age: f32, life: f32, speed: [f32; 3]) -> (f
     } + spread_rot
         + look.spin_deg.to_radians() * age;
     (size, colour, rotation)
-}
-
-/// Where in the emitter this particle starts.
-///
-/// `w` is the draw through the emitter's [`depth`](Emitter::depth),
-/// filled uniformly: a Point becomes a segment, an Ellipse a cylinder and a
-/// Rectangle a box. Line and Mask path ignore it and stay on the plane.
-///
-/// `path` is **the polyline this shape walks**: the layer's flattened mask for
-/// a Mask path emitter, and the emitter's own local outline for the two outline
-/// shapes. One argument, because both are the same question — where is
-/// `u` of the way along? — answered by the same arc-length walk.
-fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32, w: f32) -> Option<[f32; 3]> {
-    let (s, c) = e.angle_deg.to_radians().sin_cos();
-    let (local, depth) = match e.shape {
-        EmitterShape::Point => ([0.0, 0.0], (w - 0.5) * e.depth),
-        // The outline walks its own local polyline and is then turned and
-        // placed exactly as the interior it hollows out would have been, so an
-        // Ellipse and an Ellipse outline sit in the same place at the same
-        // angle. Depth fills as before: the cylinder becomes a tube.
-        EmitterShape::EllipseOutline | EmitterShape::RectangleOutline => {
-            if path.is_empty() {
-                return None;
-            }
-            (path.point_at(u * path.length()), (w - 0.5) * e.depth)
-        }
-        EmitterShape::Line => ([(u - 0.5) * e.width, 0.0], 0.0),
-        EmitterShape::Ellipse => {
-            // √u for the radius, or the middle of the disc would be crowded:
-            // area grows as r², so a uniform radius is not a uniform fill.
-            let r = u.max(0.0).sqrt();
-            let (sa, ca) = (v * std::f32::consts::TAU).sin_cos();
-            (
-                [0.5 * e.width * r * ca, 0.5 * e.height * r * sa],
-                (w - 0.5) * e.depth,
-            )
-        }
-        EmitterShape::Rectangle => (
-            [(u - 0.5) * e.width, (v - 0.5) * e.height],
-            (w - 0.5) * e.depth,
-        ),
-        EmitterShape::MaskPath => {
-            // The mask's own line, by arc length. Nothing to walk is
-            // the documented no-op: no path, no particles.
-            if path.is_empty() {
-                return None;
-            }
-            let p = path.point_at(u * path.length());
-            // Already an absolute position, so the emitter's own rotation and
-            // position do not move it — the path is where the user drew it —
-            // and it stays on the layer's plane, at the depth the emitter sits
-            // at.
-            return Some([p[0], p[1], e.position[2]]);
-        }
-    };
-    Some([
-        e.position[0] + local[0] * c - local[1] * s,
-        e.position[1] + local[0] * s + local[1] * c,
-        e.position[2] + depth,
-    ])
 }
 
 /// The stream at layer time `t`: every live particle, in birth-index order
@@ -2302,9 +2076,8 @@ pub fn evaluate_dense(
         let Some(p0) = birth_point(
             e,
             walk,
-            draw(p.seed, b, attr::EMIT_U),
-            draw(p.seed, b, attr::EMIT_V),
-            draw(p.seed, b, attr::EMIT_W),
+            p.frame,
+            [attr::EMIT_U, attr::EMIT_V, attr::EMIT_W].map(|a| draw(p.seed, b, a)),
         ) else {
             // A Mask path emitter with nothing to walk emits nothing at all,
             // and no later birth will find a path either.
@@ -2323,9 +2096,8 @@ pub fn evaluate_dense(
                     let q = birth_point(
                         e,
                         walk,
-                        draw(p.seed, b, die),
-                        draw(p.seed, b, die + 1),
-                        draw(p.seed, b, die + 2),
+                        p.frame,
+                        [die, die + 1, die + 2].map(|a| draw(p.seed, b, a)),
                     );
                     kept = q.filter(|q| draw(p.seed, b, die + 3) < d.at(q[0], q[1]));
                 }

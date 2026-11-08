@@ -11,6 +11,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show readEffectPreset;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/solid.dart';
 import 'package:uuid/uuid.dart' show UuidValue;
 
 /// Footage dragged from the Project panel onto the Timeline, or onto the New
@@ -42,6 +43,16 @@ class CompDragData {
   /// What the floating label under the pointer reads.
   final String label;
   const CompDragData(this.comp, this.label);
+}
+
+/// A solid dragged from the Project panel onto either timeline, where it
+/// lands as a Solid layer or as a clip.
+class SolidDragData {
+  final SolidReference solid;
+
+  /// What the floating label under the pointer reads.
+  final String label;
+  const SolidDragData(this.solid, this.label);
 }
 
 /// An effect, or a saved preset, dragged from the Effects & presets panel

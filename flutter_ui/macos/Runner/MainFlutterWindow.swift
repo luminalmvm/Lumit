@@ -32,10 +32,63 @@ class MainFlutterWindow: NSWindow {
   /// while the splash is what shows.
   private var handedOver = false
 
+  /// The style's see-through window (lib/state/window_backdrop.dart): the
+  /// system's material under Flutter, which leaves its room clear over it.
+  private var backdrop: NSVisualEffectView?
+
+  /// "tint" is the desktop's colour, soft and still. "blur" is whatever is
+  /// behind the window, blurred. Anything else is a solid window. Answers
+  /// whether it is see-through, which it isn't with Reduce transparency on in
+  /// System Settings.
+  private func setBackdrop(_ args: [String: Any]) -> Bool {
+    let kind = args["kind"] as? String ?? ""
+    let on = (kind == "tint" || kind == "blur")
+      && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+    guard let controller = contentViewController as? FlutterViewController,
+      let content = contentView
+    else { return false }
+    if on {
+      let effect = backdrop ?? NSVisualEffectView(frame: content.bounds)
+      if backdrop == nil {
+        effect.autoresizingMask = [.width, .height]
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        content.superview?.addSubview(effect, positioned: .below, relativeTo: content)
+        backdrop = effect
+      }
+      effect.frame = content.frame
+      effect.material = kind == "tint" ? .underWindowBackground : .hudWindow
+      effect.appearance = NSAppearance(
+        named: args["dark"] as? Bool == false ? .aqua : .darkAqua)
+      isOpaque = false
+      backgroundColor = .clear
+      controller.backgroundColor = .clear
+    } else {
+      backdrop?.removeFromSuperview()
+      backdrop = nil
+      isOpaque = true
+      backgroundColor = .windowBackgroundColor
+      controller.backgroundColor = nil
+    }
+    return on
+  }
+
   /// Kept running in the background, closing the window only hides it, and
   /// the Dock icon goes with it. Quit in the menu bar is an ordinary quit.
+  ///
+  /// Otherwise a panel popped out into a window of its own closes with this
+  /// one, as it does on the other systems. Its close docks it, so nothing in
+  /// it is lost, and quitting asks about unsaved work as it always did.
   override func performClose(_ sender: Any?) {
-    guard keepRunning else { return super.performClose(sender) }
+    guard keepRunning else {
+      for window in NSApp.windows
+      where window !== self && window.isVisible
+        && window.contentViewController is FlutterViewController
+      {
+        window.performClose(nil)
+      }
+      return super.performClose(sender)
+    }
     orderOut(nil)
     NSApp.setActivationPolicy(.accessory)
     windowChannel?.invokeMethod("hidden", arguments: nil)
@@ -213,6 +266,9 @@ class MainFlutterWindow: NSWindow {
         self?.setBackground(call.arguments as? [String: Any] ?? [:])
       case "show":
         self?.reveal()
+      case "backdrop":
+        result(self?.setBackdrop(call.arguments as? [String: Any] ?? [:]) ?? false)
+        return
       default:
         result(FlutterMethodNotImplemented)
         return
@@ -220,6 +276,14 @@ class MainFlutterWindow: NSWindow {
       result(nil)
     }
     windowChannel = window
+    // Reduce transparency switched in System Settings: Dart asks for the
+    // backdrop again and learns whether it shows.
+    NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+      object: nil, queue: .main
+    ) { [weak self] _ in
+      self?.windowChannel?.invokeMethod("backdrop", arguments: nil)
+    }
 
     // Started at sign-in, it waits in the menu bar with no window and no Dock
     // icon until it is opened.

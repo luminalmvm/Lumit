@@ -254,7 +254,7 @@ class _CacheMeterState extends State<_CacheMeter> {
     try {
       final work = workAreaFrames(widget.comp);
       final held = widget.comp.cachedFrames(
-        frames: BigInt.from(frames),
+        frames: frames,
         scale: ui.viewerScale,
       );
       final start = work.start.clamp(0, frames);

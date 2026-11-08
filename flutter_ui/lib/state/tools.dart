@@ -39,6 +39,7 @@ enum ToolGroup {
   anchor,
   razor,
   shape,
+  shape3d,
   pen,
   type,
   paint,
@@ -70,6 +71,16 @@ enum ToolMode {
   shapeEllipse(ToolGroup.shape, LumitIcon.ellipse, ready: true),
   shapePolygon(ToolGroup.shape, LumitIcon.polygon, ready: true),
   shapeStar(ToolGroup.shape, LumitIcon.star, ready: true),
+
+  // The 3D shapes: a click in the Viewer puts one there, in the order
+  // Layer > New > 3D shape lists them.
+  shape3dCube(ToolGroup.shape3d, LumitIcon.cube3d, ready: true),
+  shape3dSphere(ToolGroup.shape3d, LumitIcon.sphere, ready: true),
+  shape3dCylinder(ToolGroup.shape3d, LumitIcon.cylinder, ready: true),
+  shape3dCone(ToolGroup.shape3d, LumitIcon.cone, ready: true),
+  shape3dTorus(ToolGroup.shape3d, LumitIcon.torus, ready: true),
+  shape3dPlane(ToolGroup.shape3d, LumitIcon.plane, ready: true),
+  shape3dPyramid(ToolGroup.shape3d, LumitIcon.pyramid, ready: true),
 
   // The Pen builds a mask path point by point. Its four siblings edit a
   // finished path, which is the gizmo's work.
@@ -142,6 +153,13 @@ enum ToolMode {
         ToolMode.shapeEllipse => l10n.toolShapeEllipse,
         ToolMode.shapePolygon => l10n.toolShapePolygon,
         ToolMode.shapeStar => l10n.toolShapeStar,
+        ToolMode.shape3dCube => l10n.shape3dCube,
+        ToolMode.shape3dSphere => l10n.shape3dSphere,
+        ToolMode.shape3dCylinder => l10n.shape3dCylinder,
+        ToolMode.shape3dCone => l10n.shape3dCone,
+        ToolMode.shape3dTorus => l10n.shape3dTorus,
+        ToolMode.shape3dPlane => l10n.shape3dPlane,
+        ToolMode.shape3dPyramid => l10n.shape3dPyramid,
         ToolMode.pen => l10n.toolPen,
         ToolMode.penAddVertex => l10n.toolPenAddVertex,
         ToolMode.penDeleteVertex => l10n.toolPenDeleteVertex,
@@ -228,6 +246,7 @@ const Map<String, ToolGroup> toolActions = {
   'tool.anchor': ToolGroup.anchor,
   'tool.razor': ToolGroup.razor,
   'tool.shape': ToolGroup.shape,
+  'tool.shape3d': ToolGroup.shape3d,
   'tool.pen': ToolGroup.pen,
   'tool.type': ToolGroup.type,
   'tool.paint': ToolGroup.paint,

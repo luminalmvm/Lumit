@@ -8,6 +8,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
 
 import 'easing_curve.dart';
+import 'effect_param_row_frb.dart' show graphInputsOf;
 import 'graph_channels.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
@@ -199,10 +200,15 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
   for (final (layer, props, values) in transforms.values) {
     layer.setTransforms(props: props, values: values);
   }
+  // Each of the layer's lists an edit lands on, staged and committed alone:
+  // the stack, its styles, a placed graph's Inputs.
   for (final (layer, byEffect) in effects.values) {
-    // The layer's stack, and its Node graph drivers when a channel names one:
-    // each list is written whole, through the same call.
-    for (final staged in [layer.getEffects(), layer.getGraphDrivers()]) {
+    for (final staged in [
+      layer.getEffects(),
+      layer.getStyles(),
+      graphInputsOf(layer),
+      layer.getGraphDrivers(),
+    ]) {
       var touched = false;
       for (final instance in staged) {
         final wanted = byEffect[instance.id().toString()];
@@ -260,7 +266,7 @@ void previewChannelEdits({
   final layerId = layer.internallayerId.toString();
   bool sameLayer(GraphChannel c) =>
       c.entry.layer.internallayerId.toString() == layerId;
-  final bigFrame = BigInt.from(frame);
+  final bigFrame = frame;
 
   if (lead.retime) {
     comp.renderFrameWithRetime(

@@ -219,7 +219,19 @@ impl BezierWarp {
             ],
             steps: self.quality.clamp(1, 12) as u32,
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            frame: [0.0; 4],
         }
+    }
+
+    /// [`Self::packed`] for the op whose parameters are `p`, told where the
+    /// frame sits when a node graph box has set it down on a bigger raster.
+    #[must_use]
+    pub fn packed_in(p: Params<'_>) -> cpu::BezierWarpParams {
+        let mut packed = Self::read(p).packed();
+        if let Some(frame) = crate::fx::schema::frame_rect(p) {
+            packed.frame = frame;
+        }
+        packed
     }
 }
 
@@ -232,6 +244,25 @@ impl EffectDef for BezierWarpDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::bezier_warp(rgba, w, h, &BezierWarp::read(p).packed());
+        cpu::bezier_warp(rgba, w, h, &BezierWarp::packed_in(p));
+    }
+
+    /// The bent frame, which stays inside its twelve points. A matte or a Mix
+    /// can leave the picture where it was, so the rectangle it was handed is
+    /// kept as well.
+    fn bounds(&self, p: Params<'_>, rect: [f32; 4]) -> [f32; 4] {
+        // A pixel of margin for the bilinear tap.
+        BezierWarp::read(p)
+            .packed()
+            .pts
+            .iter()
+            .fold(rect, |r, [x, y]| {
+                [
+                    r[0].min(x - 1.0),
+                    r[1].min(y - 1.0),
+                    r[2].max(x + 1.0),
+                    r[3].max(y + 1.0),
+                ]
+            })
     }
 }

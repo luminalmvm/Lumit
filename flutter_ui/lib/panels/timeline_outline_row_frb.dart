@@ -29,6 +29,8 @@ import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
 import 'audio_streams_menu_frb.dart';
+import 'layer_fold_frb.dart' show hasFlow;
+import 'light_rows_frb.dart' show feedsEnvironment;
 import 'timeline_extras_frb.dart';
 import 'sequence_view_frb.dart';
 import 'stagger_panel_frb.dart' show showStaggerPanel;
@@ -216,7 +218,7 @@ class _OutlineRowState extends State<OutlineRow> {
     final drag = widget.layerDrag.release(widget.blockHeights);
     if (drag == null || drag.from == drag.to) return;
     widget.layers[drag.from].layer
-        .reorder(newIndex: BigInt.from(_stackIndex(drag.to)));
+        .reorder(newIndex: _stackIndex(drag.to));
     widget.onChanged();
   }
 
@@ -548,6 +550,7 @@ class _OutlineRowState extends State<OutlineRow> {
                     BridgeLayerSwitch.visible,
                     mark: LumitIcons.visible,
                     offMark: LumitIcons.hidden,
+                    dim: feedsEnvironment(widget.stack, layer.internallayerId),
                     tip: switches.visible
                         ? l10n.switchVisible
                         : l10n.switchHidden)
@@ -722,7 +725,7 @@ class _OutlineRowState extends State<OutlineRow> {
   /// leaving fx, 3D and motion blur.
   /// Whether the adjustment cell is drawn on a row of this kind: every
   /// kind that puts something in the Viewer, which is everything except the
-  /// four with no picture of their own.
+  /// kinds with no picture of their own.
   ///
   /// The frontend's half of `Layer::can_adjust`, listed as the kinds that are
   /// *out* rather than the ones that are in, so a new drawing kind gets the
@@ -731,7 +734,8 @@ class _OutlineRowState extends State<OutlineRow> {
       kind != BridgeLayerKind.camera &&
       kind != BridgeLayerKind.light &&
       kind != BridgeLayerKind.nullLayer &&
-      kind != BridgeLayerKind.audio;
+      kind != BridgeLayerKind.audio &&
+      kind != BridgeLayerKind.bus;
 
   Widget _renderCells(
       BuildContext context, BridgeLayerInfo info, double width) {
@@ -767,8 +771,8 @@ class _OutlineRowState extends State<OutlineRow> {
           //
           // **On every row that shows something in the Viewer** — footage,
           // solid, precomp, text, shape, sequence and a layer born an
-          // adjustment. Only the four with no picture to set aside leave it
-          // empty (camera, light, null, audio), and they keep the width so the
+          // adjustment. Only the kinds with no picture to set aside leave it
+          // empty (camera, light, null, audio, bus), and they keep the width so the
           // pickers after it stay in one column. Drawn regardless of the row's
           // own visibility switch: what a layer *is* and whether it is being
           // shown are two answers, and hiding one must not hide the other.
@@ -783,7 +787,7 @@ class _OutlineRowState extends State<OutlineRow> {
           // layer's interpolation policy rather than a `BridgeLayerSwitch`,
           // because that is what flow *is* underneath ("the option surfaces
           // the policy").
-          ModeCell.flow => info.kind == BridgeLayerKind.footage
+          ModeCell.flow => hasFlow(info.kind)
               ? _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
                   tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff,
                   onSet: (to) {
@@ -927,11 +931,20 @@ class _OutlineRowState extends State<OutlineRow> {
           // The chosen layer's name is the one thing on its row read at full
           // strength — the mockup brightens the name, and only the name, on
           // the selected row; every other row keeps `body`.
-          child: Text(info.name,
-              style: widget.selected ? t.bodyPrimary : t.body,
-              textDirection: nameDirection(info.name),
-              textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis),
+          child: Row(children: [
+            Flexible(
+              child: Text(info.name,
+                  style: widget.selected ? t.bodyPrimary : t.body,
+                  textDirection: nameDirection(info.name),
+                  textAlign: TextAlign.left,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            // Its eye does nothing, as a light reads it whether it's on or off.
+            if (feedsEnvironment(widget.stack, layer.internallayerId)) ...[
+              const SizedBox(width: identityGap),
+              Text(l10n.layerRowEnvironmentSource, style: t.caption),
+            ],
+          ]),
         ),
       ),
     );
@@ -1025,6 +1038,7 @@ class _OutlineRowState extends State<OutlineRow> {
     String? offMark,
     String? tip,
     ValueChanged<bool>? onSet,
+    bool dim = false,
   }) {
     final t = ThemeScope.of(context).theme;
     final project = Provider.of<LumitState>(context, listen: false).project;
@@ -1082,11 +1096,13 @@ class _OutlineRowState extends State<OutlineRow> {
     // and their struck glyph at rest too. A hidden or silenced layer has to
     // be obvious.
     final loud = name == 'visible' || name == 'audible';
-    final ink = on
-        ? t.textPrimary
-        : loud || !_resting
-            ? t.textMuted
-            : t.textDisabled;
+    final ink = dim
+        ? t.textDisabled
+        : on
+            ? t.textPrimary
+            : loud || !_resting
+                ? t.textMuted
+                : t.textDisabled;
     // The one switch the pointer is on comes up a step further than its
     // row, so which of the twelve a click would take is plain.
     Widget face(double lit) {
@@ -1474,7 +1490,7 @@ class _OutlineRowState extends State<OutlineRow> {
           if (to < 0 || to >= widget.layers.length) continue;
           try {
             widget.layers[i].layer
-                .reorder(newIndex: BigInt.from(_stackIndex(to)));
+                .reorder(newIndex: _stackIndex(to));
           } catch (_) {}
         }
       case 'delete':

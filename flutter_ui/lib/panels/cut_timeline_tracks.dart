@@ -19,6 +19,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'clip_fades.dart' show clipFadeEdge;
 import 'timeline_bar_frb.dart' show BarGrab, barGrabAt;
 import 'timeline_extras_frb.dart' show TimelineAxis;
+import 'timeline_snap.dart' show SnapTarget;
 
 /// The tools the strip offers, in the strip's order. Select moves and trims
 /// without moving anything else; Ripple trims and closes or opens the room
@@ -215,6 +216,17 @@ List<double> cutTrackTops(List<double> heights) {
   }
   return tops;
 }
+
+/// Where something dragged onto the Cut timeline would land: its track (null
+/// for a new one under the rest), its first frame and length, the name it is
+/// drawn with, and what its start or end caught.
+typedef CutLanding = ({
+  int? track,
+  int frame,
+  int length,
+  String label,
+  SnapTarget? caught,
+});
 
 /// Which track the point [y] lands on, measured down from the top of the
 /// first track, with [tops] from [cutTrackTops]. Null above the first or

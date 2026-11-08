@@ -60,6 +60,17 @@ sound on the main rows, gaps, crossfades and a passage of twelve-frame cuts.
 | B27 | Long cut: decoded sound in memory, comp open | ≤ 64 MB | ≤ 64 MB |
 | B28 | Long cut: decoded sound in memory, a minute played | ≤ 512 MB | ≤ 512 MB |
 | B29 | Long cut: first peaks of a file never summarised | ≤ 500 ms | ≤ 1500 ms |
+| B30 | Model layer, 1,000,000 triangles at 1080p, one frame | ≤ 8 ms | |
+| B31 | Particulate in the 3D scene over the same flat, 1,000,000 cap, sorted, behind a lit 3D card, 1080p, one frame | ≤ 16 ms | |
+| B32 | Volumetric light pass, 1080p, two lights showing, GPU | ≤ 4 ms | ≤ 12 ms |
+| B33 | B30 with two lights casting shadows, their maps made in the frame | ≤ 12 ms | |
+| B34 | Environment light: its cubes made from a 2K panorama, once a picture | ≤ 50 ms | |
+| B35 | B30 lit by an environment, its background drawn, one frame | ≤ 9 ms | |
+| B36 | Model layer on bones: 100,000 vertices, 64 bones and a morph target, posed and drawn at 1080p, one frame | ≤ 4 ms | |
+| B37 | Particulate's Simulate, 1,000,000 live particles, flow on and a card to hit, one step, GPU | ≤ 4 ms | |
+| B38 | Depth points of a 1080p shot at Density full, off axis, over the same flat layer, one frame | ≤ 16 ms | |
+| B39 | Extruded layer: one letter's mesh, bevelled, what a playing type-on adds a frame. Meshes are cached by outline under the governor, so a repeated outline adds nothing | ≤ 4 ms | |
+| B40 | Smoke and fire, a box 128 cells a side, full of burning gas: one step, and its march at 1080p, each | ≤ 8 ms | |
 
 The UI holds 60 fps during any interaction (16.6 ms is the floor) and budgets 8.3 ms a
 frame so high-refresh screens are fed. An idle editor schedules no frames.
@@ -76,6 +87,9 @@ edit the new mix is heard. B26 is work per second of sound, so 10 ms is one per 
 core. B27 and B28 are megabytes: decoded sound is kept in two-second blocks near the
 playhead under one 512 MB budget, never a whole file. B29 is B4's wait, paid once per
 file: its peaks are then read from a file beside its frame index.
+
+A run of 3D layers with a model of glass in it costs about an adjustment layer plus the
+run drawn again, since the glass bends the run drawn without it.
 
 **Document scale.** With 200 comps, 5,000 layers, 250,000 keyframes and 2,000 footage
 items open, B1 still holds, an edit or undo commits in 16 ms, it opens in 5 s and saves in
@@ -130,7 +144,7 @@ pressure it slows down, it never changes output.
 ## 7. CI
 
 - A frame submits one command buffer however many layers it has. A test holds that.
-- `lumit-bench` runs B3 to B7, B11 and B12 to B29 and compares each with
+- `lumit-bench` runs B3 to B7, B11, B12 to B31, B33 to B40 and compares each with
   `crates/lumit-bench/baselines/<os>.json`. It fails at 1.6x worse. Under 1 ms isn't
   ratio-gated. Regenerate a baseline by running the harness and committing the file.
 - The absolute budgets are only asserted under `LUMIT_REFERENCE_HW=1`.
@@ -138,4 +152,4 @@ pressure it slows down, it never changes output.
   `flutter_ui/integration_test/ui_budget_test.dart`. B2 is asserted everywhere, B1 only on
   reference hardware. `rebuild_budget_test.dart` pins rebuild and paint counts per
   gesture.
-- B8, B9 and B10 are manual checks before a release.
+- B8, B9, B10 and B32 are manual checks before a release.

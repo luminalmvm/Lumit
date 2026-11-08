@@ -41,6 +41,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use uuid::Uuid;
 
+mod routes;
+#[cfg(target_arch = "wasm32")]
+mod web;
+
 /// The persistent GPU engines a render needs, held between calls so shaders
 /// compile once. Taken out for the duration of one render and put back
 /// afterwards, so a failed frame never discards the compiled pipelines.
@@ -406,7 +410,7 @@ fn shared_pool_evictions(entries: &[(u32, u32, u32)]) -> Vec<usize> {
 
 /// One frame's decoded per-layer pixels, kept alongside the decode plan that
 /// asked for them, so the next render can tell at a glance whether it needs new
-/// ones ([`crate::plan::same_decode`]).
+/// ones ([`crate::plan::same_decode`]). No plan is kept for a stand-in's pixels.
 struct Retained {
     comp: Uuid,
     frame: u64,
@@ -427,7 +431,8 @@ struct Retained {
 /// more (stride, offset, DRM format) and has its own [`SharedFrameInfoLinux`].
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 pub struct SharedFrameInfo {
     /// The NT `HANDLE` value of the shared texture on Windows (a
@@ -792,6 +797,7 @@ impl HeadlessRenderer {
         // the struct: every store below that holds frame-sized memory registers
         // against this one account (docs/13 §3).
         let ledger = std::sync::Arc::clone(gpu.ledger());
+        crate::model::account_against(&ledger);
         Self {
             gpu,
             parts: Some(parts),
@@ -872,8 +878,10 @@ impl HeadlessRenderer {
     /// Whether the renders from here on may add to the per-effect cache. On
     /// for a committed document's scrub and edit renders; off for a drag's
     /// provisional values and for playback, which would only churn the budget.
-    /// Lookups happen either way.
+    /// Lookups happen either way. Never in the browser build, where an output
+    /// could hold a footage stand-in.
     pub fn keep_effect_outputs(&mut self, keep: bool) {
+        let keep = keep && cfg!(not(target_arch = "wasm32"));
         if let Some(parts) = self.parts.as_ref() {
             parts.fx_cache.borrow_mut().keep_outputs(keep);
         }
@@ -1148,7 +1156,7 @@ impl HeadlessRenderer {
             && self.colour_view.is_none()
             && self.colour_output.is_none()
         {
-            return base;
+            return crate::model::named_as_shown(base);
         }
         let mut h = blake3::Hasher::new();
         h.update(b"view/");
@@ -1194,7 +1202,7 @@ impl HeadlessRenderer {
         let bytes = h.finalize();
         let mut k = [0u8; 16];
         k.copy_from_slice(&bytes.as_bytes()[..16]);
-        u128::from_le_bytes(k)
+        crate::model::named_as_shown(u128::from_le_bytes(k))
     }
 
     /// What the Viewer is currently looking through.
@@ -1203,9 +1211,8 @@ impl HeadlessRenderer {
         self.view
     }
 
-    /// Let this renderer make a Lens flare's bake beside the frame rather than
-    /// inside it, so choosing a lens is a wait you can watch instead of
-    /// half a second of stopped picture.
+    /// Let this renderer make a Lens flare's bake, and read a 3D model, beside
+    /// the frame rather than inside it, so neither stops the picture.
     ///
     /// **Off by default, and the exporter never turns it on.** An export builds
     /// its own renderer on its own device, so it starts with an empty bake
@@ -1218,6 +1225,7 @@ impl HeadlessRenderer {
     /// kept — see [`Self::flare_substitutions`], which says exactly which
     /// frames those were.
     pub fn set_deferred_flare_bakes(&self, deferred: bool) {
+        crate::model::read_aside(deferred);
         if let Some(parts) = self.parts.as_ref() {
             for fx in parts.fx_all() {
                 fx.set_deferred_flare_bakes(deferred);
@@ -1225,32 +1233,35 @@ impl HeadlessRenderer {
         }
     }
 
-    /// A number that moves whenever a flare bake is queued or lands.
-    ///
-    /// Read either side of a render to answer "did this frame draw the lens its
-    /// parameters name?", and read on an idle tick to notice that a bake has
-    /// landed and the picture is now worth making again.
+    /// A number that moves whenever a flare bake is queued or lands, or a frame
+    /// the browser build's page decoded lands. Read either side of a render to
+    /// answer "did this frame draw the lens its parameters name?", and on an
+    /// idle tick to notice that the picture is now worth making again.
     #[must_use]
     pub fn flare_bake_generation(&self) -> u64 {
         self.parts.as_ref().map_or(0, |parts| {
             parts
                 .fx_all()
                 .map(lumit_gpu::fx::FxEngine::flare_bake_generation)
-                .sum()
-        })
+                .sum::<u64>()
+        }) + crate::model::reads()
+            + lumit_media::frames_landed()
     }
 
     /// How many times a frame has drawn a lens flare with other optics than
-    /// its parameters name. Read either side of a render: unmoved
-    /// means the frame may be banked under the name taken before it.
+    /// its parameters name, or footage the browser build's page is still
+    /// decoding, or a read-back there from an earlier frame. Read either side
+    /// of a render: unmoved means it may be banked.
     #[must_use]
     pub fn flare_substitutions(&self) -> u64 {
         self.parts.as_ref().map_or(0, |parts| {
             parts
                 .fx_all()
                 .map(lumit_gpu::fx::FxEngine::flare_substitutions)
-                .sum()
-        })
+                .sum::<u64>()
+        }) + crate::model::left_out()
+            + lumit_media::stand_ins()
+            + lumit_gpu::device::read_stand_ins()
     }
 
     /// Whether a flare bake is being made right now.
@@ -1260,7 +1271,7 @@ impl HeadlessRenderer {
             parts
                 .fx_all()
                 .any(lumit_gpu::fx::FxEngine::flare_bake_pending)
-        })
+        }) || crate::model::reading()
     }
 
     /// The content-hash name of this comp frame ([`crate::cache::frame_key`]),
@@ -1426,6 +1437,7 @@ impl HeadlessRenderer {
         );
         if !reusable {
             let total = jobs.len() as u32;
+            let stood_in = lumit_media::stand_ins();
             let pixels = self
                 .pool
                 .decode_comp(comp_id, frame as usize, &jobs, 0, &|done| {
@@ -1437,7 +1449,11 @@ impl HeadlessRenderer {
             self.retained = Some(Retained {
                 comp: comp_id,
                 frame,
-                jobs,
+                jobs: if lumit_media::stand_ins() == stood_in {
+                    jobs
+                } else {
+                    Vec::new()
+                },
                 pixels,
             });
         }
@@ -1950,6 +1966,7 @@ impl HeadlessRenderer {
                                 lumit_core::model::comp_footage_items(doc, c)
                             })
                         }
+                        lumit_core::sequence::ClipSource::Solid(_) => Vec::new(),
                     };
                     for item in items {
                         if let Some(ProjectItem::Footage(f)) = doc.item(item) {
@@ -1999,14 +2016,6 @@ impl HeadlessRenderer {
             done.target_width,
             done.decoded,
         );
-    }
-
-    /// Forget the retained per-layer pixels. The next [`Self::render_preview`]
-    /// decodes afresh. Called when something outside the document changes what
-    /// the sources *are* — a probe landing, a relink — since the decode plan
-    /// alone cannot see that.
-    pub fn forget_retained(&mut self) {
-        self.retained = None;
     }
 
     /// The decoded-frame cache's bytes and how many decoders are open — see
@@ -2168,22 +2177,10 @@ impl HeadlessRenderer {
         kind: u32,
         colours: [[u8; 3]; 5],
     ) -> Result<Vec<u8>, String> {
-        let kind = match kind {
-            0 => lumit_gpu::scope::ScopeKind::WaveformLuma,
-            1 => lumit_gpu::scope::ScopeKind::WaveformRgb,
-            2 => lumit_gpu::scope::ScopeKind::Vectorscope,
-            3 => lumit_gpu::scope::ScopeKind::Histogram,
-            other => return Err(format!("headless scope: unknown kind {other}")),
-        };
-        let colours = lumit_gpu::scope::ScopeColours {
-            bg: colours[0],
-            trace: colours[1],
-            red: colours[2],
-            green: colours[3],
-            blue: colours[4],
-        };
+        let kind = lumit_gpu::scope::ScopeKind::from_code(kind)
+            .ok_or_else(|| format!("headless scope: unknown kind {kind}"))?;
         self.scope
-            .trace_rgba8(&self.gpu, kind, colours, rgba, width, height)
+            .trace_rgba8(&self.gpu, kind, colours.into(), rgba, width, height)
             .map_err(|e| e.to_string())
     }
 
@@ -2253,7 +2250,7 @@ impl HeadlessRenderer {
                 });
             }
         }
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         // A flare that fell back to the previous lens during this composite
         // made a picture of a lens its name does not describe. The
         // name was taken before the render, so it has to be dropped
@@ -3335,9 +3332,21 @@ impl AudioJobsBuilder {
             .layers
             .iter()
             .any(|l| l.switches.solo && (l.audio_only || self.layer_has_audio(doc, l)));
+        let buses = routes::buses(doc, comp, base_s);
         for layer in &comp.layers {
+            let from = jobs.len();
+            let any_solo = any_solo && !routes::feeds_solo(&buses, layer);
             self.walk_layer(
                 doc, comp, layer, any_solo, base_s, window, carriers, strip, visited, jobs,
+            );
+            routes::route(
+                &buses,
+                layer,
+                base_s,
+                carriers.len(),
+                strip.is_none(),
+                from,
+                jobs,
             );
         }
     }
@@ -3577,6 +3586,8 @@ impl AudioJobsBuilder {
                     Some((item, sound))
                 }
                 lumit_core::sequence::ClipSource::Comp(_) => None,
+                // A colour makes no sound.
+                lumit_core::sequence::ClipSource::Solid(_) => continue,
             };
             let (start_s, end_s) = spans[i];
             // What the layer's own in/out points leave of it.
@@ -3788,7 +3799,7 @@ impl AudioJobsBuilder {
     /// Answered through the same per-item probe cache, so asking about every
     /// row of a comp probes each file once.
     pub fn layer_has_audio(&mut self, doc: &Document, layer: &lumit_core::model::Layer) -> bool {
-        self.kind_has_audio(doc, &layer.kind, &mut Vec::new())
+        layer.is_bus() || self.kind_has_audio(doc, &layer.kind, &mut Vec::new())
     }
 
     fn kind_has_audio(
@@ -3858,6 +3869,7 @@ impl AudioJobsBuilder {
                         lumit_core::sequence::ClipSource::Comp(comp) => {
                             self.kind_has_audio(doc, &LayerKind::Precomp { comp }, visited)
                         }
+                        lumit_core::sequence::ClipSource::Solid(_) => false,
                     };
                     if sounds {
                         has = true;
@@ -3913,7 +3925,7 @@ impl AudioJobsBuilder {
             }
         }
         // A missing file isn't remembered, so a relinked clip is heard.
-        if !path.is_file() {
+        if !lumit_media::is_file(path) {
             return 0;
         }
         // The lock is not held across the probe: FFI, and as slow as opening a
@@ -4100,7 +4112,7 @@ pub fn source_frames_used(
 /// "missing" would be actively wrong. A clean video caches its exact rate and
 /// frame count, warming the on-disk frame index so the decoder open reuses it.
 fn probe_item(src: &lumit_media::sequence::MediaSource) -> Probe {
-    if !src.on_disk().is_file() {
+    if !lumit_media::is_file(src.on_disk()) {
         return Probe::Slate;
     }
     let Ok(probe) = lumit_media::probe::probe(src) else {
@@ -4469,6 +4481,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -4509,7 +4522,7 @@ mod tests {
     /// id. The path is deliberately not on disk: `probe_item` answers
     /// [`Probe::Slate`] for a path that is not a file without opening anything,
     /// so a probe here costs a `stat` and never FFmpeg.
-    fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
+    pub(super) fn push_footage_item(doc: &mut Document, name: &str) -> Uuid {
         let id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
@@ -4533,12 +4546,12 @@ mod tests {
     /// Tell the has-audio memo that `item` carries sound, so a test can place a
     /// song without a file on disk. Ids are fresh per test, so seeding one says
     /// nothing about anybody else's.
-    fn seed_has_audio(item: Uuid) {
+    pub(super) fn seed_has_audio(item: Uuid) {
         AUDIO_STREAMS.lock().unwrap().insert(item, 1);
     }
 
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
-    fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
+    pub(super) fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
         let layer = lumit_core::model::Layer {
             graph: Default::default(),
             markers: Vec::new(),
@@ -4558,6 +4571,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -4577,7 +4591,7 @@ mod tests {
     }
 
     /// An empty composition added to `doc`, returning its id.
-    fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
+    pub(super) fn push_comp(doc: &mut Document, name: &str, w: u32, h: u32) -> Uuid {
         let id = Uuid::now_v7();
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
@@ -4646,6 +4660,7 @@ mod tests {
             let layer = lumit_core::model::Layer {
                 adjustment: false,
                 pitch_follows_speed: false,
+                audio_routes: Default::default(),
                 graph: Default::default(),
                 markers: Vec::new(),
                 id: Uuid::now_v7(),
@@ -6540,6 +6555,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -10178,75 +10194,4 @@ mod tests {
 /// own dev-dependency turns on. A test that needs a *second* renderer beside
 /// this one, or its own device to lose, still calls [`HeadlessRenderer::new`].
 #[cfg(any(test, feature = "test-fixtures"))]
-pub mod test_support {
-    use super::HeadlessRenderer;
-    use lumit_gpu::test_support::{lease, Lease};
-    use lumit_gpu::SharedGpu;
-    use std::ops::{Deref, DerefMut};
-
-    /// A [`HeadlessRenderer`] on borrowed engines. Derefs to the renderer;
-    /// returns the engines on drop.
-    pub struct TestRenderer {
-        /// `Some` for the whole of the test; taken in `drop`.
-        renderer: Option<HeadlessRenderer>,
-        lease: Lease,
-    }
-
-    impl HeadlessRenderer {
-        /// A renderer around the shared device and engines, or `Err` on a
-        /// machine with no adapter — the same shape as [`Self::new`], so a
-        /// test's skip site does not change.
-        pub fn shared() -> Result<TestRenderer, String> {
-            let mut lease = lease().ok_or_else(|| "no GPU adapter".to_string())?;
-            let shared = lease
-                .take()
-                .ok_or_else(|| "the shared GPU is out on loan".to_string())?;
-            let SharedGpu {
-                ctx,
-                colour,
-                compositor,
-                fx,
-                scope,
-            } = shared;
-            let renderer = HeadlessRenderer::from_engines(ctx, colour, compositor, fx, scope);
-            Ok(TestRenderer {
-                renderer: Some(renderer),
-                lease,
-            })
-        }
-    }
-
-    impl Deref for TestRenderer {
-        type Target = HeadlessRenderer;
-
-        // Test-only code; the `Option` is `Some` until `drop` by construction.
-        #[allow(clippy::expect_used)]
-        fn deref(&self) -> &HeadlessRenderer {
-            self.renderer
-                .as_ref()
-                .expect("a test renderer outlives its drop")
-        }
-    }
-
-    impl DerefMut for TestRenderer {
-        #[allow(clippy::expect_used)]
-        fn deref_mut(&mut self) -> &mut HeadlessRenderer {
-            self.renderer
-                .as_mut()
-                .expect("a test renderer outlives its drop")
-        }
-    }
-
-    impl Drop for TestRenderer {
-        fn drop(&mut self) {
-            if let Some(shared) = self
-                .renderer
-                .take()
-                .and_then(HeadlessRenderer::into_engines)
-            {
-                self.lease.restore(shared);
-            }
-        }
-    }
-}
-
+pub mod test_support;

@@ -27,7 +27,9 @@ the analysis stops there and solves the part that worked.
 | **Analyse** | Button | - | - | - |
 | **Cancel** | Button | - | - | - |
 | **Feature density** | Dropdown | Low · Normal · High | Normal | - |
+| **Focal length** | Slider | 0 to 300; higher | 0 | - |
 | **Use masks** | Checkbox | On or off | On | - |
+| **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
 | **Show points** | Checkbox | On or off | On | - |
 
 {/* END GENERATED */}
@@ -38,7 +40,11 @@ the analysis stops there and solves the part that worked.
 - **Cancel**: stop a track that's running.
 - **Feature density**: how many points are tracked. More is slower but copes better
   with hard footage.
+- **Focal length**: the lens in millimetres on 35 mm film. At 0 the track works it out.
 - **Use masks**: masks on the layer are left out of the track.
+- **Frames**: which frames Analyse tracks. **All frames** is the whole footage however the
+  layer is trimmed, **Layer in to out** is the frames between the layer's in and out
+  points, and **Work area** is the frames inside the composition's work area.
 - **Show points**: draws the solved points over the picture.
 
 ## Related

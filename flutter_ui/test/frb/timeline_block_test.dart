@@ -287,5 +287,75 @@ void main() {
           reason: 'the layer the keys sat on is untouched');
     });
 
+    /// A 3D arrow keys one axis, so a row's axes can be keyed apart. The row
+    /// shows that key, and its diamond is that key and no other axis's.
+    testWidgets('a key on one axis of a row shows, and moves and goes alone',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      BridgeScalar keyed(List<int> frames) => BridgeScalar.keyframed([
+            for (final f in frames)
+              BridgeKeyframe(
+                time: p.comp.timeOfFrame(frame: f),
+                value: f.toDouble(),
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear(),
+              ),
+          ]);
+      layer.setTransforms(props: const [
+        BridgeTransformProp.positionX,
+        BridgeTransformProp.positionY,
+        BridgeTransformProp.positionZ,
+      ], values: [
+        keyed([300, 1500]),
+        keyed([300, 900, 1500]),
+        keyed([300, 1500]),
+      ]);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openTransform(tester, layer);
+
+      List<int> frames(BridgeScalar s) => [
+            for (final k in (s as BridgeScalar_Keyframed).field0)
+              p.comp.frameAtTime(time: k.time)
+          ];
+      void expectFrames(List<int> x, List<int> y, List<int> z) {
+        final tf = layer.getTransform();
+        expect(frames(tf.positionX), x);
+        expect(frames(tf.positionY), y);
+        expect(frames(tf.positionZ), z);
+      }
+
+      final path = '${layer.internallayerId}/transform/positionX';
+      Finder diamond(int i) => find.byKey(ValueKey<String>('tl-key-$path#$i'));
+      expect(diamond(2), findsOneWidget);
+
+      final lane = tester.getRect(find.byKey(ValueKey<String>('tl-keys-$path')));
+      final perFrame =
+          (lane.width - TimelineAxis.pad * 2) / p.comp.durationFrames();
+      await tester.drag(diamond(1), Offset(perFrame * 150, 0));
+      await tester.pumpAndSettle();
+      final y = frames(layer.getTransform().positionY);
+      expect(y[1], greaterThan(900));
+      expectFrames([300, 1500], [300, y[1], 1500], [300, 1500]);
+
+      await tester.tap(diamond(1));
+      await tester.pumpAndSettle();
+      p.uiState.activePane.value = Panel.timeline.pane();
+      expect(p.uiState.deleteClaim?.call(), isTrue);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expectFrames([300, 1500], [300, 1500], [300, 1500]);
+
+      // Back in step, a diamond stands for every axis again.
+      await tester.tap(diamond(1));
+      await tester.pumpAndSettle();
+      expect(p.uiState.deleteClaim?.call(), isTrue);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expectFrames([300], [300], [300]);
+    });
+
   }, skip: !engineAvailable);
 }

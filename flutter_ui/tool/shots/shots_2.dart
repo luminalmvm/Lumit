@@ -334,7 +334,7 @@ Future<void> main() async {
   // a minute, and a bar that has finished is not a bar filling.
   await pause(4);
   final held =
-      comp.cachedFrames(frames: BigInt.from(250), scale: ui.viewerScale);
+      comp.cachedFrames(frames: 250, scale: ui.viewerScale);
   // ignore: avoid_print
   print('CACHE ${held.where((t) => t != 0).length} of ${held.length} '
       'at scale ${ui.viewerScale}');

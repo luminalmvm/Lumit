@@ -4,7 +4,7 @@
 // built the preset *listing* at all. What is asserted is that each reaches the
 // document — an effect list nothing can apply from is a picture of a panel.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -18,6 +18,8 @@ import 'package:lumit_flutter/panels/scopes_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 void main() {
   setUpAll(initEngineForTests);

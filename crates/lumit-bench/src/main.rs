@@ -110,6 +110,49 @@ fn run() -> Result<(), String> {
         },
     )?);
 
+    // A Model layer of a million triangles (docs/13 §2 B30), and with
+    // shadows (B33).
+    results.extend(lumit_bench::models::budgets(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
+    // One letter's mesh on an extruded layer (docs/13 §2 B39).
+    results.extend(lumit_bench::extruded::budgets(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
+    // A million particles in the 3D scene (docs/13 §2 B31).
+    results.extend(lumit_bench::scene_points::budgets(
+        &mut |m: Measurement| {
+            println!(
+                "{}",
+                serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+            );
+        },
+    )?);
+
+    // One step of a million simulated particles (docs/13 §2 B37).
+    results.extend(lumit_bench::sim_step::budgets(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
+    // A step and a march of smoke at 128 cells a side (docs/13 §2 B40).
+    results.extend(lumit_bench::smoke_step::budgets(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
     let out = out_path();
     let banked = Baseline::from_results(&results);
     let text =

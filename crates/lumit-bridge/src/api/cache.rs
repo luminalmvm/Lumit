@@ -349,6 +349,7 @@ pub fn set_vram_cache_budget(bytes: u64) -> BridgeVramCacheStats {
 #[frb(sync)]
 pub fn clear_vram_cache() -> BridgeVramCacheStats {
     crate::framecache::vram::request_clear();
+    lumit_render::sim::clear_kept();
     crate::framecache::bar::invalidate();
     vram_cache_stats()
 }

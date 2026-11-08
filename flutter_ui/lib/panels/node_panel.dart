@@ -406,7 +406,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       // Read inside the closure: a held tick must send the newest staged
       // value, not the one that was current when it was held.
       _driverPreview.request(() => graph.renderFrameWithGraphPreview(
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
             scale: ui.viewerScale,
             instances: _graphInstancesWith(graph, effect),
           ));
@@ -421,7 +421,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       // The drivers are read *inside* the closure: a held tick must send the
       // newest staged value, not the one that was current when it was held.
       _driverPreview.request(() => comp.renderFrameWithDriverPreview(
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
             scale: ui.viewerScale,
             layer: layer,
             drivers: _driversWith(layer, effect),
@@ -441,7 +441,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     if (ui == null) return;
     final comp = ui.selectedComp;
     final layer = _layer;
-    final frame = BigInt.from(ui.playheadFrame.value);
+    final frame = ui.playheadFrame.value;
     final home = picked.graph
         ? comp == null
             ? null
@@ -547,9 +547,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           onChanged: ui.model.refresh,
           pressed: _pressed,
         ),
-      'depth' || 'remove_background' => PlaneDisplayFrb(
+      'depth' || 'depth_points' || 'remove_background' => PlaneDisplayFrb(
           key: ValueKey<String>('node-plane-display-$id'),
-          card: picked.info.name == 'depth' ? PlaneCard.depth : PlaneCard.matte,
+          card: picked.info.name == 'remove_background'
+              ? PlaneCard.matte
+              : PlaneCard.depth,
           layer: layer,
           graph: graph,
           effectId: id,

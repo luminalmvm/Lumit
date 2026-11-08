@@ -78,7 +78,8 @@ pub fn blend_seam(
     if mode == 0 {
         return None;
     }
-    let mix = (p.float(super::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+    let mix = (p.float(super::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0)
+        * p.float(super::schema::BLEND_FADE, 1.0);
     let entries = p
         .iter()
         .map(|(id, v)| {
@@ -344,6 +345,11 @@ pub fn glow_gaussian_plan(radius_px: f32, w: u32, h: u32) -> GlowGaussian {
 /// picture itself.
 pub fn glow_gaussian(seed: &[f32], w: u32, h: u32, g: &GlowGaussian) -> Vec<f32> {
     let (fw, fh) = (w as usize, h as usize);
+    // A grid as fine as the picture is the picture, as on the GPU.
+    if g.step <= 1.0 {
+        let lit = glow_gauss_pass(seed, fw, fh, g, false);
+        return glow_gauss_pass(&lit, fw, fh, g, true);
+    }
     let (cw, ch) = (glow_grid(w, g.step) as usize, glow_grid(h, g.step) as usize);
     let across = glow_tent(seed, (fw, fh), (cw, fh), g.step, true);
     let coarse = glow_tent(&across, (cw, fh), (cw, ch), g.step, false);
@@ -717,27 +723,35 @@ pub fn transform_matted(
 /// by `mix`. The accumulation order and the divide-by-count match the WGSL
 /// kernel op-for-op, so both paths agree within the cheap-class fp16 bound
 /// (§1.6). An empty `ops` is a defensive no-op (the caller never passes one).
+///
+/// Each op also names the channels it feeds (1 red, 2 green, 4 blue; alpha
+/// always), and a channel is the mean of the ops that feed it: that is how
+/// Shake's Channels shake the colours apart. `crop` is the part of the image
+/// the edge policy treats as the whole, `[x0, y0, x1, y1]` in pixels.
 pub fn transform_average(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    ops: &[([f32; 4], [f32; 2])],
+    ops: &[([f32; 4], [f32; 2], u32)],
     edge: u32,
+    crop: [u32; 4],
     mix: f32,
 ) {
-    transform_average_matted(rgba, w, h, ops, edge, mix, &[]);
+    transform_average_matted(rgba, w, h, ops, edge, crop, mix, &[]);
 }
 
 /// [`transform_average`] driven by a matte: every sub-frame
 /// tap's displacement is scaled toward none by the destination pixel's matte
 /// strength, exactly as [`transform_matted`] scales the single tap. An empty
 /// matte is the unmatted path to the byte.
+#[allow(clippy::too_many_arguments)]
 pub fn transform_average_matted(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    ops: &[([f32; 4], [f32; 2])],
+    ops: &[([f32; 4], [f32; 2], u32)],
     edge: u32,
+    crop: [u32; 4],
     mix: f32,
     matte: &[f32],
 ) {
@@ -745,7 +759,13 @@ pub fn transform_average_matted(
         return;
     }
     let original = rgba.to_vec();
-    let n = ops.len() as f32;
+    let feeds = |bits: u32| [bits & 1, bits >> 1 & 1, bits >> 2 & 1, 1].map(|b| b as f32);
+    let mut n = [0.0f32; 4];
+    for (_, _, bits) in ops {
+        for (n, f) in n.iter_mut().zip(feeds(*bits)) {
+            *n += f;
+        }
+    }
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
@@ -753,16 +773,17 @@ pub fn transform_average_matted(
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
             let mut acc = [0.0f32; 4];
-            for (m, o) in ops {
+            for (m, o, bits) in ops {
                 let qx = matte_toward(m[0] * px + m[1] * py + o[0], px, k);
                 let qy = matte_toward(m[2] * px + m[3] * py + o[1], py, k);
-                let s = bilinear_edge(&original, w, h, qx, qy, edge);
+                let s = bilinear_edge_in(&original, w, qx, qy, edge, crop);
+                let f = feeds(*bits);
                 for c in 0..4 {
-                    acc[c] += s[c];
+                    acc[c] += s[c] * f[c];
                 }
             }
             for c in 0..4 {
-                let v = acc[c] / n;
+                let v = acc[c] / n[c];
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
             }
         }
@@ -3592,6 +3613,9 @@ pub struct BezierWarpParams {
     pub steps: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Where the frame sits on the raster, `[x, y, width, height]`. A zero
+    /// width is the whole raster.
+    pub frame: [f32; 4],
 }
 
 /// The narrowest Jacobian determinant the patch inversion will divide by. Below
@@ -3683,14 +3707,18 @@ pub fn bezier_warp(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams) {
 /// empty matte is the unmatted path to the byte.
 pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams, matte: &[f32]) {
     let original = rgba.to_vec();
-    let (fw, fh) = (w as f32, h as f32);
+    let [ox, oy, fw, fh] = if p.frame[2] > 0.0 {
+        p.frame
+    } else {
+        [0.0, 0.0, w as f32, h as f32]
+    };
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
-            let mut u = px / fw;
-            let mut v = py / fh;
+            let mut u = (px - ox) / fw;
+            let mut v = (py - oy) / fh;
             for _ in 0..p.steps {
                 let (s, du, dv) = coons(&p.pts, u, v);
                 let fx = s[0] - px;
@@ -3712,8 +3740,8 @@ pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams
             {
                 [0.0f32; 4]
             } else {
-                let mut sx = u * fw;
-                let mut sy = v * fh;
+                let mut sx = ox + u * fw;
+                let mut sy = oy + v * fh;
                 if (sx - px).abs() < BEZ_SNAP_PX && (sy - py).abs() < BEZ_SNAP_PX {
                     sx = px;
                     sy = py;
@@ -5936,7 +5964,7 @@ fn edge_y(edge: u32) -> u32 {
     }
 }
 
-fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
+pub fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
     if (0..len).contains(&i) {
         return Some(i);
     }
@@ -5973,16 +6001,24 @@ pub fn radial_blur_taps(amount_px: f32) -> i32 {
 /// keeping full weight, exactly like the gaussian's normalisation). An
 /// `edge` past 3 carries a separate policy for y in its upper bits (see
 /// [`edge_y`]).
-fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
+pub fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
+    bilinear_edge_in(rgba, w, sx, sy, edge, [0, 0, w, h])
+}
+
+/// [`bilinear_edge`] with the edges at `crop`, `[x0, y0, x1, y1]` in pixels:
+/// what lies outside it is read as the policy reads outside the frame.
+fn bilinear_edge_in(rgba: &[f32], w: u32, sx: f32, sy: f32, edge: u32, crop: [u32; 4]) -> [f32; 4] {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
     let x0 = fx.floor();
     let y0 = fy.floor();
     let tx = fx - x0;
     let ty = fy - y0;
-    let (wi, hi) = (w as i64, h as i64);
+    let wi = w as i64;
+    let [x0c, y0c, x1c, y1c] = crop.map(i64::from);
     let (ex, ey) = (edge & 3, edge_y(edge));
-    let at = |x: i64, y: i64| match (edge_index(x, wi, ex), edge_index(y, hi, ey)) {
+    let inside = |i: i64, lo: i64, hi: i64, e: u32| edge_index(i - lo, hi - lo, e).map(|i| i + lo);
+    let at = |x: i64, y: i64| match (inside(x, x0c, x1c, ex), inside(y, y0c, y1c, ey)) {
         (Some(x), Some(y)) => {
             let s = ((y * wi + x) * 4) as usize;
             [rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]]
@@ -8538,8 +8574,11 @@ pub fn texturize_matted(
 pub struct MoodLightingParams {
     /// The light field's shape (§3.37's core), seed included.
     pub field: FractalField,
-    /// `1 ÷ pool size`, in raster pixels.
-    pub inv_scale: f32,
+    /// `1 ÷ pool size` across and down, in raster pixels.
+    pub inv_scale: [f32; 2],
+    /// Raster pixels a side of the square the field is read once for; 1 reads
+    /// it at every pixel.
+    pub block: u32,
     /// The field's depth coordinate: Drift ÷ 360.
     pub z: f32,
     /// Intensity ÷ 100.
@@ -8585,6 +8624,10 @@ pub fn mood_lighting_matted(
     p: &MoodLightingParams,
     matte: &[f32],
 ) {
+    // Each pixel reads the field at the centre of its block. A block of one is
+    // the pixel's own centre.
+    let b = p.block.max(1);
+    let half = b as f32 * 0.5;
     for y in 0..h {
         for x in 0..w {
             let i = (y as usize * w as usize + x as usize) * 4;
@@ -8593,8 +8636,8 @@ pub fn mood_lighting_matted(
             let contrast = matte_toward(p.contrast, 1.0, k);
             let n = fractal(
                 &p.field,
-                (x as f32 + 0.5) * p.inv_scale,
-                (y as f32 + 0.5) * p.inv_scale,
+                ((x / b * b) as f32 + half) * p.inv_scale[0],
+                ((y / b * b) as f32 + half) * p.inv_scale[1],
                 p.z,
             );
             // The field, spread to fill 0..1: a Perlin sum rarely reaches its

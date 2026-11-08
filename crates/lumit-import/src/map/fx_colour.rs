@@ -133,6 +133,7 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         "add_grain" => add_grain(conv, path, node, row),
         "scribble" => scribble(conv, path, node, row),
         "stroke" => stroke(conv, path, node, row),
+        "energy_line" => super::fx_energy::energy_line(conv, path, node, row),
 
         // --- Temporal ----------------------------------------------------
         "echo" => echo(conv, path, node, row),

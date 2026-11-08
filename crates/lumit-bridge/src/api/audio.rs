@@ -112,8 +112,12 @@ impl CompositionReference {
         #[cfg(feature = "media")]
         {
             let buckets = buckets.min(crate::api::layer::MAX_PEAK_BUCKETS);
-            let peaks =
-                crate::audio::mix_peaks(self.id, start_seconds, end_seconds, buckets as usize);
+            let peaks = crate::audio::mix_peaks::mix_peaks(
+                self.id,
+                start_seconds,
+                end_seconds,
+                buckets as usize,
+            );
             crate::audio::prepare(self.id, document);
             if let Some((values, duration_seconds)) = peaks {
                 return Ok(BridgeAudioPeaks {

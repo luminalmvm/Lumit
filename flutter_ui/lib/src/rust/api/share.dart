@@ -151,7 +151,7 @@ class BridgeFootageLack {
   /// There is a stand-in of it here, and otherwise nothing at all.
   final bool standIn;
   final Uint32List holders;
-  final BigInt bytes;
+  final int bytes;
 
   const BridgeFootageLack({
     required this.name,
@@ -185,7 +185,7 @@ class BridgeFootageShare {
 
   /// How big the original is on a holder's disk, which is what fetching
   /// it costs. 0 when nobody has it.
-  final BigInt bytes;
+  final int bytes;
 
   /// Nobody could send it when it was last asked for.
   final bool refused;
@@ -265,7 +265,7 @@ class BridgeOnlineFootage {
   final bool used;
 
   /// How big the original is here. 0 when this machine has not got it.
-  final BigInt bytes;
+  final int bytes;
 
   const BridgeOnlineFootage({
     required this.item,
@@ -400,14 +400,14 @@ sealed class BridgeShareAsking with _$BridgeShareAsking {
   /// Sent, and the other person has not answered.
   const factory BridgeShareAsking.waiting() = BridgeShareAsking_Waiting;
   const factory BridgeShareAsking.running({
-    required BigInt frame,
-    required BigInt total,
+    required int frame,
+    required int total,
   }) = BridgeShareAsking_Running;
 
   /// Their export finished and the file is on its way here.
   const factory BridgeShareAsking.fetching({
-    required BigInt done,
-    required BigInt total,
+    required int done,
+    required int total,
   }) = BridgeShareAsking_Fetching;
   const factory BridgeShareAsking.done({
     required String path,
@@ -668,8 +668,8 @@ sealed class BridgeShareFetching with _$BridgeShareFetching {
   /// `done` of `total` bytes are here. Both 0 while the others' machines
   /// are still making the files.
   const factory BridgeShareFetching.working({
-    required BigInt done,
-    required BigInt total,
+    required int done,
+    required int total,
   }) = BridgeShareFetching_Working;
 
   /// Everything arrived and the export is in the queue under `id`.
@@ -696,7 +696,7 @@ class BridgeShareNote {
 
   /// When it was written, in seconds since 1970, by the clock of the
   /// machine it was written on.
-  final PlatformInt64 at;
+  final int at;
 
   /// The words. Five hundred characters at most.
   final String text;
@@ -706,7 +706,7 @@ class BridgeShareNote {
 
   /// The frame their playhead was on in it. `None` when they had no
   /// composition open, or it is no longer in the project.
-  final PlatformInt64? frame;
+  final int? frame;
 
   /// The layer they had chosen, while it is still in that composition.
   final LayerReference? layer;
@@ -900,7 +900,7 @@ class BridgeSharePerson {
   final List<LayerReference> layers;
 
   /// The frame their playhead is on in `comp`.
-  final PlatformInt64? playhead;
+  final int? playhead;
 
   /// Their pointer over the Viewer, in composition pixels.
   final double? cursorX;
@@ -1023,7 +1023,7 @@ class BridgeShareReturnCopy {
   final String path;
 
   /// When it was kept, in seconds since 1970.
-  final PlatformInt64 at;
+  final int at;
 
   /// How many edits that return dropped: the `refused` of its
   /// [`BridgeShareEvent::Back`]. 0 for a return that only held edits
@@ -1068,8 +1068,8 @@ class BridgeShareSitting {
   /// When the sitting began and ended, in seconds since 1970, by the
   /// clock of the machine the edits were made on. Never later than this
   /// machine's own clock says it is.
-  final PlatformInt64 began;
-  final PlatformInt64 ended;
+  final int began;
+  final int ended;
 
   /// How many edits. Each is one step of that person's undo history.
   final int edits;
@@ -1154,8 +1154,8 @@ class BridgeShareTransfer {
 
   /// This machine is sending it, and otherwise taking it.
   final bool sending;
-  final BigInt done;
-  final BigInt total;
+  final int done;
+  final int total;
 
   const BridgeShareTransfer({
     required this.name,

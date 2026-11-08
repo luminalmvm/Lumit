@@ -23,6 +23,7 @@ use std::sync::Mutex;
 
 pub mod builtin;
 pub mod package;
+pub mod style;
 
 /// The file that makes a folder an extension.
 pub const MANIFEST_FILE: &str = "extension.json";

@@ -398,7 +398,7 @@ pub fn collect_comp_jobs(
     // dozens of simultaneous 4K decodes feeding a composite that draws one
     // layer, which is the shape of a session that ends without a message.
     let any_solo = lumit_core::model::any_picture_solo(comp);
-    let mut wanted: Vec<Uuid> = Vec::new();
+    let mut wanted: Vec<Uuid> = comp.environment_source(t).into_iter().collect();
     // Whether a layer is drawn, which is the walk below's own gate.
     let drawn = |idx: usize, l: &lumit_core::model::Layer| {
         !occluder.is_some_and(|o| idx > o)
@@ -407,11 +407,10 @@ pub fn collect_comp_jobs(
             && in_span(l)
             && !(any_solo && !l.switches.solo)
     };
-    // The other moments a Clone to points shows its clone layers at, as the
-    // layer and the comp time. Empty unless one has a time offset on. It is
-    // the list the builder renders, asked of the same code, so a clone
-    // layer's footage is fetched at every moment a stamp shows. Gathered
-    // before the walk, which plans the graphs a layer applies at them too.
+    // The other moments a Clone to points or a held projection shows a layer
+    // at, as the layer and the comp time. It is the list the builder renders,
+    // asked of the same code, so its footage is fetched at every one of them.
+    // Gathered before the walk, which plans the graphs a layer applies too.
     let clone_moments: Vec<(Uuid, f64)> = comp
         .layers
         .iter()
@@ -423,6 +422,7 @@ pub fn collect_comp_jobs(
                 .iter()
                 .filter(|e| e.enabled)
                 .flat_map(move |e| clone_moments_of(e, doc, comp, t, lt))
+                .chain(lumit_core::model_material::held_moments(l, comp, lt))
         })
         .collect();
     let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -434,15 +434,31 @@ pub fn collect_comp_jobs(
     let mut rebuilt = moments.to_vec();
     let mut layer_moments = Vec::with_capacity(comp.layers.len());
     for (idx, l) in comp.layers.iter().enumerate() {
-        // And the moments a Clone to points shows this layer at.
+        // And the moments a Clone to points shows this layer at, and the ones
+        // an effect on it shows its own input at, which on an adjustment
+        // layer are the layers' below.
         let cloned = clone_moments.iter().filter(|(id, _)| *id == l.id);
+        // At the frame and at each moment an adjustment above builds this
+        // layer again at, as that rebuild draws the layer's own moments too.
+        let own: Vec<f64> = if l.switches.visible && !l.audio_only {
+            std::iter::once(t)
+                .chain(rebuilt.iter().copied())
+                .flat_map(|tau| lumit_core::fx::moments::own_moment_comp_times(comp, l, tau))
+                .collect()
+        } else {
+            Vec::new()
+        };
         layer_moments.push(
             rebuilt
                 .iter()
                 .copied()
                 .chain(cloned.map(|(_, tau)| *tau))
+                .chain(own.iter().copied().filter(|_| !l.is_adjustment()))
                 .collect::<Vec<f64>>(),
         );
+        if l.is_adjustment() {
+            rebuilt.extend(own);
+        }
         if l.is_adjustment()
             && l.switches.visible
             && !l.graph.out_unwired
@@ -521,8 +537,8 @@ pub fn collect_comp_jobs(
             // Layer-input references (e.g. a DoF depth pass) decode
             // exactly like matte sources: the referenced layer is usually
             // hidden (you don't want the depth map rendering), but its
-            // pixels still feed the effect.
-            for e in l.effects.iter().filter(|e| e.enabled) {
+            // pixels still feed the effect, or a model's material.
+            for e in lumit_core::model_material::and_effects(l).filter(|e| e.enabled) {
                 for p in &e.params {
                     if let lumit_core::model::EffectValue::Layer(Some(id)) = p.value {
                         if !wanted.contains(&id) {
@@ -581,12 +597,12 @@ pub fn collect_comp_jobs(
         }
     }
     // Posterize Time (docs/08 §3.25, FX-1): a layer covered by a live
-    // Posterize decodes its source at the held grid time, not the live
-    // playhead, so footage playback visibly steps — the decode twin of the
-    // held re-render the draw builder performs. `sample_times[idx]` is the
-    // held comp time for `comp.layers[idx]`; equal to `t` for every layer
-    // when no Posterize is live, so an ordinary comp is unchanged.
+    // Posterize decodes its source at the held grid time, the decode twin of
+    // the held re-render the draw builder performs, and one only a held
+    // projection reads at the frame it holds. `sample_times[idx]` is the comp
+    // time for `comp.layers[idx]`, `t` for every layer in an ordinary comp.
     let sample_times = lumit_core::fx::temporal::posterize_sample_times(&comp.layers, t);
+    let sample_times = lumit_core::model_material::with_held_frames(comp, sample_times, t);
     // Accumulation motion blur (docs/08 §3.26): the sub-frame moments each
     // layer's footage is wanted at by the adjustments above it, in comp
     // frames. Empty everywhere in an ordinary comp.
@@ -608,6 +624,8 @@ pub fn collect_comp_jobs(
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
+            | LayerKind::Model { .. }
+            | LayerKind::Mesh { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
             LayerKind::Sequence { clips } => {
@@ -841,13 +859,23 @@ pub fn collect_comp_jobs(
                     // moment of the nested comp this layer shows, which is the
                     // moment the builder evaluates and names. Equal to `lt`
                     // for a layer with no map.
-                    let st = lumit_core::model::nested_source_time(layer, nested, lt);
+                    let mut st = lumit_core::model::nested_source_time(layer, nested, lt);
                     // A held nested frame wants no decodes. Asked only
                     // where the builder will ask by the same name: at the live
                     // time (a Posterize-held layer is built at another time,
                     // by a walk with no keyer) and for a Precomp that is not
                     // collapsed (a collapsed one is spliced in, never named).
                     let live = sample_times[idx] == t;
+                    // On Flow between two frames, the frame before is built
+                    // and the frame after is one more moment of it.
+                    let pair = live
+                        .then(|| {
+                            lumit_core::precomp_flow::pair(layer, nested, lt, comp.frame_rate.fps())
+                        })
+                        .flatten();
+                    if let Some((a, _, _)) = pair {
+                        st = a;
+                    }
                     let collapsed = matches!(
                         lumit_core::model::collapse_state(doc, comp, layer, lt),
                         lumit_core::model::CollapseState::Active
@@ -882,6 +910,7 @@ pub fn collect_comp_jobs(
                             );
                         }
                     }
+                    nested_moments.extend(pair.map(|(_, b, _)| b));
                     // A rebuild at another moment is made from pixels, so a
                     // held frame only saves the decodes when there is none.
                     if live
@@ -1645,6 +1674,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -1782,6 +1812,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -1925,6 +1956,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -2113,6 +2145,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,

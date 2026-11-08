@@ -71,8 +71,7 @@ lumit-project = { path = "../lumit-project" }
 lumit-share = { path = "../lumit-share" }
 # File > Run script: the commands and the script runner behind them.
 lumit-script = { path = "../lumit-script" }
-# The live endpoint's pipe and the secret that guards it.
-interprocess = "2"
+# The secret that guards the live endpoint.
 lumit-peer = { path = "../lumit-peer" }
 # The command line reads the script it is given with a size cap.
 lumit-ingress = { path = "../lumit-ingress" }
@@ -101,6 +100,7 @@ lumit-audio = { path = "../lumit-audio" }
 # builder and the compositor the Viewer and export both drive. An engine crate,
 # so the bridge depends on no frontend.
 lumit-render = { path = "../lumit-render" }
+lumit-scene = { path = "../lumit-scene" }
 # The device the renderer opened, and what it says about the card.
 lumit-gpu = { path = "../lumit-gpu" }
 # Where a project's parked frames may sit.
@@ -121,6 +121,7 @@ flutter_rust_bridge = { version = "=2.12.0", features = ["uuid"] }
 # `GlobalMemoryStatusEx` for installed RAM and the first DXGI adapter's
 # dedicated video memory. Pinned to the 0.58 lumit-gpu's shared-texture path
 # already links, so the workspace resolves one copy rather than two.
+web-time = "1"
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 default-features = false
@@ -145,6 +146,17 @@ features = [
     # `GetDiskFreeSpaceExW`, so the disk cache never fills the drive it is on.
     "Win32_Storage_FileSystem",
 ]
+
+# The live endpoint's pipe. The browser build has no other programs to talk to.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+interprocess = "2"
+
+# The browser build: the page's own APIs, at the versions the bridge's runtime
+# already uses.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["MessageChannel", "MessagePort", "Performance", "Window", "Worker", "console"] }
 
 # libX11, opened at run time for the camera drags' pointer hold under X11.
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -198,6 +198,7 @@ pub fn default_keymap() -> Keymap {
         row(Tools, "Alt+W", "tool.roto"),
         row(Tools, "Mod+P", "tool.puppet"),
         row(Tools, "Shift+C", "tool.camera"),
+        row(Tools, "Shift+D", "tool.shape3d"),
         // With a camera tool in hand over the Viewer, After Effects' F and
         // Ctrl+Shift+F look at the selected layers and at all of them.
         row(Tools, "F", "viewer.3d.look.selected"),
@@ -292,6 +293,8 @@ pub fn default_keymap() -> Keymap {
         // Escape goes back to the last 3D view, as in After Effects, and
         // only when nothing else on screen wanted it.
         row(Viewer, "Escape", "viewer.3d.last"),
+        // Wireframe on and off, the key other 3D tools give it.
+        row(Viewer, "Shift+Z", "viewer.look.lines"),
         // --- Panels ---
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),
@@ -393,11 +396,21 @@ pub fn default_keymap() -> Keymap {
     }
     Keymap {
         bindings,
-        unbound: Vec::new(),
+        unbound: UNBOUND.iter().map(|a| (Viewer, (*a).into())).collect(),
         wheel: WheelKeys::default(),
         break_handles: HandleModifier::default(),
     }
 }
+
+/// The Viewer actions that ship with no key: how a 3D view shows models.
+const UNBOUND: &[&str] = &[
+    "viewer.look.final",
+    "viewer.look.shaded",
+    "viewer.look.wireframe",
+    "viewer.look.shaded_wire",
+    "viewer.look.normals",
+    "viewer.look.faces",
+];
 
 /// A **stored** keymap laid over the shipped defaults: the file's chord
 /// wins for every action it names, and an action it never heard of — one added
@@ -414,6 +427,14 @@ pub fn default_keymap() -> Keymap {
 #[must_use]
 pub fn with_new_defaults(stored: Keymap) -> Keymap {
     let mut out = stored;
+    // The actions that ship with no key, so the page lists them.
+    for action in UNBOUND {
+        let known = out.bindings.iter().any(|b| b.action.0 == *action)
+            || out.unbound.iter().any(|(_, a)| a.0 == *action);
+        if !known {
+            out.unbound.push((KeyContext::Viewer, (*action).into()));
+        }
+    }
     for binding in default_keymap().bindings {
         let known = out
             .bindings

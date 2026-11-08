@@ -31,7 +31,7 @@ BridgeGovernorReport governorReport() =>
 /// Shrinking evicts oldest-first straight away rather than waiting for the next
 /// render, so the memory the user just asked to reclaim is actually gone when
 /// the number on screen changes.
-BridgeCacheStats setCacheBudget({required BigInt bytes}) =>
+BridgeCacheStats setCacheBudget({required int bytes}) =>
     BridgeLib.instance.api.crateApiCacheSetCacheBudget(bytes: bytes);
 
 /// Empty the cache. Every frame is re-rendered from here on, so this is a
@@ -48,7 +48,7 @@ BridgeVramCacheStats vramCacheStats() =>
 /// Resize the VRAM cache. The worker applies it on its next turn, evicting
 /// down immediately then; the returned stats show the new budget with the
 /// holdings as last published.
-BridgeVramCacheStats setVramCacheBudget({required BigInt bytes}) =>
+BridgeVramCacheStats setVramCacheBudget({required int bytes}) =>
     BridgeLib.instance.api.crateApiCacheSetVramCacheBudget(bytes: bytes);
 
 /// Empty the VRAM cache on the worker's next turn.
@@ -62,7 +62,7 @@ BridgeDiskCacheStats diskCacheStats() =>
     BridgeLib.instance.api.crateApiCacheDiskCacheStats();
 
 /// Resize the disk tier. Shrinking evicts oldest-first on the IO thread.
-BridgeDiskCacheStats setDiskCacheBudget({required BigInt bytes}) =>
+BridgeDiskCacheStats setDiskCacheBudget({required int bytes}) =>
     BridgeLib.instance.api.crateApiCacheSetDiskCacheBudget(bytes: bytes);
 
 /// Choose where parked frames live. `folder` is used only for
@@ -123,21 +123,21 @@ enum BridgeCacheLocation {
 /// What the cache currently holds, for the Timeline's cache bar and the
 /// Settings window's budget control.
 class BridgeCacheStats {
-  final BigInt usedBytes;
-  final BigInt budgetBytes;
-  final BigInt entries;
+  final int usedBytes;
+  final int budgetBytes;
+  final int entries;
 
   /// Frames served from the cache rather than rendered.
-  final BigInt hits;
+  final int hits;
 
   /// Frames that had to be rendered.
-  final BigInt misses;
+  final int misses;
 
   /// Comp frames the worker's renderer has genuinely DECODED this session,
   /// as last mirrored. The drag fast path's meter: a value drag must not
   /// move it, so a decode that should not have happened is visible here
   /// rather than merely slow.
-  final BigInt compDecodes;
+  final int compDecodes;
 
   const BridgeCacheStats({
     required this.usedBytes,
@@ -173,9 +173,9 @@ class BridgeCacheStats {
 /// What the disk tier holds — the bottom of the three-tier cache
 /// (docs/06-RENDER-PIPELINE.md §5.4), and the only one that outlives the session.
 class BridgeDiskCacheStats {
-  final BigInt usedBytes;
-  final BigInt budgetBytes;
-  final BigInt entries;
+  final int usedBytes;
+  final int budgetBytes;
+  final int entries;
 
   /// The folder the frames are actually going to, for Settings to show. Empty
   /// when the tier is off — which, since an unsaved project falls back to the
@@ -235,7 +235,7 @@ class BridgeGovernorReport {
   /// a failure, since a texture cannot be refused half way through a pass, but
   /// it is the fact that explains why the next frame is reserved for more
   /// tightly.
-  final BigInt vramOverdrawnBytes;
+  final int vramOverdrawnBytes;
 
   const BridgeGovernorReport({
     required this.vram,
@@ -271,13 +271,13 @@ class BridgeMemoryReport {
   /// What the operating system says this process holds — Activity Monitor's
   /// **Memory** on macOS, the working set on Windows, `VmRSS` on Linux. 0
   /// where the platform will not say ([`crate::api::system::resident_memory_bytes`]).
-  final BigInt processBytes;
+  final int processBytes;
 
   /// Finished frames held in ordinary memory.
-  final BigInt frameCacheBytes;
+  final int frameCacheBytes;
 
   /// Frames held on the graphics card.
-  final BigInt vramCacheBytes;
+  final int vramCacheBytes;
 
   /// Whether the card's memory *is* this process's memory — true on every
   /// Apple Silicon Mac and on any integrated adapter.
@@ -290,24 +290,24 @@ class BridgeMemoryReport {
   final bool unifiedMemory;
 
   /// Decoded source frames held for the compositor.
-  final BigInt decodeCacheBytes;
+  final int decodeCacheBytes;
 
   /// How many media decoders are open. Counted, not weighed: what a decoder
   /// holds is FFmpeg's and the driver's business, and a made-up number of
   /// bytes would be worse than an honest count.
-  final BigInt openDecoders;
+  final int openDecoders;
 
   /// How many frames are waiting to be written to disk — the write-behind
   /// queue, bounded at eight. A count rather than bytes on purpose: each
   /// waiting frame shares its allocation with the frame cache above (one
   /// `Arc`, both tiers), so charging it twice would make the report lie in
   /// the one direction that matters.
-  final BigInt parkQueueFrames;
+  final int parkQueueFrames;
 
   /// What the graphics driver holds for the render device, in use. On
   /// unified memory (every Apple Silicon Mac) this is inside
   /// `process_bytes`; on a discrete card it is not.
-  final BigInt gpuAllocatedBytes;
+  final int gpuAllocatedBytes;
 
   /// What the graphics driver has **reserved** — the blocks those
   /// allocations were carved from, including the free room inside them.
@@ -319,7 +319,7 @@ class BridgeMemoryReport {
   /// **Both byte figures are 0 on macOS**, where Metal keeps no such
   /// accounting and wgpu therefore reports none — which is the platform the
   /// question was asked on. Read the two counts below there.
-  final BigInt gpuReservedBytes;
+  final int gpuReservedBytes;
 
   /// How many textures the driver is holding for the render device right now.
   ///
@@ -329,15 +329,15 @@ class BridgeMemoryReport {
   /// intermediates while it is being made. Thousands of them means frames the
   /// engine dropped were never destroyed, which is a different fault from any
   /// cache being too large and is not visible in any other number here.
-  final BigInt gpuTextures;
+  final int gpuTextures;
 
   /// How many buffers the driver is holding, for the same reason.
-  final BigInt gpuBuffers;
+  final int gpuBuffers;
 
   /// `process_bytes` less everything above that lives in ordinary memory.
   /// Saturating at zero, since the platform's number and ours are read a
   /// moment apart and a small negative is meaningless.
-  final BigInt unaccountedBytes;
+  final int unaccountedBytes;
 
   const BridgeMemoryReport({
     required this.processBytes,
@@ -420,14 +420,14 @@ class BridgeProjectCacheLocation {
 /// readout.
 class BridgeTierBudget {
   /// What is reserved right now.
-  final BigInt usedBytes;
+  final int usedBytes;
 
   /// The ceiling it is reserved against: 70% of the card for video memory,
   /// 60% of physical for host memory, or whatever Preferences has set.
-  final BigInt budgetBytes;
+  final int budgetBytes;
 
   /// The most that was ever reserved at once this session.
-  final BigInt peakBytes;
+  final int peakBytes;
 
   /// Reservations refused since the session began.
   ///
@@ -435,13 +435,13 @@ class BridgeTierBudget {
   /// budget with this climbing is a tier turning work away, which is a
   /// different fault from one that is merely full and is invisible in every
   /// other number here.
-  final BigInt denials;
+  final int denials;
 
   /// How close to the ceiling, as the degradation ladder reads it: `0` easy,
   /// `1` tight, `2` severe, `3` full. At `2` and above the renderer has begun
   /// stepping down — it stops filling the intermediate cache, then gives the
   /// cold half of it back.
-  final BigInt pressure;
+  final int pressure;
 
   const BridgeTierBudget({
     required this.usedBytes,
@@ -494,9 +494,9 @@ enum BridgeViewerTransport {
 /// What the VRAM final-frame cache holds — the tier that makes a revisited
 /// frame free on the zero-copy Viewer ("cache on the card", docs/06 §5.1).
 class BridgeVramCacheStats {
-  final BigInt usedBytes;
-  final BigInt budgetBytes;
-  final BigInt entries;
+  final int usedBytes;
+  final int budgetBytes;
+  final int entries;
 
   const BridgeVramCacheStats({
     required this.usedBytes,

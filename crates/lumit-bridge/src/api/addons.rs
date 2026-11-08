@@ -140,16 +140,6 @@ pub fn addon_runtime() -> BridgeRuntimeStatus {
     flatten_runtime(&lumit_ml::runtime::status())
 }
 
-/// Load the runtime library now and say what happened.
-///
-/// Not `#[frb(sync)]`: opening a shared library and initialising a provider is
-/// disk and driver work, and it happens once per run.
-#[must_use]
-pub fn addon_runtime_load() -> BridgeRuntimeStatus {
-    let _ = lumit_ml::runtime::load_installed();
-    flatten_runtime(&lumit_ml::runtime::status())
-}
-
 /// One installed addon, flattened.
 fn flatten(installed: store::Installed) -> BridgeAddon {
     let manifest = installed.manifest;
