@@ -1,17 +1,18 @@
 ---
 // The drawing's bar: the wordmark top-left, plain text destinations at the right
-// at 15px on a 28px gap, and the download set apart from them. No icons and no
-// reveal animation - the drawing shows words, and a marketing bar with five
-// destinations does not need a mechanism.
+// at 15px on a 28px gap, and the two ways to get Lumit set apart from them. No
+// icons and no reveal animation - the drawing shows words, and a marketing bar
+// does not need a mechanism.
 //
-// The narrow set is what survives on a phone; the rest appear from `sm`.
+// Each link says from which width it shows. Docs and Pro survive on a phone, the
+// next few from `sm`, and the community links wait for `lg` where they fit.
 const links = [
-  { href: "https://docs.lumitlab.com", label: "Docs", small: true },
-  { href: "https://github.com/luminalmvm/Lumit", label: "Source", small: false },
-  { href: "https://discord.gg/dc3p3XC7mM", label: "Discord", small: false },
-  { href: "/releases", label: "Releases", small: false },
-  { href: "/pro", label: "Pro", small: true },
-  { href: "/sponsor", label: "Sponsor", small: false },
+  { href: "https://docs.lumitlab.com", label: "Docs", show: "" },
+  { href: "/releases", label: "Releases", show: "hidden sm:inline" },
+  { href: "/pro", label: "Pro", show: "" },
+  { href: "/sponsor", label: "Sponsor", show: "hidden lg:inline" },
+  { href: "https://github.com/luminalmvm/Lumit", label: "Source", show: "hidden lg:inline" },
+  { href: "https://discord.gg/dc3p3XC7mM", label: "Discord", show: "hidden lg:inline" },
 ];
 ---
 
@@ -35,17 +36,21 @@ const links = [
             href={l.href}
             class:list={[
               "py-3 text-fg no-underline transition-colors hover:text-accent-2",
-              !l.small && "hidden sm:inline",
+              l.show,
             ]}
           >
             {l.label}
           </a>
         ))
       }
+      {/* Lumit itself runs there, but it is a big editor for a phone. */}
       <a
-        href="/download"
-        class="py-3 text-fg no-underline transition-colors hover:text-accent-2 sm:ml-[32px]"
+        href="https://web.lumitlab.com"
+        class="hidden py-3 text-fg no-underline transition-colors hover:text-accent-2 sm:ml-[32px] sm:inline"
       >
+        Try in browser
+      </a>
+      <a href="/download" class="py-3 text-fg no-underline transition-colors hover:text-accent-2">
         Download
       </a>
     </nav>
