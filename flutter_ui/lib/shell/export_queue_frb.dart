@@ -47,15 +47,19 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 import 'dialog_frame.dart';
 import 'export_dialog_frb.dart';
 import 'export_pick_frb.dart';
+import 'settings_rows.dart' show byteSize;
 import 'status_line_frb.dart';
 
-/// The frame: wide enough for a name, a path and a status side by side.
-const double exportQueueWidth = 560;
+/// The frame: wide enough for a name, its preset, a path and how it is
+/// getting on side by side.
+const double exportQueueWidth = 800;
 
 /// One item's row, and the tallest the list grows before it scrolls.
 const double exportQueueRow = 28;
@@ -112,6 +116,14 @@ class _ExportQueueState extends State<_ExportQueue> {
   double _markedFrom = 0;
   int? _markedTo;
 
+  /// When the window first saw each item running, and the frame it was on,
+  /// for the time it has left.
+  final Map<int, (DateTime, int)> _seenRunning = {};
+
+  /// Whether the queue will start the next item by itself: false before
+  /// Start, and after Stop after this one.
+  bool _goesOn = false;
+
   @override
   void initState() {
     super.initState();
@@ -134,6 +146,11 @@ class _ExportQueueState extends State<_ExportQueue> {
       };
     } catch (_) {
       // No project to ask, as in a widget test.
+    }
+    try {
+      _goesOn = exportQueueGoesOn();
+    } catch (_) {
+      // No engine to ask, as in a widget test.
     }
     setState(() {
       _items = (widget.list ?? exportQueueList)();
@@ -171,7 +188,11 @@ class _ExportQueueState extends State<_ExportQueue> {
           onClose: widget.onClose,
           keyPrefix: 'export-queue',
         ),
-        Padding(
+        // The list's ground is the queue's own right-click; a row's is its own.
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
+          child: Padding(
           padding: exportBodyPaddingForQueue,
           child: _items.isEmpty
               ? SizedBox(
@@ -210,10 +231,16 @@ class _ExportQueueState extends State<_ExportQueue> {
                     ],
                   ),
                 ),
-        ),
-        dialogFooter(
+        )),
+        // The footer's count is the queue's too.
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
+          child: dialogFooter(
           t,
-          summary: l10n.exportQueueSummary('$waiting', '$done'),
+          summary: _items.isEmpty
+              ? ''
+              : l10n.exportQueueSummary('$waiting', '$done'),
           keyPrefix: 'export-queue',
           actions: [
             HouseButton(
@@ -232,11 +259,12 @@ class _ExportQueueState extends State<_ExportQueue> {
               key: const ValueKey('export-queue-start'),
               primary: true,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              onPressed: waiting == 0 ? null : _start,
+              // Nothing to do while the queue is already working through.
+              onPressed: waiting == 0 || _goesOn ? null : _start,
               child: Text(l10n.exportQueueStart),
             ),
           ],
-        ),
+        )),
       ],
     );
   }
@@ -370,7 +398,7 @@ class _ExportQueueState extends State<_ExportQueue> {
       item.state is! BridgeExportQueueState_Done || kIsWeb
           ? row
           : LumitTooltip(
-              message: l10n.tipOpenFolder,
+              message: l10n.projectShowInFolder,
               child: HoverFill(
                 child: GestureDetector(
                   key: ValueKey<String>('export-queue-open-${item.id}'),
@@ -383,27 +411,52 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   /// One item: what it is, where it goes, how it is getting on, and the mark
   /// that takes it off the list.
-  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => SizedBox(
+  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => GestureDetector(
+      onSecondaryTapDown: (press) => _showMenu(t, item, press.globalPosition),
+      // The row's marks come up with the pointer. A row that is doing nothing
+      // only says what it is.
+      child: HoverMark(
+        cursor: MouseCursor.defer,
+        builder: (context, lit) => SizedBox(
         height: exportQueueRow,
         child: Row(
           key: ValueKey<String>('export-queue-item-${item.id}'),
           children: [
             SizedBox(
-              width: 140,
-              child: Text(item.compName,
-                  style: t.body, overflow: TextOverflow.ellipsis),
+              width: 150,
+              child: FittedText(item.compName, t.body),
             ),
             const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                _leaf(item.path),
-                style: dialogMono(t),
-                overflow: TextOverflow.ellipsis,
+            // The preset it was queued on, or its format where it was set
+            // by hand, and the format on hover.
+            SizedBox(
+              width: 120,
+              child: LumitTooltip(
+                message: exportFormatLabel(item.codec),
+                child: FittedText(
+                    item.preset.isEmpty
+                        ? exportFormatLabel(item.codec)
+                        : item.preset,
+                    t.body.copyWith(color: t.textMuted)),
               ),
             ),
             const SizedBox(width: 10),
-            Flexible(flex: 2, child: _statusFace(t, item)),
+            Expanded(
+              child: MiddleEllipsis(
+                _leaf(item.path),
+                style: dialogMono(t),
+                tip: item.path,
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(width: 260, child: _statusFace(t, item)),
             const SizedBox(width: 8),
+            // Hidden marks take no clicks either.
+            IgnorePointer(
+              ignoring: lit <= 0,
+              child: Opacity(
+              opacity: lit > 0 ? 1 : 0,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
             _settingsMark(t, item),
             LumitTooltip(
               message: item.state is BridgeExportQueueState_Running
@@ -438,18 +491,183 @@ class _ExportQueueState extends State<_ExportQueue> {
                 ),
               ),
             ),
+              ]),
+              ),
+            ),
           ],
         ),
+      ),
+      ),
+    );
+
+  /// A row's menu: what can be done with it as it stands, Remove last.
+  void _showMenu(LumitTheme t, BridgeExportQueueItem item, Offset at) {
+    final comp = _comps[item.comp.toString()];
+    final running = item.state is BridgeExportQueueState_Running;
+    final waiting = item.state is BridgeExportQueueState_Waiting;
+    final done = item.state is BridgeExportQueueState_Done;
+    final index = _items.indexOf(item);
+    Widget row(String id, String label, VoidCallback? press,
+            void Function(VoidCallback) run) =>
+        MenuRow(
+          key: ValueKey<String>('export-queue-menu-$id'),
+          enabled: press != null,
+          onPressed: () {
+            if (press != null) run(press);
+          },
+          // In line with Stop after this one's tick, where it shows.
+          child: MenuLabel(label,
+              enabled: press != null, ticked: running ? false : null),
+        );
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        void run(VoidCallback act) {
+          close(null);
+          act();
+          _refresh();
+        }
+
+        return [
+          if (running) _stopAfterRow(() => close(null)),
+          if (done && !kIsWeb)
+            row('open', l10n.projectShowInFolder,
+                () => revealInFolder(path: item.path), run),
+          // A failed row too, where its settings are what has to change.
+          if (waiting || item.state is BridgeExportQueueState_Failed)
+            row(
+                'settings',
+                l10n.exportQueueSettingsEllipsis,
+                comp == null
+                    ? null
+                    : () => showExportDialogFrb(
+                        context: context, comp: comp, queued: item.id),
+                run),
+          // Asks the composition as it is now, so a comp since deleted cannot.
+          if (!running)
+            row('duplicate', l10n.menuDuplicate,
+                comp == null ? null : () => _duplicate(comp, item), run),
+          if (done || item.state is BridgeExportQueueState_Failed)
+            row('again', l10n.exportQueueAgain,
+                comp == null ? null : () => _again(comp, item), run),
+          if (waiting && _items.length > 1) ...[
+            const MenuDivider(),
+            row('top', l10n.moveToTop, index == 0 ? null : () => _move(index, 0),
+                run),
+            row(
+                'bottom',
+                l10n.moveToBottom,
+                index == _items.length - 1
+                    ? null
+                    : () => _move(index, _items.length - 1),
+                run),
+          ],
+          const MenuDivider(),
+          row(
+              'remove',
+              running ? l10n.exportCancel : l10n.exportQueueRemove,
+              () => running
+                  ? exportQueueCancel(id: item.id)
+                  : exportQueueRemove(id: item.id),
+              run),
+        ];
+      },
+    ));
+  }
+
+  /// Stop after this one, ticked while the queue will hold once the running
+  /// export lands. Unticked, it runs on.
+  Widget _stopAfterRow(VoidCallback close) => MenuRow(
+        key: const ValueKey('export-queue-menu-stop-after'),
+        onPressed: () {
+          close();
+          _goesOn ? exportQueueStopAfter() : exportQueueStart();
+          _refresh();
+        },
+        child: MenuLabel(l10n.exportQueueStopAfter, ticked: !_goesOn),
       );
+
+  /// The queue's own menu: run it, hold it after the export in flight, add
+  /// to it, find the last file it wrote, and clear away what has landed.
+  void _queueMenu(Offset at) {
+    final running =
+        _items.any((item) => item.state is BridgeExportQueueState_Running);
+    final waiting =
+        _items.any((item) => item.state is BridgeExportQueueState_Waiting);
+    final done = [
+      for (final item in _items)
+        if (item.state is BridgeExportQueueState_Done) item.id,
+    ];
+    final last = _items
+        .where((item) => item.state is BridgeExportQueueState_Done)
+        .lastOrNull;
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        Widget row(String id, String label, VoidCallback? press) => MenuRow(
+              key: ValueKey<String>('export-queue-menu-$id'),
+              enabled: press != null,
+              onPressed: () {
+                close(null);
+                press?.call();
+              },
+              child: MenuLabel(label,
+                  enabled: press != null, ticked: running ? false : null),
+            );
+        return [
+          row('start', l10n.exportQueueStart,
+              waiting && !_goesOn ? _start : null),
+          if (running) _stopAfterRow(() => close(null)),
+          const MenuDivider(),
+          row('add', l10n.exportQueueAddComps,
+              () => showExportPickFrb(context: context)),
+          if (!kIsWeb)
+            row('folder', l10n.projectShowInFolder,
+                last == null ? null : () => revealInFolder(path: last.path)),
+          row(
+              'clear',
+              l10n.exportQueueRemoveFinished,
+              done.isEmpty
+                  ? null
+                  : () {
+                      for (final id in done) {
+                        exportQueueRemove(id: id);
+                      }
+                      _refresh();
+                    }),
+        ];
+      },
+    ));
+  }
+
+  /// Another row with the same settings, writing to a file of its own.
+  void _duplicate(CompositionReference comp, BridgeExportQueueItem item) {
+    final spec = exportQueueSpec(id: item.id);
+    if (spec == null) return;
+    comp.queueExport(
+        spec: spec,
+        path: exportFreePath(path: item.path, codec: item.codec),
+        start: false);
+  }
+
+  /// A finished or failed row, queued again over its own file.
+  void _again(CompositionReference comp, BridgeExportQueueItem item) {
+    final spec = exportQueueSpec(id: item.id);
+    if (spec == null) return;
+    comp.queueExport(spec: spec, path: item.path, start: false);
+    exportQueueRemove(id: item.id);
+  }
 
   /// The mark that opens a waiting item's settings in the export dialogue.
   /// Kept as an empty space on every other row, so the columns stay put.
   Widget _settingsMark(LumitTheme t, BridgeExportQueueItem item) {
     final comp = _comps[item.comp.toString()];
     const size = Size(dialogCloseGlyph + 8, exportQueueRow);
-    if (item.state is! BridgeExportQueueState_Waiting || comp == null) {
-      return SizedBox.fromSize(size: size);
-    }
+    final open = item.state is BridgeExportQueueState_Waiting ||
+        item.state is BridgeExportQueueState_Failed;
+    if (!open || comp == null) return SizedBox.fromSize(size: size);
     return LumitTooltip(
       message: l10n.exportQueueSettings,
       child: HoverMark(
@@ -474,13 +692,48 @@ class _ExportQueueState extends State<_ExportQueue> {
     );
   }
 
-  /// How one item is getting on. An error is longer than the column, so a
-  /// failed item shows all of it on hover.
+  /// How one item is getting on. A running one is a bar with how far it has
+  /// got and how long it has left, its encoder on hover. An error is longer
+  /// than the column, so a failed item shows all of it on hover.
   Widget _statusFace(LumitTheme t, BridgeExportQueueItem item) {
+    final key = ValueKey<String>('export-queue-status-${item.id}');
+    if (item.state
+        case BridgeExportQueueState_Running(
+          :final frame,
+          :final total,
+          :final encoder
+        ) when total > 0) {
+      final seen = _seenRunning[item.id] ??= (DateTime.now(), frame);
+      final left = exportTimeLeft(
+          done: frame - seen.$2,
+          left: total - frame,
+          taken: DateTime.now().difference(seen.$1));
+      return LumitTooltip(
+        message: encoder,
+        child: Row(
+          key: key,
+          children: [
+            Expanded(child: HouseProgressBar(fraction: frame / total)),
+            const SizedBox(width: 8),
+            Text(l10n.exportQueuePercent((frame * 100 / total).floor()),
+                style: dialogMono(t)),
+            if (left != null) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(left,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.small.copyWith(color: t.textMuted)),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
     final failed = item.state is BridgeExportQueueState_Failed;
     final text = Text(
       _status(item),
-      key: ValueKey<String>('export-queue-status-${item.id}'),
+      key: key,
       style: dialogMono(t).copyWith(color: failed ? t.warning : t.textMuted),
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.right,
@@ -488,24 +741,35 @@ class _ExportQueueState extends State<_ExportQueue> {
     return failed ? LumitTooltip(message: _status(item), child: text) : text;
   }
 
-  /// What one item is doing, in the engine's own words where it has any.
+  /// What one item is doing, in words, where it is not drawn as a bar.
   String _status(BridgeExportQueueItem item) => switch (item.state) {
         BridgeExportQueueState_Waiting() => l10n.exportQueueWaiting,
-        BridgeExportQueueState_Running(:final total, :final encoder)
-            when total == 0 =>
-          l10n.exportPreparing(encoder),
-        BridgeExportQueueState_Running(
-          :final frame,
-          :final total,
-          :final encoder
-        ) =>
-          l10n.exportFrameOf('$frame', '$total', encoder),
-        BridgeExportQueueState_Done() => l10n.exportQueueDone,
+        BridgeExportQueueState_Running() => l10n.exportQueuePreparing,
+        // How long it took and how big the file is, where those are known.
+        BridgeExportQueueState_Done(:final seconds, :final bytes) => [
+            l10n.exportQueueDone,
+            if (seconds > 0) clockTime(seconds),
+            if (bytes > 0) fileSize(bytes),
+          ].join(' · '),
         BridgeExportQueueState_Failed(:final error) => error,
       };
 
   static String _leaf(String path) => path.split(RegExp(r'[/\\]')).last;
 }
+
+/// [seconds] as a clock reads it: `2:31`, or `1:02:31` past the hour.
+String clockTime(int seconds) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  final h = seconds ~/ 3600;
+  final m = seconds ~/ 60 % 60;
+  final s = two(seconds % 60);
+  return h > 0 ? '$h:${two(m)}:$s' : '$m:$s';
+}
+
+/// A file's size, in kilobytes under one megabyte.
+String fileSize(int bytes) => bytes < 1 << 20
+    ? '${(bytes / 1024).ceil()} ${l10n.unitKb}'
+    : byteSize(bytes);
 
 /// The list's own inset — the export dialog's body padding, which is the
 /// pattern's (§12A.4).

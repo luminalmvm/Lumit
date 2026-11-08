@@ -332,7 +332,7 @@ impl std::fmt::Display for Reason {
             }
             Self::MediaMissing { path } => write!(f, "The file at {path} was missing"),
             Self::MediaNotFound => write!(f, "The file was not found"),
-            Self::MediaPlaceholder => write!(f, "An After Effects placeholder"),
+            Self::MediaPlaceholder => write!(f, "A placeholder in the imported project"),
             Self::ColourProfileIgnored { profile } => {
                 write!(f, "The {profile} colour profile was not carried")
             }

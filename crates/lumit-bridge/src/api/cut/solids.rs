@@ -14,15 +14,15 @@ impl Edit<'_> {
         solid: Uuid,
         at_frame: i64,
     ) -> Cut {
-        let (name, width, height) = {
+        let (width, height) = {
             let doc = self.of.document()?;
             let sd = doc.solid(solid).ok_or(BridgeError::InvalidItem)?;
-            (sd.name.clone(), f64::from(sd.width), f64::from(sd.height))
+            (f64::from(sd.width), f64::from(sd.height))
         };
         let at = self.time(at_frame.max(0))?;
         let r = match target {
             Some(layer) => self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?,
-            None => self.add_row(name, false, width, height),
+            None => self.add_row(None, false, width, height),
         };
         if self.rows[r].audio_only {
             return Err(BridgeCutResult::WrongLayer.into());

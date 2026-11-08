@@ -639,7 +639,7 @@ void main() {
               find.byKey(const ValueKey<String>('graph-node-source'))),
           tester
               .getCenter(find.byKey(const ValueKey<String>('graph-node-out'))),
-          tester.getCenter(find.byKey(const ValueKey<String>('graph-legend'))),
+          tester.getCenter(find.byKey(const ValueKey<String>('graph-zoom'))),
           const Offset(700, 500),
         ]) {
           await mouse.moveTo(spot);
@@ -884,6 +884,10 @@ void main() {
     /// complaint was that scrubbing got worse the more lanes were open.
     testWidgets('a scrub costs the same with twice the rows open',
         (tester) async {
+      // Every layer's open rows on screen, for the taps that open them.
+      tester.view.physicalSize = const Size(1000, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       Future<int> callsForScrub(int layers) async {
         final p = freshProject();
         final comp = p.state.project!.newComposition(name: 'Scene');
@@ -917,7 +921,7 @@ void main() {
         await tester.pumpWidget(hostPanel(
           state: p.state,
           uiState: p.uiState,
-          size: const Size(900, 700),
+          size: const Size(900, 1000),
           child: const TimelinePanelFrb(),
         ));
         await settleFrb(tester, minRounds: 8);

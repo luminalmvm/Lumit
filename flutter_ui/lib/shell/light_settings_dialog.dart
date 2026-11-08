@@ -29,8 +29,6 @@ import 'camera_settings_dialog.dart'
         cameraLabelColumn,
         cameraRowGap,
         cameraRowHeight,
-        cameraSectionKicker,
-        cameraSectionTop,
         cameraWell,
         staticCameraValue;
 import 'dialog_frame.dart';
@@ -138,8 +136,8 @@ class _LightValues {
 _LightValues? _lastNew;
 
 /// Layer ▸ New ▸ Light…: ask for the light, then make it directly above
-/// [row] as one undo step. Does nothing when cancelled.
-Future<void> newLightFrb({
+/// [row] as one undo step. Answers the new layer, or null when cancelled.
+Future<LayerReference?> newLightFrb({
   required BuildContext context,
   required CompositionReference comp,
   int? row,
@@ -190,11 +188,12 @@ Future<void> newLightFrb({
     builder: (close) => _LightSettingsBody(
         values: start, name: null, layers: layers, onDone: close),
   );
-  if (picked == null) return;
+  if (picked == null) return null;
   final (values, name) = picked;
   _lastNew = values.copy();
+  LayerReference? light;
   asOneUndoStep(project, () {
-    final layer = comp.addLightLayer(
+    final layer = light = comp.addLightLayer(
       kind: values.settings.kind.index,
       row: row,
     );
@@ -208,6 +207,7 @@ Future<void> newLightFrb({
     ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.final_);
   }
   onDone?.call();
+  return light;
 }
 
 /// Layer ▸ Light settings: the same window over a light that is already
@@ -333,7 +333,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
             ],
           ),
         ),
-        _section(t, l10n.lightOptions, [
+        dialogSection(t, l10n.lightOptions, [
           if (kind == BridgeLightKind.environment) ...[
             _row(
                 t,
@@ -586,35 +586,5 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
         labelColumn: cameraLabelColumn,
         gap: cameraRowGap,
         minHeight: cameraRowHeight,
-      );
-
-  /// A named group of rows, on the Camera settings dialog's pattern.
-  Widget _section(LumitTheme t, String title, List<Widget> rows) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(height: 1, color: t.hairline),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                dialogPadding, cameraSectionTop, dialogPadding, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: cameraSectionKicker,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 4),
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Text(t.kickerCase(title), style: t.kicker),
-                    ),
-                  ),
-                ),
-                ...rows,
-              ],
-            ),
-          ),
-        ],
       );
 }

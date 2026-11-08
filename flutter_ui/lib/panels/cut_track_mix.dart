@@ -7,6 +7,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -19,12 +20,17 @@ import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
-import 'mixer_panel_frb.dart' show panLabel;
-import 'volume_band_frb.dart' show volumeBandFloorDb, volumeBandTopDb;
+import 'mixer_panel_frb.dart' show mixValueRows, panLabel;
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'volume_band_frb.dart'
+    show BandKind, volumeBandFloorDb, volumeBandTopDb;
 
 /// How tall one bar is, and the gap between two.
 const double _barHeight = 15;
 const double _barGap = 2;
+
+/// The press a bar opened its own menu with, so the head behind it opens none.
+int? cutMixMenuPointer;
 
 /// One track's mix controls, filling the width its parent gives it.
 class CutTrackMix extends StatelessWidget {
@@ -39,12 +45,19 @@ class CutTrackMix extends StatelessWidget {
   /// stack them.
   final bool inline;
 
+  /// Whether a sound track's envelope is out across its lane, and the switch
+  /// for it, for the bar's own menu.
+  final bool Function(BandKind kind) bandShown;
+  final void Function(BandKind kind) onBand;
+
   const CutTrackMix({
     super.key,
     required this.comp,
     required this.entry,
     required this.sound,
     required this.onChanged,
+    required this.bandShown,
+    required this.onBand,
     this.inline = false,
   });
 
@@ -90,6 +103,40 @@ class CutTrackMix extends StatelessWidget {
       onChanged();
     }
 
+    // The bar's right-click: the Mixer's own rows for the same value.
+    MixMenu menu(
+      BridgeScalar scalar,
+      void Function(BridgeScalar) set, {
+      required String reset,
+      required String ask,
+      required String title,
+      required double min,
+      required double max,
+      double usual = 0,
+      int decimals = 1,
+      String? suffix,
+      List<(String, double)> sides = const [],
+    }) =>
+        (close, tickColumn) => mixValueRows(
+              context: context,
+              comp: comp,
+              frame: frame,
+              scalar: scalar,
+              write: set,
+              onChanged: onChanged,
+              close: close,
+              resetLabel: reset,
+              askLabel: ask,
+              title: title,
+              min: min,
+              max: max,
+              reset: usual,
+              decimals: decimals,
+              suffix: suffix,
+              sides: sides,
+              tickColumn: tickColumn,
+            );
+
     // A locked track, or a value an expression drives, is shown and not
     // dragged.
     bool live(BridgeScalar s) =>
@@ -97,6 +144,8 @@ class CutTrackMix extends StatelessWidget {
 
     if (!sound) {
       final level = info.transform.opacity;
+      void setLevel(BridgeScalar s) =>
+          layer.setTransform(prop: BridgeTransformProp.opacity, value: s);
       return _MixBar(
         key: ValueKey<String>('ctl-mix-level-$id'),
         label: l10n.cutMixLevel,
@@ -107,11 +156,16 @@ class CutTrackMix extends StatelessWidget {
         fill: t.accent,
         enabled: live(level),
         text: (v) => '${v.round()}${l10n.unitSymbolPercent}',
-        onCommit: (v) => write(
-            level,
-            v,
-            (s) => layer.setTransform(
-                prop: BridgeTransformProp.opacity, value: s)),
+        onCommit: (v) => write(level, v, setLevel),
+        menu: menu(level, setLevel,
+            reset: l10n.cutResetLevel,
+            ask: l10n.mixerSetLevel,
+            title: l10n.cutMixLevel,
+            min: 0,
+            max: 100,
+            usual: 100,
+            decimals: 0,
+            suffix: l10n.unitSymbolPercent),
       );
     }
     final volume = info.volumeDb;
@@ -130,6 +184,19 @@ class CutTrackMix extends StatelessWidget {
             ? l10n.volumeNegInf
             : '${v.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
         onCommit: (v) => write(volume, v, (s) => layer.setVolumeDb(value: s)),
+        menu: menu(volume, (s) => layer.setVolumeDb(value: s),
+            reset: l10n.audioResetVolume,
+            ask: l10n.mixerSetLevel,
+            title: l10n.volume,
+            min: volumeBandFloorDb,
+            max: volumeBandTopDb,
+            suffix: ' ${l10n.unitSymbolDb}'),
+        band: (
+          label: l10n.cutVolumeEnvelope,
+          action: 'cut.envelope.volume',
+          shown: bandShown(BandKind.volume),
+          toggle: () => onBand(BandKind.volume),
+        ),
       ),
       // The pan band's colour, so the bar and the line on the lane match.
       _MixBar(
@@ -144,6 +211,20 @@ class CutTrackMix extends StatelessWidget {
         enabled: live(pan),
         text: panLabel,
         onCommit: (v) => write(pan, v, (s) => layer.setPan(value: s)),
+        menu: menu(pan, (s) => layer.setPan(value: s),
+            reset: l10n.audioResetPan,
+            ask: l10n.mixerSetPan,
+            title: l10n.audioPan,
+            min: -100,
+            max: 100,
+            decimals: 0,
+            sides: [(l10n.mixerPanLeft, -100), (l10n.mixerPanRight, 100)]),
+        band: (
+          label: l10n.cutPanEnvelope,
+          action: 'cut.envelope.pan',
+          shown: bandShown(BandKind.pan),
+          toggle: () => onBand(BandKind.pan),
+        ),
       ),
     ];
     if (inline) {
@@ -160,6 +241,10 @@ class CutTrackMix extends StatelessWidget {
     );
   }
 }
+
+/// A bar's own menu rows, given how to close the menu and whether to leave
+/// room for a tick.
+typedef MixMenu = List<Widget> Function(VoidCallback close, bool tickColumn);
 
 /// One thin bar: the fill runs from [origin] to the value, the label and the
 /// value are written over it.
@@ -179,6 +264,11 @@ class _MixBar extends StatefulWidget {
   /// False shows the value dimmed and takes no drag.
   final bool enabled;
 
+  final MixMenu menu;
+
+  /// The envelope that draws this same value across the lane, for the menu.
+  final ({String label, String action, bool shown, VoidCallback toggle})? band;
+
   const _MixBar({
     super.key,
     required this.label,
@@ -190,7 +280,9 @@ class _MixBar extends StatefulWidget {
     required this.text,
     required this.onCommit,
     required this.enabled,
+    required this.menu,
     this.origin,
+    this.band,
   });
 
   @override
@@ -201,11 +293,43 @@ class _MixBarState extends State<_MixBar> {
   /// The value while a drag runs, null at rest.
   double? _live;
 
+  /// A right click on the bar: the value's own rows, and the envelope that
+  /// draws it across the lane.
+  void _menu(Offset at) {
+    final band = widget.band;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 210,
+      rows: (close) => [
+        ...widget.menu(() => close(null), band != null),
+        if (band != null) ...[
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('ctl-mix-band'),
+            onPressed: () {
+              close(null);
+              band.toggle();
+            },
+            child: MenuLabel(band.label,
+                action: band.action, ticked: band.shown),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final shown = _live ?? widget.value;
-    final value = t.mono.copyWith(fontSize: 9, color: t.textPrimary);
+    // At its usual value the bar recedes, so a track that has been turned
+    // down or panned is the one that stands out.
+    final changed = (shown - widget.reset).abs() > 1e-6;
+    final value = t.mono.copyWith(
+        fontSize: 9, color: changed ? t.textPrimary : t.textMuted);
+    final fill = changed ? widget.fill : t.textMuted;
+    final held = changed || _live != null;
     return LayoutBuilder(builder: (context, box) {
       final width = box.maxWidth.isFinite ? box.maxWidth : 120.0;
       double xOf(double v) =>
@@ -215,7 +339,11 @@ class _MixBarState extends State<_MixBar> {
       final to = xOf(shown);
       final bar = HoverMark(
         cursor: SystemMouseCursors.resizeLeftRight,
-        builder: (context, lit) => GestureDetector(
+        builder: (context, lit) {
+          // A value at its usual place is its name alone until the pointer
+          // comes, so eight rows at full say nothing eight times.
+          final bar = held ? 1.0 : lit;
+          return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onHorizontalDragStart: (_) => setState(() => _live = widget.value),
           onHorizontalDragUpdate: (d) {
@@ -241,10 +369,26 @@ class _MixBarState extends State<_MixBar> {
             height: _barHeight,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: t.surface2,
+              color: t.surface2.withValues(alpha: t.surface2.a * bar),
               borderRadius: BorderRadius.circular(2),
             ),
             child: Stack(fit: StackFit.expand, children: [
+              // At rest the bar is a hairline with its value drawn along it,
+              // so the word over it names a control.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 1,
+                child: ColoredBox(color: t.hairline),
+              ),
+              Positioned(
+                left: math.min(from, to),
+                width: (to - from).abs(),
+                bottom: 0,
+                height: 1,
+                child: ColoredBox(color: fill.withValues(alpha: 0.6)),
+              ),
               Positioned(
                 left: math.min(from, to),
                 width: (to - from).abs(),
@@ -252,7 +396,8 @@ class _MixBarState extends State<_MixBar> {
                 bottom: 0,
                 // Lifts a shade under the pointer.
                 child: ColoredBox(
-                    color: widget.fill.withValues(alpha: 0.25 + 0.2 * lit)),
+                    color: fill.withValues(
+                        alpha: ((changed ? 0.25 : 0.1) + 0.2 * lit) * bar)),
               ),
               // The origin, so Pan at centre reads as a centred slider.
               if (widget.origin != null)
@@ -261,36 +406,51 @@ class _MixBarState extends State<_MixBar> {
                   width: 1,
                   top: 0,
                   bottom: 0,
-                  child: ColoredBox(color: t.textMuted),
+                  child: ColoredBox(
+                      color: t.textMuted.withValues(alpha: t.textMuted.a * bar)),
                 ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 child: Row(children: [
-                  // Too narrow for both, the value wins.
-                  if (width >= 72) ...[
+                  // Too narrow for both, the value wins once there is one to show.
+                  if (width >= 72 || bar == 0) ...[
                     Text(widget.label,
                         style: t.small.copyWith(color: t.textMuted),
                         maxLines: 1),
                     const SizedBox(width: 4),
                   ],
                   Expanded(
-                    child: Text(
-                      widget.text(shown),
-                      style: value,
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Opacity(
+                      opacity: bar,
+                      child: Text(
+                        widget.text(shown),
+                        style: value,
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ]),
               ),
             ]),
           ),
-        ),
+          );
+        },
       );
       return IgnorePointer(
         ignoring: !widget.enabled,
-        child: Opacity(opacity: widget.enabled ? 1 : 0.5, child: bar),
+        child: Opacity(
+          opacity: widget.enabled ? 1 : 0.5,
+          child: Listener(
+            onPointerDown: (e) {
+              if (e.buttons != kSecondaryMouseButton) return;
+              cutMixMenuPointer = e.pointer;
+              _menu(e.position);
+            },
+            child: bar,
+          ),
+        ),
       );
     });
   }

@@ -134,7 +134,10 @@ void main() {
 
       await mount(tester, p,
           presetsLister: () =>
-              [BridgePresetInfo(name: 'Soft glow', path: path, group: '')]);
+              [
+                BridgePresetInfo(
+                    name: 'Soft glow', path: path, group: '', keyed: false)
+              ]);
 
       expect(find.text('Saved presets'), findsOneWidget);
       final row = find.byKey(const ValueKey('preset-item-Soft glow'));
@@ -231,9 +234,10 @@ void main() {
       ));
       await tester.pump();
 
-      // No GPU trace arrives in a widget test, so the panel says what it is
-      // doing rather than showing an empty box.
-      expect(find.text('Waiting for a trace'), findsOneWidget);
+      // No GPU trace arrives in a widget test: the scale is drawn over an
+      // empty plot, with nothing said about it.
+      expect(find.byKey(const ValueKey('scope-graticule')), findsOneWidget);
+      expect(find.byKey(const ValueKey('scope-trace')), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('scope-kind')));
       await tester.pumpAndSettle();

@@ -2873,6 +2873,17 @@
           "hard_max": 200.0
         },
         {
+          "id": "tint",
+          "label": "Tint",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -150.0,
+          "slider_max": 150.0,
+          "hard_min": -200.0,
+          "hard_max": 200.0
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",
@@ -11646,6 +11657,388 @@
         "meaning": "scales Opacity per pixel: white lays the brush down in full, grey          faintly, black not at all"
       },
       "matte_role": "own"
+    },
+    {
+      "slug": "audio-spectrum",
+      "match_name": "audio_spectrum",
+      "label": "Audio spectrum",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "This comp",
+            "Layer",
+            "Clip"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "audio",
+          "label": "Audio",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "clip",
+          "label": "Clip",
+          "kind": "clip",
+          "unit": "raw"
+        },
+        {
+          "id": "shape",
+          "label": "Shape",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Bars",
+            "Line",
+            "Ring",
+            "Waveform"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "bands",
+          "label": "Bands",
+          "kind": "int",
+          "unit": "raw",
+          "default": 64,
+          "slider_min": 2.0,
+          "slider_max": 256.0,
+          "hard_min": 2.0,
+          "hard_max": 512.0
+        },
+        {
+          "id": "start_frequency",
+          "label": "Start frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 40.0,
+          "slider_min": 20.0,
+          "slider_max": 20000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "end_frequency",
+          "label": "End frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 16000.0,
+          "slider_min": 20.0,
+          "slider_max": 20000.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "along",
+          "label": "Draw along",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Line",
+            "Mask"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "from_x",
+          "label": "From x",
+          "kind": "float",
+          "unit": "px",
+          "default": 360.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "from_y",
+          "label": "From y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "to_x",
+          "label": "To x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1560.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "to_y",
+          "label": "To y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "path",
+          "label": "Path",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "height",
+          "label": "Height",
+          "kind": "float",
+          "unit": "px",
+          "default": 320.0,
+          "slider_min": 0.0,
+          "slider_max": 1080.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "thickness",
+          "label": "Thickness",
+          "kind": "float",
+          "unit": "px",
+          "default": 10.0,
+          "slider_min": 0.5,
+          "slider_max": 100.0,
+          "hard_min": 0.1
+        },
+        {
+          "id": "softness",
+          "label": "Softness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "inside_colour",
+          "label": "Inside colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.05,
+            0.3,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "outside_colour",
+          "label": "Outside colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            0.15,
+            0.5,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "hue_spread",
+          "label": "Hue spread",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0,
+          "hard_min": 0.0,
+          "hard_max": 720.0
+        },
+        {
+          "id": "mirror",
+          "label": "Mirror",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "smoothing",
+          "label": "Smoothing",
+          "kind": "int",
+          "unit": "frames",
+          "default": 2,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0,
+          "hard_max": 120.0
+        },
+        {
+          "id": "composite_on_original",
+          "label": "Composite on original",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "",
+          "params": [
+            "audio"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "clip"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source",
+            "values": [
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "start_frequency",
+            "end_frequency"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "shape",
+            "values": [
+              0,
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "from_x",
+            "from_y",
+            "to_x",
+            "to_y"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "along",
+            "values": [
+              0
+            ]
+          }
+        },
+        {
+          "label": "",
+          "params": [
+            "path"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "along",
+            "values": [
+              1
+            ]
+          }
+        }
+      ],
+      "matte_role": "strength"
     },
     {
       "slug": "energy-line",

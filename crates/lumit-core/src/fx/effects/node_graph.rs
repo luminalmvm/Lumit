@@ -356,6 +356,7 @@ mod tests {
             widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes,
             edges: Vec::new(),
             layout: Vec::new(),

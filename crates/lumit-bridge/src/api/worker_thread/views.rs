@@ -20,7 +20,7 @@ pub(super) const VIEW_CAMERA_ID: Uuid = lumit_core::view_camera::ID;
 #[frb(ignore)]
 pub(super) fn viewed_kept(
     kept: &mut Vec<Viewed>,
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     view: Option<ViewLatch>,
     revision: u64,
     document: std::sync::Arc<lumit_core::model::Document>,
@@ -63,7 +63,7 @@ const VIEWED_KEPT: usize = 3;
 #[frb(ignore)]
 pub(super) struct Viewed {
     revision: u64,
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     view: Option<ViewLatch>,
     document: std::sync::Arc<lumit_core::model::Document>,
 }
@@ -78,7 +78,7 @@ pub(super) struct Viewed {
 /// nothing else, as it outlines every other layer over the picture.
 #[frb(ignore)]
 pub(super) fn viewed_through(
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     view: Option<ViewLatch>,
     document: std::sync::Arc<lumit_core::model::Document>,
 ) -> std::sync::Arc<lumit_core::model::Document> {

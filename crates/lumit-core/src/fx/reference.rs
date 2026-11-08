@@ -357,7 +357,16 @@ fn effect(schema: &'static EffectSchema) -> Effect {
         version: schema.version,
         category: schema.category.label(),
         category_slug: slug(schema.category.label()),
-        params: schema.params.iter().map(param).collect(),
+        // Audio spectrum's reading rides in a row nobody ever sees.
+        params: schema
+            .params
+            .iter()
+            .filter(|p| {
+                use super::effects::audio_spectrum::{LEVELS_ROW, MATCH_NAME};
+                schema.match_name != MATCH_NAME || p.id != LEVELS_ROW
+            })
+            .map(param)
+            .collect(),
         groups: schema
             .groups
             .iter()

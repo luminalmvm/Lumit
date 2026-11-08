@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../shell/settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import '../shell/share_dialog_frb.dart';
 import '../state/extension_host.dart';
 import '../state/external_links.dart';
@@ -39,7 +40,8 @@ class ExtensionPanel extends StatelessWidget {
           return PlaceholderPanel(
             icon: LumitIcon.link,
             title: l10n.extensionMissingTitle,
-            hint: l10n.extensionMissingHint,
+            hint: '',
+            action: _settingsButton(context),
           );
         }
         if (extension.broken) {
@@ -47,6 +49,7 @@ class ExtensionPanel extends StatelessWidget {
             icon: LumitIcon.link,
             title: l10n.extensionFailedTitle,
             hint: l10n.extensionBrokenHint,
+            action: _settingsButton(context),
           );
         }
         return ExtensionView(
@@ -57,6 +60,18 @@ class ExtensionPanel extends StatelessWidget {
       },
     );
   }
+}
+
+/// The way to the page extensions are installed from.
+Widget _settingsButton(BuildContext context) {
+  final t = ThemeScope.of(context).theme;
+  return HouseButton(
+    key: const ValueKey('extension-settings'),
+    small: true,
+    onPressed: () => unawaited(
+        showSettingsWindowFrb(context, initialPage: SettingsPage.addons)),
+    child: Text(l10n.menuSettings, style: t.small),
+  );
 }
 
 /// One extension's page, and the [ExtensionHost] that answers it.

@@ -156,7 +156,8 @@ void main() {
         shape: ThemeShape.lantern,
       ));
       await tester.pump();
-      expect(find.byKey(const ValueKey('viewer-cache-ready')), findsOneWidget);
+      expect(find.byKey(const ValueKey('viewer-cache-ready')), findsNothing,
+          reason: 'nothing cached is nothing to say');
 
       await tester.runAsync(() => p.state.newProject(ask: false));
       p.uiState.cacheChanged.value++;
@@ -552,15 +553,9 @@ void main() {
       final show = find.byKey(const ValueKey('viewer-snapshot-show'));
       final shown = find.byKey(const ValueKey('viewer-snapshot-overlay'));
 
-      // Nothing photographed yet, so Show is deaf rather than flashing the
-      // live picture at itself.
-      await tester.ensureVisible(show);
-      await tester.pump();
-      final empty = await tester.startGesture(tester.getCenter(show));
-      await tester.pump(const Duration(milliseconds: 300));
+      // Nothing photographed yet, so there is no Show to press.
+      expect(show, findsNothing);
       expect(shown, findsNothing);
-      await empty.up();
-      await tester.pump();
 
       await pressBar(tester, 'viewer-snapshot');
       // The photograph is taken off the render tree, which is a real async
@@ -707,7 +702,14 @@ void main() {
       await mount(tester, p);
 
       final box = find.byKey(const ValueKey('viewer-exposure'));
-      expect(box, findsOneWidget);
+      expect(box, findsNothing, reason: 'at nought only the aperture stands');
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester
+          .getCenter(find.byKey(const ValueKey('viewer-exposure-reset'))));
+      await tester.pump();
+      expect(box, findsOneWidget, reason: 'hovering brings the number up');
       expect(find.text('+0.0'), findsOneWidget,
           reason: 'neutral still reads signed, and to one decimal');
 

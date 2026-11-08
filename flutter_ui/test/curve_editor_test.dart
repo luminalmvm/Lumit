@@ -38,7 +38,6 @@ void main() {
         curves: const [curveIdentity, curveIdentity, curveIdentity],
         onLive: (_, __) {},
         onCommit: (c, p) => commits.add((c, p)),
-        resetLabel: 'Reset',
         resetTip: 'Reset this curve',
         plotSize: plotSize,
         onPlotSize: onPlotSize,

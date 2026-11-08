@@ -557,14 +557,15 @@ void main() {
       expect(find.byKey(ValueKey<String>('fx-card-$top')), findsOneWidget,
           reason: 'the card under it is still on screen');
       // Invert's only rows are Mix and Matte, which sit under the Compositing
-      // fold, so the fold's heading is what the card has to show for itself.
+      // fold, so the heading's close mark is what the card has to show for
+      // itself.
       expect(
         find.descendant(
           of: find.byKey(ValueKey<String>('fx-card-$top')),
-          matching: find.byKey(ValueKey<String>('fx-compositing-$top')),
+          matching: find.byKey(ValueKey<String>('fx-remove-$top')),
         ),
         findsOneWidget,
-        reason: 'the card that was kept stopped drawing its rows',
+        reason: 'the card that was kept stopped drawing its heading',
       );
 
       // Its heading menu is read from the stack as it is now: the top of a
@@ -574,6 +575,8 @@ void main() {
             const Offset(40, 0),
         buttons: kSecondaryButton,
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>('fx-menu-move-$top')));
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey<String>('fx-menu-up-$top')), findsNothing,
           reason: 'the new top card still thinks it has an effect above it');

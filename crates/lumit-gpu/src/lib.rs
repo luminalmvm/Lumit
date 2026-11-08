@@ -1170,9 +1170,13 @@ impl GpuContext {
             target_arch = "wasm32"
         )))]
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+        // `WGPU_POWER_PREF=low` puts the engine on the integrated card of a
+        // two-card machine, so it can be timed as a laptop without one.
+        #[cfg(not(target_arch = "wasm32"))]
+        let power = wgpu::PowerPreference::from_env();
         #[cfg(not(target_arch = "wasm32"))]
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
+            power_preference: power.unwrap_or(wgpu::PowerPreference::HighPerformance),
             ..Default::default()
         }))
         .ok_or(GpuError::NoAdapter)?;
@@ -3179,6 +3183,7 @@ impl SharedGpu {
         // one a card the ledger believes is already half full, which is a
         // failure that moves about as tests are added.
         self.ctx.release_frame_memory();
+        self.compositor.drop_attachment();
         // `release_frame_memory` latches the abandoned frame's overdraft as
         // "the last frame's"; the next test did not draw that frame.
         self.ctx.last_overdrawn.set(0);

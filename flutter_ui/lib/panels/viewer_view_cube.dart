@@ -12,8 +12,10 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/viewer_view.dart' show ViewerView;
 import '../widgets/controls.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_camera.dart' show CameraPose;
 import 'viewer_gizmo_3d.dart' show gizmoAxisColours;
+import 'viewer_menus.dart';
 
 /// How far in from the viewport's top right corner the axes sit.
 const double viewCubeInset = 26;
@@ -37,9 +39,10 @@ const List<ViewerView> _faces = [
 /// How far in from the view's top left corner its look is named.
 const double viewLookInset = 8;
 
-/// Which look a view shows models in, when that isn't what exports: empty on
-/// Final. The words change at once, as a shortcut can change them. Bright for a
-/// moment after they do, so the eye finds them, then quiet over the picture.
+/// Which way a view looks when it isn't through the comp's camera, and which
+/// look it shows models in when that isn't what exports: empty otherwise. The
+/// words change at once, as a shortcut can change them. Bright for a moment
+/// after they do, so the eye finds them, then quiet over the picture.
 class ViewLookTag extends StatefulWidget {
   final String look;
 
@@ -194,6 +197,27 @@ class _ViewerViewCubeState extends State<ViewerViewCube> {
               final at = _endAt(d.localPosition);
               if (at != null) widget.onSnap(_faces[at]);
             },
+            onSecondaryTapUp: (d) => showMenuAt<void>(
+              context: context,
+              position: d.globalPosition,
+              rows: (closeWith) {
+                void close() => closeWith(null);
+                return [
+                  for (final face in _faces)
+                    viewerRow(face.title, () => widget.onSnap(face), close,
+                        id: 'viewport-axes-${face.name}'),
+                  const MenuDivider(),
+                  viewerRow(l10n.viewportPersp,
+                      widget.ortho ? widget.onOrtho : null, close,
+                      id: 'viewport-axes-persp', ticked: !widget.ortho),
+                  viewerRow(l10n.viewportOrtho,
+                      widget.ortho ? null : widget.onOrtho, close,
+                      id: 'viewport-axes-ortho', ticked: widget.ortho),
+                  viewerRow(l10n.menuShowWireframe, widget.onWireframe, close,
+                      id: 'viewport-axes-wire', ticked: widget.wireframe),
+                ];
+              },
+            ),
             onPanStart: (_) => widget.onOrbitStart(),
             onPanUpdate: (d) => widget.onOrbit(d.delta),
             onPanEnd: (_) => widget.onOrbitEnd(),

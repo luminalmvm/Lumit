@@ -836,7 +836,7 @@ class _BarState extends State<Bar> {
                   // selection is selected first, so the menu is about it.
                   onSecondaryTapUp: (d) {
                     if (!widget.selected) widget.onSelect();
-                    showLayerRowMenu(
+                    showLayerRowMenu(context,
                         widget.entry.layer.internallayerId, d.globalPosition);
                   },
                   onHorizontalDragDown: widget.razor || held

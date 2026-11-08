@@ -6,7 +6,9 @@
 //! written into a ring that an audio worklet plays from. The clock is still
 //! the sound's: what has been mixed, less what the worklet has still to play.
 
-use crate::{fill_ahead, fill_smooth, nanos, slow, AudioEngine, AudioError, Edge, Scrub, Shared};
+use crate::{
+    fill_ahead, fill_smooth, loudness, nanos, slow, AudioEngine, AudioError, Edge, Scrub, Shared,
+};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -43,6 +45,7 @@ pub(crate) struct Output {
     scrub: Scrub,
     edge: Edge,
     stretch: slow::Stretch,
+    loudness: loudness::Loudness,
     buffer: Vec<f32>,
 }
 
@@ -55,6 +58,7 @@ impl AudioEngine {
                 scrub: Scrub::default(),
                 edge: Edge::default(),
                 stretch: slow::Stretch::new(rate),
+                loudness: loudness::Loudness::new(rate),
                 buffer: Vec::new(),
             }),
             shared: Arc::new(Shared::new(None)),
@@ -79,6 +83,7 @@ impl AudioEngine {
             scrub,
             edge,
             stretch,
+            loudness,
             buffer,
         } = &mut *output;
         let playing = shared.playing.load(Ordering::Relaxed);
@@ -111,7 +116,7 @@ impl AudioEngine {
         let frames = (wanted as usize).saturating_sub(ahead);
         if frames > 0 {
             buffer.resize(frames * 2, 0.0);
-            fill_smooth(shared, scrub, edge, stretch, buffer, 2);
+            fill_smooth(shared, scrub, edge, stretch, loudness, buffer, 2);
             write(buffer);
             ahead += frames;
         }

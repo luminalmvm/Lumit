@@ -29,6 +29,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart' show LumitUiState;
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -122,12 +123,119 @@ Color? parseHex(String input) {
       (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff, 0xff);
 }
 
+/// The numbers in [text] when it holds nothing else, the way Copy value writes
+/// them: numbers with commas, spaces or brackets between. Null for any other
+/// text, so a path that happens to hold numbers is not taken for them.
+List<double>? numbersOnly(String text) {
+  final n = <double>[];
+  for (final part in text.split(RegExp(r'[\s,;()\[\]]+'))) {
+    if (part.isEmpty) continue;
+    final v = double.tryParse(part);
+    if (v == null || !v.isFinite) return null;
+    n.add(v);
+  }
+  return n.isEmpty ? null : n;
+}
+
 /// Format a colour as an upper-case RRGGBB string (no `#`, alpha dropped).
 String formatHex(Color colour) {
   int ch(double f) => (f * 255).round().clamp(0, 255);
   String two(int v) => v.toRadixString(16).padLeft(2, '0');
   return '${two(ch(colour.r))}${two(ch(colour.g))}${two(ch(colour.b))}'
       .toUpperCase();
+}
+
+/// The clipboard every colour well shares, an Effect controls row's included:
+/// a colour copied from one pastes exactly into any other.
+abstract final class ColourClipboard {
+  /// The last colour copied, exactly, over-range channels and all.
+  static PickedColour? _copied;
+
+  /// What it put on the system clipboard, to tell whether it is still there.
+  static String? _text;
+
+  static void copy(PickedColour colour) {
+    _copied = colour;
+    // The hex goes on the system clipboard as well, so the colour can be
+    // pasted outside Lumit too.
+    _text = '#${formatHex(colour.clipped)}';
+    Clipboard.setData(ClipboardData(text: _text!));
+  }
+
+  static void copyHex(PickedColour colour) =>
+      Clipboard.setData(ClipboardData(text: '#${formatHex(colour.clipped)}'));
+
+  static Future<String?> read() async =>
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+
+  /// What a paste gives from [clip], the system clipboard's text: the colour
+  /// copied last while the clipboard still holds it, a hex, or the three or
+  /// four numbers Copy value writes. Null for anything else.
+  static PickedColour? from(String? clip) {
+    final copied = _copied;
+    if (copied != null && (clip == null || clip == _text)) return copied;
+    if (clip == null) return null;
+    if (parseHex(clip) case final hex?) return PickedColour.of(hex);
+    final n = numbersOnly(clip);
+    return n == null || n.length < 3 || n.length > 4
+        ? null
+        : PickedColour(n[0], n[1], n[2]);
+  }
+}
+
+/// A colour well's right-click at [at]: back to its default where it has
+/// one, then its colour to and from the shared clipboard.
+Future<void> showColourWellMenu(
+  BuildContext context,
+  Offset at, {
+  required PickedColour current,
+  required ValueChanged<PickedColour> onPicked,
+  PickedColour? resetTo,
+}) async {
+  final paste = ColourClipboard.from(await ColourClipboard.read());
+  if (!context.mounted) return;
+  showLumitPopup<void>(
+    context: context,
+    position: at,
+    builder: (close) {
+      Widget row(String id, String label, VoidCallback? run) => MenuRow(
+            key: ValueKey<String>('swatch-menu-$id'),
+            enabled: run != null,
+            onPressed: () {
+              close(null);
+              run?.call();
+            },
+            child: MenuLabel(label, enabled: run != null),
+          );
+      return FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (resetTo case final reset?) ...[
+                row(
+                    'reset',
+                    l10n.reset,
+                    reset.r == current.r &&
+                            reset.g == current.g &&
+                            reset.b == current.b
+                        ? null
+                        : () => onPicked(reset)),
+                const MenuDivider(),
+              ],
+              row('copy', l10n.swatchCopyColour,
+                  () => ColourClipboard.copy(current)),
+              row('paste', l10n.swatchPasteColour,
+                  paste == null ? null : () => onPicked(paste)),
+              row('hex', l10n.swatchCopyHex,
+                  () => ColourClipboard.copyHex(current)),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 /// How the picker's three numbers are shown and edited.
@@ -352,6 +460,10 @@ class ColourSwatchButton extends StatelessWidget {
   /// [onPicked] for each.
   final ValueChanged<PickedColour>? onPreview;
 
+  /// The colour its menu's Reset goes back to. Null leaves Reset off the
+  /// menu, for a colour with no default of its own.
+  final PickedColour? resetTo;
+
   const ColourSwatchButton({
     super.key,
     required this.colour,
@@ -360,6 +472,7 @@ class ColourSwatchButton extends StatelessWidget {
     this.initial,
     this.max = 1,
     this.onPreview,
+    this.resetTo,
   });
 
   @override
@@ -367,6 +480,10 @@ class ColourSwatchButton extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (d) => showColourWellMenu(context, d.globalPosition,
+          current: initial ?? PickedColour.of(colour),
+          onPicked: onPicked,
+          resetTo: resetTo),
       onTap: () async {
         final box = context.findRenderObject();
         if (box is! RenderBox) return;
@@ -441,7 +558,18 @@ class _ColourPickerBody extends StatefulWidget {
   State<_ColourPickerBody> createState() => _ColourPickerBodyState();
 }
 
-class _ColourPickerBodyState extends State<_ColourPickerBody> {
+class _ColourPickerBodyState extends State<_ColourPickerBody>
+    implements TextSelectionGestureDetectorBuilderDelegate {
+  /// The hex field, for the press, drag and right-click every field has.
+  final GlobalKey<EditableTextState> _hexKey = GlobalKey();
+  @override
+  GlobalKey<EditableTextState> get editableTextKey => _hexKey;
+  @override
+  bool get forcePressEnabled => false;
+  @override
+  bool get selectionEnabled => true;
+  late final _hexGestures = TextFieldGestures(delegate: this, context: context);
+
   /// The chosen colour, in the scale being edited. Held as three channels
   /// rather than as hue/saturation/value because the channels are what the
   /// parameter stores and what the numbers show — and because a channel above
@@ -643,12 +771,11 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
           ),
         ),
         const SizedBox(height: 8),
-        // Preview: was / now, then the hex field.
+        // What it was beside what it is now, then the hex field. Clicking the
+        // old half goes back to it.
         Row(
           children: [
-            _previewSwatch(t, widget.initial, 'was'),
-            const SizedBox(width: 4),
-            _previewSwatch(t, _colour, 'now'),
+            _beforeAndAfter(t),
             const Spacer(),
             _hexField(t),
           ],
@@ -755,23 +882,39 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
     );
   }
 
-  Widget _previewSwatch(LumitTheme t, PickedColour colour, String label) =>
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 18,
-            decoration: BoxDecoration(
-              color: colour.clipped,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: t.hairlineStrong),
+  Widget _beforeAndAfter(LumitTheme t) => Container(
+        key: const Key('colour-picker-before-after'),
+        height: 18,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          border: Border.all(color: t.hairlineStrong),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LumitTooltip(
+              message: l10n.colourPickerWas,
+              child: GestureDetector(
+                key: const Key('colour-picker-was'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _setColour(widget.initial, settled: true),
+                child: SizedBox(
+                  width: 28,
+                  child: ColoredBox(color: widget.initial.clipped),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(label, style: t.small),
-        ],
+            LumitTooltip(
+              message: l10n.colourPickerNow,
+              child: SizedBox(
+                width: 28,
+                child: ColoredBox(color: _colour.clipped),
+              ),
+            ),
+          ],
+        ),
       );
 
   Widget _hexField(LumitTheme t) => Row(
@@ -781,27 +924,33 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
           const SizedBox(width: 2),
           SizedBox(
             width: 72,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: t.surface0,
-                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                border: Border.all(
-                  color: _hexFocus.hasFocus ? t.accent : t.hairline,
+            // The whole well answers a press, a drag and a right-click, as
+            // every field does.
+            child: _hexGestures.buildGestureDetector(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: t.surface0,
+                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  border: Border.all(
+                    color: _hexFocus.hasFocus ? t.accent : t.hairline,
+                  ),
                 ),
-              ),
-              child: EditableText(
-                controller: _hexController,
-                focusNode: _hexFocus,
-                style: t.bodyPrimary,
-                cursorColor: t.accent,
-                backgroundCursorColor: t.surface2,
-                selectionColor: t.accent.withValues(alpha: 0.5),
-                // Fold a valid hex into the pick as it is typed, without
-                // reformatting the field mid-entry; focus loss then snaps it
-                // to canonical form and commits.
-                onChanged: _onHexTyped,
-                onSubmitted: (_) => _commitHex(),
+                child: EditableText(
+                  key: _hexKey,
+                  controller: _hexController,
+                  focusNode: _hexFocus,
+                  style: t.bodyPrimary,
+                  cursorColor: t.accent,
+                  backgroundCursorColor: t.surface2,
+                  selectionColor: t.accent.withValues(alpha: 0.5),
+                  // Fold a valid hex into the pick as it is typed, without
+                  // reformatting the field mid-entry; focus loss then snaps
+                  // it to canonical form and commits.
+                  onChanged: _onHexTyped,
+                  onSubmitted: (_) => _commitHex(),
+                ),
               ),
             ),
           ),

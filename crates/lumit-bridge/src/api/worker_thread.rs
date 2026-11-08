@@ -9,6 +9,7 @@ use lumit_render::headless::HeadlessRenderer;
 // "what does a scale of 0.5 mean for the decode" would drift, and the two
 // frontends would then decode at different sizes for the same on-screen scale.
 use crate::render::quality_for;
+use cut::{set_prefix, viewed};
 use dropper::cut_patch;
 #[cfg(not(target_arch = "wasm32"))]
 use dropper::sample_layer_alone;
@@ -19,6 +20,7 @@ use views::{close_view, ground_of, set_view, viewed_kept, viewed_through, Viewed
 #[cfg(target_arch = "wasm32")]
 use web::{sample_pixels, trace_scope};
 
+mod cut;
 mod dropper;
 mod views;
 #[cfg(target_arch = "wasm32")]
@@ -121,7 +123,7 @@ pub struct WorkerState {
     /// see the same picture the scrub did without nine call sites each growing
     /// a parameter. Set by the render request that carries it — the chip
     /// toggling is a render — and cleared by the first request that does not.
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     /// Each Viewer view's 3D view: a camera placement that stands in for the
     /// named comp's active camera while set. Held here for the reason the
     /// prefix is: it says what the Viewer is looking through, and every render,
@@ -211,6 +213,11 @@ pub struct WorkerState {
     // ponytail: capped at 8 and held outside the cache's budget, about 270 MB
     // of the card at 4K; count them against it if that ever matters.
     stand_ins: Vec<(u32, Uuid, lumit_render::headless::PreparedFrame)>,
+    /// The still frame last shown, by view, comp and frame: the picture on
+    /// screen, a drag's preview included, so a trace of that frame reads it
+    /// rather than the document behind it ([`trace_scope`]). Cleared when
+    /// playback starts, which shows frames another way.
+    presented: Option<(u32, Uuid, u64, lumit_render::headless::PreparedFrame)>,
     /// Turned over by each request as it is sent ([`WorkerSender`]).
     epochs: std::sync::Arc<WorkerEpochs>,
 }
@@ -536,6 +543,12 @@ fn sync_caches(state: &mut WorkerState) {
         state.fill_exhausted = false;
     }
     crate::framecache::publish_comp_decodes(state.renderer.decoded_frames());
+    // Decoded footage gets a quarter of the memory cache's budget, so the
+    // figure in Settings holds both, and a new renderer picks it up on its
+    // first turn. Cheap when nothing changed.
+    let (_, ram_budget, _, _, _) = crate::framecache::stats();
+    let decode_budget = (ram_budget / 4).max(lumit_render::decode::DEFAULT_DECODE_CACHE_BYTES);
+    state.renderer.set_decode_budget(decode_budget);
     // The decoded-frame pool's share of the memory report. Published on
     // the same turn as the rest, so the numbers a report adds up were all read
     // at one moment rather than across a second of drift.
@@ -2715,7 +2728,7 @@ pub struct RenderCompRequest {
     /// as the document has it. Latched onto [`WorkerState::prefix`],
     /// so it describes the Viewer from here until the next render says
     /// otherwise.
-    pub prefix: Option<crate::api::state::BridgePrefixPoint>,
+    pub prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     /// Which of the two playback behaviours this render is for.
     pub mode: BridgePlaybackMode,
     /// The on-screen scale of the Viewer, 1.0 meaning "shown at comp
@@ -2740,8 +2753,8 @@ pub struct RenderScopeRequest {
     pub comp: CompositionReference,
     pub frame: u64,
     pub scale: f32,
-    /// Which trace: the codes `lumit_render` reads — 0 waveform, 1 parade,
-    /// 2 vectorscope, 3 histogram.
+    /// Which trace: the codes `lumit_render` reads, 0 waveform, 1 RGB
+    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram.
     pub kind: u32,
     /// Background, trace, then the R, G and B channel tints, each `[r, g, b]`.
     pub colours: [[u8; 3]; 5],
@@ -3047,13 +3060,6 @@ fn build_viewer_renderer(
         );
         renderer.set_memory_budgets(vram, ram);
         crate::framecache::size_to_machine(vram, ram);
-        // Decoded footage gets an eighth of the same budget. It is counted
-        // against it, so the governor trims it when memory runs short.
-        renderer.set_decode_budget(
-            usize::try_from(ram / 8)
-                .unwrap_or(usize::MAX)
-                .max(lumit_render::decode::DEFAULT_DECODE_CACHE_BYTES),
-        );
     }
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it: picking a lens shows the lens
@@ -3257,6 +3263,7 @@ fn worker_loop(
         layer_sample: None,
         pending_measure: None,
         stand_ins: Vec::new(),
+        presented: None,
         epochs,
     };
 
@@ -3432,6 +3439,11 @@ fn one_turn(
                     // tier stayed empty.
                     if !state.backup_exhausted {
                         idle_backup(state);
+                    }
+                    // Nothing left to draw, so nothing needs the compositor's
+                    // multisample attachment either.
+                    if state.fill_exhausted && state.backup_exhausted {
+                        state.renderer.drop_attachments();
                     }
                 }
                 None
@@ -4057,6 +4069,9 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     // (docs/impl/multi-viewer.md §2.5), so the run is named and looked at
     // through the playing view from here.
     state.set_view_id(req.view);
+    // The run's frames are presented on their own path, so the still last
+    // shown says nothing about what is on screen from here.
+    state.presented = None;
     look_at(state, req.view);
     let (document, revision) = {
         let document = state.project.state()?;
@@ -4562,102 +4577,6 @@ fn watched<R>(
     out
 }
 
-/// Latch the "at effect" prefix the Viewer is asking under.
-///
-/// **A prefix is a way of looking, and a way of looking renames every frame.**
-/// The name memo is keyed by `(comp, frame, quality)` against a document
-/// *revision* — it cannot see a change that does not move the revision, and
-/// turning the chip on does not. Left standing, the memo would go on serving
-/// the full stack's names for the cut picture and the Viewer would show the
-/// frame it already had: the chip would look broken in the one way nothing
-/// else would catch. So this clears it exactly as the viewer-look message
-/// does, and starts both readers of those names over with it.
-#[frb(ignore)]
-fn set_prefix(state: &mut WorkerState, prefix: Option<crate::api::state::BridgePrefixPoint>) {
-    if state.prefix == prefix {
-        return;
-    }
-    state.prefix = prefix;
-    state.names.clear();
-    state.published_bar = None;
-    state.fill_exhausted = false;
-}
-
-/// `document` as the Viewer is showing it: the committed snapshot, with the
-/// prefix layer's stack cut short after the picked effect while the chip is on.
-///
-/// **In plain terms.** The image chain a layer has *is* its effect stack, so
-/// "the picture at the third effect" is the picture the composition makes with
-/// that layer's stack stopping after the third effect. There is no second
-/// render path: a patched **copy** of the snapshot goes down the ordinary one,
-/// exactly as every drag preview already does. The frame key hashes each
-/// layer's effects, so the cut names its own frame and the cache cannot hand
-/// the Viewer the full picture by mistake.
-///
-/// Returns the snapshot untouched where the cut would change nothing — another
-/// composition's layer, a layer that has gone, an effect the layer no longer
-/// carries, or a point that keeps the whole stack. A stale chip is then
-/// harmless rather than wrong.
-#[frb(ignore)]
-fn viewed(
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
-    document: std::sync::Arc<lumit_core::model::Document>,
-) -> std::sync::Arc<lumit_core::model::Document> {
-    // Taken by value rather than off the state, so a caller that already holds
-    // a mutable borrow of another of its fields (playback does) can still ask.
-    let Some(prefix) = prefix else {
-        return document;
-    };
-    cut_to_prefix(&prefix, &document).unwrap_or(document)
-}
-
-/// The cut itself, apart from the worker's state so a test can make one.
-#[frb(ignore)]
-fn cut_to_prefix(
-    prefix: &crate::api::state::BridgePrefixPoint,
-    document: &std::sync::Arc<lumit_core::model::Document>,
-) -> Option<std::sync::Arc<lumit_core::model::Document>> {
-    // A node graph's point is the other arm: the box is shown by wiring it
-    // into the Output on a patched copy, and the copy names its own frame by
-    // construction, the key feeding the Output's wire. `None` where the
-    // reading would be the one the Viewer already has.
-    if let Some(point) = prefix.graph {
-        let graph = document
-            .comp(point.comp)?
-            .graph
-            .as_ref()?
-            .viewed_at(point.node)?;
-        let mut copy = (**document).clone();
-        copy.comp_mut(point.comp)?.graph = Some(graph);
-        return Some(std::sync::Arc::new(copy));
-    }
-    let layer_ref = prefix.layer?;
-    let comp = layer_ref.comp_id;
-    let layer = document
-        .comp(comp)?
-        .layers
-        .iter()
-        .find(|l| l.id == layer_ref.layer_id)?;
-    let keep = lumit_core::graph::prefix_len(
-        &layer.effects,
-        prefix
-            .effect
-            .map_or(lumit_core::graph::NodeRef::Source, |id| {
-                lumit_core::graph::NodeRef::Effect(id)
-            }),
-    )?;
-    // ponytail: one document clone per cut frame, which is what every drag
-    // preview already costs. The ceiling is that the clone scales with the
-    // *document* — layer and keyframe count — not with the picture, so it is
-    // free on a small comp and grows without the frame getting any harder. The
-    // trigger is docs/13 §2.1's mandate breaking here first: an effect-list
-    // drag on a comp of hundreds of layers missing B1's 8 ms UI frame while the
-    // same drag on a handful of layers is smooth. The fix is to memoise the cut
-    // document by `(prefix, revision)` on the worker state — a drag holds both
-    // still, so one clone would serve the whole gesture.
-    lumit_core::graph::truncated_effects(document, comp, layer_ref.layer_id, keep)
-}
-
 fn render_comp(
     req: RenderCompRequest,
     state: &mut WorkerState,
@@ -5129,19 +5048,37 @@ fn trace_scope(
     // a second time for every trace of it. Reading it back is a copy.
     let quality = quality_for(req.scale);
     let bgra = zero_copy_wants_bgra();
-    let on_card = state
-        .renderer
-        .frame_key(&document, req.comp.id, req.frame, quality)
-        .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
-        .map(|(width, height, mut bytes)| {
-            if bgra {
-                // The Scopes bin R, G and B by name.
-                for px in bytes.chunks_exact_mut(4) {
-                    px.swap(0, 2);
-                }
+    let named = |(width, height, mut bytes): (u32, u32, Vec<u8>)| {
+        if bgra {
+            // The Scopes bin R, G and B by name.
+            for px in bytes.chunks_exact_mut(4) {
+                px.swap(0, 2);
             }
-            (width, height, bytes)
-        });
+        }
+        (width, height, bytes)
+    };
+    // The picture on screen before anything: while a value is dragged the
+    // Viewer shows a preview the document has not been given, and a colourist
+    // grades by the scope, so it must trace what the drag is doing. Only the
+    // frame the Viewer was last given, in that view; playback presents its
+    // frames another way and they are read off the card below.
+    let shown = state
+        .presented
+        .as_ref()
+        .filter(|_| state.playback.is_none())
+        .filter(|(view, comp, frame, _)| {
+            (*view, *comp, *frame) == (req.view, req.comp.id, req.frame)
+        })
+        .and_then(|(.., prepared)| state.renderer.read_back_prepared(prepared))
+        .map(named);
+    let on_card = match shown {
+        Some(shown) => Some(shown),
+        None => state
+            .renderer
+            .frame_key(&document, req.comp.id, req.frame, quality)
+            .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
+            .map(named),
+    };
     let still_current = |key: u128, quality: lumit_render::plan::Quality| {
         state
             .renderer
@@ -5520,6 +5457,7 @@ fn stand_in(
 fn remember_shown(
     state: &mut WorkerState,
     comp: Uuid,
+    frame: u64,
     prepared: &lumit_render::headless::PreparedFrame,
 ) {
     let view = state.view_id();
@@ -5528,6 +5466,7 @@ fn remember_shown(
     if state.stand_ins.len() > 8 {
         state.stand_ins.remove(0);
     }
+    state.presented = Some((view, comp, frame, prepared.clone()));
 }
 
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -5580,7 +5519,7 @@ fn publish_zero_copy(
         }
     };
     if send_dmabuf(state, frame, &prepared, stream) {
-        remember_shown(state, comp, &prepared);
+        remember_shown(state, comp, frame, &prepared);
     }
 }
 
@@ -5681,7 +5620,7 @@ fn publish_zero_copy(
         }
     };
     if send_shared(state, frame, &prepared, stream) {
-        remember_shown(state, comp, &prepared);
+        remember_shown(state, comp, frame, &prepared);
     }
 }
 
@@ -5732,279 +5671,6 @@ mod tests {
     use crate::api::composition::{BridgePlaybackMode, CompositionReference};
     use std::sync::mpsc::channel;
     use uuid::Uuid;
-
-    /// **The Viewer's own prefix cut, on the interactive path**.
-    ///
-    /// Three things, and each is a way the chip could look as if it worked
-    /// while showing the wrong picture:
-    ///
-    /// - the cut really shortens the stack, and only the named layer's;
-    /// - the cut frame **names its own frame** — the key hashes each layer's
-    ///   effects, so a shorter stack is a different name and the cache can
-    ///   never hand the chip the Viewer's full picture (WP5 proved this for
-    ///   the thumbnail; the interactive path is where it now matters);
-    /// - a point that names nothing this document has cuts nothing, so a chip
-    ///   left over from a deleted effect shows the honest picture rather than
-    ///   an empty one.
-    #[test]
-    fn a_prefix_point_cuts_the_stack_and_names_its_own_frame() {
-        use crate::api::state::BridgePrefixPoint;
-
-        let (project, comp) = project_with_solid_of(4);
-        let layer_id = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            state.store.snapshot().comp(comp).expect("comp").layers[0].id
-        };
-        let (first, second) = (
-            lumit_core::fx::builtins::instantiate("exposure").expect("a built-in"),
-            lumit_core::fx::builtins::instantiate("exposure").expect("a built-in"),
-        );
-        {
-            let state = project.state().expect("state");
-            let state = state.write().expect("write");
-            state
-                .store
-                .commit(lumit_core::ops::Op::SetLayerEffects {
-                    comp,
-                    layer: layer_id,
-                    effects: vec![first.clone(), second.clone()],
-                })
-                .expect("two effects");
-        }
-        let document = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            state.store.snapshot()
-        };
-        let stack = |doc: &std::sync::Arc<lumit_core::model::Document>| {
-            doc.comp(comp)
-                .expect("comp")
-                .layers
-                .iter()
-                .find(|l| l.id == layer_id)
-                .expect("the layer")
-                .effects
-                .len()
-        };
-        assert_eq!(stack(&document), 2);
-
-        let project_id = project.id;
-        let at = |effect| BridgePrefixPoint {
-            layer: Some(crate::api::layer::LayerReference::new(
-                project_id, comp, layer_id,
-            )),
-            effect: Some(effect),
-            graph: None,
-        };
-        // The Source box: the layer's own picture, before any effect (N4).
-        let at_source = BridgePrefixPoint {
-            layer: Some(crate::api::layer::LayerReference::new(
-                project_id, comp, layer_id,
-            )),
-            effect: None,
-            graph: None,
-        };
-        assert_eq!(
-            stack(&super::viewed(Some(at_source), document.clone())),
-            0,
-            "at the Source nothing of the stack is kept"
-        );
-        assert_eq!(
-            stack(&super::viewed(Some(at(first.id)), document.clone())),
-            1,
-            "at the first effect the stack stops after it"
-        );
-        assert_eq!(
-            stack(&super::viewed(Some(at(second.id)), document.clone())),
-            2,
-            "at the last effect nothing is cut, so the Viewer's own frame serves"
-        );
-        assert_eq!(
-            stack(&super::viewed(Some(at(Uuid::now_v7())), document.clone())),
-            2,
-            "an effect the layer no longer carries cuts nothing"
-        );
-        assert_eq!(
-            stack(&super::viewed(None, document.clone())),
-            2,
-            "and the chip off is the document as it stands"
-        );
-
-        // The name, which is the half a wrong cache would get away with.
-        let Some(mut state) = worker_state(project) else {
-            return;
-        };
-        let quality = still_quality(1.0);
-        let cut = super::viewed(Some(at(first.id)), document.clone());
-        let full = state
-            .renderer
-            .frame_key(&document, comp, 0, quality)
-            .expect("a solid is nameable");
-        let short = state
-            .renderer
-            .frame_key(&cut, comp, 0, quality)
-            .expect("and so is the cut one");
-        assert_ne!(
-            full, short,
-            "a truncated stack must name its own frame on the interactive path too"
-        );
-        assert_eq!(
-            state.renderer.frame_key(&cut, comp, 0, quality),
-            Some(short),
-            "and the same cut must name the same frame, or the cache is defeated"
-        );
-    }
-
-    /// **The picture at a box** (docs/impl/node-graph-comp.md §4.5): the point
-    /// names a comp and a box, and the cut is a patched copy whose Output shows
-    /// that box.
-    ///
-    /// Three things, each a way the chip could look as though it worked while
-    /// showing the wrong picture: the copy really rewires the Output; the box
-    /// that already feeds the Output cuts nothing, so the Viewer rides the
-    /// frame it has; and a point naming a comp with no graph cuts nothing
-    /// either.
-    #[test]
-    fn a_prefix_point_at_a_box_rewires_the_output() {
-        use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
-        use lumit_core::model::{Composition, LinearColour, ProjectItem};
-        use lumit_core::time::{Duration, FrameRate, Rational};
-
-        let (project, layer_comp) = project_with_solid_of(4);
-        let solid = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            match state
-                .store
-                .snapshot()
-                .comp(layer_comp)
-                .expect("comp")
-                .layers[0]
-                .kind
-            {
-                lumit_core::model::LayerKind::Solid { def } => def,
-                _ => unreachable!("project_with_solid_of makes a solid layer"),
-            }
-        };
-
-        // A graph of one Read into a blur into the Output, so the picture at
-        // the Read is genuinely a different picture from the Output's.
-        let read = Uuid::now_v7();
-        let blur = lumit_core::fx::builtins::instantiate("blur").expect("a built-in");
-        let blur_id = blur.id;
-        let mut graph = CompGraph::new_with_output();
-        let output = graph.output_id().expect("the seeded Output");
-        graph.nodes.push(GraphNode::Read {
-            id: read,
-            item: solid,
-            custom_name: None,
-        });
-        graph.nodes.push(GraphNode::Fx(blur));
-        graph.edges.push(GraphEdge {
-            from: read,
-            from_port: "output".into(),
-            to: blur_id,
-            to_port: "input".into(),
-        });
-        graph.edges.push(GraphEdge {
-            from: blur_id,
-            from_port: "output".into(),
-            to: output,
-            to_port: "input".into(),
-        });
-
-        let comp = Uuid::now_v7();
-        {
-            let state = project.state().expect("state");
-            let state = state.write().expect("write");
-            state
-                .store
-                .commit(lumit_core::ops::Op::AddItem {
-                    index: 0,
-                    item: Box::new(ProjectItem::Composition(Composition {
-                        graph: Some(graph),
-                        master_volume_db: 0.0,
-                        lighting: Default::default(),
-                        sound_mix: false,
-                        groups: Vec::new(),
-                        beat_grid: None,
-                        id: comp,
-                        name: "Graph".into(),
-                        width: 64,
-                        height: 32,
-                        frame_rate: FrameRate::new(30, 1).expect("30 fps"),
-                        duration: Duration(Rational::new(4, 30).expect("a duration")),
-                        background: LinearColour([0.0, 0.0, 0.0, 0.0]),
-                        work_area: None,
-                        layers: Vec::new(),
-                        markers: Vec::new(),
-                        motion_blur: Default::default(),
-                        extra: serde_json::Map::new(),
-                    })),
-                })
-                .expect("the node graph is filed");
-        }
-        let document = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            state.store.snapshot()
-        };
-
-        let at = |comp, node| crate::api::state::BridgePrefixPoint {
-            layer: None,
-            effect: None,
-            graph: Some(crate::api::state::BridgeGraphPoint { comp, node }),
-        };
-        let feeds = |doc: &std::sync::Arc<lumit_core::model::Document>| {
-            doc.comp(comp)
-                .expect("comp")
-                .graph
-                .as_ref()
-                .expect("a node graph")
-                .wire_into(output, "input")
-                .map(|(from, _)| *from)
-        };
-
-        assert_eq!(feeds(&document), Some(blur_id), "as the document has it");
-        assert_eq!(
-            feeds(&super::viewed(Some(at(comp, read)), document.clone())),
-            Some(read),
-            "at the Read the Output shows the Read"
-        );
-        assert_eq!(
-            feeds(&super::viewed(Some(at(comp, blur_id)), document.clone())),
-            Some(blur_id),
-            "the box that already feeds the Output cuts nothing"
-        );
-        assert_eq!(
-            feeds(&super::viewed(Some(at(layer_comp, read)), document.clone())),
-            Some(blur_id),
-            "a point naming a comp with no graph cuts nothing"
-        );
-        assert_eq!(
-            feeds(&super::viewed(None, document.clone())),
-            Some(blur_id),
-            "and the chip off is the document as it stands"
-        );
-
-        // And the cut names its own frame, which is the half a wrong cache
-        // would get away with.
-        let Some(mut state) = worker_state(project) else {
-            return;
-        };
-        let quality = still_quality(1.0);
-        let cut = super::viewed(Some(at(comp, read)), document.clone());
-        let (whole, at_read) = (
-            state.renderer.frame_key(&document, comp, 0, quality),
-            state.renderer.frame_key(&cut, comp, 0, quality),
-        );
-        assert!(whole.is_some() && at_read.is_some(), "a solid is nameable");
-        assert_ne!(
-            whole, at_read,
-            "the picture at a box must name its own frame, or the cache serves the Output's"
-        );
-    }
 
     /// **A view puts its own camera on top of the comp it names**
     /// (docs/impl/camera.md §6): one Camera layer at index 0, under the fixed
@@ -6330,7 +5996,9 @@ mod tests {
 
     /// A worker's state around a real renderer, built as `worker_loop` builds
     /// it. `None` where there is no graphics adapter to build one on.
-    fn worker_state(project: crate::api::project::ProjectReference) -> Option<super::WorkerState> {
+    pub(super) fn worker_state(
+        project: crate::api::project::ProjectReference,
+    ) -> Option<super::WorkerState> {
         let Ok(renderer) = super::HeadlessRenderer::new() else {
             eprintln!("no graphics adapter; skipping");
             return None;
@@ -6377,6 +6045,7 @@ mod tests {
             layer_sample: None,
             pending_measure: None,
             stand_ins: Vec::new(),
+            presented: None,
             epochs: std::sync::Arc::default(),
         })
     }
@@ -6388,7 +6057,9 @@ mod tests {
     }
 
     /// The same, `frames` frames long at 30 fps.
-    fn project_with_solid_of(frames: i64) -> (crate::api::project::ProjectReference, Uuid) {
+    pub(super) fn project_with_solid_of(
+        frames: i64,
+    ) -> (crate::api::project::ProjectReference, Uuid) {
         project_with_solid_sized(frames, 64, 32)
     }
 

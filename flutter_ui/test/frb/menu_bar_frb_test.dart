@@ -18,6 +18,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
@@ -28,6 +29,7 @@ import 'package:lumit_flutter/shell/profile_chip.dart' show ProBadge;
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/external_links.dart';
+import 'package:lumit_flutter/widgets/controls.dart' show FloatSurface;
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:provider/provider.dart';
@@ -114,7 +116,7 @@ void main() {
     /// New composition asks for its settings first, so every route to a
     /// comp goes through the dialogue: choose the command, then press Create.
     Future<void> makeComp(WidgetTester tester) async {
-      await choose(tester, 'Composition', 'New composition');
+      await choose(tester, 'Composition', 'New composition…');
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('comp-apply')));
       await tester.pumpAndSettle();
@@ -339,7 +341,7 @@ void main() {
       final p = await mount(tester);
       final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       final row =
-          find.byKey(const ValueKey<String>('menu-row-Share preview…'));
+          find.byKey(const ValueKey<String>('menu-row-Previews…'));
       Finder badge() =>
           find.descendant(of: row, matching: find.byType(ProBadge));
 
@@ -348,7 +350,7 @@ void main() {
       expect(badge(), findsOneWidget);
       // An ordinary row, not a greyed one: it opens the window, which
       // offers Pro.
-      expect(tester.widget<Text>(find.text('Share preview…')).style?.color,
+      expect(tester.widget<Text>(find.text('Previews…')).style?.color,
           isNot(t.textDisabled));
       await tester.tap(row);
       await tester.pump();
@@ -362,7 +364,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
       await tester.pump();
       expect(badge(), findsNothing);
-      expect(tester.widget<Text>(find.text('Share preview…')).style?.color,
+      expect(tester.widget<Text>(find.text('Previews…')).style?.color,
           isNot(t.textDisabled));
       await dismiss(tester);
     });
@@ -439,8 +441,8 @@ void main() {
         Iterable<String> all() => labels(
             tester.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus);
 
-        expect(all(), contains('Share preview… (Pro)'));
-        expect(all(), isNot(contains('Share preview…')));
+        expect(all(), contains('Previews… (Pro)'));
+        expect(all(), isNot(contains('Previews…')));
 
         p.uiState.account.account =
             const CloudAccount(id: '1', email: '', name: '', pro: true);
@@ -449,8 +451,8 @@ void main() {
         // Twice: the read follows the notification by a microtask.
         await tester.pump();
         await tester.pump();
-        expect(all(), contains('Share preview…'));
-        expect(all(), isNot(contains('Share preview… (Pro)')));
+        expect(all(), contains('Previews…'));
+        expect(all(), isNot(contains('Previews… (Pro)')));
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
@@ -544,7 +546,7 @@ void main() {
       final comp = p.uiState.selectedComp!;
 
       for (final item in [
-        'Solid',
+        'Solid…',
         'Text',
         'Camera',
         'Adjustment',
@@ -554,7 +556,7 @@ void main() {
         await choose(tester, 'Layer', item, under: 'New');
         await tester.pump();
         // A solid asks for its settings first.
-        if (item == 'Solid') {
+        if (item == 'Solid…') {
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
           await tester.pumpAndSettle();
@@ -576,13 +578,13 @@ void main() {
       await tester.pump();
 
       await choose(tester, 'Layer', 'Shapes from text', under: 'Create');
-      await tester.pump();
+      await settleFrb(tester, until: () => comp.getLayers().length == 2);
       expect(comp.getLayers(), hasLength(2), reason: 'a copy beside it');
       expect(text.getText()!.text, 'Text',
           reason: 'the original is kept, still saying what it said');
 
       await choose(tester, 'Layer', 'Points from text', under: 'Create');
-      await tester.pump();
+      await settleFrb(tester, until: () => comp.getLayers().length == 3);
       expect(comp.getLayers(), hasLength(3));
       expect(
           comp
@@ -768,9 +770,15 @@ void main() {
     testWidgets('the Window menu ticks the panels and toggles them',
         (tester) async {
       final p = await mount(tester);
+      // Wide enough for the Panels flyout to sit beside the menu rather than
+      // over it, where it would take the taps meant for the menu.
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pump();
       expect(panelsIn(p.uiState.split), contains(Panel.align));
 
-      await choose(tester, 'Window', Panel.align.title);
+      await choose(tester, 'Window', Panel.align.title, under: 'Panels');
       await tester.pump();
       expect(panelsIn(p.uiState.split), isNot(contains(Panel.align)),
           reason: 'the tick came off and the panel went with it');
@@ -785,10 +793,22 @@ void main() {
       expect(panelsIn(p.uiState.split), contains(Panel.align),
           reason: 'and back again, without opening the menu a second time');
 
-      // A row that is not a toggle still closes it.
+      // A row that is not a toggle still closes it. The pointer goes to the
+      // row first, which takes the Panels flyout back off it, as a hand on
+      // a mouse would.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(
+          location: tester.getCenter(find.text('Command palette…')));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Command palette…'));
       await tester.pump();
-      expect(find.text(Panel.align.title), findsNothing,
+      await mouse.removePointer();
+      // In a menu: the panel's own tab is back in the dock by now.
+      expect(
+          find.descendant(
+              of: find.byType(FloatSurface),
+              matching: find.text(Panel.align.title)),
+          findsNothing,
           reason: 'an ordinary command closes the menu as it always did');
       await dismiss(tester);
     });
@@ -802,9 +822,9 @@ void main() {
     });
 
     /// The Effect menu is the browser as a menu: a submenu per category, each
-    /// effect applying to the primary layer only, and the whole thing dead with
-    /// nothing selected.
-    testWidgets('the Effect menu applies to the primary layer only',
+    /// effect applying to every selected layer as one undo step, and the whole
+    /// thing dead with nothing selected.
+    testWidgets('the Effect menu applies to every selected layer',
         (tester) async {
       final p = await mount(tester);
       await makeComp(tester);
@@ -826,8 +846,12 @@ void main() {
       await choose(tester, 'Effect', 'Gaussian blur', under: 'Blur & sharpen');
       await tester.pump();
       expect(a.getEffects().single.name(), 'blur');
-      expect(b.getEffects(), isEmpty,
-          reason: 'the primary layer alone, not every selected layer');
+      expect(b.getEffects().single.name(), 'blur',
+          reason: 'every selected layer, as the Layer rows act');
+      // One step takes both away.
+      undoFrb(p.state);
+      expect(a.getEffects(), isEmpty);
+      expect(b.getEffects(), isEmpty);
     });
 
   }, skip: !engineAvailable);

@@ -39,6 +39,8 @@ mod lights;
 mod material;
 mod model;
 mod moments;
+mod orient;
+mod overlap_key;
 pub mod pool;
 mod projection;
 pub mod schedule;
@@ -1308,7 +1310,10 @@ fn feed_effect_stack(
                     // for this row alone, and Beat trigger's. Depth points' Camera
                     // row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
-                        && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
+                        && matches!(
+                            e.effect.match_name.as_str(),
+                            "audio_level" | "beat_trigger" | "audio_spectrum"
+                        )
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
                         .flatten()
@@ -2510,12 +2515,7 @@ fn feed_source(
                     gain,
                     opacity,
                 } => {
-                    h.update(b"seq-dissolve/");
-                    feed_f64(h, gain);
-                    // The clips' own opacity, drawn as the layer's.
-                    if opacity < 1.0 {
-                        feed_f64(h, opacity);
-                    }
+                    overlap_key::feed_overlap(h, outgoing, incoming, gain, opacity, lt);
                     feed_clip(h, outgoing)?;
                     feed_clip(h, incoming)?;
                 }
@@ -2831,6 +2831,7 @@ fn feed_depth(
     lt: f64,
     read: &dyn Fn(&lumit_core::anim::Property) -> f64,
 ) {
+    orient::feed(h, tr, lt);
     let (x, y, z) = tr.orientation_at(lt, read);
     let values = [x, y, z, read(&tr.anchor_z), read(&tr.scale_z)];
     if values != [0.0, 0.0, 0.0, 0.0, 100.0] || tr.after_effects_order {
@@ -3070,6 +3071,7 @@ mod tests {
             widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle.clone()],
@@ -4808,12 +4810,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 36, which renamed every frame.
+        // Pinned under ALGO_VERSION 37, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                95_689_429_451_961_835_282_372_309_592_421_000_195,
-                131_043_331_677_396_239_371_407_079_818_943_689_187
+                147_468_104_447_878_697_879_367_290_286_622_048_124,
+                257_304_935_719_304_727_937_549_597_088_181_006_687
             )
         );
 
@@ -4885,6 +4887,7 @@ mod tests {
             widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

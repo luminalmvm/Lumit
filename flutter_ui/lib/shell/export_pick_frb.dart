@@ -193,7 +193,7 @@ class _ExportPickState extends State<_ExportPick> {
                       key: const ValueKey('export-pick-browse'),
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       onPressed: _busy ? null : _chooseFolder,
-                      child: Text(l10n.exportBrowse, style: t.body),
+                      child: Text(l10n.exportBrowseEllipsis, style: t.body),
                     ),
                   ),
                 ]),

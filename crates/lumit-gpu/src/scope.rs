@@ -69,11 +69,15 @@ pub enum ScopeKind {
     Vectorscope,
     /// Per-channel pixel counts by brightness.
     Histogram,
+    /// Red, green and blue waveforms side by side, each in its own third.
+    Parade,
+    /// Pixel counts by brightness, one trace.
+    HistogramLuma,
 }
 
 impl ScopeKind {
-    /// The kind a bridge code names: 0 waveform, 1 parade, 2 vectorscope, 3
-    /// histogram.
+    /// The kind a bridge code names: 0 waveform, 1 RGB waveform, 2
+    /// vectorscope, 3 histogram, 4 parade, 5 luma histogram.
     #[must_use]
     pub fn from_code(code: u32) -> Option<Self> {
         match code {
@@ -81,6 +85,8 @@ impl ScopeKind {
             1 => Some(ScopeKind::WaveformRgb),
             2 => Some(ScopeKind::Vectorscope),
             3 => Some(ScopeKind::Histogram),
+            4 => Some(ScopeKind::Parade),
+            5 => Some(ScopeKind::HistogramLuma),
             _ => None,
         }
     }
@@ -91,6 +97,8 @@ impl ScopeKind {
             ScopeKind::WaveformRgb => 1,
             ScopeKind::Vectorscope => 2,
             ScopeKind::Histogram => 3,
+            ScopeKind::Parade => 4,
+            ScopeKind::HistogramLuma => 5,
         }
     }
 
@@ -98,9 +106,10 @@ impl ScopeKind {
     /// peak reduction scans and the colourise pass reads.
     fn count_len(self) -> u32 {
         match self {
-            ScopeKind::WaveformLuma | ScopeKind::Vectorscope => GRID * GRID,
+            ScopeKind::WaveformLuma | ScopeKind::Vectorscope | ScopeKind::Parade => GRID * GRID,
             ScopeKind::WaveformRgb => 3 * GRID * GRID,
             ScopeKind::Histogram => 3 * GRID,
+            ScopeKind::HistogramLuma => GRID,
         }
     }
 }
@@ -761,6 +770,51 @@ mod tests {
         let empty_row = if row > 10 { 0 } else { g() - 1 };
         let cell = (empty_row * g()) * 4;
         assert_eq!(&trace[cell..cell + 3], &STANDARD.bg);
+    }
+
+    /// The parade puts each channel's waveform in its own third: a solid
+    /// (255, 128, 0) frame lands its red at the top of the left cell, its
+    /// green half way up the middle one, and its blue at the foot of the right
+    /// one, and nothing anywhere else.
+    #[test]
+    fn parade_bins_each_channel_in_its_own_third() {
+        let Some(ctx) = ctx() else {
+            crate::no_adapter();
+            return;
+        };
+        let engine = ctx.scope();
+        let (w, h) = (16, 16);
+        let frame = solid(w, h, 255, 128, 0);
+        let counts = gpu_counts(engine, &ctx, ScopeKind::Parade, &frame, 16, 16);
+        let third = g() / 3;
+        let expect = [
+            (0, value_row(1.0)),
+            (1, value_row(128.0 / 255.0)),
+            (2, value_row(0.0)),
+        ];
+        for (cell, row) in expect {
+            let in_cell: u32 = (0..third)
+                .map(|x| counts[row * g() + cell * third + x])
+                .sum();
+            assert_eq!(in_cell, (w * h) as u32, "cell {cell} row {row}");
+        }
+        assert_eq!(counts.iter().sum::<u32>(), 3 * (w * h) as u32);
+    }
+
+    /// The luma histogram is one count per brightness: a solid grey fills
+    /// its own bin and no other.
+    #[test]
+    fn luma_histogram_counts_one_bin() {
+        let Some(ctx) = ctx() else {
+            crate::no_adapter();
+            return;
+        };
+        let engine = ctx.scope();
+        let frame = solid(16, 16, 128, 128, 128);
+        let counts = gpu_counts(engine, &ctx, ScopeKind::HistogramLuma, &frame, 16, 16);
+        let bin = (luma8(128, 128, 128) * 255.0 + 0.5).floor() as usize;
+        assert_eq!(counts[bin], 16 * 16);
+        assert_eq!(counts.iter().sum::<u32>(), 16 * 16);
     }
 
     /// A malformed (too-short) frame never panics or reads out of bounds: the

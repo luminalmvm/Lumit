@@ -151,11 +151,13 @@ SingleActivator? activatorForChord(String chord) {
 /// ⌘. The stored form never changes — only the reading of it.
 ///
 /// The keys the keymap names in one word read the way their caps do: an arrow
-/// is an arrow, and PageUp is Page Up.
+/// is an arrow, and PageUp is Page Up. `*` is only ever the number pad's star
+/// ([_namedKeys]), and alone in a menu it would read as a footnote.
 String chordLabel(String chord) {
   if (chord.isEmpty) return '';
   final mac = defaultTargetPlatform == TargetPlatform.macOS;
   return chord
+      .replaceAll('*', 'Numpad *')
       .replaceAll('Mod+', mac ? '⌘' : 'Ctrl+')
       .replaceAll('Alt+', mac ? '⌥' : 'Alt+')
       .replaceAll('Shift+', mac ? '⇧' : 'Shift+')
@@ -164,7 +166,9 @@ String chordLabel(String chord) {
       .replaceAll('ArrowUp', '↑')
       .replaceAll('ArrowDown', '↓')
       .replaceAll('PageUp', 'Page Up')
-      .replaceAll('PageDown', 'Page Down');
+      .replaceAll('PageDown', 'Page Down')
+      // The mark alone is a speck at a menu's size.
+      .replaceAll('`', 'Backtick');
 }
 
 /// How far a wheel event moved, on whichever axis carries it. Some platforms

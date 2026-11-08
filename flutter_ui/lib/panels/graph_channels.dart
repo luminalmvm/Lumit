@@ -77,6 +77,11 @@ class RowValueDrag {
   }
 }
 
+/// The curves put away in the graph's list, by channel id. Lasts as long as
+/// Lumit is open, and the document never hears about it. Held here so it outlives
+/// the pane when the Timeline goes back to its layers.
+final ValueNotifier<Set<String>> hiddenCurves = ValueNotifier(const {});
+
 /// Which reading of the curve is on screen (docs/07 §5.1): the value, how
 /// fast it changes, or how fast that changes.
 enum GraphLens { value, speed, acceleration }

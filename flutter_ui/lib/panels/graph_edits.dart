@@ -416,46 +416,174 @@ void applyTangentModeToSelection({
   if (edits.isNotEmpty) commitChannelEdits(edits);
 }
 
-/// Join handles: every selected key whose two sides were split takes one
-/// speed on both, the mean of the two, and keeps each side's influence.
-void joinHandlesOnSelection({
+/// The ease of the first picked key that has one and the unit its speed is in,
+/// for a dialogue that opens on the selection. Null when no picked key has a
+/// span on either side to ease.
+({KeyEase ease, String? unit})? firstPickedEase({
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,
 }) {
-  bool eased(BridgeSideInterp s) =>
-      s is BridgeSideInterp_Bezier || s is BridgeSideInterp_Auto;
+  for (final channel in channels) {
+    for (var i = 0; i < channel.keys.length; i++) {
+      if (!selectedKeys.contains('${channel.id}#$i')) continue;
+      final ease = keyEaseOf(channel.keys, i);
+      if (!ease.isEmpty) return (ease: ease, unit: graphChannelUnit(channel));
+    }
+  }
+  return null;
+}
+
+/// Typed speed and influence onto every selected key, one write per curve.
+void applyKeyEaseToSelection({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+  required KeyEase ease,
+}) {
   final edits = <GraphChannel, BridgeScalar>{};
   for (final channel in channels) {
     final keys = channel.keys;
     final next = [...keys];
     var touched = false;
     for (var i = 0; i < keys.length; i++) {
-      final key = keys[i];
-      // An end key has one side to aim, so nothing to join.
-      if (i == 0 ||
-          i == keys.length - 1 ||
-          !selectedKeys.contains('${channel.id}#$i') ||
-          !eased(key.interpIn) ||
-          !eased(key.interpOut)) {
+      if (!selectedKeys.contains('${channel.id}#$i')) continue;
+      touched = true;
+      next[i] = keyWithEase(keys, i, ease);
+    }
+    if (touched) edits[channel] = BridgeScalar.keyframed(next);
+  }
+  if (edits.isNotEmpty) commitChannelEdits(edits);
+}
+
+/// Whether the key at [i] has two eased sides aimed apart. An end key has one
+/// side to aim, so nothing to join.
+bool keyHandlesSplit(List<BridgeKeyframe> keys, int i) {
+  bool eased(BridgeSideInterp s) =>
+      s is BridgeSideInterp_Bezier || s is BridgeSideInterp_Auto;
+  return i > 0 &&
+      i + 1 < keys.length &&
+      eased(keys[i].interpIn) &&
+      eased(keys[i].interpOut) &&
+      (sideSpeedAtKey(keys, i, isOut: false) -
+                  sideSpeedAtKey(keys, i, isOut: true))
+              .abs() >=
+          1e-9;
+}
+
+/// The key at [i] with its split handles joined: one speed on both sides, the
+/// mean of the two, each side keeping its influence.
+BridgeKeyframe keyWithHandlesJoined(List<BridgeKeyframe> keys, int i) {
+  final key = keys[i];
+  final speed = (sideSpeedAtKey(keys, i, isOut: false) +
+          sideSpeedAtKey(keys, i, isOut: true)) /
+      2;
+  return BridgeKeyframe(
+    time: key.time,
+    value: key.value,
+    interpIn: BridgeSideInterp.bezier(BridgeBezierSide(
+        speed: speed, influence: sideInfluence(key.interpIn))),
+    interpOut: BridgeSideInterp.bezier(BridgeBezierSide(
+        speed: speed, influence: sideInfluence(key.interpOut))),
+  );
+}
+
+/// Join handles on every selected key that has them split.
+void joinHandlesOnSelection({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+}) {
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    final keys = channel.keys;
+    final next = [...keys];
+    var touched = false;
+    for (var i = 0; i < keys.length; i++) {
+      if (!selectedKeys.contains('${channel.id}#$i') ||
+          !keyHandlesSplit(keys, i)) {
         continue;
       }
-      final into = sideSpeedAtKey(keys, i, isOut: false);
-      final out = sideSpeedAtKey(keys, i, isOut: true);
-      if ((into - out).abs() < 1e-9) continue;
-      final speed = (into + out) / 2;
+      touched = true;
+      next[i] = keyWithHandlesJoined(keys, i);
+    }
+    if (touched) edits[channel] = BridgeScalar.keyframed(next);
+  }
+  if (edits.isNotEmpty) commitChannelEdits(edits);
+}
+
+/// Lay the handles of every selected key flat: the curve stops as it passes
+/// through the key. [isOut] names one side, or null for both.
+void flattenHandlesOnSelection({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+  bool? isOut,
+}) {
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    final keys = channel.keys;
+    final next = [...keys];
+    var touched = false;
+    BridgeSideInterp flat(BridgeSideInterp side) =>
+        BridgeSideInterp.bezier(BridgeBezierSide(
+            speed: 0, influence: sideInfluence(side).clamp(1e-3, 1.0)));
+    for (var i = 0; i < keys.length; i++) {
+      if (!selectedKeys.contains('${channel.id}#$i')) continue;
       touched = true;
       next[i] = BridgeKeyframe(
-        time: key.time,
-        value: key.value,
-        interpIn: BridgeSideInterp.bezier(BridgeBezierSide(
-            speed: speed, influence: sideInfluence(key.interpIn))),
-        interpOut: BridgeSideInterp.bezier(BridgeBezierSide(
-            speed: speed, influence: sideInfluence(key.interpOut))),
+        time: keys[i].time,
+        value: keys[i].value,
+        interpIn: isOut == true ? keys[i].interpIn : flat(keys[i].interpIn),
+        interpOut: isOut == false ? keys[i].interpOut : flat(keys[i].interpOut),
       );
     }
     if (touched) edits[channel] = BridgeScalar.keyframed(next);
   }
   if (edits.isNotEmpty) commitChannelEdits(edits);
+}
+
+/// Whether any selected key has two eased sides aimed apart, which is what
+/// Join handles can do something about.
+bool anyHandlesSplit({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+}) {
+  for (final channel in channels) {
+    final keys = channel.keys;
+    for (var i = 1; i + 1 < keys.length; i++) {
+      if (selectedKeys.contains('${channel.id}#$i') &&
+          keyHandlesSplit(keys, i)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// Give the stretch of curve between key [span] and the next one [side]: the
+/// side leaving the first and, unless it holds, the side reaching the second.
+void applyInterpToSpan(GraphChannel channel, int span, BridgeSideInterp side) {
+  final keys = channel.keys;
+  if (span < 0 || span + 1 >= keys.length) return;
+  final hold = side is BridgeSideInterp_Hold;
+  commitChannelEdits({
+    channel: BridgeScalar.keyframed([
+      for (var i = 0; i < keys.length; i++)
+        if (i == span)
+          BridgeKeyframe(
+            time: keys[i].time,
+            value: keys[i].value,
+            interpIn: keys[i].interpIn,
+            interpOut: side,
+          )
+        else if (i == span + 1 && !hold)
+          BridgeKeyframe(
+            time: keys[i].time,
+            value: keys[i].value,
+            interpIn: side,
+            interpOut: keys[i].interpOut,
+          )
+        else
+          keys[i],
+    ]),
+  });
 }
 
 /// Plant a key at [frame] on every channel here, each taking the value its own
@@ -596,8 +724,8 @@ void moveSelectedKeys({
       next.add(BridgeKeyframe(
         time: timeOfSubframe(now, fpsNum, fpsDen),
         value: keys[i].value,
-        interpIn: swapSides ? keys[i].interpOut : keys[i].interpIn,
-        interpOut: swapSides ? keys[i].interpIn : keys[i].interpOut,
+        interpIn: swapSides ? turnedSide(keys[i].interpOut) : keys[i].interpIn,
+        interpOut: swapSides ? turnedSide(keys[i].interpIn) : keys[i].interpOut,
       ));
     }
     if (!touched) continue;

@@ -349,6 +349,26 @@ class InterfaceSettings {
   /// a line across it, edited where it lies, as Vegas draws velocity.
   bool cutSpeedLines;
 
+  /// What Ctrl+D and a clip dragged across another under Auto crossfade put on
+  /// an overlap, by the transition's match name. Null is the dissolve.
+  String? cutDefaultTransition;
+
+  /// How long Freeze frame holds on a clip, and on a layer, in seconds. The
+  /// last length asked for.
+  double cutFreezeSeconds;
+  double retimeHoldSeconds;
+
+  /// What the last Ramp… asked for: the speed in per cent, the length in
+  /// frames, whether the length reads in seconds, and the ease by name.
+  double retimeRampTo;
+  int retimeRampFrames;
+  bool retimeRampInSeconds;
+  String retimeRampEase;
+
+  /// A freeze on a clip leaves its linked sound playing on through the hold,
+  /// rather than cutting it and leaving silence there.
+  bool cutFreezeKeepsSound;
+
   /// Mouse drags in the Cut timeline the way Vegas has them: Ctrl drags a
   /// copy or stretches an edge, Alt slips, Ctrl+Alt slides, and Shift holds
   /// snapping off. Turned on with the Vegas key preset.
@@ -360,6 +380,10 @@ class InterfaceSettings {
   /// The Frames switch on the Cut and Audio timelines: sound moves in whole
   /// frames. Off, a sound clip goes where the pointer puts it.
   bool quantiseSound;
+
+  /// How long a level meter's hold line rests on the loudest peak, in seconds.
+  /// Nought draws no line, and a negative number holds it until reset.
+  int peakHoldSeconds;
 
   /// What a file with more than one audio stream becomes when it is added to
   /// a composition.
@@ -427,6 +451,17 @@ class InterfaceSettings {
   /// effective look's tone map is false whatever a comp stored — so hiding the
   /// button can never strand an engaged look with nothing to turn it off.
   bool showToneMap;
+
+  /// Whether the Viewer's guides stay where they are: a locked guide can't be
+  /// dragged, and a layer dragged under one still snaps to it.
+  bool viewerGuidesLocked;
+
+  /// Whether the Viewer's rulers count in percent of the frame, not in pixels.
+  bool viewerRulerPercent;
+
+  /// Whether lining the selection up goes to the first picked layer's edge,
+  /// rather than the edge of the box round them all.
+  bool alignToFirstPicked;
 
   /// Whether an orbit in the Viewer turns the other way across, and up and
   /// down. Off by default.
@@ -580,9 +615,18 @@ class InterfaceSettings {
     this.cutAutoRipple = false,
     this.cutAutoCrossfade = false,
     this.cutSpeedLines = false,
+    this.cutDefaultTransition,
+    this.cutFreezeSeconds = 2,
+    this.retimeHoldSeconds = 1,
+    this.retimeRampTo = 20,
+    this.retimeRampFrames = 12,
+    this.retimeRampInSeconds = false,
+    this.retimeRampEase = 'linear',
+    this.cutFreezeKeepsSound = false,
     this.cutVegasDrags = false,
     this.cutHeadWidth = 180,
     this.quantiseSound = true,
+    this.peakHoldSeconds = 3,
     this.streamsArrival = StreamsArrival.mixed,
     this.cutSoundWithPicture = false,
     this.cutTracksAnyOrder = false,
@@ -592,6 +636,9 @@ class InterfaceSettings {
     this.reduceTransparency = false,
     this.waveformsFromBottom = false,
     this.showToneMap = false,
+    this.viewerGuidesLocked = false,
+    this.alignToFirstPicked = false,
+    this.viewerRulerPercent = false,
     this.invertOrbitAcross = false,
     this.invertOrbitUpDown = false,
     this.easingInPopup = false,
@@ -604,7 +651,7 @@ class InterfaceSettings {
     this.toolBarPosition = ToolBarPosition.auto,
     this.rangeSliders = true,
     this.commandBox = true,
-    this.rightClickOpensNodeSearch = true,
+    this.rightClickOpensNodeSearch = false,
     this.tabOpensNodeSearch = true,
     this.shiftAOpensNodeSearch = true,
     this.wireStyle = WireStyle.curved,
@@ -628,9 +675,18 @@ class InterfaceSettings {
         'cut_auto_ripple': cutAutoRipple,
         'cut_auto_crossfade': cutAutoCrossfade,
         'cut_speed_lines': cutSpeedLines,
+        'cut_default_transition': cutDefaultTransition,
+        'cut_freeze_seconds': cutFreezeSeconds,
+        'retime_hold_seconds': retimeHoldSeconds,
+        'retime_ramp_to': retimeRampTo,
+        'retime_ramp_frames': retimeRampFrames,
+        'retime_ramp_in_seconds': retimeRampInSeconds,
+        'retime_ramp_ease': retimeRampEase,
+        'cut_freeze_keeps_sound': cutFreezeKeepsSound,
         'cut_vegas_drags': cutVegasDrags,
         'cut_head_width': cutHeadWidth,
         'quantise_sound': quantiseSound,
+        'peak_hold_seconds': peakHoldSeconds,
         'audio_streams_arrival': streamsArrival.name,
         'cut_sound_with_picture': cutSoundWithPicture,
         'cut_tracks_any_order': cutTracksAnyOrder,
@@ -640,6 +696,9 @@ class InterfaceSettings {
         'reduce_transparency': reduceTransparency,
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
+        'viewer_guides_locked': viewerGuidesLocked,
+        'align_to_first_picked': alignToFirstPicked,
+        'viewer_ruler_percent': viewerRulerPercent,
         'invert_orbit_across': invertOrbitAcross,
         'invert_orbit_up_down': invertOrbitUpDown,
         'easing_in_popup': easingInPopup,
@@ -697,9 +756,18 @@ class InterfaceSettings {
         cutAutoRipple: j['cut_auto_ripple'] as bool? ?? false,
         cutAutoCrossfade: j['cut_auto_crossfade'] as bool? ?? false,
         cutSpeedLines: j['cut_speed_lines'] as bool? ?? false,
+        cutDefaultTransition: j['cut_default_transition'] as String?,
+        cutFreezeSeconds: (j['cut_freeze_seconds'] as num?)?.toDouble() ?? 2,
+        retimeHoldSeconds: (j['retime_hold_seconds'] as num?)?.toDouble() ?? 1,
+        retimeRampTo: (j['retime_ramp_to'] as num?)?.toDouble() ?? 20,
+        retimeRampFrames: (j['retime_ramp_frames'] as num?)?.toInt() ?? 12,
+        retimeRampInSeconds: j['retime_ramp_in_seconds'] as bool? ?? false,
+        retimeRampEase: j['retime_ramp_ease'] as String? ?? 'linear',
+        cutFreezeKeepsSound: j['cut_freeze_keeps_sound'] as bool? ?? false,
         cutVegasDrags: j['cut_vegas_drags'] as bool? ?? false,
         cutHeadWidth: (j['cut_head_width'] as num?)?.toDouble() ?? 180,
         quantiseSound: j['quantise_sound'] as bool? ?? true,
+        peakHoldSeconds: j['peak_hold_seconds'] as int? ?? 3,
         // 0.7.0 kept this under `streams_arrival` and wrote the first stream
         // there whether or not anybody had chosen it, so only a layer each is
         // believed from that key. Anything else gets the default.
@@ -732,6 +800,9 @@ class InterfaceSettings {
         // written before this field existed adopts it — a comp that stored an
         // engaged tone map is disengaged with it rather than left stranded.
         showToneMap: j['show_tone_map'] as bool? ?? false,
+        viewerGuidesLocked: j['viewer_guides_locked'] as bool? ?? false,
+        alignToFirstPicked: j['align_to_first_picked'] as bool? ?? false,
+        viewerRulerPercent: j['viewer_ruler_percent'] as bool? ?? false,
         invertOrbitAcross: j['invert_orbit_across'] as bool? ?? false,
         invertOrbitUpDown: j['invert_orbit_up_down'] as bool? ?? false,
         // Absent means off: the panel is the default, and the popup
@@ -777,10 +848,10 @@ class InterfaceSettings {
         rangeSliders: j['range_sliders'] as bool? ?? true,
         // Absent means shown, and a name no build wrote means the style's.
         commandBox: j['command_box'] as bool? ?? true,
-        // Absent means on, since a file from before these existed never turned
-        // them off.
+        // Absent means the canvas menu: a file that never turned the search
+        // on gets the menu, with the search a row down. The keys stay on.
         rightClickOpensNodeSearch:
-            j['right_click_opens_node_search'] as bool? ?? true,
+            j['right_click_opens_node_search'] as bool? ?? false,
         tabOpensNodeSearch: j['tab_opens_node_search'] as bool? ?? true,
         shiftAOpensNodeSearch: j['shift_a_opens_node_search'] as bool? ?? true,
         // A file from before the choice had a hanging switch.

@@ -1234,6 +1234,16 @@ impl Eval<'_> {
                 "intersection_points" => Some(Producer::Crossings(
                     super::effects::intersection_points::IntersectionPoints::read(params),
                 )),
+                "audio_spectrum" => Some(Producer::Grid(Box::new(
+                    super::effects::audio_spectrum::stream(
+                        params,
+                        inst,
+                        layer,
+                        t,
+                        (1.0 / dt, &self.context, self.audio),
+                        self.projection,
+                    ),
+                ))),
                 // Read back from the analysis, so it is finished here as a
                 // lattice is.
                 "track_points" => Some(Producer::Grid(Box::new(

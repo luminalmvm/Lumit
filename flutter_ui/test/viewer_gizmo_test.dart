@@ -16,6 +16,7 @@ import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo_3d.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/state/tools.dart' show GizmoAxes;
 import 'package:uuid/uuid.dart';
@@ -196,6 +197,7 @@ void main() {
             interpOut: const BridgeSideInterp.linear(),
           );
       final tf = BridgeTransform(
+        orient: BridgeOrient.off,
         anchorX: const BridgeScalar.static_(0),
         anchorY: const BridgeScalar.static_(0),
         positionX: BridgeScalar.keyframed([key(0, 100), key(3, 400)]),

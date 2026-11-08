@@ -1,5 +1,5 @@
 // Taking in a style: a `.lumstyle` file, or a style's folder zipped into one,
-// from Importâ€¦, a double-click or a drop on the window. It goes into the
+// from Import…, a double-click or a drop on the window. It goes into the
 // styles folder and is in use at once, with the look it replaced one click
 // away on the status line. A style only dresses, so nothing is asked first
 // unless it would replace one of the same name.

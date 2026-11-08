@@ -67,7 +67,8 @@
     },
     {
      "name": "Razor",
-     "body": "<path d=\"M12 2.5L5 9.5\"/><path d=\"M5 9.5l-2 4 4-2z\" fill=\"currentColor\"/><path d=\"M9 5.5l1.5 1.5\"/>"
+     "body": "<path d=\"M6 4H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H5\"/><path d=\"M10 12h2.5a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H11\"/><path d=\"M10 2 6 14\"/>",
+     "comment": "A clip with the cut running through it. A tilted blade would be the Eraser beside it."
     },
     {
      "name": "Anchor",
@@ -200,6 +201,46 @@
    ]
   },
   {
+   "name": "Cutting",
+   "glyphs": [
+    {
+     "name": "Ripple trim",
+     "body": "<path d=\"M5.5 3H3v10h2.5\"/><path d=\"M8 8h6\"/><path d=\"M11.5 5.5L14 8l-2.5 2.5\"/>",
+     "comment": "An edge, and what is after it pushed along."
+    },
+    {
+     "name": "Roll",
+     "body": "<path d=\"M5.5 3H7v10H5.5\"/><path d=\"M10.5 3H9v10h1.5\"/><path d=\"M3.5 8H1.5M2.75 6.75L1.5 8l1.25 1.25\"/><path d=\"M12.5 8h2M13.25 6.75L14.5 8l-1.25 1.25\"/>",
+     "comment": "Two clips meeting, the meeting point going either way."
+    },
+    {
+     "name": "Slip",
+     "body": "<rect x=\"2\" y=\"4\" width=\"12\" height=\"8\" rx=\"1\"/><path d=\"M5.5 8h5M6.75 6.75L5.5 8l1.25 1.25M9.25 6.75L10.5 8 9.25 9.25\"/>",
+     "comment": "The arrows inside the clip: the box stays and what it shows moves."
+    },
+    {
+     "name": "Slide",
+     "body": "<rect x=\"5\" y=\"4\" width=\"6\" height=\"8\" rx=\"1\"/><path d=\"M3.25 6.75L2 8l1.25 1.25\"/><path d=\"M12.75 6.75L14 8l-1.25 1.25\"/>",
+     "comment": "The arrows outside the clip: the box itself moves. Slip's twin."
+    },
+    {
+     "name": "Auto ripple",
+     "body": "<rect x=\"1.5\" y=\"4\" width=\"3.5\" height=\"8\" rx=\"1\"/><rect x=\"11\" y=\"4\" width=\"3.5\" height=\"8\" rx=\"1\"/><path d=\"M9.5 8H6.5M8 6.5 6.5 8 8 9.5\"/>",
+     "comment": "Two clips, and the later one coming back to close the gap."
+    },
+    {
+     "name": "Crossfade",
+     "body": "<path d=\"M2 12C6 12 10 4 14 4\"/><path d=\"M2 4C6 4 10 12 14 12\"/>",
+     "comment": "One ramp falling through one rising. Curved, so it is never read as Close."
+    },
+    {
+     "name": "Quantise",
+     "body": "<path d=\"M3 3v10M8 3v10M13 3v10\"/><circle cx=\"8\" cy=\"8\" r=\"2\" fill=\"currentColor\"/>",
+     "comment": "A beat grid, with a point sat on one of its lines."
+    }
+   ]
+  },
+  {
    "name": "Layer switches",
    "glyphs": [
     {
@@ -244,8 +285,8 @@
     },
     {
      "name": "Effects switch",
-     "body": "<path d=\"M8 2.5h-.5a3 3 0 0 0-3 3v8M2.5 7h5\"/><path d=\"M9.5 7l4.5 6.5M14 7l-4.5 6.5\"/>",
-     "comment": "The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word."
+     "body": "<path d=\"M8 2.5h-.5a2.5 2.5 0 0 0-2.5 2.5v8.5M3 7h4.5\"/><path d=\"M10 7.5l3.5 5.5M13.5 7.5L10 13\"/>",
+     "comment": "The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word. The x is kept small, as two crossing strokes at 16px darken fast."
     },
     {
      "name": "Motion blur",
@@ -259,11 +300,13 @@
     {
      "name": "3D",
      "id": "threeD",
-     "body": "<path d=\"M8 2l5 3v6l-5 3-5-3V5z\"/><path d=\"M8 8l5-3M8 8v6M8 8L3 5\"/>"
+     "body": "<path d=\"M8 2l5 3v6l-5 3-5-3V5z\"/><path d=\"M8 8l5-3M8 8v6M8 8L3 5\" opacity=\".55\"/>",
+     "comment": "The inner edges are fainter, as the motion blur's ghosts are, so the cube weighs the same as the fx beside it."
     },
     {
      "name": "Adjustment",
-     "body": "<circle cx=\"8\" cy=\"8\" r=\"5.5\"/><path d=\"M8 2.5v11\"/><path d=\"M8 8a3 3 0 0 1 0 0\" fill=\"currentColor\"/><path d=\"M8 2.5a5.5 5.5 0 0 1 0 11z\" fill=\"currentColor\"/>"
+     "body": "<circle cx=\"8\" cy=\"8\" r=\"5.5\"/><path d=\"M8 2.5v11\"/><path d=\"M8 2.5a5.5 5.5 0 0 1 0 11z\" fill=\"currentColor\" opacity=\".5\"/>",
+     "comment": "The filled half is at half strength, as the matte's is, so a solid blob does not outweigh the line icons beside it."
     },
     {
      "name": "Collapse",
@@ -362,7 +405,8 @@
     },
     {
      "name": "Speed",
-     "body": "<path d=\"M2 12h12\"/><path d=\"M3 12c2-7 8-7 10 0z\" fill=\"currentColor\" opacity=\".35\"/>"
+     "body": "<path d=\"M2 13.5h12\" opacity=\".55\"/><path d=\"M2 11h3.5l5-7H14\"/>",
+     "comment": "The speed line itself, ramping up over its clip."
     },
     {
      "name": "Auto",
@@ -570,6 +614,50 @@
      "name": "Tone map",
      "body": "<path d=\"M2 13h12M2 13V4\" opacity=\".4\"/><path d=\"M3 13C8 13 8 4.5 13.5 4.5\"/>",
      "comment": "The transfer curve on its axes: values going up the side and coming out flat at the top is the whole of what the switch does to the ones above 1. Value draws a zigzag on the same axes and the two never share a surface."
+    },
+    {
+     "name": "Align edge left",
+     "body": "<path d=\"M2.5 2v12\"/><rect x=\"5\" y=\"3.5\" width=\"8.5\" height=\"3\" rx=\".5\"/><rect x=\"5\" y=\"9.5\" width=\"5.5\" height=\"3\" rx=\".5\"/>"
+    },
+    {
+     "name": "Align edge centre",
+     "body": "<path d=\"M8 2v1.5M8 6.5v3M8 12.5V14\"/><rect x=\"3\" y=\"3.5\" width=\"10\" height=\"3\" rx=\".5\"/><rect x=\"5\" y=\"9.5\" width=\"6\" height=\"3\" rx=\".5\"/>"
+    },
+    {
+     "name": "Align edge right",
+     "body": "<path d=\"M13.5 2v12\"/><rect x=\"2.5\" y=\"3.5\" width=\"8.5\" height=\"3\" rx=\".5\"/><rect x=\"5.5\" y=\"9.5\" width=\"5.5\" height=\"3\" rx=\".5\"/>"
+    },
+    {
+     "name": "Align edge top",
+     "body": "<path d=\"M2 2.5h12\"/><rect x=\"3.5\" y=\"5\" width=\"3\" height=\"8.5\" rx=\".5\"/><rect x=\"9.5\" y=\"5\" width=\"3\" height=\"5.5\" rx=\".5\"/>"
+    },
+    {
+     "name": "Align edge middle",
+     "body": "<path d=\"M2 8h1.5M6.5 8h3M12.5 8H14\"/><rect x=\"3.5\" y=\"3\" width=\"3\" height=\"10\" rx=\".5\"/><rect x=\"9.5\" y=\"5\" width=\"3\" height=\"6\" rx=\".5\"/>"
+    },
+    {
+     "name": "Align edge bottom",
+     "body": "<path d=\"M2 13.5h12\"/><rect x=\"3.5\" y=\"2.5\" width=\"3\" height=\"8.5\" rx=\".5\"/><rect x=\"9.5\" y=\"5.5\" width=\"3\" height=\"5.5\" rx=\".5\"/>"
+    },
+    {
+     "name": "Distribute across",
+     "body": "<path d=\"M2.5 2v12M13.5 2v12\"/><rect x=\"6\" y=\"4\" width=\"4\" height=\"8\" rx=\".5\"/>"
+    },
+    {
+     "name": "Distribute down",
+     "body": "<path d=\"M2 2.5h12M2 13.5h12\"/><rect x=\"4\" y=\"6\" width=\"8\" height=\"4\" rx=\".5\"/>"
+    },
+    {
+     "name": "Fit to comp",
+     "body": "<rect x=\"2\" y=\"3\" width=\"12\" height=\"10\" rx=\"1\"/><rect x=\"5\" y=\"5.5\" width=\"6\" height=\"5\" rx=\".5\"/>"
+    },
+    {
+     "name": "Fit to comp width",
+     "body": "<path d=\"M2.5 3v10M13.5 3v10M5 8h6M6.5 6.5L5 8l1.5 1.5M9.5 6.5L11 8l-1.5 1.5\"/>"
+    },
+    {
+     "name": "Fit to comp height",
+     "body": "<path d=\"M3 2.5h10M3 13.5h10M8 5v6M6.5 6.5L8 5l1.5 1.5M6.5 9.5L8 11l1.5-1.5\"/>"
     }
    ]
   },

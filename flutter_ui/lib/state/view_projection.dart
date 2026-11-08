@@ -7,6 +7,7 @@
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 
 /// The rows that draw a 3D layer flat, for while the engine can't say.
 const List<double> flatView = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
@@ -49,6 +50,33 @@ class _Held {
   final Object key;
   final List<double> rows;
   const _Held(this.key, this.rows);
+}
+
+/// What each layer's Orient adds, asked again only when the frame, the document
+/// or a solve has moved. A layer with Orient off costs nothing.
+class OrientTurns {
+  final Map<Object, (Object, BridgeOrientTurn?)> _byLayer = {};
+
+  BridgeOrientTurn? of(
+    BridgeLayerEntry entry, {
+    required int frame,
+    required int? revision,
+    required int generation,
+  }) {
+    if (entry.info.transform.orient == BridgeOrient.off) return null;
+    final id = entry.layer.internallayerId;
+    final key = (frame, revision, generation);
+    final held = _byLayer[id];
+    if (held != null && held.$1 == key) return held.$2;
+    BridgeOrientTurn? turn;
+    try {
+      turn = entry.layer.orientTurnAt(frame: frame);
+    } catch (_) {
+      // A layer that has gone. Asked again once the document moves.
+    }
+    _byLayer[id] = (key, turn);
+    return turn;
+  }
 }
 
 /// The engine's pose of each camera layer, aim and solve included, asked

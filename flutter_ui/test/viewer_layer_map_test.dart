@@ -9,6 +9,7 @@ import 'package:lumit_flutter/panels/viewer_stage.dart' show parentMatrix;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
 void expectOffset(Offset a, Offset b, {double eps = 1e-9}) {
@@ -143,6 +144,7 @@ void main() {
           clips: const [],
           parent: parent,
           transform: BridgeTransform(
+            orient: BridgeOrient.off,
             anchorX: v(50),
             anchorY: v(50),
             positionX: v(400),

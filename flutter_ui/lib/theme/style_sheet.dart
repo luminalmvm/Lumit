@@ -447,6 +447,9 @@ class StyleSheet {
       monoFamily: face('mono', b.monoFamily),
       tabularNumbers: flag('tabularnumbers', b.tabularNumbers),
       kickerTracking: num('kickertracking', b.kickerTracking),
+      kickerMono: flag('kickermono', b.kickerMono),
+      kickerSize: num('kickersize', b.kickerSize),
+      kickerWeight: b.kickerWeight,
     );
   }
 

@@ -53,8 +53,9 @@ composites over it.
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
   earlier goes out, through the later clip's fade-in shape, for as long as they overlap. On
-  an audio-only layer it is a crossfade. A fade at an end nothing overlaps runs to
-  transparent, or to silence. A cut between clips is an **edit point**.
+  an audio-only layer it is a crossfade. A picture overlap may instead be a **transition**,
+  one of the Transition effects run over the earlier clip. A fade at an end nothing overlaps
+  runs to transparent, or to silence. A cut between clips is an **edit point**.
 - **Linked clips**: a picture clip and its sound clip, on two Sequence layers, that move,
   trim and cut together while Linked is on.
 - **Ripple**: an edit that moves everything after it by the same amount. **Insert** places
@@ -64,6 +65,7 @@ composites over it.
 - **Lift** removes a span and leaves the gap, **extract** removes it and closes the gap.
   **Match frame** loads a clip's footage into the source view on the frame the comp shows.
 - **Anchor point**: the point the transform pivots around. Position places it.
+- **Orient**: whether a layer turns by itself, along its motion path or towards the camera.
 - **Parenting**: a layer can follow another layer's transform. No cycles.
 - **Switches**: per-layer toggles. Visible, audible, solo, lock, shy, quality, motion blur,
   adjustment, 3D, collapse.
@@ -161,8 +163,11 @@ Not interchangeable.
 | **Source view** | A Viewer view of one footage item, with **In** and **Out** marks on the stretch to place |
 | **Work area** | The span used for preview and default export |
 | **Playhead** | The current time. Not *CTI* |
-| **Scopes** | Waveform, vectorscope, histogram |
+| **Scopes** | Waveform, RGB parade, vectorscope, histogram |
+| **Grade panel** | The selected layer's grade as wheels, primaries, curves and a look, over its Colour effects |
+| **Look** | A preset of Colour effects in the library's Looks group, picked from the Grade panel. It takes the place of the layer's grade |
 | **Easing panel** | One curve shape applied to selected keyframe spans |
+| **Retime panel** | The selected layer's speed, length, freeze, reverse and in-between frames |
 | **Text panel** | Sets a text layer's font, size, spacing and outline |
 | **Paragraph panel** | Sets how a text layer's lines are aligned and spaced |
 | **Expressions panel** | Keeps saved expressions and puts one on the selected properties |

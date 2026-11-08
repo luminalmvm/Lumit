@@ -324,6 +324,7 @@ impl FootageReference {
                     }
                 }
                 media.fingerprint = lumit_project::fingerprint_path(&candidate).ok();
+                let same_file = Self::resolve_path(&p, other).as_ref() == Some(&candidate);
                 // A run still wearing its import name is renamed for its new span.
                 // The old name is matched with any digits, so a name the user chose is kept.
                 #[cfg(feature = "media")]
@@ -361,26 +362,25 @@ impl FootageReference {
                     interpret: lumit_render::source::interpretation(other),
                     stamp: None,
                 });
-                ops.push(lumit_core::ops::Op::SetMediaRef {
-                    id: other.id,
-                    media: Box::new(media),
-                });
+                // The file it already names, unchanged, is only read again.
+                if !same_file || media.fingerprint != other.media.fingerprint {
+                    ops.push(lumit_core::ops::Op::SetMediaRef {
+                        id: other.id,
+                        media: Box::new(media),
+                    });
+                }
             }
             ops
         };
 
-        if ops.is_empty() {
-            return Err(BridgeError::MediaPathUnresolved);
-        }
-
-        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        let op = if ops.len() == 1 {
-            ops.into_iter().next().ok_or(BridgeError::InvalidItem)?
-        } else {
-            lumit_core::ops::Op::Batch { ops }
+        let op = match ops.len() {
+            0 | 1 => ops.into_iter().next(),
+            _ => Some(lumit_core::ops::Op::Batch { ops }),
         };
-        proj.store.commit(op).map_err(BridgeError::OpError)?;
-        drop(proj);
+        if let Some(op) = op {
+            let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+            proj.store.commit(op).map_err(BridgeError::OpError)?;
+        }
 
         // After the commit and outside the lock: queueing is a channel send,
         // but the rule is the rule (docs/14 §3).
@@ -845,6 +845,9 @@ impl FootageReference {
         path.is_some_and(|path| crate::export::reveal_in_folder(&path.to_string_lossy()))
     }
 
+    /// Where the file is on disk, a path kept relative to the project
+    /// resolved against the project's folder. Whether anything is there is
+    /// [`Self::get_status`]'s question.
     #[frb(sync)]
     pub fn file_path(&self) -> Result<String, BridgeError> {
         let proj = self.project()?;
@@ -853,7 +856,17 @@ impl FootageReference {
         let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(self.id) else {
             return Err(BridgeError::InvalidItem);
         };
-        Ok(footage.media.display_path().to_owned())
+        // Collected back from its parts, so a stored `clips/a.mov` reads with
+        // this system's separators.
+        Ok(Self::stored_path(&proj, footage).map_or_else(
+            || footage.media.display_path().to_owned(),
+            |path| {
+                path.components()
+                    .collect::<PathBuf>()
+                    .to_string_lossy()
+                    .into_owned()
+            },
+        ))
     }
 
     pub fn get_status(&self) -> Result<LumitMediaStatus, BridgeError> {

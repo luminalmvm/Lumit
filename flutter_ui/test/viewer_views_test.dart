@@ -50,6 +50,16 @@ void main() {
       return views;
     }
 
+    test('a compare that split one view puts it back when it ends', () {
+      final views = viewsWith(1);
+      final pane = Panel.viewer.pane();
+      views.setCompare(pane, CompareMode.wipe);
+      expect(views.forPane(pane).length, 2);
+      views.setCompare(pane, CompareMode.none);
+      expect(views.layoutOf(pane), ViewLayout.one);
+      expect(views.forPane(pane).length, 1);
+    });
+
     test('a pane makes the views its layout asks for, and no more', () {
       final views = viewsWith(4);
       expect(views.forPane(Panel.viewer.pane()).length, 4);

@@ -17,10 +17,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart'
     show ApplyEasing, EasingCurve;
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show effectLabelOf;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart'
-    show RevealFilter, effectPath;
+    show RevealFilter, asOneUndoStep, effectPath;
 import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart'
@@ -58,6 +60,8 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setHardwareDecode,
         setLargestPicture;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
+import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
@@ -130,12 +134,15 @@ const BridgeColourSummary noColourConfig = BridgeColourSummary(
 /// sits, which the canvas reads and commits through, and the words the
 /// breadcrumb reads, captured on the double-click so drawing them costs no
 /// call. [layerName] is null for a shader in a node graph, which has no layer.
+/// [layer] or [comp] says where the Viewer finds the shader for View here.
 typedef ShaderGraphEntry = ({
   InstanceHome home,
   UuidValue effect,
   String compName,
   String? layerName,
   String effectName,
+  LayerReference? layer,
+  CompositionReference? comp,
 });
 
 /// A project the account keeps online, as Lumit's server lists it: what the
@@ -563,6 +570,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Where a selected camera is and which way it faces, for its 3D handles.
   final CameraPoses cameraPoses = CameraPoses();
+  final OrientTurns orientTurns = OrientTurns();
 
   /// Which tool the toolbar has armed (docs/07 §1.7).
   ///
@@ -641,13 +649,16 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<int> panelSearchRequest = ValueNotifier(0);
 
   /// Ask the focused panel for its search box, and say whether there is one to
-  /// ask for. Only three panels have one (docs/07 §15); anywhere else the chord
-  /// is left alone rather than swallowed.
+  /// ask for. Three panels have one (docs/07 §15) and two more open a row
+  /// filter on the chord; anywhere else it is left alone rather than
+  /// swallowed.
   bool requestPanelSearch() {
     final panel = activePanel;
     if (panel != Panel.project &&
         panel != Panel.effectsAndPresets &&
-        panel != Panel.expressions) {
+        panel != Panel.expressions &&
+        panel != Panel.effectControls &&
+        panel != Panel.node) {
       return false;
     }
     panelSearchRequest.value++;
@@ -876,6 +887,18 @@ class LumitUiState extends ChangeNotifier {
     revealFilterRequest.value++;
   }
 
+  /// Layer ▸ Reveal ▸ Expand all and Collapse all: the Timeline runs its own
+  /// rows over the selection. The same counter shape as the reveal above.
+  final ValueNotifier<int> foldAllRequest = ValueNotifier(0);
+
+  /// Whether the last [requestFoldAll] opens or shuts.
+  bool foldAllExpand = true;
+
+  void requestFoldAll({required bool expand}) {
+    foldAllExpand = expand;
+    foldAllRequest.value++;
+  }
+
   /// **Which property rows the Timeline has picked**, as their paths, published
   /// so the Viewer can answer the same question.
   ///
@@ -893,6 +916,15 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<String?> selectPropertyRequest = ValueNotifier(null);
 
   void requestSelectProperty(String path) => selectPropertyRequest.value = path;
+
+  /// Whether the next [selectPropertyRequest] also puts the graph up.
+  bool selectPropertyShowsGraph = false;
+
+  /// Pick the property row at [path] in the Timeline and show its curve.
+  void requestRevealInGraph(String path) {
+    selectPropertyShowsGraph = true;
+    selectPropertyRequest.value = path;
+  }
 
   /// The id of the shape item `Enter` has asked to rename, for its row to
   /// open its own editor and clear.
@@ -1532,12 +1564,8 @@ class LumitUiState extends ChangeNotifier {
     final pane = currentViewerPane;
     if (pane == null) return false;
     final now = views.compareOf(pane);
-    views.setCompare(
-      pane,
-      now == CompareMode.none ? CompareMode.wipe : CompareMode.none,
-    );
-    saveLayout();
-    requestFrame();
+    setCompareMode(
+        now == CompareMode.none ? CompareMode.wipe : CompareMode.none);
     return true;
   }
 
@@ -1545,6 +1573,66 @@ class LumitUiState extends ChangeNotifier {
     final pane = currentViewerPane;
     if (pane == null) return;
     views.setCompare(pane, mode);
+    // Ending a compare leaves the app on the picture that stays.
+    if (mode == CompareMode.none) {
+      final lead = views.byId(views.paneViews[pane]?.firstOrNull);
+      if (lead != null) {
+        frontView(lead.id);
+        final comp = lead.mode == ViewMode.composition ? compFor(lead) : null;
+        if (comp != null && comp.internalid != _selectedComp?.internalid) {
+          setSelectedComp(comp);
+        }
+      }
+    }
+    saveLayout();
+    requestFrame();
+  }
+
+  /// The compositions a compare's second side can show: every one but the
+  /// first side's.
+  List<(CompositionReference, String)> get compareChoices {
+    final pane = currentViewerPane;
+    final ids = pane == null ? null : views.paneViews[pane];
+    final first = ids == null || ids.isEmpty ? null : views.byId(ids.first);
+    return [
+      for (final c in _app.comps())
+        if (c.$1.internalid.toString() != first?.compId) c,
+    ];
+  }
+
+  /// The composition a two-view compare's second side shows, or null.
+  String? get compareSideB {
+    final pane = currentViewerPane;
+    if (pane == null || !views.compareOf(pane).pairsViews) return null;
+    final ids = views.paneViews[pane];
+    return ids == null || ids.length < 2 ? null : views.byId(ids[1])?.compId;
+  }
+
+  /// Put [comp] on the compare's second side, wiping against it unless a
+  /// split is up. Locked, so opening another composition leaves it there.
+  void compareWith(CompositionReference comp) {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    if (!views.compareOf(pane).pairsViews) {
+      views.setCompare(pane, CompareMode.wipe);
+    }
+    final side = views.forPane(pane).elementAtOrNull(1);
+    if (side == null) return;
+    side
+      ..mode = ViewMode.composition
+      ..compId = comp.internalid.toString()
+      ..itemId = null
+      ..locked = true;
+    views.touch();
+    saveLayout();
+    requestFrame();
+  }
+
+  /// The compare's two sides the other way round.
+  void swapCompare() {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    views.swapCompare(pane);
     saveLayout();
     requestFrame();
   }
@@ -1841,6 +1929,64 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({UuidValue id, String label, bool picture})?>
       compGraphNode = ValueNotifier(null);
 
+  /// A pick asked for from the Node panel's index on a node graph
+  /// composition: the box to pick, or none to clear the pick. Its own
+  /// notifier rather than [compGraphNode], which every canvas publishes to:
+  /// the Graph panel's canvas answers an ask, and the Timeline's canvas keeps
+  /// its own pick. Cleared once answered.
+  final ValueNotifier<({UuidValue? id})?> compGraphPickAsk =
+      ValueNotifier(null);
+
+  /// A box's menu asked for from the Node panel's heading: the box's key on
+  /// its canvas and the point to open at. The canvas owns every row of that
+  /// menu, so it is opened there and cleared once answered.
+  final ValueNotifier<({String key, Offset at})?> graphBoxMenuAsk =
+      ValueNotifier(null);
+
+  /// An effect the Effect controls panel is asked to scroll into view, by a
+  /// box's Reveal in Effect controls. The panel clears it once it has.
+  final ValueNotifier<UuidValue?> revealEffect = ValueNotifier(null);
+
+  /// Reveal in Effect controls: the panel is opened where the layout has it
+  /// shut, fronted, and handed the effect to pick and scroll to.
+  void revealEffectCard(LayerReference layer, UuidValue effect) {
+    if (!panelVisible(split, Panel.effectControls)) {
+      setPanelVisible(split, Panel.effectControls, true);
+      workspace.touch();
+    }
+    frontPanel(Panel.effectControls);
+    setEffectSelection(layer, [effect]);
+    revealEffect.value = effect;
+  }
+
+  /// A box the Graph panel is asked to bring into view, by an effect's Reveal
+  /// in node graph. The panel clears it once it has.
+  final ValueNotifier<BridgeNodeRef?> frameBoxRequest = ValueNotifier(null);
+
+  /// Reveal in node graph: the Graph panel is opened where the layout has it
+  /// shut, fronted on [layer], and the box is picked and brought into view.
+  void revealBox(LayerReference layer, BridgeNodeRef node) {
+    showNodeIn(Panel.graph, layer, node);
+    frameBoxRequest.value = null;
+    frameBoxRequest.value = node;
+  }
+
+  /// Front [panel] on [layer] with [node] picked: the Node panel for a driven
+  /// row's driver, the Graph panel for a box.
+  void showNodeIn(Panel panel, LayerReference layer, BridgeNodeRef node) {
+    if (!panelVisible(split, panel)) {
+      setPanelVisible(split, panel, true);
+      workspace.touch();
+    }
+    frontPanel(panel);
+    if (selectedLayer.value?.internallayerId != layer.internallayerId) {
+      setSelection([layer]);
+    }
+    // Set twice so a listener hears it even when the same box is asked for.
+    graphNode.value = null;
+    graphNode.value = node;
+  }
+
   /// The Custom shader whose **inner graph** the Graph panel is showing
   /// (docs/impl/custom-shader.md §4.2), or null when it shows the
   /// layer's own graph.
@@ -1851,6 +1997,16 @@ class LumitUiState extends ChangeNotifier {
   /// be mounted for the other to work. The names ride along so the breadcrumb
   /// costs no call in a rebuild.
   final ValueNotifier<ShaderGraphEntry?> shaderGraphEntry = ValueNotifier(null);
+
+  /// The one box picked inside that graph, by its id, which the Node panel
+  /// draws. Either side may set it: the canvas on a pick, the Node panel's
+  /// list of boxes on a click.
+  final ValueNotifier<int?> shaderGraphNode = ValueNotifier(null);
+
+  /// The word each box of the open inner graph goes by, for the boxes that
+  /// make a value and so can be looked at. Handed over by the canvas on
+  /// each read, so the Viewer's chip names a box without a call.
+  Map<int, String> shaderGraphWords = const {};
 
   /// Where each inner graph's canvas was left **this session**, by effect
   /// instance id: the pan and the zoom come back on re-entry (§4.2 — standing
@@ -1876,12 +2032,15 @@ class LumitUiState extends ChangeNotifier {
       // The comp or layer has gone under the gesture; the crumbs read blank
       // and the canvas's own reload decides whether there is anything to show.
     }
+    shaderGraphNode.value = null;
     shaderGraphEntry.value = (
       home: InstanceHome.layer(layer),
       effect: effect,
       compName: compName,
       layerName: layerName,
       effectName: effectName,
+      layer: layer,
+      comp: null,
     );
   }
 
@@ -1895,17 +2054,23 @@ class LumitUiState extends ChangeNotifier {
     } catch (_) {
       // The comp has gone under the gesture; the crumb reads blank.
     }
+    shaderGraphNode.value = null;
     shaderGraphEntry.value = (
       home: InstanceHome.graph(comp),
       effect: effect,
       compName: compName,
       layerName: null,
       effectName: effectName,
+      layer: null,
+      comp: comp,
     );
   }
 
   /// The breadcrumb's way back, and Escape's.
-  void exitShaderGraph() => shaderGraphEntry.value = null;
+  void exitShaderGraph() {
+    shaderGraphNode.value = null;
+    shaderGraphEntry.value = null;
+  }
 
   /// What Copy put down, for Paste to pick up. One tray for the
   /// session, shared by the Edit menu and the panels.
@@ -1934,6 +2099,13 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Copy masks, same repaint, same mirror.
+  void copyMasksToClipboard(String text) {
+    clipboard.putMasks(text);
+    Clipboard.setData(ClipboardData(text: text));
+    notifyListeners();
+  }
+
   /// Take a Lumit document off the **system** clipboard into the tray, if
   /// there is one there and the tray has nothing of its own.
   ///
@@ -1950,6 +2122,8 @@ class LumitUiState extends ChangeNotifier {
         clipboard.putLayer(text);
       case ClipboardKind.effects:
         clipboard.putEffects(text);
+      case ClipboardKind.masks:
+        clipboard.putMasks(text);
       case null:
         return false;
     }
@@ -2133,8 +2307,22 @@ class LumitUiState extends ChangeNotifier {
     return BridgeGraphPoint(comp: comp.internalid, node: box.id);
   }
 
+  /// The box inside the open Custom shader the picture is read at, with the
+  /// shader it is in. Null unless a box that makes a value is picked there;
+  /// the Result is the shader's own picture.
+  ({ShaderGraphEntry entry, int node})? get viewerShaderPoint {
+    final entry = shaderGraphEntry.value;
+    final node = shaderGraphNode.value;
+    if (entry == null || node == null) return null;
+    if (!shaderGraphWords.containsKey(node)) return null;
+    return (entry: entry, node: node);
+  }
+
   /// How [_atNodes] remembers one point.
   String? get _chipNodeKey {
+    if (viewerShaderPoint case final shader?) {
+      return 'shader:${shader.entry.effect}/${shader.node}';
+    }
     if (viewerGraphPoint case final graph?) {
       return 'graph:${graph.comp}/${graph.node}';
     }
@@ -2152,6 +2340,19 @@ class LumitUiState extends ChangeNotifier {
   /// point and so cuts nothing.
   BridgePrefixPoint? get viewerPrefix {
     if (!atSelectedEffect.value) return null;
+    // A box inside a Custom shader: the shader's point, and the box its
+    // Result reads instead.
+    if (viewerShaderPoint case (:final entry, :final node)) {
+      if (entry.comp case final comp?) {
+        return BridgePrefixPoint(
+            graph: BridgeGraphPoint(comp: comp.internalid, node: entry.effect),
+            shaderNode: node);
+      }
+      if (entry.layer case final layer?) {
+        return BridgePrefixPoint(
+            layer: layer, effect: entry.effect, shaderNode: node);
+      }
+    }
     // A node graph has no layers to cut, so its point names a comp and a box.
     if (viewerGraphPoint case final graph?) {
       return BridgePrefixPoint(graph: graph);
@@ -2274,10 +2475,12 @@ class LumitUiState extends ChangeNotifier {
         fx.id
     };
     try {
-      layer.addEffect(name: name);
+      asOneUndoStep(_app.project, () => layer.addEffect(name: name),
+          name: l10n.histAddNamed(effectLabelOf(name)));
     } catch (_) {
       return false;
     }
+    EffectDragData.last = name;
     model.refresh();
     final added = model
         .byId(layer.internallayerId)
@@ -2384,10 +2587,13 @@ class LumitUiState extends ChangeNotifier {
     // put back there, and the Project panel is what an opened project fronts
     // (item 6.35).
     // Except over the Mixer: picking a track there is mixing, and taking the
-    // faders away for its effects is the one thing nobody asked for.
+    // faders away for its effects is the one thing nobody asked for. The
+    // Grade panel is the same: it is the layer's controls in the Colour
+    // workspace, and Effect controls sit one tab behind it on purpose.
     if (primary != null &&
         !_restoring &&
-        !frontedOver(split, Panel.mixer, Panel.effectControls)) {
+        !frontedOver(split, Panel.mixer, Panel.effectControls) &&
+        !frontedOver(split, Panel.grade, Panel.effectControls)) {
       frontPanel(Panel.effectControls);
     }
     if (primary == null) {
@@ -2547,6 +2753,35 @@ class LumitUiState extends ChangeNotifier {
 
   void requestPointsTurn() => pointsTurnRequest.value++;
 
+  /// The selection lined up with itself or spaced out, for the Align panel.
+  /// [x] and [y] are the point of each box to bring together, 0 to 1, null for
+  /// an axis left alone; [distribute] the axis to space them along, by the
+  /// point [by] of each box, or with equal [gaps] between them.
+  final ValueNotifier<
+      (
+        int, {
+        double? x,
+        double? y,
+        Axis? distribute,
+        double by,
+        bool gaps,
+      })?> arrangeRequest = ValueNotifier(null);
+
+  void requestArrange(
+          {double? x,
+          double? y,
+          Axis? distribute,
+          double by = 0.5,
+          bool gaps = false}) =>
+      arrangeRequest.value = (
+        ++_alignRequests,
+        x: x,
+        y: y,
+        distribute: distribute,
+        by: by,
+        gaps: gaps,
+      );
+
   /// The armed dropper, or null when the tool is not armed (docs/07 §7).
   ///
   /// One at a time, and held at the session level rather than inside the Viewer:
@@ -2674,6 +2909,8 @@ class LumitUiState extends ChangeNotifier {
     graphNode.addListener(_followSelectionWithChip);
     // And the node graph's own pick, which names a point the same way.
     compGraphNode.addListener(_followSelectionWithChip);
+    // And a box picked inside a Custom shader.
+    shaderGraphNode.addListener(_followSelectionWithChip);
     // And the same for the comp the model itself is bound to: it can be undone
     // out of existence while it is the one being looked at.
     model.addListener(_frontLiveCompIfFrontedOneHasGone);
@@ -3141,6 +3378,8 @@ class LumitUiState extends ChangeNotifier {
     workspace.presetApplied.removeListener(_onPresetApplied);
     cutLinked.dispose();
     cutClip.dispose();
+    cutClips.dispose();
+    cutOverlap.dispose();
     presetsChanged.dispose();
     _lifecycle.dispose();
     _clock.dispose();
@@ -3179,6 +3418,7 @@ class LumitUiState extends ChangeNotifier {
     selectedLayers.dispose();
     graphNode.dispose();
     shaderGraphEntry.dispose();
+    shaderGraphNode.dispose();
     atSelectedEffect.dispose();
     activePane.dispose();
     maximisedPane.dispose();
@@ -3249,7 +3489,13 @@ class LumitUiState extends ChangeNotifier {
     // the active view when it is unlocked, in the most recently active
     // unlocked view otherwise, and in a new view when every one of them is
     // locked — which is the only answer that still shows what was opened.
-    if (reference != null && !_restoring) {
+    // Nothing moves when the active view is already showing it, which is
+    // what fronting a view does: a locked one must not pull another along.
+    final shown = views.active;
+    if (reference != null &&
+        !_restoring &&
+        !(shown?.mode == ViewMode.composition &&
+            shown?.compId == reference.internalid.toString())) {
       final into = _viewForOpening(prefer: ViewMode.composition);
       if (into != null) {
         into.mode = ViewMode.composition;
@@ -3552,6 +3798,30 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
+  /// Whether [view] shares its pane, so letting its clip go leaves a picture.
+  bool sourceBesideComposition(ViewerSurface view) => views.paneViews.values
+      .any((ids) => ids.length > 1 && ids.contains(view.id));
+
+  /// Let a source view's clip go. An empty source takes no room, so the
+  /// composition beside it has the pane again.
+  void clearSourceView(ViewerSurface view) {
+    view.itemId = null;
+    view.sourceFrame = 0;
+    view.sourceIn = null;
+    view.sourceOut = null;
+    if (views.activeId == view.id) {
+      for (final other in views.views) {
+        if (other.mode == ViewMode.composition) {
+          views.front(other.id);
+          break;
+        }
+      }
+    }
+    views.touch();
+    rememberSession();
+    requestFrame();
+  }
+
   /// Set a footage view's In or Out mark to the frame it stands on. A mark
   /// that would cross the other one moves it out of the way, so In is never
   /// after Out.
@@ -3651,9 +3921,30 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutClip =
       ValueNotifier(null);
 
+  /// Every picture clip picked in the Cut timeline, the pressed one first: what
+  /// the Retime panel works on.
+  final ValueNotifier<List<({LayerReference layer, UuidValue clip})>> cutClips =
+      ValueNotifier(const []);
+
+  /// The overlap Effect controls is showing the rows of, by its incoming clip.
+  /// Null for any other subject.
+  final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutOverlap =
+      ValueNotifier(null);
+
   /// Bumped when a preset file has been written, so the Effects & presets
   /// panel reads its folder again.
   final ValueNotifier<int> presetsChanged = ValueNotifier(0);
+
+  /// The Sequence layers whose view is open in the Timeline, by layer id:
+  /// double-clicking one opens its clips and their speed envelope inside its
+  /// own row.
+  final Set<String> sequenceOpen = {};
+
+  /// How tall each open view's **graph** half is, by layer id, once its
+  /// divider has been dragged. Absent means the default three rows. Only the
+  /// graph resizes: the clip strip is sized for cutting, while the room a
+  /// speed curve wants depends on how far the ramps go.
+  final Map<String, double> sequenceGraph = {};
 
   /// How tall each row of the Cut timeline stands where it has been dragged
   /// off the usual height, by composition id and then row id. Kept in the
@@ -3705,16 +3996,89 @@ class LumitUiState extends ChangeNotifier {
   /// playhead moves to the end of what was placed, ready for the next.
   void placeSource(ViewerSurface view, {required bool insert}) {
     final comp = _selectedComp;
+    final marked = _marked(view);
+    if (comp == null || marked == null) return;
+    final at = playheadFrame.value;
+    final done = _sourceEdit(() => comp.cutPlace(
+          target: _sourceTarget(),
+          footage: marked.footage,
+          sourceIn: marked.from,
+          sourceOut: marked.to,
+          atFrame: at,
+          insert: insert,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+    if (!done) return;
+    final placed = (marked.seconds * model.fps).round();
+    final end = model.durationFrames - 1;
+    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+  }
+
+  /// The source side's Replace: the source from its In over the clip picked
+  /// in the Cut timeline, which keeps its place and its length.
+  void replaceSource(ViewerSurface view) {
+    final comp = _selectedComp;
+    final picked = cutClip.value;
+    final marked = _marked(view);
+    if (comp == null || picked == null || marked == null) return;
+    _sourceEdit(name: 'Replace', () => comp.cutReplace(
+          clip: picked.clip,
+          footage: marked.footage,
+          sourceIn: marked.from,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+  }
+
+  /// The source side's Fit to fill: the marked stretch over the work area, at
+  /// whatever speed fills it. The playhead moves to the end of it.
+  void fitSource(ViewerSurface view) {
+    final comp = _selectedComp;
+    final marked = _marked(view);
+    if (comp == null || marked == null) return;
+    final done = _sourceEdit(name: 'Fit to fill', () => comp.cutFitToFill(
+          target: _sourceTarget(),
+          footage: marked.footage,
+          sourceIn: marked.from,
+          sourceOut: marked.to,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+    final work = done ? comp.getWorkArea() : null;
+    if (work == null) return;
+    final end = model.durationFrames - 1;
+    playheadFrame.value =
+        comp.frameAtTime(time: work.outPoint).clamp(0, end < 0 ? 0 : end);
+  }
+
+  /// A footage view's marked stretch as source times, unmarked ends reading
+  /// as the item's own, and how many seconds it runs.
+  ({FootageReference footage, BridgeRational from, BridgeRational to,
+      double seconds})? _marked(ViewerSurface view) {
     final footage = footageOf(view);
     final facts = footage == null ? null : itemFacts(footage);
-    if (comp == null || footage == null || facts == null) return;
-    if (facts.fpsNum <= 0) return;
+    if (footage == null || facts == null || facts.fpsNum <= 0) return null;
     final frames = framesOf(facts);
     final first = (view.sourceIn ?? 0).clamp(0, frames - 1);
     final last = (view.sourceOut ?? frames - 1).clamp(first, frames - 1);
     // A frame count over the item's rate is its time in seconds, exactly.
     BridgeRational seconds(int frame) =>
         BridgeRational(num: frame * facts.fpsDen, den: facts.fpsNum);
+    return (
+      footage: footage,
+      from: seconds(first),
+      to: seconds(last + 1),
+      seconds: (last + 1 - first) * facts.fpsDen / facts.fpsNum,
+    );
+  }
+
+  /// Where the source side puts a clip: the selected layer when it is a
+  /// Sequence layer, else the lowest one, else none, for a new one.
+  LayerReference? _sourceTarget() {
     // Top of the stack first, so the last one found is the lowest.
     LayerReference? target;
     final selected = selectedLayer.value?.internallayerId;
@@ -3723,31 +4087,29 @@ class LumitUiState extends ChangeNotifier {
       target = entry.layer;
       if (entry.layer.internallayerId == selected) break;
     }
-    final at = playheadFrame.value;
+    return target;
+  }
+
+  /// Run a source-side edit, say why when it is refused, and whether it went
+  /// through.
+  bool _sourceEdit(BridgeCutResult Function() edit, {String? name}) {
     final BridgeCutResult result;
+    // Named in the History list where the edit has a name of its own.
+    final project = name == null ? null : _app.project;
+    project?.beginUndoGroup();
+    if (name != null) project?.nameUndoGroup(name: name);
     try {
-      result = comp.cutPlace(
-        target: target,
-        footage: footage,
-        sourceIn: seconds(first),
-        sourceOut: seconds(last + 1),
-        atFrame: at,
-        insert: insert,
-        linked: cutLinked.value,
-        withPicture: workspace.interface.cutSoundWithPicture,
-        arrival: streamsArrival,
-      );
+      result = edit();
     } catch (_) {
       // The item or the composition went away under the press.
-      return;
+      return false;
+    } finally {
+      project?.endUndoGroup();
     }
     reportCut(result);
-    if (result != BridgeCutResult.done) return;
+    if (result != BridgeCutResult.done) return false;
     _app.notifyDocumentChanged();
-    final placed =
-        ((last + 1 - first) * facts.fpsDen / facts.fpsNum * model.fps).round();
-    final end = model.durationFrames - 1;
-    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+    return true;
   }
 
   /// Open the composition a Precomp layer draws, landing on the frame that
@@ -3837,7 +4199,7 @@ class LumitUiState extends ChangeNotifier {
   /// built-in transform (null). The push and the re-render are
   /// [pushViewerLook]'s — the view is part of the one look message.
   void setColourView(List<String>? view) {
-    if (_colourView?.join(' ') == view?.join(' ')) return;
+    if (_colourView?.join('\x00') == view?.join('\x00')) return;
     _colourView = view == null ? null : List.of(view);
     notifyListeners();
     pushViewerLook();
@@ -4096,7 +4458,7 @@ class LumitUiState extends ChangeNotifier {
       // engine is told the look *whole*, so a message that left the view out
       // would not leave it alone — it would say "no view" and the picture
       // would quietly fall back to the built-in transform.
-      view: _colourView?.join(' ') ?? '',
+      view: _colourView?.join('\x00') ?? '',
     );
     if (target == _pushedView) return;
     try {

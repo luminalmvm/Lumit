@@ -11,6 +11,7 @@ import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeScalar;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 
 import 'frb/frb_test_support.dart';
 
@@ -130,6 +131,7 @@ void main() {
   group('A transform with no camera channels reads them as a still zero', () {
     BridgeScalar st(double v) => BridgeScalar.static_(v);
     final plain = BridgeTransform(
+      orient: BridgeOrient.off,
       anchorX: st(0),
       anchorY: st(0),
       positionX: st(0),
@@ -150,6 +152,7 @@ void main() {
 
     test('and a camera keeps the other six when one is written', () {
       final camera = BridgeTransform(
+        orient: BridgeOrient.off,
         anchorX: st(0),
         anchorY: st(0),
         positionX: st(0),

@@ -96,7 +96,7 @@ impl Edit<'_> {
                 if landings[n].is_none() {
                     let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
                     let name = crate::streams::split_name(&name, *place, &streams);
-                    landings[n] = Some(self.add_row(name, true, w, h));
+                    landings[n] = Some(self.add_row(Some(name), true, w, h));
                 }
             }
             for (place, landing) in rest.iter().zip(landings.into_iter().flatten()) {

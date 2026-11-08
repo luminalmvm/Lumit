@@ -66,4 +66,6 @@
 /// * 36: an old Shake's twist and zoom settle when its keys take Amplitude to 0,
 ///   a layer with only a still Shake draws as if it had no effects, and Shake's
 ///   Scale, Crop and Blend fade out as Amplitude reaches 0.
-pub const ALGO_VERSION: u32 = 36;
+/// * 37: a comp shown at two times in one frame draws its footage at both, where
+///   both drew one and the wrong picture could be banked under the other's name.
+pub const ALGO_VERSION: u32 = 37;

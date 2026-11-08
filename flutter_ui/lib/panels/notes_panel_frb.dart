@@ -101,17 +101,27 @@ class _NotesPanelFrbState extends State<NotesPanelFrb> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Container(
-      color: t.surface0,
-      padding: const EdgeInsets.all(8),
-      child: HouseTextField(
-        key: const ValueKey('notes-text'),
-        controller: _text,
-        focusNode: _focus,
-        multiline: true,
-        topAlign: true,
-        frameless: true,
-        width: double.infinity,
+    // A press anywhere on the panel is a press on the page, and the lines are
+    // held to a length that can be read however wide the panel gets.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _focus.requestFocus(),
+      child: Container(
+        color: t.surface0,
+        padding: const EdgeInsets.all(10),
+        alignment: AlignmentDirectional.topStart,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: HouseTextField(
+            key: const ValueKey('notes-text'),
+            controller: _text,
+            focusNode: _focus,
+            multiline: true,
+            topAlign: true,
+            frameless: true,
+            width: double.infinity,
+          ),
+        ),
       ),
     );
   }

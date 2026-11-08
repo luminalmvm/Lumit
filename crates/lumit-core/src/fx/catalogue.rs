@@ -69,6 +69,7 @@ use super::effects::{
             reverb::{AudioReverb, AudioReverbDef},
         },
     },
+    audio_spectrum::{AudioSpectrum, AudioSpectrumDef},
     bake_points::{BakePoints, BakePointsDef},
     beam::{Beam, BeamDef},
     bezier_warp::{BezierWarp, BezierWarpDef},
@@ -299,6 +300,7 @@ crate::catalogue![
     ScribbleDef => Scribble,
     StrokeDef => Stroke,
     // Draws its own light along a line, a mask, a shape or text.
+    AudioSpectrumDef => AudioSpectrum,
     EnergyLineDef => EnergyLine,
     // Particulate, at the Generate family's end: it makes its own pixels
     // rather than changing the ones that arrived, which is what the Generate

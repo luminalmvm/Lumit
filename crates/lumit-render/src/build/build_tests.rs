@@ -78,6 +78,8 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
     // Native 1920x1080, decoded 480x270 (zoomed out, quarter res).
     let lp = CompLayerPixels {
         layer: layer.id,
+        at: 0.0,
+        elsewhere: Vec::new(),
         width: 480,
         height: 270,
         rgba: vec![0u8; 480 * 270 * 4].into(),
@@ -379,6 +381,8 @@ fn patch_layer_prop_overrides_the_previewed_value() {
 
     let lp = CompLayerPixels {
         layer: layer.id,
+        at: 0.0,
+        elsewhere: Vec::new(),
         width: 1920,
         height: 1080,
         rgba: vec![0u8; 16].into(),
@@ -1032,6 +1036,8 @@ fn float_layer_comp(
     }
     let lp = CompLayerPixels {
         layer: layer.id,
+        at: 0.0,
+        elsewhere: Vec::new(),
         width: 4,
         height: 4,
         rgba: rgba.into(),

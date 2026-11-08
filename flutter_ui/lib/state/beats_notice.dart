@@ -1,15 +1,16 @@
 // Running beat detection, and the sentence it leaves on the status line.
 //
-// Three surfaces offer detection (the Audio panel's Generate, the Timeline's
-// more menu, Composition ▸ Detect beats) and all three come through here, so a
-// run started from the menu shows the same card, the same bar and the same
-// words as a run started from the panel. It used to be one function for the
-// sentence alone, and the menu path had no card at all.
+// Every surface that offers detection (the Audio panel's Generate, the
+// Timeline's more menu, Composition ▸ Detect beats and a sound layer's own
+// menu) comes through here, so a run started from a menu shows the same card,
+// the same bar and the same words as a run started from the panel. It used to
+// be one function for the sentence alone, and the menu path had no card at all.
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 
 import '../l10n/strings.dart';
@@ -70,6 +71,32 @@ Future<void> runBeatDetection({
     watching.cancel();
     app.busyProgress.value = null;
   });
+}
+
+/// Composition ▸ Detect beats: the whole comp's sound, with the standard
+/// options. A layer's own menu passes that [layer], so a click on the music
+/// listens to the music and not the dialogue over it.
+Future<void> detectCompBeats(LumitState app, CompositionReference comp,
+    {LayerReference? layer}) {
+  final standard = BridgeBeatOptions.standard();
+  return runBeatDetection(
+    app: app,
+    comp: comp,
+    options: layer == null
+        ? standard
+        : BridgeBeatOptions(
+            sourceLayer: layer.internallayerId.toString(),
+            sensitivityPercent: standard.sensitivityPercent,
+            workAreaOnly: standard.workAreaOnly,
+            minSpacingMs: standard.minSpacingMs,
+            bpmOverride: standard.bpmOverride,
+            phaseMs: standard.phaseMs,
+          ),
+    // The markers land after the menu's own redraw, so the run asks for
+    // another when they do.
+    onFound: (_) => app.notifyDocumentChanged(),
+    noSound: layer == null ? null : l10n.beatsLayerNoSound,
+  );
 }
 
 /// What a detection that placed markers says (the AudioWorkspace board's own

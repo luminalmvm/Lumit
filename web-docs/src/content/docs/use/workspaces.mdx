@@ -28,6 +28,7 @@ arrangement. Toggling one adds or drops it.
 | **Node graph** | Boxes and wires: the selected layer's stack, a Custom shader's inner graph, or a [node graph composition](/use/node-graphs/). See [The node graph](/use/nodes/). |
 | **Node** | The parameter rows of whichever box the Node graph has picked, and the form of a Read or Input box. |
 | **Easing** | Shape a curve and apply it to the selected keyframes. |
+| **Retime** | Set a layer's speed, stretch, freeze or reverse it, and choose its in-between frames. |
 | **Scopes** | Waveform and vectorscope. |
 | **Text** | The font, size, spacing and outline of a [text layer](/use/text/). |
 | **Paragraph** | How a text layer's lines are aligned, indented and spaced. |
@@ -36,7 +37,7 @@ arrangement. Toggling one adds or drops it.
 | **Notes** | One page of text kept in the project file. |
 | **Align** | Moves the selected layers' anchor points, or lines the layers up with the composition. See [Align](/panels/align/). |
 | **Hierarchy** | The open composition's layers as a tree, precomps expandable. |
-| **Debug view** | Engine readouts. Off unless you turn it on from the Help menu. |
+| **Debug** | Engine readouts. Off, and out of the Panels list, until you turn it on from the Help menu. |
 | **Mixer** | A strip per audible layer, and the Master strip. See [Mixer](/panels/audio/#mixer). |
 | **Audio** | Output levels, beats, and the selected layer's sound. See [Audio panel](/panels/audio/#audio-panel). |
 | **Audio timeline** | A row per layer that makes a sound, with its wave on the lane. See [Audio timeline](/panels/audio/#audio-timeline). |
@@ -87,7 +88,7 @@ first and then your own. Each button's tooltip gives its name and its shortcut.
 | **Nodes** | The [Node graph](/use/nodes/) across most of the window, a short Timeline under it, a small Viewer down the right, and the Node panel open under it with Effects & presets and Expressions shut. |
 | **Colour** | Project and Effect controls tabbed on the left, Viewer dominant, and a wide right-hand column with Scopes open and Effects & presets shut below it. |
 | **Audio** | Mixer in front of Project and Effect controls on the left, Viewer centre, the Audio panel open on the right with Effects & presets shut below it, and the Audio timeline across the bottom. |
-| **Retiming** | The Easing panel open on the right, with Stagger and Expressions shut below it. |
+| **Retiming** | The Retime panel open on the right, with Easing, Stagger and Expressions shut below it, and the Timeline on the speed graph. |
 | **Cut** | Project, Effect controls, Effects & presets and Notes tabbed on the left, a Viewer showing a source view beside the composition, and the [Cut timeline](/use/cutting/) across the bottom with the Mixer at its right. |
 
 Rearranging under a preset moves the panels and leaves the preset alone. **Window ▸
@@ -98,9 +99,9 @@ Workspace ▸ Reset workspace** puts the preset you are on back to how it shippe
 **Window ▸ Workspace ▸ Save as new workspace…** asks for a name and writes the arrangement
 out. It joins the strip beside the presets.
 
-The same menu carries **Rename workspace…**, **Delete workspace**, **Export workspace…**
-and **Import workspace…**, each live only on one of your own. Export writes a
-`.lumworkspace` file; Import reads one.
+The same menu carries **Rename workspace…**, **Delete workspace** and **Export workspace…**,
+each live only on one of your own, **Import workspace…**, and **Change shortcut…**. Export
+writes a `.lumworkspace` file; Import reads one.
 
 Your workspaces are listed alphabetically. A name is taken only once: saving a second
 *Grading* gives you *Grading 2*.
@@ -138,10 +139,12 @@ A tooltip gives the control's name and its shortcut, as the keymap has it now.
 menu bar. It finds every menu command, composition, layer, effect, panel and setting by
 name, and **Enter** runs or opens the one highlighted.
 
-<Shot file="command-palette.png" caption="The command palette, with a badge on each row saying what it is." />
+<Shot file="command-palette.png" caption="The command palette, with a heading over each kind of row." />
 
 A layer row selects that layer in the open composition, and a setting row opens Settings on
-that setting. An effect row reads *Select a layer first* while no layer is selected.
+that setting. An effect row reads *Select a layer first* while no layer is selected. Before
+anything is typed, the palette leads with the last eight commands run, from it or from the
+menus.
 
 ## The menu bar
 
@@ -158,6 +161,8 @@ the next start. macOS keeps its own title bar.
 The window is at least 840 × 560.
 
 **Edit ▸ Undo** and **Redo** name the step they would take, as **Edit ▸ History** lists it.
+Right-click that list for **Clear history…**, which drops every undo and redo step and leaves
+the project as it is.
 
 ## The status line
 

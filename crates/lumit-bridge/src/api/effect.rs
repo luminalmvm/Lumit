@@ -20,11 +20,10 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
-use lumit_core::model::EffectInstance;
 use lumit_core::{
     anim::{Animation, Keyframe, Property, SideInterp},
     expression::ExpressionContext,
-    model::{EffectParam, EffectValue, FileParam},
+    model::{EffectInstance, EffectParam, EffectValue, FileParam},
     time::Rational,
 };
 use serde_json::json;
@@ -32,6 +31,7 @@ use uuid::Uuid;
 
 use crate::api::{
     layer::{BridgeTransformProp, LayerReference},
+    shader_fault::{BridgeShaderFault, BridgeShaderGraphError},
     state::PROJECTS,
     BridgeError,
 };
@@ -618,6 +618,8 @@ pub struct BridgePresetInfo {
     /// The group it is filed in, with `/` between nested groups. Empty at the
     /// top of the library.
     pub group: String,
+    /// Whether it carries transform keys or text animators as well as effects.
+    pub keyed: bool,
 }
 
 /// Every `.lumfx` in the preset library and its groups, sorted by name — what the
@@ -781,6 +783,8 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
         // them is parsed properly at load time.
         effects: Option<serde_json::Value>,
         nodes: Option<serde_json::Value>,
+        transform: Option<serde_json::Value>,
+        animators: Option<serde_json::Value>,
     }
     let mut out: Vec<BridgePresetInfo> = Vec::new();
     for folder in crate::api::presets::folders_under(dir) {
@@ -818,6 +822,7 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
                 name,
                 path: path.to_string_lossy().into_owned(),
                 group: group.clone(),
+                keyed: named.transform.is_some() || named.animators.is_some(),
             })
         }));
     }
@@ -1101,7 +1106,7 @@ fn own_slot(
 /// the app down for from inside an FFI call, where a panic unwinds across the
 /// language boundary rather than into a handler, so the samplers below fall
 /// back to the un-driven value instead.
-fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::model::Document>> {
+pub(crate) fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::model::Document>> {
     let projects = PROJECTS.read().ok()?;
     let project = projects.get(&layer.project_id)?.clone();
     drop(projects);
@@ -2579,9 +2584,9 @@ pub struct BridgeShaderPort {
     pub ty: BridgeShaderTy,
 }
 
-/// One box of the inner graph, resolved for drawing. `label` is set only for
-/// a Parameter box — the user's own word for their own control, shown as-is
-/// and never translated; every other box is named by the frontend from `kind`.
+/// One box of the inner graph, resolved for drawing. `label` is the user's own
+/// name for the box, shown as-is and never translated, and a Parameter box
+/// always has one; the frontend names every box from `kind` beside it.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgeShaderGraphNode {
@@ -2592,15 +2597,15 @@ pub struct BridgeShaderGraphNode {
     pub outputs: Vec<BridgeShaderPort>,
 }
 
-/// A stored inner graph as the canvas draws it, plus the one sentence that
-/// says whether it will compile. The canvas draws a broken graph exactly as it
-/// draws a working one — being broken is a state to work in, and the badge is
-/// the messenger (§2.2) — so the boxes and the error travel together.
+/// A stored inner graph as the canvas draws it, plus why it will not compile
+/// when it will not. The canvas draws a broken graph exactly as it draws a
+/// working one, since being broken is a state to work in and the badge is the
+/// messenger (§2.2), so the boxes and the fault travel together.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgeShaderGraphView {
     pub nodes: Vec<BridgeShaderGraphNode>,
-    pub error: Option<String>,
+    pub error: Option<BridgeShaderGraphError>,
 }
 
 /// One entry of the inner graph's add-search: a kind the frontend translates,
@@ -2641,12 +2646,12 @@ pub fn shader_graph_view(graph: String) -> BridgeShaderGraphView {
     let Ok(g) = parsed else {
         return BridgeShaderGraphView {
             nodes: Vec::new(),
-            error: Some("the stored graph does not parse".to_owned()),
+            error: Some(BridgeShaderFault::Unreadable.into()),
         };
     };
     let error = lumit_core::fx::shader::compile::compile(&g)
         .err()
-        .map(|why| why.to_string());
+        .map(Into::into);
     let nodes = g
         .nodes
         .iter()
@@ -2661,22 +2666,18 @@ pub fn shader_graph_view(graph: String) -> BridgeShaderGraphView {
             BridgeShaderGraphNode {
                 id: node.id,
                 kind: node.kind.clone(),
-                label: (node.kind == "param").then(|| {
-                    node.settings
-                        .get("label")
-                        .and_then(|v| v.as_str())
-                        .filter(|s| !s.trim().is_empty())
-                        .map_or_else(
-                            || {
-                                node.settings
-                                    .get("id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("?")
-                                    .to_owned()
-                            },
-                            str::to_owned,
-                        )
-                }),
+                label: node
+                    .settings
+                    .get("label")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                    .map(str::to_owned)
+                    .or_else(|| {
+                        (node.kind == "param").then(|| {
+                            let id = node.settings.get("id").and_then(|v| v.as_str());
+                            id.unwrap_or("?").to_owned()
+                        })
+                    }),
                 inputs: inputs.iter().map(port).collect(),
                 outputs: outputs.iter().map(port).collect(),
             }

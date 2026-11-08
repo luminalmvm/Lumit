@@ -714,11 +714,10 @@ pub struct TransformGroup {
     /// Percent, 0..100.
     pub opacity: Property,
     /// How each two-axis property is shown and edited (docs/03 §6.5).
-    /// Absent in every project written before separate axes existed, which is
-    /// exactly the default — so old files load unchanged, and a project that
-    /// has never been separated writes nothing.
     #[serde(default, skip_serializing_if = "AxisModes::is_default")]
     pub axis_modes: AxisModes,
+    #[serde(default, skip_serializing_if = "crate::orient::Orient::is_off")]
+    pub orient: crate::orient::Orient,
     /// How the layer takes the comp's lights. Kept beside the transform
     /// because it is animated the same way and read in the same places; a
     /// file from before it existed reads as the lights it had then, and a
@@ -878,6 +877,7 @@ impl Default for TransformGroup {
             orientation: zero3(),
             anchor_z: Property::zero(),
             scale_z: Property::fixed(100.0),
+            orient: crate::orient::Orient::Off,
             after_effects_order: false,
             opacity: Property::fixed(100.0),
             axis_modes: AxisModes::default(),
@@ -3621,9 +3621,7 @@ pub fn placement(layer: &Layer, t: f64, read: &Read<'_>) -> Placement {
     );
     let flat = !layer.switches.three_d && !eye;
     let lt = crate::time::layer_time(t, layer.start_offset.0);
-    let mut out = layer
-        .transform
-        .placement_at(lt, flat, &|p: &Property| read(layer, p));
+    let mut out = crate::orient::placed_at(layer, lt, flat, &|p: &Property| read(layer, p));
     if eye {
         out.anchor = (0.0, 0.0, 0.0);
         out.scale = (100.0, 100.0, 100.0);
@@ -3726,7 +3724,7 @@ fn parent_placement(
     read: &Read<'_>,
     solves: Solves<'_>,
 ) -> Placement {
-    let mut p = placement(layer, t, read);
+    let mut p = crate::orient::placed_in(comp, layer, t, read, solves);
     let solved = matches!(
         layer.kind,
         LayerKind::Camera {

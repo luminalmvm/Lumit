@@ -187,11 +187,15 @@ class EasingTilePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-          Offset.zero & size, Radius.circular(theme.tokens.wellRadius)),
-      Paint()..color = theme.surface0,
-    );
+    // The picked tile's button draws its frame, and a second one here would
+    // sit just inside it.
+    if (!current) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Offset.zero & size, Radius.circular(theme.tokens.wellRadius)),
+        Paint()..color = theme.surface0,
+      );
+    }
     // A graph's proportions however wide the tile grows: a stretched curve
     // reads flatter than the shape it is.
     final pad = size.height * 0.2;
@@ -218,7 +222,7 @@ class EasingTilePainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = current ? theme.accent : theme.curve.first
+        ..color = current ? theme.textPrimary : theme.curve.first
         ..strokeWidth = 1.5
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round,

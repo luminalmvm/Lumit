@@ -467,6 +467,7 @@ fn graph_cutting(size: u32) -> (Arc<Document>, Uuid, Uuid) {
         widths: Vec::new(),
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes: vec![
             GraphNode::Read {
                 id: read,

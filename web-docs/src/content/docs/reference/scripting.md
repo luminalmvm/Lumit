@@ -382,7 +382,7 @@ Script: `lumit.effect.get({ ... })`. MCP tool: `effect_get`.
 
 ## effect.add
 
-Add an effect to the bottom of a layer's stack, by Lumit's name for it or After Effects'.
+Add an effect to the bottom of a layer's stack, by Lumit's name for it or the name an imported project gives it.
 
 Script: `lumit.effect.add({ ... })`. MCP tool: `effect_add`.
 
@@ -390,7 +390,7 @@ Script: `lumit.effect.add({ ... })`. MCP tool: `effect_add`.
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
 | `layer` | string | yes | The layer's id, or its name in the comp |
-| `effect` | string | yes | Lumit's id or name for the effect, or After Effects' match name or name, such as ADBE Gaussian Blur 2 |
+| `effect` | string | yes | Lumit's id or name for the effect, or the match name or name an imported project gives it, such as ADBE Gaussian Blur 2 |
 | `name` | string |  | The name it shows |
 
 ## effect.set

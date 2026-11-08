@@ -64,18 +64,14 @@ class TimingsHeaderCell extends StatelessWidget {
         final on = timings.measuring;
         final total = timings.totalMs;
         final stages = timings.stages;
-        // The total, and — when one stage the rows can never itemise owns
-        // most of it — that stage's name beside it: a 97 ms frame whose rows
-        // are all cheap used to hang unexplained over the column, and the
-        // usual culprit was the draw-list build, which belongs to no layer.
-        final culprit = on ? dominantUnownedStage(stages) : null;
+        // The total alone. Which stage owns most of it is in the tooltip:
+        // the column has no room for a second word, and cut off it said less
+        // than nothing.
         final text = !on
             ? l10n.timeColumn
             : total == null
                 ? '…'
-                : culprit == null
-                    ? formatRenderMs(total)
-                    : '${formatRenderMs(total)} · ${stageWord(culprit)}';
+                : formatRenderMs(total);
         // The tooltip carries the full split while there is one, so where the
         // time went is a hover away even when no stage dominates.
         final split = stages.isEmpty
@@ -155,7 +151,7 @@ class RenderTimingsToggle extends StatelessWidget {
 ///
 /// Nothing at all while the clock in the bottom strip is off: the Timeline drops
 /// the whole column then, and an effect's heading goes back to the shape it had
-/// before this existed. A dash *while measuring* means the last measured frame
+/// before this existed. Blank *while measuring* means the last measured frame
 /// had no such row — it was hidden, outside its span, or inside a Precomp.
 class TimingsCell extends StatelessWidget {
   final String? layerId;
@@ -183,12 +179,15 @@ class TimingsCell extends StatelessWidget {
         // take no space and say nothing, which is also what makes the Effect
         // controls heading read as it did before this existed.
         if (!on) return const SizedBox.shrink();
+        // No number, nothing: a row the last frame did not draw says so by
+        // its silence, as an empty cell reads as empty.
+        if (ms == null) return const SizedBox.shrink();
         final cell = Align(
           alignment: Alignment.centerRight,
           child: Padding(
             padding: const EdgeInsets.only(right: 4),
             child: Text(
-              ms == null ? '—' : formatRenderMs(ms),
+              formatRenderMs(ms),
               // Mono, because it is a number, and §7.1's mono-for-numbers rule
               // has no exceptions anywhere in the UI. **10**, the size every
               // other number in an outline row takes and the size the mockup

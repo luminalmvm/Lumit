@@ -123,7 +123,7 @@ void main() {
       await tester.pump();
       final section = find.byKey(const ValueKey('easing-key'));
       expect(section, findsOneWidget);
-      expect(find.descendant(of: section, matching: find.text('f12')),
+      expect(find.descendant(of: section, matching: find.text('F12')),
           findsOneWidget);
       for (final well in const [
         'speed-in',

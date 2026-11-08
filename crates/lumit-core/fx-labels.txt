@@ -84,6 +84,7 @@ Attack
 Attractor
 Audio
 Audio level
+Audio spectrum
 Auto
 Away from points
 B
@@ -121,6 +122,8 @@ Band 5 frequency
 Band 5 gain
 Band 5 on
 Band 5 type
+Bands
+Bars
 Base colour
 Base colour layer
 Basic
@@ -480,6 +483,7 @@ Emitter layer
 Emitter size
 End
 End colour
+End frequency
 End size
 End thickness
 End x
@@ -700,6 +704,7 @@ Hue
 Hue and saturation
 Hue range
 Hue shift
+Hue spread
 Hue start
 Hysteresis
 IOR
@@ -1188,6 +1193,7 @@ Right top tangent x
 Right top tangent y
 Right trim
 Rim brightness
+Ring
 Ring wave
 Rings
 Ripple
@@ -1322,6 +1328,7 @@ Smoke and fire
 Smoke colour
 Smooth
 Smooth noise
+Smoothing
 Smoothness
 Smudges
 Soft colour
@@ -1382,6 +1389,7 @@ Starburst intensity
 Start
 Start angle
 Start colour
+Start frequency
 Start size
 Start thickness
 Start x
@@ -1446,6 +1454,7 @@ Texture layer
 Textures
 Texturize
 The stock's own
+Thickness
 Thickness max
 Thickness min
 This comp
@@ -1600,6 +1609,7 @@ Wave warp
 Wave width
 Wave x
 Wave y
+Waveform
 Wavelength
 Waves
 Weak

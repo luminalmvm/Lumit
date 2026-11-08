@@ -564,10 +564,8 @@ pub struct Compositor {
     /// Bound at binding 4 when a layer needs no dst snapshot.
     black: wgpu::Texture,
     /// The last multisample attachment and the ledger's charge for it, kept
-    /// for the next composite of the same shape once
-    /// [`Self::keep_attachment`] has been asked for.
+    /// for the next composite of the same shape.
     kept: std::sync::Mutex<Option<(wgpu::Texture, lumit_budget::Reservation)>>,
-    keep: std::sync::atomic::AtomicBool,
     /// How a model's picture joins a run of 3D layers, built on first use.
     joins: join::Joins,
 }
@@ -868,18 +866,19 @@ impl Compositor {
             white,
             black,
             kept: std::sync::Mutex::new(None),
-            keep: std::sync::atomic::AtomicBool::new(false),
             joins: Default::default(),
         }
     }
 
-    /// Keep the multisample attachment from one composite to the next
-    /// instead of making a new one each time. An export asks for this: at 4K
-    /// and 8x the attachment is half a gigabyte, and making it took longer
-    /// than drawing into it. The Viewer doesn't, so an idle project holds
-    /// none.
-    pub fn keep_attachment(&self) {
-        self.keep.store(true, std::sync::atomic::Ordering::Relaxed);
+    /// Let go of the kept multisample attachment. It is kept from one
+    /// composite to the next because making it costs more than drawing into
+    /// it, at 4K and 8x it is half a gigabyte, and a frame with an adjustment
+    /// layer composites more than once. The Viewer lets go of it when it goes
+    /// idle, so an idle project holds none.
+    pub fn drop_attachment(&self) {
+        if let Ok(mut k) = self.kept.lock() {
+            k.take();
+        }
     }
 
     /// The kept attachment when it has this shape, or a new one. Every
@@ -899,12 +898,9 @@ impl Compositor {
         }
     }
 
-    /// Hold `texture` for the next composite, if keeping was asked for and
-    /// the ledger has room for it. Otherwise it goes, as it always did.
+    /// Hold `texture` for the next composite, if the ledger has room for it.
+    /// Otherwise it goes.
     fn give_back(&self, ctx: &GpuContext, texture: wgpu::Texture) {
-        if !self.keep.load(std::sync::atomic::Ordering::Relaxed) {
-            return;
-        }
         let size = texture.size();
         let bytes = crate::texture_bytes(texture.format(), size.width, size.height)
             .saturating_mul(u64::from(texture.sample_count()));
@@ -1405,21 +1401,26 @@ impl Compositor {
         // multisample treatment the composite does, resolving into `temp` —
         // which is what the fp32 add pass then reads, single-sample as ever.
         let aa_samples = aa_samples.max(1);
+        // The composite's kept attachment when the shapes agree: every
+        // placement clears it before drawing.
         let temp_msaa = (aa_samples > 1).then(|| {
-            ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("mb-temp-msaa"),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
+            self.attachment(
+                ctx,
+                &wgpu::TextureDescriptor {
+                    label: Some("mb-temp-msaa"),
+                    size: wgpu::Extent3d {
+                        width: tw,
+                        height: th,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: aa_samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: ctx.working(),
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
                 },
-                mip_level_count: 1,
-                sample_count: aa_samples,
-                dimension: wgpu::TextureDimension::D2,
-                format: ctx.working(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            })
+            )
         });
         let temp_msaa_view = temp_msaa
             .as_ref()
@@ -1596,6 +1597,9 @@ impl Compositor {
         }
         drop(encoder);
         drop((keep, add_binds));
+        if let Some(msaa) = temp_msaa {
+            self.give_back(ctx, msaa);
+        }
         target
     }
 

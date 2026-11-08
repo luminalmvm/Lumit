@@ -311,6 +311,7 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ("CCompTime", "TimeTrimOut", Timeline, "layer.trim.out"),
     ("CSwitchboard", "SplitLayer", Timeline, "layer.split"),
     ("CSwitchboard", "Duplicate", Timeline, "layer.duplicate"),
+    ("CSwitchboard", "Duplicate", Effects, "effect.duplicate"),
     ("CSwitchboard", "Compify", Timeline, "layer.precompose"),
     (
         "CSwitchboard",

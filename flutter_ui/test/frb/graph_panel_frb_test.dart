@@ -15,7 +15,7 @@
 import 'dart:io';
 
 import 'package:flutter/gestures.dart'
-    show kDoubleTapMinTime;
+    show PointerDeviceKind, kDoubleTapMinTime, kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,12 +37,28 @@ void main() {
   group('Graph panel (frb)', () {
     /// A comp with one solid carrying one Gaussian blur, selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
-        withBlur() {
+        withBlur({bool open = true}) {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       comp.addSolidLayer();
       final layer = comp.getLayers().single;
       layer.addEffect(name: 'blur');
+      // Twirled open from outside, so a test can reach a parameter socket
+      // nobody has wired yet.
+      if (open) {
+        final graph = layer.getGraph();
+        final blur = graph.nodes.firstWhere((n) => n.matchName == 'blur').node;
+        layer.setGraph(
+          drivers: layer.getGraphDrivers(),
+          wiring: BridgeGraphWiring(
+            edges: graph.wiring.edges,
+            layout: graph.wiring.layout,
+            exposed: [...graph.wiring.exposed, blur],
+            groups: graph.wiring.groups,
+            outUnwired: false,
+          ),
+        );
+      }
       p.uiState.selectedLayer.value = layer;
       p.uiState.model.refresh();
       return (state: p.state, uiState: p.uiState, layer: layer);
@@ -99,27 +115,27 @@ void main() {
     String effectKey(LayerReference layer) => graphNodeKey(
         layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node);
 
-    /// A new effect's box starts open, showing every parameter socket. The
-    /// header twirl shuts it, and a number socket nobody has wired is then not
-    /// drawn at all.
+    /// A new effect's box starts shut: a number socket nobody has wired is
+    /// not drawn at all. The header twirl opens it, showing every parameter
+    /// socket.
     testWidgets('exposure shows the parameter sockets, and is one op',
         (tester) async {
-      final p = withBlur();
+      final p = withBlur(open: false);
       await mount(tester, p);
       final key = effectKey(p.layer);
 
-      expect(socket(key, 'radius'), findsOneWidget);
-      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
+      expect(socket(key, 'radius'), findsNothing);
+      expect(p.layer.getGraph().wiring.exposed, isEmpty);
       await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
-      expect(socket(key, 'radius'), findsNothing);
-      expect(p.layer.getGraph().wiring.exposed, isEmpty);
+      expect(socket(key, 'radius'), findsOneWidget);
+      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
 
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pump();
-      expect(p.layer.getGraph().wiring.exposed, hasLength(1),
+      expect(p.layer.getGraph().wiring.exposed, isEmpty,
           reason: 'one gesture, one undo step');
     });
 
@@ -807,7 +823,14 @@ void main() {
           tester,
           find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}')),
           held: LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.byKey(const ValueKey('graph-save-group')));
+      // Save group… is on the box's menu, over the whole pick.
+      await tester.tapAt(
+          tester.getCenter(
+              find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}'))),
+          buttons: kSecondaryMouseButton,
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('graph-menu-save-group')));
       await tester.pumpAndSettle();
       await tester.enterText(
           find.byKey(const ValueKey('graph-group-name')), 'Audio rig');
@@ -864,7 +887,10 @@ void main() {
 
       await mount(tester, p,
           groups: () =>
-              [BridgePresetInfo(name: 'Audio rig', path: path, group: '')]);
+              [
+                BridgePresetInfo(
+                    name: 'Audio rig', path: path, group: '', keyed: false)
+              ]);
       await tester.tapAt(const Offset(600, 500));
       await tester.pump();
       p.uiState.activePane.value = Panel.graph.pane();
@@ -944,14 +970,12 @@ void main() {
       await tester.pumpAndSettle();
       final drivers = layer.getGraphDrivers();
       expect(drivers, hasLength(1));
-      final canvas =
-          tester.getTopLeft(find.byKey(const ValueKey('graph-canvas')));
+      // The canvas opens framed, so the box is checked on screen.
       final from =
           tester.getTopLeft(find.byKey(const ValueKey<String>('drag-driver')));
-      final place = layer.getGraph().wiring.layout.firstWhere(
-          (l) => l.node == BridgeNodeRef.driver(drivers.single.id()));
-      expect(Offset(place.x, place.y),
-          from + const Offset(300, 350) - canvas,
+      final box = tester.getTopLeft(find.byKey(
+          ValueKey<String>('graph-node-driver:${drivers.single.id()}')));
+      expect((box - (from + const Offset(300, 350))).distance, lessThan(1),
           reason: 'the driver sits where it was let go');
       expect(comp.documentRevision(), was + 2, reason: 'one op');
     });

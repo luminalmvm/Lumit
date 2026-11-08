@@ -24,10 +24,11 @@
 //! reason each time. How the write reaches the document is in
 //! [`write_param`].
 //!
-//! Keyframing, and the derivative and integral of an animated control, are
-//! still `kOfxStatErrUnsupported`: they need the animation to be the plugin's
-//! to see, and answering them with a guess would be worse than answering them
-//! with the truth.
+//! A control reads the same at every time, so a plugin is told it has no
+//! keys. Keying from the plugin, and the derivative and integral of an
+//! animated control, are still `kOfxStatErrUnsupported`: they need the
+//! animation to be the plugin's to see, and answering them with a guess would
+//! be worse than answering them with the truth.
 //!
 //! **A parameter's type is fixed at definition and never afterwards.** The bag
 //! it hands back is seeded with the type, the standard defaults for that type,
@@ -666,14 +667,20 @@ unsafe extern "C" fn param_set(param: OfxParamHandle, v0: u64, v1: u64, v2: u64,
     guard(|| unsafe { write_param(param, [v0, v1, v2, v3]) })
 }
 
+/// A plugin reads one value at every time (the snapshot), so it sees no keys.
+/// Twixtor asks this in every render and fails the frame on a refusal.
 unsafe extern "C" fn param_get_num_keys(
     param: OfxParamHandle,
     number_of_keys: *mut c_uint,
 ) -> c_int {
-    let _ = number_of_keys;
     guard(|| {
         live_param(param)?;
-        Err(Status::ErrUnsupported)
+        if number_of_keys.is_null() {
+            return Err(Status::ErrValue);
+        }
+        // SAFETY: the plugin's out-parameter, checked non-null.
+        unsafe { *number_of_keys = 0 };
+        Ok(())
     })
 }
 
@@ -683,9 +690,10 @@ unsafe extern "C" fn param_get_key_time(
     time: *mut OfxTime,
 ) -> c_int {
     let _ = (nth_key, time);
+    // No keys, so no nth one.
     guard(|| {
         live_param(param)?;
-        Err(Status::ErrUnsupported)
+        Err(Status::ErrBadIndex)
     })
 }
 
@@ -696,9 +704,10 @@ unsafe extern "C" fn param_get_key_index(
     index: *mut c_int,
 ) -> c_int {
     let _ = (time, direction, index);
+    // No keys, so none near `time`.
     guard(|| {
         live_param(param)?;
-        Err(Status::ErrUnsupported)
+        Err(Status::Failed)
     })
 }
 

@@ -943,7 +943,11 @@ void main() {
 
       expect(well.left - counter.right, closeTo(outlineGap, 0.5),
           reason: 'the gap after the frame counter');
-      expect(tabs.left - well.right, closeTo(outlineGap, 0.5),
+      // A search box keeps to a field's width rather than filling the row,
+      // so the mode tabs stand clear of it by at least the gap.
+      expect(well.width, lessThanOrEqualTo(220.5),
+          reason: 'the well is a box, not a bar');
+      expect(tabs.left - well.right, greaterThanOrEqualTo(outlineGap - 0.5),
           reason: 'and the gap before the mode tabs');
       expect(outlineGap, cellGap,
           reason: 'the same number the compose boxes keep between them');
@@ -1423,6 +1427,8 @@ void main() {
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
+      // The fx mark is only drawn on a row with effects to bypass.
+      layer.addEffect(name: 'blur');
       p.uiState.model.refresh();
       await mount(tester, p);
       final id = layer.internallayerId;

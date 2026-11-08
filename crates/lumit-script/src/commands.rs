@@ -391,13 +391,13 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "effect.add",
-        summary: "Add an effect to the bottom of a layer's stack, by Lumit's name for it or After Effects'",
+        summary: "Add an effect to the bottom of a layer's stack, by Lumit's name for it or the name an imported project gives it",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
             r#","layer":"#,
             layer!(),
-            r#","effect":{"type":"string","description":"Lumit's id or name for the effect, or After Effects' match name or name, such as ADBE Gaussian Blur 2"},"name":{"type":"string","description":"The name it shows"}},"required":["comp","layer","effect"],"additionalProperties":false}"#
+            r#","effect":{"type":"string","description":"Lumit's id or name for the effect, or the match name or name an imported project gives it, such as ADBE Gaussian Blur 2"},"name":{"type":"string","description":"The name it shows"}},"required":["comp","layer","effect"],"additionalProperties":false}"#
         ),
     },
     Command {

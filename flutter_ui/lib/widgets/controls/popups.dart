@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import '../../state/ui_state.dart';
 import '../../theme/motion.dart';
 import '../../theme/style_sheet.dart';
+import '../edge_fade.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
 import 'motion.dart';
@@ -260,21 +261,25 @@ Future<T?> showLumitPopup<T>({
               delegate: _PopupLayout(anchor,
                   above: above, flipped: flipped, rtl: rtl),
               // Scrolls only when it has to: a shorter popup shrink-wraps and
-              // behaves exactly as before.
-              child: SingleChildScrollView(
-                child: _PopupScope(
-                  depth: depth,
-                  child: Directionality(
-                    textDirection: direction,
-                    child: ValueListenableBuilder<bool>(
-                      valueListenable: flipped,
-                      child: builder(close),
-                      builder: (_, up, child) => _PopupEntrance(
-                        flyout: depth > 0,
-                        still: takesOver,
-                        up: up,
-                        rtl: rtl,
-                        child: child!,
+              // behaves exactly as before. One that does scroll fades at the
+              // cut end rather than stopping dead.
+              child: EdgeFade(
+                axis: Axis.vertical,
+                child: SingleChildScrollView(
+                  child: _PopupScope(
+                    depth: depth,
+                    child: Directionality(
+                      textDirection: direction,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: flipped,
+                        child: builder(close),
+                        builder: (_, up, child) => _PopupEntrance(
+                          flyout: depth > 0,
+                          still: takesOver,
+                          up: up,
+                          rtl: rtl,
+                          child: child!,
+                        ),
                       ),
                     ),
                   ),

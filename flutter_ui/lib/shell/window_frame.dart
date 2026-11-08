@@ -31,6 +31,7 @@ import '../l10n/strings.dart';
 import '../state/background.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
+import '../widgets/controls.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
@@ -107,9 +108,51 @@ class WindowDragArea extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onPanStart: (_) => _ask('drag'),
       onDoubleTap: () => _ask('maximise'),
+      onSecondaryTapUp: (d) => _menu(context, d.globalPosition),
       child: child,
     );
   }
+}
+
+/// What a title bar's right-click offers: the three buttons, by name.
+void _menu(BuildContext context, Offset at) {
+  showLumitPopup<void>(
+    context: context,
+    position: at,
+    builder: (close) => FloatSurface(
+      width: 160,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (what, label) in [
+            ('minimise', l10n.windowMinimise),
+            (
+              'maximise',
+              _maximised.value ? l10n.windowRestore : l10n.windowMaximise
+            ),
+          ])
+            MenuRow(
+              key: ValueKey<String>('window-menu-$what'),
+              onPressed: () {
+                close(null);
+                _ask(what);
+              },
+              child: Text(label),
+            ),
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('window-menu-close'),
+            onPressed: () {
+              close(null);
+              _ask('close');
+            },
+            child: Text(l10n.close),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// [child] with a strip along its top that moves the window, for a screen

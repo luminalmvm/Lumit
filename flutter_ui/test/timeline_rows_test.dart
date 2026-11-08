@@ -10,6 +10,7 @@ import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
@@ -85,6 +86,7 @@ void main() {
       BridgeScalar? scale,
     }) =>
         BridgeTransform(
+          orient: BridgeOrient.off,
           anchorX: st(0),
           anchorY: st(0),
           positionX: st(centre),
@@ -162,7 +164,33 @@ void main() {
           noStream: false
         ));
 
-    final rows = [still_, keyed_, expressed, changed, fxHeading, driven];
+    // A mask's values: its Opacity at the 100 every mask is drawn with,
+    // which is no change, and its Feather typed to 12, which is.
+    final mask = BridgeMask(
+        id: fxId,
+        name: 'Mask 1',
+        vertices: const [],
+        closed: true,
+        inverted: false,
+        opacity: st(100),
+        mode: BridgeMaskMode.add,
+        feather: st(12),
+        vertexFeather: const [],
+        expansion: st(0),
+        pathKeys: const []);
+    final maskOpacity = FoldMaskValueRow(mask, MaskValue.opacity, depth: 3);
+    final maskFeather = FoldMaskValueRow(mask, MaskValue.feather, depth: 3);
+
+    final rows = [
+      still_,
+      keyed_,
+      expressed,
+      changed,
+      fxHeading,
+      driven,
+      maskOpacity,
+      maskFeather,
+    ];
 
     List<LayerFoldRow> kept(RevealFilter filter) => revealFoldRows(rows, filter,
         compWidth: 1920, compHeight: 1080);
@@ -174,7 +202,7 @@ void main() {
 
     test('all modified adds the value somebody typed', () {
       expect(kept(RevealFilter.modified),
-          [keyed_, expressed, changed, fxHeading, driven]);
+          [keyed_, expressed, changed, fxHeading, driven, maskFeather]);
     });
   });
 }

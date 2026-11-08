@@ -25,6 +25,7 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../l10n/strings.dart';
 import 'controls.dart';
 
 /// The width of [characters] characters of [style], measured once per style
@@ -118,6 +119,10 @@ class TimeReadout extends StatefulWidget {
   /// the whole of the invitation, and it costs no colour to make.
   final bool well;
 
+  /// How tall the well stands. A readout beside a [DragValueField] passes
+  /// `wellHeight`, so the two are one height.
+  final double wellFaceHeight;
+
   /// What the **editor** is seeded with, when that is not what the readout
   /// shows. The frame count rests as `f48` and edits as `48`: the `f`
   /// is a label saying which clock this is, not a digit, and leaving it in the
@@ -137,6 +142,7 @@ class TimeReadout extends StatefulWidget {
     required this.onCommit,
     required this.minFrame,
     required this.maxFrame,
+    this.wellFaceHeight = readoutWellHeight,
     this.draggable = false,
     this.onDragLive,
     this.onDragCancel,
@@ -183,6 +189,44 @@ class _TimeReadoutState extends State<TimeReadout>
     _controller.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  /// The time as text, in and out, as a field's menu has it.
+  void _menu(Offset at) {
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) => FloatSurface(
+        width: 160,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MenuRow(
+              key: const ValueKey('time-readout-copy'),
+              onPressed: () {
+                close(null);
+                Clipboard.setData(
+                    ClipboardData(text: widget.format(widget.frame)));
+              },
+              child: MenuLabel(l10n.paramMenuCopyValue),
+            ),
+            MenuRow(
+              key: const ValueKey('time-readout-paste'),
+              onPressed: () async {
+                close(null);
+                final data = await Clipboard.getData(Clipboard.kTextPlain);
+                final frame = widget.parse(data?.text?.trim() ?? '');
+                if (frame == null || !mounted) return;
+                widget.onCommit(
+                    frame.clamp(widget.minFrame, widget.maxFrame));
+              },
+              child: MenuLabel(l10n.paramMenuPasteValue),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _beginEdit() {
@@ -236,7 +280,7 @@ class _TimeReadoutState extends State<TimeReadout>
               }
               return KeyEventResult.ignored;
             },
-            child: TextSelectionGestureDetectorBuilder(delegate: this)
+            child: TextFieldGestures(delegate: this, context: context)
                 .buildGestureDetector(
               child: EditableText(
                 key: textFieldKey,
@@ -284,6 +328,10 @@ class _TimeReadoutState extends State<TimeReadout>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _editing ? null : _beginEdit,
+        // Being typed into, the field has its own menu.
+        onSecondaryTapUp: (d) {
+          if (!_editing) _menu(d.globalPosition);
+        },
         onHorizontalDragStart: widget.draggable
             ? (_) {
                 _dragAccum = 0;
@@ -327,7 +375,7 @@ class _TimeReadoutState extends State<TimeReadout>
             : null,
         child: Container(
           width: width,
-          height: widget.well ? readoutWellHeight : null,
+          height: widget.well ? widget.wellFaceHeight : null,
           padding: readoutPadding,
           alignment: Alignment.centerRight,
           decoration: BoxDecoration(

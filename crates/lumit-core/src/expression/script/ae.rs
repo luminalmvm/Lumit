@@ -17,6 +17,7 @@ use super::Slot;
 use crate::anim::{Animation, Property};
 use crate::expression::space::{self, Way};
 use crate::expression::ExpressionContext;
+use crate::fx::names::name_of as effect_name;
 use crate::fx::noise;
 use crate::model::{Composition, EffectInstance, EffectValue, Layer, LayerKind, ProjectItem};
 
@@ -518,14 +519,6 @@ fn transform_name(layer: &Layer, name: &str) -> Option<Tr> {
         "pointOfInterest" if camera => Tr::PointOfInterest,
         "zoom" if camera => Tr::Zoom,
         _ => return None,
-    })
-}
-
-/// The name an effect goes by: the user's own for it, or the effect's.
-fn effect_name(inst: &EffectInstance) -> &str {
-    inst.custom_name.as_deref().unwrap_or_else(|| {
-        crate::fx::builtins::schema(&inst.effect.match_name)
-            .map_or(&inst.effect.match_name, |s| s.label)
     })
 }
 

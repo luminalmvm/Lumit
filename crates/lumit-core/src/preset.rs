@@ -945,6 +945,7 @@ mod tests {
             widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             nodes: vec![wiggle, smooth, outside],
             edges: vec![
@@ -1125,6 +1126,7 @@ mod tests {
             widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             edges: vec![wire(&read, &blur), wire(&blur, &out)],
             layout: vec![
                 (read.id(), [100.0, 60.0]),

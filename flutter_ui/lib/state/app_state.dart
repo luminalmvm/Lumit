@@ -1009,14 +1009,16 @@ class LumitState extends ChangeNotifier {
   ///
   /// [launch] is the open a document on the command line asks for, by a Lumit
   /// started to do nothing else.
+  /// [ask] false opens it without asking about unsaved changes, for Revert
+  /// to saved, which has asked its own question.
   Future<void> openProject(String asked,
-      {bool recover = true, bool launch = false}) async {
+      {bool recover = true, bool launch = false, bool ask = true}) async {
     final path = kIsWeb ? await pickIfGone(asked, this) : asked;
     if (path == null) return;
     // One at a time: the change sink below is a single pending field, and two
     // opens in flight would have the second take the first's.
     if (opening.value) return;
-    if (unsavedNeedsAsking && !await askBeforeLeaving()) return;
+    if (ask && unsavedNeedsAsking && !await askBeforeLeaving()) return;
     // Asked again, because another open can have started while the question
     // was up.
     if (opening.value) return;

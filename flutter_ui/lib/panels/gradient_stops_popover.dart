@@ -8,6 +8,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 
@@ -17,6 +18,7 @@ import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// The most stops between the two ends, `MAX_GRADIENT_STOPS` in `lumit-core`'s
 /// `shape.rs`.
@@ -321,6 +323,113 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
     _dirty = false;
   }
 
+  /// The stop within reach of [local], or null.
+  _Stop? _stopAt(Offset local) {
+    _Stop? best;
+    var bestD = _grabRadius;
+    for (final s in [_start, ..._between, _end]) {
+      final d = (local.dx - _xOf(s)).abs();
+      if (d > bestD) continue;
+      bestD = d;
+      best = s;
+    }
+    return best;
+  }
+
+  /// A stop put down at [local] and committed, from the menu.
+  void _addAt(Offset local) {
+    final made = _sampled(
+        ((local.dx - _bar.left) / _bar.width * 100).clamp(0.0, 100.0));
+    setState(() {
+      _between.add(made);
+      _selected = made;
+    });
+    widget.onCommit(_ramp);
+  }
+
+  /// The whole ramp the other way round.
+  void _reverse() {
+    setState(() {
+      final colour = _start.colour, opacity = _start.opacity;
+      _start
+        ..colour = _end.colour
+        ..opacity = _end.opacity;
+      _end
+        ..colour = colour
+        ..opacity = opacity;
+      for (final s in _between) {
+        s.position = 100 - s.position;
+      }
+    });
+    widget.onCommit(_ramp);
+  }
+
+  /// The stops between the ends, the same distance apart.
+  void _spaceEvenly() {
+    final ordered = [..._between]
+      ..sort((a, b) => a.position.compareTo(b.position));
+    setState(() {
+      for (final (i, s) in ordered.indexed) {
+        s.position = (i + 1) / (ordered.length + 1) * 100;
+      }
+    });
+    widget.onCommit(_ramp);
+  }
+
+  /// The ramp's right-click menu: the stop under the pointer or a new one
+  /// there, then the ramp as a whole.
+  void _menu(Offset local, Offset global) {
+    final stop = _stopAt(local);
+    if (stop != null) setState(() => _selected = stop);
+    final onEnd = stop != null && _isEnd(stop);
+    final room = _between.length < maxGradientStops;
+    showMenuAt<void>(
+      context: context,
+      position: global,
+      rows: (close) => [
+        if (stop == null)
+          MenuRow(
+            key: const ValueKey('grad-menu-add'),
+            enabled: room,
+            onPressed: () {
+              close(null);
+              _addAt(local);
+            },
+            child: MenuLabel(l10n.gradientAddStop, enabled: room),
+          )
+        else
+          MenuRow(
+            key: const ValueKey('grad-menu-remove'),
+            enabled: !onEnd,
+            onPressed: () {
+              close(null);
+              _remove();
+            },
+            child: MenuLabel(l10n.shapeGradientStopRemove, enabled: !onEnd),
+          ),
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('grad-menu-reverse'),
+          onPressed: () {
+            close(null);
+            _reverse();
+          },
+          child: MenuLabel(l10n.gradientReverse),
+        ),
+        MenuRow(
+          key: const ValueKey('grad-menu-even'),
+          enabled: _between.length > 1,
+          onPressed: () {
+            close(null);
+            _spaceEvenly();
+          },
+          child: MenuLabel(l10n.gradientSpaceEvenly,
+              enabled: _between.length > 1),
+        ),
+      ],
+    );
+  }
+
   void _remove() {
     if (_isEnd(_selected)) return;
     setState(() {
@@ -356,19 +465,6 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              height: t.density.laneRow,
-              decoration: BoxDecoration(
-                color: t.surface2,
-                border: Border(bottom: BorderSide(color: t.hairline)),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(t.kickerCase(l10n.shapeGradientStops),
-                    style: t.kickerOn),
-              ),
-            ),
             // The empty drag handlers put the ramp in the gesture arena ahead
             // of an enclosing scroll, and the Listener hears the first
             // pointer-down rather than waiting out the drag slop.
@@ -376,9 +472,12 @@ class _GradientStopsPopoverState extends State<_GradientStopsPopover> {
               behavior: HitTestBehavior.opaque,
               onVerticalDragUpdate: (_) {},
               onHorizontalDragUpdate: (_) {},
+              onSecondaryTapUp: (d) => _menu(d.localPosition, d.globalPosition),
               child: Listener(
                 key: const ValueKey<String>('grad-ramp'),
-                onPointerDown: (e) => _grab(e.localPosition),
+                onPointerDown: (e) {
+                  if (e.buttons == kPrimaryButton) _grab(e.localPosition);
+                },
                 onPointerMove: (e) => _drag(e.localPosition),
                 onPointerUp: (_) => _release(),
                 onPointerCancel: (_) => _release(),

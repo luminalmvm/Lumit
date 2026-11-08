@@ -14,7 +14,6 @@
 // pair — so a key eased from this menu and one eased on the strip cannot come
 // out different.
 
-import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -27,9 +26,10 @@ import '../panels/expression_editor.dart';
 import '../panels/graph_channels.dart';
 import '../panels/graph_edits.dart';
 import '../panels/graph_maths.dart';
+import '../panels/preset_save.dart';
 import '../panels/layer_fold_frb.dart'
     show asOneUndoStep, transformGroupPath;
-import '../panels/text_animator_rows_frb.dart' show addTextAnimator;
+import '../panels/text_animation_presets.dart' show textPresetRows;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, transformGroups;
 import '../state/comp_time.dart';
@@ -355,18 +355,10 @@ MenuEntry keyframeSpeedRow(
   );
 }
 
-/// Animation ▸ Animate text: one more animator on every selected Text layer,
-/// each arriving with its five property groups and its one range selector
-/// already on it.
-MenuEntry animateTextRow(LumitState app, LumitUiState ui) => MenuEntry(
-      l10n.menuAnimateText,
-      onSelection(
-        app,
-        ui,
-        (entry) => addTextAnimator(entry.layer),
-        when: (entry) => entry.info.kind == BridgeLayerKind.text,
-      ),
-    );
+/// Animation ▸ Animate text: a blank animator or a named animation on every
+/// selected Text layer.
+MenuEntry animateTextRow(LumitState app, LumitUiState ui) =>
+    MenuEntry.submenu(l10n.menuAnimateText, textPresetRows(app, ui));
 
 /// Animation ▸ Add expression: an expression on every picked property row,
 /// replacing whatever it held.
@@ -410,6 +402,7 @@ MenuEntry addExpressionRow(
               comp: comp,
               layer: layer,
               row: first.expressionRow,
+              decimals: expressionDecimals(first),
               onCommit: (next) {
                 // An expression goes on every picked row. Taking one off
                 // leaves a number, which is only the first row's to hold.
@@ -460,12 +453,11 @@ const String _cameraTrack = 'camera_track';
 // Presets
 // ---------------------------------------------------------------------------
 
-/// The two file dialogues the preset rows open, and the seam a test replaces —
-/// the pattern `openExternalLink` set, because no plugin channel opens a real
-/// dialogue in a widget test.
-Future<String?> Function(String suggested) animationPresetSavePicker =
-    (suggested) =>
-        pickPresetSaveLocation(suggested, initialDirectory: presetsDirPath());
+/// The file the save row writes, which a test names, and the open row's file
+/// dialogue, which a test replaces: no plugin channel opens a real dialogue in
+/// a widget test. With no save picker the row asks for a name and saves into
+/// the library, as the panels do.
+Future<String?> Function(String suggested)? animationPresetSavePicker;
 Future<String?> Function() animationPresetOpenPicker = pickPresetToOpen;
 
 /// Animation ▸ Save animation preset: the selected layer's effect stack
@@ -476,24 +468,14 @@ Future<String?> Function() animationPresetOpenPicker = pickPresetToOpen;
 /// the picker's business and writing it is Dart's. The preset's display name is
 /// its file's stem, as the panel names it, so one saved from here and one saved
 /// from there are the same document.
-MenuEntry saveAnimationPresetRow(LumitUiState ui) {
+MenuEntry saveAnimationPresetRow(BuildContext context, LumitUiState ui) {
   final layer = ui.selectedLayer.value;
   return MenuEntry(
     l10n.menuSaveAnimationPreset,
     layer == null
         ? null
-        : () async {
-            final path = await animationPresetSavePicker('preset.lumfx');
-            if (path == null) return;
-            final name =
-                path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
-            try {
-              File(path).writeAsStringSync(layer.savePreset(name: name));
-            } catch (_) {
-              // A folder that will not take the file, or a layer that went away
-              // under the open dialogue. The document is untouched either way.
-            }
-          },
+        : () => saveLayerPreset(context, ui, layer,
+            picker: animationPresetSavePicker),
   );
 }
 
@@ -510,14 +492,16 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
         ? null
         : () async {
             final path = await animationPresetOpenPicker();
-            if (path != null) await applyPresetFile(app, layer, path);
+            if (path != null) {
+              await applyPresetFile(app, layer, path, ui.playheadFrame.value);
+            }
           },
   );
 }
 
 /// The preset at [path] onto [layer], as one undo step.
 Future<void> applyPresetFile(
-    LumitState app, LayerReference layer, String path) async {
+    LumitState app, LayerReference layer, String path, int frame) async {
   final String text;
   try {
     text = await readEffectPreset(path: path);
@@ -526,7 +510,7 @@ Future<void> applyPresetFile(
   }
   asOneUndoStep(app.project, () {
     try {
-      layer.loadPreset(text: text);
+      layer.pasteEffects(text: text, atFrame: frame);
     } catch (_) {}
   });
   app.notifyDocumentChanged();

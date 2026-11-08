@@ -10,11 +10,11 @@
 // however many places ask it, and three copies of it would be three chances to
 // drift apart.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 
 /// Ask for a number, seeded with [value]. Completes with null when dismissed.
 ///
@@ -76,63 +76,48 @@ class _NumberBodyState extends State<_NumberBody> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // The dialogue takes focus when it opens and Enter applies wherever that
-    // focus sits — the rule every one of them follows.
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (_, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey != LogicalKeyboardKey.enter &&
-            event.logicalKey != LogicalKeyboardKey.numpadEnter) {
-          return KeyEventResult.ignored;
-        }
-        _confirm();
-        return KeyEventResult.handled;
-      },
-      child: FloatSurface(
-        width: 300,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                SizedBox(
-                    width: 110,
-                    child: Text(widget.title, style: t.bodyPrimary)),
-                Expanded(
-                  child: DragValueField(
-                    key: const ValueKey('number-value'),
-                    value: _value,
-                    min: widget.min,
-                    max: widget.max,
-                    decimals: widget.decimals,
-                    suffix: widget.suffix,
-                    onChanged: (v) => setState(() => _value = v.toDouble()),
-                  ),
-                ),
-              ],
+    return dialogEnter(
+      onEnter: _confirm,
+      child: DialogFrame(
+        width: 280,
+        children: [
+          dialogTitleBar(t,
+              title: widget.title,
+              onClose: widget.onCancel,
+              keyPrefix: 'number'),
+          Padding(
+            padding: dialogBodyPadding,
+            child: SizedBox(
+              height: dialogControlHeight,
+              child: DragValueField(
+                key: const ValueKey('number-value'),
+                value: _value,
+                min: widget.min,
+                max: widget.max,
+                decimals: widget.decimals,
+                suffix: widget.suffix,
+                onChanged: (v) => setState(() => _value = v.toDouble()),
+              ),
             ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: const ValueKey('number-confirm'),
-                  primary: true,
-                  onPressed: _confirm,
-                  child: Text(l10n.apply),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('number-cancel'),
-                  onPressed: widget.onCancel,
-                  child: Text(l10n.cancel),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+          dialogFooter(
+            t,
+            keyPrefix: 'number',
+            actions: [
+              HouseButton(
+                key: const ValueKey('number-cancel'),
+                onPressed: widget.onCancel,
+                child: Text(l10n.cancel),
+              ),
+              HouseButton(
+                key: const ValueKey('number-confirm'),
+                primary: true,
+                onPressed: _confirm,
+                child: Text(l10n.apply),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

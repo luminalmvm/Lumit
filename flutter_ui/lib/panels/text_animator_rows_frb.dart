@@ -27,6 +27,8 @@ import '../widgets/controls.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
+import 'text_animation_presets.dart' show reversedAnimator;
 import 'layer_fold_frb.dart' show animatorsPath;
 
 /// Matches the Effect controls panel's own cell width, so the values line up
@@ -147,15 +149,35 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         context: context,
         name: Text(t.kickerCase(a.name),
             style: t.kickerOn, overflow: TextOverflow.ellipsis),
-        control: HouseButton(
-          key: ValueKey<String>('text-animator-remove-$index'),
-          small: true,
-          frameless: true,
-          onPressed: () => write([
-            for (var i = 0; i < animators.length; i++)
-              if (i != index) animators[i],
-          ]),
-          child: Text(l10n.textAnimatorRemove),
+        control: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (animatorHasKeys(a))
+              HouseButton(
+                key: ValueKey<String>('text-animator-reverse-$index'),
+                small: true,
+                frameless: true,
+                // Every animator of this name, as Tracking in lays two.
+                onPressed: () => write([
+                  for (final other in animators)
+                    if (other.name == a.name)
+                      reversedAnimator(other)
+                    else
+                      other,
+                ]),
+                child: Text(l10n.textAnimatorReverse),
+              ),
+            HouseButton(
+              key: ValueKey<String>('text-animator-remove-$index'),
+              small: true,
+              frameless: true,
+              onPressed: () => write([
+                for (var i = 0; i < animators.length; i++)
+                  if (i != index) animators[i],
+              ]),
+              child: Text(l10n.textAnimatorRemove),
+            ),
+          ],
         ),
       ),
       // The range: which letters this animator reaches, in per cent of the
@@ -349,40 +371,48 @@ class TextAnimatorRowsFrb extends StatelessWidget {
               scalars[i],
         ]);
 
-    return fxTwoColumnRow(
-      context: context,
-      keyframeControls: KeyframeControlsFrb(
-        scalars: scalars,
-        onWrite: write,
-        comp: comp,
-        onSeek: onSeek,
-        rowKey: keyName,
-        // These rows only ever draw in the Effect controls panel, on its fixed
-        // columns.
-        fixedColumns: true,
-      ),
-      lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
-      name: Text(t.propertyCase(label),
-          style: t.body, overflow: TextOverflow.ellipsis),
-      control: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < scalars.length; i++) ...[
-            if (i > 0) const SizedBox(width: 6),
-            SizedBox(
-              width: _cellWidth,
-              child: DragValueField(
-                key: ValueKey<String>('$keyName-$i'),
-                value: shown(scalars[i]),
-                min: min,
-                max: max,
-                resetTo: resetTo,
-                decimals: 1,
-                onChanged: (v) => commit(i, v),
+    final keys = KeyframeControlsFrb(
+      scalars: scalars,
+      onWrite: write,
+      comp: comp,
+      onSeek: onSeek,
+      rowKey: keyName,
+      // These rows only ever draw in the Effect controls panel, on its fixed
+      // columns.
+      fixedColumns: true,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: List.filled(scalars.length, resetTo)),
+      child: fxTwoColumnRow(
+        context: context,
+        keyframeControls: keys,
+        lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
+        name: Text(t.propertyCase(label),
+            style: t.body, overflow: TextOverflow.ellipsis),
+        control: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < scalars.length; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              // Three values in a narrow panel give way, rather than run off it.
+              Flexible(
+                child: SizedBox(
+                  width: _cellWidth,
+                  child: DragValueField(
+                    key: ValueKey<String>('$keyName-$i'),
+                    value: shown(scalars[i]),
+                    min: min,
+                    max: max,
+                    resetTo: resetTo,
+                    decimals: 1,
+                    onChanged: (v) => commit(i, v),
+                  ),
+                ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -407,7 +437,9 @@ class TextAnimatorRowsFrb extends StatelessWidget {
 /// takes — and adding the **first** animator moves the layer's anchor in the
 /// same op, so the words do not jump. Returns whether one was added: a layer
 /// that is not Type has no document to add to, and says so by doing nothing.
-bool addTextAnimator(LayerReference layer) {
+/// [adding] is the animators to add, a blank one if there are none.
+bool addTextAnimator(LayerReference layer,
+    {List<BridgeTextAnimator> adding = const []}) {
   final document = layer.getText();
   if (document == null) return false;
   layer.setText(
@@ -422,8 +454,10 @@ bool addTextAnimator(LayerReference layer) {
       paragraph: document.paragraph,
       animators: [
         ...document.animators,
-        _freshAnimator(
-            l10n.textAnimatorDefaultName(document.animators.length + 1)),
+        ...adding,
+        if (adding.isEmpty)
+          freshTextAnimator(
+              l10n.textAnimatorDefaultName(document.animators.length + 1)),
       ],
     ),
   );
@@ -432,7 +466,7 @@ bool addTextAnimator(LayerReference layer) {
 
 /// A fresh animator: the whole set of properties, every one of them at a value
 /// that changes nothing until it is moved.
-BridgeTextAnimator _freshAnimator(String name) => BridgeTextAnimator(
+BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
       name: name,
       selector: const BridgeRangeSelector(
         start: BridgeScalar.static_(0),
@@ -454,6 +488,25 @@ BridgeTextAnimator _freshAnimator(String name) => BridgeTextAnimator(
       fillG: const BridgeScalar.static_(0),
       fillB: const BridgeScalar.static_(0),
     );
+
+/// Whether any of [a]'s rows are keyed.
+bool animatorHasKeys(BridgeTextAnimator a) => [
+      a.selector.start,
+      a.selector.end,
+      a.selector.offset,
+      a.positionX,
+      a.positionY,
+      a.rotation,
+      a.positionZ,
+      a.rotationX,
+      a.rotationY,
+      a.scaleX,
+      a.scaleY,
+      a.opacity,
+      a.fillR,
+      a.fillG,
+      a.fillB,
+    ].any((s) => s is BridgeScalar_Keyframed);
 
 /// [animator] with one channel replaced — the generated struct is immutable and
 /// every field required, so there is one copy helper rather than eleven

@@ -231,6 +231,18 @@ lumit = "energy_line"
 conversion = "energy_line"
 
 [[effect]]
+ae = "ADBE AudSpect"
+name = "Audio Spectrum"
+lumit = "audio_spectrum"
+conversion = "audio_spectrum"
+
+[[effect]]
+ae = "ADBE AudWave"
+name = "Audio Waveform"
+lumit = "audio_spectrum"
+conversion = "audio_waveform"
+
+[[effect]]
 ae = "ADBE Grid"
 name = "Grid"
 lumit = "grid"

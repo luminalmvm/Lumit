@@ -22,6 +22,7 @@
 //! cheaper than one decoded at 4K and thrown away.
 
 use crate::decode::{CompJob, Cut};
+use crate::overlap::under_incoming;
 use crate::source::SourceProbes;
 use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
@@ -677,6 +678,7 @@ pub fn collect_comp_jobs(
                         lumit_core::pixels::frame_pick(st, fps, src_frames, blend_on, sample_fps);
                     Some(CompJob {
                         layer: layer.id,
+                        at: t,
                         item,
                         source: media_source(doc, item, media),
                         source_frame,
@@ -737,7 +739,7 @@ pub fn collect_comp_jobs(
                             let Some(mut job) = footage_job(incoming, lt, whole) else {
                                 return under;
                             };
-                            job.cuts.push(Cut::Under(gain, under));
+                            job.cuts.push(under_incoming(incoming, whole, gain, under));
                             Some(job)
                         }
                     }
@@ -940,6 +942,7 @@ pub fn collect_comp_jobs(
                 if probe.slates() {
                     jobs.push(CompJob {
                         layer: layer.id,
+                        at: t,
                         item: *item,
                         source: media_source(doc, *item, media),
                         source_frame: 0,
@@ -1091,6 +1094,7 @@ pub fn collect_comp_jobs(
                 };
                 jobs.push(CompJob {
                     layer: layer.id,
+                    at: t,
                     item: *item,
                     source: media_source(doc, *item, media),
                     source_frame,
@@ -1241,6 +1245,7 @@ fn collect_graph_jobs(
                     jobs.push(CompJob {
                         channels: None,
                         layer: *id,
+                        at: t,
                         item: *item,
                         source: media_source(doc, *item, media),
                         source_frame: 0,
@@ -1274,6 +1279,7 @@ fn collect_graph_jobs(
                 jobs.push(CompJob {
                     channels: None,
                     layer: *id,
+                    at: t,
                     item: *item,
                     source: media_source(doc, *item, media),
                     source_frame,
@@ -1373,7 +1379,7 @@ pub fn plan_comp_frame_held(
     let mut jobs = Vec::new();
     let mut visited = vec![comp.id];
     collect_comp_jobs(&ctx, comp, t, &[], &mut jobs, &mut visited, false);
-    jobs
+    crate::placed::merged(jobs)
 }
 
 /// Whether two decode plans ask for exactly the same pixels — the test a live
@@ -1389,6 +1395,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
     a.len() == b.len()
         && a.iter().zip(b).all(|(x, y)| {
             x.layer == y.layer
+                && x.at.to_bits() == y.at.to_bits()
                 && x.item == y.item
                 && x.source_frame == y.source_frame
                 && x.target_width == y.target_width
@@ -1410,7 +1417,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
 impl Cut {
     /// What this asks for, as numbers that compare and hash: which kind, the
     /// offset or the gain, and the other clip's own content name.
-    fn name(&self) -> (u8, u64, Option<u128>) {
+    pub(crate) fn name(&self) -> (u8, u64, Option<u128>) {
         match self {
             Cut::Neighbour(o, job) => (0, f64::from(*o).to_bits(), Some(job.source_key())),
             Cut::Moment(o, job) => (1, o.to_bits(), job.as_ref().map(CompJob::source_key)),
@@ -2224,6 +2231,7 @@ mod tests {
                 widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -2261,6 +2269,7 @@ mod tests {
                 widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read_comp,
@@ -2331,6 +2340,7 @@ mod tests {
                 widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
                 edges: vec![wire(box_id, "output", out3, "input")],
                 layout: Vec::new(),
@@ -2407,6 +2417,7 @@ mod tests {
                     widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
+                    looks: Default::default(),
                     nodes,
                     edges,
                     layout: Vec::new(),

@@ -23,6 +23,39 @@ import 'package:lumit_flutter/state/win32.dart'
 /// first composition. Both are real pages on `web-docs/`; the sidebar
 /// sections themselves have no index page, so a link must name a page.
 const String lumitDocsUrl = 'https://docs.lumitlab.com/';
+
+/// An effect's page in the manual, or null when it has none: a plug-in's or an
+/// extension's. Lumit's own have a page each, named after their label, in a
+/// folder for their category.
+String? effectManualUrl({
+  required String name,
+  required String category,
+  required String label,
+  required String namespace,
+}) {
+  if (namespace != 'builtin') return null;
+  final folder = switch (category) {
+    'blur_sharpen' => 'blur-sharpen',
+    'siceliot_drivers' => 'siceliot',
+    // The one category that fills two folders.
+    'controls' => const {
+      'slider_control',
+      'angle_control',
+      'checkbox_control',
+      'colour_control',
+      'point_control',
+      'custom_controls',
+    }.contains(name)
+        ? 'controls'
+        : 'drivers',
+    _ => category,
+  };
+  final page = label
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-|-$'), '');
+  return '${lumitDocsUrl}effects/$folder/$page/';
+}
 const String lumitGuidesUrl =
     'https://docs.lumitlab.com/start/first-composition/';
 
