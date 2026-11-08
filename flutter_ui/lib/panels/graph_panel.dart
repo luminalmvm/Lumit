@@ -49,6 +49,7 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
 import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -64,25 +65,35 @@ import '../state/dock.dart';
 import '../state/drag_payloads.dart';
 import '../state/external_links.dart' show effectManualUrl, openExternalLink;
 import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
+import '../state/preview_throttle.dart';
 import '../state/settings.dart' show InterfaceSettings;
+import '../state/timeline_columns.dart' show ValueColumn;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'comp_graph_panel.dart' show CompBoxRows, CompGraphPanel, compBoxRows;
 import 'effect_commands.dart' show EffectCommands;
-import 'effect_param_row_frb.dart' show instanceParameters, relistedRows;
+import 'effect_param_row_frb.dart'
+    show
+        EffectParamRowFrb,
+        EffectStackEditor,
+        instanceParameters,
+        relistedRows,
+        withChained;
+import 'flare_window.dart' show pressFlareButton;
+import 'lens_window.dart' show pressLensButton;
 import 'graph_card.dart';
 import 'graph_cut_fade.dart';
 import 'graph_groups.dart';
 import 'node_menus.dart';
 import 'graph_ties.dart';
-import 'graph_value_row.dart';
 import '../state/clipboard.dart' show ClipboardKind;
 import 'fx_section.dart' show fxEnableMarkScale;
 import 'layer_fold_frb.dart' show effectPath;
 import '../state/share.dart';
 import 'placeholder.dart';
-import 'shader_editor.dart' show InstanceHome;
+import 'shader_editor.dart'
+    show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'viewer_tool_cursor.dart' show handPanLayer;
@@ -134,11 +145,18 @@ const double graphEnableSize = graphBadgeSize * fxEnableMarkScale;
 /// (the default is a default, not a law).
 const double graphTwirlSize = 12;
 
-/// A box twirled open draws every parameter as a row of its name and its
-/// value, so it is wider than a shut one: room for the longest names and a
-/// number with its unit, inside the row inset on both sides. The controls
-/// are the Node panel's rows.
-const double graphNodeOpenWidth = 200;
+/// A node graph box twirled open draws a control on every parameter row, so
+/// it is wider than a shut one: the stopwatch, the name and the control column
+/// the Node panel gives a row, inside the row inset on both sides.
+const double graphNodeOpenWidth = 300;
+
+/// A parameter row with a control in it: the 20px well with 2px of air either
+/// side, on the four-pixel module. A socket-only row keeps [graphPortRowHeight].
+const double graphControlRowHeight = 24;
+
+/// The control column on an open box's row. Wide enough for every control the
+/// row widget draws, the Range sliders setting's well and track included.
+const double graphControlColumn = 150;
 
 /// What a row keeps clear of the card's edge on either side, where the socket
 /// sits.
@@ -1069,6 +1087,14 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   Map<String, BridgeEffectInstanceInfo> _infos = const {};
   Map<String, CompBoxRows> _params = const {};
 
+  /// A drag on an effect box's control: staged, previewed, committed on
+  /// release as one op, as the Node panel's is.
+  final EffectStackEditor _stack = EffectStackEditor();
+
+  /// The same for a driver box, whose commit is `setGraph`.
+  ({String key, Map<String, BridgeEffectValue> values})? _driverDrag;
+  final PreviewThrottle _driverPreview = PreviewThrottle();
+
   /// The layer's name, taken at the same moment, so the Source box can be
   /// headed without asking the model during a paint.
   String _layerName = '';
@@ -1473,6 +1499,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   @override
   void dispose() {
     _unbind();
+    // A held tick would fire into a panel that is gone.
+    _driverPreview.cancel();
+    _stack.clear();
     _canvasFocus.dispose();
     super.dispose();
   }
@@ -1537,6 +1566,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _graph = graph;
       _infos = infos;
       _params = params;
+      _driverDrag = null;
       _notes = graph == null ? const [] : notes;
       _ties = graph == null ? const [] : ties;
       _looks = graph == null ? null : looks;
@@ -1600,32 +1630,194 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
   /// One parameter row on an open box: the Node panel's row, committed and
   /// previewed the way that panel's edit is.
-  /// A parameter's row on an open box: the name and the value, read. The
-  /// control for it is the Node panel's row.
   Widget _paramRow(String key, String param) {
+    final layer = _layer;
     final ui = _ui;
     final comp = ui?.selectedComp;
     final info = _infos[key];
     final held = _params[key];
     final p = held?.open.where((p) => p.id == param).firstOrNull;
-    if (ui == null ||
+    if (layer == null ||
+        ui == null ||
         comp == null ||
         info == null ||
         held == null ||
         p == null) {
       return const SizedBox.shrink();
     }
-    return GraphValueRow(
+    final driver = key.startsWith('driver:');
+    final values = {for (final v in info.values) v.id: v.value};
+    final drag = _driverDrag;
+    BridgeEffectValue? valueOf(String id) =>
+        (driver
+            ? (drag?.key == key ? drag!.values[id] : null)
+            : _stack.stagedValue(info.id, id)) ??
+        values[id];
+    Map<String, BridgeEffectValue> chained(
+            String param, BridgeEffectValue value) =>
+        withChained(info, param, value, comp, ui.playheadFrame.value);
+    return EffectParamRowFrb(
       key: ValueKey<String>('graph-row-$key-$param'),
+      effectId: info.id,
       param: p,
-      value: info.values.where((v) => v.id == param).firstOrNull?.value,
+      value: valueOf(param),
       comp: comp,
-      frame: ui.playheadFrame.value,
+      ownerLayerId: layer.internallayerId,
+      ownerLayers: ui.model.layers,
+      playheadFrame: ui.playheadFrame.value,
+      onSeek: (frame) => ui.playheadFrame.value = frame,
+      onWrite: (_, param, value) =>
+          _writeParams(key, info, chained(param, value)),
+      onLive: (_, param, value) =>
+          _liveParams(key, info, chained(param, value)),
+      rowPadding: EdgeInsets.zero,
+      valueColumn: const ValueColumn(graphControlColumn, graphRowInset),
+      siblings: values,
       // Greyed where another control has taken the row over.
       enabled: !held.disabled.contains(param),
+      riders: [
+        for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
+          (r, valueOf(r.id)),
+      ],
+      onAction: (effect, param) => _pressParam(info, driver, effect, param),
     );
   }
 
+  /// The layer's drivers, freshly read, with [values] written into one of
+  /// them: what a driver box's preview and commit both send.
+  List<BridgeEffectInstance> _driversWith(LayerReference layer, UuidValue node,
+      Map<String, BridgeEffectValue> values) {
+    final drivers = layer.getGraphDrivers();
+    for (final instance in drivers) {
+      if (instance.id() != node) continue;
+      for (final entry in values.entries) {
+        instance.setValue(id: entry.key, value: entry.value);
+      }
+    }
+    return drivers;
+  }
+
+  /// A typed value, or the release of a drag: one op, one undo step.
+  void _writeParams(String key, BridgeEffectInstanceInfo info,
+      Map<String, BridgeEffectValue> values) {
+    final layer = _layer;
+    if (layer == null) return;
+    if (key.startsWith('driver:')) {
+      _driverPreview.cancel();
+      final List<BridgeEffectInstance> drivers;
+      try {
+        drivers = _driversWith(layer, info.id, values);
+      } catch (_) {
+        return;
+      }
+      _commit(_wiringNow(), drivers: drivers);
+      return;
+    }
+    _stack.writeAll(layer, info.id, values);
+    _ui?.model.refresh();
+  }
+
+  /// A drag tick: the row shows it and the Viewer previews it, and nothing is
+  /// committed.
+  void _liveParams(String key, BridgeEffectInstanceInfo info,
+      Map<String, BridgeEffectValue> values) {
+    final ui = _ui;
+    final layer = _layer;
+    final comp = ui?.selectedComp;
+    if (ui == null || layer == null || comp == null) return;
+    if (key.startsWith('driver:')) {
+      setState(() => _driverDrag = (key: key, values: values));
+      _driverPreview.request(() {
+        try {
+          comp.renderFrameWithDriverPreview(
+            frame: ui.playheadFrame.value,
+            scale: ui.viewerScale,
+            layer: layer,
+            drivers: _driversWith(layer, info.id, values),
+          );
+        } catch (_) {
+          // The graph moved under the drag; the release re-reads.
+        }
+      });
+      return;
+    }
+    setState(() {
+      for (final entry in values.entries) {
+        _stack.live(comp, layer, info.id, entry.key, entry.value,
+            frame: ui.playheadFrame.value, scale: ui.viewerScale);
+      }
+    });
+  }
+
+  /// A press on one of a box's buttons, the same press Effect controls and the
+  /// Node panel make.
+  void _pressParam(BridgeEffectInstanceInfo info, bool driver,
+      UuidValue effect, String param) {
+    final ui = _ui;
+    final layer = _layer;
+    if (ui == null || layer == null) return;
+    final comp = ui.selectedComp;
+    final frame = ui.playheadFrame.value;
+    final home = driver
+        ? InstanceHome.drivers(layer)
+        : InstanceHome.layer(layer,
+            draw: comp == null
+                ? null
+                : (staged) => comp.renderFrameWithPreview(
+                    frame: frame,
+                    scale: ui.viewerScale,
+                    layer: layer,
+                    effects: staged));
+    void applied() => ui.model.refresh();
+    if (info.name == 'expression' &&
+        editExpressionOn(
+            context: context,
+            home: home,
+            effect: effect,
+            param: param,
+            onApplied: applied)) {
+      return;
+    }
+    if (info.name == 'custom_shader' &&
+        pressShaderButton(
+            context: context,
+            home: home,
+            effect: effect,
+            param: param,
+            onApplied: applied)) {
+      return;
+    }
+    if (pressLensButton(
+        context: context,
+        home: home,
+        effect: effect,
+        param: param,
+        onApplied: applied)) {
+      return;
+    }
+    if (pressFlareButton(
+        context: context,
+        home: home,
+        effect: effect,
+        param: param,
+        onApplied: applied,
+        comp: comp,
+        frame: frame)) {
+      return;
+    }
+    if (info.name == 'node_graph' && param == 'open') {
+      final project = Provider.of<LumitState>(context, listen: false).project;
+      final inner = graphCompById(project, info.nodeGraphComp);
+      if (inner != null) ui.setSelectedComp(inner);
+      return;
+    }
+    if (driver) return;
+    try {
+      fireEffectAction(layer: layer, effect: effect, param: param, frame: frame);
+    } catch (_) {
+      // Refused; the effect's own status line says why.
+    }
+  }
   // --- Committing ---------------------------------------------------------
 
   /// The wiring as it stands, with the staged positions folded in. Every write
