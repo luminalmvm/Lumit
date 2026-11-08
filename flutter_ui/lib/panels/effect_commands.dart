@@ -298,35 +298,18 @@ class EffectCommands {
     onStackChanged();
   }
 
-  /// A copy of this effect, or the picked run, just below it. Its keys stay
-  /// where they are, so a paste is told the frame the first of them is on.
+  /// Duplicate this effect in place, with the rest of the picked run when it
+  /// is part of one, and pick the copies.
   void _duplicate(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    final ids = ui.effectsToCopy(layer, info.id);
     try {
-      final text = layer.copyEffects(effects: ids);
-      final entry = ui.model.byId(layer.internallayerId)?.info;
-      final offset =
-          entry == null ? 0 : comp.frameAtTime(time: entry.span.startOffset);
-      var first = ui.playheadFrame.value;
-      var keyed = false;
-      for (final fx in entry?.effects ?? const <BridgeEffectInstanceInfo>[]) {
-        if (!ids.contains(fx.id)) continue;
-        for (final v in fx.values) {
-          if (v.value case BridgeEffectValue_Float(
-              field0: BridgeScalar_Keyframed(field0: final keys))) {
-            for (final k in keys) {
-              final at = comp.frameAtTime(time: k.time) + offset;
-              if (!keyed || at < first) first = at;
-              keyed = true;
-            }
-          }
-        }
-      }
-      _pasteBelow(context, text, first);
+      ui.setEffectSelection(layer,
+          layer.duplicateEffects(effects: ui.effectsToCopy(layer, info.id)));
     } catch (_) {
-      // The effect is gone; there is nothing to copy.
+      // The effect is gone.
+      return;
     }
+    onStackChanged();
   }
 
   /// The effect's menu at [at]. An instance that has gone has none.
@@ -450,7 +433,9 @@ class EffectCommands {
                   ),
                   row('duplicate', l10n.menuDuplicate,
                       () => _duplicate(context),
-                      ticked: false, enabled: !locked),
+                      action: 'effect.duplicate',
+                      ticked: false,
+                      enabled: !locked),
                 ],
               ],
               // Only the moves this effect can make are listed: nine named

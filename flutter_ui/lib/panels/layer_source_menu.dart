@@ -39,20 +39,23 @@ class ReplaceSourceEntry extends MenuEntry {
 void replaceLayerSources(LumitState app, List<BridgeLayerEntry> targets,
     ItemReference item) {
   var refused = false;
+  var unretimed = false;
   asOneUndoStep(app.project, () {
     for (final entry in targets) {
       try {
-        entry.layer.setSourceItem(item: item);
+        // A solid has no time to remap, so a swap to one takes the Retime.
+        if (entry.layer.setSourceItem(item: item) &&
+            item is ItemReference_Solid &&
+            entry.info.retime != null) {
+          unretimed = true;
+        }
       } catch (_) {
         refused = true;
       }
     }
   });
   if (refused) app.postNotice(l10n.replaceSourceRefused);
-  if (item is ItemReference_Solid &&
-      targets.any((e) => e.info.retime != null)) {
-    app.postNotice(l10n.replaceSourceRetimeRemoved);
-  }
+  if (unretimed) app.postNotice(l10n.replaceSourceRetimeRemoved);
   app.notifyDocumentChanged();
 }
 
@@ -74,7 +77,14 @@ List<MenuEntry> replaceSourceRows(LumitState app, LumitUiState ui) {
   if (project == null) return const [];
   final targets = selectedEntries(ui).where(canReplaceSource).toList();
   final current = targets.firstOrNull?.layer.getSourceItem();
-  final here = ui.selectedComp;
+  // Only what every picked layer can take, by the engine's own test.
+  bool takes(ItemReference item) => targets.every((e) {
+        try {
+          return e.layer.canTakeSource(item: item);
+        } catch (_) {
+          return false;
+        }
+      });
 
   List<MenuEntry> rows(List<ItemReference> items) {
     final out = <MenuEntry>[];
@@ -82,10 +92,7 @@ List<MenuEntry> replaceSourceRows(LumitState app, LumitUiState ui) {
       if (item case ItemReference_Folder(:final field0)) {
         final inside = rows(field0.getChildren());
         if (inside.isNotEmpty) out.add(MenuEntry.submenu(item.name(), inside));
-      } else if (item case ItemReference_Composition(:final field0)
-          when field0 == here) {
-        // A composition has no use for itself.
-      } else {
+      } else if (takes(item)) {
         out.add(MenuEntry(
           item.name(),
           targets.isEmpty

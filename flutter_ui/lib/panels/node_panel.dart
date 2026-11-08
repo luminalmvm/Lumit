@@ -910,6 +910,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             enabled: picked.info.enabled,
             onEnabled: (on) => _setEnabled(picked, on),
             onMenu: (at) => _askMenu(key, at),
+            filterable: true,
             // A driver makes no picture to stop at.
             viewHere: !picked.driver &&
                 (picked.graph
@@ -1057,6 +1058,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     ValueChanged<bool>? onEnabled,
     void Function(Offset at)? onMenu,
     bool viewHere = false,
+    bool filterable = false,
   }) {
     final t = ThemeScope.of(context).theme;
     final ui = _ui;
@@ -1118,6 +1120,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (filterable && !_filter.open)
+              rowFilterMark(context, _filter.show,
+                  key: const ValueKey('node-filter-mark')),
             if (_driven.isNotEmpty)
               Text(
                 l10n.nodeDrivenCount(_driven.length),

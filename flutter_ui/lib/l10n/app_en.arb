@@ -559,7 +559,7 @@
   "@close": {
     "description": "Button that shuts a window."
   },
-  "colourOutsideRange": "Outside 0â€“1",
+  "colourOutsideRange": "Outside 0–1",
   "@colourOutsideRange": {
     "description": "Note in the colour picker when a value is brighter or darker than a screen can show."
   },
@@ -9480,6 +9480,10 @@
       }
     }
   },
+  "filterRows": "Filter rows",
+  "@filterRows": {
+    "description": "Menu row and tooltip in Effect controls and the Node panel: opens a search field that narrows the property rows to those whose names hold the text."
+  },
   "searchLayers": "Search layers",
   "@searchLayers": {
     "description": "Placeholder in the Timeline's search box."
@@ -10152,7 +10156,7 @@
   "@textPresetTypeOn": {
     "description": "Menu row under Animate text: the letters appear one at a time, as if typed."
   },
-  "textPresetRiseByLetter": "Rise by letter",
+  "textPresetRiseByLetter": "Rise in by letter",
   "@textPresetRiseByLetter": {
     "description": "Menu row under Animate text: the letters rise into place and fade in one after another."
   },
@@ -13633,7 +13637,7 @@
   "@menuImportFolder": {
     "description": "Item in the File menu, under Import footage. Opens a folder chooser, then imports the footage in that folder and every folder inside it, keeping the folders as folders in the project."
   },
-  "aeBundleFromAep": "That folder holds a project file. Import it with File â€º Import â€º After Effects project.",
+  "aeBundleFromAep": "That folder holds a project file. Import it with File › Import › After Effects project.",
   "@aeBundleFromAep": {
     "description": "Status line notice when the Bridge bundle folder chooser was pointed at a folder holding an .aep instead of a bundle. Names both routes; lumit-bridge.jsx is a file name and stays untranslated."
   },
@@ -17944,7 +17948,7 @@
       }
     }
   },
-  "statusShiftSelect": "Add to selection Â· One axis Â· Proportional",
+  "statusShiftSelect": "Add to selection · One axis · Proportional",
   "@statusShiftSelect": {
     "description": "Right-hand end of the status bar while the Selection tool is armed and the Shift key is held: what the key does to a click and a drag in the Viewer. The key's own name is drawn before it. The parts are separated by a middle dot."
   },
@@ -17960,7 +17964,7 @@
   "@statusAltZoom": {
     "description": "Right-hand end of the status bar while the Zoom tool is armed and the Alt key is held: what a click does then. The key's own name is drawn before it."
   },
-  "statusShiftRotate": "45Â° steps Â· Add to selection",
+  "statusShiftRotate": "45° steps · Add to selection",
   "@statusShiftRotate": {
     "description": "Right-hand end of the status bar while the Rotation tool is armed and the Shift key is held: what the key does to a drag and a click in the Viewer. The key's own name is drawn before it. The parts are separated by a middle dot."
   },
@@ -19831,15 +19835,15 @@
   },
   "keyFitTheLayerToTheComposition": "Fit the layer to the composition",
   "@keyFitTheLayerToTheComposition": {
-    "description": "Settings â†’ Keymap: what a shortcut does, in the tableâ€™s left column."
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyFitTheLayerToTheCompositionWidth": "Fit the layer to the composition's width",
   "@keyFitTheLayerToTheCompositionWidth": {
-    "description": "Settings â†’ Keymap: what a shortcut does, in the tableâ€™s left column."
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyFitTheLayerToTheCompositionHeight": "Fit the layer to the composition's height",
   "@keyFitTheLayerToTheCompositionHeight": {
-    "description": "Settings â†’ Keymap: what a shortcut does, in the tableâ€™s left column."
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keySetTheMaskSFeather": "Set the mask's feather",
   "@keySetTheMaskSFeather": {

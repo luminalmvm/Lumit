@@ -463,6 +463,9 @@ class EffectParamRowFrb extends StatelessWidget {
       );
     }
 
+    // The Timeline's fold: the link mark ends the name, so the value column
+    // stays where the columns above put it.
+    final mark = valueColumn == null || action ? null : _linkMark(scalars);
     final row = Padding(
       padding: rowPadding,
       child: Row(
@@ -472,6 +475,7 @@ class EffectParamRowFrb extends StatelessWidget {
           // The button keeps the value column, so it lines up with the
           // controls above and below it, and the name column stays empty.
           Expanded(child: action ? const SizedBox.shrink() : label),
+          if (mark != null) mark,
           if (valueColumn case final col?) ...[
             SizedBox(
               width: col.width,
@@ -488,7 +492,10 @@ class EffectParamRowFrb extends StatelessWidget {
         ],
       ),
     );
-    return action ? row : ParamRowMenu(menu: menu, child: row);
+    if (action) return row;
+    final menued = ParamRowMenu(menu: menu, child: row);
+    if (valueColumn == null) return menued;
+    return LinkDrop(ref: _linkRef, child: FxRowHoverRegion(child: menued));
   }
 
   /// The scalar behind this row when the kind is one that can animate, else
@@ -734,6 +741,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// layer's stack by its heading name, and the row by its label. A driver's
   /// row and a clip's effect have no name an expression can reach.
   PropertyRef? _linkRef(PropertyLink link) {
+    if (link.from.contains(_linkKey)) return null;
     final entry = ownerLayers
         .where((e) => e.layer.internallayerId == ownerLayerId)
         .firstOrNull;
@@ -751,6 +759,9 @@ class EffectParamRowFrb extends StatelessWidget {
     return null;
   }
 
+  (UuidValue, UuidValue, String) get _linkKey =>
+      (ownerLayerId, effectId, param.id);
+
   /// The mark a link is dragged from, on a row that can hold an expression:
   /// one number, not yet driven by a wire or an expression.
   Widget? _linkMark(List<BridgeScalar>? scalars) {
@@ -766,6 +777,7 @@ class EffectParamRowFrb extends StatelessWidget {
       name: engineLabel(param.label),
       link: PropertyLink(
         layer: ownerLayerId,
+        from: {_linkKey},
         write: (text, language) {
           noteSetExpression(select: false);
           _set(BridgeEffectValue.float(BridgeScalar.expression(text, language)));

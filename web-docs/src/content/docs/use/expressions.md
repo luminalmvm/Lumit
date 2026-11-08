@@ -45,7 +45,7 @@ it there.
 
 ## Follow another property
 
-Hover a property row and drag the link mark at its end onto another property row, in any
+Hover a property row and drag its link mark onto another property row, in any
 panel. The editor opens on the dragged row with a reference to the dropped one, and the
 caret after it. A reference Rhai has no word for, an effect's row, is written in
 JavaScript. A drop on a layer's name in the Timeline writes the layer alone. The editor's

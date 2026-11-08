@@ -8,8 +8,10 @@
 
 import 'package:flutter/widgets.dart';
 
+import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
+import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 
 /// The text and whether the well is up. Listeners hear both change.
@@ -72,6 +74,24 @@ Widget rowFilterWell(BuildContext context, RowFilter filter, {Key? key}) {
       padding: const EdgeInsets.symmetric(horizontal: 6),
       leading: glyph.LumitIcon(LumitIcons.search, size: 12, colour: t.textMuted),
       onCancelled: filter.clear,
+    ),
+  );
+}
+
+/// The search mark a header shows while its well is down: the visible way to
+/// the filter that Ctrl+F opens.
+Widget rowFilterMark(BuildContext context, VoidCallback show, {Key? key}) {
+  final t = ThemeScope.of(context).theme;
+  return LumitTooltip(
+    message: l10n.filterRows,
+    action: 'panel.search.focus',
+    child: HouseButton(
+      key: key,
+      frameless: true,
+      small: true,
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      onPressed: show,
+      child: glyph.LumitIcon(LumitIcons.search, size: iconSize, colour: t.textMuted),
     ),
   );
 }

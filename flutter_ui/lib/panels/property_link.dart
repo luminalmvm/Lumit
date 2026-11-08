@@ -37,11 +37,16 @@ class PropertyLink {
   /// Put [reference] at the caret: a drag from the editor's own mark.
   final void Function(String reference)? insert;
 
+  /// The rows the drag began on, so a drop back on one of them is refused
+  /// rather than writing a row that reads itself.
+  final Set<Object> from;
+
   const PropertyLink({
     required this.layer,
     this.language,
     this.write,
     this.insert,
+    this.from = const {},
   });
 
   /// The text a drop on [ref] writes, and its language, or null when no

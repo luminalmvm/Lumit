@@ -3106,6 +3106,13 @@ class LayerReference {
         that: this,
       );
 
+  /// Whether this layer can take `item` as its source, so a menu offers only
+  /// what works: a picture layer wants a picture, a sound layer wants sound,
+  /// and a composition can't hold itself. Probes the file, so ask as a menu
+  /// opens.
+  bool canTakeSource({required ItemReference item}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceCanTakeSource(that: this, item: item);
+
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
   /// The stopwatch turning off, and it matches what the stopwatch does

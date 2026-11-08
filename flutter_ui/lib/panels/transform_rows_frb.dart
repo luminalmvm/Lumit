@@ -912,6 +912,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       );
     }
 
+    // The Timeline's fold: the link mark ends the name, so the value boxes
+    // stay where the columns above put them.
+    final mark =
+        widget.valueColumn == null ? null : _linkMark(group, transform);
     final row = Padding(
       padding: widget.rowPadding,
       child: Row(
@@ -919,6 +923,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           keyframes,
           const SizedBox(width: 4),
           Expanded(child: label),
+          if (mark != null) mark,
           if (widget.valueColumn case final col?) ...[
             SizedBox(
               width: _valueAreaWidth(col, cells.length),
@@ -946,9 +951,14 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       ),
     );
     final height = widget.rowHeight;
-    return ParamRowMenu(
+    final menued = ParamRowMenu(
       menu: menu,
       child: height == null ? row : SizedBox(height: height, child: row),
+    );
+    if (widget.valueColumn == null) return menued;
+    return LinkDrop(
+      ref: (link) => _linkRef(link, group, cells),
+      child: FxRowHoverRegion(child: menued),
     );
   }
 
@@ -1531,8 +1541,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// the whole pair for a row of two.
   PropertyRef? _linkRef(
       PropertyLink link, TransformGroup group, List<TransformAxis> cells) {
-    if (group.colour) return null;
-    final name = _ui.model.byId(widget.layer.internallayerId)?.info.name;
+    final at = widget.layer.internallayerId;
+    if (group.colour || cells.any((c) => link.from.contains((at, c.prop)))) {
+      return null;
+    }
+    final name = _ui.model.byId(at)?.info.name;
     if (name == null) return null;
     return PropertyRef.transform(
       name,
@@ -1554,6 +1567,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       name: engineLabel(group.label),
       link: PropertyLink(
         layer: widget.layer.internallayerId,
+        from: {for (final p in props) (widget.layer.internallayerId, p)},
         write: (text, language) {
           _throttle.cancel();
           _clearLive();

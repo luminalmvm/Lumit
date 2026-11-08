@@ -283,6 +283,13 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       () => _foldAll(effects, true)),
                   row('collapse', MenuLabel(l10n.fxMenuCollapseAll, ticked: false),
                       () => _foldAll(effects, false)),
+                  if (layer != null)
+                    row(
+                      'filter',
+                      MenuLabel(l10n.filterRows,
+                          action: 'panel.search.focus', ticked: false),
+                      _filter.show,
+                    ),
                 ],
                 row(
                   'strip',
@@ -1449,6 +1456,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           layerName: info.name,
           onAdd: addToLayer,
           onMenu: stackMenu,
+          onFilter: info.effects.isEmpty ? null : _filter.show,
           filter: _filter.open
               ? rowFilterWell(context, _filter, key: const ValueKey('fx-filter'))
               : null,
@@ -2289,6 +2297,9 @@ class _Header extends StatelessWidget {
 
   /// The row filter's well, in the name's place while it is up.
   final Widget? filter;
+
+  /// Puts the filter up, from the search mark shown while it is down.
+  final VoidCallback? onFilter;
   const _Header({
     required this.layerName,
     this.clipOn,
@@ -2296,6 +2307,7 @@ class _Header extends StatelessWidget {
     this.onAdd,
     required this.onMenu,
     this.filter,
+    this.onFilter,
   });
 
   @override
@@ -2353,6 +2365,8 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
+        if (onFilter case final show? when filter == null)
+          rowFilterMark(context, show, key: const ValueKey('fx-filter-mark')),
         // The keyframe strip's switch.
         const FxKeyStripToggle(),
         const SizedBox(width: 4),

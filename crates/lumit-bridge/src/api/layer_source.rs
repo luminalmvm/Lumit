@@ -54,6 +54,41 @@ impl LayerReference {
         ))
     }
 
+    /// Whether this layer can take `item` as its source, so a menu offers only
+    /// what works: a picture layer wants a picture, a sound layer wants sound,
+    /// and a composition can't hold itself. Probes the file, so ask as a menu
+    /// opens.
+    #[frb(sync)]
+    pub fn can_take_source(&self, item: &ItemReference) -> Result<bool, BridgeError> {
+        if !self.can_replace_source()? {
+            return Ok(false);
+        }
+        let layer = self.item()?;
+        let doc = self.document()?;
+        let footage = match item {
+            ItemReference::Folder(_) => return Ok(false),
+            ItemReference::Solid(_) => return Ok(!layer.audio_only),
+            ItemReference::Composition(c) => {
+                return Ok(!nests(&doc, c.id, self.comp_id, &mut Vec::new()))
+            }
+            ItemReference::Footage(f) => match doc.item(f.id) {
+                Some(lumit_core::model::ProjectItem::Footage(footage)) => footage,
+                _ => return Ok(false),
+            },
+        };
+        // A model is drawn by a kind of its own.
+        if lumit_scene::is_model(footage.media.on_disk()) {
+            return Ok(false);
+        }
+        let proj = self.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(if layer.audio_only {
+            has_sound(&state, footage)
+        } else {
+            CompositionReference::has_picture(&state, footage)
+        })
+    }
+
     /// Point this layer at `item`, keeping its transform, keys, masks, effects
     /// and markers. An anchor keeps its place on the picture as the size
     /// changes, a name that was the old source's follows the new one, and a
@@ -61,39 +96,19 @@ impl LayerReference {
     /// Returns whether it did. One undo step.
     #[frb(sync)]
     pub fn set_source_item(&self, item: &ItemReference) -> Result<bool, BridgeError> {
+        if !self.can_take_source(item)? {
+            return Err(BridgeError::NotConvertible);
+        }
         let layer = self.item()?;
         let comp = self.composition()?;
         let doc = self.document()?;
         let kind = match item {
             ItemReference::Footage(f) => LayerKind::Footage { item: f.id },
             ItemReference::Solid(s) => LayerKind::Solid { def: s.id },
-            ItemReference::Composition(c) => {
-                if nests(&doc, c.id, comp.id, &mut Vec::new()) {
-                    return Err(BridgeError::InvalidComp);
-                }
-                LayerKind::Precomp { comp: c.id }
-            }
+            ItemReference::Composition(c) => LayerKind::Precomp { comp: c.id },
             ItemReference::Folder(_) => return Err(BridgeError::InvalidItem),
         };
-        if !self.can_replace_source()? {
-            return Err(BridgeError::NotConvertible);
-        }
         let new_id = source_of(&kind);
-        if let ItemReference::Footage(f) = item {
-            let Some(lumit_core::model::ProjectItem::Footage(footage)) = doc.item(f.id) else {
-                return Err(BridgeError::InvalidItem);
-            };
-            // A model is drawn by a kind of its own, and a file with no picture
-            // would leave a picture layer with nothing on it.
-            if lumit_scene::is_model(footage.media.on_disk()) {
-                return Err(BridgeError::NotConvertible);
-            }
-            let proj = self.project()?;
-            let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-            if !layer.audio_only && !CompositionReference::has_picture(&state, footage) {
-                return Err(BridgeError::NotConvertible);
-            }
-        }
         let mut ops = vec![Op::SetLayerKind {
             comp: self.comp_id,
             layer: self.layer_id,
@@ -148,6 +163,29 @@ impl LayerReference {
         }
         self.commit(Op::Batch { ops })?;
         Ok(true)
+    }
+}
+
+/// Whether a footage item's file carries sound. One that can't be read is
+/// given the benefit of the doubt, as [`CompositionReference::has_picture`]
+/// gives it.
+fn has_sound(
+    state: &crate::api::state::LumitBridgeState,
+    footage: &lumit_core::model::FootageItem,
+) -> bool {
+    #[cfg(feature = "media")]
+    {
+        let Some(src) = crate::api::footage::FootageReference::resolve_source(state, footage)
+        else {
+            return true;
+        };
+        crate::probe::ensure_probed(&src).is_none_or(|p| p.audio_streams().next().is_some())
+    }
+
+    #[cfg(not(feature = "media"))]
+    {
+        let _ = (state, footage);
+        true
     }
 }
 
