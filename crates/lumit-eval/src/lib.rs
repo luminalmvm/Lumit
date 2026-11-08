@@ -1177,6 +1177,28 @@ fn feed_effect_stack(
                     visited,
                     false,
                 )?;
+                // As placed in comp draws the source where it stands at
+                // that moment, parents and all.
+                let tr = &src.transform;
+                for v in [
+                    tr.position_x.value_at(slt),
+                    tr.position_y.value_at(slt),
+                    tr.position_z.value_at(slt),
+                    tr.anchor_x.value_at(slt),
+                    tr.anchor_y.value_at(slt),
+                    tr.scale_x.value_at(slt),
+                    tr.scale_y.value_at(slt),
+                    tr.rotation.value_at(slt),
+                    tr.rotation_x.value_at(slt),
+                    tr.rotation_y.value_at(slt),
+                    tr.opacity.value_at(slt),
+                ] {
+                    feed_f64(h, v);
+                }
+                feed_depth(h, tr, slt, &|p| p.value_at(slt));
+                if src.parent.is_some() {
+                    feed_parents(h, doc, comp, src, at, stamper);
+                }
             }
         }
         // An expression is read about its layer at this moment, as the builder
