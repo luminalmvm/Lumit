@@ -417,6 +417,61 @@ void main() {
 
     Finder twirl(UuidValue node) =>
         find.byKey(ValueKey<String>('graph-twirl-node:$node'));
+    /// The rows on a box only read, so the picked box is edited in the Node
+    /// panel. Backspace typed into its well is the well's, not the canvas's
+    /// Delete, which would take the box with it.
+    testWidgets("a Node panel row edits its box in one op, undone in one",
+        (tester) async {
+      final p = withGraph();
+      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(
+        tester,
+        p,
+        child: const Row(children: [
+          SizedBox(width: 600, child: GraphPanelFrb()),
+          Expanded(child: NodePanelFrb()),
+        ]),
+      );
+      await tester.tapAt(tester.getCenter(card(blur)));
+      await tester.pump();
+
+      double radius() {
+        final values = p.graph
+            .getNodeGraphInstances()
+            .firstWhere((i) => i.id() == blur)
+            .getInfo()
+            .values;
+        final value =
+            values.where((v) => v.id == 'radius').map((v) => v.value).single;
+        return stillValue((value as BridgeEffectValue_Float).field0);
+      }
+
+      final was = p.graph.documentRevision();
+      final field = find.byKey(ValueKey<String>('fx-float-$blur-radius'));
+      final typing =
+          find.descendant(of: field, matching: find.byType(EditableText));
+      await tester.tap(field);
+      await tester.pump();
+      await tester.enterText(typing, '12');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(radius(), closeTo(12, 0.001));
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(radius(), closeTo(30, 0.001), reason: 'one undo step');
+
+      await tester.tap(field);
+      await tester.pump();
+      expect(typing, findsOneWidget, reason: 'the key goes to the well');
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pump();
+      expect(card(blur), findsOneWidget);
+    });
+
     // --- A box lists what the Effect controls panel lists. The rows are
     // derived by that panel's own rules, so a box and the panel can never
     // disagree about what an effect is showing. The rows read; the Node

@@ -3884,7 +3884,7 @@ class LumitUiState extends ChangeNotifier {
   /// built-in transform (null). The push and the re-render are
   /// [pushViewerLook]'s — the view is part of the one look message.
   void setColourView(List<String>? view) {
-    if (_colourView?.join(' ') == view?.join(' ')) return;
+    if (_colourView?.join('\x00') == view?.join('\x00')) return;
     _colourView = view == null ? null : List.of(view);
     notifyListeners();
     pushViewerLook();
@@ -4143,7 +4143,7 @@ class LumitUiState extends ChangeNotifier {
       // engine is told the look *whole*, so a message that left the view out
       // would not leave it alone — it would say "no view" and the picture
       // would quietly fall back to the built-in transform.
-      view: _colourView?.join(' ') ?? '',
+      view: _colourView?.join('\x00') ?? '',
     );
     if (target == _pushedView) return;
     try {

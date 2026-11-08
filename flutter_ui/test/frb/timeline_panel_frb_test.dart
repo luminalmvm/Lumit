@@ -841,7 +841,7 @@ void main() {
         size: const Size(1400, 700),
       ));
       await tester.pump();
-      expect(find.textContaining('Open a composition'), findsOneWidget);
+      expect(find.text('No composition'), findsOneWidget);
 
       final row =
           find.byKey(ValueKey<String>('project-row-${footage.internalid}'));

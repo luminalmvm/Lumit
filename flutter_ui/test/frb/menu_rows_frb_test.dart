@@ -94,10 +94,14 @@ void main() {
     testWidgets('Layer ▸ Transform ▸ Reset puts every property back',
         (tester) async {
       final p = withComp();
+      final untouched = p.comp.addSolidLayer().getTransform();
       final layer = p.comp.addSolidLayer();
       layer.setTransform(
           prop: BridgeTransformProp.positionX,
           value: const BridgeScalar.static_(400));
+      layer.setTransform(
+          prop: BridgeTransformProp.anchorX,
+          value: const BridgeScalar.static_(10));
       layer.setTransform(
           prop: BridgeTransformProp.scaleX,
           value: const BridgeScalar.static_(37));
@@ -108,7 +112,10 @@ void main() {
       await choose(tester, 'Layer', 'Reset', under: 'Transform');
 
       final after = layer.getTransform();
-      expect(staticOf(after.positionX), 0);
+      expect(staticOf(after.positionX), staticOf(untouched.positionX),
+          reason: 'back in the middle of the comp, where a new layer sits');
+      expect(staticOf(after.anchorX), staticOf(untouched.anchorX),
+          reason: 'pivoting about its own middle, as a new layer does');
       expect(staticOf(after.scaleX), 100,
           reason: 'a fresh layer is at full size, not at nothing');
       expect(staticOf(after.opacity), 100);
