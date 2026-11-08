@@ -63,6 +63,24 @@ extension ShapeEntries on List<BridgeShapeEntry> {
     return end;
   }
 
+  /// One past the entry at [index], everything inside it and, for art, the
+  /// modifiers that are its own. An own modifier acts on the art right above
+  /// it, so it goes where that art goes.
+  int _withOwnEnd(int index) {
+    final depth = this[index].depth;
+    var end = _blockEnd(index);
+    if (this[index].kind is BridgeShapeEntryKind_Modifier) return end;
+    while (end < length && this[end].depth == depth && _isOwn(end)) {
+      end++;
+    }
+    return end;
+  }
+
+  bool _isOwn(int index) => switch (this[index].kind) {
+        BridgeShapeEntryKind_Modifier(:final field0) => field0.own,
+        _ => false,
+      };
+
   /// The list with the item [id] replaced by [change] of it.
   List<BridgeShapeEntry> withItem(
           UuidValue id, BridgeShapeItem Function(BridgeShapeItem) change) =>
@@ -113,11 +131,12 @@ extension ShapeEntries on List<BridgeShapeEntry> {
           },
       ];
 
-  /// The list without the entry [id], and without whatever sat inside it.
+  /// The list without the entry [id], without whatever sat inside it and
+  /// without its own modifiers.
   List<BridgeShapeEntry> without(UuidValue id) {
     final i = _indexOf(id);
     if (i < 0) return this;
-    return [...sublist(0, i), ...sublist(_blockEnd(i))];
+    return [...sublist(0, i), ...sublist(_withOwnEnd(i))];
   }
 
   /// The list with [kind] added after the entry [id] (after everything
@@ -177,18 +196,26 @@ extension ShapeEntries on List<BridgeShapeEntry> {
     ];
   }
 
-  /// The list with the entry [id] (and everything inside it) swapped with the
-  /// entry before it ([by] -1) or after it (+1) at its own depth. Unchanged
-  /// where there is none.
+  /// The list with the entry [id] (with everything inside it and its own
+  /// modifiers) swapped with the entry before it ([by] -1) or after it (+1) at
+  /// its own depth. Unchanged where there is none.
   List<BridgeShapeEntry> moved(UuidValue id, int by) {
     final i = _indexOf(id);
     if (i < 0) return this;
     final depth = this[i].depth;
-    final end = _blockEnd(i);
+    final art = this[i].kind is! BridgeShapeEntryKind_Modifier;
+    final end = _withOwnEnd(i);
     if (by < 0) {
       var p = i - 1;
       while (p >= 0 && this[p].depth > depth) {
         p--;
+      }
+      // Art swaps with the art before it, whose own modifiers go with it.
+      while (art && p > 0 && this[p].depth == depth && _isOwn(p)) {
+        p--;
+        while (p > 0 && this[p].depth > depth) {
+          p--;
+        }
       }
       if (p < 0 || this[p].depth < depth) return this;
       return [
@@ -199,7 +226,7 @@ extension ShapeEntries on List<BridgeShapeEntry> {
       ];
     }
     if (end >= length || this[end].depth < depth) return this;
-    final nextEnd = _blockEnd(end);
+    final nextEnd = art ? _withOwnEnd(end) : _blockEnd(end);
     return [
       ...sublist(0, i),
       ...sublist(end, nextEnd),
