@@ -16504,7 +16504,7 @@
   },
   "settingsRightClickOpensNodeSearch": "Right-click opens node search",
   "@settingsRightClickOpensNodeSearch": {
-    "description": "Settings window, Timeline page: the name of one setting - whether a right-click on empty node graph canvas opens the search for adding a box at the pointer. On by default."
+    "description": "Settings window, Timeline page: the name of one setting - whether a right-click on empty node graph canvas opens the search for adding a box at the pointer, skipping the canvas menu whose first row is that search. Off by default."
   },
   "settingsTabOpensNodeSearch": "Tab opens node search",
   "@settingsTabOpensNodeSearch": {

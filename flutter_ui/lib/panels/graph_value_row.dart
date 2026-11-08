@@ -98,9 +98,21 @@ class GraphValueRow extends StatelessWidget {
           ),
         );
       case BridgeEffectValue_Bool(:final field0):
+        // Off draws the empty box, so the row still reads as a switch and
+        // not as a heading.
         return field0
             ? glyph.LumitIcon(LumitIcons.tick, size: 10, colour: bright)
-            : null;
+            : Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(t.tokens.controlRadius - 1),
+                  border: Border.all(color: t.textDisabled),
+                ),
+              );
+      case BridgeEffectValue_Seed(:final field0):
+        return Text('$field0', style: mono);
       case BridgeEffectValue_Choice(:final field0):
         if (param.kind case BridgeParamKind_Choice(:final options)
             when field0 >= 0 && field0 < options.length) {

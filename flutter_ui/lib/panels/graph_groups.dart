@@ -874,47 +874,75 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
 
   /// The toolbar's group and note buttons, shared so both canvases word them
   /// alike.
-  List<Widget> groupButtons(LumitTheme t) => [
-        LumitTooltip(
-          message: l10n.tipGraphGroup,
-          action: 'layer.group',
-          child: HouseButton(
-            key: const ValueKey('graph-group'),
-            small: true,
-            frameless: true,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            onPressed: canGroup ? groupPicked : null,
-            child: glyph.LumitIcon(LumitIcons.group,
-                size: graphIconSize,
-                colour: canGroup ? t.textPrimary : t.textDisabled),
+  /// The toolbar's three group buttons, as items of the row that folds them
+  /// into the overflow mark when the panel is narrow.
+  List<FoldItem> groupFoldItems(LumitTheme t) => [
+        FoldItem(
+          label: l10n.tipGraphGroup,
+          icon: glyph.LumitIcon(LumitIcons.group,
+              size: graphIconSize,
+              colour: canGroup ? t.textPrimary : t.textDisabled),
+          onPressed: canGroup ? groupPicked : null,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: LumitTooltip(
+              message: l10n.tipGraphGroup,
+              action: 'layer.group',
+              child: HouseButton(
+                key: const ValueKey('graph-group'),
+                small: true,
+                frameless: true,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: canGroup ? groupPicked : null,
+                child: glyph.LumitIcon(LumitIcons.group,
+                    size: graphIconSize,
+                    colour: canGroup ? t.textPrimary : t.textDisabled),
+              ),
+            ),
           ),
         ),
-        const SizedBox(width: 6),
-        LumitTooltip(
-          message: l10n.tipGraphNote,
-          child: HouseButton(
-            key: const ValueKey('graph-note'),
-            small: true,
-            frameless: true,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            onPressed: addNote,
-            child: glyph.LumitIcon(LumitIcons.note,
-                size: graphIconSize, colour: t.textMuted),
+        FoldItem(
+          label: l10n.tipGraphNote,
+          icon: glyph.LumitIcon(LumitIcons.note,
+              size: graphIconSize, colour: t.textMuted),
+          onPressed: addNote,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: LumitTooltip(
+              message: l10n.tipGraphNote,
+              child: HouseButton(
+                key: const ValueKey('graph-note'),
+                small: true,
+                frameless: true,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: addNote,
+                child: glyph.LumitIcon(LumitIcons.note,
+                    size: graphIconSize, colour: t.textMuted),
+              ),
+            ),
           ),
         ),
-        const SizedBox(width: 6),
         // Save group… is a row on a box's menu and on a group's bar, where
         // the pick it saves is.
-        LumitTooltip(
-          message: l10n.graphSavedGroups,
-          child: HouseButton(
-            key: const ValueKey('graph-saved-groups'),
-            small: true,
-            frameless: true,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            onPressed: _openSaved,
-            child: glyph.LumitIcon(LumitIcons.folder,
-                size: graphIconSize, colour: t.textMuted),
+        FoldItem(
+          label: l10n.graphSavedGroups,
+          icon: glyph.LumitIcon(LumitIcons.folder,
+              size: graphIconSize, colour: t.textMuted),
+          onPressed: _openSaved,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: LumitTooltip(
+              message: l10n.graphSavedGroups,
+              child: HouseButton(
+                key: const ValueKey('graph-saved-groups'),
+                small: true,
+                frameless: true,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: _openSaved,
+                child: glyph.LumitIcon(LumitIcons.folder,
+                    size: graphIconSize, colour: t.textMuted),
+              ),
+            ),
           ),
         ),
       ];

@@ -102,8 +102,12 @@ Future<void> showGraphBoxMenu(
     _show(context, at, [
       [
         _Row('bypass', l10n.fxBypass, onBypass, ticked: bypassed),
-        _Row('rename', l10n.rename, onRename),
-        _Row('expand', (expanded ?? false) ? l10n.graphNoteCollapse : l10n.graphNoteExpand,
+        _Row('rename', l10n.rename, onRename, action: 'effect.rename'),
+        // The socket menu's pair, so the twirl has one name wherever it is
+        // pressed.
+        _Row(
+            'expand',
+            (expanded ?? false) ? l10n.graphHideSockets : l10n.graphShowSockets,
             onExpand),
         if (enterLabel != null) _Row('enter', enterLabel, onEnter),
       ],

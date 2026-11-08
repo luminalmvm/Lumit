@@ -618,7 +618,7 @@ class InterfaceSettings {
     this.toolBarPosition = ToolBarPosition.auto,
     this.rangeSliders = true,
     this.commandBox = true,
-    this.rightClickOpensNodeSearch = true,
+    this.rightClickOpensNodeSearch = false,
     this.tabOpensNodeSearch = true,
     this.shiftAOpensNodeSearch = true,
     this.wireStyle = WireStyle.curved,
@@ -797,10 +797,10 @@ class InterfaceSettings {
         rangeSliders: j['range_sliders'] as bool? ?? true,
         // Absent means shown, and a name no build wrote means the style's.
         commandBox: j['command_box'] as bool? ?? true,
-        // Absent means on, since a file from before these existed never turned
-        // them off.
+        // Absent means the canvas menu: a file that never turned the search
+        // on gets the menu, with the search a row down. The keys stay on.
         rightClickOpensNodeSearch:
-            j['right_click_opens_node_search'] as bool? ?? true,
+            j['right_click_opens_node_search'] as bool? ?? false,
         tabOpensNodeSearch: j['tab_opens_node_search'] as bool? ?? true,
         shiftAOpensNodeSearch: j['shift_a_opens_node_search'] as bool? ?? true,
         // A file from before the choice had a hanging switch.

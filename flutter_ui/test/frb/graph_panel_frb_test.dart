@@ -37,12 +37,28 @@ void main() {
   group('Graph panel (frb)', () {
     /// A comp with one solid carrying one Gaussian blur, selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
-        withBlur() {
+        withBlur({bool open = true}) {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       comp.addSolidLayer();
       final layer = comp.getLayers().single;
       layer.addEffect(name: 'blur');
+      // Twirled open from outside, so a test can reach a parameter socket
+      // nobody has wired yet.
+      if (open) {
+        final graph = layer.getGraph();
+        final blur = graph.nodes.firstWhere((n) => n.matchName == 'blur').node;
+        layer.setGraph(
+          drivers: layer.getGraphDrivers(),
+          wiring: BridgeGraphWiring(
+            edges: graph.wiring.edges,
+            layout: graph.wiring.layout,
+            exposed: [...graph.wiring.exposed, blur],
+            groups: graph.wiring.groups,
+            outUnwired: false,
+          ),
+        );
+      }
       p.uiState.selectedLayer.value = layer;
       p.uiState.model.refresh();
       return (state: p.state, uiState: p.uiState, layer: layer);
@@ -99,27 +115,27 @@ void main() {
     String effectKey(LayerReference layer) => graphNodeKey(
         layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node);
 
-    /// A new effect's box starts open, showing every parameter socket. The
-    /// header twirl shuts it, and a number socket nobody has wired is then not
-    /// drawn at all.
+    /// A new effect's box starts shut: a number socket nobody has wired is
+    /// not drawn at all. The header twirl opens it, showing every parameter
+    /// socket.
     testWidgets('exposure shows the parameter sockets, and is one op',
         (tester) async {
-      final p = withBlur();
+      final p = withBlur(open: false);
       await mount(tester, p);
       final key = effectKey(p.layer);
 
-      expect(socket(key, 'radius'), findsOneWidget);
-      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
+      expect(socket(key, 'radius'), findsNothing);
+      expect(p.layer.getGraph().wiring.exposed, isEmpty);
       await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
-      expect(socket(key, 'radius'), findsNothing);
-      expect(p.layer.getGraph().wiring.exposed, isEmpty);
+      expect(socket(key, 'radius'), findsOneWidget);
+      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
 
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pump();
-      expect(p.layer.getGraph().wiring.exposed, hasLength(1),
+      expect(p.layer.getGraph().wiring.exposed, isEmpty,
           reason: 'one gesture, one undo step');
     });
 

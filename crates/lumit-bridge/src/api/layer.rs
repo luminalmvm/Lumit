@@ -7650,7 +7650,7 @@ impl LayerReference {
 
         // A points effect landing below a producer is wired to it in the same
         // undo step, so the stack works without a trip to the node graph. Its
-        // box starts open there too, showing every control.
+        // box starts shut there, the twirl opening it.
         let layer = self.item()?;
         let mut effects = layer.effects.clone();
         let mut graph = layer.graph.clone();
@@ -7658,9 +7658,6 @@ impl LayerReference {
         effects.push(instance.clone());
         crate::api::track::settle(&before, &mut effects);
         graph.wire_points_from_above(&effects, instance.id);
-        graph
-            .exposed
-            .push(lumit_core::graph::NodeRef::Effect(instance.id));
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store

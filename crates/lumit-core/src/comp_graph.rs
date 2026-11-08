@@ -572,7 +572,10 @@ impl CompGraph {
             ties: Vec::new(),
             nodes: vec![GraphNode::Output { id }],
             edges: Vec::new(),
-            layout: vec![(id, [0.0, 0.0])],
+            // Down and to the right, where a chain ends, with the top-left
+            // free for the boxes that feed it and the socket clear of the
+            // panel's edge.
+            layout: vec![(id, [560.0, 500.0])],
             exposed: Vec::new(),
             groups: Vec::new(),
         }

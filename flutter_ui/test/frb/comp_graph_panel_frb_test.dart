@@ -841,9 +841,12 @@ void main() {
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
       final boxes = p.graph.getNodeGraph().nodes.length;
 
-      // A right-click on empty ground, the box landing under it.
+      // A right-click on empty ground opens the canvas menu, whose first
+      // row is the search, and the box lands under the click.
       const click = Offset(300, 200);
       await tester.tapAt(canvas + click, buttons: kSecondaryMouseButton);
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('graph-menu-add-node')));
       await tester.pump();
       await pickExposure(tester);
       expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 1));

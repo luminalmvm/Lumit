@@ -491,6 +491,34 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// selection of its own.
   void _onRowTouched(String name) => _boundUi?.touchProperty(name);
 
+  /// Reveal in Effect controls, from a box on the node graph: the effect's
+  /// card is scrolled into view once the selection has drawn it.
+  void _onReveal() {
+    final ui = _boundUi;
+    final id = ui?.revealEffect.value;
+    if (ui == null || id == null || !mounted) return;
+    ui.revealEffect.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final wanted = ValueKey<String>('fx-twirl-$id');
+      BuildContext? found;
+      void visit(Element el) {
+        if (found != null) return;
+        if (el.widget.key == wanted) {
+          found = el;
+          return;
+        }
+        el.visitChildren(visit);
+      }
+
+      context.visitChildElements(visit);
+      if (found case final card?) {
+        Scrollable.ensureVisible(card,
+            alignment: 0.1, duration: const Duration(milliseconds: 160));
+      }
+    });
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -502,6 +530,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     _boundUi = ui;
     ui.selectedLayer.addListener(_readDriven);
     ui.model.addListener(_readDriven);
+    ui.revealEffect.addListener(_onReveal);
     // `Ctrl+A` here means every effect on the layer, not every layer
     // in the composition — the shell routes the chord to the focused panel.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
@@ -543,6 +572,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   void _unbindDriven() {
     _boundUi?.selectedLayer.removeListener(_readDriven);
     _boundUi?.model.removeListener(_readDriven);
+    _boundUi?.revealEffect.removeListener(_onReveal);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
     if (_boundUi?.deleteClaim == _deleteClaim) {
       _boundUi!.deleteClaim = _priorDeleteClaim;

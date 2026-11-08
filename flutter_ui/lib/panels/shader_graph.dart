@@ -863,9 +863,16 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     final graph = _graph;
     if (graph == null) return;
     final wired = graph.edges.any((e) => e['from'] == id || e['to'] == id);
+    // The Result box alone copies to nothing: a graph has one.
+    final resultAlone = _selection.length == 1 &&
+        graph.nodes.any((n) => n['id'] == id && n['kind'] == 'result');
     showGraphBoxMenu(
       context,
       at,
+      onCopy: resultAlone ? null : _copySelected,
+      onPaste: () => _paste(_toCanvas(const Offset(80, 80))),
+      canPaste: _copied != null,
+      onDuplicate: resultAlone ? null : _duplicateSelected,
       onDisconnectAll: !wired
           ? null
           : () {
@@ -876,6 +883,99 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       onDelete: _deleteSelected,
     );
   }
+
+  /// The boxes copied last, with the wires between them, held for the
+  /// session: a shader box names nothing outside its graph, so a copy is
+  /// the boxes themselves.
+  static ({List<Map<String, dynamic>> nodes, List<Map<String, dynamic>> edges})?
+      _copied;
+
+  ({List<Map<String, dynamic>> nodes, List<Map<String, dynamic>> edges})?
+      _pickedBoxes() {
+    final graph = _graph;
+    if (graph == null || _selection.isEmpty) return null;
+    return (
+      nodes: [
+        for (final n in graph.nodes)
+          if (_selection.contains(n['id'])) jsonDecode(jsonEncode(n)),
+      ],
+      edges: [
+        for (final e in graph.edges)
+          if (_selection.contains(e['from']) && _selection.contains(e['to']))
+            Map<String, dynamic>.of(e),
+      ],
+    );
+  }
+
+  void _copySelected() => _copied = _pickedBoxes() ?? _copied;
+
+  /// The held boxes land with fresh ids, the first at [at] and the rest
+  /// keeping their offsets from it, and become the pick. A second Result
+  /// box is left out: a graph has one.
+  void _paste(Offset at,
+      [({List<Map<String, dynamic>> nodes, List<Map<String, dynamic>> edges})?
+          held]) {
+    final graph = _graph;
+    final boxes = held ?? _copied;
+    if (graph == null || boxes == null || boxes.nodes.isEmpty) return;
+    final next = graph.clone();
+    var id = next.nextId();
+    final ids = <int, int>{};
+    final origins = {for (final b in _boxes()) b.node.id: b.rect.topLeft};
+    final first = origins[boxes.nodes.first['id']] ?? Offset.zero;
+    for (final n in boxes.nodes) {
+      if (n['kind'] == 'result' && _hasResult()) continue;
+      final was = n['id'] as int;
+      ids[was] = id;
+      next.nodes.add(jsonDecode(jsonEncode(n)) as Map<String, dynamic>
+        ..['id'] = id);
+      _positions[id] = at + ((origins[was] ?? first) - first);
+      id++;
+    }
+    for (final e in boxes.edges) {
+      final from = ids[e['from']];
+      final to = ids[e['to']];
+      if (from == null || to == null) continue;
+      next.edges.add(Map<String, dynamic>.of(e)
+        ..['from'] = from
+        ..['to'] = to);
+    }
+    _selection
+      ..clear()
+      ..addAll(ids.values);
+    _commit(next);
+  }
+
+  void _duplicateSelected() {
+    final picked = _pickedBoxes();
+    if (picked == null) return;
+    final first =
+        _boxes().where((b) => b.node.id == picked.nodes.first['id']).firstOrNull;
+    _paste((first?.rect.topLeft ?? Offset.zero) + const Offset(20, 20), picked);
+  }
+
+  /// Fit every box on screen, with a little air round the edges.
+  void _frameAll() {
+    final boxes = _boxes();
+    if (boxes.isEmpty || _viewport.isEmpty) return;
+    var bounds = boxes.first.rect;
+    for (final box in boxes) {
+      bounds = bounds.expandToInclude(box.rect);
+    }
+    bounds = bounds.inflate(20);
+    final zoom = math
+        .min(_viewport.width / bounds.width, _viewport.height / bounds.height)
+        .clamp(0.2, 2.0);
+    setState(() {
+      _zoom = zoom;
+      _pan = Offset(
+        (_viewport.width - bounds.width * zoom) / 2 - bounds.left * zoom,
+        (_viewport.height - bounds.height * zoom) / 2 - bounds.top * zoom,
+      );
+    });
+  }
+
+  Size _viewport = Size.zero;
 
   void _socketMenu(_Sock socket, Offset at) {
     final graph = _graph;
@@ -904,9 +1004,12 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
         context,
         position,
         onAddNode: () => _openConsole(at, byKey: true),
+        onPaste: () => _paste(at),
+        canPaste: _copied != null,
         onSelectAll: () => setState(() => _selection
           ..clear()
           ..addAll([for (final n in _graph?.nodes ?? const []) n['id'] as int])),
+        onFrameAll: _frameAll,
       );
 
   void _wheel(PointerSignalEvent event) {
@@ -932,7 +1035,12 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _breadcrumb(t),
-        Expanded(child: _canvas(t, boxes)),
+        Expanded(
+          child: LayoutBuilder(builder: (context, box) {
+            _viewport = box.biggest;
+            return _canvas(t, boxes);
+          }),
+        ),
       ],
     );
   }

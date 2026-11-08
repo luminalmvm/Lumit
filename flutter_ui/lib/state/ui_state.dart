@@ -1850,6 +1850,24 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({UuidValue id, String label, bool picture})?>
       compGraphNode = ValueNotifier(null);
 
+  /// A pick asked for from the Node panel's index on a node graph
+  /// composition: the box to pick, or none to clear the pick. Its own
+  /// notifier rather than [compGraphNode], which every canvas publishes to:
+  /// the Graph panel's canvas answers an ask, and the Timeline's canvas keeps
+  /// its own pick. Cleared once answered.
+  final ValueNotifier<({UuidValue? id})?> compGraphPickAsk =
+      ValueNotifier(null);
+
+  /// A box's menu asked for from the Node panel's heading: the box's key on
+  /// its canvas and the point to open at. The canvas owns every row of that
+  /// menu, so it is opened there and cleared once answered.
+  final ValueNotifier<({String key, Offset at})?> graphBoxMenuAsk =
+      ValueNotifier(null);
+
+  /// An effect the Effect controls panel is asked to scroll into view, by a
+  /// box's Reveal in Effect controls. The panel clears it once it has.
+  final ValueNotifier<UuidValue?> revealEffect = ValueNotifier(null);
+
   /// The Custom shader whose **inner graph** the Graph panel is showing
   /// (docs/impl/custom-shader.md §4.2), or null when it shows the
   /// layer's own graph.

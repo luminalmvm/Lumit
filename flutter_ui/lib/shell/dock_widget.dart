@@ -61,7 +61,7 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // groups buttons, save group, the two toggles, the snap magnet and
       // the view cluster. Below this the floor slides, which is what a
       // canvas panel wants anyway.
-      Panel.graph => 560,
+      Panel.graph => 400,
       Panel.effectsAndPresets => 180,
       Panel.node => 200,
       Panel.scopes => 160,

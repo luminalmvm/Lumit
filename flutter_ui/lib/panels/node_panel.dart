@@ -50,10 +50,18 @@ import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'comp_graph_panel.dart'
-    show compInputKindWord, compInputKinds, compItemKindWord, pressGraphBox;
+    show
+        compInputKindWord,
+        compInputKinds,
+        compItemKindWord,
+        compNodeKey,
+        pressGraphBox;
+import 'effect_controls_panel_frb.dart' show curveChannelColour;
 import 'effect_param_row_frb.dart';
+import 'fx_section.dart' show fxEnableMark, fxGroupHeaderRow;
 import 'graph_panel.dart'
     show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
+import 'levels_display_frb.dart' show LevelsDisplayFrb, levelsChannels;
 import 'placeholder.dart';
 import 'plane_display_frb.dart';
 import 'roto_display_frb.dart';
@@ -107,9 +115,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   ({UuidValue id, String label, bool picture})? _lastCompNode;
 
   /// With no box to draw, the layer's own boxes, each a click from being
-  /// picked, under the layer's name.
+  /// picked, under the layer's name. A node graph composition lists its
+  /// boxes the same way under the composition's name.
   List<BridgeGraphNode> _index = const [];
   String _layerName = '';
+  List<BridgeCompNode> _compIndex = const [];
+  String _compName = '';
 
   /// Which of the picked box's parameters a driver is wired to, by parameter
   /// id, with the driver's name and what its wire carries — the same shape
@@ -148,6 +159,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// The Input form's number well being dragged, so the drag shows where it
   /// has got to without committing a step per tick.
   ({String key, double value})? _numberDrag;
+
+  /// Which of the picked box's groups are open, by box and group. The
+  /// schema's `collapsed` stands until a twirl is pressed.
+  final Map<String, bool> _groupOpen = {};
 
   /// The driver drag's own rate limit, the twin of the one inside
   /// [EffectStackEditor]: the first tick goes at once and the newest of those
@@ -230,14 +245,17 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     _lastNode = picked == null ? null : node;
     var index = const <BridgeGraphNode>[];
     var name = '';
-    if (picked == null && layer != null) {
+    if (layer != null) {
       try {
         name = layer.getInfo().name;
-        index = [
-          for (final n in layer.getGraph().nodes)
-            if (n.node is BridgeNodeRef_Effect || n.node is BridgeNodeRef_Driver)
-              n,
-        ];
+        if (picked == null) {
+          index = [
+            for (final n in layer.getGraph().nodes)
+              if (n.node is BridgeNodeRef_Effect ||
+                  n.node is BridgeNodeRef_Driver)
+                n,
+          ];
+        }
       } catch (_) {
         // The layer has gone; there is nothing to list.
       }
@@ -297,14 +315,93 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     }
     if (input == null) _labelFor = null;
     _lastCompNode = box == null ? null : picked;
+    var index = const <BridgeCompNode>[];
+    var name = '';
+    try {
+      name = comp.getSettings().name;
+      if (box == null) index = comp.getNodeGraph().nodes;
+    } catch (_) {
+      // The comp has gone; there is nothing to list.
+    }
     setState(() {
       _layer = null;
       _picked = row;
       _box = box;
       _input = input;
+      _compIndex = index;
+      _compName = name;
       _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
+  }
+
+  /// Back to the index: the pick is let go of here and on the canvas, which
+  /// hears the cleared notifier.
+  void _toIndex() {
+    // Both notifiers first: each write reloads this panel, and a reload
+    // with the other still set would keep the box as the last one.
+    _ui?.graphNode.value = null;
+    _ui?.compGraphNode.value = null;
+    _askPick(null);
+    _lastNode = null;
+    _lastCompNode = null;
+    _reload();
+  }
+
+  /// Ask the Graph panel's canvas to pick [id], or nothing. Reset first: an
+  /// ask nobody was up to answer would otherwise equal the next one, and a
+  /// notifier says nothing about a value it already holds.
+  void _askPick(UuidValue? id) {
+    final ui = _ui;
+    if (ui == null) return;
+    ui.compGraphPickAsk.value = null;
+    ui.compGraphPickAsk.value = (id: id);
+  }
+
+  /// The picked box's enable tick, which the canvas's box wears too: the
+  /// same write for the same control. One op whichever box it is.
+  void _setEnabled(_Picked picked, bool on) {
+    final id = picked.info.id;
+    try {
+      if (picked.graph) {
+        final comp = _ui?.selectedComp;
+        if (comp == null) return;
+        final instances = comp.getNodeGraphInstances();
+        for (final instance in instances) {
+          if (instance.id() == id) instance.setEnabled(enabled: on);
+        }
+        comp.setNodeGraph(
+            instances: instances, wiring: comp.getNodeGraph().wiring);
+      } else if (picked.driver) {
+        final layer = _layer;
+        if (layer == null) return;
+        final drivers = layer.getGraphDrivers();
+        for (final instance in drivers) {
+          if (instance.id() == id) instance.setEnabled(enabled: on);
+        }
+        layer.setGraph(drivers: drivers, wiring: layer.getGraph().wiring);
+      } else {
+        final layer = _layer;
+        if (layer == null) return;
+        for (final instance in layer.getEffects()) {
+          if (instance.id() == id) {
+            layer.setEffectEnabled(effect: instance, enabled: on);
+          }
+        }
+      }
+    } catch (_) {
+      // The box changed under us; re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+  }
+
+  /// The picked box's menu, opened by the canvas that owns its rows. Reset
+  /// first, for the reason [_askPick] is.
+  void _askMenu(String key, Offset at) {
+    final ui = _ui;
+    if (ui == null) return;
+    ui.graphBoxMenuAsk.value = null;
+    ui.graphBoxMenuAsk.value = (key: key, at: at);
   }
 
   /// Which of this box's parameters a wire is feeding, by socket id: the same
@@ -686,11 +783,18 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // A node graph's Read, Input and Output boxes carry no parameters, so they
     // draw their own small face rather than a row list.
     if (comp != null && picked == null && _box != null) {
+      final box = _box!;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(context, _boxName(_box!)),
-          Expanded(child: _boxFace(ui, comp, _box!)),
+          _header(
+            context,
+            _boxName(box),
+            crumb: _compName,
+            onCrumb: _toIndex,
+            onMenu: (at) => _askMenu(compNodeKey(box.id), at),
+          ),
+          Expanded(child: _boxFace(ui, comp, box)),
         ],
       );
     }
@@ -703,6 +807,17 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         ],
       );
     }
+    if (picked == null && _box == null && comp != null && ui.model.isNodeGraph) {
+      // The graph's boxes, or nothing at all for a graph with none.
+      if (_compIndex.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(context, _compName),
+          Expanded(child: _compIndexList(context, ui)),
+        ],
+      );
+    }
     if (picked == null || comp == null || (layer == null && !picked.graph)) {
       return PlaceholderPanel(
         icon: LumitIcon.nodes,
@@ -710,6 +825,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         hint: '',
       );
     }
+    final id = picked.info.id;
+    final key = picked.graph
+        ? compNodeKey(id)
+        : graphNodeKey(picked.driver
+            ? BridgeNodeRef.driver(id)
+            : BridgeNodeRef.effect(id));
     // The keyframe controls read the playhead — which key is under it, whether
     // the diamond is filled — so the rows redraw when it moves.
     return ValueListenableBuilder<int>(
@@ -718,13 +839,79 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // The box's own title. The instance's name is its schema key.
-          _header(context, switch (_box) {
-            final box? => _boxName(box),
-            null => picked.info.customName ?? effectLabelOf(picked.info.name),
-          }),
-          Expanded(child: _rows(ui, picked, layer, playhead)),
+          _header(
+            context,
+            switch (_box) {
+              final box? => _boxName(box),
+              null =>
+                picked.info.customName ?? effectLabelOf(picked.info.name),
+            },
+            crumb: layer == null ? _compName : _layerName,
+            onCrumb: _toIndex,
+            enabled: picked.info.enabled,
+            onEnabled: (on) => _setEnabled(picked, on),
+            onMenu: (at) => _askMenu(key, at),
+          ),
+          Expanded(child: _rows(context, ui, picked, layer, playhead)),
         ],
       ),
+    );
+  }
+
+  /// A node graph's boxes, one row each, a click from being picked on the
+  /// canvas. The layer index's shape, with the Output and the Read and
+  /// Input boxes among the Fx ones.
+  Widget _compIndexList(BuildContext context, LumitUiState ui) {
+    final t = ThemeScope.of(context).theme;
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      children: [
+        for (final n in _compIndex)
+          HoverMark(
+            builder: (context, lit) => GestureDetector(
+              key: ValueKey<String>('node-index-${compNodeKey(n.id)}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                // The panel draws the box at once; the Graph panel's canvas
+                // picks it when it hears the ask.
+                ui.compGraphNode.value = (
+                  id: n.id,
+                  label: _boxName(n),
+                  picture: n.outputs
+                      .any((p) => p.portType == BridgePortType.image),
+                );
+                _askPick(n.id);
+              },
+              child: Container(
+                height: t.density.laneRow,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: t.surface2.withValues(alpha: lit),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      child: n.kind == BridgeCompNodeKind.fx
+                          ? lumitIcon(LumitIcon.fx,
+                              size: 12, color: t.textMuted)
+                          : lumitIcon(LumitIcon.nodes,
+                              size: 12, color: t.textMuted),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _boxName(n),
+                        style: t.body.copyWith(
+                            color: n.enabled ? t.textPrimary : t.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (n.customName != null)
+                      Text(engineLabel(n.label), style: t.kicker),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -784,39 +971,86 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         _ => box.customName ?? engineLabel(box.label),
       };
 
-  /// The panel's own strip: the kicker, the box's name, and how many of its
-  /// parameters a wire has taken over. The dock draws the tab bar above it,
-  /// and the strip matches the Graph panel's in height and colour so the two
-  /// columns of the workspace line up.
-  Widget _header(BuildContext context, String name) {
+  /// The panel's own strip: the box's enable tick, where it has one, the
+  /// layer or composition the box is on as a crumb that leads back to the
+  /// index, the box's name, and how many of its parameters a wire has taken
+  /// over. A right-click opens the box's menu. The dock draws the tab bar
+  /// above it, and the strip matches the Graph panel's in height and colour
+  /// so the two columns of the workspace line up.
+  Widget _header(
+    BuildContext context,
+    String name, {
+    String? crumb,
+    VoidCallback? onCrumb,
+    bool? enabled,
+    ValueChanged<bool>? onEnabled,
+    void Function(Offset at)? onMenu,
+  }) {
     final t = ThemeScope.of(context).theme;
-    return Container(
-      key: const ValueKey('node-header'),
-      height: graphToolbarHeight,
-      color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              name,
-              key: const ValueKey('node-name'),
-              style: t.body,
-              overflow: TextOverflow.ellipsis,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp:
+          onMenu == null ? null : (d) => onMenu(d.globalPosition),
+      child: Container(
+        key: const ValueKey('node-header'),
+        height: graphToolbarHeight,
+        color: t.surface1,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          children: [
+            if (enabled != null && onEnabled != null) ...[
+              fxEnableMark(
+                key: const ValueKey('node-enable'),
+                on: enabled,
+                onChanged: onEnabled,
+              ),
+              const SizedBox(width: 6),
+            ],
+            if (crumb != null) ...[
+              Flexible(
+                child: HoverMark(
+                  cursor: SystemMouseCursors.click,
+                  builder: (context, lit) => GestureDetector(
+                    key: const ValueKey('node-crumb'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onCrumb,
+                    child: Text(
+                      crumb,
+                      style: t.body.copyWith(
+                          color: Color.lerp(t.textMuted, t.textPrimary, lit)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text('›', style: t.body.copyWith(color: t.textMuted)),
+              ),
+            ],
+            Expanded(
+              flex: 2,
+              child: Text(
+                name,
+                key: const ValueKey('node-name'),
+                style: t.body,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          if (_driven.isNotEmpty)
-            Text(
-              l10n.nodeDrivenCount(_driven.length),
-              key: const ValueKey('node-driven-count'),
-              style: t.kicker,
-            ),
-        ],
+            if (_driven.isNotEmpty)
+              Text(
+                l10n.nodeDrivenCount(_driven.length),
+                key: const ValueKey('node-driven-count'),
+                style: t.kicker,
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _rows(
+    BuildContext context,
     LumitUiState ui,
     _Picked picked,
     LayerReference? layer,
@@ -870,57 +1104,132 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             },
           ),
         ),
-    ];
-    for (var i = 0; i < params.length; i++) {
-      final param = params[i];
-      final next = i + 1 < params.length ? params[i + 1] : null;
-      if (next != null &&
-          param.id.endsWith('_x') &&
-          next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
-          param.kind is BridgeParamKind_Float &&
-          next.kind is BridgeParamKind_Float &&
-          !drivenByExpression(_staged(id, param.id) ?? values[param.id]) &&
-          !drivenByExpression(_staged(id, next.id) ?? values[next.id])) {
-        final stem = pairStemOf(picked.info.name, param.id);
-        rows.add(EffectPointRowFrb(
-          key: ValueKey<String>('node-row-$id-${param.id}-pair'),
+      // Levels draws its histogram above its rows here as it does in Effect
+      // controls, through the same two writes.
+      if (picked.info.name == 'levels')
+        LevelsDisplayFrb(
+          key: ValueKey<String>('node-levels-display-$id'),
           effectId: id,
-          xParam: param,
-          yParam: next,
-          xValue: _staged(id, param.id) ?? values[param.id],
-          yValue: _staged(id, next.id) ?? values[next.id],
+          values: {
+            for (final p in params)
+              if ((_staged(id, p.id) ?? values[p.id]) case final v?) p.id: v,
+          },
           comp: ui.selectedComp!,
+          playheadFrame: playhead,
+          onWrite: _write,
+          onLive: _live,
+          channelColours: ui.workspace.themedEffectGraphs
+              ? null
+              : [for (final c in levelsChannels) curveChannelColour(c)],
+        ),
+    ];
+    List<Widget> rowsFor(List<BridgeParamInfo> run) {
+      final out = <Widget>[];
+      for (var i = 0; i < run.length; i++) {
+        final param = run[i];
+        final next = i + 1 < run.length ? run[i + 1] : null;
+        if (next != null &&
+            param.id.endsWith('_x') &&
+            next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
+            param.kind is BridgeParamKind_Float &&
+            next.kind is BridgeParamKind_Float &&
+            !drivenByExpression(_staged(id, param.id) ?? values[param.id]) &&
+            !drivenByExpression(_staged(id, next.id) ?? values[next.id])) {
+          final stem = pairStemOf(picked.info.name, param.id);
+          out.add(EffectPointRowFrb(
+            key: ValueKey<String>('node-row-$id-${param.id}-pair'),
+            effectId: id,
+            xParam: param,
+            yParam: next,
+            xValue: _staged(id, param.id) ?? values[param.id],
+            yValue: _staged(id, next.id) ?? values[next.id],
+            comp: ui.selectedComp!,
+            playheadFrame: playhead,
+            onSeek: (frame) => ui.playheadFrame.value = frame,
+            onWrite: _write,
+            onLive: _live,
+            onWritePair: _writeAll,
+            twoColumn: true,
+            linked: stem != null && picked.info.linkedPairs.contains(stem),
+            onToggleLink: stem == null || picked.driver
+                ? null
+                : () => _togglePairLink(picked, stem),
+          ));
+          i += 1;
+          continue;
+        }
+        out.add(EffectParamRowFrb(
+          key: ValueKey<String>('node-row-$id-${param.id}'),
+          effectId: id,
+          param: param,
+          value: _staged(id, param.id) ?? values[param.id],
+          comp: ui.selectedComp!,
+          ownerLayerId: owner,
+          ownerLayers: owners,
           playheadFrame: playhead,
           onSeek: (frame) => ui.playheadFrame.value = frame,
           onWrite: _write,
           onLive: _live,
-          onWritePair: _writeAll,
           twoColumn: true,
-          linked: stem != null && picked.info.linkedPairs.contains(stem),
-          onToggleLink: stem == null || picked.driver
-              ? null
-              : () => _togglePairLink(picked, stem),
+          siblings: values,
+          driven: _driven[param.id],
+          onAction: (e, p) => _press(picked, e, p),
         ));
+      }
+      return out;
+    }
+
+    // The engine's groups, as Effect controls draws them: a fold per named
+    // group, shut where the schema says so, and a group whose condition is
+    // unmet left out whole.
+    final groups = cachedListParameterGroups(picked.info.name);
+    final byFirstMember = {for (final g in groups) g.params.first: g};
+    final memberOf = {
+      for (final g in groups)
+        for (final m in g.params) m: g,
+    };
+    var i = 0;
+    while (i < params.length) {
+      final param = params[i];
+      final group = byFirstMember[param.id];
+      if (group == null) {
+        if (memberOf.containsKey(param.id)) {
+          rows.addAll(rowsFor([param]));
+          i += 1;
+          continue;
+        }
+        final flat = <BridgeParamInfo>[param];
         i += 1;
+        // A pair stays together when it is the next row along.
+        if (param.id.endsWith('_x') &&
+            i < params.length &&
+            !memberOf.containsKey(params[i].id)) {
+          flat.add(params[i]);
+          i += 1;
+        }
+        rows.addAll(rowsFor(flat));
         continue;
       }
-      rows.add(EffectParamRowFrb(
-        key: ValueKey<String>('node-row-$id-${param.id}'),
-        effectId: id,
-        param: param,
-        value: _staged(id, param.id) ?? values[param.id],
-        comp: ui.selectedComp!,
-        ownerLayerId: owner,
-        ownerLayers: owners,
-        playheadFrame: playhead,
-        onSeek: (frame) => ui.playheadFrame.value = frame,
-        onWrite: _write,
-        onLive: _live,
-        twoColumn: true,
-        siblings: values,
-        driven: _driven[param.id],
-        onAction: (e, p) => _press(picked, e, p),
+      final run = <BridgeParamInfo>[];
+      while (i < params.length && group.params.contains(params[i].id)) {
+        run.add(params[i]);
+        i += 1;
+      }
+      if (!paramGroupVisible(group, values)) continue;
+      if (group.label.isEmpty) {
+        rows.addAll(rowsFor(run));
+        continue;
+      }
+      final path = '$id/${group.label}';
+      final open = _groupOpen[path] ?? !group.collapsed;
+      rows.add(fxGroupHeaderRow(
+        context,
+        key: ValueKey<String>('node-group-$path'),
+        label: group.label,
+        open: open,
+        onToggle: () => setState(() => _groupOpen[path] = !open),
       ));
+      if (open) rows.addAll(rowsFor(run));
     }
     if (_statusCard(ui, picked, layer, playhead) case final card?) {
       rows.add(card);
