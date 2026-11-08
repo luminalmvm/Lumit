@@ -121,6 +121,18 @@ fn textured_disc_solves_to_its_analytic_shape() {
     .unwrap();
     let matte = solve_one(DW, DH, &rgb, &seeds);
     assert!(iou(&matte, &truth) >= 0.98, "IoU {}", iou(&matte, &truth));
+    // Grey only near the edge. Further out the matte is solid or empty, or
+    // the cut shows the plate through it.
+    let reach = RotoSettings::default().guide_radius as f32 * 2.0;
+    for y in 0..DH {
+        for x in 0..DW {
+            let d = (x as f32 + 0.5 - 64.0).hypot(y as f32 + 0.5 - 64.0) - DR;
+            let a = matte[(y * DW + x) as usize];
+            if d.abs() > reach {
+                assert!(a == 0.0 || a == 1.0, "grey {a} at ({x}, {y})");
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

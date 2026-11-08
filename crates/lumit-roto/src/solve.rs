@@ -22,7 +22,7 @@ pub struct RotoSolver {
     alpha_raw: Vec<f32>,
     filtered: Vec<f32>,
     band: Vec<f32>,
-    band_dilated: Vec<f32>,
+    hard: Vec<f32>,
     boxes: BoxScratch,
     guided: Guided,
 }
@@ -40,7 +40,7 @@ impl RotoSolver {
             alpha_raw: Vec::new(),
             filtered: Vec::new(),
             band: Vec::new(),
-            band_dilated: Vec::new(),
+            hard: Vec::new(),
             boxes: BoxScratch::default(),
             guided: Guided::default(),
         }
@@ -90,30 +90,41 @@ impl RotoSolver {
             &mut self.alpha_raw,
         );
 
+        // Each pixel goes to the nearer seed, and the filter reshapes that
+        // answer. Not `alpha_raw` itself, which is a ratio of two distances
+        // and drifts across the whole frame, so filtered it comes back grey
+        // everywhere. Under a Refine stroke neither side is claimed and the
+        // colours decide.
+        for (i, slot) in self.hard.iter_mut().enumerate() {
+            let a = self.alpha_raw.get(i).copied().unwrap_or(0.0);
+            *slot = if seeds.refine_at(i) {
+                0.5
+            } else if a > 0.5 {
+                1.0
+            } else {
+                0.0
+            };
+        }
         let radius = self.settings.guide_radius;
         self.guided.filter(
             frame,
-            &self.alpha_raw,
+            &self.hard,
             radius,
             self.settings.guide_eps,
             &mut self.filtered,
         );
 
-        // The band: where the segmentation was undecided, widened by the
-        // filter's own radius so its window has room to work. Everywhere else
-        // the answer is snapped, because a filter run over a solid interior
-        // greys it wherever the guide happens to have texture (§12's fence).
-        let half = self.settings.band;
-        for (i, slot) in self.band.iter_mut().enumerate() {
-            let a = self.alpha_raw.get(i).copied().unwrap_or(0.0);
-            *slot = if (a - 0.5).abs() < half { 1.0 } else { 0.0 };
-        }
-        box_mean(w, h, radius, &mut self.boxes, &mut self.band_dilated, |i| {
-            self.band[i]
+        // The band: within the filter's radius of the edge, where the window
+        // holds both sides. Everywhere else the answer is snapped, because a
+        // filter run over a solid interior greys it wherever the guide happens
+        // to have texture (§12's fence).
+        box_mean(w, h, radius, &mut self.boxes, &mut self.band, |i| {
+            self.hard.get(i).copied().unwrap_or(0.0)
         });
         for i in 0..n {
             let raw = self.alpha_raw.get(i).copied().unwrap_or(0.0);
-            let in_band = self.band_dilated.get(i).copied().unwrap_or(0.0) > 0.0;
+            let mixed = self.band.get(i).copied().unwrap_or(0.0);
+            let in_band = mixed > 0.0 && mixed < 1.0;
             let refine = seeds.refine_at(i);
             let value = if in_band || refine {
                 self.filtered.get(i).copied().unwrap_or(raw).clamp(0.0, 1.0)
@@ -142,7 +153,7 @@ impl RotoSolver {
             &mut self.alpha_raw,
             &mut self.filtered,
             &mut self.band,
-            &mut self.band_dilated,
+            &mut self.hard,
         ] {
             plane.clear();
             plane.resize(len, 0.0);
