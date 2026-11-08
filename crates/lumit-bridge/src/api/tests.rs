@@ -8,7 +8,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
-mod clip_edits;
+mod clip_edit_tests;
 
 use crate::api::{
     composition::{BridgeCompSettings, CompositionReference},
