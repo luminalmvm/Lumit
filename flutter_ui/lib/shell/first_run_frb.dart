@@ -1,20 +1,15 @@
-// The first-run screen: a few questions, asked once (docs/07 §13.1).
+// The first-run screen: a few questions, asked once.
 //
-// On the very first launch — a machine with no settings file — Lumit asks how
-// the user edits and what the interface should look like: the style, the
-// colour scheme, where the toolbar stands and how much the chrome moves. The
-// After Effects and Vegas answers can load that editor's shortcuts too, and
-// the Premiere Pro or Resolve answer opens the Cut workspace. One page, no
-// steps.
-// Every setting it writes is an ordinary row in Settings
-// afterwards — the editing pair under Interface ▸ Editing, the look under
-// Appearance and Interface, the update tick under General ▸ Updates — so
-// nothing here is a decision anybody is stuck with.
+// On the very first launch, a machine with no settings file, Lumit asks which
+// workspace to start in. That is the one real question, so nothing is picked
+// for it and Continue waits for an answer. Under it sit Lumit's own defaults,
+// each marked as the one to keep unless you know you want another: the
+// shortcuts, the style, the colour scheme and the language.
 //
-// The look is applied as it is chosen, so the window behind the screen and the
-// screen itself are the preview. Skipping puts the look back to what it was.
-
-import 'dart:math' as math;
+// Every setting it writes is an ordinary row in Settings afterwards, so
+// nothing here is a decision anybody is stuck with. The look is applied as it
+// is chosen, so the window behind the screen and the workspace drawings are
+// the preview. Skipping puts the look back to what it was.
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
@@ -23,32 +18,22 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../state/keymap.dart';
-import '../state/settings.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/theme_swatches.dart';
 
-/// Where the person is coming from: the three cards of the first question.
-enum FirstRunEditor {
-  afterEffects,
-  vegas,
+/// The workspaces offered, in the strip's order.
+const _workspaces = [
+  WorkspacePreset.edit,
+  WorkspacePreset.cut,
+  WorkspacePreset.nodes,
+];
 
-  /// Premiere Pro or Resolve: cutting footage, in the Cut workspace.
-  cut,
-}
-
-/// What the screen comes back with: which editor, and whether Lumit should
-/// keep an eye out for new versions. The tick is on the screen rather than
-/// only in Settings because it is a decision about how Lumit behaves from now
-/// on, which is exactly what this screen is for. A null editor is Skip.
-/// [sequenceLayers] is false when the tick on the Vegas card asks for the
-/// Retime graph alone, and means nothing with the other answers.
-/// [shortcuts] is the chosen card's tick for loading that editor's keys.
+/// What the screen comes back with. A null [workspace] is Skip.
 typedef FirstRunAnswer = ({
-  FirstRunEditor? editor,
-  bool sequenceLayers,
-  bool shortcuts,
+  WorkspacePreset? workspace,
+  BridgeKeymapPreset keys,
   bool autoUpdate,
 });
 
@@ -56,64 +41,50 @@ typedef FirstRunAnswer = ({
 /// answer. Does nothing at all on any later launch, so callers can call it
 /// unconditionally at start-up.
 ///
-/// [keymap] is what the After Effects or Vegas answer loads its shortcuts
-/// into, when its tick asks for them.
+/// [keymap] is what the After Effects or Vegas shortcuts load into.
 Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
     {KeymapState? keymap}) async {
   if (workspace.firstRunDone) return;
   // The look as it stood, which is what Skip goes back to.
   final shape = workspace.themeShape;
   final scheme = workspace.themeChoice;
-  final toolBar = workspace.interface.toolBarPosition;
-  final motion = workspace.animationLevel;
+  final language = workspace.interface.language;
   final answer = await showLumitModal<FirstRunAnswer>(
     context: context,
-    // Tall enough for three cards' words and every row under them.
-    initialSize: const Size(620, 600),
+    // An id, so a stray click beside the window doesn't skip the questions.
+    id: 'first-run',
+    initialSize: const Size(640, 440),
     minSize: const Size(520, 380),
     builder: (close) => _FirstRun(workspace: workspace, onChoose: close),
   );
-  // A null answer is a click on the scrim, which is the same as Skip: the
-  // questions have been put, so they are not put again, and the defaults
-  // stand — the After Effects shape, with update checks on.
+  // Escape is the same as Skip: the questions have been put, so they are not
+  // put again, and Lumit's defaults stand.
   workspace.setAutoUpdate(answer?.autoUpdate ?? true);
-  final editor = answer?.editor;
-  switch (editor) {
-    case null:
-      workspace.setShape(shape);
-      workspace.choose(scheme);
-      workspace.interface.toolBarPosition = toolBar;
-      workspace.setAnimationLevel(motion);
-      workspace.skipFirstRun();
-    case FirstRunEditor.afterEffects:
-      workspace.setEditingStyle(speedGraph: false, sequenceLayers: false);
-      // The preset the After Effects button on Settings > Shortcuts loads.
-      if (answer!.shortcuts) {
-        await keymap?.loadPreset(BridgeKeymapPreset.afterEffects);
-      }
-    case FirstRunEditor.vegas:
-      workspace.setEditingStyle(
-          speedGraph: true, sequenceLayers: answer!.sequenceLayers);
-      if (answer.shortcuts) {
-        await keymap?.loadPreset(BridgeKeymapPreset.vegas);
-      }
-      // Vegas's mouse, and a clip dropped over another crossfading into it
-      // rather than cutting it away.
-      workspace.interface
-        ..cutVegasDrags = true
-        ..cutAutoCrossfade = true;
-      workspace.settingsChanged();
-      // Cut is where a Vegas editor works: tracks, clips and a split that
-      // stays on its track.
-      workspace.applyWorkspacePreset(WorkspacePreset.cut);
-    case FirstRunEditor.cut:
-      // Sequence layers, the Retime graph as it is, and no keymap preset: the
-      // Cut timeline's own keys already follow an editor's habits. The
-      // arrangement is the card's other half, so it is applied here rather
-      // than left for the person to find in the workspace strip.
-      workspace.setEditingStyle(speedGraph: false, sequenceLayers: true);
-      workspace.applyWorkspacePreset(WorkspacePreset.cut);
+  final preset = answer?.workspace;
+  if (answer == null || preset == null) {
+    workspace.setShape(shape);
+    workspace.choose(scheme);
+    workspace.interface.language = language;
+    workspace.settingsChanged();
+    workspace.skipFirstRun();
+    return;
   }
+  final vegas = answer.keys == BridgeKeymapPreset.vegas;
+  // Cut brings footage in on Sequence layers, as an editor expects, and the
+  // Vegas keys bring Vegas's speed graph with them.
+  workspace.setEditingStyle(
+      speedGraph: vegas, sequenceLayers: preset == WorkspacePreset.cut);
+  if (answer.keys != BridgeKeymapPreset.lumit) {
+    await keymap?.loadPreset(answer.keys);
+  }
+  if (vegas) {
+    // Vegas's mouse too, and a clip dropped over another crossfades into it.
+    workspace.interface
+      ..cutVegasDrags = true
+      ..cutAutoCrossfade = true;
+    workspace.settingsChanged();
+  }
+  workspace.applyWorkspacePreset(preset);
 }
 
 class _FirstRun extends StatefulWidget {
@@ -126,30 +97,17 @@ class _FirstRun extends StatefulWidget {
 }
 
 class _FirstRunState extends State<_FirstRun> {
-  /// After Effects to begin with, which is what Lumit is with nothing set.
-  FirstRunEditor _editor = FirstRunEditor.afterEffects;
+  /// Nothing to begin with: this is the one question to answer yourself.
+  WorkspacePreset? _workspace;
 
-  /// The tick on the Vegas card: the Retime graph is all that changes, and
-  /// video goes on arriving as a layer. Clear to begin with, since the two
-  /// together are what the card describes.
-  bool _retimeOnly = false;
+  BridgeKeymapPreset _keys = BridgeKeymapPreset.lumit;
 
-  /// The ticks for loading After Effects' or Vegas' own shortcuts. After
-  /// Effects' is clear to begin with, so Lumit's keys stay unless asked;
-  /// Vegas's is ticked, since S has to split for a Vegas hand from the start.
-  bool _aeKeys = false;
-  bool _vegasKeys = true;
-
-  /// Ticked to begin with. Nothing is downloaded either way — this is
-  /// permission to look, not permission to fetch.
+  /// Permission to look for new versions, not to fetch them.
   bool _autoUpdate = true;
 
-  /// Answer with both halves at once: the editor, or null for Skip, and the
-  /// update tick as it stands.
-  void _answer(FirstRunEditor? editor) => widget.onChoose((
-        editor: editor,
-        sequenceLayers: !_retimeOnly,
-        shortcuts: editor == FirstRunEditor.vegas ? _vegasKeys : _aeKeys,
+  void _answer(WorkspacePreset? workspace) => widget.onChoose((
+        workspace: workspace,
+        keys: _keys,
         autoUpdate: _autoUpdate,
       ));
 
@@ -166,7 +124,7 @@ class _FirstRunState extends State<_FirstRun> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                 child: Text(l10n.firstRunSetup,
                     style: t.bodyStrong.copyWith(color: t.textPrimary)),
               ),
@@ -174,110 +132,72 @@ class _FirstRunState extends State<_FirstRun> {
               // question is ever out of reach.
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _heading(t, l10n.firstRunTitle),
-                      // Three equal shares of the row, and every card as
-                      // tall as the tallest: each drawing is as wide as its
-                      // card and the words wrap under it, so the row takes
-                      // a narrow window by growing down, never sideways.
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(t.kickerCase(l10n.settingsGroupWorkspace),
+                            style: t.kicker),
+                      ),
+                      // Equal shares, every card as tall as the tallest, so a
+                      // narrow window grows the row down, never sideways.
                       IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: _Choice(
-                                id: 'first-run-ae',
-                                editor: FirstRunEditor.afterEffects,
-                                title: l10n.keymapAfterEffects,
-                                blurb: l10n.firstRunAfterEffects,
-                                chosen: _editor == FirstRunEditor.afterEffects,
-                                onTap: () => setState(
-                                    () => _editor = FirstRunEditor.afterEffects),
-                                options: [
-                                  (
-                                    label: l10n.firstRunAfterEffectsShortcuts,
-                                    on: _aeKeys,
-                                    set: (on) => setState(() {
-                                      _aeKeys = on;
-                                      _editor = FirstRunEditor.afterEffects;
-                                    }),
-                                  ),
-                                ],
+                            for (final preset in _workspaces) ...[
+                              if (preset != _workspaces.first)
+                                const SizedBox(width: 10),
+                              Expanded(
+                                child: _WorkspaceChoice(
+                                  preset: preset,
+                                  chosen: _workspace == preset,
+                                  onTap: () =>
+                                      setState(() => _workspace = preset),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _Choice(
-                                id: 'first-run-vegas',
-                                editor: FirstRunEditor.vegas,
-                                title: l10n.firstRunVegasName,
-                                blurb: l10n.firstRunVegas,
-                                chosen: _editor == FirstRunEditor.vegas,
-                                onTap: () => setState(
-                                    () => _editor = FirstRunEditor.vegas),
-                                // Ticking or clearing either is choosing
-                                // Vegas: they are questions about that answer.
-                                options: [
-                                  (
-                                    label: l10n.firstRunVegasRetimeOnly,
-                                    on: _retimeOnly,
-                                    set: (on) => setState(() {
-                                      _retimeOnly = on;
-                                      _editor = FirstRunEditor.vegas;
-                                    }),
-                                  ),
-                                  (
-                                    label: l10n.firstRunVegasShortcuts,
-                                    on: _vegasKeys,
-                                    set: (on) => setState(() {
-                                      _vegasKeys = on;
-                                      _editor = FirstRunEditor.vegas;
-                                    }),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _Choice(
-                                id: 'first-run-cut',
-                                editor: FirstRunEditor.cut,
-                                title: l10n.firstRunCutName,
-                                blurb: l10n.firstRunCut,
-                                chosen: _editor == FirstRunEditor.cut,
-                                onTap: () => setState(
-                                    () => _editor = FirstRunEditor.cut),
-                              ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
-                      _heading(t, l10n.firstRunStyle),
-                      Row(
-                        children: [
-                          for (final shape in ThemeShape.values) ...[
-                            if (shape != ThemeShape.values.first)
-                              const SizedBox(width: 10),
-                            Expanded(
-                              child: _StyleChoice(
-                                shape: shape,
-                                // Drawn in the colours in force, so the three
-                                // differ by their shape and nothing else.
-                                theme: workspace.theme.copyWith(
-                                  shape: shape,
-                                  tokens: ShapeTokens.of(shape),
-                                ),
-                                chosen: workspace.themeShape == shape,
-                                onTap: () => workspace.setShape(shape),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                      const SizedBox(height: 18),
+                      Container(height: 1, color: t.hairline),
                       const SizedBox(height: 14),
+                      _row(
+                        t,
+                        l10n.settingsPageShortcuts,
+                        _Chips<BridgeKeymapPreset>(
+                          id: 'first-run-keys',
+                          options: BridgeKeymapPreset.values,
+                          value: _keys,
+                          recommended: BridgeKeymapPreset.lumit,
+                          label: (keys) => switch (keys) {
+                            BridgeKeymapPreset.lumit => l10n.firstRunLumit,
+                            BridgeKeymapPreset.afterEffects =>
+                              l10n.keymapAfterEffects,
+                            BridgeKeymapPreset.vegas => l10n.firstRunVegasName,
+                          },
+                          onChanged: (keys) => setState(() => _keys = keys),
+                        ),
+                      ),
+                      _row(
+                        t,
+                        l10n.firstRunStyle,
+                        _Chips<ThemeShape>(
+                          id: 'first-run-style',
+                          options: ThemeShape.values,
+                          value: workspace.themeShape,
+                          recommended: ThemeShape.studio,
+                          label: (shape) => switch (shape) {
+                            ThemeShape.studio => l10n.shapeStudio,
+                            ThemeShape.desk => l10n.shapeDesk,
+                            ThemeShape.lantern => l10n.shapeLantern,
+                          },
+                          onChanged: workspace.setShape,
+                        ),
+                      ),
                       _row(
                         t,
                         l10n.settingsColourScheme,
@@ -308,35 +228,24 @@ class _FirstRunState extends State<_FirstRun> {
                       ),
                       _row(
                         t,
-                        l10n.settingsToolBarPosition,
-                        _Chips<ToolBarPosition>(
-                          id: 'first-run-toolbar',
-                          options: ToolBarPosition.values,
-                          value: workspace.interface.toolBarPosition,
-                          label: (position) => switch (position) {
-                            ToolBarPosition.auto => l10n.styleChoice,
-                            ToolBarPosition.top => l10n.toolBarTop,
-                            ToolBarPosition.left => l10n.toolBarLeft,
-                          },
-                          onChanged: (position) {
-                            workspace.interface.toolBarPosition = position;
-                            workspace.settingsChanged();
-                          },
-                        ),
-                      ),
-                      _row(
-                        t,
-                        l10n.settingsMotion,
-                        _Chips<AnimationLevel>(
-                          id: 'first-run-motion',
-                          options: AnimationLevel.values,
-                          value: workspace.animationLevel,
-                          label: (level) => switch (level) {
-                            AnimationLevel.all => l10n.motionFull,
-                            AnimationLevel.minimal => l10n.motionMinimal,
-                            AnimationLevel.none => l10n.none,
-                          },
-                          onChanged: workspace.setAnimationLevel,
+                        l10n.settingsLanguage,
+                        SizedBox(
+                          width: 190,
+                          height: _rowControl,
+                          child: BareDropdown<String?>(
+                            key: const ValueKey('first-run-language'),
+                            value: workspace.interface.language,
+                            options: [null, ...languageNames.keys],
+                            // Each language names itself, so the list reads
+                            // the same whichever one is in force.
+                            label: (tag) => tag == null
+                                ? l10n.languageFollowSystem
+                                : languageNames[tag]!,
+                            onChanged: (tag) {
+                              workspace.interface.language = tag;
+                              workspace.settingsChanged();
+                            },
+                          ),
                         ),
                       ),
                     ],
@@ -344,11 +253,13 @@ class _FirstRunState extends State<_FirstRun> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
                 child: Row(
                   children: [
                     // The update tick, a smaller question. A page is newest.
-                    if (kIsWeb) const Spacer() else ...[
+                    if (kIsWeb)
+                      const Spacer()
+                    else ...[
                       HouseCheckbox(
                         key: const ValueKey('first-run-auto-update'),
                         value: _autoUpdate,
@@ -374,7 +285,8 @@ class _FirstRunState extends State<_FirstRun> {
                     HouseButton(
                       key: const ValueKey('first-run-continue'),
                       primary: true,
-                      onPressed: () => _answer(_editor),
+                      onPressed:
+                          _workspace == null ? null : () => _answer(_workspace),
                       child: Text(l10n.firstRunContinue),
                     ),
                   ],
@@ -387,15 +299,9 @@ class _FirstRunState extends State<_FirstRun> {
     );
   }
 
-  /// The word over a question.
-  Widget _heading(LumitTheme t, String text) => Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 6),
-        child: Text(t.kickerCase(text), style: t.kicker),
-      );
-
   /// A question that is one line: its name, then its control.
   Widget _row(LumitTheme t, String label, Widget control) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: 10),
         child: Row(
           children: [
             SizedBox(width: 130, child: Text(label, style: t.body)),
@@ -408,31 +314,23 @@ class _FirstRunState extends State<_FirstRun> {
 /// How tall a one-line question's control stands.
 const double _rowControl = 22;
 
-/// How tall the editing drawings stand. Each is as wide as its card.
-const double _editingPicture = 66;
-
-/// The style drawings' size, the proportions of a window.
-const Size _silhouette = Size(132, 84);
-
-/// A big button: one of the answers that has more to show than a word.
+/// A big button: one of the answers that has a picture to show.
 ///
 /// Its own surface and not the house button's, because that is an action's
 /// face and a stadium under Lantern, which is the wrong shape for something
-/// holding a picture or a paragraph. A card on a page wears the section's
-/// corner, as the welcome screen's do. The one in force takes the accent as
-/// an outline and a tint in every style.
+/// holding a picture. A card on a page wears the section's corner, as the
+/// welcome screen's do. The one in force takes the accent as an outline and a
+/// tint in every style.
 class _Card extends StatefulWidget {
   final String id;
   final bool chosen;
   final VoidCallback onTap;
-  final EdgeInsets padding;
   final Widget child;
 
   const _Card({
     required this.id,
     required this.chosen,
     required this.onTap,
-    required this.padding,
     required this.child,
   });
 
@@ -442,461 +340,146 @@ class _Card extends StatefulWidget {
 
 class _CardState extends State<_Card> {
   bool _hover = false;
+  bool _down = false;
 
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     final step = _hover ? scope.motion.hoverIn : scope.motion.hoverOut;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        key: ValueKey<String>(widget.id),
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: step.duration,
-          curve: step.curve,
-          padding: widget.padding,
-          decoration: BoxDecoration(
-            color: widget.chosen
-                ? t.accent.withValues(alpha: _hover ? 0.24 : 0.16)
-                : _hover
-                    ? t.surface4
-                    : t.surface2,
-            borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
-            border: Border.all(
-              color: widget.chosen
-                  ? t.accent
-                  : _hover
-                      ? t.hairlineStrong
-                      : t.hairline,
+    // A press gives a little, as the house button's does: at Full only, and
+    // never in Desk, whose controls stop dead.
+    final gives = scope.animationLevel == AnimationLevel.all &&
+        t.shape != ThemeShape.desk;
+    return Semantics(
+      button: true,
+      selected: widget.chosen,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          key: ValueKey<String>(widget.id),
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => setState(() => _down = true),
+          onTapUp: (_) => setState(() => _down = false),
+          onTapCancel: () => setState(() => _down = false),
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: gives && _down ? 0.98 : 1,
+            duration: scope.motion.hoverIn.duration,
+            curve: scope.motion.hoverIn.curve,
+            child: AnimatedContainer(
+              duration: step.duration,
+              curve: step.curve,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: widget.chosen
+                    ? t.accent.withValues(alpha: _hover ? 0.24 : 0.16)
+                    : _hover
+                        ? t.surface4
+                        : t.surface2,
+                borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+                border: Border.all(
+                  color: widget.chosen
+                      ? t.accent
+                      : _hover
+                          ? t.hairlineStrong
+                          : t.hairline,
+                ),
+              ),
+              child: widget.child,
             ),
           ),
-          child: widget.child,
         ),
       ),
     );
   }
 }
 
-/// One answer to how you edit: a tall card, because the blurb is as much a
-/// part of the choice as the name over it, with a drawing of the Timeline as
-/// that editor has it across the top.
-class _Choice extends StatelessWidget {
-  final String id;
-
-  /// Which of the three the drawing is of.
-  final FirstRunEditor editor;
-  final String title;
-  final String blurb;
+/// One workspace: a drawing of the window as it arranges it, in the style in
+/// force, then its name and what it is for.
+class _WorkspaceChoice extends StatelessWidget {
+  final WorkspacePreset preset;
   final bool chosen;
   final VoidCallback onTap;
 
-  /// Ticks at the foot of the card, for what else the answer can do: each
-  /// one's words, whether it is on, and what changes it.
-  final List<({String label, bool on, ValueChanged<bool> set})> options;
-
-  const _Choice({
-    required this.id,
-    required this.editor,
-    required this.title,
-    required this.blurb,
+  const _WorkspaceChoice({
+    required this.preset,
     required this.chosen,
     required this.onTap,
-    this.options = const [],
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // The drawing's corner sits inside the card's, the padding between them.
+    final inner = (t.tokens.sectionRadius - 8).clamp(0.0, 8.0);
     return _Card(
-      id: id,
+      id: 'first-run-workspace-${preset.name}',
       chosen: chosen,
       onTap: onTap,
-      padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: double.infinity,
-            height: _editingPicture,
-            child: CustomPaint(painter: _EditingPainter(editor, t)),
+          AspectRatio(
+            aspectRatio: _drawing.aspectRatio,
+            child: CustomPaint(
+                painter: _WorkspacePainter(preset, t, inner.toDouble())),
           ),
-          const SizedBox(height: 8),
-          Text(title, style: t.bodyPrimary),
-          const SizedBox(height: 4),
-          Text(blurb, style: t.small.copyWith(color: t.textSecondary)),
-          for (final (i, option) in options.indexed) ...[
-            const SizedBox(height: 8),
-            Row(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 8, 2, 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                HouseCheckbox(
-                  key: ValueKey<String>('$id-option-$i'),
-                  value: option.on,
-                  onChanged: option.set,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(option.label,
-                      style: t.small.copyWith(color: t.textPrimary)),
+                Text(preset.title, style: t.bodyPrimary),
+                const SizedBox(height: 2),
+                Text(
+                  switch (preset) {
+                    WorkspacePreset.cut => l10n.firstRunWorkspaceCut,
+                    WorkspacePreset.nodes => l10n.firstRunWorkspaceNodes,
+                    _ => l10n.firstRunWorkspaceEdit,
+                  },
+                  style: t.small.copyWith(color: t.textSecondary),
                 ),
               ],
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// The Timeline in outline, as one way of editing has it.
-///
-/// What differs between the three is how footage is handled once it is in,
-/// so that is what is drawn. After Effects: the graph open in place of the
-/// bars, with one curve rising through it from one key to the next, which is
-/// the moment of the source against time. Vegas: three tracks of clips, one
-/// of them cut in two, and one carrying its speed as a line along the clip
-/// that dips and comes back up between its points. Premiere Pro or Resolve:
-/// rows of picture clips over rows of sound clips, with one picture clip and
-/// its sound clip lit together as the pair that moves as one.
-class _EditingPainter extends CustomPainter {
-  final FirstRunEditor editor;
-  final LumitTheme theme;
+/// The size the workspace drawings are made at, then scaled to the card.
+const Size _drawing = Size(160, 100);
 
-  const _EditingPainter(this.editor, this.theme);
+/// The window in outline, as one workspace arranges it and one style draws it.
+///
+/// The panes come from the workspace's own factory layout, so the drawing can
+/// never disagree with what Continue opens. Each pane carries a hint of what
+/// it holds: a picture, layer bars, clips on tracks, nodes and their wires,
+/// faders, or a few rows. The style shows in the tools (a strip, a rail or a
+/// pill) and in whether panes meet flush or stand apart as cards.
+class _WorkspacePainter extends CustomPainter {
+  final WorkspacePreset preset;
+  final LumitTheme theme;
+  final double corner;
+
+  const _WorkspacePainter(this.preset, this.theme, this.corner);
 
   @override
   void paint(Canvas canvas, Size size) {
     final t = theme;
-    final desk = t.shape == ThemeShape.desk;
     final lantern = t.shape == ThemeShape.lantern;
-    final window = RRect.fromRectAndRadius(
-        Offset.zero & size, Radius.circular(desk ? 0 : (lantern ? 5 : 3)));
+    final desk = t.shape == ThemeShape.desk;
+    final window =
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(corner));
     canvas.save();
     canvas.clipRRect(window);
-    canvas.drawRect(Offset.zero & size, Paint()..color = t.surface1);
-
-    final seam = Paint()..color = t.hairlineStrong;
-    final mark = Paint()..color = t.textMuted;
-
-    // The names down the left and the ruler along the top, as all three have
-    // them.
-    const ruler = 8.0;
-    final names = (size.width *
-            (editor == FirstRunEditor.afterEffects ? 0.27 : 0.2))
-        .roundToDouble();
-    final lanes = Rect.fromLTRB(names + 1, ruler + 1, size.width, size.height);
-    canvas.drawRect(
-        Rect.fromLTWH(0, 0, size.width, ruler), Paint()..color = t.surface2);
-    for (var x = lanes.left + 9; x < size.width; x += 18) {
-      canvas.drawRect(Rect.fromLTWH(x, ruler - 3, 1, 3), mark);
-    }
-    canvas.drawRect(Rect.fromLTWH(0, ruler, size.width, 1), seam);
-    canvas.drawRect(Rect.fromLTWH(names, 0, 1, size.height), seam);
-
-    final corner = lantern ? 2.0 : (desk ? 0.0 : 1.0);
-    switch (editor) {
-      case FirstRunEditor.afterEffects:
-        _graph(canvas, t, lanes, names);
-      case FirstRunEditor.vegas:
-        _tracks(canvas, t, lanes, names, corner);
-      case FirstRunEditor.cut:
-        _cut(canvas, t, lanes, names, corner);
-    }
-    canvas.restore();
-    canvas.drawRRect(
-      window.deflate(0.5),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = t.hairlineStrong,
-    );
-  }
-
-  /// A layer with its property twirled open, and the graph where the bars
-  /// would be.
-  void _graph(Canvas canvas, LumitTheme t, Rect lanes, double names) {
-    final lit = Paint()..color = t.accent;
-    final mark = Paint()..color = t.textMuted;
-    final faint = Paint()..color = t.hairline;
-    final row = lanes.height / 3;
-    for (var i = 0; i < 3; i++) {
-      final y = lanes.top + row * i + row / 2 - 1;
-      // The middle row is the property the graph is drawing, set in under
-      // its layer.
-      final inset = i == 1 ? 13.0 : 6.0;
-      canvas.drawRect(
-          Rect.fromLTWH(inset, y, math.max(4, names - inset - 8 - i * 5), 2),
-          i == 1 ? lit : mark);
-    }
-    // The graph's ground: a few lines each way.
-    for (var i = 1; i < 4; i++) {
-      canvas.drawRect(
-          Rect.fromLTWH(
-              lanes.left, lanes.top + lanes.height * i / 4, lanes.width, 1),
-          faint);
-    }
-    for (var i = 1; i < 5; i++) {
-      canvas.drawRect(
-          Rect.fromLTWH(
-              lanes.left + lanes.width * i / 5, lanes.top, 1, lanes.height),
-          faint);
-    }
-    // One curve from a key low on the left to a key high on the right,
-    // leaving and arriving level. Its handles lie flat, so it never turns
-    // back on itself.
-    final from = Offset(lanes.left + 12, lanes.bottom - 9);
-    final to = Offset(lanes.right - 12, lanes.top + 8);
-    final reach = (to.dx - from.dx) * 0.42;
-    final handle = Paint()
-      ..color = t.textMuted
-      ..strokeWidth = 1;
-    final leaving = Offset(from.dx + reach * 0.6, from.dy);
-    final arriving = Offset(to.dx - reach * 0.6, to.dy);
-    canvas.drawLine(from, leaving, handle);
-    canvas.drawLine(to, arriving, handle);
-    canvas.drawCircle(leaving, 1.6, mark);
-    canvas.drawCircle(arriving, 1.6, mark);
-    canvas.drawPath(
-      Path()
-        ..moveTo(from.dx, from.dy)
-        ..cubicTo(from.dx + reach, from.dy, to.dx - reach, to.dy, to.dx, to.dy),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.75
-        ..strokeCap = StrokeCap.round
-        ..color = t.accent,
-    );
-    for (final key in [from, to]) {
-      canvas.drawRect(Rect.fromCenter(center: key, width: 5, height: 5), lit);
-    }
-  }
-
-  /// Three tracks of clips. The middle one stands taller and wears its speed.
-  void _tracks(
-      Canvas canvas, LumitTheme t, Rect lanes, double names, double corner) {
-    final seam = Paint()..color = t.hairlineStrong;
-    final mark = Paint()..color = t.textMuted;
-    final clip = Paint()..color = t.surface4;
-    final radius = Radius.circular(corner);
-    final unit = lanes.height / 3.8;
-    final heights = [unit, unit * 1.8, unit];
-    var top = lanes.top;
-    for (var i = 0; i < 3; i++) {
-      final track = Rect.fromLTWH(lanes.left, top, lanes.width, heights[i]);
-      top = track.bottom;
-      if (i > 0) {
-        canvas.drawRect(Rect.fromLTWH(0, track.top, lanes.right, 1), seam);
-      }
-      // The track's name and its two switches.
-      canvas.drawRect(
-          Rect.fromLTWH(5, track.center.dy - 1, math.max(4, names - 24), 2),
-          mark);
-      for (var b = 0; b < 2; b++) {
-        canvas.drawRect(
-            Rect.fromLTWH(names - 14 + b * 6.0, track.center.dy - 2, 3.5, 3.5),
-            mark);
-      }
-      final body = track.deflate(2.5);
-      RRect piece(double from, double to) => RRect.fromRectAndRadius(
-          Rect.fromLTRB(body.left + body.width * from, body.top,
-              body.left + body.width * to, body.bottom),
-          radius);
-      switch (i) {
-        case 0:
-          // One piece of footage, cut in two.
-          canvas.drawRRect(piece(0.03, 0.44), clip);
-          canvas.drawRRect(piece(0.45, 0.8), clip);
-        case 1:
-          final speed = piece(0.1, 0.97);
-          canvas.drawRRect(
-              speed, Paint()..color = t.accent.withValues(alpha: 0.2));
-          _speed(canvas, t, speed.outerRect.deflate(4));
-        default:
-          canvas.drawRRect(piece(0.03, 0.62), clip);
-      }
-    }
-  }
-
-  /// A clip's speed along it: from each point the line dips and comes back up
-  /// to the next, so the whole of it reads as a run of bowls joined at their
-  /// rims.
-  void _speed(Canvas canvas, LumitTheme t, Rect room) {
-    // As many bowls as stand about twice as wide as they are deep.
-    final count = math.max(2, (room.width / (room.height * 2.4)).round());
-    final width = room.width / count;
-    // A cubic with both handles at one depth reaches three quarters of the
-    // way to it, so the handles go a third deeper than the bowl.
-    final deep = room.top + room.height / 0.75;
-    final line = Path()..moveTo(room.left, room.top);
-    for (var i = 0; i < count; i++) {
-      final from = room.left + width * i;
-      line.cubicTo(from + width * 0.14, deep, from + width * 0.86, deep,
-          from + width, room.top);
-    }
-    canvas.drawPath(
-      line,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round
-        ..color = t.accent,
-    );
-    final point = Paint()..color = t.accent;
-    for (var i = 0; i <= count; i++) {
-      canvas.drawCircle(Offset(room.left + width * i, room.top), 2, point);
-    }
-  }
-
-  /// Two rows of picture clips over two rows of sound clips, a seam between
-  /// the kinds. The pair across that seam is lit: a picture clip and the
-  /// sound that came in with it, held as one.
-  void _cut(
-      Canvas canvas, LumitTheme t, Rect lanes, double names, double corner) {
-    final seam = Paint()..color = t.hairlineStrong;
-    final mark = Paint()..color = t.textMuted;
-    final clip = Paint()..color = t.surface4;
-    final held = Paint()..color = t.accent.withValues(alpha: 0.2);
-    final lit = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..color = t.accent;
-    final radius = Radius.circular(corner);
-    final row = lanes.height / 4;
-    for (var i = 0; i < 4; i++) {
-      final track =
-          Rect.fromLTWH(lanes.left, lanes.top + row * i, lanes.width, row);
-      // The seam between picture and sound is the one drawn the whole way
-      // across, names included; the others are the lanes' own.
-      if (i > 0) {
-        canvas.drawRect(
-            Rect.fromLTRB(
-                i == 2 ? 0 : lanes.left, track.top, lanes.right, track.top + 1),
-            seam);
-      }
-      // The row's name and its switch.
-      canvas.drawRect(
-          Rect.fromLTWH(5, track.center.dy - 1, math.max(4, names - 18), 2),
-          mark);
-      canvas.drawRect(
-          Rect.fromLTWH(names - 9, track.center.dy - 2, 3.5, 3.5), mark);
-      final body = track.deflate(2);
-      final sound = i >= 2;
-      RRect piece(double from, double to) => RRect.fromRectAndRadius(
-          Rect.fromLTRB(body.left + body.width * from, body.top,
-              body.left + body.width * to, body.bottom),
-          radius);
-      // A sound clip wears a line along its middle, the flat of its wave.
-      void wave(RRect box, Paint paint) => canvas.drawRect(
-          Rect.fromLTRB(box.left + 3, box.outerRect.center.dy - 0.5,
-              box.right - 3, box.outerRect.center.dy + 0.5),
-          paint);
-      switch (i) {
-        case 0:
-          canvas.drawRRect(piece(0.03, 0.34), clip);
-          canvas.drawRRect(piece(0.36, 0.7), clip);
-        case 1 || 2:
-          // The pair: the same stretch on the lowest picture row and the
-          // first sound row, lit together.
-          final pair = piece(0.3, 0.64);
-          canvas.drawRRect(pair, held);
-          canvas.drawRRect(pair.deflate(0.5), lit);
-          if (sound) wave(pair, Paint()..color = t.accent);
-        default:
-          final first = piece(0.03, 0.42);
-          final second = piece(0.46, 0.9);
-          canvas.drawRRect(first, clip);
-          canvas.drawRRect(second, clip);
-          wave(first, mark);
-          wave(second, mark);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_EditingPainter old) =>
-      old.editor != editor || old.theme != theme;
-}
-
-/// One style: a drawing of the window as that style lays it out, with its
-/// name under it, and the whole of it the button.
-class _StyleChoice extends StatelessWidget {
-  final ThemeShape shape;
-
-  /// The theme the drawing is made in: this style's shape, the colours in
-  /// force.
-  final LumitTheme theme;
-  final bool chosen;
-  final VoidCallback onTap;
-
-  const _StyleChoice({
-    required this.shape,
-    required this.theme,
-    required this.chosen,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return _Card(
-      id: 'first-run-style-${shape.name}',
-      chosen: chosen,
-      onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: CustomPaint(
-              size: _silhouette,
-              painter: _SilhouettePainter(shape, theme),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            switch (shape) {
-              ThemeShape.studio => l10n.shapeStudio,
-              ThemeShape.desk => l10n.shapeDesk,
-              ThemeShape.lantern => l10n.shapeLantern,
-            },
-            style: t.bodyPrimary,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The window in outline, as one style arranges it.
-///
-/// Three things tell the styles apart at this size, and they are what is
-/// drawn. Studio: a tool strip across the top and panes meeting flush with a
-/// hairline between them. Desk: the same flush panes, square, with the tools
-/// on a rail down the left. Lantern: the panes as rounded cards standing apart
-/// in a room, with the tools in a pill.
-class _SilhouettePainter extends CustomPainter {
-  final ThemeShape shape;
-  final LumitTheme theme;
-
-  const _SilhouettePainter(this.shape, this.theme);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = theme;
-    final lantern = shape == ThemeShape.lantern;
-    final desk = shape == ThemeShape.desk;
-    final window = RRect.fromRectAndRadius(
-        Offset.zero & size, Radius.circular(desk ? 0 : 3));
-    canvas.save();
-    canvas.clipRRect(window);
-    canvas.drawRect(
-        Offset.zero & size, Paint()..color = lantern ? t.room : t.surface0);
+    canvas.scale(size.width / _drawing.width, size.height / _drawing.height);
+    final full = Offset.zero & _drawing;
+    canvas.drawRect(full, Paint()..color = lantern ? t.room : t.surface0);
 
     final pane = Paint()..color = t.surface1;
     final seam = Paint()..color = t.hairlineStrong;
@@ -906,7 +489,7 @@ class _SilhouettePainter extends CustomPainter {
     // The menu line, the same in all three.
     const menu = 7.0;
     if (!lantern) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, menu), pane);
+      canvas.drawRect(Rect.fromLTWH(0, 0, full.width, menu), pane);
     }
     for (var i = 0; i < 4; i++) {
       canvas.drawRect(Rect.fromLTWH(4 + i * 9.0, 3, 6, 1.5), mark);
@@ -917,9 +500,8 @@ class _SilhouettePainter extends CustomPainter {
     var left = 0.0;
     if (desk) {
       const rail = 10.0;
-      canvas.drawRect(Rect.fromLTWH(0, menu, rail, size.height - menu), pane);
-      canvas.drawRect(Rect.fromLTWH(rail, menu, 1, size.height - menu), seam);
-      canvas.drawRect(const Rect.fromLTWH(0, menu + 3, 1.5, 5), lit);
+      canvas.drawRect(Rect.fromLTWH(0, menu, rail, full.height - menu), pane);
+      canvas.drawRect(Rect.fromLTWH(rail, menu, 1, full.height - menu), seam);
       for (var i = 0; i < 6; i++) {
         canvas.drawRect(
             Rect.fromLTWH(3.5, menu + 4 + i * 8.0, 3, 3), i == 0 ? lit : mark);
@@ -927,13 +509,15 @@ class _SilhouettePainter extends CustomPainter {
       left = rail + 1;
     } else if (lantern) {
       const pill = 9.0;
-      final tools = RRect.fromRectAndRadius(
-          Rect.fromLTWH(3, menu + 2, 56, pill), const Radius.circular(pill));
-      final spaces = RRect.fromRectAndRadius(
-          Rect.fromLTWH(size.width - 45, menu + 2, 42, pill),
-          const Radius.circular(pill));
-      canvas.drawRRect(tools, pane);
-      canvas.drawRRect(spaces, pane);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(3, menu + 2, 56, pill),
+              const Radius.circular(pill)),
+          pane);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(
+              Rect.fromLTWH(full.width - 45, menu + 2, 42, pill),
+              const Radius.circular(pill)),
+          pane);
       for (var i = 0; i < 6; i++) {
         canvas.drawCircle(
             Offset(9 + i * 8.0, menu + 2 + pill / 2), 1.7, i == 0 ? lit : mark);
@@ -941,9 +525,9 @@ class _SilhouettePainter extends CustomPainter {
       top = menu + 2 + pill;
     } else {
       const strip = 9.0;
-      canvas.drawRect(
-          Rect.fromLTWH(0, menu, size.width, strip), Paint()..color = t.surface2);
-      canvas.drawRect(Rect.fromLTWH(0, menu + strip, size.width, 1), seam);
+      canvas.drawRect(Rect.fromLTWH(0, menu, full.width, strip),
+          Paint()..color = t.surface2);
+      canvas.drawRect(Rect.fromLTWH(0, menu + strip, full.width, 1), seam);
       for (var i = 0; i < 6; i++) {
         canvas.drawRect(
             Rect.fromLTWH(4 + i * 8.0, menu + 3, 3, 3), i == 0 ? lit : mark);
@@ -951,48 +535,17 @@ class _SilhouettePainter extends CustomPainter {
       top = menu + strip + 1;
     }
 
-    // The panes: three across, and the Timeline under them.
     final gap = lantern ? 3.0 : 1.0;
     final edge = lantern ? 3.0 : 0.0;
-    final corner = Radius.circular(lantern ? 4 : 0);
     final area = Rect.fromLTRB(
-        left + edge, top + edge, size.width - edge, size.height - edge);
-    final upper = (area.height - gap) * 0.62;
-    final side = (area.width - 2 * gap) * 0.22;
-    final project = Rect.fromLTWH(area.left, area.top, side, upper);
-    final viewer = Rect.fromLTWH(
-        project.right + gap, area.top, area.width - 2 * (side + gap), upper);
-    final effects = Rect.fromLTWH(viewer.right + gap, area.top, side, upper);
-    final timeline = Rect.fromLTRB(
-        area.left, area.top + upper + gap, area.right, area.bottom);
+        left + edge, top + edge, full.width - edge, full.height - edge);
     if (!lantern) canvas.drawRect(area, seam);
-    for (final rect in [project, viewer, effects, timeline]) {
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, corner), pane);
-    }
-    // The picture in the Viewer, a few rows in the side panes, and the
-    // Timeline's bars.
-    canvas.drawRRect(
-        RRect.fromRectAndRadius(viewer.deflate(lantern ? 3 : 4), corner),
-        Paint()..color = t.surface0);
-    for (final rect in [project, effects]) {
-      for (var i = 0; i < 4; i++) {
-        canvas.drawRect(
-            Rect.fromLTWH(
-                rect.left + 3, rect.top + 5 + i * 5.0, rect.width - 8, 1.5),
-            mark);
-      }
-    }
-    for (var i = 0; i < 3; i++) {
-      final y = timeline.top + 5 + i * 5.5;
-      if (y + 3 > timeline.bottom - 2) break;
-      canvas.drawRect(Rect.fromLTWH(timeline.left + 3, y + 0.5, 22, 1.5), mark);
+    _lay(presetLayout(preset), area, gap, (panel, rect) {
       canvas.drawRRect(
-          RRect.fromRectAndRadius(
-              Rect.fromLTWH(timeline.left + 34 + i * 9.0, y,
-                  timeline.width - 60 - i * 14.0, 3),
-              Radius.circular(lantern ? 1.5 : 0)),
-          i == 0 ? lit : seam);
-    }
+          RRect.fromRectAndRadius(rect, Radius.circular(lantern ? 4 : 0)),
+          pane);
+      _content(canvas, panel, rect, lantern);
+    });
     canvas.restore();
     canvas.drawRRect(
       window.deflate(0.5),
@@ -1003,16 +556,169 @@ class _SilhouettePainter extends CustomPainter {
     );
   }
 
+  /// Hand each pane of [node] its rectangle in [r], tabs as their front pane.
+  void _lay(DockNode node, Rect r, double gap,
+      void Function(Panel panel, Rect rect) pane) {
+    switch (node) {
+      case DockPane(:final panel):
+        pane(panel, r);
+      case DockTabs(:final children, :final active):
+        pane(children[active.clamp(0, children.length - 1)].panel, r);
+      case DockSplit(:final axis, :final children, :final shares):
+        final across = axis == DockAxis.horizontal;
+        final room =
+            (across ? r.width : r.height) - gap * (children.length - 1);
+        var at = across ? r.left : r.top;
+        for (var i = 0; i < children.length; i++) {
+          final length = room * shares[i];
+          _lay(
+              children[i],
+              across
+                  ? Rect.fromLTWH(at, r.top, length, r.height)
+                  : Rect.fromLTWH(r.left, at, r.width, length),
+              gap,
+              pane);
+          at += length + gap;
+        }
+    }
+  }
+
+  /// What a pane holds, drawn small.
+  void _content(Canvas canvas, Panel panel, Rect r, bool lantern) {
+    final t = theme;
+    final mark = Paint()..color = t.textMuted;
+    final lit = Paint()..color = t.accent;
+    final clip = Paint()..color = t.surface4;
+    final seam = Paint()..color = t.hairlineStrong;
+    final round = Radius.circular(lantern ? 1.5 : 0);
+    switch (panel) {
+      case Panel.viewer:
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                r.deflate(lantern ? 3 : 4), Radius.circular(lantern ? 3 : 0)),
+            Paint()..color = t.surface0);
+      case Panel.timeline:
+        // Layer names, and a bar each; the first one lit.
+        for (var i = 0; i < 6; i++) {
+          final y = r.top + 5 + i * 5.5;
+          if (y + 3 > r.bottom - 2) break;
+          canvas.drawRect(Rect.fromLTWH(r.left + 3, y + 0.5, 18, 1.5), mark);
+          canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                  Rect.fromLTWH(
+                      r.left + 28 + i * 8.0, y, r.width - 50 - i * 12.0, 3),
+                  round),
+              i == 0 ? lit : seam);
+        }
+      case Panel.cutTimeline:
+        // Two rows of picture over two of sound, cut into clips, with one
+        // picture clip and its sound lit together.
+        final row = (r.height - 6) / 4;
+        final lanes =
+            Rect.fromLTRB(r.left + 14, r.top + 3, r.right - 3, r.bottom - 3);
+        const spans = [
+          [(0.0, 0.3), (0.32, 0.62), (0.64, 0.95)],
+          [(0.1, 0.45), (0.47, 0.8)],
+          [(0.1, 0.45), (0.47, 0.8)],
+          [(0.0, 0.62), (0.64, 1.0)],
+        ];
+        for (var i = 0; i < 4; i++) {
+          final y = lanes.top + row * i;
+          canvas.drawRect(
+              Rect.fromLTWH(r.left + 3, y + row / 2 - 0.75, 8, 1.5), mark);
+          for (final (j, (from, to)) in spans[i].indexed) {
+            final box = RRect.fromRectAndRadius(
+                Rect.fromLTRB(lanes.left + lanes.width * from, y + 0.75,
+                    lanes.left + lanes.width * to, y + row - 0.75),
+                round);
+            final pair = (i == 1 || i == 2) && j == 0;
+            canvas.drawRRect(
+                box,
+                pair
+                    ? (Paint()..color = t.accent.withValues(alpha: 0.35))
+                    : clip);
+            if (i >= 2) {
+              // A sound clip's wave, flat at this size.
+              canvas.drawRect(
+                  Rect.fromLTRB(box.left + 2, box.outerRect.center.dy - 0.4,
+                      box.right - 2, box.outerRect.center.dy + 0.4),
+                  pair ? lit : mark);
+            }
+          }
+        }
+      case Panel.graph:
+        // Three nodes wired into a fourth, which is lit.
+        final w = 16.0, h = 7.0;
+        final inputs = [
+          Offset(r.left + r.width * 0.16, r.top + r.height * 0.22),
+          Offset(r.left + r.width * 0.16, r.top + r.height * 0.5),
+          Offset(r.left + r.width * 0.42, r.top + r.height * 0.78),
+        ];
+        final out = Offset(r.left + r.width * 0.7, r.top + r.height * 0.45);
+        final wire = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = t.textMuted;
+        for (final from in inputs) {
+          final a = Offset(from.dx + w / 2, from.dy);
+          final b = Offset(out.dx - w / 2, out.dy);
+          final reach = (b.dx - a.dx).abs() * 0.5;
+          canvas.drawPath(
+              Path()
+                ..moveTo(a.dx, a.dy)
+                ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy),
+              wire);
+        }
+        for (final at in inputs) {
+          canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                  Rect.fromCenter(center: at, width: w, height: h),
+                  const Radius.circular(1.5)),
+              clip);
+        }
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                Rect.fromCenter(center: out, width: w, height: h),
+                const Radius.circular(1.5)),
+            lit);
+      case Panel.mixer:
+        // Two faders.
+        for (var i = 0; i < 2; i++) {
+          final x = r.left + r.width * (i + 1) / 3;
+          canvas.drawRect(
+              Rect.fromLTRB(x - 0.5, r.top + 4, x + 0.5, r.bottom - 4), mark);
+          canvas.drawRect(
+              Rect.fromCenter(
+                  center: Offset(x, r.top + r.height * (i == 0 ? 0.4 : 0.6)),
+                  width: 5,
+                  height: 2.5),
+              i == 0 ? lit : mark);
+        }
+      default:
+        for (var i = 0; i < 6; i++) {
+          final y = r.top + 5 + i * 5.0;
+          if (y + 2 > r.bottom - 2) break;
+          canvas.drawRect(
+              Rect.fromLTWH(
+                  r.left + 3, y, (r.width - 8) * (i.isEven ? 1 : 0.7), 1.5),
+              mark);
+        }
+    }
+  }
+
   @override
-  bool shouldRepaint(_SilhouettePainter old) =>
-      old.shape != shape || old.theme != theme;
+  bool shouldRepaint(_WorkspacePainter old) =>
+      old.preset != preset || old.theme != theme || old.corner != corner;
 }
 
-/// A short set of choices side by side, the one in force lit.
+/// A short set of choices side by side, the one in force lit. The
+/// [recommended] one says so after its name, in the label's own colour but
+/// quieter, so it reads in every state the button can be in.
 class _Chips<T extends Enum> extends StatelessWidget {
   final String id;
   final List<T> options;
   final T value;
+  final T? recommended;
   final String Function(T) label;
   final ValueChanged<T> onChanged;
 
@@ -1020,16 +726,17 @@ class _Chips<T extends Enum> extends StatelessWidget {
     required this.id,
     required this.options,
     required this.value,
+    this.recommended,
     required this.label,
     required this.onChanged,
   });
 
   @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget build(BuildContext context) => Wrap(
+        spacing: 4,
+        runSpacing: 4,
         children: [
-          for (final option in options) ...[
-            if (option != options.first) const SizedBox(width: 4),
+          for (final option in options)
             SizedBox(
               height: _rowControl,
               child: HouseButton(
@@ -1038,10 +745,25 @@ class _Chips<T extends Enum> extends StatelessWidget {
                 active: option == value,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 onPressed: () => onChanged(option),
-                child: Text(label(option)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(label(option)),
+                    if (option == recommended) ...[
+                      const SizedBox(width: 6),
+                      Builder(builder: (context) {
+                        final style = DefaultTextStyle.of(context).style;
+                        return Text(
+                          l10n.firstRunRecommended,
+                          style: style.copyWith(
+                              color: style.color?.withValues(alpha: 0.6)),
+                        );
+                      }),
+                    ],
+                  ],
+                ),
               ),
             ),
-          ],
         ],
       );
 }

@@ -1,5 +1,5 @@
 // The first-run screen: asked once, on a machine with no settings
-// file, and its editing answer sets the two editing preferences.
+// file, and its answers set the two editing preferences.
 //
 // The screen is worth its own tests because everything about it is a
 // once-only side effect: an answer that did not stick would send the user
@@ -49,12 +49,20 @@ void main() {
         ),
       );
 
-  testWidgets('the Vegas answer sets both preferences', (tester) async {
+  testWidgets('Cut with the Vegas keys sets both preferences', (tester) async {
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('first-run-vegas')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('first-run-workspace-cut')), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('first-run-vegas')));
+    // Continue waits for a workspace.
+    await tester.tap(find.byKey(const ValueKey('first-run-continue')));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('first-run-workspace-cut')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('first-run-workspace-cut')));
+    await tester.tap(find.byKey(const ValueKey('first-run-keys-vegas')));
     await tester.pumpAndSettle();
     // A choice is only a choice until Continue keeps it.
     expect(workspace.firstRunDone, isFalse);
@@ -64,7 +72,7 @@ void main() {
     expect(workspace.interface.retimeOpensToSpeed, isTrue);
     expect(workspace.interface.videoAsSequenceLayer, isTrue);
     expect(workspace.firstRunDone, isTrue);
-    expect(find.byKey(const ValueKey('first-run-vegas')), findsNothing,
+    expect(find.byKey(const ValueKey('first-run-workspace-cut')), findsNothing,
         reason: 'answering closes the screen');
   });
 
@@ -74,7 +82,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('first-run-auto-update')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('first-run-vegas')));
+    await tester.tap(find.byKey(const ValueKey('first-run-workspace-cut')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('first-run-continue')));
     await tester.pumpAndSettle();
@@ -134,7 +142,7 @@ void main() {
     workspace.firstRunDone = true;
     await tester.pumpWidget(host());
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('first-run-vegas')), findsNothing);
+    expect(find.byKey(const ValueKey('first-run-workspace-cut')), findsNothing);
   });
 }
 
