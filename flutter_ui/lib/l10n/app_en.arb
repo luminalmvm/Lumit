@@ -15182,9 +15182,86 @@
   "@mixerMaster": {
     "description": "The Mixer panel's right-hand strip: the fader over the summed mix, ahead of the limiter. A mixing-desk term."
   },
-  "mixerNoSound": "No layer in this composition makes a sound",
+  "mixerNoSound": "No sound",
   "@mixerNoSound": {
     "description": "Empty-state line in the Mixer panel when the fronted composition has no audio-capable layers, so there are no strips to draw."
+  },
+  "audioResetVolume": "Reset volume",
+  "@audioResetVolume": {
+    "description": "Right-click menu on a sound layer, a Mixer strip or its fader: puts the Volume back at 0 dB."
+  },
+  "audioResetPan": "Reset pan",
+  "@audioResetPan": {
+    "description": "Right-click menu on a sound layer, a Mixer strip or its pan pot: puts the sound back in the centre."
+  },
+  "mixerSetLevel": "Set level…",
+  "@mixerSetLevel": {
+    "description": "Right-click menu on a Mixer fader: asks for the level as a number of decibels. Ellipsis because a dialogue follows."
+  },
+  "mixerSetPan": "Set pan…",
+  "@mixerSetPan": {
+    "description": "Right-click menu on a Mixer pan pot: asks for the pan as a number from -100 to 100. Ellipsis because a dialogue follows."
+  },
+  "mixerPanLeft": "Full left",
+  "@mixerPanLeft": {
+    "description": "Right-click menu on a Mixer pan pot: the whole sound in the left channel."
+  },
+  "mixerPanRight": "Full right",
+  "@mixerPanRight": {
+    "description": "Right-click menu on a Mixer pan pot: the whole sound in the right channel."
+  },
+  "mixerPeakHold": "Peak hold",
+  "@mixerPeakHold": {
+    "description": "Right-click menu on a level meter: opens the choices for how long the thin line above a meter rests on the loudest peak."
+  },
+  "mixerPeakHoldOff": "Off",
+  "@mixerPeakHoldOff": {
+    "description": "Peak hold submenu: no hold line above the meters."
+  },
+  "mixerPeakHoldSeconds": "{count} s",
+  "@mixerPeakHoldSeconds": {
+    "description": "Peak hold submenu: the hold line rests on the loudest peak for this many seconds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mixerPeakHoldForever": "Until reset",
+  "@mixerPeakHoldForever": {
+    "description": "Peak hold submenu: the hold line stays on the loudest peak until Reset peaks is chosen."
+  },
+  "mixerResetPeaks": "Reset peaks",
+  "@mixerResetPeaks": {
+    "description": "Right-click menu on a level meter: forgets the held peaks and puts the limiter's light out. The mix itself is unchanged."
+  },
+  "mixerUnmuteAll": "Unmute all",
+  "@mixerUnmuteAll": {
+    "description": "Right-click menu on the Mixer's empty ground: turns the sound back on for every muted layer."
+  },
+  "mixerClearSolos": "Clear solos",
+  "@mixerClearSolos": {
+    "description": "Right-click menu on the Mixer's empty ground: takes solo off every soloed layer."
+  },
+  "mixerResetFaders": "Reset all faders",
+  "@mixerResetFaders": {
+    "description": "Right-click menu on the Mixer's empty ground: puts every strip's fader back at 0 dB."
+  },
+  "audioMute": "Mute",
+  "@audioMute": {
+    "description": "Right-click menu on a sound layer, a tick row: silences the layer."
+  },
+  "audioAddEffect": "Add audio effect",
+  "@audioAddEffect": {
+    "description": "Right-click menu on a sound layer or clip: opens the list of audio effects to add to it."
+  },
+  "audioTrackResetHeight": "Reset height",
+  "@audioTrackResetHeight": {
+    "description": "Right-click menu on an Audio timeline track head: puts a track whose bottom edge was dragged back to its usual height."
+  },
+  "audioTracksResetHeights": "Reset all heights",
+  "@audioTracksResetHeights": {
+    "description": "Right-click menu on the Audio timeline's column header: puts every track back to its usual height."
   },
   "mixerLimiter": "Limiter",
   "@mixerLimiter": {
@@ -15194,38 +15271,18 @@
   "@mixerLimiterClipped": {
     "description": "Tooltip on the Master strip's LIM lamp while it is lit: something reached the ceiling since the light was last reset, and clicking the lamp puts the light out (the mix itself is unchanged)."
   },
-  "mixerLufsPending": "LUFS —",
-  "@mixerLufsPending": {
-    "description": "The Master strip's muted loudness readout: loudness measurement is a planned later feature, so the value is an em dash rather than a number. LUFS is the standard loudness unit and stays untranslated."
-  },
   "mixerChain": "Audio plugins: {count}",
   "@mixerChain": {
-    "description": "Tooltip on the small FX chip a Mixer strip wears when the layer's sound plays through audio plugins. The count is how many plugins are in the layer's chain.",
+    "description": "Tooltip on the fx switch a Mixer strip wears when the layer's sound plays through audio plugins. The count is how many plugins are in the layer's chain.",
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
   },
-  "audioSectionLevels": "Levels",
-  "@audioSectionLevels": {
-    "description": "Audio panel section header over the output level meters. A noun, plural."
-  },
   "audioSectionBeats": "Beats",
   "@audioSectionBeats": {
     "description": "Audio panel section header over the beat-detection controls. A noun, plural."
-  },
-  "audioSectionSelectedLayer": "Selected layer",
-  "@audioSectionSelectedLayer": {
-    "description": "Audio panel section header over the selected layer's sound controls (volume, pan, fades)."
-  },
-  "audioClip": "Clip",
-  "@audioClip": {
-    "description": "Audio panel, Levels section: the label beside the clip lamp, which lights when the mix reaches full scale. Audio-engineering sense of clip (distortion), not a timeline clip."
-  },
-  "audioPeakHold": "peak hold 3 s",
-  "@audioPeakHold": {
-    "description": "Audio panel, Levels section: small caption saying the thin line above each meter rests on the loudest recent peak for three seconds. Lower case."
   },
   "audioPan": "Pan",
   "@audioPan": {
@@ -15238,10 +15295,6 @@
   "audioFadeOut": "Fade out",
   "@audioFadeOut": {
     "description": "Audio panel, Selected layer: the row that writes a volume fade at the layer's end."
-  },
-  "audioLayerSilent": "This layer makes no sound.",
-  "@audioLayerSilent": {
-    "description": "Audio panel, Selected layer: shown instead of the sound controls when the selected layer has no audio (a solid, a title, image-only footage)."
   },
   "audioDriveWith": "Drive with audio…",
   "@audioDriveWith": {
@@ -15261,15 +15314,15 @@
   },
   "fadeShapeEase": "Ease",
   "@fadeShapeEase": {
-    "description": "Audio panel fade rows: the eased fade shape chip (gentle at both ends). Kept short - it is a small chip."
+    "description": "Tooltip on a fade row's curve button in the Audio panel: the eased fade shape (gentle at both ends)."
   },
-  "fadeShapeLinear": "Lin",
+  "fadeShapeLinear": "Linear",
   "@fadeShapeLinear": {
-    "description": "Audio panel fade rows: the straight-line fade shape chip. An abbreviation of linear; keep it about three letters."
+    "description": "Tooltip on a fade row's curve button in the Audio panel: the straight-line fade shape."
   },
-  "fadeShapeExponential": "Exp",
+  "fadeShapeExponential": "Exponential",
   "@fadeShapeExponential": {
-    "description": "Audio panel fade rows: the exponential fade shape chip (hangs at the loud end, then falls away). An abbreviation of exponential; keep it about three letters."
+    "description": "Tooltip on a fade row's curve button in the Audio panel: the exponential fade shape (hangs at the loud end, then falls away)."
   },
   "beatsSource": "Source",
   "@beatsSource": {
@@ -15306,10 +15359,6 @@
   "beatsBpmAuto": "Auto",
   "@beatsBpmAuto": {
     "description": "Audio panel, Beats: shown beside the BPM well while no tempo is typed or tapped, so the next Generate works the tempo out from the sound."
-  },
-  "beatsGridOn": "Grid on",
-  "@beatsGridOn": {
-    "description": "Audio panel, Beats section: small caption shown while a typed or tapped BPM overrides the estimate, so generated beats snap to that grid."
   },
   "beatsPhaseEarlier": "Nudge beats 10 ms earlier",
   "@beatsPhaseEarlier": {
@@ -17436,10 +17485,6 @@
   "clipFadeCustom": "Custom…",
   "@clipFadeCustom": {
     "description": "Audio timeline, fade menu: opens the editor where the fade's curve is drawn by hand."
-  },
-  "clipFadeShapeTitle": "Fade shape",
-  "@clipFadeShapeTitle": {
-    "description": "Audio timeline, the header of the box where a fade's curve is drawn by hand."
   },
   "clipFadeKeepLevel": "Keep level",
   "@clipFadeKeepLevel": {

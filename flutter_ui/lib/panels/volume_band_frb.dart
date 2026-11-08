@@ -565,6 +565,7 @@ class VolumeBandState extends State<VolumeBand> {
               key: const ValueKey('band-reset-point'),
               onPressed: () => close('reset'),
               child: Text(l10n.envelopePointReset)),
+          const MenuDivider(),
           MenuRow(
               key: const ValueKey('band-delete-point'),
               onPressed: () => close('delete'),
@@ -574,7 +575,8 @@ class VolumeBandState extends State<VolumeBand> {
               key: const ValueKey('band-add-point'),
               onPressed: () => close('add'),
               child: Text(l10n.speedPointAdd)),
-          if (span != null)
+          if (span != null) ...[
+            const MenuDivider(),
             for (final MapEntry(key: curve, value: name) in names.entries)
               MenuRow.option(
                 key: ValueKey<String>('band-curve-${curve.name}'),
@@ -584,6 +586,8 @@ class VolumeBandState extends State<VolumeBand> {
                   Expanded(child: Text(name)),
                 ]),
               ),
+          ],
+          const MenuDivider(),
           if (keys.length > 2)
             MenuRow(
                 key: const ValueKey('band-thin'),

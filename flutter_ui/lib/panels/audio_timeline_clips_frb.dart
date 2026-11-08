@@ -1,8 +1,9 @@
 // The clips on an Audio timeline track (docs/impl/audio-timeline.md §5).
 //
 // A converted track holds clips laid end to end, and this draws one row of
-// them: a box per clip in the track's label colour, a header strip naming what
-// it plays, and the clip's own wave or spectrogram under that. The gestures
+// them: a box per clip in the track's label colour, its own wave or spectrogram
+// the full height of the box, and over that the name of what it plays. The
+// gestures
 // live here too - the body slides a clip along its track or carries it to
 // another one, either edge trims it - staged in Dart and written once, on
 // release, so a drag is one undo step and Escape abandons it having written
@@ -40,13 +41,15 @@ import 'timeline_snap.dart';
 import 'volume_band_frb.dart';
 import 'waveform_frb.dart';
 
-/// How tall a clip's header strip is: the colour box, the name and the three
-/// controls at its right, over the clip's own picture below.
+/// How tall a clip's header strip is: the name and the three controls, laid
+/// over the top of the clip's picture.
 const double audioClipHeader = 16;
 
-/// The narrowest clip that still draws a header. Below this the strip is all
-/// controls and no name, which says less than the box's own colour already
-/// does, so the box is left plain.
+/// The narrowest clip that wears its name. Below this a name is a letter and an
+/// ellipsis, which says less than the box's own colour already does.
+const double audioClipNameMinWidth = 44;
+
+/// The narrowest clip that has room for the three controls beside its name.
 const double audioClipHeaderMinWidth = 110;
 
 /// How far the pointer must travel before a press counts as a drag rather than
@@ -94,8 +97,7 @@ const double _sourceMarkWidth = 6;
 const double _sourceMarkHeight = 4;
 
 /// How big the header's three glyphs are drawn. Smaller than the outline's
-/// [iconSize], because the strip is one lane row tall and the marks share it
-/// with a name.
+/// [iconSize], because the marks share the strip with a name.
 const double _headerIcon = 10;
 
 /// Which track the point [y] lands on, measured down from the top of the first
@@ -244,8 +246,9 @@ class AudioClipStrip extends StatefulWidget {
   /// under them (docs/impl/audio-timeline.md §5).
   final ValueNotifier<AudioClipDrag?> preview;
 
-  /// The picked clip's id, drawn lit.
-  final String? selected;
+  /// The picked clips' ids, drawn lit. The table's own list, so a pick reaching
+  /// across tracks reads the same on each.
+  final Set<String> selected;
 
   /// Which clips on this track are twirled open, by id - the drop-down rows
   /// are the track's to draw, so all this changes here is which way the
@@ -329,6 +332,11 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   /// hit first, being on top, so the flag is set before the box sees anything.
   bool _pressedControl = false;
 
+  /// The clip the pointer is on, for what waits for it: the header's controls,
+  /// and a gain line still at its usual level. Its own notifier, so the pointer
+  /// crossing a clip rebuilds those and not the box or its wave.
+  final ValueNotifier<String?> _over = ValueNotifier<String?>(null);
+
   /// Each clip's picture over the stretch of it that is on screen, and what
   /// each was fetched for. Equal keys mean the answer in hand still fits, so a
   /// rebuild asks nothing; the key is claimed before the fetch starts, so a
@@ -345,6 +353,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   @override
   void dispose() {
     _escape.dispose();
+    _over.dispose();
     super.dispose();
   }
 
@@ -756,7 +765,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       // The headers last, so their controls stand over the box's own pointer
       // and over the gain line drawn on it.
       for (final clip in _clips)
-        if (_widthOf(clip) >= audioClipHeaderMinWidth) _headerBox(t, clip),
+        if (_widthOf(clip) >= audioClipNameMinWidth) _headerBox(t, clip),
     ]);
   }
 
@@ -830,7 +839,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       width: width,
       top: 2,
       height: audioClipHeader,
-      child: _header(t, clip, t.labelColour(widget.track.entry.info.label)),
+      child: _header(t, clip, width),
     );
   }
 
@@ -843,7 +852,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _wantPicture(clip, left, width);
     });
-    final picked = widget.selected == clip.id.toString();
+    final picked = widget.selected.contains(clip.id.toString());
     return Positioned(
       key: ValueKey<String>('atl-clip-${clip.id}'),
       left: left,
@@ -885,10 +894,14 @@ class _AudioClipStripState extends State<AudioClipStrip> {
               // The razor's own blade is drawn over the lanes, and the innermost
               // cursor is the one shown - so this stands down while it is armed.
               cursor: _cursor(),
+              onEnter: (_) => _over.value = clip.id.toString(),
               onHover: (e) => _hoverAt(audioClipGrabAt(
                       _clips, widget.axis, _localX(e.position))
                   ?.grab),
-              onExit: (_) => _hoverAt(null),
+              onExit: (_) {
+                _hoverAt(null);
+                if (_over.value == clip.id.toString()) _over.value = null;
+              },
               child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) => _down(e, clip, width),
@@ -910,16 +923,24 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   ///
   /// The line is the clip's level the way the band is the track's: 0 dB at the
   /// top of the box, silence at its foot. It is drawn inside the box's own
-  /// stack, so a slide or a trim carries it along for nothing.
+  /// stack, so a slide or a trim carries it along for nothing. A clip at its
+  /// usual level keeps the line back until the pointer is on it.
   List<Widget> _gainParts(LumitTheme t, BridgeClip clip) {
     final id = clip.id.toString();
     final held = _gain?.clip == id ? _gain : null;
     final box = math.max(0.0, widget.height - 4);
     final y = audioClipGainY(held?.db ?? clip.gainDb, widget.height) - 2;
+    final usual = held == null && clip.gainDb == 0;
     final line = Padding(
       padding:
           const EdgeInsets.symmetric(vertical: (_gainHit - _gainStroke) / 2),
-      child: ColoredBox(color: t.accent),
+      child: usual
+          ? ValueListenableBuilder<String?>(
+              valueListenable: _over,
+              builder: (context, over, _) => ColoredBox(
+                  color: over == id ? t.accent : t.accent.withValues(alpha: 0)),
+            )
+          : ColoredBox(color: t.accent),
     );
     return [
       Positioned(
@@ -971,8 +992,9 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     final secondsPerPixel = widget.axis.perFrame <= 0 || widget.fps <= 0
         ? 0.0
         : 1 / (widget.axis.perFrame * widget.fps);
-    final top = width >= audioClipHeaderMinWidth ? audioClipHeader : 0.0;
-    final height = math.max(1.0, widget.height - 4 - top);
+    // The whole box: a name laid over the wave costs the wave nothing, and a
+    // short track has none of its height to spare.
+    final height = math.max(1.0, widget.height - 4);
     // The box's own left, which the mark below is measured back from: it is a
     // comp frame and this is drawn in the box's pixels.
     final boxLeft = _place(clip).$1;
@@ -988,7 +1010,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       Positioned(
         left: 0,
         right: 0,
-        top: top,
+        top: 0,
         bottom: 0,
         child: widget.mode == LaneMode.spectral
             ? SpectralLane(
@@ -1027,87 +1049,118 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     ]);
   }
 
-  /// The header strip: the colour box, what the clip plays, and the three
-  /// controls beside it. Left, not right: an overlap draws the incoming clip
-  /// over the outgoing one's end, and controls that stood there were covered.
-  Widget _header(LumitTheme t, BridgeClip clip, Color label) {
+  /// The header strip: what the clip plays, on a shade that lets it read over
+  /// the wave, and the three controls beside it. Left, not right: an overlap
+  /// draws the incoming clip over the outgoing one's end, and controls that
+  /// stood there were covered.
+  ///
+  /// The controls wait for the pointer, unless one has something to say: a
+  /// bypassed stack, or a clip twirled open. They still take a press while they
+  /// wait, which needs a pointer on the clip, and that is what brings them up.
+  Widget _header(LumitTheme t, BridgeClip clip, double width) {
     final open = widget.openClips.contains(clip.id.toString());
-    return Padding(
-      padding: const EdgeInsets.only(left: clipEdgeWidth + 3, right: 2),
-      child: Row(children: [
-        // A clip's colour is its track's, so this opens the layer's own
-        // picker and writes the layer's label.
-        LumitTooltip(
-          message: l10n.tipLabelColour,
-          child: HoverMark(
-            builder: (_, lit) => GestureDetector(
-              key: ValueKey<String>('atl-clip-colour-${clip.id}'),
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (d) async {
-                final picked = await showLabelPicker(context, d.globalPosition,
-                    keyPrefix: 'atl-clip-label');
-                if (picked == null || !mounted) return;
-                widget.track.entry.layer.setLabel(label: picked);
-                widget.onChanged();
-              },
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: label,
-                  border: Border.all(
-                      color: Color.lerp(t.surface0, t.textPrimary, 0.7 * lit)!),
+    final bypassed = !clip.fx;
+    final room = width >= audioClipHeaderMinWidth;
+    // On a plate of the ground, because a muted glyph is lost on a busy wave.
+    Widget waits(bool always, Widget control) => ValueListenableBuilder<String?>(
+          valueListenable: _over,
+          builder: (context, over, child) => Opacity(
+            opacity: always || over == clip.id.toString() ? 1 : 0,
+            child: ColoredBox(
+                color: t.surface0.withValues(alpha: 0.7), child: child),
+          ),
+          child: control,
+        );
+    return IgnorePointer(
+      ignoring: !room,
+      child: Stack(children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    t.surface0.withValues(alpha: 0.55),
+                    t.surface0.withValues(alpha: 0),
+                  ],
                 ),
+                borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(clipRadius(t))),
               ),
             ),
           ),
         ),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            clip.sourceName,
-            key: ValueKey<String>('atl-clip-name-${clip.id}'),
-            style: t.small.copyWith(color: t.textSecondary),
-            overflow: TextOverflow.ellipsis,
-          ),
+        Padding(
+          padding: const EdgeInsets.only(left: clipEdgeWidth + 3, right: 2),
+          child: Row(children: [
+            // The press goes through the name to the box, so a clip can be
+            // taken hold of by it.
+            Flexible(
+              child: IgnorePointer(
+                child: Text(
+                  clip.sourceName,
+                  key: ValueKey<String>('atl-clip-name-${clip.id}'),
+                  style: t.small.copyWith(color: t.textPrimary),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            if (room) ...[
+              const SizedBox(width: 4),
+              waits(
+                bypassed,
+                _control(
+                  t,
+                  id: 'fx',
+                  clip: clip,
+                  tip: clip.fx
+                      ? l10n.switchEffectsOn
+                      : l10n.switchEffectsBypassed,
+                  on: bypassed,
+                  icon: (ink) =>
+                      lumitIcon(LumitIcon.fx, size: _headerIcon, color: ink),
+                  onPressed: widget.onToggleFx,
+                ),
+              ),
+              waits(
+                false,
+                _control(
+                  t,
+                  id: 'add-effect',
+                  clip: clip,
+                  tip: l10n.addEffect,
+                  on: false,
+                  icon: (ink) => glyph.LumitIcon(LumitIcons.addEffect,
+                      size: _headerIcon, colour: ink),
+                  onPressed: widget.onAddEffect,
+                ),
+              ),
+              waits(
+                open,
+                _control(
+                  t,
+                  id: 'twirl',
+                  clip: clip,
+                  tip: open ? l10n.tipHideProperties : l10n.tipProperties,
+                  on: open,
+                  icon: (ink) => TwirlTurn(
+                    open: open,
+                    child: glyph.LumitIcon(
+                        open ? LumitIcons.collapse : LumitIcons.expand,
+                        size: _headerIcon,
+                        colour: ink),
+                  ),
+                  onPressed: widget.onToggleOpen,
+                ),
+              ),
+            ],
+            const Spacer(),
+          ]),
         ),
-        const SizedBox(width: 6),
-        _control(
-          t,
-          id: 'fx',
-          clip: clip,
-          tip: clip.fx ? l10n.switchEffectsOn : l10n.switchEffectsBypassed,
-          on: clip.fx,
-          icon: (ink) =>
-              lumitIcon(LumitIcon.fx, size: _headerIcon, color: ink),
-          onPressed: widget.onToggleFx,
-        ),
-        _control(
-          t,
-          id: 'add-effect',
-          clip: clip,
-          tip: l10n.addEffect,
-          on: false,
-          icon: (ink) => glyph.LumitIcon(LumitIcons.addEffect,
-              size: _headerIcon, colour: ink),
-          onPressed: widget.onAddEffect,
-        ),
-        _control(
-          t,
-          id: 'twirl',
-          clip: clip,
-          tip: open ? l10n.tipHideProperties : l10n.tipProperties,
-          on: open,
-          icon: (ink) => TwirlTurn(
-            open: open,
-            child: glyph.LumitIcon(
-                open ? LumitIcons.collapse : LumitIcons.expand,
-                size: _headerIcon,
-                colour: ink),
-          ),
-          onPressed: widget.onToggleOpen,
-        ),
-        const Spacer(),
       ]),
     );
   }
@@ -1145,6 +1198,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
             key: ValueKey<String>('atl-clip-$id-${clip.id}'),
             behavior: HitTestBehavior.opaque,
             onTap: () => onPressed(clip, buttonContext),
+            onSecondaryTapUp: (d) => widget.onMenu(clip, d.globalPosition),
             child: cell(lit),
           ),
         ),

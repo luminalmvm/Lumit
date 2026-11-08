@@ -9,9 +9,9 @@
 // the wells never hear it (the rebuild gates; docs/impl/ui-performance.md
 // WP-2's listenable-inside-a-boundary shape).
 //
-// The peak hold — the line resting above the bar for a few seconds — is
-// computed here, because docs/09 §3.1 makes it the panel's own and because a
-// painter must stay a pure function of the frame it is handed.
+// The peak hold, the line resting above the bar, is computed here, because
+// docs/09 §3.1 makes it the panel's own and because a painter must stay a pure
+// function of the frame it is handed.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -19,10 +19,24 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 
-/// How long the hold line rests on the loudest peak before letting go —
-/// docs/09 §3.1's "a few seconds", and the board's own caption ("peak hold
-/// 3 s").
-const Duration peakHoldTime = Duration(seconds: 3);
+/// How long every meter's hold line rests on the loudest peak before letting
+/// go, in seconds. Nought draws no line, and a negative number holds it until
+/// [resetMeterPeaks]. Set from the person's settings, and shared because a
+/// Mixer and an Audio panel side by side should not disagree about it.
+int meterPeakHoldSeconds = 3;
+
+/// The feeds polling now, for [resetMeterPeaks] to reach.
+final Set<AudioMeterFeed> _running = {};
+
+/// Forget every held peak and put the limiter's light out. The mix is untouched.
+void resetMeterPeaks() {
+  resetAudioClip();
+  for (final feed in _running) {
+    feed._holds.clear();
+    // A parked poll would leave the lines where they are.
+    feed.wake();
+  }
+}
 
 /// One strip's reading, dB-ready: linear amplitudes straight off the tap,
 /// converted where they are drawn.
@@ -133,6 +147,7 @@ class AudioMeterFeed {
   static const Duration _quiet = Duration(seconds: 1);
 
   void start({Listenable? wake}) {
+    _running.add(this);
     _wake = wake?..addListener(this.wake);
     this.wake();
   }
@@ -144,6 +159,7 @@ class AudioMeterFeed {
   }
 
   void stop() {
+    _running.remove(this);
     _wake?.removeListener(wake);
     _wake = null;
     _timer?.cancel();
@@ -182,10 +198,13 @@ class AudioMeterFeed {
   }
 
   /// A rising peak takes the hold at once; a fallen one keeps it for
-  /// [peakHoldTime] and then lets it drop to the level that is there.
+  /// [meterPeakHoldSeconds] and then lets it drop to the level that is there.
   double _hold(String key, double peak, DateTime now) {
+    final seconds = meterPeakHoldSeconds;
+    if (seconds == 0) return 0;
     final hold = _holds.putIfAbsent(key, _Hold.new);
-    if (peak >= hold.value || now.difference(hold.since) > peakHoldTime) {
+    if (peak >= hold.value ||
+        (seconds > 0 && now.difference(hold.since).inSeconds >= seconds)) {
       hold.value = peak;
       hold.since = now;
     }

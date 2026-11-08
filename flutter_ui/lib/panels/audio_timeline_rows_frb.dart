@@ -25,8 +25,9 @@ import 'timeline_metrics_frb.dart';
 import 'timeline_extras_frb.dart' show rowSelectionFill;
 import 'timeline_outline_row_frb.dart' show RowRenameField;
 
-/// The lane-mode chip's own column, wide enough for *Spectral*.
-const double audioTrackChipWidth = 56;
+/// The cell at a track head's right end: the lane picture's switch, or Detach
+/// audio on a faded picture row.
+const double audioTrackChipWidth = 22;
 
 /// How many lane rows a track may stand on. Two to begin with, which is the
 /// height the board draws and enough for a wave to read; eight at the most,
@@ -237,8 +238,8 @@ List<AudioTrackRow> audioTimelineTracks({
 }
 
 /// The head of one track in the outline: mute, solo, the fx switch, the twirl,
-/// the number, the label dot, the name, and at the right edge either the
-/// lane-mode chip or - on a faded picture row - *Detach audio*.
+/// the number, the name, and at the right edge the lane picture's switch, or
+/// on a faded picture row *Detach audio*.
 ///
 /// As tall as its track's own band, which is the height before the twirl adds
 /// anything and what the drag on the row's bottom edge sets.
@@ -262,7 +263,8 @@ class AudioTrackOutlineRow extends StatelessWidget {
   final VoidCallback onToggleOpen;
   final VoidCallback onCycleLaneMode;
   final VoidCallback onDetach;
-  final VoidCallback onSelect;
+  /// A press on the head, with the buttons it was made with.
+  final ValueChanged<int> onSelect;
   final VoidCallback onRenameCommit;
   final VoidCallback onRenameCancel;
   final VoidCallback onChanged;
@@ -313,13 +315,19 @@ class AudioTrackOutlineRow extends StatelessWidget {
     LumitIcon? icon,
     required String tip,
   }) {
-    final ink = on ? t.textPrimary : t.textMuted;
+    // A switch at its usual setting draws quietly, and only the one that has
+    // been changed stands out, as a Mixer strip's do.
+    final usual = which == BridgeLayerSwitch.solo ? !on : on;
+    final ink = usual
+        ? t.textMuted
+        : which == BridgeLayerSwitch.solo
+            ? t.accent
+            : t.warning;
     return LumitTooltip(
       message: tip,
       child: HoverMark(
         builder: (context, lit) {
-          final lifted =
-              Color.lerp(ink, on ? t.textPrimary : t.textSecondary, lit)!;
+          final lifted = usual ? Color.lerp(ink, t.textPrimary, lit)! : ink;
           return GestureDetector(
             key: ValueKey<String>('atl-$name-${track.id}'),
             behavior: HitTestBehavior.opaque,
@@ -360,7 +368,7 @@ class AudioTrackOutlineRow extends StatelessWidget {
       height: track.laneHeight,
       child: AudioRowGround(
         selected: selected && !track.dimmed,
-        child: Stack(children: [
+        builder: (over) => Stack(children: [
         // The track's colour, a bar down its left edge, as its clips wear it.
         Positioned(
           key: ValueKey<String>('atl-label-${track.id}'),
@@ -391,19 +399,19 @@ class AudioTrackOutlineRow extends StatelessWidget {
                   // start.
                   Listener(
                     behavior: HitTestBehavior.opaque,
-                    onPointerDown: (_) => onSelect(),
+                    onPointerDown: (e) => onSelect(e.buttons),
                     child: _head(t, info, switches),
                   ),
                 ),
               ),
               const SizedBox(width: outlineGap),
-              // A bus has no sound of its own to draw, so no lane chip.
+              // A bus has no sound of its own to draw, so no lane switch.
               if (track.dimmed)
                 _detach(t)
               else if (track.entry.info.kind == BridgeLayerKind.bus)
                 const SizedBox(width: audioTrackChipWidth)
               else
-                _laneChip(t),
+                _laneChip(t, over),
             ],
           ),
         )),
@@ -520,73 +528,122 @@ class AudioTrackOutlineRow extends StatelessWidget {
         ),
       ]);
 
-  /// A faded picture row wears this where every other track wears its chip:
-  /// its sound cannot be mixed here until it stands on a track of its own.
+  /// A faded picture row wears this where every other track wears its lane
+  /// switch: its sound cannot be mixed here until it stands on a track of its
+  /// own.
   ///
   /// Outside the dimming, deliberately - the row is deaf to the pointer, and
   /// the one control that undoes that has to stay reachable.
-  Widget _detach(LumitTheme t) => HouseButton(
-        key: ValueKey<String>('atl-detach-${track.id}'),
-        small: true,
-        frameless: true,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        onPressed: onDetach,
-        child: Text(l10n.menuDetachAudio,
-            style: t.small, overflow: TextOverflow.ellipsis),
-      );
-
-  /// Which picture this track's lane draws. **Wave and Spectral only**: the
-  /// stack is a setting of the layer Timeline's lanes, and this panel's chip is
-  /// its own state, so a choice here does not change a lane there.
-  Widget _laneChip(LumitTheme t) => LumitTooltip(
-        message: l10n.laneModeTooltip,
+  Widget _detach(LumitTheme t) => LumitTooltip(
+        message: l10n.menuDetachAudio,
         child: HoverMark(
           builder: (context, lit) => GestureDetector(
-            key: ValueKey<String>('atl-lane-mode-${track.id}'),
+            key: ValueKey<String>('atl-detach-${track.id}'),
             behavior: HitTestBehavior.opaque,
-            onTap: onCycleLaneMode,
-            // Centred, and sized by its text: one line tall, the board's chip,
-            // not the two lane rows the track spends. (An alignment on the box
-            // would have it fill the row again.)
-            child: Center(
-              child: Container(
-                width: audioTrackChipWidth,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  border: Border.all(color: t.hairlineStrong),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Text(
-                  laneMode == LaneMode.spectral
-                      ? l10n.laneModeSpectral
-                      : l10n.laneModeWave,
-                  textAlign: TextAlign.center,
-                  style: t.mono.copyWith(
-                      fontSize: 9,
-                      color: Color.lerp(t.textSecondary, t.textPrimary, lit)),
-                ),
+            onTap: onDetach,
+            child: SizedBox(
+              width: audioTrackChipWidth,
+              child: Center(
+                child: glyph.LumitIcon(LumitIcons.unlink,
+                    size: iconSize,
+                    colour: Color.lerp(t.textMuted, t.textPrimary, lit)),
               ),
             ),
           ),
         ),
       );
+
+  /// Which picture this track's lane draws. **Wave and Spectral only**: the
+  /// stack is a setting of the layer Timeline's lanes, and this panel's switch
+  /// is its own state, so a choice here does not change a lane there.
+  ///
+  /// Wave is what every lane draws until told otherwise, so its glyph waits for
+  /// the pointer. A spectral lane keeps its own up, being the different one.
+  Widget _laneChip(LumitTheme t, bool over) {
+    final spectral = laneMode == LaneMode.spectral;
+    return LumitTooltip(
+      message: spectral ? l10n.laneModeSpectral : l10n.laneModeWave,
+      child: HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey<String>('atl-lane-mode-${track.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: onCycleLaneMode,
+          child: Center(
+            child: Opacity(
+              opacity: spectral || over ? 1 : 0,
+              child: Container(
+                width: audioTrackChipWidth,
+                height: iconSize,
+                alignment: Alignment.center,
+                child: CustomPaint(
+                  size: const Size.square(iconSize),
+                  painter: LaneGlyphPainter(
+                    spectral: spectral,
+                    colour: spectral
+                        ? t.accent
+                        : Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-/// The board's column header over the outline: the number, the name and the
-/// lane chip each get their kicker, stood over the cells the rows below use,
-/// so the words line up with what they name. The switches and the twirl carry
-/// no word, as the layer Timeline's own header leaves them.
+/// The two lane pictures, drawn small: a wave's bars, or a spectrogram's rows
+/// of dots. Also what the menu rows that choose between them wear.
+class LaneGlyphPainter extends CustomPainter {
+  final bool spectral;
+  final Color colour;
+
+  const LaneGlyphPainter({required this.spectral, required this.colour});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = colour
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    final u = size.shortestSide / 16;
+    if (spectral) {
+      for (var row = 0; row < 3; row++) {
+        for (var col = 0; col < 4; col++) {
+          // Fuller at the foot, as a sound's energy mostly is.
+          if (col > 3 - row || (row == 2 && col == 1)) continue;
+          canvas.drawCircle(
+              Offset((3.5 + col * 3) * u, (12.5 - row * 4.5) * u), 1.1 * u, paint);
+        }
+      }
+      return;
+    }
+    const heights = [2.0, 5.0, 3.0, 6.0, 2.5];
+    for (var i = 0; i < heights.length; i++) {
+      final x = (2.5 + i * 2.75) * u;
+      canvas.drawLine(Offset(x, (8 - heights[i]) * u),
+          Offset(x, (8 + heights[i]) * u), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(LaneGlyphPainter old) =>
+      old.spectral != spectral || old.colour != colour;
+}
+
+/// The board's column header over the outline: the number and the name each
+/// get their kicker, stood over the cells the rows below use, so the words line
+/// up with what they name. The switches, the twirl and the lane switch carry no
+/// word, as the layer Timeline's own header leaves them.
 class AudioTrackHeaderRow extends StatelessWidget {
   const AudioTrackHeaderRow({super.key});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    Widget kicker(String text,
-            {AlignmentGeometry align = Alignment.centerLeft}) =>
-        Align(
-          alignment: align,
+    Widget kicker(String text) => Align(
+          alignment: Alignment.centerLeft,
           child: Text(t.kickerCase(text),
               style: t.kicker, maxLines: 1, overflow: TextOverflow.ellipsis),
         );
@@ -605,10 +662,6 @@ class AudioTrackHeaderRow extends StatelessWidget {
           SizedBox(width: numberCellWidth, child: kicker(l10n.columnNumber)),
           const SizedBox(width: identityGap + 6 + identityGap),
           Expanded(child: kicker(l10n.columnTrack)),
-          const SizedBox(width: outlineGap),
-          SizedBox(
-              width: audioTrackChipWidth,
-              child: kicker(l10n.columnLane, align: Alignment.center)),
         ],
       ),
     );
@@ -620,9 +673,13 @@ class AudioTrackHeaderRow extends StatelessWidget {
 /// layer Timeline's rows do.
 class AudioRowGround extends StatefulWidget {
   final bool selected;
-  final Widget child;
 
-  const AudioRowGround({super.key, required this.selected, required this.child});
+  /// The row, told whether the pointer is on it, so what waits for the pointer
+  /// comes up with the wash.
+  final Widget Function(bool over) builder;
+
+  const AudioRowGround(
+      {super.key, required this.selected, required this.builder});
 
   @override
   State<AudioRowGround> createState() => _AudioRowGroundState();
@@ -655,7 +712,7 @@ class _AudioRowGroundState extends State<AudioRowGround> {
               ? BorderRadius.circular(t.tokens.controlRadius)
               : null,
         ),
-        child: widget.child,
+        child: widget.builder(_over),
       ),
     );
   }

@@ -361,6 +361,10 @@ class InterfaceSettings {
   /// frames. Off, a sound clip goes where the pointer puts it.
   bool quantiseSound;
 
+  /// How long a level meter's hold line rests on the loudest peak, in seconds.
+  /// Nought draws no line, and a negative number holds it until reset.
+  int peakHoldSeconds;
+
   /// What a file with more than one audio stream becomes when it is added to
   /// a composition.
   StreamsArrival streamsArrival;
@@ -583,6 +587,7 @@ class InterfaceSettings {
     this.cutVegasDrags = false,
     this.cutHeadWidth = 180,
     this.quantiseSound = true,
+    this.peakHoldSeconds = 3,
     this.streamsArrival = StreamsArrival.mixed,
     this.cutSoundWithPicture = false,
     this.cutTracksAnyOrder = false,
@@ -631,6 +636,7 @@ class InterfaceSettings {
         'cut_vegas_drags': cutVegasDrags,
         'cut_head_width': cutHeadWidth,
         'quantise_sound': quantiseSound,
+        'peak_hold_seconds': peakHoldSeconds,
         'audio_streams_arrival': streamsArrival.name,
         'cut_sound_with_picture': cutSoundWithPicture,
         'cut_tracks_any_order': cutTracksAnyOrder,
@@ -700,6 +706,7 @@ class InterfaceSettings {
         cutVegasDrags: j['cut_vegas_drags'] as bool? ?? false,
         cutHeadWidth: (j['cut_head_width'] as num?)?.toDouble() ?? 180,
         quantiseSound: j['quantise_sound'] as bool? ?? true,
+        peakHoldSeconds: j['peak_hold_seconds'] as int? ?? 3,
         // 0.7.0 kept this under `streams_arrival` and wrote the first stream
         // there whether or not anybody had chosen it, so only a layer each is
         // believed from that key. Anything else gets the default.

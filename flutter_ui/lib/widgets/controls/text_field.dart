@@ -544,7 +544,11 @@ class _HouseTextFieldState extends State<HouseTextField>
           fit: widget.topAlign ? StackFit.expand : StackFit.loose,
           children: [
             if (hint != null && widget.controller.text.isEmpty)
-              Text(hint, style: t.body.copyWith(color: t.textMuted)),
+              Text(hint,
+                  style: t.body.copyWith(color: t.textMuted),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis),
             // Focus on the *down* stroke, not the resolved tap: a press that
             // slides straight into a drag is someone selecting text in one
             // motion, and the field must already be theirs when the drag's

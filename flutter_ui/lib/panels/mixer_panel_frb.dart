@@ -4,9 +4,9 @@
 //
 // Each strip is the board's drawing: the layer's name underlined in its label
 // colour, a pan pot, a fader beside the stereo meters, the dB well, and the
-// mute and solo switches. The Master strip swaps the pot for the limiter lamp
-// and carries the muted LUFS placeholder (loudness measurement is post-v1,
-// docs/09 §8).
+// mute, solo and fx switches. The Master strip swaps the pot for the limiter
+// lamp. Every part of a strip answers a right-click, and all the strips' faders
+// stand level, whichever of them have something extra to show.
 //
 // **The meters run off the feed.** The rest moves only as the house controls
 // do: a picked strip's fill and a switch's light ease in. One
@@ -21,26 +21,34 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
-import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show insertEmptyLayer;
+import '../shell/number_dialog_frb.dart';
+import '../state/app_state.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'audio_meters_feed.dart';
+import 'audio_routes_frb.dart';
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'placeholder.dart';
-import 'timeline_extras_frb.dart' show rowSelectionFill;
+import 'timeline_extras_frb.dart' show rowSelectionFill, showMenuAt;
+import 'timeline_outline_row_frb.dart' show RowRenameField;
 
 /// The fader's floor: the engine's own knee, at or below which the sound is
 /// exactly off (`lumit_audio::mix::VOLUME_FLOOR_DB`).
@@ -84,6 +92,81 @@ double _faderDb(double fraction) {
   return _taper.last.$2;
 }
 
+/// The menu rows every level meter wears: how long its hold line rests, and
+/// putting the lines and the limiter's light out.
+List<Widget> meterRows(LumitUiState ui, VoidCallback close) {
+  final settings = ui.workspace.interface;
+  return [
+    SubmenuRow(
+      key: const ValueKey<String>('meter-menu-hold'),
+      closeParent: close,
+      submenu: (dismiss) => FloatSurface(
+        width: 130,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (seconds, label) in [
+              (0, l10n.mixerPeakHoldOff),
+              (3, l10n.mixerPeakHoldSeconds(3)),
+              (10, l10n.mixerPeakHoldSeconds(10)),
+              (-1, l10n.mixerPeakHoldForever),
+            ])
+              MenuRow(
+                key: ValueKey<String>('meter-menu-hold-$seconds'),
+                onPressed: () {
+                  dismiss();
+                  settings.peakHoldSeconds = seconds;
+                  meterPeakHoldSeconds = seconds;
+                  ui.workspace.settingsChanged();
+                  resetMeterPeaks();
+                },
+                child:
+                    MenuLabel(label, ticked: settings.peakHoldSeconds == seconds),
+              ),
+          ],
+        ),
+      ),
+      child: Text(l10n.mixerPeakHold),
+    ),
+    MenuRow(
+      key: const ValueKey<String>('meter-menu-reset'),
+      onPressed: () {
+        close();
+        resetMeterPeaks();
+      },
+      child: Text(l10n.mixerResetPeaks),
+    ),
+  ];
+}
+
+/// [scalar] with a key added at [frame], or the one there taken away. Taking the
+/// last one away leaves the plain value it held.
+BridgeScalar scalarWithKeyToggled(
+    BridgeScalar scalar, double value, CompositionReference comp, int frame) {
+  final keys = scalar is BridgeScalar_Keyframed
+      ? scalar.field0
+      : const <BridgeKeyframe>[];
+  if (keys.any((k) => comp.frameAtTime(time: k.time) == frame)) {
+    final rest = [
+      for (final k in keys)
+        if (comp.frameAtTime(time: k.time) != frame) k,
+    ];
+    return rest.isEmpty
+        ? BridgeScalar.static_(value)
+        : BridgeScalar.keyframed(rest);
+  }
+  if (keys.isNotEmpty) return scalarWithValueAt(scalar, value, comp, frame);
+  return BridgeScalar.keyframed([
+    BridgeKeyframe(
+      time: timeOfFrame(comp, frame),
+      value: value,
+      interpIn: const BridgeSideInterp.linear(),
+      interpOut: const BridgeSideInterp.linear(),
+    ),
+  ]);
+}
+
 class MixerPanelFrb extends StatefulWidget {
   /// A test's own feed, silent and hand-pulsed. The application passes none
   /// and the panel makes its own polling one.
@@ -113,6 +196,7 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     super.initState();
     if (widget.feed == null) {
       final ui = Provider.of<LumitUiState>(context, listen: false);
+      meterPeakHoldSeconds = ui.workspace.interface.peakHoldSeconds;
       _feed.start(wake: Listenable.merge([ui.playing, ui.playheadFrame]));
     }
   }
@@ -153,6 +237,101 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     }
   }
 
+  /// The desk's own ground, off every strip: new strips, and what can be said
+  /// of all of them at once.
+  void _groundMenu(LumitUiState ui, CompositionReference comp, Offset at,
+      List<BridgeLayerEntry> sounding) {
+    final muted = [
+      for (final e in sounding)
+        if (!e.info.switches.audible) e.layer.internallayerId,
+    ];
+    final soloed = [
+      for (final e in sounding)
+        if (e.info.switches.solo) e.layer.internallayerId,
+    ];
+    final raised = [
+      for (final e in sounding)
+        if (e.info.volumeDb is! BridgeScalar_Static ||
+            (e.info.volumeDb as BridgeScalar_Static).field0 != 0)
+          e,
+    ];
+    void changed() {
+      ui.model.refresh();
+      comp.audioPrepare();
+    }
+
+    void flip(BridgeLayerSwitch which, List<UuidValue> layers, bool on) {
+      try {
+        comp.setSwitchOnLayers(
+            clicked: layers.first, layers: layers, switch_: which, on_: on);
+      } catch (_) {}
+      changed();
+    }
+
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 210,
+      rows: (close) => [
+        for (final (action, label) in [
+          ('layer.new.audio', l10n.insertAudioLayer),
+          ('layer.new.bus', l10n.insertBus),
+        ])
+          MenuRow(
+            key: ValueKey<String>('mixer-$action'),
+            onPressed: () {
+              close(null);
+              insertEmptyLayer(ui, comp, action);
+              changed();
+            },
+            child: MenuLabel(label, action: action),
+          ),
+        if (sounding.isNotEmpty) ...[
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey<String>('mixer-unmute-all'),
+            enabled: muted.isNotEmpty,
+            onPressed: () {
+              close(null);
+              flip(BridgeLayerSwitch.audible, muted, true);
+            },
+            child: MenuLabel(l10n.mixerUnmuteAll, enabled: muted.isNotEmpty),
+          ),
+          MenuRow(
+            key: const ValueKey<String>('mixer-clear-solos'),
+            enabled: soloed.isNotEmpty,
+            onPressed: () {
+              close(null);
+              flip(BridgeLayerSwitch.solo, soloed, false);
+            },
+            child: MenuLabel(l10n.mixerClearSolos, enabled: soloed.isNotEmpty),
+          ),
+          MenuRow(
+            key: const ValueKey<String>('mixer-reset-faders'),
+            enabled: raised.isNotEmpty,
+            onPressed: () {
+              close(null);
+              asOneUndoStep(
+                  Provider.of<LumitState>(context, listen: false).project, () {
+                for (final e in raised) {
+                  try {
+                    e.layer.setVolumeDb(
+                        value: scalarWithValueAt(
+                            e.info.volumeDb, 0, comp, ui.playheadFrame.value));
+                  } catch (_) {
+                    // A locked layer refuses, and the rest still take it.
+                  }
+                }
+              });
+              changed();
+            },
+            child: MenuLabel(l10n.mixerResetFaders, enabled: raised.isNotEmpty),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
@@ -181,12 +360,20 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
             if (_hasAudio[entry.layer.internallayerId.toString()] ?? false)
               entry,
         ];
+        // A line under the names is what a routed strip's sound says, and every
+        // strip keeps the room for it while any of them is, so the faders stand
+        // level. While none is, it takes up nothing.
+        final routed = sounding.any((e) => e.info.output != null);
         return Container(
           color: t.surface0,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
+                child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapUp: (e) =>
+                    _groundMenu(ui, comp, e.globalPosition, sounding),
                 child: sounding.isEmpty
                     ? Center(
                         child: Padding(
@@ -205,6 +392,7 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                         child: HouseScrollbar(
                         controller: _strips,
                         crossAxisMargin: 2,
+                        child: EdgeFade(
                         child: ListView(
                         controller: _strips,
                         scrollDirection: Axis.horizontal,
@@ -223,6 +411,8 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                                     'strip-${entry.layer.internallayerId}'),
                                 comp: comp,
                                 entry: entry,
+                                desk: sounding,
+                                routed: routed,
                                 feed: _feed,
                                 onChanged: () {
                                   ui.model.refresh();
@@ -234,8 +424,10 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                       ),
                       ),
                       ),
+                      ),
+                ),
               ),
-              _MasterStrip(comp: comp, feed: _feed),
+              _MasterStrip(comp: comp, feed: _feed, routed: routed),
             ],
           ),
         );
@@ -247,9 +439,20 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
 /// The width the board draws a strip at.
 const double _stripWidth = 62;
 
+/// How tall the strip's rows that must stand level across the desk are.
+const double _nameRow = 18;
+const double _routeRow = 12;
+const double _switchRow = 14;
+
 class _MixerStrip extends StatefulWidget {
   final CompositionReference comp;
   final BridgeLayerEntry entry;
+
+  /// Every strip on the desk, which a menu on a picked strip acts across.
+  final List<BridgeLayerEntry> desk;
+
+  /// Whether any strip on the desk is routed, so this one keeps a line for it.
+  final bool routed;
   final AudioMeterFeed feed;
   final VoidCallback onChanged;
 
@@ -257,6 +460,8 @@ class _MixerStrip extends StatefulWidget {
     super.key,
     required this.comp,
     required this.entry,
+    required this.desk,
+    required this.routed,
     required this.feed,
     required this.onChanged,
   });
@@ -270,6 +475,184 @@ class _MixerStripState extends State<_MixerStrip> {
   /// gesture is one undo step (the value fields' own discipline).
   double? _dragDb;
   double? _dragPan;
+
+  /// The name's field while the strip is being renamed, null the rest of the
+  /// time.
+  TextEditingController? _rename;
+
+  @override
+  void dispose() {
+    _rename?.dispose();
+    super.dispose();
+  }
+
+  void _beginRename() {
+    if (widget.entry.info.switches.locked) return;
+    setState(
+        () => _rename = TextEditingController(text: widget.entry.info.name));
+  }
+
+  void _endRename({required bool commit}) {
+    final text = _rename?.text.trim();
+    setState(() {
+      _rename?.dispose();
+      _rename = null;
+    });
+    if (commit &&
+        text != null &&
+        text.isNotEmpty &&
+        text != widget.entry.info.name) {
+      widget.entry.layer.rename(name: text);
+      widget.onChanged();
+    }
+  }
+
+  // ---------------------------------------------------------------- the menus
+
+  /// The strip's own right-click: the same rows a track head has in the Audio
+  /// timeline, since it is the same layer.
+  void _stripMenu(Offset at) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 200,
+      rows: (close) => audioLayerRows(
+        theme: ThemeScope.of(context).theme,
+        comp: widget.comp,
+        app: Provider.of<LumitState>(context, listen: false),
+        entry: widget.entry,
+        targets:
+            audioMenuTargets(widget.entry, widget.desk, ui.selectedLayerIds),
+        buses: [
+          for (final l in ui.model.heldLayers)
+            if (l.info.kind == BridgeLayerKind.bus) l,
+        ],
+        frame: ui.playheadFrame.value,
+        closeParent: () => close(null),
+        onRename: _beginRename,
+        onChanged: widget.onChanged,
+      ),
+    );
+  }
+
+  /// A fader's or a pot's right-click: back to its usual value, a number asked
+  /// for, a key at the playhead, and any sides it can be thrown to.
+  void _valueMenu(
+    Offset at, {
+    required BridgeScalar scalar,
+    required void Function(BridgeScalar next) write,
+    required String resetLabel,
+    required String askLabel,
+    required String title,
+    required double min,
+    required double max,
+    required int decimals,
+    String? suffix,
+    List<(String, double)> sides = const [],
+  }) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final frame = ui.playheadFrame.value;
+    final value = _sampled(scalar, frame);
+    final keyed = scalar is BridgeScalar_Keyframed &&
+        scalar.field0.any((k) => widget.comp.frameAtTime(time: k.time) == frame);
+    void put(double v) {
+      write(scalarWithValueAt(scalar, v, widget.comp, frame));
+      widget.onChanged();
+    }
+
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 190,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey<String>('mixer-value-reset'),
+          enabled: value != 0,
+          onPressed: () {
+            close(null);
+            put(0);
+          },
+          child: MenuLabel(resetLabel, enabled: value != 0),
+        ),
+        MenuRow(
+          key: const ValueKey<String>('mixer-value-ask'),
+          onPressed: () async {
+            close(null);
+            final typed = await askNumberFrb(
+                context: context,
+                title: title,
+                value: value,
+                min: min,
+                max: max,
+                decimals: decimals,
+                suffix: suffix);
+            if (typed != null && mounted) put(typed);
+          },
+          child: MenuLabel(askLabel),
+        ),
+        for (final (label, side) in sides)
+          MenuRow(
+            key: ValueKey<String>('mixer-value-side-$side'),
+            onPressed: () {
+              close(null);
+              put(side);
+            },
+            child: MenuLabel(label),
+          ),
+        // A value an expression drives has no keys to add.
+        if (scalar is! BridgeScalar_Expression) ...[
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey<String>('mixer-value-key'),
+            onPressed: () {
+              close(null);
+              write(scalarWithKeyToggled(scalar, value, widget.comp, frame));
+              widget.onChanged();
+            },
+            child: MenuLabel(
+                keyed ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _faderMenu(Offset at) => _valueMenu(
+        at,
+        scalar: widget.entry.info.volumeDb,
+        write: (next) => widget.entry.layer.setVolumeDb(value: next),
+        resetLabel: l10n.audioResetVolume,
+        askLabel: l10n.mixerSetLevel,
+        title: l10n.volume,
+        min: _faderFloorDb,
+        max: 12,
+        decimals: 1,
+        suffix: ' dB',
+      );
+
+  void _potMenu(Offset at) => _valueMenu(
+        at,
+        scalar: widget.entry.info.pan,
+        write: (next) => widget.entry.layer.setPan(value: next),
+        resetLabel: l10n.audioResetPan,
+        askLabel: l10n.mixerSetPan,
+        title: l10n.audioPan,
+        min: -100,
+        max: 100,
+        decimals: 0,
+        sides: [(l10n.mixerPanLeft, -100), (l10n.mixerPanRight, 100)],
+      );
+
+  void _meterMenu(Offset at) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 170,
+      rows: (close) => meterRows(ui, () => close(null)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -294,12 +677,23 @@ class _MixerStripState extends State<_MixerStrip> {
     // pick lands before the fader or the pot starts its own gesture. The
     // picked strip wears the Timeline's selection fill.
     return Listener(
-      onPointerDown: (_) {
-        if (!ui.selectedLayerIds.contains(layer.internallayerId)) {
+      onPointerDown: (e) {
+        final isIn = ui.selectedLayerIds.contains(layer.internallayerId);
+        if (HardwareKeyboard.instance.isControlPressed ||
+            HardwareKeyboard.instance.isShiftPressed) {
+          ui.setSelection([
+            for (final l in ui.selectedLayers.value)
+              if (l.internallayerId != layer.internallayerId) l,
+            if (!isIn) layer,
+          ]);
+        } else if (!isIn) {
           ui.setSelection([layer]);
         }
       },
-      child: ValueListenableBuilder<List<LayerReference>>(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (e) => _stripMenu(e.globalPosition),
+        child: ValueListenableBuilder<List<LayerReference>>(
         valueListenable: ui.selectedLayers,
         builder: (context, picked, child) => AnimatedContainer(
           duration: mark.duration,
@@ -321,7 +715,73 @@ class _MixerStripState extends State<_MixerStrip> {
                 builder: (context, frame, _) =>
                     _body(context, t, info, layer, id, switches, frame),
               ),
+        ),
       ),
+    );
+  }
+
+  /// The strip's name, with its label colour under it, or the field it turns
+  /// into. A double-click is the way in, as it is on a name anywhere.
+  Widget _name(LumitTheme t, BridgeLayerInfo info) => SizedBox(
+        height: _nameRow,
+        child: _rename != null
+            ? RowRenameField(
+                key: const ValueKey<String>('strip-rename'),
+                controller: _rename!,
+                onCommit: () => _endRename(commit: true),
+                onCancel: () => _endRename(commit: false),
+              )
+            : LumitTooltip(
+                message: info.name,
+                child: GestureDetector(
+                  key: ValueKey<String>(
+                      'strip-name-${widget.entry.layer.internallayerId}'),
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: _beginRename,
+                  child: Container(
+                    constraints:
+                        const BoxConstraints(maxWidth: _stripWidth - 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: t.labelColour(info.label),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      info.name,
+                      style: t.small.copyWith(color: t.textPrimary),
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+      );
+
+  /// Which bus this strip's sound goes to, while it does not go to the master.
+  Widget _route(LumitTheme t, BridgeLayerInfo info) {
+    String? bus;
+    for (final l in Provider.of<LumitUiState>(context, listen: false)
+        .model
+        .heldLayers) {
+      if (l.layer.internallayerId == info.output) bus = l.info.name;
+    }
+    return SizedBox(
+      height: _routeRow,
+      width: _stripWidth - 8,
+      child: bus == null
+          ? null
+          : Text(
+              '→ $bus',
+              style: t.caption.copyWith(color: t.textMuted),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+            ),
     );
   }
 
@@ -338,117 +798,103 @@ class _MixerStripState extends State<_MixerStrip> {
     final pan = info.pan;
     final db = _dragDb ?? _sampled(volume, frame);
     final panValue = _dragPan ?? _sampled(pan, frame);
+    final chain = info.effects.where((e) => e.enabled && e.audio).length;
     return Column(
+      children: [
+        _name(t, info),
+        if (widget.routed) _route(t, info),
+        const SizedBox(height: 6),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapUp: (e) => _potMenu(e.globalPosition),
+          child: PanPot(
+            key: ValueKey('pot-$id'),
+            value: panValue,
+            onLive: (v) => setState(() => _dragPan = v),
+            onCommit: (v) => _commitPan(pan, v, frame),
+            onCancel: () => setState(() => _dragPan = null),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              LumitTooltip(
-                message: info.name,
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: _stripWidth - 8),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: t.labelColour(info.label),
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    info.name,
-                    style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              GestureDetector(
+                onSecondaryTapUp: (e) => _faderMenu(e.globalPosition),
+                child: _Fader(
+                  key: ValueKey('fader-$id'),
+                  db: db,
+                  onLive: (v) => setState(() => _dragDb = v),
+                  onCommit: (v) => _commitVolume(volume, v, frame),
+                  onCancel: () => setState(() => _dragDb = null),
                 ),
               ),
-              const SizedBox(height: 6),
-              // The chain indicator (AP5, the board's small mark): the strip
-              // says the layer's sound goes through plugins without listing
-              // them — the stack is the rack, and Effect controls is where the
-              // rack is worked. Enabled entries only, because a fully bypassed
-              // chain is not in the sound.
-              if (info.effects
-                      .where((e) => e.enabled && e.audio)
-                      .length
-                  case final chain when chain > 0) ...[
-                LumitTooltip(
-                  message: l10n.mixerChain(chain),
-                  child: Container(
-                    key: ValueKey('chain-$id'),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: t.hairlineStrong),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Text(
-                      'FX $chain',
-                      style: t.mono
-                          .copyWith(fontSize: 9, color: t.textMuted),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-              ],
-              PanPot(
-                key: ValueKey('pot-$id'),
-                value: panValue,
-                onLive: (v) => setState(() => _dragPan = v),
-                onCommit: (v) => _commitPan(pan, v, frame),
-                onCancel: () => setState(() => _dragPan = null),
-              ),
-              const SizedBox(height: 4),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Fader(
-                      key: ValueKey('fader-$id'),
-                      db: db,
-                      onLive: (v) => setState(() => _dragDb = v),
-                      onCommit: (v) => _commitVolume(volume, v, frame),
-                      onCancel: () => setState(() => _dragDb = null),
-                    ),
-                    const SizedBox(width: 3),
-                    MeterBand(stripId: id, feed: widget.feed),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 4),
-              _DbWell(db: db),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _SwitchGlyph(
-                    keyName: 'mute-$id',
-                    mark: switches.audible ? LumitIcons.audio : LumitIcons.muted,
-                    on: switches.audible,
-                    tip: switches.audible
-                        ? l10n.switchAudible
-                        : l10n.switchMuted,
-                    onTap: () {
-                      layer.setSwitch(
-                          switch_: BridgeLayerSwitch.audible,
-                          on_: !switches.audible);
-                      widget.onChanged();
-                    },
-                  ),
-                  const SizedBox(width: 5),
-                  _SoloChip(
-                    keyName: 'solo-$id',
-                    on: switches.solo,
-                    onTap: () {
-                      layer.setSwitch(
-                          switch_: BridgeLayerSwitch.solo, on_: !switches.solo);
-                      widget.onChanged();
-                    },
-                  ),
-                ],
+              const SizedBox(width: 3),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapUp: (e) => _meterMenu(e.globalPosition),
+                child: MeterBand(stripId: id, feed: widget.feed),
               ),
             ],
-          );
+          ),
+        ),
+        const SizedBox(height: 4),
+        _DbWell(
+          db: db,
+          onCommit: (v) => _commitVolume(volume, v, frame),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: _switchRow,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _SwitchGlyph(
+                keyName: 'mute-$id',
+                mark: switches.audible ? LumitIcons.audio : LumitIcons.muted,
+                on: switches.audible,
+                tip: switches.audible ? l10n.switchAudible : l10n.switchMuted,
+                onTap: () {
+                  layer.setSwitch(
+                      switch_: BridgeLayerSwitch.audible,
+                      on_: !switches.audible);
+                  widget.onChanged();
+                },
+              ),
+              const SizedBox(width: 5),
+              _SoloChip(
+                keyName: 'solo-$id',
+                on: switches.solo,
+                onTap: () {
+                  layer.setSwitch(
+                      switch_: BridgeLayerSwitch.solo, on_: !switches.solo);
+                  widget.onChanged();
+                },
+              ),
+              // A strip with plugins in its sound says so and can bypass them,
+              // which is the rack's one control a desk wants at hand. The stack
+              // is the rack, and Effect controls is where it is worked.
+              if (chain > 0) ...[
+                const SizedBox(width: 5),
+                _SwitchGlyph(
+                  keyName: 'chain-$id',
+                  icon: LumitIcon.fx,
+                  on: switches.fx,
+                  tip: l10n.mixerChain(chain),
+                  onTap: () {
+                    layer.setSwitch(
+                        switch_: BridgeLayerSwitch.fx, on_: !switches.fx);
+                    widget.onChanged();
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   double _sampled(BridgeScalar scalar, int frame) =>
@@ -476,14 +922,18 @@ class _MixerStripState extends State<_MixerStrip> {
   }
 }
 
-/// The Master strip: the fader is a gain stage on the sum, the lamp is
-/// the limiter's sticky clip light, and the LUFS readout is the muted
-/// placeholder the board draws — loudness measurement is post-v1 (docs/09 §8).
+/// The Master strip: the fader is a gain stage on the sum, and the lamp is the
+/// limiter's sticky clip light.
 class _MasterStrip extends StatefulWidget {
   final CompositionReference comp;
   final AudioMeterFeed feed;
 
-  const _MasterStrip({required this.comp, required this.feed});
+  /// Whether the strips keep a line under their names, so this fader stands
+  /// level with theirs.
+  final bool routed;
+
+  const _MasterStrip(
+      {required this.comp, required this.feed, required this.routed});
 
   @override
   State<_MasterStrip> createState() => _MasterStripState();
@@ -492,57 +942,103 @@ class _MasterStrip extends StatefulWidget {
 class _MasterStripState extends State<_MasterStrip> {
   double? _dragDb;
 
+  void _write(double db) {
+    widget.comp.setMasterVolumeDb(db: db);
+    setState(() => _dragDb = null);
+    context.read<LumitUiState>().model.refresh();
+    widget.comp.audioPrepare();
+  }
+
+  void _menu(Offset at) {
+    final ui = context.read<LumitUiState>();
+    final db = widget.comp.masterVolumeDb();
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 190,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey<String>('master-reset'),
+          enabled: db != 0,
+          onPressed: () {
+            close(null);
+            _write(0);
+          },
+          child: MenuLabel(l10n.audioResetVolume, enabled: db != 0),
+        ),
+        MenuRow(
+          key: const ValueKey<String>('master-ask'),
+          onPressed: () async {
+            close(null);
+            final typed = await askNumberFrb(
+                context: context,
+                title: l10n.mixerMaster,
+                value: db,
+                min: _faderFloorDb,
+                max: 12,
+                decimals: 1,
+                suffix: ' dB');
+            if (typed != null && mounted) _write(typed);
+          },
+          child: MenuLabel(l10n.mixerSetLevel),
+        ),
+        const MenuDivider(),
+        ...meterRows(ui, () => close(null)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final db = _dragDb ?? widget.comp.masterVolumeDb();
-    return Container(
-      width: _stripWidth,
-      color: t.surface1,
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        children: [
-          Text(
-            l10n.mixerMaster,
-            style: t.small.copyWith(color: t.textPrimary),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 6),
-          _LimiterLamp(feed: widget.feed),
-          const SizedBox(height: 4),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _Fader(
-                  key: const ValueKey('fader-master'),
-                  db: db,
-                  onLive: (v) => setState(() => _dragDb = v),
-                  onCommit: (v) {
-                    widget.comp.setMasterVolumeDb(db: v);
-                    setState(() => _dragDb = null);
-                    context.read<LumitUiState>().model.refresh();
-                    widget.comp.audioPrepare();
-                  },
-                  onCancel: () => setState(() => _dragDb = null),
-                ),
-                const SizedBox(width: 3),
-                MeterBand(stripId: '', feed: widget.feed),
-              ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (e) => _menu(e.globalPosition),
+      child: Container(
+        width: _stripWidth,
+        decoration: BoxDecoration(
+          color: t.surface1,
+          border: Border(left: BorderSide(color: t.hairline)),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          children: [
+            SizedBox(
+              height: _nameRow,
+              child: Text(
+                l10n.mixerMaster,
+                style: t.small.copyWith(color: t.textPrimary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          _DbWell(db: db),
-          const SizedBox(height: 4),
-          // The muted LUFS placeholder: measurement is a planned export
-          // option, and a number invented here would be a lie with decimals.
-          Text(
-            l10n.mixerLufsPending,
-            style: t.caption.copyWith(color: t.textDisabled),
-          ),
-        ],
+            if (widget.routed) const SizedBox(height: _routeRow),
+            const SizedBox(height: 6),
+            _LimiterLamp(feed: widget.feed),
+            const SizedBox(height: 4),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Fader(
+                    key: const ValueKey('fader-master'),
+                    db: db,
+                    onLive: (v) => setState(() => _dragDb = v),
+                    onCommit: _write,
+                    onCancel: () => setState(() => _dragDb = null),
+                  ),
+                  const SizedBox(width: 3),
+                  MeterBand(stripId: '', feed: widget.feed),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            _DbWell(db: db, onCommit: _write),
+            const SizedBox(height: 4 + _switchRow),
+          ],
+        ),
       ),
     );
   }
@@ -568,14 +1064,12 @@ class _LimiterLamp extends StatelessWidget {
         child: HoverMark(
           builder: (context, over) => GestureDetector(
             key: const ValueKey('limiter-lamp'),
-            onTap: () {
-              resetAudioClip();
-              // A parked poll would leave the lamp lit.
-              feed.wake();
-            },
+            onTap: resetMeterPeaks,
             child: AnimatedContainer(
               duration: ThemeScope.of(context).motion.mark.duration,
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              width: 30,
+              height: 14,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: t.error.withValues(alpha: lit ? 0.18 : 0),
                 border: Border.all(color: lit ? t.error : t.hairlineStrong),
@@ -799,7 +1293,12 @@ class _FaderState extends State<_Fader> with TickerProviderStateMixin {
                 painter: _FaderPainter(
                   fraction: _faderFraction(widget.db),
                   rail: t.surface3,
-                  knob: Color.lerp(t.accent, t.textPrimary, _glow.light * 0.3)!,
+                  // A fader at unity is where it usually rests, so it stays
+                  // quiet, and one that has been moved takes the accent.
+                  knob: Color.lerp(
+                      widget.db == 0 ? t.textSecondary : t.accent,
+                      t.textPrimary,
+                      _glow.light * 0.3)!,
                   tick: t.textMuted,
                   label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                 ),
@@ -835,6 +1334,9 @@ class _FaderPainter extends CustomPainter {
       Rect.fromLTWH(x - 1.5, 0, 3, size.height),
       Paint()..color = rail,
     );
+    // On a short strip the numbers would run into each other, so any too near
+    // the last one printed gives way, working down from the top.
+    var lastY = double.negativeInfinity;
     for (final (db, text) in _faderScale) {
       final y = yOf(_faderFraction(db));
       // Unity is the one a hand looks for, so its mark is the longer.
@@ -843,6 +1345,8 @@ class _FaderPainter extends CustomPainter {
         Rect.fromLTWH(x - (unity ? 7 : 5), y - 0.5, unity ? 4 : 2, 1),
         Paint()..color = tick,
       );
+      if (y - lastY < 12) continue;
+      lastY = y;
       final words = TextPainter(
         text: TextSpan(text: text, style: label),
         textDirection: TextDirection.ltr,
@@ -915,7 +1419,8 @@ class PanPot extends StatelessWidget {
             painter: _PotPainter(
               fraction: (value + 100) / 200,
               ring: Color.lerp(t.hairlineStrong, t.textSecondary, lit)!,
-              mark: Color.lerp(t.accent, t.textPrimary, lit * 0.3)!,
+              mark: Color.lerp(value == 0 ? t.textSecondary : t.accent,
+                  t.textPrimary, lit * 0.3)!,
             ),
           ),
         ),
@@ -973,44 +1478,88 @@ class _PotPainter extends CustomPainter {
       old.fraction != fraction || old.mark != mark || old.ring != ring;
 }
 
-/// The dB well under a fader.
-class _DbWell extends StatelessWidget {
+/// The dB well under a fader. It reads the level, and a click turns it into a
+/// field that takes a number.
+class _DbWell extends StatefulWidget {
   final double db;
+  final ValueChanged<double> onCommit;
 
-  const _DbWell({required this.db});
+  const _DbWell({required this.db, required this.onCommit});
+
+  @override
+  State<_DbWell> createState() => _DbWellState();
+}
+
+class _DbWellState extends State<_DbWell> {
+  bool _typing = false;
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final shown = widget.db <= _faderFloorDb
+        ? l10n.volumeNegInf
+        : widget.db.toStringAsFixed(1);
     return Container(
       width: 54,
-      height: 15,
+      height: 16,
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: t.surface0,
-        border: Border.all(color: t.hairline),
-        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: _typing ? t.accent : t.hairline),
+        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
       ),
-      child: Text(
-        '${db <= _faderFloorDb ? l10n.volumeNegInf : db.toStringAsFixed(1)} dB',
-        style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
-        maxLines: 1,
-      ),
+      child: _typing
+          ? Focus(
+              onFocusChange: (on) {
+                if (!on) setState(() => _typing = false);
+              },
+              child: DragValueField(
+                bare: true,
+                autofocus: true,
+                value: widget.db,
+                min: _faderFloorDb,
+                max: 12,
+                decimals: 1,
+                onChanged: (v) => widget.onCommit(v.toDouble()),
+                onSubmitted: () => setState(() => _typing = false),
+              ),
+            )
+          : MouseRegion(
+              cursor: SystemMouseCursors.text,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _typing = true),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '$shown ${l10n.unitSymbolDb}',
+                    style: t.mono.copyWith(
+                        fontSize: 9,
+                        color: widget.db == 0 ? t.textMuted : t.textPrimary),
+                    maxLines: 1,
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }
 
 class _SwitchGlyph extends StatelessWidget {
   final String keyName;
-  final String mark;
+
+  /// One of the set's glyphs, or one of the older marks through [icon].
+  final String? mark;
+  final LumitIcon? icon;
   final bool on;
   final String tip;
   final VoidCallback onTap;
 
   const _SwitchGlyph({
     required this.keyName,
-    required this.mark,
+    this.mark,
+    this.icon,
     required this.on,
     required this.tip,
     required this.onTap,
@@ -1033,11 +1582,12 @@ class _SwitchGlyph extends StatelessWidget {
             tween: ColorTween(end: on ? t.textMuted : t.warning),
             duration: scope.motion.mark.duration,
             curve: scope.motion.mark.curve,
-            builder: (context, ink, _) => glyph.LumitIcon(
-              mark,
-              size: 12,
-              colour: Color.lerp(ink, t.textPrimary, on ? lit : 0),
-            ),
+            builder: (context, ink, _) {
+              final colour = Color.lerp(ink, t.textPrimary, on ? lit : 0)!;
+              return mark != null
+                  ? glyph.LumitIcon(mark!, size: 12, colour: colour)
+                  : lumitIcon(icon!, size: 12, color: colour);
+            },
           ),
         ),
       ),
