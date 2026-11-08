@@ -1212,8 +1212,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
   /// The other axes of a row whose axes are shown together but move on their
   /// own (Position with Separate dimensions off): a key planted on one is
-  /// planted on all, or the row, which shows and toggles its first axis's
-  /// keys, would not show a key set by dragging only Y. None for a linked
+  /// planted on all, so the row's axes stay keyed together. None for a linked
   /// row, whose partners are written anyway, or a one-axis row.
   List<BridgeTransformProp> _keyMates(
           TransformGroup group, TransformAxis axis) =>

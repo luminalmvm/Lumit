@@ -869,15 +869,6 @@ final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
 }
 
-/// The keys of the first keyed channel of a multi-channel effect value, or
-/// none.
-List<BridgeKeyframe> firstKeys(List<BridgeScalar> channels) {
-  for (final c in channels) {
-    if (c case BridgeScalar_Keyframed(:final field0)) return field0;
-  }
-  return const [];
-}
-
 /// The channel a multi-channel effect value is read by: the first keyed one,
 /// else the first with an expression, else the first.
 BridgeScalar leadScalar(List<BridgeScalar> channels) =>
@@ -920,9 +911,9 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           // A Colour's and a Point's channels key together, from one
           // stopwatch, so the first keyed channel's times are the row's.
           BridgeEffectValue_Colour(:final field0) =>
-            firstKeys([field0.r, field0.g, field0.b, field0.a]),
+            rowKeysOf([field0.r, field0.g, field0.b, field0.a]),
           BridgeEffectValue_Point(:final field0) =>
-            firstKeys([field0.x, field0.y]),
+            rowKeysOf([field0.x, field0.y]),
           _ => const [],
         },
       // A mask's numbers key like any other scalar; its **shape** keys as whole
@@ -2179,14 +2170,20 @@ bool moveLaneKeys({
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
-      // Every keyed channel of a Colour or a Point moves, or none.
-      BridgeScalar? movedChannel(BridgeScalar s) => switch (s) {
-            BridgeScalar_Keyframed(:final field0) => switch (moved(field0)) {
-                final next? => BridgeScalar.keyframed(next),
-                null => null,
-              },
-            _ => s,
-          };
+      // Every keyed channel of a Colour or a Point moves, or none, each finding
+      // its own key by time: the Graph can key one channel alone.
+      final rowKeys = laneKeysOf(row);
+      BridgeScalar? movedChannel(BridgeScalar s) {
+        if (s is! BridgeScalar_Keyframed) return s;
+        final own = {
+          for (final MapEntry(key: i, value: time) in times.entries)
+            if (axisKeyIndex(rowKeys, i, s.field0) case final j?) j: time,
+        };
+        if (own.isEmpty) return s;
+        final next = movedBy(own, s.field0);
+        return next == null ? null : BridgeScalar.keyframed(next);
+      }
+
       for (final instance in stack) {
         if (instance.id() != info.id) continue;
         final value = instance.getValue(id: param.id);

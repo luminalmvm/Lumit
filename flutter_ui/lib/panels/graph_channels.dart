@@ -479,6 +479,7 @@ List<GraphChannel> graphChannels({
                 colourIndex: out.length,
                 scalar: parts[i],
                 entry: entry,
+                rowKeys: rowKeysOf(parts),
                 effect: fx,
                 param: param,
                 component: i,
