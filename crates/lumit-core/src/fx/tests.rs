@@ -11304,6 +11304,26 @@ fn clone_deformer_subtract_from_layer_keeps_the_layer() {
     assert_eq!(&rgba[12..16], &[1.0, 0.0, 0.0, 1.0]);
 }
 
+/// **Every clone row is its layer as it sits in the comp**, and no other
+/// row is; a saved Layer transform switch is dropped on load.
+#[test]
+fn clone_to_points_places_the_clone_rows() {
+    use crate::fx::builtins::{map_placement, MapPlacement};
+    let mut e = instantiate("clone_to_points").expect("Clone to points is declared");
+    assert_eq!(map_placement(&e, "clone_layer"), MapPlacement::AsPlaced);
+    assert_eq!(map_placement(&e, "clone_layer_8"), MapPlacement::AsPlaced);
+    assert_eq!(map_placement(&e, "path_layer"), MapPlacement::Stretch);
+    e.params.push(crate::model::EffectParam {
+        id: "layer_transform".to_owned(),
+        value: EffectValue::Bool(false),
+        extra: serde_json::Map::new(),
+    });
+    let mut stack = vec![e];
+    crate::fx::builtins::backfill_builtin_params(&mut stack);
+    assert!(stack[0].param("layer_transform").is_none());
+    assert_eq!(map_placement(&stack[0], "clone_layer"), MapPlacement::AsPlaced);
+}
+
 /// **Round corners rounds a square's corners and leaves its sides**: the
 /// corner pixel goes, the middle of an edge stays.
 #[test]

@@ -1167,16 +1167,23 @@ fn clone_deformer_carriage(
             .next()
             .filter(|s| !s.is_empty())?;
             stream.projection = projection;
-            // Every picture the copies show, each a Shape layer's outline.
+            // Every picture the copies show, each a Shape layer's outline as it
+            // sits on this layer, in a picture the size of this layer's, as the
+            // raster has it.
             let planned = CloneToPoints::planned(x, doc, comp, t_comp, lt, Some(stream.len()));
+            let (fw, fh) = lumit_core::fx::builtins::picture_size(doc, comp, layer);
             let pictures: Vec<(d::Outline, [f32; 2])> = planned
                 .iter()
                 .map(|p| {
                     let p = p.as_ref().filter(|p| p.layer != layer.id)?;
                     let l = comp.layers.iter().find(|l| l.id == p.layer)?;
-                    matches!(l.kind, LayerKind::Shape { .. })
-                        .then(|| outline(l, p.time))
-                        .flatten()
+                    if !matches!(l.kind, LayerKind::Shape { .. }) {
+                        return None;
+                    }
+                    let line =
+                        lumit_core::fx::points::layer_path(comp, layer, l, p.time, &context);
+                    let contours = d::contours_of(&line);
+                    (!contours.is_empty()).then_some((contours, [fw as f32, fh as f32]))
                 })
                 .collect::<Option<_>>()?;
             let rows = rows_of(x);

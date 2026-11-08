@@ -63,6 +63,11 @@ pub enum MapPlacement {
 /// How `e` places the picture it reads through its Layer row `row`.
 #[must_use]
 pub fn map_placement(e: &EffectInstance, row: &str) -> MapPlacement {
+    // Each Clone to points copy is its layer as placed in the comp: the
+    // layer's own Position, Scale and Rotation come with it.
+    if e.effect.match_name == "clone_to_points" && row.starts_with("clone_layer") {
+        return MapPlacement::AsPlaced;
+    }
     match e.param(&format!("{row}_placement")) {
         Some(EffectValue::Choice(0)) => MapPlacement::AsPlaced,
         Some(EffectValue::Choice(2)) => MapPlacement::Centre,
@@ -453,6 +458,11 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         if e.effect.match_name == "linear_wipe" {
             e.params
                 .retain(|p| p.id != "centre_x" && p.id != "centre_y");
+        }
+        // Clone to points' Layer transform switch is gone: a copy always
+        // carries its layer's transform.
+        if e.effect.match_name == "clone_to_points" {
+            e.params.retain(|p| p.id != "layer_transform");
         }
         for p in s.params {
             let Some(mut value) = default_param_value(&p.kind) else {

@@ -206,6 +206,9 @@ impl LayerInputDraw {
     #[must_use]
     pub fn size(&self) -> Option<[f32; 2]> {
         match self {
+            // Set down where it sits in the comp, the picture is the consuming
+            // layer's own.
+            LayerInputDraw::Layer(d) if d.place.as_ref().is_some_and(|p| p.placed.is_some()) => None,
             LayerInputDraw::Layer(d) => Some(d.natural),
             _ => None,
         }

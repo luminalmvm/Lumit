@@ -137,6 +137,8 @@ pub fn default_keymap() -> Keymap {
         // chord there and ship without one here.
         row(Global, "Mod+Y", "layer.new.solid"),
         row(Global, "Mod+Alt+Shift+T", "layer.new.text"),
+        // Global, as the Path row it works on is picked in the Timeline.
+        row(Global, "Mod+Shift+T", "path.points.transform"),
         row(Global, "Mod+Alt+Shift+C", "layer.new.camera"),
         row(Global, "Mod+Alt+Shift+L", "layer.new.light.point"),
         row(Global, "Mod+Alt+Y", "layer.new.adjustment"),
