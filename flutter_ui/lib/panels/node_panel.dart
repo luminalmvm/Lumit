@@ -132,8 +132,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   String _compName = '';
 
   /// While a list row's menu is up the list stays, though the right-click
-  /// has made that row's box the pick on the canvas.
+  /// has made that row's box the pick on the canvas. It stays after the menu
+  /// too, until something else is picked: [_menuPick] is that row's box.
   bool _holdIndex = false;
+  Object? _menuPick;
 
   /// Which of the picked box's parameters a driver is wired to, by parameter
   /// id, with the driver's name and what its wire carries — the same shape
@@ -242,6 +244,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   void _reload() {
     if (!mounted) return;
     final ui = _ui;
+    if (_menuPick != null &&
+        (ui?.graphNode.value ?? ui?.compGraphNode.value) != _menuPick) {
+      _menuPick = null;
+      _holdIndex = false;
+    }
     final comp = ui?.selectedComp;
     if (ui != null && comp != null && ui.model.isNodeGraph) {
       _reloadGraphBox(ui, comp);
@@ -429,6 +436,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// A list row's menu: [_askMenu], with the list kept on screen until the
   /// menu goes, rather than the row's own rows swapped in under it.
   void _askRowMenu(String key, Offset at) {
+    _menuPick = null;
     setState(() => _holdIndex = true);
     _askMenu(key, at);
     if (lumitPopupUp.value) {
@@ -441,7 +449,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   void _menuGone() {
     if (lumitPopupUp.value) return;
     lumitPopupUp.removeListener(_menuGone);
-    if (mounted) setState(() => _holdIndex = false);
+    _menuPick = _ui?.graphNode.value ?? _ui?.compGraphNode.value;
+    if (_menuPick == null && mounted) setState(() => _holdIndex = false);
   }
 
   /// The picked box's menu, opened by the canvas that owns its rows. Reset

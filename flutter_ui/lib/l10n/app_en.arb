@@ -16618,9 +16618,9 @@
   "@graphKeyKicker": {
     "description": "Timeline, Graph mode: the label opening the readout row at the foot of the outline, which appears while exactly one keyframe is selected and says which frame and value it holds. Shown in small capitals."
   },
-  "graphKeyFrame": "f{frame}",
+  "graphKeyFrame": "F{frame}",
   "@graphKeyFrame": {
-    "description": "Timeline, Graph mode: a frame number in the selected keyframe's readout row, written the short way with a lower-case f in front of it. Mono type.",
+    "description": "Timeline, Graph mode: a frame number in the selected keyframe's readout row, written the short way with a capital F in front of it, as the Timeline header writes it. Mono type.",
     "placeholders": {
       "frame": {
         "type": "int"

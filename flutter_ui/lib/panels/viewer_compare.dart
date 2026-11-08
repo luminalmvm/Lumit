@@ -28,39 +28,48 @@ import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_menus.dart';
 
-/// The second view of a wipe: where across the picture it starts, the line
-/// that sits there, the view whose zoom and pan it takes, and what each side
+/// The second view of a wipe: where across the picture the line sits, the
+/// line itself, the view whose zoom and pan it takes, and what each view
 /// shows where the two differ. The second side names its own composition
-/// when it is another one; the first one's is in the bar.
+/// when it is another one; the first one's is in the bar. It draws right of
+/// the line, or left of it once the sides are swapped.
 class ViewerWipe {
   final double x;
   final Widget seam;
   final ViewerSurface registerTo;
-  final String leftTag;
-  final String rightTag;
+  final String leadTag;
+  final String sideTag;
   final bool nameComp;
+  final bool swapped;
 
   const ViewerWipe({
     required this.x,
     required this.seam,
     required this.registerTo,
-    this.leftTag = '',
-    this.rightTag = '',
+    this.leadTag = '',
+    this.sideTag = '',
     this.nameComp = false,
+    this.swapped = false,
   });
 }
 
-/// Everything right of `x`.
+/// Everything right of `x`, or left of it when [swapped].
 class ViewerWipeClip extends CustomClipper<Rect> {
   final double x;
-  const ViewerWipeClip(this.x);
+  final bool swapped;
+  const ViewerWipeClip(this.x, {this.swapped = false});
 
   @override
-  Rect getClip(Size size) =>
-      Rect.fromLTRB(x.clamp(0, size.width), 0, size.width, size.height);
+  Rect getClip(Size size) {
+    final at = x.clamp(0.0, size.width);
+    return swapped
+        ? Rect.fromLTRB(0, 0, at, size.height)
+        : Rect.fromLTRB(at, 0, size.width, size.height);
+  }
 
   @override
-  bool shouldReclip(ViewerWipeClip old) => old.x != x;
+  bool shouldReclip(ViewerWipeClip old) =>
+      old.x != x || old.swapped != swapped;
 }
 
 class ViewerCompare extends StatelessWidget {
@@ -79,6 +88,9 @@ class ViewerCompare extends StatelessWidget {
   final ViewerSurface leftView;
   final ViewerSurface rightView;
 
+  /// The second view drawn on the left, the first on the right.
+  final bool swapped;
+
   const ViewerCompare({
     super.key,
     required this.pane,
@@ -89,6 +101,7 @@ class ViewerCompare extends StatelessWidget {
     required this.right,
     required this.leftView,
     required this.rightView,
+    this.swapped = false,
   });
 
   @override
@@ -99,7 +112,7 @@ class ViewerCompare extends StatelessWidget {
         final x = (box.maxWidth * at).clamp(0.0, box.maxWidth);
         if (mode != CompareMode.split) {
           final ui = context.read<LumitUiState>();
-          final (leftTag, rightTag) = _tags(ui);
+          final (leadTag, sideTag) = _tags(ui);
           // Both at the whole box's size, so the two pictures are in
           // register and the seam is a seam rather than two shots meeting.
           return Stack(
@@ -110,23 +123,26 @@ class ViewerCompare extends StatelessWidget {
                   x: x,
                   seam: _seam(context, t, box, x),
                   registerTo: leftView,
-                  leftTag: leftTag,
-                  rightTag: rightTag,
+                  leadTag: leadTag,
+                  sideTag: sideTag,
                   nameComp: leftView.compId != rightView.compId,
+                  swapped: swapped,
                 )),
               ),
             ],
           );
         }
+        final (first, second) =
+            swapped ? (right(null), left) : (left, right(null));
         return Stack(
           children: [
-            Positioned(left: 0, top: 0, bottom: 0, width: x, child: left),
+            Positioned(left: 0, top: 0, bottom: 0, width: x, child: first),
             Positioned(
               left: x,
               top: 0,
               bottom: 0,
               width: box.maxWidth - x,
-              child: right(null),
+              child: second,
             ),
             Positioned(
               left: x - grab / 2,

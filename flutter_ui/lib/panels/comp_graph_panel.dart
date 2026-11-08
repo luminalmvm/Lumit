@@ -1665,7 +1665,11 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       onExpand: fx && !_folded.contains(key) ? () => _toggleExposed(key) : null,
       enterLabel: enter,
       onEnter: enter == null ? null : () => _enterBox(node),
-      onAddNode: outputAlone ? () => _feedOutput(key) : null,
+      onAddNode: outputAlone
+          ? () => _feedOutput(key)
+          : picked.length > 1 || node.outputs.isEmpty
+              ? null
+              : () => _addAfter(key),
       onCopy: outputAlone ? null : () => _copySelected(ui),
       onPaste: () => _pasteBoxes(ui),
       canPaste: ui.clipboard.boxes != null,
@@ -1733,6 +1737,31 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     final edge = _edgeInto(into);
     final at = box.rect.topLeft - const Offset(graphOutNodeWidth + 60, 0);
     _openSearch(at, wire: into, insertOn: edge);
+  }
+
+  /// Add node… after a box: on the wire leaving it, as the wire's Insert
+  /// node… does, or wired from its output when nothing leaves it.
+  void _addAfter(String key) {
+    final layout = _layout();
+    final box = layout.byKey[key];
+    final id = _byKey[key]?.id;
+    final out = box?.outputs.firstOrNull;
+    final from = out == null ? null : box!.socket(out.id, false);
+    if (box == null || id == null || out == null || from == null) return;
+    final at = graphClearSpot(box.rect.topRight + const Offset(48, 0),
+        [for (final b in layout.boxes) b.rect]);
+    final edge = _graph!.wiring.edges
+        .where((e) => e.from == id && e.fromPort == out.id)
+        .firstOrNull;
+    final next = edge == null ? null : layout.byKey[_toKey(edge)];
+    final socket = next?.inputs.where((p) => p.id == edge!.toPort).firstOrNull;
+    final into = socket == null ? null : next!.socket(socket.id, true);
+    if (edge != null && socket != null && into != null) {
+      _openSearch(at,
+          wire: GraphSocket(_toKey(edge), socket, true, into), insertOn: edge);
+    } else {
+      _openSearch(at, wire: GraphSocket(key, out, false, from));
+    }
   }
 
   /// A socket's menu: its wire off, and the box's unused sockets shown or

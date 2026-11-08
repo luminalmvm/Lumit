@@ -696,6 +696,19 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
           },
       };
 
+  /// Add node… after a box: on the wire leaving it, or wired from its first
+  /// output when nothing leaves it. Null for a box with no output.
+  VoidCallback? _addAfterOf(int id) {
+    final boxes = _boxes();
+    final box = boxes.where((b) => b.node.id == id).firstOrNull;
+    if (box == null || box.node.outputs.isEmpty) return null;
+    return () => _openConsole(
+        graphClearSpot(box.rect.topRight + const Offset(48, 0),
+            [for (final b in boxes) b.rect]),
+        onWire: _graph!.edges.where((e) => e['from'] == id).firstOrNull ??
+            {'from': id, 'from_port': 0, 'to': null});
+  }
+
   /// A box put on a wire takes the wire's place: fed through its first input
   /// the wire fits, feeding on from its first output that fits. The engine
   /// says what fits, and where nothing does the box lands unwired.
@@ -720,12 +733,14 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
               'to': id,
               'to_port': i,
             },
-            {
-              'from': id,
-              'from_port': o,
-              'to': edge['to'],
-              'to_port': edge['to_port'],
-            },
+            // Nothing to pass on when the box was added after an end.
+            if (edge['to'] != null)
+              {
+                'from': id,
+                'from_port': o,
+                'to': edge['to'],
+                'to_port': edge['to_port'],
+              },
           ]);
         if (broken || shaderGraphView(graph: wired.encode()).error == null) {
           _commit(wired);
@@ -1091,6 +1106,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       onRename: _selection.length == 1
           ? () => setState(() => _renaming = id)
           : null,
+      onAddNode: _selection.length == 1 ? _addAfterOf(id) : null,
       onCopy: resultAlone ? null : _copySelected,
       onPaste: () => _paste(_toCanvas(const Offset(80, 80))),
       canPaste: _copied != null,

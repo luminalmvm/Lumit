@@ -1997,6 +1997,10 @@ List<MenuSection> lumitMenus(
                     MenuEntry.option(name, () => ui.compareWith(comp),
                         checked: () => '${comp.internalid}' == ui.compareSideB),
                 ]),
+              if (ui.currentCompare.pairsViews) ...[
+                MenuEntry.divider(),
+                MenuEntry(l10n.viewerMenuSwapSides, ui.swapCompare),
+              ],
             ]),
             // The way of looking, shared or each view's own.
             MenuEntry.toggle(

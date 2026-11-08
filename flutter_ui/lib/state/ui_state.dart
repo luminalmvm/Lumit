@@ -1564,12 +1564,8 @@ class LumitUiState extends ChangeNotifier {
     final pane = currentViewerPane;
     if (pane == null) return false;
     final now = views.compareOf(pane);
-    views.setCompare(
-      pane,
-      now == CompareMode.none ? CompareMode.wipe : CompareMode.none,
-    );
-    saveLayout();
-    requestFrame();
+    setCompareMode(
+        now == CompareMode.none ? CompareMode.wipe : CompareMode.none);
     return true;
   }
 
@@ -1577,6 +1573,17 @@ class LumitUiState extends ChangeNotifier {
     final pane = currentViewerPane;
     if (pane == null) return;
     views.setCompare(pane, mode);
+    // Ending a compare leaves the app on the picture that stays.
+    if (mode == CompareMode.none) {
+      final lead = views.byId(views.paneViews[pane]?.firstOrNull);
+      if (lead != null) {
+        frontView(lead.id);
+        final comp = lead.mode == ViewMode.composition ? compFor(lead) : null;
+        if (comp != null && comp.internalid != _selectedComp?.internalid) {
+          setSelectedComp(comp);
+        }
+      }
+    }
     saveLayout();
     requestFrame();
   }
@@ -3475,7 +3482,13 @@ class LumitUiState extends ChangeNotifier {
     // the active view when it is unlocked, in the most recently active
     // unlocked view otherwise, and in a new view when every one of them is
     // locked — which is the only answer that still shows what was opened.
-    if (reference != null && !_restoring) {
+    // Nothing moves when the active view is already showing it, which is
+    // what fronting a view does: a locked one must not pull another along.
+    final shown = views.active;
+    if (reference != null &&
+        !_restoring &&
+        !(shown?.mode == ViewMode.composition &&
+            shown?.compId == reference.internalid.toString())) {
       final into = _viewForOpening(prefer: ViewMode.composition);
       if (into != null) {
         into.mode = ViewMode.composition;

@@ -273,10 +273,15 @@ const double graphGroupHead = graphNodeHeaderHeight;
 const String graphGroupExtension = 'lumgrp';
 
 /// Where an unplaced box lands: the chain marches right, the drivers sit
-/// below it. The drawing's own spacing — a node's width plus 88 of air.
+/// below it. The drawing's own spacing: a node's width plus 88 of air, and
+/// 64 along the layer's own chain.
 const double _autoX = 26;
 const double _autoY = 44;
 const double _autoAir = 88;
+const double _chainAir = 64;
+
+/// The smallest a graph opens at, so its words stay readable.
+const double _openFloor = 0.85;
 const double _autoDriverY = 222;
 const double _autoDriverStepY = 140;
 
@@ -641,20 +646,32 @@ GraphLayout _layoutOf(
   };
   final folded = {...?looks?.collapsed.map(graphNodeKey)};
   final boxes = <GraphBox>[];
-  var chain = 0;
+  var chainX = _autoX;
   var drivers = 0;
   for (final node in graph.nodes) {
     final key = graphNodeKey(node.node);
     final isDriver = node.node is BridgeNodeRef_Driver;
     final derived = _derivedNode(node.node);
+    final held = params[key];
+    // The chain steps on each box's shut width, so a chain of seven opens at
+    // a size you can read. A box twirled open eats into the air after it.
+    final shut = node.node is BridgeNodeRef_Out
+        ? graphOutNodeWidth
+        : held?.telling.isNotEmpty ?? false
+            ? graphNodeOpenWidth
+            : graphNodeWidth;
     final placed = positions[key] ??
-        graphAutoPlace(isDriver ? drivers : chain,
-            lower: isDriver, width: graphNodeOpenWidth);
-    isDriver ? drivers++ : chain++;
+        (isDriver
+            ? graphAutoPlace(drivers, lower: true, width: graphNodeOpenWidth)
+            : Offset(chainX, _autoY));
+    if (isDriver) {
+      drivers++;
+    } else {
+      chainX += shut + _chainAir;
+    }
     final open = exposed.contains(key) || isDriver;
     // Open, every row under its group's heading; shut, the rows that tell
     // something: a wire on them, a key, or a value off its default.
-    final held = params[key];
     final rows = held == null
         ? const <BridgeParamInfo>[]
         : open
@@ -3529,9 +3546,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       // The boxes open in the middle of the panel, never larger than they
       // are. After the frame, as a view change is.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _frame(graphFrame(size, [for (final b in layout.boxes) b.rect],
-              maxZoom: 1));
+        if (!mounted) return;
+        final rects = [for (final b in layout.boxes) b.rect];
+        final fit = graphFrame(size, rects, maxZoom: 1);
+        // Never too small to read: a chain longer than the panel opens on
+        // its start and runs on under the fade.
+        if (fit != null && fit.zoom < _openFloor) {
+          final all = rects.reduce((a, b) => a.expandToInclude(b));
+          _frame((
+            zoom: _openFloor,
+            pan: Offset(20 - all.left * _openFloor,
+                size.height / 2 - all.center.dy * _openFloor),
+          ));
+        } else {
+          _frame(fit);
         }
       });
     }

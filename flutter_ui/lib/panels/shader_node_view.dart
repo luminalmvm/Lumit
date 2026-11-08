@@ -47,6 +47,7 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
   /// While a row's menu is up the list stays, though the right-click has
   /// made that row's box the pick.
   bool _holdIndex = false;
+  int? _menuPick;
 
   InstanceHome get _home => widget.entry.home;
 
@@ -100,6 +101,11 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
 
   void _reload() {
     if (!mounted) return;
+    // The list stays after a row's menu until something else is picked.
+    if (_menuPick != null && _ui?.shaderGraphNode.value != _menuPick) {
+      _menuPick = null;
+      _holdIndex = false;
+    }
     final read = _read();
     final settings = <int, Map<String, dynamic>>{};
     final edges = <Map<String, dynamic>>[];
@@ -151,7 +157,10 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
   void _askMenu(int? id, Offset at, {bool hold = false}) {
     final ui = _ui;
     if (ui == null) return;
-    if (hold) setState(() => _holdIndex = true);
+    if (hold) {
+      _menuPick = null;
+      setState(() => _holdIndex = true);
+    }
     ui.graphBoxMenuAsk.value = null;
     ui.graphBoxMenuAsk.value = (key: shaderMenuKey(id), at: at);
     if (!hold) return;
@@ -165,7 +174,8 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
   void _menuGone() {
     if (lumitPopupUp.value) return;
     lumitPopupUp.removeListener(_menuGone);
-    if (mounted) setState(() => _holdIndex = false);
+    _menuPick = _ui?.shaderGraphNode.value;
+    if (_menuPick == null && mounted) setState(() => _holdIndex = false);
   }
 
   String _boxName(BridgeShaderGraphNode n) => switch (n.label) {
@@ -249,19 +259,21 @@ class _ShaderNodeViewState extends State<ShaderNodeView> {
                         child: lumitIcon(LumitIcon.nodes,
                             size: 12, color: t.textMuted),
                       ),
-                      Expanded(
+                      Flexible(
                         child: Text(
                           shaderNodeWord(n.kind),
                           style: t.body,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (n.label case final own?)
+                      if (n.label case final own?) ...[
+                        const SizedBox(width: 6),
                         Flexible(
                           child: Text(own,
                               style: t.kicker,
                               overflow: TextOverflow.ellipsis),
                         ),
+                      ],
                     ],
                   ),
                 ),

@@ -130,10 +130,10 @@ class ViewerStage extends StatelessWidget {
   /// where it is the part that was on screen. Null when nothing is stored.
   final Rect? snapshotArea;
 
-  /// In a compare against the snapshot, how far across the stage the snapshot
-  /// reaches, as a fraction; the live picture shows after it. Null draws the
-  /// whole snapshot.
-  final double? snapshotUpTo;
+  /// In a compare against the snapshot, how far across the stage the live
+  /// picture reaches, as a fraction; the snapshot shows after it. Null draws
+  /// the whole snapshot.
+  final double? snapshotFrom;
 
   /// Whether the layer controls are drawn (the bar's wireframe switch).
   final bool wireframes;
@@ -169,7 +169,7 @@ class ViewerStage extends StatelessWidget {
     required this.pictureKey,
     required this.snapshot,
     required this.snapshotArea,
-    this.snapshotUpTo,
+    this.snapshotFrom,
     required this.wireframes,
     required this.channel,
     required this.compSize,
@@ -1263,7 +1263,7 @@ class ViewerStage extends StatelessWidget {
             if (snapshot case final shot?)
               Positioned.fill(
                 child: ClipRect(
-                  clipper: _UpTo(snapshotUpTo ?? 1),
+                  clipper: _From(snapshotFrom ?? 0),
                   child: Stack(
                     children: [
                       Positioned.fromRect(
@@ -1663,17 +1663,17 @@ BridgeLayerEntry? layerAtCompPoint(
   return entries[layerAtPoint(boxes, at)?.id];
 }
 
-/// Everything left of [fraction] of the way across.
-class _UpTo extends CustomClipper<Rect> {
+/// Everything right of [fraction] of the way across.
+class _From extends CustomClipper<Rect> {
   final double fraction;
-  const _UpTo(this.fraction);
+  const _From(this.fraction);
 
   @override
-  Rect getClip(Size size) =>
-      Rect.fromLTRB(0, 0, size.width * fraction.clamp(0.0, 1.0), size.height);
+  Rect getClip(Size size) => Rect.fromLTRB(
+      size.width * fraction.clamp(0.0, 1.0), 0, size.width, size.height);
 
   @override
-  bool shouldReclip(_UpTo old) => old.fraction != fraction;
+  bool shouldReclip(_From old) => old.fraction != fraction;
 }
 
 /// The badge that appears only once a probe has actually found a file gone.

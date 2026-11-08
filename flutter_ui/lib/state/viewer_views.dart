@@ -384,6 +384,9 @@ class ViewerViews extends ChangeNotifier {
   /// Where the divider sits in a compare, as a fraction across the pane.
   final Map<PaneId, double> paneDivider = {};
 
+  /// Panes whose compare draws its second picture left of the line.
+  final Set<PaneId> paneSwapped = {};
+
   /// The layout a compare split the pane from, to put back when it ends, and
   /// the view that was there, which stays whichever side it ended on.
   final Map<PaneId, ({ViewLayout layout, String? keep})> _beforeCompare = {};
@@ -506,6 +509,7 @@ class ViewerViews extends ChangeNotifier {
       paneLayouts[pane] = ViewLayout.twoAcross;
       forPane(pane);
     } else if (!mode.pairsViews) {
+      paneSwapped.remove(pane);
       if (_beforeCompare.remove(pane) case final before?) {
         final ids = paneViews[pane];
         if (before.keep case final keep? when ids != null && ids.remove(keep)) {
@@ -519,11 +523,10 @@ class ViewerViews extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The two views of a compare the other way round.
+  /// The two sides of a compare the other way round. Only the drawing turns:
+  /// the first view stays the one the app is working in.
   void swapCompare(PaneId pane) {
-    final ids = paneViews[pane];
-    if (ids == null || ids.length < 2) return;
-    ids.insert(1, ids.removeAt(0));
+    if (!paneSwapped.remove(pane)) paneSwapped.add(pane);
     notifyListeners();
   }
 
@@ -565,6 +568,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.remove(pane);
     paneCompare.remove(pane);
     paneDivider.remove(pane);
+    paneSwapped.remove(pane);
     viewportPanes.remove(pane);
     notifyListeners();
   }
@@ -678,6 +682,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.clear();
     paneCompare.clear();
     paneDivider.clear();
+    paneSwapped.clear();
     _beforeCompare.clear();
     viewportPanes.clear();
     _activeId = null;

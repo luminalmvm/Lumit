@@ -249,6 +249,7 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
             right: (side) => _surface(ui, shown[1], wipe: side),
             leftView: shown[0],
             rightView: shown[1],
+            swapped: ui.views.paneSwapped.contains(widget.pane),
           );
         }
         return _grid(ui, shown, layout);
@@ -276,10 +277,10 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
     );
     // One view in the pane is the pane, so it needs no edge of its own: the
     // dock already draws one round the active pane.
-    if (alone) return surface;
-    // Without an edge there is nothing here that takes a press of its own,
-    // so a wipe's second side lets presses outside its picture through.
-    if (!edge || wipe != null) {
+    // A wipe's second side lends its picture and takes no presses, so the
+    // first view stays the one the app is working in.
+    if (alone || wipe != null) return surface;
+    if (!edge) {
       return Listener(
           onPointerDown: (_) => ui.frontView(view.id), child: surface);
     }
@@ -967,7 +968,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                 : null,
             snapshotArea: _snapshotArea,
             // Held, the snapshot covers all of it again.
-            snapshotUpTo: _comparingSnapshot(ui) && !_showingSnapshot
+            snapshotFrom: _comparingSnapshot(ui) && !_showingSnapshot
                 ? ui.views.dividerOf(widget.pane)
                 : null,
             wireframes: ui.viewerLayerControls,
@@ -1121,23 +1122,27 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     );
   }
 
-  /// A wipe's second side: its picture from the line across, the line on it,
-  /// and a quiet name on each side of the line where the two differ.
+  /// A wipe's second side: its picture on its side of the line, the line on
+  /// it, and a quiet name on each side of the line where the two differ.
   Widget _wiped(ViewerWipe wipe, Widget stage, String compName) =>
       LayoutBuilder(builder: (context, box) {
-        final right = [
+        final side = [
           if (wipe.nameComp) compName,
-          if (wipe.rightTag.isNotEmpty) wipe.rightTag,
+          if (wipe.sideTag.isNotEmpty) wipe.sideTag,
         ].join(' · ');
+        final (left, right) =
+            wipe.swapped ? (side, wipe.leadTag) : (wipe.leadTag, side);
         return Stack(
           fit: StackFit.expand,
           children: [
-            ClipRect(clipper: ViewerWipeClip(wipe.x), child: stage),
-            if (wipe.leftTag.isNotEmpty)
+            ClipRect(
+                clipper: ViewerWipeClip(wipe.x, swapped: wipe.swapped),
+                child: IgnorePointer(child: stage)),
+            if (left.isNotEmpty)
               Positioned(
                 right: box.maxWidth - wipe.x + _wipeTagGap,
                 bottom: _wipeTagGap,
-                child: ViewLookTag(look: wipe.leftTag),
+                child: ViewLookTag(look: left),
               ),
             if (right.isNotEmpty)
               Positioned(
@@ -1161,8 +1166,9 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       _snapshot != null &&
       ui.views.compareOf(widget.pane) == CompareMode.snapshot;
 
-  /// The picture wiped against its snapshot: the snapshot up to the line,
-  /// which the stage cuts, then the line, and the snapshot's side named.
+  /// The picture wiped against its snapshot: the live picture up to the
+  /// line, then the snapshot, which the stage cuts, and the snapshot's side
+  /// named. The reference sits right of the line, as another comp's does.
   Widget _snapshotWiped(LumitUiState ui, Widget stage) =>
       LayoutBuilder(builder: (context, box) {
         final t = ThemeScope.of(context).theme;
@@ -1172,7 +1178,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           children: [
             stage,
             Positioned(
-              right: box.maxWidth - x + _wipeTagGap,
+              left: x + _wipeTagGap,
               bottom: _wipeTagGap,
               child: ViewLookTag(look: l10n.viewerMenuSnapshot),
             ),

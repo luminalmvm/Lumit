@@ -756,24 +756,6 @@ class _FxConsoleState extends State<_FxConsole> {
                       overflow: TextOverflow.ellipsis,
                       style: hot ? t.bodyPrimary : t.body),
                 ),
-                const SizedBox(width: 8),
-                // The preview swatch the board draws on every row. There
-                // is no per-effect render behind it yet, so it is the
-                // surface's own gradient, the slot the picture will take.
-                Container(
-                  width: 34,
-                  height: 19,
-                  decoration: BoxDecoration(
-                    borderRadius:
-                        BorderRadius.circular(t.tokens.controlRadius),
-                    border: Border.all(color: t.hairline, width: 1),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [t.surface2, t.surface4],
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
