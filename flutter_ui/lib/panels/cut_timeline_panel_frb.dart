@@ -1008,14 +1008,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       {required bool ripple}) {
     final work = _workArea;
     if (comp == null || work == null || work.whole) return;
-    final result = _cut(() => comp.cutRemoveSpan(
-          startFrame: work.start,
-          endFrame: work.end,
-          layers: _selected.isEmpty
-              ? const []
-              : [for (final track in _candidateTracks()) track.entry.layer],
-          ripple: ripple,
-        ));
+    var result = BridgeCutResult.nothing;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      result = _cut(() => comp.cutRemoveSpan(
+            startFrame: work.start,
+            endFrame: work.end,
+            layers: _selected.isEmpty
+                ? const []
+                : [for (final track in _candidateTracks()) track.entry.layer],
+            ripple: ripple,
+          ));
+    }, name: ripple ? 'Extract work area' : 'Lift work area');
     if (ripple && result == BridgeCutResult.done) ui.scrubTo(work.start);
     _afterCut(result);
   }
@@ -2888,13 +2891,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       context: context,
       position: global,
       width: 230,
+      // The gap's order, less what needs a track.
       rows: (close) => [
+        _row(close, 'ctl-ground-paste', l10n.menuPaste,
+            () => _pasteAt(ui, comp, frame ?? ui.playheadFrame.value),
+            action: 'edit.paste', enabled: _clipsHeld),
+        const MenuDivider(),
         ...cutInsertRows(context, ui, comp,
             close: () => close(null),
             frame: frame ?? ui.playheadFrame.value,
             row: newLayerRow(ui, comp),
             onDone: _afterWrite),
-        const MenuDivider(),
         for (final (action, label) in [
           ('layer.new.audio', l10n.insertAudioLayer),
           ('layer.new.sequence', l10n.insertVideoLayer),
@@ -2905,18 +2912,47 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             _afterWrite();
           }, action: action),
         const MenuDivider(),
-        _row(close, 'ctl-ground-paste', l10n.menuPaste,
-            () => _pasteAt(ui, comp, frame ?? ui.playheadFrame.value),
-            action: 'edit.paste', enabled: _clipsHeld),
         _row(close, 'ctl-ground-select-all', l10n.menuSelectAll, _selectEvery,
             action: 'edit.select.all'),
-        if (frame != null)
-          _row(close, 'ctl-ground-marker', l10n.menuAddMarkerHere, () {
-            addMarkerFrb(comp, frame: frame);
-            _afterWrite();
-          }, action: 'marker.add'),
+        if (frame != null) ...[
+          const MenuDivider(),
+          ..._timeRows(close, comp, frame),
+        ],
       ],
     );
+  }
+
+  /// A marker and the work area's ends at [frame], for the gap and the ground.
+  List<Widget> _timeRows(void Function(void) close, CompositionReference comp,
+      int frame) {
+    void workEdge(bool isStart) {
+      // A comp with no frames has no valid span: it keeps the one it has.
+      try {
+        comp.setWorkArea(
+            span: workAreaWith(
+          comp: comp,
+          current: comp.getWorkArea(),
+          wanted: frame,
+          isStart: isStart,
+        ));
+      } catch (_) {}
+      _afterWrite();
+    }
+
+    return [
+      _row(close, 'ctl-menu-marker', l10n.menuAddMarkerHere, () {
+        addMarkerFrb(comp, frame: frame);
+        _afterWrite();
+      }, action: 'marker.add'),
+      _row(close, 'ctl-menu-work-in', l10n.workAreaStart, () => workEdge(true)),
+      _row(close, 'ctl-menu-work-out', l10n.workAreaEnd,
+          () => workEdge(false)),
+      if (!(_workArea?.whole ?? true))
+        _row(close, 'ctl-menu-work-clear', l10n.workAreaClear, () {
+          comp.setWorkArea(span: null);
+          _afterWrite();
+        }),
+    ];
   }
 
   /// Whether the track at [to] is somewhere the track at [from] can go.
@@ -3185,7 +3221,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final comp = ui.selectedComp;
     if (comp == null) return;
     if (track.kind == CutTrackKind.plain ||
-        track.kind == CutTrackKind.layerSound) {
+        track.kind == CutTrackKind.layerSound ||
+        track.clips.isEmpty) {
       await _headMenu(ThemeScope.of(context).theme, track, global);
       return;
     }
@@ -3208,20 +3245,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   Future<void> _gapMenu(LumitUiState ui, CompositionReference comp,
       CutTrack track, int frame, Offset global) {
     final isGap = track.clips.any((clip) => clip.startFrame.toInt() > frame);
-    void workEdge(bool isStart) {
-      // A comp with no frames has no valid span: it keeps the one it has.
-      try {
-        comp.setWorkArea(
-            span: workAreaWith(
-          comp: comp,
-          current: comp.getWorkArea(),
-          wanted: frame,
-          isStart: isStart,
-        ));
-      } catch (_) {}
-      _afterWrite();
-    }
-
     return showMenuAt<void>(
       context: context,
       position: global,
@@ -3253,19 +3276,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         _row(close, 'ctl-menu-select-all', l10n.menuSelectAll, _selectEvery,
             action: 'edit.select.all'),
         const MenuDivider(),
-        _row(close, 'ctl-menu-marker', l10n.menuAddMarkerHere, () {
-          addMarkerFrb(comp, frame: frame);
-          _afterWrite();
-        }, action: 'marker.add'),
-        _row(close, 'ctl-menu-work-in', l10n.workAreaStart,
-            () => workEdge(true)),
-        _row(close, 'ctl-menu-work-out', l10n.workAreaEnd,
-            () => workEdge(false)),
-        if (!(_workArea?.whole ?? true))
-          _row(close, 'ctl-menu-work-clear', l10n.workAreaClear, () {
-            comp.setWorkArea(span: null);
-            _afterWrite();
-          }),
+        ..._timeRows(close, comp, frame),
       ],
     );
   }

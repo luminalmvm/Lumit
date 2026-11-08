@@ -550,9 +550,9 @@
   "@clipPasteLayerCuts": {
     "description": "Menu row on a clip, or the room, in a Sequence layer's open row: cut this Sequence layer where the copied one was cut and give each clip the copied speeds, keeping this layer's own media."
   },
-  "sequenceViewClose": "Close clips",
+  "sequenceViewClose": "Close Sequence view",
   "@sequenceViewClose": {
-    "description": "Menu row on the room of a Sequence layer's open row: closes the row back to its bar, as a double-click on the layer does. Not the same as Close gap beside it."
+    "description": "Menu row on the room of a Sequence layer's open row: closes the row of clips back to the layer's bar, as a double-click on the layer does. It closes a view and edits nothing, unlike Close gap above it."
   },
   "clipResetSpeed": "Reset speed",
   "@clipResetSpeed": {
@@ -18000,6 +18000,18 @@
   "@histFitToFill": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: footage from the source view stretched over the work area."
   },
+  "histSplitAllTracks": "Split all tracks",
+  "@histSplitAllTracks": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: every track cut in two at the playhead."
+  },
+  "histLiftWorkArea": "Lift work area",
+  "@histLiftWorkArea": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: what lay in the work area taken out, leaving its room."
+  },
+  "histExtractWorkArea": "Extract work area",
+  "@histExtractWorkArea": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: what lay in the work area taken out, and the room closed."
+  },
   "histGrade": "Grade",
   "@histGrade": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a change made in the Grade panel."
@@ -19689,6 +19701,14 @@
   "curveDeletePoint": "Delete point",
   "@curveDeletePoint": {
     "description": "Right-click on a point on a curve's plot: take the point away."
+  },
+  "curveCopy": "Copy curve",
+  "@curveCopy": {
+    "description": "Right-click on a curve's plot: remember the curve's points as text, to paste onto another curve."
+  },
+  "curvePaste": "Paste curve",
+  "@curvePaste": {
+    "description": "Right-click on a curve's plot: replace this curve with the one copied last."
   },
   "gradientAddStop": "Add stop",
   "@gradientAddStop": {

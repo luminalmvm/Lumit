@@ -706,15 +706,17 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   /// A section's or a row's menu: what it can do now, with a row's key and
   /// expression rows between, then the whole grade's rows under a divider.
   /// Nothing greyed: a row that could do nothing is left out, and a section
-  /// with no effect yet offers the grade's rows alone.
+  /// with no effect yet offers the grade's rows alone. A row with no effect
+  /// yet keeps its value and key rows, which add the effect.
   List<Widget> _menuFor(List<GradeFx> fxs, VoidCallback close,
       {required bool changed, GradeFx? rowFx, String? rowParam}) {
-    if (!fxs.any((fx) => _instance(fx) != null)) return _groundMenu(close);
-    final off = _bypassed(fxs);
+    final present = fxs.any((fx) => _instance(fx) != null);
     final param =
         rowFx == null || rowParam == null ? null : _paramMenu(rowFx, rowParam);
+    if (!present && param == null) return _groundMenu(close);
+    final off = _bypassed(fxs);
     return menuGroups([
-      [
+      if (present) [
         if (changed)
           _row(
               'grade-section-reset',
@@ -729,13 +731,13 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       ],
       if (param != null) paramCopyRows(context, param, close, tickColumn: true),
       if (param != null) paramKeyRows(context, param, close, tickColumn: true),
-      [
+      if (present) [
         _row('grade-section-reveal', l10n.gradeRevealInEffectControls, close,
             () => _reveal(fxs)),
       ],
       if (param != null)
         paramLastRows(context, param, close, tickColumn: true),
-      [
+      if (present) [
         _row('grade-section-remove', l10n.gradeRemovePart(_part(fxs)), close,
             () => _remove(fxs)),
       ],
@@ -805,13 +807,15 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       ]);
 
   /// The key and expression rows of one parameter's menu: the same rows its
-  /// Effect controls row has, acting on the same keys and the same curve.
+  /// Effect controls row has, acting on the same keys and the same curve. A
+  /// layer with no grade yet reads the default, and a write adds the effect
+  /// as a drag does.
   ParamMenu? _paramMenu(GradeFx fx, String id) {
     final comp = ui.selectedComp;
     final layer = _layer;
     final at = _instance(fx);
-    final v = _value(fx, id);
-    if (comp == null || layer == null || at == null || v == null) return null;
+    final v = _value(fx, id) ?? defaultEffectValue(_kind(fx, id));
+    if (comp == null || layer == null || v == null) return null;
     final scalars = switch (v) {
       BridgeEffectValue_Float(:final field0) => [field0],
       BridgeEffectValue_Colour(:final field0) => [
@@ -833,6 +837,14 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                 BridgeColour(r: next[0], g: next[1], b: next[2], a: next[3]))
             : BridgeEffectValue.float(next[0]);
     final colour = v is BridgeEffectValue_Colour;
+    // Each row is one Grade step, the effect it may add included.
+    void write(GradeFx fx, String id,
+        BridgeEffectValue Function(BridgeLayerInfo? on) valueFor,
+        {bool all = true}) {
+      _touchStart();
+      _write(fx, id, valueFor, all: all);
+    }
+
     return ParamMenu(
       // The value as text, as Effect controls copies it, so it pastes into any
       // other row or field, and onto every picked layer.
@@ -845,7 +857,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
           : (text) {
               final n = pastedAxes(text, colour ? 3 : 1);
               if (n == null) return;
-              _write(
+              write(
                   fx,
                   id,
                   (on) => colour
@@ -860,10 +872,10 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
               onSeek: (frame) => ui.playheadFrame.value = frame,
               rowKey: 'grade-${fx.matchName}-$id',
               onWrite: (next) =>
-                  _write(fx, id, (_) => rebuilt(next), all: false),
+                  write(fx, id, (_) => rebuilt(next), all: false),
             ),
       setExpression: v is BridgeEffectValue_Float && expression == null
-          ? () => _write(
+          ? () => write(
               fx,
               id,
               (_) => BridgeEffectValue.float(BridgeScalar.expression(
@@ -872,7 +884,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
           : null,
       removeExpression: expression == null
           ? null
-          : () => _write(
+          : () => write(
               fx,
               id,
               (_) => BridgeEffectValue.float(BridgeScalar.static_(
@@ -881,7 +893,9 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                       time: timeOfFrame(comp, ui.playheadFrame.value),
                       layer: layer))),
               all: false),
-      graphPath: '${effectPath('${layer.internallayerId}', '${at.id}')}/$id',
+      graphPath: at == null
+          ? null
+          : '${effectPath('${layer.internallayerId}', '${at.id}')}/$id',
     );
   }
 

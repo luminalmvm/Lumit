@@ -349,16 +349,15 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
       {required bool all}) {
     if (comp == null) return;
     var result = BridgeCutResult.nothing;
-    asOneUndoStep(
-        Provider.of<LumitState>(context, listen: false).project,
-        () => result = _cut(() => comp.cutRazor(
-              layers: all || cutPicked.isEmpty
-                  ? const []
-                  : [for (final track in _candidateTracks()) track.entry.layer],
-              atFrame: ui.playheadFrame.value,
-              linked: _linked,
-            )),
-        name: 'Split');
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      result = _cut(() => comp.cutRazor(
+            layers: all || cutPicked.isEmpty
+                ? const []
+                : [for (final track in _candidateTracks()) track.entry.layer],
+            atFrame: ui.playheadFrame.value,
+            linked: _linked,
+          ));
+    }, name: all ? 'Split all tracks' : 'Split');
     _afterCut(result);
   }
 

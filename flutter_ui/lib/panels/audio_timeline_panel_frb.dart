@@ -2348,7 +2348,19 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       context: context,
       position: at,
       width: 230,
+      // The Cut timeline's order: paste, insert, select, then time.
       rows: (close) => [
+        MenuRow(
+          key: const ValueKey<String>('atl-menu-ground-paste'),
+          enabled: _clipsHeld,
+          onPressed: () {
+            close(null);
+            _pasteClips();
+          },
+          child: MenuLabel(l10n.menuPaste,
+              action: 'edit.paste', enabled: _clipsHeld, ticked: false),
+        ),
+        const MenuDivider(),
         for (final (action, label) in [
           ('layer.new.audio', l10n.insertAudioLayer),
           ('layer.new.bus', l10n.insertBus),
@@ -2360,19 +2372,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               insertEmptyLayer(ui, comp, action);
               _afterWrite();
             },
-            child: MenuLabel(label, action: action),
+            child: MenuLabel(label, action: action, ticked: false),
           ),
         const MenuDivider(),
-        MenuRow(
-          key: const ValueKey<String>('atl-menu-ground-paste'),
-          enabled: _clipsHeld,
-          onPressed: () {
-            close(null);
-            _pasteClips();
-          },
-          child: MenuLabel(l10n.menuPaste,
-              action: 'edit.paste', enabled: _clipsHeld),
-        ),
         _selectAllRow(() => close(null)),
         if (frame != null) ...[
           const MenuDivider(),
@@ -2401,10 +2403,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             _pasteClips(onto: track.entry.layer);
           },
           child: MenuLabel(l10n.menuPaste,
-              action: 'edit.paste', enabled: _clipsHeld),
+              action: 'edit.paste', enabled: _clipsHeld, ticked: false),
         ),
-        _selectAllRow(() => close(null)),
-        const MenuDivider(),
         MenuRow(
           key: const ValueKey<String>('atl-menu-gap-close'),
           enabled: canClose,
@@ -2413,8 +2413,11 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             _afterCut(_cut(() =>
                 comp.cutCloseGap(layer: track.entry.layer, atFrame: frame)));
           },
-          child: MenuLabel(l10n.cutCloseGap, enabled: canClose),
+          child: MenuLabel(l10n.cutCloseGap, enabled: canClose, ticked: false),
         ),
+        const MenuDivider(),
+        _selectAllRow(() => close(null)),
+        const MenuDivider(),
         _addMarkerRow(comp, frame, () => close(null)),
       ],
     );
@@ -2429,7 +2432,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                   for (final c in t.entry.info.clips) c.id.toString(),
               });
         },
-        child: MenuLabel(l10n.menuSelectAll),
+        child: MenuLabel(l10n.menuSelectAll,
+            action: 'edit.select.all', ticked: false),
       );
 
   Widget _addMarkerRow(
@@ -2441,7 +2445,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           addMarkerFrb(comp, frame: frame);
           _afterWrite();
         },
-        child: MenuLabel(l10n.menuAddMarkerHere, action: 'marker.add'),
+        child: MenuLabel(l10n.menuAddMarkerHere,
+            action: 'marker.add', ticked: false),
       );
 
   /// The fade menu: a right click on a fade, or anywhere in an overlap. The
@@ -2725,7 +2730,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                     then: _afterWrite)
                 : null,
           ),
-          _laneSubmenu([track], close),
           if (clip != null) ...[
             if (clip.takes.length > 1)
               SubmenuRow(
@@ -2782,7 +2786,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               row('merge-streams', l10n.menuMergeAudioStreams,
                   () => _clipStreams(comp, clip, split: false), close),
             ],
-            const MenuDivider(),
             SubmenuRow(
               key: ValueKey<String>('atl-clip-add-audio-effect-${clip.id}'),
               closeParent: close,
@@ -2792,6 +2795,11 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               }),
               child: MenuLabel(l10n.audioAddEffect, ticked: false),
             ),
+          ],
+          // The lane is this timeline's own, so it follows the rows Cut shares.
+          _laneSubmenu([track], close),
+          if (clip != null) ...[
+            const MenuDivider(),
             // What opens or looks at the clip, as Cut has them.
             if ((picked?.length ?? 0) <= 1) ...[
               if (ui.currentViewerPane != null &&

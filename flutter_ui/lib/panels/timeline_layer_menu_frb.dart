@@ -463,7 +463,8 @@ List<MenuEntry> audioRows(
     ),
     // Composition ▸ Detect beats, from the music's own row.
     if (comp != null)
-      MenuEntry(l10n.menuDetectBeats, () => detectCompBeats(app, comp)),
+      MenuEntry(l10n.menuDetectBeats,
+          () => detectCompBeats(app, comp, layer: entry.layer)),
     if (streams != null && streams.streams.length > 1) ...[
       MenuEntry.divider(),
       for (final stream in streams.streams)

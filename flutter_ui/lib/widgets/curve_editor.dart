@@ -290,7 +290,7 @@ class _CurveEditorState extends State<CurveEditor> {
                     Clipboard.setData(ClipboardData(
                         text: points.map((p) => p.join(' ')).join(', ')));
                   },
-                  child: MenuLabel(l10n.menuCopy, ticked: ticks),
+                  child: MenuLabel(l10n.curveCopy, ticked: ticks),
                 ),
                 MenuRow(
                   key: const ValueKey('curve-menu-paste'),
@@ -300,7 +300,7 @@ class _CurveEditorState extends State<CurveEditor> {
                     final parsed = _pointsIn(data?.text ?? '');
                     if (parsed != null && mounted) widget.onCommit(parsed);
                   },
-                  child: MenuLabel(l10n.menuPaste, ticked: ticks),
+                  child: MenuLabel(l10n.curvePaste, ticked: ticks),
                 ),
                 if (more.isNotEmpty) ...[const MenuDivider(), ...more],
               ],

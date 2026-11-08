@@ -254,13 +254,26 @@ List<Widget> audioLayerRows({
         },
         child: MenuLabel(l10n.audioNormalise, ticked: false),
       ),
+    // The clip menu's loudness list, over every clip of the picked layers. A
+    // layer that is one file has no loudness call yet, so it needs clips.
+    if (!isBus && targets.any((t) => t.info.clips.isNotEmpty))
+      loudnessRow(
+        key: 'audio-menu-loudness',
+        close: closeParent,
+        tickColumn: true,
+        onLoudness: (lufs) => normaliseClips(app, lufs, [
+          for (final t in targets)
+            if (t.info.kind != BridgeLayerKind.bus)
+              for (final c in t.info.clips) (t.layer, c.id),
+        ], then: onChanged, loudness: true),
+      ),
     // Composition ▸ Detect beats, from the music where a cutter looks for it.
     if (!isBus)
       MenuRow(
         key: const ValueKey<String>('audio-menu-beats'),
         onPressed: () {
           closeParent();
-          detectCompBeats(app, comp);
+          detectCompBeats(app, comp, layer: entry.layer);
         },
         child: MenuLabel(l10n.menuDetectBeats, ticked: false),
       ),
@@ -343,34 +356,47 @@ List<Widget> soundClipRows({
       row('keep-pitch', l10n.menuKeepPitch, onKeepPitch, ticked: keepPitch),
     if (onNormalise != null) row('normalise', l10n.audioNormalise, onNormalise),
     if (onLoudness != null)
-      SubmenuRow(
-        key: const ValueKey<String>('sound-clip-loudness'),
-        closeParent: close,
-        submenu: (dismiss) => FloatSurface(
-          width: 130,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // The common targets for streaming, podcasts and broadcast.
-              for (final lufs in const [-14.0, -16.0, -23.0])
-                MenuRow(
-                  key: ValueKey<String>('sound-clip-loudness-${-lufs.round()}'),
-                  onPressed: () {
-                    dismiss();
-                    onLoudness(lufs);
-                  },
-                  child: Text(l10n.audioLoudnessTarget('\u2212${-lufs.round()}')),
-                ),
-            ],
-          ),
-        ),
-        child: MenuLabel(l10n.audioNormaliseLoudness,
-            ticked: tickColumn ? false : null),
-      ),
+      loudnessRow(
+          key: 'sound-clip-loudness',
+          close: close,
+          tickColumn: tickColumn,
+          onLoudness: onLoudness),
     if (resetGainShown) row('reset-gain', l10n.clipResetGain, onResetGain),
   ];
 }
+
+/// Normalise loudness \u25b8, a list of targets in LUFS, for a clip and a layer.
+Widget loudnessRow({
+  required String key,
+  required VoidCallback close,
+  required ValueChanged<double> onLoudness,
+  bool tickColumn = false,
+}) =>
+    SubmenuRow(
+      key: ValueKey<String>(key),
+      closeParent: close,
+      submenu: (dismiss) => FloatSurface(
+        width: 130,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // The common targets for streaming, podcasts and broadcast.
+            for (final lufs in const [-14.0, -16.0, -23.0])
+              MenuRow(
+                key: ValueKey<String>('$key-${-lufs.round()}'),
+                onPressed: () {
+                  dismiss();
+                  onLoudness(lufs);
+                },
+                child: Text(l10n.audioLoudnessTarget('\u2212${-lufs.round()}')),
+              ),
+          ],
+        ),
+      ),
+      child: MenuLabel(l10n.audioNormaliseLoudness,
+          ticked: tickColumn ? false : null),
+    );
 
 /// What a track head adds to [audioLayerRows], the same in the Cut and Audio
 /// timelines. A row greys where it cannot act now: a track with no clips has

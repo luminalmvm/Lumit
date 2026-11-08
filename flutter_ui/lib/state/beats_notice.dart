@@ -10,6 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 
 import '../l10n/strings.dart';
@@ -73,16 +74,30 @@ Future<void> runBeatDetection({
 }
 
 /// Composition ▸ Detect beats: the whole comp's sound, with the standard
-/// options. A sound layer's own menu runs this same command.
-Future<void> detectCompBeats(LumitState app, CompositionReference comp) =>
-    runBeatDetection(
-      app: app,
-      comp: comp,
-      options: BridgeBeatOptions.standard(),
-      // The markers land after the menu's own redraw, so the run asks for
-      // another when they do.
-      onFound: (_) => app.notifyDocumentChanged(),
-    );
+/// options. A layer's own menu passes that [layer], so a click on the music
+/// listens to the music and not the dialogue over it.
+Future<void> detectCompBeats(LumitState app, CompositionReference comp,
+    {LayerReference? layer}) {
+  final standard = BridgeBeatOptions.standard();
+  return runBeatDetection(
+    app: app,
+    comp: comp,
+    options: layer == null
+        ? standard
+        : BridgeBeatOptions(
+            sourceLayer: layer.internallayerId.toString(),
+            sensitivityPercent: standard.sensitivityPercent,
+            workAreaOnly: standard.workAreaOnly,
+            minSpacingMs: standard.minSpacingMs,
+            bpmOverride: standard.bpmOverride,
+            phaseMs: standard.phaseMs,
+          ),
+    // The markers land after the menu's own redraw, so the run asks for
+    // another when they do.
+    onFound: (_) => app.notifyDocumentChanged(),
+    noSound: layer == null ? null : l10n.beatsLayerNoSound,
+  );
+}
 
 /// What a detection that placed markers says (the AudioWorkspace board's own
 /// status caption): the confirmed tempo and the count, or the count alone when

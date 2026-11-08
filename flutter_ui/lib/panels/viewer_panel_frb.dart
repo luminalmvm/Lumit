@@ -1773,8 +1773,10 @@ class _SourceBarState extends State<_SourceBar>
   int? _fitAskedAt;
 
   /// How wide the bar has to be to show Replace and Fit to fill as well, and
-  /// to show the steps and the jumps to the marks beside Play.
-  static const double _roomForEveryEdit = 660;
+  /// to show the steps and the jumps to the marks beside Play. The edits win:
+  /// the steps go first, and come back once the edits have gone too.
+  static const double _roomForEveryEdit = 560;
+  static const double _roomForStepsBesideEdits = 620;
   static const double _roomForSteps = 420;
 
   ViewerSurface get view => widget.view;
@@ -1956,7 +1958,8 @@ class _SourceBarState extends State<_SourceBar>
       padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
       child: LayoutBuilder(builder: (context, box) {
       final wide = box.maxWidth >= _roomForEveryEdit;
-      final steps = box.maxWidth >= _roomForSteps;
+      final steps = box.maxWidth >=
+          (wide ? _roomForStepsBesideEdits : _roomForSteps);
       final last = LumitUiState.framesOf(facts) - 1;
       // A step or a jump to a mark, the Viewer's own glyphs. A jump with no
       // mark to go to greys.

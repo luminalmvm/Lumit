@@ -598,22 +598,22 @@ class VolumeBandState extends State<VolumeBand> {
     final picked = await showMenuAt<Object>(
       context: context,
       position: global,
-      width: 170,
+      width: 220,
       rows: (close) => [
         if (key != null) ...[
           MenuRow(
               key: const ValueKey('band-set-point'),
               onPressed: () => close('set'),
-              child: Text(l10n.envelopePointSet)),
+              child: MenuLabel(l10n.envelopePointSet, ticked: false)),
           MenuRow(
               key: const ValueKey('band-reset-point'),
               onPressed: () => close('reset'),
-              child: Text(l10n.envelopePointReset)),
+              child: MenuLabel(l10n.envelopePointReset, ticked: false)),
           const MenuDivider(),
           MenuRow(
               key: const ValueKey('band-delete-point'),
               onPressed: () => close('delete'),
-              child: Text(l10n.delete)),
+              child: MenuLabel(l10n.delete, ticked: false)),
         ] else ...[
           MenuRow(
               key: const ValueKey('band-add-point'),

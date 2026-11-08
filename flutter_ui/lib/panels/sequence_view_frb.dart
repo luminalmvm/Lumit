@@ -784,7 +784,8 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
         key: ValueKey<String>('seq-menu-$answer'),
         enabled: enabled,
         onPressed: () => close(answer),
-        child: MenuLabel(label, action: action, enabled: enabled),
+        child:
+            MenuLabel(label, action: action, enabled: enabled, ticked: false),
       );
 
   bool get _clipsHeld => cutClipsHeld(
@@ -899,7 +900,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
                   sequenceShapeClipboard =
                       widget.entry.layer.copySequenceShape();
                 },
-                child: Text(l10n.clipCopyLayerCuts),
+                child: MenuLabel(l10n.clipCopyLayerCuts, ticked: false),
               ),
               MenuRow(
                 key: const ValueKey('seq-menu-paste-shape'),
@@ -909,7 +910,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
                   _pasteShape();
                 },
                 child: MenuLabel(l10n.clipPasteLayerCuts,
-                    enabled: sequenceShapeClipboard != null),
+                    enabled: sequenceShapeClipboard != null, ticked: false),
               ),
             ]);
   }
@@ -947,7 +948,8 @@ class _SequenceViewFrbState extends State<SequenceViewFrb>
       width: 210,
       rows: (close) => [
         if (comp != null) ...[
-          _menuRow(close, 'paste', l10n.menuPaste, enabled: _clipsHeld),
+          _menuRow(close, 'paste', l10n.menuPaste,
+              enabled: _clipsHeld, action: 'edit.paste'),
           _menuRow(close, 'close-gap', l10n.cutCloseGap, enabled: isGap),
           const MenuDivider(),
         ],

@@ -316,6 +316,19 @@ fn estimate_bpm(env: &[f32], env_fps: f64) -> f64 {
     if n < 16 || env_fps <= 0.0 {
         return 0.0;
     }
+    // Each peak spread over two frames either side first. A beat is rarely a
+    // whole number of frames long, so a sharp peak train lines up with itself
+    // at two beats better than at one, and 120 BPM used to read as 60.
+    const SPREAD: [f32; 5] = [1.0 / 16.0, 4.0 / 16.0, 6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0];
+    let env: Vec<f32> = (0..n)
+        .map(|i| {
+            SPREAD
+                .iter()
+                .enumerate()
+                .map(|(k, w)| w * env[(i + k).saturating_sub(2).min(n - 1)])
+                .sum()
+        })
+        .collect();
     let mean = env.iter().sum::<f32>() / n as f32;
     let x: Vec<f32> = env.iter().map(|v| (v - mean).max(0.0)).collect();
     let autocorr = |lag: usize| -> f32 {
@@ -472,8 +485,10 @@ mod tests {
     #[test]
     fn finds_120bpm_clicks_accurately() {
         let rate = 48_000;
-        let beats: Vec<f64> = (0..8).map(|i| 0.5 + i as f64 * 0.5).collect(); // 120 BPM
-        let audio = clicks(rate, &beats, 5.0);
+        // 120 BPM for long enough that a beat of 23.4 envelope frames, not a
+        // whole number, would read as 60 without the smoothing.
+        let beats: Vec<f64> = (0..32).map(|i| 0.5 + i as f64 * 0.5).collect();
+        let audio = clicks(rate, &beats, 16.5);
         let a = analyse_mono(&audio, rate, 1.5);
 
         // Every beat is matched within ~2 envelope frames (raw onsets carry an
