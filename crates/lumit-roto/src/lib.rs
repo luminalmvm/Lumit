@@ -143,7 +143,8 @@ pub enum RotoError {
 pub struct RotoSettings {
     /// How dearly the geodesic walk pays for colour change against distance
     /// (docs/impl/roto.md §2). At the default, a full-scale step in one encoded
-    /// channel costs about as much as fifty pixels of travel.
+    /// channel costs about as much as a thousand pixels of travel. At fifty, a
+    /// 1080p frame was cut by distance alone and its edges did nothing.
     pub gamma: f32,
     /// The guided filter's window radius in source pixels, and the half-width
     /// of the band round the edge its answer is allowed into.
@@ -159,7 +160,7 @@ pub struct RotoSettings {
 impl Default for RotoSettings {
     fn default() -> Self {
         Self {
-            gamma: 50.0,
+            gamma: 1000.0,
             guide_radius: 8,
             guide_eps: 1e-3,
             confidence_floor: 0.5,
