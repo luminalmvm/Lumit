@@ -110,6 +110,17 @@ Future<List<ItemReference>> duplicateProjectItems(
   return copies;
 }
 
+/// Whether [from] is footage, or a folder with some in it at any depth.
+bool _holdsFootage(ItemReference from) {
+  if (from is ItemReference_Footage) return true;
+  if (from is! ItemReference_Folder) return false;
+  try {
+    return from.field0.getChildren().any(_holdsFootage);
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Delete [items] as one undo step: the row menu's Delete and the panel's
 /// `Delete` key. A folder takes what is inside it, and when compositions use
 /// any of it the question comes first, since those uses go too. Returns
@@ -376,7 +387,8 @@ Future<void> showProjectMenuFrb({
               row(_ProjectMenuAction.newFolder, l10n.newFolder,
                   key: 'new-folder'),
               row(_ProjectMenuAction.makeProxy, l10n.makeProxies,
-                  key: 'make-proxies'),
+                  key: 'make-proxies',
+                  enabled: (targets ?? [item]).any(_holdsFootage)),
             ],
             if (isComp) ...[
               row(_ProjectMenuAction.open, l10n.projectOpen,

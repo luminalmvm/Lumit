@@ -74,6 +74,8 @@ const _bannedWordIsAnotherSense = {
   'cutSoundOnItsOwnTrack',
   // The Cut and Audio timelines' clip menu, handing a clip back its row's.
   'clipColourFromTrack',
+  // The Cut timeline's menus, picking every clip on the row.
+  'cutSelectTrack',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.

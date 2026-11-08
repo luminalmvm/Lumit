@@ -209,7 +209,14 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
     for (final mode in BridgeMaskMode.values)
       MenuEntry(
         maskModeLabel(mode),
-        picked == null ? null : () => write(maskWith(picked.mask, mode: mode)),
+        picked == null
+            ? null
+            : () {
+                // The mode it has already makes no undo step.
+                if (picked.mask.mode != mode) {
+                  write(maskWith(picked.mask, mode: mode));
+                }
+              },
         checked: picked?.mask.mode == mode,
       ),
     MenuEntry.divider(),
@@ -936,7 +943,10 @@ List<MenuEntry> blendRows(LumitState app, LumitUiState ui) {
     for (var i = 0; i < modes.length; i++)
       MenuEntry(
         engineLabel(modes[i]),
-        onSelection(app, ui, (entry) => entry.layer.setBlend(index: i)),
+        // The mode a layer already has makes no undo step.
+        onSelection(app, ui, (entry) {
+          if (entry.info.blend != i) entry.layer.setBlend(index: i);
+        }),
         checked: lead?.info.blend == i,
       ),
   ];

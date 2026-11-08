@@ -9495,10 +9495,6 @@
   "@sendBackward": {
     "description": "Context-menu item: move a layer one place down the stack."
   },
-  "setExpression": "Set expression",
-  "@setExpression": {
-    "description": "Context-menu item on a value field: drive this value with a formula instead of a number."
-  },
   "settingsAntiAliasing": "Anti-aliasing",
   "@settingsAntiAliasing": {
     "description": "Project settings: the name of the setting that smooths edges."

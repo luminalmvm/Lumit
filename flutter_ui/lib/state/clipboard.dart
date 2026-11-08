@@ -64,6 +64,28 @@ class LumitClipboard {
   ({String text, Offset at})? boxes;
 }
 
+/// Several layers as one document: each one's own document, top of the stack
+/// first, so a copy of the whole pick pastes as the whole pick.
+String layersDocument(List<String> layers) => layers.length == 1
+    ? layers.single
+    : jsonEncode({
+        'kind': 'layers',
+        'layers': [for (final l in layers) jsonDecode(l)],
+      });
+
+/// The single-layer documents in a layer document, top of the stack first.
+List<String> layerDocuments(String text) {
+  try {
+    final decoded = jsonDecode(text);
+    if (decoded is Map<String, dynamic> &&
+        decoded['kind'] == 'layers' &&
+        decoded['layers'] is List) {
+      return [for (final l in decoded['layers'] as List) jsonEncode(l)];
+    }
+  } catch (_) {}
+  return [text];
+}
+
 /// What kind of Lumit document [text] is, or null when it is not one.
 ///
 /// Sniffed rather than trusted: this is asked of whatever happens to be on the
@@ -79,6 +101,9 @@ ClipboardKind? lumitDocumentKind(String text) {
     final decoded = jsonDecode(text);
     if (decoded is! Map<String, dynamic>) return null;
     if (decoded['kind'] == 'layer' && decoded['layer'] != null) {
+      return ClipboardKind.layer;
+    }
+    if (decoded['kind'] == 'layers' && decoded['layers'] is List) {
       return ClipboardKind.layer;
     }
     if (decoded['effects'] is List) return ClipboardKind.effects;

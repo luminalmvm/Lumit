@@ -447,14 +447,16 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
       widget.onWindowEnd?.call();
     }
 
-    Widget row(String name, String label, VoidCallback run, String action) =>
+    Widget row(String name, String label, VoidCallback run, String action,
+            {bool enabled = true}) =>
         MenuRow(
           key: ValueKey<String>('tl-navigator-$name'),
+          enabled: enabled,
           onPressed: () {
             closeLumitPopups();
             run();
           },
-          child: MenuLabel(label, action: action),
+          child: MenuLabel(label, action: action, enabled: enabled),
         );
     showMenuAt<void>(
       context: context,
@@ -464,13 +466,16 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
         final window = _window;
         final span = window.end - window.start;
         return [
+          // Showing the whole comp already: nothing further out to go to.
           row('fit', l10n.keyZoomToFit, () => show(0, frames),
-              'timeline.zoom.fit'),
+              'timeline.zoom.fit', enabled: span < frames),
           const MenuDivider(),
           row('in', l10n.keyZoomIn,
-              () => show(window.start + span / 4, span / 2), 'timeline.zoom.in'),
+              () => show(window.start + span / 4, span / 2), 'timeline.zoom.in',
+              enabled: span > 1),
           row('out', l10n.keyZoomOut,
-              () => show(window.start - span / 2, span * 2), 'timeline.zoom.out'),
+              () => show(window.start - span / 2, span * 2), 'timeline.zoom.out',
+              enabled: span < frames),
         ];
       },
     );

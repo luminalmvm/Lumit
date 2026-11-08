@@ -1513,8 +1513,7 @@ List<MenuSection> lumitMenus(
                           // status line rather than taking the interface down.
                         }
                       })
-                    : null,
-                action: 'layer.sequence.convert'),
+                    : null),
             flowRow(app, ui),
             threeDRow(app, ui),
             lockRow(app, ui),
@@ -2017,7 +2016,11 @@ List<MenuEntry> _effectMenu(
               layers.isEmpty
                   ? null
                   : () {
-                      ui.addEffect(layers.first, effect.name);
+                      asOneUndoStep(app.project, () {
+                        for (final layer in layers) {
+                          ui.addEffect(layer, effect.name);
+                        }
+                      });
                       app.notifyDocumentChanged();
                     },
             ),
@@ -2473,9 +2476,11 @@ bool copySelectionFrb(LumitUiState ui) {
       return false;
     }
   }
-  final layer = ui.selectedLayer.value;
-  if (layer == null) return false;
-  ui.copyLayerToClipboard(layer.copyLayer());
+  // Every picked layer, not only the first.
+  final layers = [for (final e in selectedEntries(ui)) e.layer];
+  if (layers.isEmpty) return false;
+  ui.copyLayerToClipboard(
+      layersDocument([for (final l in layers) l.copyLayer()]));
   return true;
 }
 
@@ -2493,7 +2498,7 @@ bool cutSelectionFrb(LumitState app, LumitUiState ui) {
   }
   final effects = ui.selectedEffects.value;
   final effectsLayer = ui.selectedEffectsLayer;
-  final layer = ui.selectedLayer.value;
+  final layers = [for (final e in selectedEntries(ui)) e.layer];
   if (!copySelectionFrb(ui)) return false;
   if (effectsLayer != null && effects.isNotEmpty) {
     for (final instance in effectsLayer.getEffects()) {
@@ -2505,8 +2510,16 @@ bool cutSelectionFrb(LumitState app, LumitUiState ui) {
     app.notifyDocumentChanged();
     return true;
   }
-  if (layer == null) return false;
-  layer.delete();
+  if (layers.isEmpty) return false;
+  asOneUndoStep(app.project, () {
+    for (final layer in layers) {
+      try {
+        layer.delete();
+      } catch (_) {
+        // Gone already, or refused. The rest still go.
+      }
+    }
+  });
   ui.clearSelection();
   app.notifyDocumentChanged();
   return true;
@@ -2555,15 +2568,20 @@ VoidCallback? _pasteAction(
     case ClipboardKind.layer:
       if (comp == null) return null;
       return () {
-        final pasted = comp.pasteLayer(
-          text: text,
-          atFrame: ui.workspace.interface.pasteLayersAtOriginalTime
-              ? null
-              : ui.playheadFrame.value,
-        );
+        final atFrame = ui.workspace.interface.pasteLayersAtOriginalTime
+            ? null
+            : ui.playheadFrame.value;
+        // Each one lands on top, so the bottom one goes in first and the
+        // stack keeps its order. One undo step for the lot.
+        final pasted = <LayerReference>[];
+        asOneUndoStep(app.project, () {
+          for (final doc in layerDocuments(text).reversed) {
+            pasted.add(comp.pasteLayer(text: doc, atFrame: atFrame));
+          }
+        });
         // Selecting what was just pasted is what every editor does, and it is
         // also what makes a second paste land somewhere you can see.
-        ui.setSelection([pasted]);
+        ui.setSelection(pasted.reversed.toList());
         app.notifyDocumentChanged();
       };
     case ClipboardKind.effects:

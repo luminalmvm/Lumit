@@ -822,9 +822,9 @@ void main() {
     });
 
     /// The Effect menu is the browser as a menu: a submenu per category, each
-    /// effect applying to the primary layer only, and the whole thing dead with
-    /// nothing selected.
-    testWidgets('the Effect menu applies to the primary layer only',
+    /// effect applying to every selected layer as one undo step, and the whole
+    /// thing dead with nothing selected.
+    testWidgets('the Effect menu applies to every selected layer',
         (tester) async {
       final p = await mount(tester);
       await makeComp(tester);
@@ -846,8 +846,8 @@ void main() {
       await choose(tester, 'Effect', 'Gaussian blur', under: 'Blur & sharpen');
       await tester.pump();
       expect(a.getEffects().single.name(), 'blur');
-      expect(b.getEffects(), isEmpty,
-          reason: 'the primary layer alone, not every selected layer');
+      expect(b.getEffects().single.name(), 'blur',
+          reason: 'every selected layer, not the primary alone');
     });
 
   }, skip: !engineAvailable);

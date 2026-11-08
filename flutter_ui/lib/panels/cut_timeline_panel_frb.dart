@@ -3530,7 +3530,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         final at = _trackOfClip[id];
         if (at == null) continue;
         final clip = _tracks[at].clip(id);
-        if (clip == null) continue;
+        // The colour it already has makes no undo step.
+        if (clip == null || clip.label == label) continue;
         try {
           _tracks[at].entry.layer.setClipLabel(clip: clip.id, label: label);
         } catch (_) {
@@ -4293,7 +4294,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         final at = _trackOfClip[id];
         if (at == null || _tracks[at].kind != CutTrackKind.picture) continue;
         final clip = _tracks[at].clip(id);
-        if (clip == null) continue;
+        // The mode it already has makes no undo step.
+        if (clip == null || clip.blend == index) continue;
         try {
           _tracks[at].entry.layer.setClipBlend(clip: clip.id, index: index);
         } catch (_) {

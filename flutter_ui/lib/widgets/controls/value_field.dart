@@ -630,7 +630,7 @@ class _DragValueFieldState extends State<DragValueField>
                       noteSetExpression();
                       widget.setExpression?.call();
                     },
-                    child: MenuLabel(l10n.setExpression,
+                    child: MenuLabel(l10n.menuAddExpression,
                         action: 'expression.add'),
                   ),
                 ],

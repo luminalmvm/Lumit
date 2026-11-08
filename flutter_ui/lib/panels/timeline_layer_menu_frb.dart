@@ -129,8 +129,8 @@ List<MenuEntry> layerMenuEntries(
         action: 'layer.settings'),
     MenuEntry.divider(),
     if (view.isNotEmpty) ...[...view, MenuEntry.divider()],
-    MenuEntry.submenu(
-        l10n.menuEffect, effectMenuEntries(app, ui, [layer])),
+    MenuEntry.submenu(l10n.menuEffect,
+        effectMenuEntries(app, ui, [for (final e in unlocked) e.layer])),
     if (_sounds(kind))
       MenuEntry.submenu(l10n.menuAudio, _audioRows(app, ui, entry)),
     if (kind != BridgeLayerKind.sequence)
@@ -175,13 +175,11 @@ List<MenuEntry> layerMenuEntries(
     if (kind == BridgeLayerKind.footage)
       MenuEntry(
           l10n.menuConvertToSequenceLayer,
-          editing(() => _convert(app, unlocked, toSequence: true)),
-          action: 'layer.sequence.convert'),
+          editing(() => _convert(app, unlocked, toSequence: true))),
     if (kind == BridgeLayerKind.sequence) ...[
       MenuEntry(
           l10n.menuConvertToFootageLayer,
-          editing(() => _convert(app, unlocked, toSequence: false)),
-          action: 'layer.sequence.convert'),
+          editing(() => _convert(app, unlocked, toSequence: false))),
       MenuEntry(l10n.copySequenceShape, () {
         try {
           sequenceShapeClipboard = layer.copySequenceShape();
@@ -546,15 +544,17 @@ List<MenuEntry> _createRows(
           locked
               ? null
               : () {
-                  for (final e in selectedEntries(ui)) {
-                    if (e.info.switches.locked ||
-                        e.info.kind != BridgeLayerKind.text) {
-                      continue;
+                  asOneUndoStep(app.project, () {
+                    for (final e in selectedEntries(ui)) {
+                      if (e.info.switches.locked ||
+                          e.info.kind != BridgeLayerKind.text) {
+                        continue;
+                      }
+                      try {
+                        e.layer.createPointsFromText();
+                      } catch (_) {}
                     }
-                    try {
-                      e.layer.createPointsFromText();
-                    } catch (_) {}
-                  }
+                  });
                   app.notifyDocumentChanged();
                 }),
   ];
@@ -569,7 +569,10 @@ List<MenuEntry> _parentRows(LumitState app, LumitUiState ui,
     final frame = ui.playheadFrame.value;
     asOneUndoStep(app.project, () {
       for (final e in unlocked) {
-        if (e.layer.internallayerId == parent) continue;
+        // Its own parent can't be, and the one it has makes no undo step.
+        if (e.layer.internallayerId == parent || e.info.parent == parent) {
+          continue;
+        }
         try {
           e.layer.setParent(parent: parent, frame: frame);
         } catch (_) {}

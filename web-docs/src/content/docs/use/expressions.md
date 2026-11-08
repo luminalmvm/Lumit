@@ -10,7 +10,7 @@ An **expression** is a line of script on a property, calculated every frame.
 ## Put one on a property
 
 1. Right-click the property's value field.
-2. Choose **Set expression**.
+2. Choose **Add expression**.
 
 An editor opens over the row, seeded with the value that was there. The number under the
 text is what the expression comes to at the playhead, and the function names complete as

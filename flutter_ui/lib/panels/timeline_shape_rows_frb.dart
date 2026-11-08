@@ -124,7 +124,7 @@ class ShapeItemRow extends StatelessWidget {
           },
           child: Text(l10n.shapeConvertToPath),
         ),
-      ...shapeMoveRows(close, item.id, _writeEntries),
+      ...shapeMoveRows(close, layer, item.id, _writeEntries),
     ];
   }
 
@@ -206,14 +206,18 @@ Widget shapeAddSubmenu(VoidCallback close, UuidValue id, List<ShapeAdd> adds,
 
 /// Move up and Move down, swapping the entry with its neighbour at its own
 /// depth. A modifier moved past an item changes what it acts on.
-List<Widget> shapeMoveRows(VoidCallback close, UuidValue id,
-        void Function(List<BridgeShapeEntry> Function(List<BridgeShapeEntry>))
-            write) =>
-    [
+///
+/// An entry already at that end of its list has nowhere to go, so the row greys.
+List<Widget> shapeMoveRows(VoidCallback close, LayerReference layer, UuidValue id,
+    void Function(List<BridgeShapeEntry> Function(List<BridgeShapeEntry>))
+        write) {
+  final now = layer.getShapeContents();
+  return [
       const MenuDivider(),
       for (final (by, label) in [(-1, l10n.moveUp), (1, l10n.moveDown)])
         MenuRow(
           key: ValueKey<String>('tl-shape-move-${by < 0 ? 'up' : 'down'}-$id'),
+          enabled: !identical(now.moved(id, by), now),
           onPressed: () {
             close();
             write((entries) => entries.moved(id, by));
@@ -221,6 +225,7 @@ List<Widget> shapeMoveRows(VoidCallback close, UuidValue id,
           child: Text(label),
         ),
     ];
+}
 
 /// Which kind of entry a modifier is, in the Add menu's terms.
 ShapeAdd shapeAddOf(BridgeShapeModifier modifier) => switch (modifier.kind) {
@@ -402,7 +407,7 @@ class ShapeModifierRow extends StatelessWidget {
               close, 'tl-shape-expand-${modifier.id}', l10n.shapeExpandCopies,
               (intoLayers) => expandShapeCopies(
                   ui, layer, onChanged, modifier.id, intoLayers)),
-        ...shapeMoveRows(close, modifier.id, _write),
+        ...shapeMoveRows(close, layer, modifier.id, _write),
       ],
     );
   }
@@ -515,7 +520,7 @@ class ShapeGroupRow extends StatelessWidget {
           },
           child: Text(l10n.shapeUngroup),
         ),
-        ...shapeMoveRows(close, group.id, _write),
+        ...shapeMoveRows(close, layer, group.id, _write),
       ],
     );
   }

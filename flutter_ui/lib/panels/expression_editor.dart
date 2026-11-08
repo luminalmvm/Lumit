@@ -271,7 +271,7 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
                   LinkMark(
                     key: const ValueKey('expression-editor-link'),
                     always: true,
-                    name: l10n.setExpression,
+                    name: l10n.menuAddExpression,
                     link: PropertyLink(
                       layer: widget.layerId,
                       language: _draft.field1,

@@ -249,7 +249,7 @@ List<Widget> paramLastRows(
   final ui = Provider.of<LumitUiState>(context, listen: false);
   return [
     if (menu.setExpression case final set?)
-      _row('param-menu-expression', l10n.setExpression, () {
+      _row('param-menu-expression', l10n.menuAddExpression, () {
         close();
         noteSetExpression();
         set();
@@ -507,7 +507,7 @@ List<Widget> _rows(BuildContext context, ParamMenu menu, VoidCallback done) {
     ],
     [
       if (menu.setExpression case final set? when hasCurve || !menu.onCurves)
-        _row('param-menu-expression', l10n.setExpression, () {
+        _row('param-menu-expression', l10n.menuAddExpression, () {
           done();
           noteSetExpression();
           set();
@@ -531,7 +531,7 @@ List<Widget> _rows(BuildContext context, ParamMenu menu, VoidCallback done) {
               ],
             ),
           ),
-          child: MenuLabel(l10n.setExpression),
+          child: MenuLabel(l10n.menuAddExpression),
         ),
       if (menu.drive case final drive?) ..._driveRows(context, drive, done),
       if (menu.removeExpression case final remove?)

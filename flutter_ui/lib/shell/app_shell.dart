@@ -1133,7 +1133,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         saveVersionFrb(context, state, ui);
       case 'file.import':
         importFootageFrb(context, state);
-      case 'file.export':
+      case 'file.export' || 'export.queue.add':
         if (comp == null) {
           handled = false;
         } else {
@@ -1449,6 +1449,7 @@ bool _pressedOnce(String action) =>
       'mask.invert',
       'comp.trim.workarea',
       'marker.add.region',
+      'export.queue.add',
       'export.queue.open',
       'help.open',
       'viewer.controls.toggle',

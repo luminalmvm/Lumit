@@ -392,7 +392,12 @@ void resetSpeed(BuildContext context, List<BridgeLayerEntry> targets) =>
 void setInterpolation(BuildContext context, List<BridgeLayerEntry> targets,
         BridgeRetimeInterp interpolation) =>
     _forEach(context, targets,
-        (entry) => entry.layer.setInterpolation(interpolation: interpolation));
+        (entry) {
+      // The one it has already makes no undo step.
+      if (entry.layer.getInterpolation() != interpolation) {
+        entry.layer.setInterpolation(interpolation: interpolation);
+      }
+    });
 
 /// The name of a way of finding in-between frames.
 String interpLabel(BridgeRetimeInterp interp) => switch (interp) {

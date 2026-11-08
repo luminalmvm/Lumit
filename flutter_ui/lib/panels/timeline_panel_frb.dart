@@ -3633,12 +3633,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.noteTimelineView == _rememberShownView) {
       _ui!.noteTimelineView = null;
     }
-    if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
-    if (_ui?.easingKey.value?.apply == _applyKeyEase) {
-      _ui!.easingKey.value = null;
+    // After the frame: the Easing panel listens to these, and it can't be asked
+    // to rebuild while the tree is being taken down. A second Timeline may have
+    // published its own by then, so only what's still this one's is cleared.
+    final held = _ui;
+    final span = held?.easingSpan.value;
+    if (held != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (held.easingApply.value == _applyEasing) {
+          held.easingApply.value = null;
+        }
+        if (held.easingKey.value?.apply == _applyKeyEase) {
+          held.easingKey.value = null;
+        }
+        if (held.easingSpan.value == span) held.easingSpan.value = null;
+      });
     }
-    // A second Timeline publishes its own again on its next build.
-    _ui?.easingSpan.value = null;
     _ui?.selectedEffects.removeListener(_onEffectSelectionChanged);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     _boundTools?.removeListener(_onToolChanged);

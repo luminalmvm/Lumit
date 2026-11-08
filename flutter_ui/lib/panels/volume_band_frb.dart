@@ -543,6 +543,7 @@ class VolumeBandState extends State<VolumeBand> {
     final key = keys.isEmpty ? null : _keyNear(local);
     final span = key == null ? _spanAt(local.dx) : null;
     final current = span == null ? null : _curveOf(keys, span);
+    final changed = keys.isNotEmpty || _staticValue != 0;
     final names = {
       SpeedCurve.linear: l10n.speedCurveLinear,
       SpeedCurve.fast: l10n.speedCurveFast,
@@ -593,12 +594,15 @@ class VolumeBandState extends State<VolumeBand> {
                 key: const ValueKey('band-thin'),
                 onPressed: () => close('thin'),
                 child: Text(l10n.envelopeThin)),
+          // A band at its centre with no points: nothing to flip or reset.
           MenuRow(
               key: const ValueKey('band-flip'),
+              enabled: changed,
               onPressed: () => close('flip'),
               child: Text(l10n.envelopeFlipAll)),
           MenuRow(
               key: const ValueKey('band-reset-all'),
+              enabled: changed,
               onPressed: () => close('reset-all'),
               child: Text(l10n.envelopeResetAll)),
         ],

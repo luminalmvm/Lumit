@@ -221,10 +221,10 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>('fx-float-$id-completion')),
           buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      expect(find.text('Set expression'), findsOneWidget,
+      expect(find.text('Add expression'), findsOneWidget,
           reason: 'a Slider keeps every float affordance (docs/08 §1.2)');
 
-      await tester.tap(find.text('Set expression'));
+      await tester.tap(find.text('Add expression'));
       await tester.pumpAndSettle();
       // Seeded with the value showing, so turning one on moves no picture.
       expect(

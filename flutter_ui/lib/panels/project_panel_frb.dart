@@ -323,9 +323,18 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// Copies of [items], picked, and filed in [folder] when one is given.
   Future<void> _duplicate(List<ItemReference> items,
       {ItemReference_Folder? folder}) async {
-    final copies = await duplicateProjectItems(context, items);
-    if (copies.isEmpty || !mounted) return;
-    if (folder != null) _fileInto(folder, copies);
+    // Pasting into a folder is one thing to undo, the copy and the filing both.
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final group = folder != null && project != null;
+    if (group) project.beginUndoGroup();
+    final List<ItemReference> copies;
+    try {
+      copies = await duplicateProjectItems(context, items);
+      if (copies.isEmpty || !mounted) return;
+      if (folder != null) _fileInto(folder, copies);
+    } finally {
+      if (group) project.endUndoGroup();
+    }
     _pick(copies);
   }
 
@@ -774,9 +783,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       _compStillId = id;
     }
     final ui_ = Provider.of<LumitUiState>(context, listen: false);
-    final frame = ui_.selectedComp == comp
-        ? ui_.playheadFrame.value
-        : comp.durationFrames() ~/ 2;
+    final int frame;
+    try {
+      frame = ui_.selectedComp == comp
+          ? ui_.playheadFrame.value
+          : comp.durationFrames() ~/ 2;
+    } catch (_) {
+      // Deleted a moment ago. The card's still pointing at it until the rebuild.
+      return;
+    }
     Workspace.compStill(comp, frame, maxEdge: _thumbMaxEdge).then((image) {
       if (image == null) return;
       if (!mounted || _compStillId != id) {
@@ -1996,7 +2011,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   void _fileInto(ItemReference folder, List<ItemReference> items) {
     if (folder is! ItemReference_Folder) return;
     final id = folder.field0.internalid;
-    eachInOneUndo(Provider.of<LumitState>(context, listen: false), items,
+    // What's in there already stays where it is, rather than being shuffled.
+    final inside = {
+      for (final c in folder.field0.getChildren()) projectItemId(c),
+    };
+    final moving = [
+      for (final item in items)
+        if (!inside.contains(projectItemId(item))) item,
+    ];
+    if (moving.isEmpty) return;
+    eachInOneUndo(Provider.of<LumitState>(context, listen: false), moving,
         (item) => item.moveToFolder(folder: id));
     _documentChanged();
   }

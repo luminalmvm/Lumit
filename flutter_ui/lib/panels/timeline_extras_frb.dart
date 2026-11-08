@@ -3627,6 +3627,7 @@ Future<void> showRulerMenu(
             child: Text(l10n.workAreaEnd)),
         MenuRow(
             key: const ValueKey('tl-ruler-work-clear'),
+            enabled: comp.getWorkArea() != null,
             onPressed: () => close('work-clear'),
             child: Text(l10n.workAreaClear)),
       ],

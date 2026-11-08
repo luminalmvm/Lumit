@@ -874,10 +874,13 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
         plain('seq-envelope-add-point', l10n.speedPointAdd, 'add', close),
         const MenuDivider(),
         for (final MapEntry(key: curve, value: name) in names.entries)
+          // A line still at one speed throughout has no change for a curve to shape.
           MenuRow(
             key: ValueKey<String>('seq-envelope-curve-${curve.name}'),
+            enabled: clip.retimed,
             onPressed: () => close(curve),
-            child: MenuLabel(name, ticked: curve == current),
+            child: MenuLabel(name,
+                ticked: curve == current, enabled: clip.retimed),
           ),
         const MenuDivider(),
         plain('seq-envelope-thin', l10n.speedThin, 'thin', close,

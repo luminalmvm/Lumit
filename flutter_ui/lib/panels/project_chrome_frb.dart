@@ -37,7 +37,7 @@ const double _thumbWidth = 128;
 const double _thumbHeight = 72;
 
 /// The gap between the card's three text lines.
-const double _previewLineGap = 3;
+const double _previewLineGap = 2;
 
 /// How many moments a hover across the poster frame can land on (docs/07
 /// §3.1).
