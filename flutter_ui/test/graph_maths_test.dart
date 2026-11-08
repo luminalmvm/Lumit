@@ -26,6 +26,22 @@ void main() {
   /// **M19 — a new keyframe takes after its neighbours.** It used to be born
   /// linear on both sides whatever it landed between, so planting one in the
   /// middle of a held run quietly turned that run into a ramp.
+  // Reversing an eased curve used to leave its stored speeds pointing the old
+  // way, which bends every frame between the keys: wrong pixels, quietly.
+  test('reversed keys draw the same curve backwards', () {
+    const ease = BridgeSideInterp.bezier(
+        BridgeBezierSide(speed: 30, influence: 0.4));
+    final keys = [
+      key(1, 1, 0, interpOut: ease),
+      key(3, 1, 100, interpIn: ease, interpOut: ease),
+      key(6, 1, 40, interpIn: ease),
+    ];
+    final back = reversedKeys(keys, (s) => rat((s * 1000).round(), 1000));
+    for (var t = 1.0; t <= 6; t += 0.25) {
+      expect(evaluateKeys(back, 7 - t), closeTo(evaluateKeys(keys, t), 1e-9));
+    }
+  });
+
   group('keyframeAmong', () {
     const hold = BridgeSideInterp.hold();
     const ease =

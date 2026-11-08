@@ -6398,9 +6398,53 @@
   "@graphBreakHandles": {
     "description": "Graph editor button: while it is on, dragging one handle of a keyframe leaves the handle on its other side where it is."
   },
-  "graphEditorEmpty": "Select a property to see its curve — click its name in the outline; Ctrl/Shift-click adds more",
+  "graphEditorEmpty": "Pick a property",
   "@graphEditorEmpty": {
-    "description": "Empty state in the graph editor. Ctrl and Shift are key names and stay as they are."
+    "description": "Empty state in the graph editor: no property is picked, so there is no curve to draw."
+  },
+  "graphAddKeyAtPlayhead": "Add key at playhead",
+  "@graphAddKeyAtPlayhead": {
+    "description": "Graph editor, right-click on the empty plot: plants a key under the playhead on every keyed curve on show, leaving the curve as it was."
+  },
+  "graphAddKeyHere": "Add key here",
+  "@graphAddKeyHere": {
+    "description": "Graph editor, right-click on a curve: plants a key on it where the pointer is, leaving the curve as it was."
+  },
+  "graphSelectAllKeys": "Select all keys",
+  "@graphSelectAllKeys": {
+    "description": "Graph editor, right-click on the empty plot: selects every key of every curve on show."
+  },
+  "graphSelectKeys": "Select keys",
+  "@graphSelectKeys": {
+    "description": "Graph editor, right-click on a curve or its row in the curve list: selects every key of that curve."
+  },
+  "graphFrameSelected": "Frame selected",
+  "@graphFrameSelected": {
+    "description": "Graph editor, right-click on the empty plot: zooms the graph to the selected keys, in time and in value."
+  },
+  "graphFlattenHandle": "Flatten",
+  "@graphFlattenHandle": {
+    "description": "Graph editor, right-click on a tangent handle: lays the handle flat, so the curve comes to rest as it passes through the key."
+  },
+  "graphHideCurve": "Hide",
+  "@graphHideCurve": {
+    "description": "Graph editor, right-click on a curve: takes the curve off the plot without changing it. Ticked while it is hidden."
+  },
+  "graphShowAllCurves": "Show all curves",
+  "@graphShowAllCurves": {
+    "description": "Graph editor, right-click on the empty plot, when curves are hidden: brings them all back."
+  },
+  "graphRenameLayer": "Rename layer",
+  "@graphRenameLayer": {
+    "description": "Graph editor, right-click on a row of the curve list: renames the layer the curve belongs to."
+  },
+  "keyMenuTangents": "Tangents",
+  "@keyMenuTangents": {
+    "description": "Graph editor, right-click on a key: the submenu holding the tangent modes Auto, Clamp and Free."
+  },
+  "deleteKeys": "Delete keys",
+  "@deleteKeys": {
+    "description": "Graph editor, right-click on a key with several keys selected: removes them all."
   },
   "graphSpeed": "Speed",
   "@graphSpeed": {
@@ -11143,21 +11187,25 @@
   "@shapeDeformDetail": {
     "description": "Timeline row under a shape layer's art: how many times for each bump the noise is read along the path. Fewer bends the outline more broadly."
   },
+  "retimePickLayer": "Pick a layer",
+  "@retimePickLayer": {
+    "description": "Empty state of the graph in the Retiming workspace: no layer is selected, so there is no Retime to draw."
+  },
+  "retimeFreeze": "Freeze frame",
+  "@retimeFreeze": {
+    "description": "Retime panel button: holds the frame under the playhead for a moment, then carries on."
+  },
   "stretchTitle": "Stretch",
   "@stretchTitle": {
     "description": "Title of the small dialogue that stretches a layer: a new speed, or the duration that speed implies."
   },
-  "stretchNewSpeed": "New speed",
+  "stretchNewSpeed": "Speed",
   "@stretchNewSpeed": {
     "description": "Stretch dialogue: the well holding the speed the layer will play at, as a percentage. Speed, never velocity (docs/01-GLOSSARY.md)."
   },
-  "stretchNewDuration": "New duration",
+  "stretchNewDuration": "Duration",
   "@stretchNewDuration": {
     "description": "Stretch dialogue: the well holding the length the layer will have, in frames. Linked to the speed well above it."
-  },
-  "stretchAnchor": "The in point holds; the end of the layer moves.",
-  "@stretchAnchor": {
-    "description": "Stretch dialogue: a note under the wells saying which end of the layer stays put when it is stretched."
   },
   "panelStagger": "Stagger",
   "@panelStagger": {

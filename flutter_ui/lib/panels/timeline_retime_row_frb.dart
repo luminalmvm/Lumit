@@ -18,7 +18,9 @@ import '../widgets/controls.dart';
 import '../widgets/time_readout.dart';
 import 'graph_editor_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
+import 'graph_maths.dart';
 import 'keyframe_controls_frb.dart';
+import 'retime_commands.dart';
 
 /// The layer's Retime: which moment of the source, in seconds, the
 /// layer shows at this point on its own timeline.
@@ -176,9 +178,32 @@ class _RetimeRowState extends State<RetimeRow> {
                   key: const ValueKey('tl-retime-name'),
                   behavior: HitTestBehavior.opaque,
                   onTap: widget.onLabelTap,
-                  child: Text(t.propertyCase(l10n.retime),
-                      style: t.body.copyWith(
-                          color: Color.lerp(t.body.color, t.textPrimary, lit))),
+                  onSecondaryTapDown: (d) => showRetimeMenuFor(
+                      context, widget.layer, d.globalPosition),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(t.propertyCase(l10n.retime),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.body.copyWith(
+                                color: Color.lerp(
+                                    t.body.color, t.textPrimary, lit))),
+                      ),
+                      // The speed under the playhead, once it is not the
+                      // ordinary one.
+                      if (_speedAt(frame) case final speed?) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '${speedText(speed, fine: false)}'
+                          '${l10n.unitSymbolPercent}',
+                          key: const ValueKey('tl-retime-speed'),
+                          style: t.mono.copyWith(
+                              fontSize: wellTextSize, color: t.textMuted),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -255,6 +280,17 @@ class _RetimeRowState extends State<RetimeRow> {
         );
       },
     );
+  }
+
+  /// The map's speed at comp frame [frame], in per cent, or null where it is
+  /// playing at 100% or isn't keyed.
+  double? _speedAt(int frame) {
+    final scalar = widget.scalar;
+    if (scalar is! BridgeScalar_Keyframed) return null;
+    final fps = Provider.of<LumitUiState>(context, listen: false).model.fps;
+    if (fps <= 0) return null;
+    final speed = evaluateKeysSpeed(scalar.field0, frame / fps) * 100;
+    return (speed - 100).abs() < 0.05 ? null : speed;
   }
 
   /// A source time in seconds as a whole source frame, and back.

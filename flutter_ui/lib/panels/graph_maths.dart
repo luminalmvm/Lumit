@@ -1483,6 +1483,51 @@ List<BridgeKeyframe> thinEnvelope(List<BridgeKeyframe> keys) {
   );
 }
 
+/// The speed of [keys] at [seconds], in per cent. Read just inside the two end
+/// keys, since a curve has no speed outside itself and its ends would read as
+/// nothing.
+double envelopeSpeedAt(List<BridgeKeyframe> keys, double seconds) {
+  if (keys.length < 2) return 0;
+  const nudge = 1e-6;
+  final first = rationalSeconds(keys.first.time) + nudge;
+  final last = rationalSeconds(keys.last.time) - nudge;
+  return evaluateKeysSpeed(keys, seconds.clamp(first, last).toDouble()) * 100;
+}
+
+/// One side of a key once time runs the other way. A curve that was climbing
+/// through the key is falling through it now, so a stored speed changes sign.
+BridgeSideInterp turnedSide(BridgeSideInterp side) => switch (side) {
+      BridgeSideInterp_Bezier(:final field0) => BridgeSideInterp.bezier(
+          BridgeBezierSide(speed: -field0.speed, influence: field0.influence)),
+      _ => side,
+    };
+
+/// [keys] played backwards across the stretch they cover: the same times from
+/// end to end, each key's value and eases coming the other way round. [timeOf]
+/// puts a moment in seconds on the composition's grid.
+List<BridgeKeyframe> reversedKeys(
+    List<BridgeKeyframe> keys, BridgeRational Function(double seconds) timeOf) {
+  if (keys.length < 2) return keys;
+  final sum =
+      rationalSeconds(keys.first.time) + rationalSeconds(keys.last.time);
+  return [
+    for (final key in keys.reversed)
+      BridgeKeyframe(
+        time: timeOf(sum - rationalSeconds(key.time)),
+        value: key.value,
+        interpIn: turnedSide(key.interpOut),
+        interpOut: turnedSide(key.interpIn),
+      ),
+  ];
+}
+
+/// [keys] back to one straight run at 100%, from the first key's moment to the
+/// last key's time.
+List<BridgeKeyframe> resetEnvelope(List<BridgeKeyframe> keys) => keys.length < 2
+    ? keys
+    : envelopeToKeys([keys.first, keys.last], const [100.0, 100.0],
+        curves: const [SpeedCurve.linear]);
+
 /// [keys] with span [span] played in [curve].
 List<BridgeKeyframe> setEnvelopeCurve(
     List<BridgeKeyframe> keys, int span, SpeedCurve curve) {

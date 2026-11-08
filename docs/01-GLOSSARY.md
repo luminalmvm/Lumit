@@ -164,6 +164,7 @@ Not interchangeable.
 | **Scopes** | Waveform, RGB parade, vectorscope, histogram |
 | **Grade panel** | The selected layer's grade as wheels, primaries, curves and a look, over its Colour effects |
 | **Easing panel** | One curve shape applied to selected keyframe spans |
+| **Retime panel** | The selected layer's speed, length, freeze, reverse and in-between frames |
 | **Text panel** | Sets a text layer's font, size, spacing and outline |
 | **Paragraph panel** | Sets how a text layer's lines are aligned and spaced |
 | **Expressions panel** | Keeps saved expressions and puts one on the selected properties |

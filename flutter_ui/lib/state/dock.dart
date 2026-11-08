@@ -86,7 +86,11 @@ enum Panel {
   /// An installed extension's own page. One pane for each extension, told
   /// apart by the pane's instance number, which `ExtensionService` gives
   /// each extension once and keeps.
-  extension;
+  extension,
+
+  /// How fast the selected layer plays and the commands that change it: the
+  /// Retiming workspace's right-hand column heads with it.
+  retime;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -108,6 +112,7 @@ enum Panel {
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
         Panel.stagger => l10n.panelStagger,
+        Panel.retime => l10n.retime,
         Panel.notes => l10n.panelNotes,
         Panel.align => l10n.panelAlign,
         Panel.debug => l10n.panelDebug,
@@ -589,14 +594,12 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.53, 0.47],
         ),
-      // Retiming: the arrangement for shaping movement. The **Easing**
-      // panel stays open at the top of the right-hand column rather than
-      // behind a tab — the whole point of the panel over the popup is that it
-      // stays on screen while the selection changes underneath it. Stagger
-      // and Expressions sit shut under it: the curve and a key's fields want
-      // the column's whole height. The Timeline is as tall as Audio's,
-      // because retiming is timeline work: the graph editor is where the eye
-      // is, and the shape is drawn beside it.
+      // Retiming: the arrangement for shaping movement. The Retime panel has
+      // the right-hand column, with Easing, Stagger and Expressions shut under
+      // it. Easing has nothing to do on the speed graph, so it opens when it is
+      // wanted. The Timeline is as tall as Audio's and comes up on the speed
+      // graph, because that is where the eye is (the Timeline does that part,
+      // see `presetApplied`).
       WorkspacePreset.retiming => DockSplit(
           DockAxis.vertical,
           [
@@ -611,12 +614,14 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                 DockPane(Panel.viewer),
                 DockTabs(
                   [
+                    DockPane(Panel.retime),
                     DockPane(Panel.easing),
                     DockPane(Panel.stagger),
                     DockPane(Panel.expressions),
                   ],
                   stacked: true,
-                  open: {Panel.easing.pane()},
+                  open: {Panel.retime.pane()},
+                  shares: {Panel.retime.pane(): 1.4},
                 ),
               ],
               [0.20, 0.58, 0.22],

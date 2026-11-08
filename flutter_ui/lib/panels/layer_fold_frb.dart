@@ -1123,7 +1123,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
     switch (row) {
       FoldTransformRow(:final group, :final transform) => group.axes.any((a) {
           final scalar = read(transform, a.prop);
-          final fresh = _transformDefault(a.prop, compWidth, compHeight);
+          final fresh = transformDefault(a.prop, compWidth, compHeight);
           // No default to compare against — the Anchor, whose seeded value is
           // the source's own half-size, and Position with no comp size to
           // hand. Only its animation can say anything, and that has been asked
@@ -1172,7 +1172,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
 /// (`centred_transform`). The Anchor is the source's own middle, and the source
 /// is not this file's to know — so it is exempt, exactly as the engine exempts
 /// it when it answers the same question for the groups.
-double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
+double? transformDefault(BridgeTransformProp prop, double w, double h) =>
     switch (prop) {
       BridgeTransformProp.anchorX || BridgeTransformProp.anchorY => null,
       BridgeTransformProp.positionX => w > 0 ? w / 2 : null,

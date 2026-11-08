@@ -89,6 +89,8 @@ import 'graph_lens_guides.dart' show GraphLensSwitch;
 import 'graph_maths.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
 import 'graph_box_lanes.dart';
+import 'retime_commands.dart';
+import '../shell/menu_layer_frb.dart' show selectedEntries;
 import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
@@ -1534,8 +1536,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           .interface
           .videoAsSequenceLayer;
 
-  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Speed*.
+  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Speed*, which the
+  /// Retiming workspace has on whatever the setting says.
   bool _vegas(BuildContext context) =>
+      _retiming ||
       Provider.of<LumitUiState>(context, listen: false)
           .workspace
           .interface
@@ -1844,8 +1848,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         if (foldRowPath(row.id, fold) == path) {
           if (!_vOutline.hasClients) return;
           final view = _vOutline.position;
-          // Enough for the part's own rows under it.
-          final block = row.rowHeight * 11;
+          // Enough for the part's own rows under it. A Retime has none.
+          final block = fold is FoldRetimeRow
+              ? row.rowHeight
+              : row.rowHeight * 11;
           if (at >= view.pixels &&
               at + block <= view.pixels + view.viewportDimension) {
             return;
@@ -2217,6 +2223,59 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // draws the Timeline with every sounding layer's waveform lane open, and
     // the dock split alone cannot say so.
     _ui!.workspace.presetApplied.addListener(_onPresetApplied);
+    _ui!.model.addListener(_followRetime);
+    _ui!.selectedLayers.addListener(_followRetime);
+    if (_retiming) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _enterRetiming();
+      });
+    }
+  }
+
+  bool get _retiming =>
+      _ui?.workspace.activePreset == WorkspacePreset.retiming;
+
+  /// The view and the lens the Timeline had when Retiming changed them, to go
+  /// back to on the way out. Null outside Retiming.
+  (TimelineMode, GraphLens)? _beforeRetiming;
+
+  /// The Retiming arrangement is about the speed graph, which a dock tree cannot
+  /// say: the graph comes up on the speed lens, with the selected layer's Retime
+  /// on it. Nothing in the document changes for choosing a workspace.
+  void _enterRetiming() {
+    _beforeRetiming ??= (_mode, _graphLens);
+    _setMode(TimelineMode.graph);
+    setState(() => _graphLens = GraphLens.speed);
+    _publishEasingClaim();
+    _followRetime();
+  }
+
+  /// In Retiming, a layer picked with no property of it picked brings up its
+  /// Retime. After the frame, so it reads where the selection and the model
+  /// came to rest, whichever of them moved first.
+  void _followRetime() {
+    if (!_retiming || !_graph || _selectedProperties.isNotEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ui = _ui;
+      if (ui == null || !mounted || !_retiming || !_graph) return;
+      if (_selectedProperties.isNotEmpty) return;
+      final paths = [
+        for (final entry in selectedEntries(ui))
+          if (entry.info.retime != null)
+            retimePath(entry.layer.internallayerId.toString()),
+      ];
+      if (paths.isEmpty) return;
+      setState(() {
+        for (final path in paths) {
+          _setOpen(layerIdOfPath(path)!, true);
+        }
+        _selectedProperties.addAll(paths);
+        _highlighted = layerIdOfPath(paths.first);
+        _foldToShow = paths.first;
+      });
+      _publishPropertySelection();
+      _publishRowSelection();
+    });
   }
 
   /// A shipped preset was applied. Audio's board (docs/09 §1) draws the
@@ -2228,6 +2287,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void _onPresetApplied() {
     final ui = _ui;
     if (ui == null || !mounted) return;
+    if (_retiming) {
+      _enterRetiming();
+      return;
+    }
+    if (_beforeRetiming case (final mode, final lens)?) {
+      _beforeRetiming = null;
+      _setMode(mode);
+      setState(() => _graphLens = lens);
+      _publishEasingClaim();
+    }
     if (ui.workspace.activePreset != WorkspacePreset.audio) return;
     for (final entry in ui.model.layers) {
       final id = entry.layer.internallayerId.toString();
@@ -3537,6 +3606,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.workspace.presetApplied.removeListener(_onPresetApplied);
+    _ui?.model.removeListener(_followRetime);
+    _ui?.selectedLayers.removeListener(_followRetime);
     _ui?.selectedLayer.removeListener(_onPrimaryChanged);
     _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
     _ui?.renderTimings.removeListener(_onTimingsChanged);
@@ -3833,9 +3904,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Frame the selected keys in the graph, in time and in value, or every
   /// curve when none is picked. After Effects calls it Fit selection to view.
-  void _fitGraph() {
+  void _fitGraph({bool everything = false}) {
     final pane = _graphPane.currentState;
-    final span = pane?.fitSelection();
+    final span = pane?.fitSelection(everything: everything);
     final fps = _ui?.model.fps ?? 0;
     final viewport = positionOf(_hLane)?.viewportDimension ?? _laneViewport;
     if (span == null || fps <= 0 || viewport <= graphGutterWidth) {
@@ -5215,6 +5286,39 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     },
                                     onChanged: ui.model.refresh,
                                     onWheelTime: (e, x) => _wheel(e, x, axis),
+                                    scope: _graphScope,
+                                    onLens: (lens) => setState(() {
+                                      _graphLens = lens;
+                                      _publishEasingClaim();
+                                    }),
+                                    onScope: (scope) =>
+                                        setState(() => _graphScope = scope),
+                                    onToggleAutoFit: () => setState(
+                                        () => _graphAutoFit = !_graphAutoFit),
+                                    onToggleMagnet: () =>
+                                        setState(() => _magnet = !_magnet),
+                                    onToggleBreakHandles: () => setState(() =>
+                                        _graphBreakHandles =
+                                            !_graphBreakHandles),
+                                    onFrame: _fitGraph,
+                                    onFrameAll: () =>
+                                        _fitGraph(everything: true),
+                                    onCopyKeys: _copySelectedKeys,
+                                    onPasteKeys: _pasteKeysIntoSelection,
+                                    onOpenEase: _openEasePopover,
+                                    onEnableRetime: shown.isEmpty &&
+                                            _retiming &&
+                                            retimeTargets(ui).isNotEmpty
+                                        ? () => setRetime(context,
+                                            retimeTargets(ui), true)
+                                        : null,
+                                    // A layer in hand that can't take one has
+                                    // nothing to pick and nothing to offer.
+                                    emptyHint: !_retiming
+                                        ? null
+                                        : ui.selectedLayerIds.isEmpty
+                                            ? l10n.retimePickLayer
+                                            : '',
                                   ),
                                 ],
                               ),

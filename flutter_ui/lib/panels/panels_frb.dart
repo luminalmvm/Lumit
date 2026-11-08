@@ -29,6 +29,7 @@ import 'mixer_panel_frb.dart';
 import 'node_panel.dart';
 import 'notes_panel_frb.dart';
 import 'project_panel_frb.dart';
+import 'retime_panel_frb.dart';
 import 'paragraph_panel_frb.dart';
 import 'scopes_panel_frb.dart';
 import 'stagger_panel_frb.dart';
@@ -52,6 +53,7 @@ const Set<Panel> _changing = {
   Panel.paragraph,
   Panel.expressions,
   Panel.stagger,
+  Panel.retime,
   Panel.notes,
   Panel.align,
 };
@@ -68,6 +70,7 @@ const Set<Panel> _leftToRight = {
   Panel.audio,
   Panel.audioTimeline,
   Panel.cutTimeline,
+  Panel.retime,
   Panel.expressions,
   Panel.align,
   Panel.paragraph,
@@ -130,6 +133,7 @@ Widget _panelBody(PaneId pane) => switch (pane.panel) {
       Panel.paragraph => const ParagraphPanelFrb(),
       Panel.expressions => const ExpressionsPanelFrb(),
       Panel.stagger => const StaggerPanelFrb(),
+      Panel.retime => const RetimePanelFrb(),
       Panel.notes => const NotesPanelFrb(),
       Panel.align => const AlignPanel(),
       Panel.debug => const DebugPanel(),

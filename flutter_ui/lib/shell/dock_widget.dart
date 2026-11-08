@@ -70,6 +70,7 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.grade => 200,
       Panel.hierarchy => 180,
       Panel.easing => 220,
+      Panel.retime => 220,
       // Two strips and the Master: below that a desk is a list of names.
       Panel.mixer => 190,
       // The Beats section's widest row: a label, the BPM well, Tap and the

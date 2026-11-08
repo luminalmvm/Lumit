@@ -22,11 +22,30 @@ speed, ramps between speeds, holds a frame or runs backwards.
 | [**Retime**](#retime-on-a-layer) | **Layer ▸ Enable Retime**, `Ctrl+Alt+T` | Footage and Precomp layers |
 | [**Stretch…**](#stretch) | A layer's right-click menu in the Timeline, or `Shift`+drag either end | Footage and Precomp layers |
 | [**Freeze frame at playhead**](#freeze-a-frame) | A layer's right-click menu in the Timeline | Footage and Precomp layers |
+| [**Retime panel**](#the-retiming-workspace) | **Window ▸ Retime**, and the **Retiming** workspace | Footage and Precomp layers |
 | [**Interpret footage…**](#interpret-footage) | The Project panel's right-click menu | Footage items |
 | [**Posterize time**](/effects/temporal/posterize-time/) | **Effect ▸ Temporal** | Any layer |
 
-The **Retiming** workspace puts the Easing panel beside the Viewer, with the Timeline across
-the bottom.
+
+## The Retiming workspace
+
+Choosing **Retiming** brings up the graph editor on the speed graph, with the selected layer's
+Retime on it. A layer with no Retime offers **Enable Retime** on the empty graph. Choosing the
+workspace changes nothing in the project.
+
+The **Retime** panel works on the selected layers:
+
+- The toggle turns Retime on or off.
+- The strip draws the layer's speed from end to end, with the speed at the playhead and the
+  moment of the source showing. A click or a drag seeks.
+- **Speed** and **Duration** stretch the layer. **25**, **50**, **100**, **200** and **400** set
+  its speed.
+- **Freeze frame** holds the frame at the playhead.
+- **Reverse** plays the layer backwards. Pressing it again puts it back.
+- **Reset speed** sets the Retime back to 100%.
+- **In-between frames** picks **Nearest**, **Blend** or **Flow**. Footage layers only.
+
+The Retime row's name and the panel have the same right-click menu.
 
 ## Speed on a clip
 
@@ -128,7 +147,9 @@ In the speed envelope:
 - Double-click the line, or `Ctrl`+click it, to add a point.
 - Double-click a point to put it back to 100%.
 - Right-click a point for **Set speed…**, which types its **Frame** and **Speed**, **Reset to
-  100%**, the curve to the next point, and **Delete key**. Speed runs from −10000% to 10000%.
+  100%**, the curve to the next point, and **Delete point**. Speed runs from −10000% to 10000%.
+- Right-click the line for **Add point**, the curve to the next point, **Flip**, **Thin** and
+  **Reset speed**.
 - `Alt`+click a point to remove it.
 - Hold `Ctrl` while dragging to change the speed a tenth as fast.
 - The first point stays where it is. Moving a later point moves the frames after it.
@@ -166,8 +187,9 @@ lens.
 
 ## Play backwards
 
-There is no Reverse command. A speed below 0% plays backwards: drag a point under 0%, or type
-a negative speed into **Set speed…**. In the Value lens a line that falls plays backwards.
+**Reverse**, in the Retime panel and on the Retime row's menu, plays a layer backwards. A speed
+below 0% plays backwards too: drag a point under 0%, or type a negative speed into **Set
+speed…**. In the Value lens a line that falls plays backwards.
 
 **Stretch…** and **Speed…** stop at 1%.
 
@@ -241,8 +263,8 @@ the matching straight-line Retime, and a negative one runs backwards. Frame Mix 
 **Blend** and Pixel Motion becomes **Flow**.
 
 :::note[Not built yet]
-Stretching a clip by dragging its edge inside a Sequence layer in the Timeline. A Reverse
-command. The speed envelope in the Cut timeline.
+Stretching a clip by dragging its edge inside a Sequence layer in the Timeline. The speed
+envelope in the Cut timeline.
 :::
 
 ## Related
