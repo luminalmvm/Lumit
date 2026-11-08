@@ -13,7 +13,6 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
 import '../l10n/strings.dart';
-import '../theme/theme.dart' show ShapeTokens;
 import '../widgets/controls.dart';
 import 'graph_key_fields.dart' show keyFieldRow;
 import 'graph_channels.dart';
@@ -307,7 +306,8 @@ class GraphLensSwitch extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
                     color: t.surface0,
-                    borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+                    borderRadius:
+                        BorderRadius.circular(t.tokens.actionRadius),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
