@@ -328,9 +328,13 @@
   "@gradeBalance": {
     "description": "Grade panel: the heading over the three colour wheels (lift, gamma, gain)."
   },
-  "gradeBasics": "Basics",
-  "@gradeBasics": {
+  "gradePrimaries": "Primaries",
+  "@gradePrimaries": {
     "description": "Grade panel: the heading over the primary sliders (exposure, contrast, saturation, temperature, tint)."
+  },
+  "gradeRemove": "Remove",
+  "@gradeRemove": {
+    "description": "Grade panel section menu: removes the section's effects from the layer."
   },
   "gradeBefore": "Before",
   "@gradeBefore": {
@@ -9292,6 +9296,10 @@
   "scopeGraticule": "Graticule",
   "@scopeGraticule": {
     "description": "Scopes panel menu: the scale drawn over the trace. Ticked while it is shown."
+  },
+  "scopeThemeColours": "Theme colours",
+  "@scopeThemeColours": {
+    "description": "Scopes panel menu: draws the trace in the theme's colours instead of the standard black and white instrument. Ticked while on."
   },
   "scopeHistogram": "Histogram",
   "@scopeHistogram": {

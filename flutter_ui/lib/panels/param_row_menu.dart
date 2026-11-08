@@ -161,13 +161,69 @@ ParamMenu scalarRowMenu(
 }
 
 MenuRow _row(String key, String label, VoidCallback onPressed,
-        {String? action, bool enabled = true}) =>
+        {String? action, bool enabled = true, bool tickColumn = false}) =>
     MenuRow(
       key: ValueKey<String>(key),
       enabled: enabled,
       onPressed: onPressed,
-      child: MenuLabel(label, action: action, enabled: enabled),
+      child: MenuLabel(label,
+          action: action, enabled: enabled, ticked: tickColumn ? false : null),
     );
+
+/// Add or remove a key at the playhead and stop animating, for this row's
+/// keyframes. [tickColumn] keeps the words in line with a menu whose other
+/// rows carry a tick.
+List<Widget> paramKeyRows(
+    BuildContext context, ParamMenu menu, VoidCallback close,
+    {bool tickColumn = false}) {
+  final keys = menu.keys;
+  if (keys == null) return const [];
+  final playhead =
+      Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+  final frame = playhead.value;
+  return [
+    _row(
+      'param-menu-key',
+      keys.hasKeyAt(frame) ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
+      () {
+        close();
+        keys.toggleKeyAt(playhead.value);
+      },
+      action: 'keyframe.toggle',
+      tickColumn: tickColumn,
+    ),
+    if (keys.animated)
+      _row('param-menu-stop', l10n.tipStopAnimating, () {
+        close();
+        keys.toggleAnimatedAt(playhead.value);
+      }, tickColumn: tickColumn),
+  ];
+}
+
+/// Set or remove an expression, and go to the row's curve.
+List<Widget> paramLastRows(
+    BuildContext context, ParamMenu menu, VoidCallback close,
+    {bool tickColumn = false}) {
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  return [
+    if (menu.setExpression case final set?)
+      _row('param-menu-expression', l10n.setExpression, () {
+        close();
+        noteSetExpression();
+        set();
+      }, action: 'expression.add', tickColumn: tickColumn),
+    if (menu.removeExpression case final remove?)
+      _row('param-menu-no-expression', l10n.removeExpression, () {
+        close();
+        remove();
+      }, tickColumn: tickColumn),
+    if (menu.graphPath case final path?)
+      _row('param-menu-graph', l10n.paramMenuRevealInGraph, () {
+        close();
+        ui.requestRevealInGraph(path);
+      }, tickColumn: tickColumn),
+  ];
+}
 
 /// The groups in order, with the menu divider between those that have rows.
 List<Widget> menuGroups(List<List<Widget>> groups) {

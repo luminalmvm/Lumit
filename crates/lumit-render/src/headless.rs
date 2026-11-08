@@ -2617,6 +2617,18 @@ impl HeadlessRenderer {
         Some((held.texture.width(), held.texture.height(), bytes))
     }
 
+    /// Read a prepared frame's pixels back off the card, in the channel order
+    /// it was made in. For the Scopes: a drag's preview is never held under a
+    /// name, and this is how a trace reads the picture the Viewer is showing
+    /// rather than the document behind it. Waits for the card, as
+    /// [`Self::read_back_frame_texture`] does.
+    #[must_use]
+    pub fn read_back_prepared(&self, prepared: &PreparedFrame) -> Option<(u32, u32, Vec<u8>)> {
+        let parts = self.parts.as_ref()?;
+        let bytes = parts.colour.readback8(&self.gpu, &prepared.texture).ok()?;
+        Some((prepared.texture.width(), prepared.texture.height(), bytes))
+    }
+
     /// How many times the held set has changed — bumped by every insert, every
     /// clear and every resize.
     ///

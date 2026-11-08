@@ -9,6 +9,8 @@
 // still works on the same effects, which is where their keyframes are set;
 // a keyed value here takes a key at the playhead, as a keyed row does.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -33,11 +35,14 @@ import 'effect_param_row_frb.dart'
         curvePointsOf,
         curveValue,
         defaultEffectValue,
+        newExpressionLanguage,
         scalarValueAt;
 import 'grade_controls.dart';
 import 'grade_wheel.dart';
-import 'keyframe_controls_frb.dart' show scalarWithValueAt;
-import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'keyframe_controls_frb.dart'
+    show KeyframeControlsFrb, scalarWithValueAt;
+import 'layer_fold_frb.dart' show asOneUndoStep, effectPath;
+import 'param_row_menu.dart';
 
 /// The effects a grade is made of, in the order they are stacked: light
 /// first, then balance, then the shaping, with a look last.
@@ -82,10 +87,11 @@ bool _gradeable(BridgeLayerKind kind) => switch (kind) {
     };
 
 /// How far a wheel's rim reaches, and how far its bar travels, per colour.
-/// Lift adds, so a little goes a long way; Gamma and Gain multiply.
+/// Lift adds, so a little goes a long way; Gamma and Gain multiply, and
+/// Gamma's rim stops where its floor of 0.1 is, so the dot never jumps back.
 const Map<String, (double reach, double span)> _wheelRanges = {
   'lift': (0.5, 0.5),
-  'gamma': (1.0, 1.0),
+  'gamma': (0.9, 0.9),
   'gain': (1.0, 1.0),
 };
 
@@ -165,6 +171,16 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         BridgeParamKind_Float(:final sliderMin, :final sliderMax) => (
             sliderMin,
             sliderMax
+          ),
+        _ => (0, 1),
+      };
+
+  /// The bounds typing keeps to: the hard ones, or open where the effect
+  /// declares none, as an Effect controls field reads them.
+  (double, double) _hardRange(GradeFx fx, String id) => switch (_kind(fx, id)) {
+        BridgeParamKind_Float(:final hardMin, :final hardMax) => (
+            hardMin ?? -1000000,
+            hardMax ?? 1000000
           ),
         _ => (0, 1),
       };
@@ -296,6 +312,14 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     _touched?.endUndoGroup();
   }
 
+  /// A gesture that ends with nothing written: the preview it staged goes,
+  /// and the Viewer is asked for the document again.
+  void _touchCancel() {
+    _editor.clear();
+    _touchEnd();
+    ui.requestFrame();
+  }
+
   void _tell() {
     app.notifyDocumentChanged();
     ui.model.refresh();
@@ -411,7 +435,8 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   }
 
   /// Every parameter of the section's effects back to its declared default,
-  /// as one step. Keys go with it: a reset is a clean slate.
+  /// as one step. A keyed value takes the default at the playhead, as an
+  /// Effect controls row's reset does, so the animation stays.
   void _reset(List<GradeFx> fxs, {Set<String>? only}) {
     final layer = _layer;
     if (layer == null) return;
@@ -423,13 +448,45 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         for (final p in _schema[fx]!.values) {
           if (only != null && !only.contains(p.id)) continue;
           final d = defaultEffectValue(p.kind);
-          if (d != null) values[p.id] = d;
+          if (d != null) values[p.id] = _defaultAtPlayhead(_value(fx, p.id), d);
         }
         if (values.isNotEmpty) _editor.writeAll(layer, at.id, values);
       }
     });
     _tell();
   }
+
+  /// [d], the declared default, written into [was] at the playhead when
+  /// [was] is keyed; [d] itself otherwise.
+  BridgeEffectValue _defaultAtPlayhead(
+      BridgeEffectValue? was, BridgeEffectValue d) {
+    final comp = ui.selectedComp;
+    if (comp == null) return d;
+    final frame = ui.playheadFrame.value;
+    double of(BridgeScalar s) => sampledScalar(s, timeOfFrame(comp, frame));
+    return switch ((was, d)) {
+      (
+        BridgeEffectValue_Float(field0: final BridgeScalar_Keyframed k),
+        BridgeEffectValue_Float(:final field0)
+      ) =>
+        BridgeEffectValue.float(scalarWithValueAt(k, of(field0), comp, frame)),
+      (
+        BridgeEffectValue_Colour(field0: final c),
+        BridgeEffectValue_Colour(field0: final dc)
+      )
+          when _colourKeyedScalar(c) =>
+        BridgeEffectValue.colour(BridgeColour(
+          r: scalarWithValueAt(c.r, of(dc.r), comp, frame),
+          g: scalarWithValueAt(c.g, of(dc.g), comp, frame),
+          b: scalarWithValueAt(c.b, of(dc.b), comp, frame),
+          a: scalarWithValueAt(c.a, of(dc.a), comp, frame),
+        )),
+      _ => d,
+    };
+  }
+
+  static bool _colourKeyedScalar(BridgeColour c) =>
+      [c.r, c.g, c.b, c.a].any((s) => s is BridgeScalar_Keyframed);
 
   void _setBypassed(List<GradeFx> fxs, bool off) {
     final layer = _layer;
@@ -499,96 +556,138 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
 
   // --- Menus -----------------------------------------------------------------
 
+  MenuRow _row(String key, String label, VoidCallback close, VoidCallback run,
+          {bool ticked = false}) =>
+      MenuRow(
+        key: ValueKey<String>(key),
+        onPressed: () {
+          close();
+          run();
+        },
+        child: MenuLabel(label, ticked: ticked),
+      );
+
+  /// A section's or a row's menu: what it can do now, with a row's key and
+  /// expression rows between, then the whole grade's rows under a divider.
+  /// Nothing greyed: a row that could do nothing is left out, and a section
+  /// with no effect yet offers the grade's rows alone.
   List<Widget> _menuFor(List<GradeFx> fxs, VoidCallback close,
-      {required bool changed, String? resetParam, GradeFx? resetFx}) {
-    final present = fxs.any((fx) => _instance(fx) != null);
+      {required bool changed, GradeFx? rowFx, String? rowParam}) {
+    if (!fxs.any((fx) => _instance(fx) != null)) return _groundMenu(close);
     final off = _bypassed(fxs);
-    return [
-      MenuRow(
-        enabled: changed,
-        onPressed: () {
-          close();
-          resetParam == null
-              ? _reset(fxs)
-              : _reset([resetFx!], only: {resetParam});
-        },
-        child: MenuLabel(l10n.reset, ticked: false, enabled: changed),
-      ),
-      MenuRow(
-        enabled: present,
-        onPressed: () {
-          close();
-          _setBypassed(fxs, !off);
-        },
-        child: MenuLabel(l10n.fxBypass, ticked: off, enabled: present),
-      ),
-      const MenuDivider(),
-      MenuRow(
-        enabled: present,
-        onPressed: () {
-          close();
-          _reveal(fxs);
-        },
-        child: MenuLabel(l10n.gradeRevealInEffectControls,
-            ticked: false, enabled: present),
-      ),
-      const MenuDivider(),
-      MenuRow(
-        enabled: present,
-        onPressed: () {
-          close();
-          _remove(fxs);
-        },
-        child: MenuLabel(l10n.delete, ticked: false, enabled: present),
-      ),
-    ];
+    final param =
+        rowFx == null || rowParam == null ? null : _paramMenu(rowFx, rowParam);
+    return menuGroups([
+      [
+        if (changed)
+          _row(
+              'grade-section-reset',
+              l10n.reset,
+              close,
+              () => rowParam == null
+                  ? _reset(fxs)
+                  : _reset([rowFx!], only: {rowParam})),
+        _row('grade-section-bypass', l10n.fxBypass, close,
+            () => _setBypassed(fxs, !off),
+            ticked: off),
+      ],
+      if (param != null) paramKeyRows(context, param, close, tickColumn: true),
+      [
+        _row('grade-section-reveal', l10n.gradeRevealInEffectControls, close,
+            () => _reveal(fxs)),
+      ],
+      if (param != null)
+        paramLastRows(context, param, close, tickColumn: true),
+      [
+        _row('grade-section-remove', l10n.gradeRemove, close,
+            () => _remove(fxs)),
+      ],
+      _gradeRows(close),
+    ]);
   }
 
-  List<Widget> _groundMenu(VoidCallback close) {
+  /// The rows that act on the whole grade, each only while it can.
+  List<Widget> _gradeRows(VoidCallback close, {bool reveal = false}) {
     final present = _anyPresent;
     final off = _bypassed(GradeFx.values);
     return [
-      MenuRow(
-        key: const ValueKey('grade-menu-reset'),
-        enabled: _anyChanged,
-        onPressed: () {
-          close();
-          _reset(GradeFx.values);
-        },
-        child:
-            MenuLabel(l10n.gradeResetAll, ticked: false, enabled: _anyChanged),
-      ),
-      MenuRow(
-        key: const ValueKey('grade-menu-bypass'),
-        enabled: present,
-        onPressed: () {
-          close();
-          _setBypassed(GradeFx.values, !off);
-        },
-        child: MenuLabel(l10n.gradeBypassAll, ticked: off, enabled: present),
-      ),
-      const MenuDivider(),
-      MenuRow(
-        key: const ValueKey('grade-menu-reveal'),
-        enabled: present,
-        onPressed: () {
-          close();
-          _reveal(GradeFx.values);
-        },
-        child: MenuLabel(l10n.gradeRevealInEffectControls,
-            ticked: false, enabled: present),
-      ),
-      const MenuDivider(),
-      MenuRow(
-        key: const ValueKey('grade-menu-remove'),
-        enabled: present,
-        onPressed: () {
-          close();
-          _remove(GradeFx.values);
-        },
-        child: MenuLabel(l10n.gradeRemoveAll, ticked: false, enabled: present),
-      ),
+      if (_anyChanged)
+        _row('grade-menu-reset', l10n.gradeResetAll, close,
+            () => _reset(GradeFx.values)),
+      if (present)
+        _row('grade-menu-bypass', l10n.gradeBypassAll, close,
+            () => _setBypassed(GradeFx.values, !off),
+            ticked: off),
+      if (present && reveal)
+        _row('grade-menu-reveal', l10n.gradeRevealInEffectControls, close,
+            () => _reveal(GradeFx.values)),
+      if (present)
+        _row('grade-menu-remove', l10n.gradeRemoveAll, close,
+            () => _remove(GradeFx.values)),
     ];
+  }
+
+  /// The panel's own menu: empty, so no menu, while the layer has no grade.
+  List<Widget> _groundMenu(VoidCallback close) =>
+      _gradeRows(close, reveal: true);
+
+  /// The key and expression rows of one parameter's menu: the same rows its
+  /// Effect controls row has, acting on the same keys and the same curve.
+  ParamMenu? _paramMenu(GradeFx fx, String id) {
+    final comp = ui.selectedComp;
+    final layer = _layer;
+    final at = _instance(fx);
+    final v = _value(fx, id);
+    if (comp == null || layer == null || at == null || v == null) return null;
+    final scalars = switch (v) {
+      BridgeEffectValue_Float(:final field0) => [field0],
+      BridgeEffectValue_Colour(:final field0) => [
+          field0.r,
+          field0.g,
+          field0.b,
+          field0.a
+        ],
+      _ => null,
+    };
+    if (scalars == null) return null;
+    final expression = switch (v) {
+      BridgeEffectValue_Float(field0: final BridgeScalar_Expression e) => e,
+      _ => null,
+    };
+    BridgeEffectValue rebuilt(List<BridgeScalar> next) =>
+        v is BridgeEffectValue_Colour
+            ? BridgeEffectValue.colour(
+                BridgeColour(r: next[0], g: next[1], b: next[2], a: next[3]))
+            : BridgeEffectValue.float(next[0]);
+    return ParamMenu(
+      keys: expression != null
+          ? null
+          : KeyframeControlsFrb(
+              scalars: scalars,
+              comp: comp,
+              onSeek: (frame) => ui.playheadFrame.value = frame,
+              rowKey: 'grade-${fx.matchName}-$id',
+              onWrite: (next) => _write(fx, id, rebuilt(next)),
+            ),
+      setExpression: v is BridgeEffectValue_Float && expression == null
+          ? () => _write(
+              fx,
+              id,
+              BridgeEffectValue.float(BridgeScalar.expression(
+                  _float(fx, id).toString(), newExpressionLanguage(context))))
+          : null,
+      removeExpression: expression == null
+          ? null
+          : () => _write(
+              fx,
+              id,
+              BridgeEffectValue.float(BridgeScalar.static_(
+                  sampleScalarWithContext(
+                      scalar: expression,
+                      time: timeOfFrame(comp, ui.playheadFrame.value),
+                      layer: layer)))),
+      graphPath: '${effectPath('${layer.internallayerId}', '${at.id}')}/$id',
+    );
   }
 
   // --- Drawing ---------------------------------------------------------------
@@ -653,7 +752,9 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                 onPointerCancel: (_) => _beforeUp(),
                 child: GradeIconButton(
                   key: const ValueKey('grade-before'),
-                  glyph: LumitIcons.visible,
+                  // The effect bypass glyph: held, the grade is bypassed. The
+                  // layer's eye one panel down means hide, which this is not.
+                  glyph: LumitIcons.bypass,
                   tip: l10n.gradeBefore,
                   active: _before,
                   onPressed: () {},
@@ -690,7 +791,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       final label = engineLabel(_schema[fx]![id]!.label);
       return GradeMenu(
         rows: (close) => _menuFor([fx], close,
-            changed: changed, resetParam: id, resetFx: fx),
+            changed: changed, rowFx: fx, rowParam: id),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -706,6 +807,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
               onStart: _touchStart,
               onLive: (c) => _live(fx, id, _colourFor(fx, id, c)),
               onCommit: (c) => _write(fx, id, _colourFor(fx, id, c)),
+              onCancel: _touchCancel,
             ),
             const SizedBox(height: 4),
             Text(
@@ -762,8 +864,13 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   Widget _basics(LumitTheme t, bool enabled) {
     Widget row(GradeFx fx, String id, {int decimals = 1, bool signed = false}) {
       final (min, max) = _range(fx, id);
+      final (hardMin, hardMax) = _hardRange(fx, id);
       final neutral = _defaultFloat(fx, id);
       final changed = _floatChanged(fx, id);
+      // The track sits its neutral value in the middle, however far the
+      // effect's own range runs past it one way: an untouched row reads as
+      // untouched. The number keeps the whole range.
+      final span = math.min(neutral - min, max - neutral);
       return GradeSlider(
         key: ValueKey<String>('grade-row-${fx.matchName}-$id'),
         // Exposure's one number is called Stops on its own row; here, among
@@ -772,8 +879,10 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             ? l10n.fxExposure
             : engineLabel(_schema[fx]![id]!.label),
         value: _float(fx, id),
-        min: min,
-        max: max,
+        min: neutral - span,
+        max: neutral + span,
+        fieldMin: hardMin,
+        fieldMax: hardMax,
         neutral: neutral,
         decimals: decimals,
         signed: signed,
@@ -782,16 +891,16 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         onStart: _touchStart,
         onLive: (v) => _liveFloat(fx, id, v),
         onCommit: (v) => _writeFloat(fx, id, v),
-        onCancel: _touchEnd,
+        onCancel: _touchCancel,
         menu: (close) => _menuFor([fx], close,
-            changed: changed, resetParam: id, resetFx: fx),
+            changed: changed, rowFx: fx, rowParam: id),
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _heading(_Section.basics, l10n.gradeBasics),
+        _heading(_Section.basics, l10n.gradePrimaries),
         row(GradeFx.exposure, 'stops', decimals: 2, signed: true),
         row(GradeFx.contrast, 'contrast'),
         row(GradeFx.saturation, 'saturation'),
@@ -813,13 +922,15 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         _heading(_Section.curves, l10n.fxCurves),
         GradeMenu(
           rows: (close) => _menuFor([fx], close,
-              changed: _curveChanged(id), resetParam: id, resetFx: fx),
+              changed: _curveChanged(id), rowFx: fx, rowParam: id),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: gradeInset),
             child: LayoutBuilder(builder: (context, box) {
               final column = channelColumnWidth(labels) + channelColumnGap;
+              // Grows with the pane: the curve a colourist draws wants room,
+              // and a small square beside long sliders reads as an afterthought.
               final plot =
-                  (box.maxWidth - column).clamp(48.0, 180.0).toDouble();
+                  (box.maxWidth - column).clamp(48.0, 260.0).toDouble();
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -941,11 +1052,11 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             onStart: _touchStart,
             onLive: (v) => _liveFloat(fx, 'mix', v),
             onCommit: (v) => _writeFloat(fx, 'mix', v),
-            onCancel: _touchEnd,
+            onCancel: _touchCancel,
             menu: (close) => _menuFor([fx], close,
                 changed: _floatChanged(fx, 'mix'),
-                resetParam: 'mix',
-                resetFx: fx),
+                rowFx: fx,
+                rowParam: 'mix'),
           ),
       ],
     );

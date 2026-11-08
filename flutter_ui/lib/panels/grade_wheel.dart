@@ -84,6 +84,9 @@ class GradeWheel extends StatefulWidget {
   /// The end of a gesture, with the three channels to commit.
   final ValueChanged<List<double>> onCommit;
 
+  /// A gesture that began and wrote nothing.
+  final VoidCallback onCancel;
+
   const GradeWheel({
     super.key,
     required this.rgb,
@@ -96,6 +99,7 @@ class GradeWheel extends StatefulWidget {
     required this.onStart,
     required this.onLive,
     required this.onCommit,
+    required this.onCancel,
   });
 
   @override
@@ -149,12 +153,29 @@ class _GradeWheelState extends State<GradeWheel> {
     widget.onCommit(rgb);
   }
 
+  /// A recogniser that lost the arena: the other axis, or the panel's
+  /// scroll, has the pointer. Nothing is written, so one drag stays one step.
+  /// The loser rarely got as far as [_start]; when it did, the gesture it
+  /// opened is closed with nothing in it.
+  void _cancel() {
+    if (_master == null) return;
+    setState(() {
+      _master = null;
+      _chroma = null;
+    });
+    widget.onCancel();
+  }
+
+  /// Double-clicks. Already there is nothing to write, so no step is taken
+  /// and no effect is added for it.
   void _resetChroma() {
+    if (wheelChroma(widget.rgb).distance < 1e-6) return;
     widget.onStart();
     widget.onCommit(wheelRgb(wheelMaster(widget.rgb), Offset.zero));
   }
 
   void _resetMaster() {
+    if ((wheelMaster(widget.rgb) - widget.neutral).abs() < 1e-6) return;
     widget.onStart();
     widget.onCommit(wheelRgb(widget.neutral, wheelChroma(widget.rgb)));
   }
@@ -226,11 +247,11 @@ class _GradeWheelState extends State<GradeWheel> {
       onVerticalDragStart: (_) => _start(bar),
       onVerticalDragUpdate: (d) => _move(d.delta),
       onVerticalDragEnd: (_) => _end(),
-      onVerticalDragCancel: _end,
+      onVerticalDragCancel: _cancel,
       onHorizontalDragStart: bar ? null : (_) => _start(bar),
       onHorizontalDragUpdate: bar ? null : (d) => _move(d.delta),
       onHorizontalDragEnd: bar ? null : (_) => _end(),
-      onHorizontalDragCancel: bar ? null : _end,
+      onHorizontalDragCancel: bar ? null : _cancel,
       child: MouseRegion(cursor: SystemMouseCursors.precise, child: child),
     );
   }

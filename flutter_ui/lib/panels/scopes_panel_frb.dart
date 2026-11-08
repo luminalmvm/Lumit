@@ -48,8 +48,9 @@ bool _hasChannelPick(ScopeKind kind) =>
     kind == ScopeKind.waveform || kind == ScopeKind.histogram;
 
 /// The room a trace leaves round itself for the scale: levels down the left
-/// of a waveform, code values under a histogram.
-const double _gutter = 22;
+/// of a waveform, code values under a histogram. Wide enough that "100" in
+/// the scale's type clears the panel's edge.
+const double _gutter = 26;
 const double _margin = 6;
 
 class ScopesPanelFrb extends StatefulWidget {
@@ -82,6 +83,8 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   /// value drag holds the playhead still and changes the picture under it.
   int _lastArrival = -1;
 
+  late final LumitUiState _ui;
+
   int get _asked => _engineKind(_kind, rgb: _rgb);
 
   @override
@@ -89,10 +92,19 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     super.initState();
     final state = Provider.of<LumitState>(context, listen: false);
     _responses = state.onWorkerResponse.listen(_onResponse);
+    // The two facts worth a trace, listened to rather than read in `build`:
+    // the playhead moving, and a picture reaching the Viewer. Nothing a
+    // rebuild does on its own asks the engine for anything.
+    _ui = Provider.of<LumitUiState>(context, listen: false);
+    _ui.playheadFrame.addListener(_request);
+    _ui.frameArrived.addListener(_request);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _request());
   }
 
   @override
   void dispose() {
+    _ui.playheadFrame.removeListener(_request);
+    _ui.frameArrived.removeListener(_request);
     _responses?.cancel();
     _trace?.dispose();
     super.dispose();
@@ -128,10 +140,10 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     setState(() {
       _kind = kind ?? _kind;
       _rgb = rgb ?? _rgb;
-      // A new trace kind is worth a request of its own: neither the frame
-      // nor the picture of it has moved, so nothing else here would ask.
-      _lastFrame = -1;
     });
+    // A new trace kind is worth a request of its own: neither the frame nor
+    // the picture of it has moved, so nothing else here would ask.
+    _request(force: true);
   }
 
   @override
@@ -147,25 +159,12 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
       );
     }
 
-    return ValueListenableBuilder<int>(
-      valueListenable: ui_.playheadFrame,
-      builder: (context, frame, _) => ValueListenableBuilder<int>(
-        // A rendered frame reaching the Viewer is the other reason to trace
-        // again: an edit at a stationary playhead moves neither the playhead
-        // nor this panel's own state, and without this the trace kept showing
-        // the picture from before the edit.
-        valueListenable: ui_.frameArrived,
-        builder: (context, arrived, __) {
-          _requestIfDue(ui_, frame, arrived);
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _header(t),
-              Expanded(child: _body(t, ui_)),
-            ],
-          );
-        },
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _header(t),
+        Expanded(child: _body(t, ui_)),
+      ],
     );
   }
 
@@ -191,23 +190,24 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
               ),
               if (_hasChannelPick(_kind)) ...[
                 const SizedBox(width: 8),
-                _channelButton(t, l10n.scopeLuma, rgb: false),
+                _channelButton(l10n.scopeLuma, rgb: false),
                 const SizedBox(width: 2),
-                _channelButton(t, l10n.scopeRgb, rgb: true),
+                _channelButton(l10n.scopeRgb, rgb: true),
               ],
             ],
           ),
         ),
       );
 
-  Widget _channelButton(LumitTheme t, String word, {required bool rgb}) =>
-      HouseButton(
+  /// The word takes the button's own colour: on Lantern's filled pill the
+  /// panel's small style vanished into the accent.
+  Widget _channelButton(String word, {required bool rgb}) => HouseButton(
         key: ValueKey<String>('scope-${rgb ? 'rgb' : 'luma'}'),
         small: true,
         frameless: _rgb != rgb,
         active: _rgb == rgb,
         onPressed: () => _pick(rgb: rgb),
-        child: Text(word, style: t.small),
+        child: Text(word),
       );
 
   Widget _body(LumitTheme t, LumitUiState state) {
@@ -287,31 +287,36 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   }
 
   /// Ask for a trace when the frame has moved, or when a new picture of it has
-  /// reached the Viewer.
+  /// reached the Viewer. The engine traces the picture the Viewer is showing,
+  /// a drag's preview included, so the trace follows the grade in hand.
   ///
-  /// Called from `build`, so it must never call `setState` — it only sends, and
-  /// the reply arrives on the worker stream.
-  ///
-  /// [arrived] is [LumitUiState.frameArrived]'s count. Together with [frame] it
-  /// is the whole memo: the same frame and the same picture of it is nothing to
-  /// ask for, and every other rebuild — a hover, a resize, the trace landing —
-  /// therefore costs no render. Once per arrival is the rule, never once per
-  /// rebuild. `_lastFrame = -1` is how the pickers force one through.
-  void _requestIfDue(LumitUiState state, int frame, int arrived) {
-    final comp = state.selectedComp;
+  /// Never from `build`: the playhead and the arrival count call it, and the
+  /// reply arrives on the worker stream. Those two numbers are the whole memo:
+  /// the same frame and the same picture of it is nothing to ask for, so a
+  /// hover, a resize or the trace landing costs no render. [force] is how
+  /// the pickers ask for a new kind of the same picture.
+  void _request({bool force = false}) {
+    if (!mounted) return;
+    final comp = _ui.selectedComp;
     if (comp == null) return;
-    if (frame == _lastFrame && arrived == _lastArrival) return;
+    final frame = _ui.playheadFrame.value;
+    final arrived = _ui.frameArrived.value;
+    if (!force && frame == _lastFrame && arrived == _lastArrival) return;
 
     _lastFrame = frame;
     _lastArrival = arrived;
     final t = ThemeScope.of(context).theme;
-    comp.renderScope(
-      frame: frame,
-      scale: state.measuredScale,
-      kind: _asked,
-      colours: scopeColoursFor(t, themed: state.workspace.themedScopes),
-      view: state.measuredViewId,
-    );
+    try {
+      comp.renderScope(
+        frame: frame,
+        scale: _ui.measuredScale,
+        kind: _asked,
+        colours: scopeColoursFor(t, themed: _ui.workspace.themedScopes),
+        view: _ui.measuredViewId,
+      );
+    } catch (_) {
+      // A comp that went away under the panel: the plot stays as it was.
+    }
   }
 }
 
@@ -401,8 +406,7 @@ class _ScopeMenu extends StatelessWidget {
               MenuRow.option(
                 key: const ValueKey('scope-menu-themed'),
                 onPressed: () => onThemed(!themed),
-                child: MenuLabel(l10n.settingsScopesUseThemeColour,
-                    ticked: themed),
+                child: MenuLabel(l10n.scopeThemeColours, ticked: themed),
               ),
             ],
           ),

@@ -31,6 +31,9 @@ class GradeMenu extends StatelessWidget {
 
   static void show(BuildContext context, Offset at,
       List<Widget> Function(VoidCallback close) rows) {
+    // Nothing to offer, no menu: a section with no effect on a layer with no
+    // grade has nothing that could act.
+    if (rows(() {}).isEmpty) return;
     showLumitPopup<void>(
       context: context,
       position: at,
@@ -133,16 +136,21 @@ class GradeIconButton extends StatelessWidget {
 
 /// One primary: its name, a track, and the number.
 ///
-/// The track is the whole row's width between the name and the number, and
-/// the pointer sets the value where it lands: a slider here is a thing to
-/// grab, not a thing to find. The fill runs from the neutral value, so a row
-/// that has moved shows how far and which way, and a row at its default
-/// shows nothing but its line. Below a width that can hold a track, the name
-/// and the number stay and the track goes.
+/// The track is the whole row's width between the name and the number, and a
+/// drag on it takes the value to the pointer: a slider here is a thing to
+/// grab, not a thing to find, and a click alone moves nothing, as on the
+/// wheels. The fill runs from the neutral value, so a row that has moved
+/// shows how far and which way, and a row at its default shows nothing but
+/// its line. Below a width that can hold a track, the name and the number
+/// stay and the track goes.
 class GradeSlider extends StatefulWidget {
   final String label;
   final double value;
+
+  /// The track's travel. The number beside it goes further: [fieldMin] and
+  /// [fieldMax] are what typing and dragging the number keep to.
   final double min, max;
+  final double? fieldMin, fieldMax;
 
   /// What the fill measures from, and what a double-click puts back.
   final double neutral;
@@ -173,6 +181,8 @@ class GradeSlider extends StatefulWidget {
     required this.onLive,
     required this.onCommit,
     required this.onCancel,
+    this.fieldMin,
+    this.fieldMax,
     this.decimals = 1,
     this.signed = false,
     this.enabled = true,
@@ -230,15 +240,19 @@ class _GradeSliderState extends State<GradeSlider> {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     dragStartBehavior: DragStartBehavior.down,
+                    // A double-click puts the neutral value back, as one
+                    // step. A lone click does nothing, so the first of the
+                    // two never commits a jump the second has to undo; and
+                    // a row already at neutral writes nothing.
                     onTapUp: !widget.enabled
                         ? null
                         : (d) {
-                            final again =
-                                _taps.tap(at: d.localPosition, slop: 6);
+                            if (!_taps.tap(at: d.localPosition, slop: 6) ||
+                                !changed) {
+                              return;
+                            }
                             widget.onStart();
-                            widget.onCommit(again
-                                ? widget.neutral
-                                : _at(d.localPosition.dx, width));
+                            widget.onCommit(widget.neutral);
                           },
                     onHorizontalDragStart: !widget.enabled
                         ? null
@@ -311,8 +325,8 @@ class _GradeSliderState extends State<GradeSlider> {
                 child: DragValueField(
                   key: ValueKey<String>('grade-${widget.label}'),
                   value: value,
-                  min: widget.min,
-                  max: widget.max,
+                  min: widget.fieldMin ?? widget.min,
+                  max: widget.fieldMax ?? widget.max,
                   speed: (widget.max - widget.min) / 200,
                   decimals: widget.decimals,
                   signed: widget.signed,

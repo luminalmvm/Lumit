@@ -211,6 +211,11 @@ pub struct WorkerState {
     // ponytail: capped at 8 and held outside the cache's budget, about 270 MB
     // of the card at 4K; count them against it if that ever matters.
     stand_ins: Vec<(u32, Uuid, lumit_render::headless::PreparedFrame)>,
+    /// The still frame last shown, by view, comp and frame: the picture on
+    /// screen, a drag's preview included, so a trace of that frame reads it
+    /// rather than the document behind it ([`trace_scope`]). Cleared when
+    /// playback starts, which shows frames another way.
+    presented: Option<(u32, Uuid, u64, lumit_render::headless::PreparedFrame)>,
     /// Turned over by each request as it is sent ([`WorkerSender`]).
     epochs: std::sync::Arc<WorkerEpochs>,
 }
@@ -3257,6 +3262,7 @@ fn worker_loop(
         layer_sample: None,
         pending_measure: None,
         stand_ins: Vec::new(),
+        presented: None,
         epochs,
     };
 
@@ -4062,6 +4068,9 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     // (docs/impl/multi-viewer.md §2.5), so the run is named and looked at
     // through the playing view from here.
     state.set_view_id(req.view);
+    // The run's frames are presented on their own path, so the still last
+    // shown says nothing about what is on screen from here.
+    state.presented = None;
     look_at(state, req.view);
     let (document, revision) = {
         let document = state.project.state()?;
@@ -5101,19 +5110,37 @@ fn trace_scope(
     // a second time for every trace of it. Reading it back is a copy.
     let quality = quality_for(req.scale);
     let bgra = zero_copy_wants_bgra();
-    let on_card = state
-        .renderer
-        .frame_key(&document, req.comp.id, req.frame, quality)
-        .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
-        .map(|(width, height, mut bytes)| {
-            if bgra {
-                // The Scopes bin R, G and B by name.
-                for px in bytes.chunks_exact_mut(4) {
-                    px.swap(0, 2);
-                }
+    let named = |(width, height, mut bytes): (u32, u32, Vec<u8>)| {
+        if bgra {
+            // The Scopes bin R, G and B by name.
+            for px in bytes.chunks_exact_mut(4) {
+                px.swap(0, 2);
             }
-            (width, height, bytes)
-        });
+        }
+        (width, height, bytes)
+    };
+    // The picture on screen before anything: while a value is dragged the
+    // Viewer shows a preview the document has not been given, and a colourist
+    // grades by the scope, so it must trace what the drag is doing. Only the
+    // frame the Viewer was last given, in that view; playback presents its
+    // frames another way and they are read off the card below.
+    let shown = state
+        .presented
+        .as_ref()
+        .filter(|_| state.playback.is_none())
+        .filter(|(view, comp, frame, _)| {
+            (*view, *comp, *frame) == (req.view, req.comp.id, req.frame)
+        })
+        .and_then(|(.., prepared)| state.renderer.read_back_prepared(prepared))
+        .map(named);
+    let on_card = match shown {
+        Some(shown) => Some(shown),
+        None => state
+            .renderer
+            .frame_key(&document, req.comp.id, req.frame, quality)
+            .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
+            .map(named),
+    };
     let still_current = |key: u128, quality: lumit_render::plan::Quality| {
         state
             .renderer
@@ -5492,6 +5519,7 @@ fn stand_in(
 fn remember_shown(
     state: &mut WorkerState,
     comp: Uuid,
+    frame: u64,
     prepared: &lumit_render::headless::PreparedFrame,
 ) {
     let view = state.view_id();
@@ -5500,6 +5528,7 @@ fn remember_shown(
     if state.stand_ins.len() > 8 {
         state.stand_ins.remove(0);
     }
+    state.presented = Some((view, comp, frame, prepared.clone()));
 }
 
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -5552,7 +5581,7 @@ fn publish_zero_copy(
         }
     };
     if send_dmabuf(state, frame, &prepared, stream) {
-        remember_shown(state, comp, &prepared);
+        remember_shown(state, comp, frame, &prepared);
     }
 }
 
@@ -5653,7 +5682,7 @@ fn publish_zero_copy(
         }
     };
     if send_shared(state, frame, &prepared, stream) {
-        remember_shown(state, comp, &prepared);
+        remember_shown(state, comp, frame, &prepared);
     }
 }
 
@@ -6349,6 +6378,7 @@ mod tests {
             layer_sample: None,
             pending_measure: None,
             stand_ins: Vec::new(),
+            presented: None,
             epochs: std::sync::Arc::default(),
         })
     }
