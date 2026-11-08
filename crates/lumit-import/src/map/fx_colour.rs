@@ -284,7 +284,11 @@ impl<'a> Fx<'a> {
             // job (docs/11 §2.2 item 8 — never rewritten).
             if matches!(p.animation, Animation::Expression(_)) {
                 let param = display_name(node, ae_id).to_string();
-                self.approx_named(conv, &param, "an expression still in After Effects' units");
+                self.approx_named(
+                    conv,
+                    &param,
+                    "an expression still in the imported project's units",
+                );
             }
         }
         self.set(lumit_id, EffectValue::Float(affine(p, k, c)));
@@ -1495,7 +1499,7 @@ fn lightning(
     fx.toggle(conv, "ADBE Lightning 2-0020", "composite_on_original");
     fx.differs(
         conv,
-        "the bolt's shape is Lumit's own, After Effects' displacement being undocumented",
+        "the bolt's shape is Lumit's own, the original displacement being undocumented",
     );
     fx.drop_params(
         conv,

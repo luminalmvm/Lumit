@@ -2136,7 +2136,7 @@
   "@fileTypeShader": {
     "description": "A file type in the system's file dialogues: a .wgsl shader loaded into a Custom shader effect by its 'Load from file…' button."
   },
-  "fileTypeAeProject": "After Effects project",
+  "fileTypeAeProject": "Project to import",
   "@fileTypeAeProject": {
     "description": "A file type in the system's Open dialogue for the After Effects import: an .aep project, or a zipped Lumit Bridge bundle."
   },
@@ -9280,9 +9280,9 @@
   "@projectItemConverting": {
     "description": "Project panel row badge, beside the item name: this 3D model is being turned into a form Lumit reads by the user's Blender, which takes a while the first time. Lower case, one word, like the other row badges."
   },
-  "projectItemNoBlender": "no Blender",
+  "projectItemNoBlender": "no 3D app",
   "@projectItemNoBlender": {
-    "description": "Warning badge beside a 3D model in the Project panel that opens through Blender (a .blend, USD, Alembic file) when no Blender was found on this computer. Blender is a product name; keep it as it is. Lower case first word, like the other row badges. Clicking it opens Settings at the Blender row."
+    "description": "Warning badge beside a 3D model in the Project panel that opens through a separate 3D program (a .blend, USD, Alembic file) when none was found on this computer. Lower case first word, like the other row badges. Clicking it opens Settings at the 3D app row."
   },
   "exportModelsUnread": "Can't read {names}",
   "@exportModelsUnread": {
@@ -9309,13 +9309,13 @@
   "@tipProjectNoImporter": {
     "description": "Tooltip on the unreadable badge of a Project panel 3D model whose file type the Blender found has no importer for, as with Collada files on Blender 5. Blender is a product name; keep it as it is."
   },
-  "tipProjectNoBlender": "Choose Blender",
+  "tipProjectNoBlender": "3D app",
   "@tipProjectNoBlender": {
-    "description": "Tooltip on the no Blender badge of a Project panel 3D model. Clicking the badge opens Settings at the Blender row."
+    "description": "Tooltip on the no 3D app badge of a Project panel 3D model. Clicking the badge opens Settings at the 3D app row."
   },
-  "menuEditInBlender": "Edit in Blender",
+  "menuEditInBlender": "Edit in 3D app",
   "@menuEditInBlender": {
-    "description": "Layer menu and Project panel context menu item: opens the selected Model layer's or item's .blend file in Blender, the separate 3D program. Blender is a product name; keep it as it is."
+    "description": "Layer menu and Project panel context menu item: opens the selected Model layer's or item's .blend file in the separate 3D program chosen in Settings."
   },
   "projectItemUndecodable": "unreadable",
   "@projectItemUndecodable": {
@@ -11903,9 +11903,9 @@
   "@toolZoom": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
-  "transformAfterEffectsOrder": "After Effects rotation order",
+  "transformAfterEffectsOrder": "Rotate X, then Y, then Z",
   "@transformAfterEffectsOrder": {
-    "description": "Ticked item on the menu opened by right-clicking a 3D layer's, camera's or light's Rotation rows: X, Y and Z Rotation turn in After Effects' order, as an imported layer's do, rather than Lumit's. Changing it keeps the layer where it is."
+    "description": "Ticked item on the menu opened by right-clicking a 3D layer's, camera's or light's Rotation rows: X, Y and Z Rotation turn in that order, as an imported layer's do, rather than Lumit's own Y, X, Z. Changing it keeps the layer where it is."
   },
   "transformAnchorPoint": "Anchor point",
   "@transformAnchorPoint": {
@@ -13857,9 +13857,9 @@
   "@fxWindow": {
     "description": "Effect controls — how long a stretch of sound the Audio level driver measures."
   },
-  "menuImportAe": "Import After Effects project…",
+  "menuImportAe": "Import .aep project…",
   "@menuImportAe": {
-    "description": "Item in the File menu, under Import folder: opens a file chooser for an After Effects .aep project, which Lumit reads directly and opens as the project."
+    "description": "Item in the File menu, under Import folder: opens a file chooser for an .aep project, which Lumit reads directly and opens as the project."
   },
   "menuImportFootage": "Import footage…",
   "@menuImportFootage": {
@@ -13869,11 +13869,11 @@
   "@menuImportFolder": {
     "description": "Item in the File menu, under Import footage. Opens a folder chooser, then imports the footage in that folder and every folder inside it, keeping the folders as folders in the project."
   },
-  "aeBundleFromAep": "That folder holds a project file. Import it with File › Import › After Effects project.",
+  "aeBundleFromAep": "That folder holds a project file. Import it with File › Import .aep project…",
   "@aeBundleFromAep": {
     "description": "Status line notice when the Bridge bundle folder chooser was pointed at a folder holding an .aep instead of a bundle. Names both routes; lumit-bridge.jsx is a file name and stays untranslated."
   },
-  "aeAepUnreadable": "This After Effects project could not be read. Export a Bridge bundle from After Effects and import that folder.",
+  "aeAepUnreadable": "This .aep project could not be read. Export a bundle with lumit-bridge.jsx and import that folder.",
   "@aeAepUnreadable": {
     "description": "Status line notice when the After Effects import could not read the .aep file it was given. Calm, and points at the Bridge route as the way through; lumit-bridge.jsx is a file name and stays untranslated."
   },
@@ -14026,7 +14026,7 @@
   "@aeMediaNotFound": {
     "description": "Import report row reason. The footage was fine in After Effects and is not on the machine doing the import."
   },
-  "aeMediaPlaceholder": "An After Effects placeholder",
+  "aeMediaPlaceholder": "A placeholder in the imported project",
   "@aeMediaPlaceholder": {
     "description": "Import report row reason. The project item stood in for a file that was never chosen."
   },
@@ -15562,9 +15562,9 @@
   "@compGroupLights": {
     "description": "Section of the Composition settings window about how the composition's lights fall on its layers."
   },
-  "compLightsLikeAfterEffects": "Like After Effects",
+  "compLightsLikeAfterEffects": "Lights start from black",
   "@compLightsLikeAfterEffects": {
-    "description": "Composition settings checkbox: light layers from black, with ambient lights as their base, as After Effects does, rather than adding light to the picture. On for compositions imported from After Effects."
+    "description": "Composition settings checkbox: light layers from black, with ambient lights as their base, rather than adding light to the picture. On for compositions imported from an .aep project."
   },
   "histSetLighting": "Set lighting",
   "@histSetLighting": {
@@ -17401,7 +17401,7 @@
   "@dropProjectFile": {
     "description": "Status-line notice after a .lum project file was dragged onto the Project panel from the file manager. It is not opened silently, because opening one replaces the project on screen."
   },
-  "dropAeProject": "That is an After Effects project",
+  "dropAeProject": "Import .aep projects from the File menu",
   "@dropAeProject": {
     "description": "Status-line notice after an .aep file or a zipped Lumit Bridge bundle was dragged onto the Project panel from the file manager. It is not imported silently, because the conversion is a long job that ends in a report."
   },
@@ -24347,9 +24347,9 @@
   "@settingsGroupScripts": {
     "description": "Settings window: heading over a group of rows, the Scripts folder and the script run after each event."
   },
-  "settingsBlender": "Blender",
+  "settingsBlender": "3D app",
   "@settingsBlender": {
-    "description": "Settings window: row naming the Blender program that 3D model files Lumit cannot read itself (.blend, USD, Alembic) are converted with. A product name; keep it as it is. Its buttons choose another program or go back to the one found."
+    "description": "Settings window: row naming the separate 3D program that model files Lumit cannot read itself (.blend, USD, Alembic) are converted with. Its buttons choose another program or go back to the one found."
   },
   "settingsBlenderNotFound": "Not found",
   "@settingsBlenderNotFound": {

@@ -100,7 +100,7 @@ pub enum ImportError {
     Zip(#[from] zip::result::ZipError),
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("this After Effects project could not be read: {0}")]
+    #[error("this .aep project could not be read: {0}")]
     Aep(#[from] aep::AepError),
     #[error("not a Lumit bundle")]
     NotABundle,
