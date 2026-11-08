@@ -584,9 +584,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       final hash = id.lastIndexOf('#');
       if (hash <= 0) continue;
       final path = id.substring(0, hash);
-      final index = id.substring(hash + 1);
+      final index = int.tryParse(id.substring(hash + 1));
+      if (index == null) continue;
       for (final channel in channels) {
-        if (channel.path == path) out.add('${channel.id}#$index');
+        if (channel.path != path) continue;
+        if (channel.ownKeyIndex(index) case final own?) {
+          out.add('${channel.id}#$own');
+        }
       }
     }
     return out;
