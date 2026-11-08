@@ -601,7 +601,7 @@ class _KeyLaneState extends State<KeyLane> {
   /// The `f<frame> · <value>` pill beside the key being dragged.
   ///
   /// The value is the one this lane's own keys carry — a multi-axis row reads
-  /// its lead axis, exactly as its diamonds do (`laneKeysOf`) — so the readout
+  /// the first axis keyed there (`laneKeysOf`) — so the readout
   /// costs nothing but a lookup: a sampled row value would cross the bridge on
   /// every pointer move.
   Widget _dragHint(double frame, double value) {

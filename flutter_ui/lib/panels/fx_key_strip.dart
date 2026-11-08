@@ -40,7 +40,7 @@ import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
-import 'graph_maths.dart' show keyframeAmong;
+import 'graph_maths.dart' show axisKeyIndex, keyframeAmong, rowKeysOf;
 import 'key_block.dart';
 import 'layer_fold_frb.dart'
     show asOneUndoStep, laneKeyFrame, timeOfSubframe;
@@ -126,12 +126,21 @@ class FxKeyStripScope extends InheritedWidget {
     required super.child,
   }) : _host = host;
 
-  /// The keys picked on [rowKey]'s lane, by index.
-  Set<int> pickedOn(String rowKey) => {
-        for (final id in selected.value)
-          if (id.startsWith('$rowKey#'))
-            if (int.tryParse(id.substring(rowKey.length + 1)) case final i?) i,
-      };
+  /// The keys picked on [rowKey]'s lane, by index. None on a row whose axes
+  /// are keyed apart, where an index doesn't mean the same key on each.
+  Set<int> pickedOn(String rowKey) {
+    final scalars = _host._lanes[rowKey]?.scalars ?? const <BridgeScalar>[];
+    final count = rowKeysOf(scalars).length;
+    if (scalars.any((s) =>
+        s is BridgeScalar_Keyframed && s.field0.length != count)) {
+      return const {};
+    }
+    return {
+      for (final id in selected.value)
+        if (id.startsWith('$rowKey#'))
+          if (int.tryParse(id.substring(rowKey.length + 1)) case final i?) i,
+    };
+  }
 
   static FxKeyStripScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<FxKeyStripScope>();
@@ -352,6 +361,15 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     return out;
   }
 
+  /// A row's picked keys, as indices into one axis's own [keys].
+  Set<int> _ownKeys(Set<int> picked, _LaneEntry lane, List<BridgeKeyframe> keys) {
+    final rowKeys = rowKeysOf(lane.scalars);
+    return {
+      for (final i in picked)
+        if (axisKeyIndex(rowKeys, i, keys) case final own?) own,
+    };
+  }
+
   /// The release of a lane key's drag: every key it carried written where it
   /// travelled, one undo step. Each row rewrites all of its channels, so a
   /// point's two axes move together, and a row whose times would no longer
@@ -372,9 +390,10 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
             continue;
           }
           final keys = scalar.field0;
+          final own = _ownKeys(row.value, lane, keys);
           final retimed = [
             for (var i = 0; i < keys.length; i++)
-              if (row.value.contains(i))
+              if (own.contains(i))
                 BridgeKeyframe(
                   time: timeOfSubframe(
                       moved.frameOf(laneKeyFrame(keys[i], scope.fps),
@@ -418,16 +437,16 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
             continue;
           }
           final keys = scalar.field0;
+          final own = _ownKeys(row.value, lane, keys);
           final rest = [
             for (var i = 0; i < keys.length; i++)
-              if (!row.value.contains(i)) keys[i],
+              if (!own.contains(i)) keys[i],
           ];
           if (rest.length == keys.length) {
             next.add(scalar);
             continue;
           }
-          final last =
-              keys[row.value.where((i) => i < keys.length).last].value;
+          final last = keys[own.last].value;
           next.add(rest.isEmpty
               ? BridgeScalar.static_(last)
               : BridgeScalar.keyframed(rest));
@@ -450,7 +469,10 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     final time = timeOfSubframe(frame.toDouble(), scope.fpsNum, scope.fpsDen);
     final next = <BridgeScalar>[];
     for (final scalar in lane.scalars) {
-      if (scalar is! BridgeScalar_Keyframed) return;
+      if (scalar is! BridgeScalar_Keyframed) {
+        next.add(scalar);
+        continue;
+      }
       final keys = scalar.field0;
       if (keys.any((k) => laneKeyFrame(k, scope.fps).round() == frame)) return;
       final added = [...keys, keyframeAmong(keys, time, sampledScalar(scalar, time))]
@@ -986,7 +1008,7 @@ class _BeyondPainter extends CustomPainter {
 }
 
 /// One row's lane in the strip: the Timeline's own [KeyLane] over the row's
-/// lead channel, and the ground under it. Nothing at all outside the strip.
+/// keys, and the ground under it. Nothing at all outside the strip.
 ///
 /// A row hands over the same channels and write its stopwatch uses, so a key
 /// moved here is committed by the row exactly as a key added there is.
@@ -1004,8 +1026,7 @@ class FxKeyLane extends StatefulWidget {
 
   /// Whether the row has keys to show, which is what gives it a line of its
   /// own while the strip is stacked.
-  bool get animated =>
-      scalars.isNotEmpty && scalars.first is BridgeScalar_Keyframed;
+  bool get animated => scalars.any((s) => s is BridgeScalar_Keyframed);
 
   @override
   State<FxKeyLane> createState() => _FxKeyLaneState();
@@ -1034,10 +1055,7 @@ class _FxKeyLaneState extends State<FxKeyLane> {
     super.dispose();
   }
 
-  List<BridgeKeyframe> get _keys => switch (widget.scalars.first) {
-        BridgeScalar_Keyframed(:final field0) => field0,
-        _ => const [],
-      };
+  List<BridgeKeyframe> get _keys => rowKeysOf(widget.scalars);
 
   /// A click on the lane's ground: `Ctrl` plants a key on an animated row at
   /// that frame, a plain click lets everything go, as the Timeline's ground
