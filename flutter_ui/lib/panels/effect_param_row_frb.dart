@@ -3362,7 +3362,15 @@ String? optionNoteOf(String effect, String param, int option) =>
   BridgeEffectInstanceInfo? clone;
   for (var i = index - 1; i >= 0; i--) {
     final fx = stack[i];
-    if (!fx.enabled || fx.name == 'clone_deformer') continue;
+    if (!fx.enabled) continue;
+    // Outlines come through a Vector deformer, and stop at a Raster one.
+    if (fx.name == 'clone_deformer' &&
+        fx.values.any((v) =>
+            v.id == 'mode' &&
+            v.value is BridgeEffectValue_Choice &&
+            (v.value as BridgeEffectValue_Choice).field0 == 1)) {
+      continue;
+    }
     if (fx.name == 'clone_to_points') clone = fx;
     break;
   }
