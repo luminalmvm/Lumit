@@ -362,6 +362,7 @@ class EffectParamRowFrb extends StatelessWidget {
                 // The panel's fixed columns; the Timeline's fold-out takes
                 // the other branch and keeps its narrow gutter.
                 fixedColumns: fixed,
+                navigatorApart: valueColumn != null,
                 onWrite: (next) => _set(next.length == 4
                     ? BridgeEffectValue.colour(BridgeColour(
                         r: next[0], g: next[1], b: next[2], a: next[3]))
@@ -475,6 +476,8 @@ class EffectParamRowFrb extends StatelessWidget {
           // The button keeps the value column, so it lines up with the
           // controls above and below it, and the name column stays empty.
           Expanded(child: action ? const SizedBox.shrink() : label),
+          if (valueColumn != null && keyframes is KeyframeControlsFrb)
+            if (keyframes.trailingNavigator case final nav?) _greyed(nav),
           if (mark != null) mark,
           if (valueColumn case final col?) ...[
             SizedBox(
@@ -636,6 +639,8 @@ class EffectParamRowFrb extends StatelessWidget {
     double read(BridgeScalar s) =>
         sampledScalar(s, timeOfFrame(comp, playhead.value));
     return ParamMenu(
+      linkTo: _linkRef,
+      linkFrom: _link(scalars),
       keys: numeric ? keys : null,
       reset: driven != null || fallback == null
           ? null
@@ -748,9 +753,17 @@ class EffectParamRowFrb extends StatelessWidget {
     if (entry == null) return null;
     for (final fx in entry.info.effects) {
       if (fx.id == effectId) {
+        // The engine's own words, which an expression finds the effect by in
+        // any language the panel is drawn in.
         return PropertyRef.row(
           entry.info.name,
-          fx.customName ?? effectLabelOf(fx.name),
+          fx.customName ??
+              effectSchema
+                  .effectsFor(fx.name)
+                  .where((e) => e.name == fx.name)
+                  .firstOrNull
+                  ?.label ??
+              fx.name,
           param.label,
           sameLayer: link.layer == ownerLayerId,
         );
@@ -765,6 +778,14 @@ class EffectParamRowFrb extends StatelessWidget {
   /// The mark a link is dragged from, on a row that can hold an expression:
   /// one number, not yet driven by a wire or an expression.
   Widget? _linkMark(List<BridgeScalar>? scalars) {
+    final link = _link(scalars);
+    return link == null
+        ? null
+        : LinkMark(name: engineLabel(param.label), link: link);
+  }
+
+  /// What this row's link mark drags, and Paste link writes through.
+  PropertyLink? _link(List<BridgeScalar>? scalars) {
     if (scalars == null ||
         scalars.length != 1 ||
         driven != null ||
@@ -773,16 +794,13 @@ class EffectParamRowFrb extends StatelessWidget {
         currentLayer == null) {
       return null;
     }
-    return LinkMark(
-      name: engineLabel(param.label),
-      link: PropertyLink(
-        layer: ownerLayerId,
-        from: {_linkKey},
-        write: (text, language) {
-          noteSetExpression(select: false);
-          _set(BridgeEffectValue.float(BridgeScalar.expression(text, language)));
-        },
-      ),
+    return PropertyLink(
+      layer: ownerLayerId,
+      from: {_linkKey},
+      write: (text, language) {
+        noteSetExpression(select: false);
+        _set(BridgeEffectValue.float(BridgeScalar.expression(text, language)));
+      },
     );
   }
 
@@ -2277,6 +2295,7 @@ class EffectPointRowFrb extends StatelessWidget {
             onSeek: onSeek,
             rowKey: '$id-${xParam.id}-pair',
             fixedColumns: twoColumn,
+            navigatorApart: !twoColumn,
             onWrite: (next) {
               if (next.length == 2) {
                 writeBoth(BridgeEffectValue.float(next[0]),
@@ -2594,6 +2613,7 @@ class EffectPointRowFrb extends StatelessWidget {
           if (keyframes != null) greyed(keyframes),
           const SizedBox(width: 4),
           Expanded(child: label),
+          if (keyframes?.trailingNavigator case final nav?) greyed(nav),
           const SizedBox(width: 10),
           greyed(control),
         ],

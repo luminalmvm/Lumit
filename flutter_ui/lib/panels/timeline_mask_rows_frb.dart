@@ -3,6 +3,8 @@
 //
 // Split out of timeline_panel_frb.dart.
 
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -10,12 +12,14 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show MenuEntry;
 import '../shell/menu_layer_frb.dart' show maskRows;
+import '../state/clipboard.dart' show ClipboardKind;
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
@@ -276,11 +280,9 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
                     small: true,
                     frameless: true,
                     onPressed: () => _write(inverted: !mask.inverted),
-                    child: Text(
-                      l10n.maskInvertMark,
-                      style: t.small.copyWith(
-                          color: mask.inverted ? t.accent : t.textMuted),
-                    ),
+                    child: glyph.LumitIcon(LumitIcons.invert,
+                        size: iconSize,
+                        colour: mask.inverted ? t.accent : t.textMuted),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -308,18 +310,18 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
     );
   }
 
-  /// The mask's menu: its name, then the Layer menu's own Mask rows (its
-  /// mode, its inversion, its feather and opacity), on this mask, which the
-  /// menu picks first so the rows know which one.
+  /// The mask's menu: its name, the Layer menu's own Mask rows on this mask,
+  /// then the clipboard and Delete, which act on every picked mask. A mask
+  /// outside the pick is picked first, so the rows know which one.
   void _menu(BuildContext context, Offset at) {
-    widget.onLabelTap?.call();
     final app = Provider.of<LumitState>(context, listen: false);
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    final mine = pickedMasks(ui).any((p) => p.$2.contains(widget.mask.id));
+    if (!mine) widget.onLabelTap?.call();
     showMenuEntriesAt(context, at, [
       MenuEntry(l10n.rename, startRename, action: 'layer.rename'),
       MenuEntry.divider(),
       ...maskRows(context, app, ui),
-      MenuEntry.divider(),
       // Where a varying feather is switched on. Turning it on gives every
       // point the width the mask already had, so the picture does not move
       // until a point is dragged; off drops the points and the one width
@@ -337,14 +339,120 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
         );
       }),
       MenuEntry.divider(),
-      MenuEntry(l10n.deleteMask, () {
-        try {
-          widget.layer.deleteMask(id: widget.mask.id);
-          widget.onChanged();
-        } catch (_) {}
-      }, action: 'edit.delete.selection'),
+      MenuEntry(l10n.menuCut, () {
+        if (copyPickedMasks(ui)) deletePickedMasks(app, ui);
+      }, action: 'edit.cut'),
+      MenuEntry(l10n.menuCopy, () => copyPickedMasks(ui), action: 'edit.copy'),
+      MenuEntry(
+          l10n.menuPaste,
+          ui.clipboard.kind == ClipboardKind.masks
+              ? () => pasteMasksOnto(app, ui, [widget.layer])
+              : null,
+          action: 'edit.paste'),
+      MenuEntry(l10n.menuDuplicate, () => duplicatePickedMasks(app, ui),
+          action: 'layer.duplicate'),
+      MenuEntry.divider(),
+      MenuEntry(l10n.deleteMask, () => deletePickedMasks(app, ui),
+          action: 'edit.delete.selection'),
     ]);
   }
+}
+
+/// The masks picked in the Timeline, by the layer each is on, in stack order.
+/// A mask's own row picks it; a row under it picks a value, not the mask.
+List<(LayerReference, List<UuidValue>)> pickedMasks(LumitUiState ui) {
+  final wanted = <String, Set<String>>{};
+  for (final path in ui.selectedProperties.value) {
+    final layerId = layerIdOfPath(path);
+    if (layerId == null) continue;
+    final prefix = '${masksPath(layerId)}/';
+    final rest = path.startsWith(prefix) ? path.substring(prefix.length) : '';
+    if (rest.isEmpty || rest.contains('/')) continue;
+    (wanted[layerId] ??= {}).add(rest);
+  }
+  return [
+    for (final entry in ui.model.layers)
+      if (wanted[entry.layer.internallayerId.toString()] case final ids?)
+        (
+          entry.layer,
+          [
+            for (final m in entry.info.masks)
+              if (ids.contains(m.id.toString())) m.id,
+          ]
+        ),
+  ];
+}
+
+/// Put the picked masks on the clipboard, from every layer they are on. False
+/// with none picked.
+bool copyPickedMasks(LumitUiState ui) {
+  final masks = <Object?>[];
+  for (final (layer, ids) in pickedMasks(ui)) {
+    try {
+      final copied = jsonDecode(layer.copyMasks(masks: ids)) as Map;
+      masks.addAll(copied['masks'] as List);
+    } catch (_) {
+      // Gone between the pick and the press.
+    }
+  }
+  if (masks.isEmpty) return false;
+  ui.copyMasksToClipboard(
+      jsonEncode({'format': 1, 'kind': 'masks', 'masks': masks}));
+  return true;
+}
+
+/// Take the picked masks away, as one undo step.
+bool deletePickedMasks(LumitState app, LumitUiState ui) {
+  final picked = pickedMasks(ui);
+  if (picked.isEmpty) return false;
+  asOneUndoStep(app.project, () {
+    for (final (layer, ids) in picked) {
+      for (final id in ids) {
+        try {
+          layer.deleteMask(id: id);
+        } catch (_) {}
+      }
+    }
+  });
+  app.notifyDocumentChanged();
+  ui.model.refresh();
+  return true;
+}
+
+/// A copy of each picked mask, right after it, as one undo step.
+bool duplicatePickedMasks(LumitState app, LumitUiState ui) {
+  final picked = pickedMasks(ui);
+  if (picked.isEmpty) return false;
+  asOneUndoStep(app.project, () {
+    for (final (layer, ids) in picked) {
+      try {
+        layer.duplicateMasks(masks: ids);
+      } catch (_) {}
+    }
+  });
+  app.notifyDocumentChanged();
+  ui.model.refresh();
+  return true;
+}
+
+/// The clipboard's masks onto each of [layers], as one undo step.
+bool pasteMasksOnto(
+    LumitState app, LumitUiState ui, List<LayerReference> layers) {
+  final text = ui.clipboard.text;
+  if (ui.clipboard.kind != ClipboardKind.masks || text == null) return false;
+  if (layers.isEmpty) return false;
+  asOneUndoStep(app.project, () {
+    for (final layer in layers) {
+      try {
+        layer.pasteMasks(text: text);
+      } catch (_) {
+        // A layer that takes no masks, or one that has gone.
+      }
+    }
+  });
+  app.notifyDocumentChanged();
+  ui.model.refresh();
+  return true;
 }
 
 /// One of a mask's values on a row under it: its shape, its
@@ -476,11 +584,11 @@ class _MaskValueRowState extends State<MaskValueRow> {
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: _rowKey,
+      navigatorApart: true,
     );
-    final row = Row(
-      children: [
-        if (_isPath)
-          PathKeyframesFrb(
+    final pathKeys = !_isPath
+        ? null
+        : PathKeyframesFrb(
             keys: widget.mask.pathKeys,
             rowKey: 'tl-mask-path-${widget.mask.id}',
             onToggleKey: (time) =>
@@ -490,9 +598,12 @@ class _MaskValueRowState extends State<MaskValueRow> {
             comp: widget.comp,
             onSeek: widget.onSeek,
             onChanged: widget.onChanged,
-          )
-        else
-          keys,
+            navigatorApart: true,
+          );
+    final RowKeys lead = pathKeys ?? keys;
+    final row = Row(
+      children: [
+        pathKeys ?? keys,
         const SizedBox(width: 4),
         Expanded(
           child: HoverMark(
@@ -512,6 +623,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
             ),
           ),
         ),
+        if (lead.trailingNavigator case final nav?) nav,
         // Left of the value column, exactly where an effect parameter's field
         // sits, so every number down an open layer forms one column.
         SizedBox(
@@ -526,7 +638,14 @@ class _MaskValueRowState extends State<MaskValueRow> {
         SizedBox(width: widget.valueColumn.rightInset),
       ],
     );
-    if (_isPath) return row;
+    // A shape is no number to copy or type, so its menu is its keys and its
+    // curve; the shape itself travels with the mask's own Copy.
+    if (pathKeys != null) {
+      return ParamRowMenu(
+        menu: ParamMenu(keys: pathKeys, graphPath: ParamRowPath.of(context)),
+        child: row,
+      );
+    }
     return ParamRowMenu(
       menu: scalarRowMenu(context, keys,
           defaults: [widget.value == MaskValue.opacity ? 100 : 0]),

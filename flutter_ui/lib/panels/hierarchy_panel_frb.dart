@@ -78,7 +78,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
   /// The menu on a row, or with no [layer] on the ground under the rows. A
   /// layer of the comp in front has the one layer menu it has everywhere, with
   /// this panel's own rows in it, and a layer inside a Precomp has what can be
-  /// done from here.
+  /// done from here. A row opens or closes itself; the ground does them all.
   void _menu(BuildContext context, Offset at, LumitUiState ui,
       LayerReference? layer, CompositionReference? nested) {
     final id = layer?.internallayerId.toString();
@@ -89,7 +89,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
             () => setState(() {
                   if (!_open.remove(id)) _open.add(id!);
                 })),
-      if (_openable.isNotEmpty) ...[
+      if (layer == null && _openable.isNotEmpty) ...[
         MenuEntry(l10n.expandAll, () => setState(() => _open.addAll(_openable))),
         MenuEntry(l10n.collapseAll,
             _open.isEmpty ? null : () => setState(_open.clear)),

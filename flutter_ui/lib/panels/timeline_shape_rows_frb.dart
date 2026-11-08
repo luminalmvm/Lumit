@@ -763,6 +763,7 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: _rowKey,
+      navigatorApart: true,
     );
     return ParamRowMenu(
       menu: scalarRowMenu(context, keys,
@@ -775,6 +776,7 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
             child: Text(t.propertyCase(strokeValueLabel(widget.value)),
                 style: t.body, overflow: TextOverflow.ellipsis),
           ),
+          if (keys.trailingNavigator case final nav?) nav,
           SizedBox(
             width: widget.valueColumn.width,
             child: Align(
@@ -896,6 +898,7 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: _rowKey,
+      navigatorApart: true,
     );
     return ParamRowMenu(
       menu: scalarRowMenu(context, keys,
@@ -908,6 +911,7 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
             child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
                 style: t.body, overflow: TextOverflow.ellipsis),
           ),
+          if (keys.trailingNavigator case final nav?) nav,
           SizedBox(
             width: widget.valueColumn.width,
             child: Align(
@@ -1220,11 +1224,11 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: _rowKey,
+      navigatorApart: true,
     );
-    final row = Row(
-      children: [
-        if (_isPath)
-          PathKeyframesFrb(
+    final pathKeys = !_isPath
+        ? null
+        : PathKeyframesFrb(
             keys: widget.item!.pathKeys,
             rowKey: _rowKey,
             onToggleKey: (time) => widget.layer
@@ -1234,9 +1238,12 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             comp: widget.comp,
             onSeek: widget.onSeek,
             onChanged: widget.onChanged,
-          )
-        else
-          keys,
+            navigatorApart: true,
+          );
+    final RowKeys lead = pathKeys ?? keys;
+    final row = Row(
+      children: [
+        pathKeys ?? keys,
         const SizedBox(width: 4),
         Expanded(
           child: Text(
@@ -1244,6 +1251,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
                   shapeValueLabel(widget.value, stop: widget.stop)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
+        if (lead.trailingNavigator case final nav?) nav,
         SizedBox(
           width: widget.valueColumn.width,
           child: Align(

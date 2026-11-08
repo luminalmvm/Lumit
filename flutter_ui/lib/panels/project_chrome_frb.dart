@@ -705,6 +705,9 @@ Widget projectPreviewCard(
 
   /// A right press on the card, which is the item's own menu.
   ValueChanged<Offset>? onMenu,
+
+  /// A press on the uses line, which reveals them.
+  VoidCallback? onUses,
 }) =>
     GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -724,7 +727,8 @@ Widget projectPreviewCard(
             path: path,
             onScrub: onScrub,
             onPlaySound: onPlaySound,
-            soundPlaying: soundPlaying),
+            soundPlaying: soundPlaying,
+            onUses: onUses),
       ),
     );
 
@@ -743,6 +747,7 @@ Widget _previewContent(
   ValueChanged<int?>? onScrub,
   VoidCallback? onPlaySound,
   bool soundPlaying = false,
+  VoidCallback? onUses,
 }) {
   final type = switch (item) {
     ItemReference_Footage() => l10n.projectTypeFootage,
@@ -820,11 +825,7 @@ Widget _previewContent(
             ),
             if (uses != null) ...[
               const SizedBox(height: _previewLineGap),
-              Text(l10n.projectUsedCount(uses),
-                  key: const ValueKey('project-info-uses'),
-                  style: projectMetaStyle(t),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+              _usesLine(t, uses, uses > 0 ? onUses : null),
             ],
             if (path.isNotEmpty) ...[
               const SizedBox(height: _previewLineGap),
@@ -963,4 +964,25 @@ String? _previewCodecs(
     if (info.audioStreams > 1) l10n.projectAudioStreamCount(info.audioStreams),
   ];
   return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// "Used twice", which takes you to those uses when there are any.
+Widget _usesLine(LumitTheme t, int uses, VoidCallback? onUses) {
+  Widget line(double lit) => Text(l10n.projectUsedCount(uses),
+      key: const ValueKey('project-info-uses'),
+      style: projectMetaStyle(t).copyWith(
+          color: Color.lerp(projectMetaStyle(t).color, t.textPrimary, lit)),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis);
+  if (onUses == null) return line(0);
+  return LumitTooltip(
+    message: l10n.projectRevealInComposition,
+    child: HoverMark(
+      builder: (context, lit) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onUses,
+        child: line(lit),
+      ),
+    ),
+  );
 }

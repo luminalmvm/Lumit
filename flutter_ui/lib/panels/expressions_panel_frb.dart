@@ -187,11 +187,15 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
 
   void _pick(LumitUiState ui, String name) {
     _commitLinked();
+    final saved = ui.workspace.savedExpressions[name];
+    final starter = saved == null ? _starterCode(name) : null;
     _name.text = name;
-    _code.text = ui.workspace.savedExpressions[name] ?? '';
+    _code.text = saved ?? starter ?? '';
     setState(() {
       _picked = name;
-      _language = ui.workspace.savedExpressionLanguage(name);
+      _language = starter != null
+          ? BridgeExpressionLanguage.javaScript
+          : ui.workspace.savedExpressionLanguage(name);
       // A saved expression is not the property's, so it stops following.
       _linked = null;
       _loaded = null;
@@ -268,6 +272,9 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   /// A saved expression's menu.
   void _rowMenu(LumitState app, LumitUiState ui, String name, Offset at) {
     final canApply = _targets(ui).isNotEmpty;
+    // One of the set that comes with Lumit, which is not the user's to rename
+    // or delete. Duplicate keeps a copy of it to change.
+    final starter = !ui.workspace.savedExpressions.containsKey(name);
     showMenuAt<void>(
       context: context,
       position: at,
@@ -288,22 +295,25 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
             child: MenuLabel(l10n.apply, enabled: canApply),
           ),
           const MenuDivider(),
-          MenuRow(
-            key: const ValueKey('expr-menu-rename'),
-            onPressed: () => run(() => _renameSaved(ui, name)),
-            child: Text(l10n.renameEllipsis),
-          ),
+          if (!starter)
+            MenuRow(
+              key: const ValueKey('expr-menu-rename'),
+              onPressed: () => run(() => _renameSaved(ui, name)),
+              child: Text(l10n.renameEllipsis),
+            ),
           MenuRow(
             key: const ValueKey('expr-menu-duplicate'),
             onPressed: () => run(() => _duplicateSaved(ui, name)),
             child: Text(l10n.menuDuplicate),
           ),
-          const MenuDivider(),
-          MenuRow(
-            key: const ValueKey('expr-menu-delete'),
-            onPressed: () => run(() => _deleteSaved(ui, name)),
-            child: Text(l10n.delete),
-          ),
+          if (!starter) ...[
+            const MenuDivider(),
+            MenuRow(
+              key: const ValueKey('expr-menu-delete'),
+              onPressed: () => run(() => _deleteSaved(ui, name)),
+              child: Text(l10n.delete),
+            ),
+          ],
         ];
       },
     );
@@ -364,9 +374,17 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     });
   }
 
-  /// A copy under the next free name.
+  /// A copy under the next free name. One of the starters is kept under
+  /// its own name, which is then the user's.
   void _duplicateSaved(LumitUiState ui, String name) {
     final saved = ui.workspace.savedExpressions;
+    final starter = saved.containsKey(name) ? null : _starterCode(name);
+    if (starter != null) {
+      ui.workspace
+          .saveExpression(name, starter, BridgeExpressionLanguage.javaScript);
+      _pick(ui, name);
+      return;
+    }
     var copy = l10n.expressionCopyName(name);
     for (var n = 2; saved.containsKey(copy); n++) {
       copy = '${l10n.expressionCopyName(name)} $n';
@@ -374,6 +392,26 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     ui.workspace.saveExpression(
         copy, saved[name] ?? '', ui.workspace.savedExpressionLanguage(name));
     _pick(ui, copy);
+  }
+
+  /// The few that come with Lumit, so the list has something to start from.
+  /// Written in JavaScript, the language with the words for them.
+  static List<(String, String)> get _starters => [
+        (l10n.expressionStarterWiggle, 'wiggle(2, 20)'),
+        (l10n.expressionStarterLoop, 'loopOut("cycle")'),
+        (
+          l10n.expressionStarterBounce,
+          'var t = time - inPoint;\n'
+              'value + 40 * Math.sin(t * 6 * Math.PI) / Math.exp(t * 5)'
+        ),
+        (l10n.expressionStarterOverTime, 'value + time * 30'),
+      ];
+
+  static String? _starterCode(String name) {
+    for (final (named, code) in _starters) {
+      if (named == name) return code;
+    }
+    return null;
   }
 
   void _deleteSaved(LumitUiState ui, String name) {
@@ -447,6 +485,14 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
             value.toLowerCase().contains(needle))
           key,
     ]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    // The starters after the user's own, less any kept under the same name.
+    final starters = [
+      for (final (name, code) in _starters)
+        if (!saved.containsKey(name) &&
+            (name.toLowerCase().contains(needle) ||
+                code.toLowerCase().contains(needle)))
+          name,
+    ];
 
     // A mark on the bar over the list, greyed when it can do nothing.
     Widget mark(String key, String tip, String icon, VoidCallback? onPressed) =>
@@ -475,19 +521,15 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
             least: 140,
             child: Row(
             children: [
-              // With nothing saved there is nothing to search.
-              if (saved.isNotEmpty)
-                Expanded(
-                  child: HouseTextField(
-                    key: const ValueKey('expr-search'),
-                    controller: _search,
-                    focusNode: _searchFocus,
-                    hint: l10n.searchExpressions,
-                    width: double.infinity,
-                  ),
-                )
-              else
-                const Spacer(),
+              Expanded(
+                child: HouseTextField(
+                  key: const ValueKey('expr-search'),
+                  controller: _search,
+                  focusNode: _searchFocus,
+                  hint: l10n.searchExpressions,
+                  width: double.infinity,
+                ),
+              ),
               const SizedBox(width: 4),
               mark('expr-new', l10n.newExpression, LumitIcons.addEffect,
                   () => _new(ui)),
@@ -499,9 +541,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           ),
           ),
         ),
-        // The list only takes room with something in it, and the editor has
-        // the panel to itself until then.
-        if (saved.isNotEmpty)
+        if (names.isNotEmpty || starters.isNotEmpty)
           Expanded(
             flex: 2,
             child: GestureDetector(
@@ -511,7 +551,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 children: [
-                  for (final name in names)
+                  for (final name in [...names, ...starters])
                     HoverFill(
                       faint: true,
                       child: GestureDetector(

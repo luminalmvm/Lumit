@@ -846,10 +846,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// The columns switched off from the headings' menu. Kept as the widths are.
   Set<ProjectColumn> _hiddenColumns = const {};
 
-  void _columnMenu(Offset at, double width) => showProjectColumnMenu(
+  void _columnMenu(Offset at) => showProjectColumnMenu(
         context: context,
         position: at,
-        room: ProjectColumns.forWidth(width),
         hidden: _hiddenColumns,
         onToggle: (column) => setState(() {
           _hiddenColumns = _hiddenColumns.contains(column)
@@ -884,7 +883,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
           sort: _sortColumn,
           ascending: _sortAscending,
           onSort: _sortBy,
-          onMenu: (at) => _columnMenu(at, cols.panelWidth));
+          onMenu: _columnMenu);
 
   /// The rows in the order the sorted column asks for. A row keeps the rows
   /// under it, so a folder still holds its own items and only siblings swap.
@@ -1658,6 +1657,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
       onPlaySound: sound ? () => _toggleSound(item) : null,
       soundPlaying: sound && _soundId == id,
       onMenu: (at) => _itemMenu(item, at),
+      onUses: () => revealInComposition(
+          Provider.of<LumitUiState>(context, listen: false), item),
     );
   }
 
@@ -1808,21 +1809,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
             ? 0.0
             : info.duration.num / info.duration.den;
         if (info.videoCodec == null) {
-          // A sound file's cells, as the mockup writes them: the rate where a
-          // picture would state its size, and the channel layout — shortened
-          // to fit the FPS column — where a picture would state its rate.
-          // Its length counts milliseconds, as the card's does: sound has
-          // no frames worth counting.
+          // A sound file's cells: the rate where a picture would state its
+          // size, and no frame rate, which sound has none of. The card says
+          // how many channels. Its length counts milliseconds, as the card's
+          // does: sound has no frames worth counting.
           if (info.audioCodec == null) {
             return ProjectCells(date: date, path: path);
           }
           return ProjectCells(
             size: projectSampleRateText(info.sampleRate),
-            fps: switch (info.channels) {
-              1 => l10n.audioMonoShort,
-              2 => l10n.audioStereoShort,
-              final n => l10n.audioChannels(n),
-            },
             duration: timecodeOfSecondsMs(seconds),
             date: date,
             path: path,

@@ -396,9 +396,7 @@ void main() {
         dir = Directory.systemTemp.createTempSync('lumit-menu-preset');
       });
       tearDown(() {
-        animationPresetSavePicker = (suggested) => pickPresetSaveLocation(
-            suggested,
-            initialDirectory: presetsDirPath());
+        animationPresetSavePicker = null;
         animationPresetOpenPicker = pickPresetToOpen;
         try {
           dir.deleteSync(recursive: true);

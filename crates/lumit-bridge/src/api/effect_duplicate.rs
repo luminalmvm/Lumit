@@ -24,7 +24,7 @@ impl LayerReference {
         let ids: Vec<Uuid> = taken.iter().map(|e| e.id).collect();
         let wiring = lumit_core::preset::wiring_of(&layer.graph, &layer.effects, &ids);
         // Both come out in stack order, so the nth copy is the nth original's.
-        let (copies, graph) = match &wiring {
+        let (mut copies, graph) = match &wiring {
             Some(wiring) => {
                 let right = (layer.graph.layout.iter())
                     .map(|(_, xy)| xy[0])
@@ -49,6 +49,7 @@ impl LayerReference {
                 (fresh.collect(), None)
             }
         };
+        lumit_core::fx::names::name_copies(&layer.effects, &mut copies);
         let made: Vec<Uuid> = copies.iter().map(|e| e.id).collect();
         let mut copies = copies.into_iter();
         let mut stack = Vec::with_capacity(layer.effects.len() + made.len());

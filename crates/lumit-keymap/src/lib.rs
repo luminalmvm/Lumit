@@ -216,6 +216,7 @@ impl ActionId {
             "reveal.effects" => "Reveal Effects",
             "reveal.masks" => "Reveal Masks",
             "reveal.animated" => "Reveal animated properties",
+            "reveal.changed" => "Reveal changed properties",
             "reveal.volume" => "Reveal Volume",
             "reveal.audio" => "Reveal Audio, again for the waveform",
             "layer.move.in" => "Move the layer's in point to the playhead",

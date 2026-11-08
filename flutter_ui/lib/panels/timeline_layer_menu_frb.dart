@@ -132,7 +132,7 @@ List<MenuEntry> layerMenuEntries(
     MenuEntry.submenu(l10n.menuEffect,
         effectMenuEntries(app, ui, [for (final e in unlocked) e.layer])),
     if (_sounds(kind))
-      MenuEntry.submenu(l10n.menuAudio, _audioRows(app, ui, entry)),
+      MenuEntry.submenu(l10n.menuAudio, audioRows(app, ui, entry)),
     if (kind != BridgeLayerKind.sequence)
       MenuEntry.submenu(l10n.retime, [
         MenuEntry(
@@ -243,11 +243,12 @@ List<MenuEntry> layerMenuEntries(
       app.notifyDocumentChanged();
     }),
     MenuEntry.divider(),
-    _switchRow(app, ui, comp, entry, entries, l10n.switchHidden,
-        BridgeLayerSwitch.visible, !info.switches.visible,
-        inverted: true, action: 'layer.toggle.visible'),
-    lockRow(app, ui),
     MenuEntry.submenu(l10n.columnSwitches, [
+      _switchRow(app, ui, comp, entry, entries, l10n.switchHidden,
+          BridgeLayerSwitch.visible, !info.switches.visible,
+          inverted: true, action: 'layer.toggle.visible'),
+      lockRow(app, ui),
+      MenuEntry.divider(),
       _switchRow(app, ui, comp, entry, entries, l10n.switchSolo,
           BridgeLayerSwitch.solo, info.switches.solo),
       _switchRow(app, ui, comp, entry, entries, l10n.switchShy,
@@ -380,13 +381,15 @@ MenuEntry _switchRow(
       checked: on,
     );
 
-/// Audio ▸: the layer's sound onto its own row, which streams of its file it
-/// plays, and whether a retimed sound keeps its pitch.
-List<MenuEntry> _audioRows(
+/// Audio ▸: mute, the layer's sound onto its own row, which streams of its
+/// file it plays, and whether a retimed sound keeps its pitch. The Audio
+/// heading in the fold has the same rows.
+List<MenuEntry> audioRows(
     LumitState app, LumitUiState ui, BridgeLayerEntry entry) {
   final layer = entry.layer;
   final locked = entry.info.switches.locked;
   final entries = selectedEntries(ui);
+  final comp = ui.selectedComp;
   BridgeAudioStreams? streams;
   if (!locked) {
     try {
@@ -397,6 +400,12 @@ List<MenuEntry> _audioRows(
   // The ticks are the layer's own choice, kept here so a press shows at once.
   final chosen = {...?streams?.chosen};
   return [
+    if (comp != null) ...[
+      _switchRow(app, ui, comp, entry, entries, l10n.audioMute,
+          BridgeLayerSwitch.audible, !entry.info.switches.audible,
+          inverted: true),
+      MenuEntry.divider(),
+    ],
     if (entry.info.kind != BridgeLayerKind.audio)
       MenuEntry(
         l10n.menuDetachAudio,

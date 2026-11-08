@@ -55,6 +55,9 @@ import '../panels/timeline_extras_frb.dart';
 import '../panels/viewer_shape3d.dart' show addShape3d, shape3dTools;
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
+import '../panels/timeline_mask_rows_frb.dart'
+    show copyPickedMasks, deletePickedMasks, duplicatePickedMasks,
+        pasteMasksOnto, pickedMasks;
 import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/beats_notice.dart';
@@ -1744,7 +1747,7 @@ List<MenuSection> lumitMenus(
             for (final reveal in const [
               (RevealFilter.keyframed, 'reveal.animated'),
               (RevealFilter.animated, null),
-              (RevealFilter.modified, null),
+              (RevealFilter.modified, 'reveal.changed'),
             ])
               MenuEntry(
                 switch (reveal.$1) {
@@ -2643,6 +2646,7 @@ void duplicateLayersFrb(
 /// effects, each copy after its original and picked in its place, else the
 /// selected layers. False when there was nothing to duplicate.
 bool duplicateSelectionFrb(LumitState app, LumitUiState ui) {
+  if (duplicatePickedMasks(app, ui)) return true;
   if (ui.selectedEffectsLayer case final layer?
       when ui.selectedEffects.value.isNotEmpty) {
     try {
@@ -2667,7 +2671,9 @@ bool duplicateSelectionFrb(LumitState app, LumitUiState ui) {
 /// the chord, and a menu row that ungreyed on a selection the menu cannot see
 /// would be guessing.
 bool _somethingSelected(LumitUiState ui) =>
-    ui.selectedEffects.value.isNotEmpty || ui.selectedLayer.value != null;
+    ui.selectedEffects.value.isNotEmpty ||
+    ui.selectedLayer.value != null ||
+    pickedMasks(ui).isNotEmpty;
 
 /// What Copy takes, finest selection first: the keyframes a panel has claimed,
 /// else the picked effects, else the selected layer. Returns whether anything
@@ -2679,6 +2685,7 @@ bool _somethingSelected(LumitUiState ui) =>
 /// this fixes, one layer down.
 bool copySelectionFrb(LumitUiState ui) {
   if (ui.copyClaim?.call() ?? false) return true;
+  if (copyPickedMasks(ui)) return true;
   if (ui.selectedEffectsLayer case final layer?
       when ui.selectedEffects.value.isNotEmpty) {
     try {
@@ -2711,6 +2718,7 @@ bool cutSelectionFrb(LumitState app, LumitUiState ui) {
     ui.deleteClaim?.call();
     return true;
   }
+  if (copyPickedMasks(ui)) return deletePickedMasks(app, ui);
   final effects = ui.selectedEffects.value;
   final effectsLayer = ui.selectedEffectsLayer;
   final layers = [for (final e in selectedEntries(ui)) e.layer];
@@ -2805,6 +2813,10 @@ VoidCallback? _pasteAction(
         layer.pasteEffects(text: text, atFrame: ui.playheadFrame.value);
         app.notifyDocumentChanged();
       };
+    // Onto every selected layer.
+    case ClipboardKind.masks:
+      if (layer == null) return null;
+      return () => pasteMasksOnto(app, ui, ui.selectedLayers.value);
     case null:
       return null;
   }

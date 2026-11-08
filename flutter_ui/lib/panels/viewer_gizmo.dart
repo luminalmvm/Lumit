@@ -3220,19 +3220,21 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   /// Space the selected layers' middles evenly between the two outermost, or
-  /// with Shift held the gaps between their boxes.
-  void _distribute(Axis axis) {
+  /// the point [by] of each box, 0 to 1, or with [gaps] or Shift held the gaps
+  /// between their boxes.
+  void _distribute(Axis axis, {double by = 0.5, bool gaps = false}) {
     final boxes = _arrangeable;
     if (boxes.length < 3) return;
     final across = axis == Axis.horizontal;
-    double middle(Rect r) => across ? r.center.dx : r.center.dy;
+    double middle(Rect r) =>
+        across ? r.left + r.width * by : r.top + r.height * by;
     double extent(Rect r) => across ? r.width : r.height;
     final rects = {for (final box in boxes) box: _rectOf([box])!};
     final order = boxes.toList()
       ..sort((a, b) => middle(rects[a]!).compareTo(middle(rects[b]!)));
     final wanted = <LayerBox, double>{};
     final (first, last) = (rects[order.first]!, rects[order.last]!);
-    if (HardwareKeyboard.instance.isShiftPressed) {
+    if (gaps || HardwareKeyboard.instance.isShiftPressed) {
       final near = across ? first.left : first.top;
       final far = across ? last.right : last.bottom;
       final used = rects.values.fold(0.0, (sum, r) => sum + extent(r));
@@ -3240,7 +3242,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       var at = near;
       for (final box in order) {
         final size = extent(rects[box]!);
-        wanted[box] = at + size / 2;
+        wanted[box] = at + size * by;
         at += size + gap;
       }
     } else {
@@ -3251,9 +3253,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
     final moves = <(LayerBox, double, double, double?)>[];
     for (final box in order) {
-      final by = wanted[box]! - middle(rects[box]!);
+      final shift = wanted[box]! - middle(rects[box]!);
       final step = box.map.positionStep(
-          (across ? Offset(by, 0) : Offset(0, by)) / box.map.viewScale);
+          (across ? Offset(shift, 0) : Offset(0, shift)) /
+              box.map.viewScale);
       moves.add((box, box.map.px + step.dx, box.map.py + step.dy, null));
     }
     _place(moves);
@@ -3264,7 +3267,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final request = widget.uiState.arrangeRequest.value;
     if (request == null || !mounted || !_activeView) return;
     if (request.distribute case final axis?) {
-      _distribute(axis);
+      _distribute(axis, by: request.by, gaps: request.gaps);
     } else {
       _alignSelection(request.x, request.y);
     }

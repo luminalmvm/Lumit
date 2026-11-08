@@ -214,6 +214,7 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: _rowKey,
+      navigatorApart: true,
     );
     return ParamRowMenu(
       menu: scalarRowMenu(context, keys,
@@ -230,6 +231,7 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
             child: Text(t.propertyCase(puppetValueLabel(widget.value)),
                 style: t.body, overflow: TextOverflow.ellipsis),
           ),
+          if (keys.trailingNavigator case final nav?) nav,
           SizedBox(
             width: widget.valueColumn.width,
             child: Align(

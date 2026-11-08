@@ -224,6 +224,7 @@ pub fn default_keymap() -> Keymap {
         row(Timeline, "E", "reveal.effects"),
         row(Timeline, "M", "reveal.masks"),
         row(Timeline, "U", "reveal.animated"),
+        row(Timeline, "Shift+U", "reveal.changed"),
         // `L` opens a layer's Audio group; a second `L` adds its waveform lane,
         // a third shuts the layer again. It shadows the J/K/L shuttle
         // inside the Timeline and nowhere else — the panel where you reach for

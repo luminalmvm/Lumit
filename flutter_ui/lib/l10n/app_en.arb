@@ -7163,6 +7163,10 @@
   "@keyRevealAnimatedProperties": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyRevealChangedProperties": "Reveal changed properties",
+  "@keyRevealChangedProperties": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyRevealAudioAgainForTheWaveform": "Reveal Audio, again for the waveform",
   "@keyRevealAudioAgainForTheWaveform": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7666,6 +7670,10 @@
   "@markerHint": {
     "description": "Placeholder in the marker's text field."
   },
+  "markerGoTo": "Go to marker",
+  "@markerGoTo": {
+    "description": "Right-click menu of a marker on the Timeline's ruler: move the playhead to the marker."
+  },
   "markerMakeRegion": "Make region",
   "@markerMakeRegion": {
     "description": "Context-menu item on a Timeline marker. It gives the marker a duration, so it marks a stretch of time that is shaded down through the layers instead of a single frame."
@@ -7693,10 +7701,6 @@
   "maskFeatherPerPoint": "Feather per point",
   "@maskFeatherPerPoint": {
     "description": "Item in a mask row's right-click menu: give every point of the shape a feather width of its own, so one edge can be sharp and another soft."
-  },
-  "maskInvertMark": "Inv",
-  "@maskInvertMark": {
-    "description": "Very short marker on a mask row meaning it is inverted. Abbreviate in your language too — the cell is about three characters wide."
   },
   "maskModeAdd": "Add",
   "@maskModeAdd": {
@@ -8118,6 +8122,10 @@
   "menuMarkers": "Markers",
   "@menuMarkers": {
     "description": "Menu item."
+  },
+  "menuMaskMode": "Mode",
+  "@menuMaskMode": {
+    "description": "Layer ▸ Mask and a mask's right-click menu: the submenu of how the mask combines with the masks above it (Add, Subtract, Intersect and so on)."
   },
   "menuMask": "Mask",
   "@menuMask": {
@@ -9074,14 +9082,6 @@
     "description": "A two-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
     "type": "text"
   },
-  "audioMonoShort": "mo",
-  "@audioMonoShort": {
-    "description": "The Project panel list's channel-layout cell for a mono sound file — the FPS column is narrow, so this is the two-letter form of 'mono'."
-  },
-  "audioStereoShort": "st",
-  "@audioStereoShort": {
-    "description": "The Project panel list's channel-layout cell for a stereo sound file — the FPS column is narrow, so this is the two-letter form of 'stereo'."
-  },
   "label": "Label",
   "@label": {
     "description": "Row on the Project panel's right-click menu, beside a strip of colour chips that tag the picked items.",
@@ -9337,6 +9337,10 @@
   "@projectAddToComp": {
     "description": "Project panel, row menu: put the picked items in the open composition as layers."
   },
+  "projectRevealInComposition": "Reveal in composition",
+  "@projectRevealInComposition": {
+    "description": "Project panel, row menu and the tooltip on the card's uses line: open the composition that uses the item, with its layers selected."
+  },
   "projectNewCompFromSelection": "New composition from selection",
   "@projectNewCompFromSelection": {
     "description": "Project panel, row menu on footage: make a composition sized and timed to the picked footage."
@@ -9437,6 +9441,15 @@
   "saved": "Saved",
   "@saved": {
     "description": "Bottom strip: the project matches what is on disk."
+  },
+  "presetReplace": "Replace {name}?",
+  "@presetReplace": {
+    "description": "Asked before a saved preset is written over one of the same name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "presetSaveTitle": "Save preset",
   "@presetSaveTitle": {
@@ -11564,6 +11577,34 @@
   "@alignDistributeDown": {
     "description": "Align panel and Viewer menu: space the selected layers evenly from top to bottom."
   },
+  "alignByLeftEdges": "Left edges",
+  "@alignByLeftEdges": {
+    "description": "Align panel menu, under Distribute across: space the selected layers so their left edges are evenly apart."
+  },
+  "alignByCentres": "Centres",
+  "@alignByCentres": {
+    "description": "Align panel menu, under Distribute across: space the selected layers so their centres are evenly apart."
+  },
+  "alignByRightEdges": "Right edges",
+  "@alignByRightEdges": {
+    "description": "Align panel menu, under Distribute across: space the selected layers so their right edges are evenly apart."
+  },
+  "alignByTopEdges": "Top edges",
+  "@alignByTopEdges": {
+    "description": "Align panel menu, under Distribute down: space the selected layers so their top edges are evenly apart."
+  },
+  "alignByMiddles": "Middles",
+  "@alignByMiddles": {
+    "description": "Align panel menu, under Distribute down: space the selected layers so their middles are evenly apart."
+  },
+  "alignByBottomEdges": "Bottom edges",
+  "@alignByBottomEdges": {
+    "description": "Align panel menu, under Distribute down: space the selected layers so their bottom edges are evenly apart."
+  },
+  "alignEqualGaps": "Equal gaps",
+  "@alignEqualGaps": {
+    "description": "Align panel menu, under Distribute across and Distribute down: space the selected layers so the gaps between their boxes are the same."
+  },
   "settingsAlignToFirstPicked": "Align to the first picked layer",
   "@settingsAlignToFirstPicked": {
     "description": "A setting: lining up the selection goes to the first picked layer rather than the box round them all."
@@ -11961,6 +12002,15 @@
   "@unitSymbolDegrees": {
     "description": "The unit rider beside an effect parameter's value when the number is an angle. A symbol, not a word — it sits in a narrow column beside the number.",
     "type": "text"
+  },
+  "unitFramesCount": "{count, plural, =1{frame} other{frames}}",
+  "@unitFramesCount": {
+    "description": "The unit beside a count of frames in a field, after the number: 1 frame, 2 frames. Lower case.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "unitSymbolFrames": "frames",
   "@unitSymbolFrames": {
@@ -16970,6 +17020,10 @@
   "@wireStyleAngled": {
     "description": "Settings window, the Wires dropdown: wires run in straight lines that turn only at 45 or 90 degrees, with each turn slightly rounded."
   },
+  "closeOtherTabs": "Close other tabs",
+  "@closeOtherTabs": {
+    "description": "Right-click menu of a composition's tab over the Timeline: close every other composition's tab."
+  },
   "closeOtherPanels": "Close other panels",
   "@closeOtherPanels": {
     "description": "Row on a panel tab's right-click menu: closes every other panel in that tab group, leaving this one."
@@ -19296,6 +19350,22 @@
   "@newExpression": {
     "description": "Button in the Expressions panel: clear the editor to write a new expression. When the selected property already has an expression, the editor starts with that."
   },
+  "expressionStarterWiggle": "Wiggle",
+  "@expressionStarterWiggle": {
+    "description": "Expressions panel: one of the expressions that come with Lumit, which shakes a value at random."
+  },
+  "expressionStarterLoop": "Loop",
+  "@expressionStarterLoop": {
+    "description": "Expressions panel: one of the expressions that come with Lumit, which repeats a property's keyframes for ever."
+  },
+  "expressionStarterBounce": "Bounce",
+  "@expressionStarterBounce": {
+    "description": "Expressions panel: one of the expressions that come with Lumit, which makes a value spring and settle from the layer's start."
+  },
+  "expressionStarterOverTime": "Grow over time",
+  "@expressionStarterOverTime": {
+    "description": "Expressions panel: one of the expressions that come with Lumit, which adds a steady amount to a value every second."
+  },
   "expressionCopyName": "{name} copy",
   "@expressionCopyName": {
     "description": "Expressions panel: the name a duplicated saved expression starts with.",
@@ -19385,6 +19455,14 @@
   "paramMenuCopyValue": "Copy value",
   "@paramMenuCopyValue": {
     "description": "Right-click menu on a property row's name or stopwatch: put the value shown at the playhead on the clipboard."
+  },
+  "paramMenuCopyLink": "Copy link",
+  "@paramMenuCopyLink": {
+    "description": "Right-click menu of a property row: remember this property, so Paste link on another row makes that row follow it with an expression."
+  },
+  "paramMenuPasteLink": "Paste link",
+  "@paramMenuPasteLink": {
+    "description": "Right-click menu of a property row: make this row follow the property Copy link remembered, by writing an expression that reads it."
   },
   "paramMenuPasteValue": "Paste value",
   "@paramMenuPasteValue": {

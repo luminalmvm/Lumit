@@ -8,6 +8,8 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/effect_presets.dart'
+    show listPresetsFor;
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/model.dart'
@@ -19,12 +21,12 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/clipboard.dart';
 import '../state/external_links.dart';
-import '../state/file_dialogs.dart';
 import '../state/layer_bounds.dart' show geometryOptionsNames;
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'param_row_menu.dart' show menuGroups;
+import 'preset_save.dart' show askPresetName, presetPathFor;
 
 /// One effect, on whichever list holds it, and everything its menu can do.
 ///
@@ -212,6 +214,30 @@ class EffectCommands {
     onStackChanged();
   }
 
+  /// Set this effect, and any picked effect of the same kind, to the one a
+  /// saved preset at [path] holds, keyframes from the playhead.
+  Future<void> _applySavedEffect(BuildContext context, String path) async {
+    final app = Provider.of<LumitState>(context, listen: false);
+    final at = Provider.of<LumitUiState>(context, listen: false)
+        .playheadFrame
+        .value;
+    final String text;
+    try {
+      text = await readEffectPreset(path: path);
+    } catch (_) {
+      app.postNotice(l10n.presetFileNotPreset, error: true);
+      return;
+    }
+    if (!context.mounted) return;
+    withEach(context, (e) {
+      if (e.getInfo().name != info.name) return;
+      try {
+        layer.applySavedPreset(effect: e, text: text, atFrame: at);
+      } catch (_) {}
+    });
+    onStackChanged();
+  }
+
   /// Set this material to the one saved in the preset at [path].
   Future<void> _applySaved(LumitState app, String path, int at) async {
     try {
@@ -247,9 +273,11 @@ class EffectCommands {
   Future<void> _savePreset(BuildContext context) async {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final kind = material ? 'lummat' : 'lumfx';
-    final suggested = '${info.customName ?? effectLabelOf(info.name)}.$kind';
-    final path = await pickPresetSaveLocation(suggested,
-        initialDirectory: presetsDirPath(), material: material);
+    final named = await askPresetName(
+        context, ui.workspace, info.customName ?? effectLabelOf(info.name));
+    if (named == null || !context.mounted) return;
+    final path = await presetPathFor(context, named,
+        extension: kind, material: material);
     if (path == null) return;
     final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.$kind', '');
     try {
@@ -338,8 +366,12 @@ class EffectCommands {
       for (final instance in stack)
         if (instance.id() == info.id) ...instance.presetNames(),
     ];
-    // A material also takes any the user has saved.
-    final saved = material ? listMaterialPresets() : const <BridgePresetInfo>[];
+    // And any of its kind the user has saved. Read here, as the menu opens.
+    final saved = material
+        ? listMaterialPresets()
+        : style || inputs
+            ? const <BridgePresetInfo>[]
+            : listPresetsFor(name: info.name);
     final pastable = onStack && ui.clipboard.kind == ClipboardKind.effects;
     // A style, the Inputs and a material have no clipboard.
     final copies = !style && !inputs && !material;
@@ -500,16 +532,22 @@ class EffectCommands {
                               },
                               child: Text(engineLabel(name)),
                             ),
+                          if (presets.isNotEmpty && saved.isNotEmpty)
+                            const MenuDivider(),
                           for (final (i, preset) in saved.indexed)
                             MenuRow(
                               key: ValueKey<String>('fx-menu-saved-$id-$i'),
                               onPressed: () {
                                 dismiss();
-                                _applySaved(
-                                    Provider.of<LumitState>(context,
-                                        listen: false),
-                                    preset.path,
-                                    ui.playheadFrame.value);
+                                if (material) {
+                                  _applySaved(
+                                      Provider.of<LumitState>(context,
+                                          listen: false),
+                                      preset.path,
+                                      ui.playheadFrame.value);
+                                } else {
+                                  _applySavedEffect(context, preset.path);
+                                }
                               },
                               child: Text(preset.name),
                             ),

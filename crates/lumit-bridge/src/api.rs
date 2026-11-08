@@ -37,6 +37,7 @@ pub mod keymap;
 pub mod layer;
 pub mod layer_source;
 pub mod lens;
+pub mod mask_clipboard;
 pub mod model;
 pub mod model_rows;
 pub mod notes;

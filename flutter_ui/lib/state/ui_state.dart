@@ -2037,6 +2037,13 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Copy masks, same repaint, same mirror.
+  void copyMasksToClipboard(String text) {
+    clipboard.putMasks(text);
+    Clipboard.setData(ClipboardData(text: text));
+    notifyListeners();
+  }
+
   /// Take a Lumit document off the **system** clipboard into the tray, if
   /// there is one there and the tray has nothing of its own.
   ///
@@ -2053,6 +2060,8 @@ class LumitUiState extends ChangeNotifier {
         clipboard.putLayer(text);
       case ClipboardKind.effects:
         clipboard.putEffects(text);
+      case ClipboardKind.masks:
+        clipboard.putMasks(text);
       case null:
         return false;
     }
@@ -2649,13 +2658,32 @@ class LumitUiState extends ChangeNotifier {
 
   /// The selection lined up with itself or spaced out, for the Align panel.
   /// [x] and [y] are the point of each box to bring together, 0 to 1, null for
-  /// an axis left alone; [distribute] the axis to space them along.
-  final ValueNotifier<(int, {double? x, double? y, Axis? distribute})?>
-      arrangeRequest = ValueNotifier(null);
+  /// an axis left alone; [distribute] the axis to space them along, by the
+  /// point [by] of each box, or with equal [gaps] between them.
+  final ValueNotifier<
+      (
+        int, {
+        double? x,
+        double? y,
+        Axis? distribute,
+        double by,
+        bool gaps,
+      })?> arrangeRequest = ValueNotifier(null);
 
-  void requestArrange({double? x, double? y, Axis? distribute}) =>
-      arrangeRequest.value =
-          (++_alignRequests, x: x, y: y, distribute: distribute);
+  void requestArrange(
+          {double? x,
+          double? y,
+          Axis? distribute,
+          double by = 0.5,
+          bool gaps = false}) =>
+      arrangeRequest.value = (
+        ++_alignRequests,
+        x: x,
+        y: y,
+        distribute: distribute,
+        by: by,
+        gaps: gaps,
+      );
 
   /// The armed dropper, or null when the tool is not armed (docs/07 §7).
   ///

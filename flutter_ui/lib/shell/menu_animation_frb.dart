@@ -452,12 +452,11 @@ const String _cameraTrack = 'camera_track';
 // Presets
 // ---------------------------------------------------------------------------
 
-/// The two file dialogues the preset rows open, and the seam a test replaces —
-/// the pattern `openExternalLink` set, because no plugin channel opens a real
-/// dialogue in a widget test.
-Future<String?> Function(String suggested) animationPresetSavePicker =
-    (suggested) =>
-        pickPresetSaveLocation(suggested, initialDirectory: presetsDirPath());
+/// The file the save row writes, which a test names, and the open row's file
+/// dialogue, which a test replaces: no plugin channel opens a real dialogue in
+/// a widget test. With no save picker the row asks for a name and saves into
+/// the library, as the panels do.
+Future<String?> Function(String suggested)? animationPresetSavePicker;
 Future<String?> Function() animationPresetOpenPicker = pickPresetToOpen;
 
 /// Animation ▸ Save animation preset: the selected layer's effect stack

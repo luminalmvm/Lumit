@@ -189,7 +189,7 @@ class _StaggerPanelFrbState extends State<StaggerPanelFrb> {
             ),
           ),
           const SizedBox(width: 6),
-          Text(l10n.unitSymbolFrames,
+          Text(l10n.unitFramesCount(value),
               style: t.body.copyWith(color: t.textMuted)),
         ],
       );

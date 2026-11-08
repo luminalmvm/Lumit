@@ -4,7 +4,11 @@ use flutter_rust_bridge::frb;
 
 use lumit_core::preset_parts::PresetParts;
 
-use crate::api::{effect::BridgeEffectInstance, layer::LayerReference, BridgeError};
+use crate::api::{
+    effect::{BridgeEffectInstance, BridgePresetInfo},
+    layer::LayerReference,
+    BridgeError,
+};
 
 impl BridgeEffectInstance {
     /// The names of the presets this effect ships with, in menu order. Engine
@@ -18,7 +22,65 @@ impl BridgeEffectInstance {
     }
 }
 
+/// The saved presets that hold one effect of the kind `name` and nothing
+/// else, in the library's order: what that effect's own menu can apply.
+#[frb(sync)]
+pub fn list_presets_for(name: String) -> Vec<BridgePresetInfo> {
+    let only = |path: &str| {
+        let text = std::fs::read_to_string(path).ok()?;
+        let preset = lumit_core::preset::from_json(&text).ok()?;
+        Some(preset.effects.len() == 1 && preset.effects[0].effect.match_name == name)
+    };
+    crate::api::effect::list_presets()
+        .into_iter()
+        .filter(|p| !p.keyed && only(&p.path) == Some(true))
+        .collect()
+}
+
 impl LayerReference {
+    /// Set `effect` to the settings a saved preset of its kind holds, as one
+    /// undo step. Its name, its id and whether it is on stay; any keyframes
+    /// start at comp frame `at_frame`, the playhead.
+    #[frb(sync)]
+    pub fn apply_saved_preset(
+        &self,
+        effect: &BridgeEffectInstance,
+        text: String,
+        at_frame: i64,
+    ) -> Result<(), BridgeError> {
+        let id = effect.id();
+        let preset =
+            lumit_core::preset::from_json(&text).map_err(|_| BridgeError::InvalidPreset)?;
+        let kind = &effect.effect.effect.match_name;
+        let mut chosen = (lumit_core::preset::instantiated(&preset).into_iter())
+            .find(|e| &e.effect.match_name == kind)
+            .ok_or(BridgeError::InvalidPreset)?;
+        let comp = self.composition()?;
+        let layer = self.item()?;
+        let at = comp
+            .frame_rate
+            .time_of_frame(at_frame.max(0))
+            .and_then(|t| t.delta(layer.start_offset))
+            .map_err(|_| BridgeError::InvalidTime)?;
+        if let Some(first) = lumit_core::preset::first_key_time(std::slice::from_ref(&chosen)) {
+            let delta =
+                at.0.checked_sub(first)
+                    .map_err(|_| BridgeError::InvalidTime)?;
+            lumit_core::preset::shift_keys(std::slice::from_mut(&mut chosen), delta);
+        }
+        self.with_instances(self.instance_home(&effect.effect)?, move |effects| {
+            let instance = effects
+                .iter_mut()
+                .find(|e| e.id == id)
+                .ok_or(BridgeError::InvalidEffect)?;
+            instance.params = chosen.params;
+            instance.linked_pairs = chosen.linked_pairs;
+            instance.plugin_state = chosen.plugin_state;
+            instance.sample_temporally = chosen.sample_temporally;
+            Ok(())
+        })
+    }
+
     /// Set `effect` to the `preset`-th of its built-in presets, as one undo
     /// step. Any keyframes start at comp frame `at_frame`, the playhead.
     #[frb(sync)]
@@ -183,6 +245,10 @@ impl LayerReference {
                 lumit_core::preset::shift_keys(&mut wired.nodes, delta);
             }
             parts.shift_keys(delta);
+        }
+        lumit_core::fx::names::name_copies(&layer.effects, &mut fresh);
+        if let Some(wired) = &mut wired {
+            lumit_core::fx::names::name_copies(&layer.effects, &mut wired.effects);
         }
 
         let mut ops = Vec::new();

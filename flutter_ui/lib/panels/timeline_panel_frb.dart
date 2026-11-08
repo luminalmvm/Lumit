@@ -729,6 +729,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return (
       expand: ids.any((id) => !_isOpen(id)) ? _expandLayers : null,
       collapse: ids.any(_isOpen) ? _collapseLayers : null,
+      reveal: _ui?.requestRevealFilter,
     );
   }
 
@@ -1092,7 +1093,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           MenuRow(
             key: const ValueKey('tl-column-menu-timings'),
             onPressed: () => close(TimelineGroup.timings.name),
-            child: MenuLabel(l10n.tipRenderTime, ticked: timings.measuring),
+            child: MenuLabel(l10n.timeColumn, ticked: timings.measuring),
           ),
         ],
       ],
@@ -3103,6 +3104,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (action == 'reveal.animated') {
       return _revealTap();
     }
+    if (action == 'reveal.changed') {
+      ui.requestRevealFilter(RevealFilter.modified);
+      return true;
+    }
     if (action == 'reveal.audio') {
       return _revealAudioTap(ui);
     }
@@ -3122,6 +3127,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final parts = _selectedProperties.single.split('/');
         if (parts.length == 3 && parts[1] == 'contents') {
           ui.renameItemRequest.value = parts[2];
+          return true;
+        }
+        // An effect's own heading on a layer: its name opens in place.
+        if (effectIdOfPath(_selectedProperties.single) != null &&
+            ui.model.layers
+                .any((e) => e.layer.internallayerId.toString() == parts[0])) {
+          foldEffectRenaming.value = _selectedProperties.single;
           return true;
         }
       }

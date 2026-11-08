@@ -23,7 +23,7 @@ import 'dart:ui' show Offset;
 
 /// What kind of thing is on the clipboard, so Paste knows what to do with the
 /// text rather than guessing from its shape.
-enum ClipboardKind { layer, effects }
+enum ClipboardKind { layer, effects, masks }
 
 /// The one tray. Held by the shell state, read by the Edit menu.
 class LumitClipboard {
@@ -50,6 +50,12 @@ class LumitClipboard {
   /// the same way.
   void putEffects(String text) {
     _kind = ClipboardKind.effects;
+    _text = text;
+  }
+
+  /// Put masks down (from `LayerReference.copyMasks`).
+  void putMasks(String text) {
+    _kind = ClipboardKind.masks;
     _text = text;
   }
 
@@ -105,6 +111,9 @@ ClipboardKind? lumitDocumentKind(String text) {
     }
     if (decoded['kind'] == 'layers' && decoded['layers'] is List) {
       return ClipboardKind.layer;
+    }
+    if (decoded['kind'] == 'masks' && decoded['masks'] is List) {
+      return ClipboardKind.masks;
     }
     if (decoded['effects'] is List) return ClipboardKind.effects;
     return null;

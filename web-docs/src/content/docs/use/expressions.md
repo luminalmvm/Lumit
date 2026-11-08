@@ -51,6 +51,9 @@ caret after it. A reference Rhai has no word for, an effect's row, is written in
 JavaScript. A drop on a layer's name in the Timeline writes the layer alone. The editor's
 footer has the same mark: dragged onto a row, the reference lands at the caret.
 
+Without dragging, **Copy link** on the menu of the row to follow, then **Paste link** on the
+row that follows, does the same, for a row in another composition or scrolled out of view.
+
 ## Choose the language
 
 An expression is written in **JavaScript** or in **Rhai**, and each one keeps its own
@@ -174,6 +177,8 @@ expressions.
 - **Save** stores the script and its language under the name in the name field. A name
   already in the list is replaced.
 - Right-click an entry for **Apply**, **Rename…**, **Duplicate** and **Delete**.
+- **Wiggle**, **Loop**, **Bounce** and **Grow over time** come with Lumit, after your own.
+  **Duplicate** keeps one as yours to change.
 - **Apply** puts the script on every property row selected in the Timeline, in the language
   the dropdown shows. Double-clicking an entry does the same.
 - **Export…** writes every saved expression to one file. **Import…** adds a file's

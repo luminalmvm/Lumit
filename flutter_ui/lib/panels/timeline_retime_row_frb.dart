@@ -165,6 +165,7 @@ class _RetimeRowState extends State<RetimeRow> {
           comp: widget.comp,
           onSeek: widget.onSeek,
           rowKey: 'tl-retime',
+          navigatorApart: true,
           onWrite: (next) {
             widget.layer.setRetimeProperty(value: next.single);
             widget.onChanged();
@@ -207,6 +208,7 @@ class _RetimeRowState extends State<RetimeRow> {
                 ),
               ),
             ),
+            if (keys.trailingNavigator case final nav?) nav,
             SizedBox(
               width: widget.valueColumn.width,
               child: seconds

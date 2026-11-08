@@ -28,6 +28,7 @@ import '../shell/light_settings_dialog.dart';
 import '../widgets/time_readout.dart';
 import 'graph_channels.dart';
 import 'graph_maths.dart';
+import 'layer_fold_frb.dart' show RevealFilter;
 import 'timeline_extras_frb.dart';
 import 'timeline_metrics_frb.dart';
 
@@ -371,10 +372,15 @@ Widget _compToggleButton(
 /// razor row stays on the button: the ground has no razor to hand over.
 /// The empty ground under the outline's rows opens it too, with no [frame],
 /// so "here" is the playhead.
-/// What Expand all and Collapse all run, null for a row with nothing to do.
-typedef TimelineFoldRows = ({VoidCallback? expand, VoidCallback? collapse});
+/// What Expand all and Collapse all run, null for a row with nothing to do,
+/// and the reveals the Animation menu has.
+typedef TimelineFoldRows = ({
+  VoidCallback? expand,
+  VoidCallback? collapse,
+  ValueChanged<RevealFilter>? reveal,
+});
 
-/// The two rows, on the ground's menu and the headings' alike.
+/// The fold rows, on the ground's menu and the headings' alike.
 List<Widget> timelineFoldRows(TimelineFoldRows fold, VoidCallback close) {
   Widget row(String id, String text, String action, VoidCallback? run) =>
       MenuRow(
@@ -390,6 +396,12 @@ List<Widget> timelineFoldRows(TimelineFoldRows fold, VoidCallback close) {
     row('expand-all', l10n.expandAll, 'timeline.expand.all', fold.expand),
     row('collapse-all', l10n.collapseAll, 'timeline.collapse.all',
         fold.collapse),
+    if (fold.reveal case final reveal?) ...[
+      row('reveal-animated', l10n.menuRevealPropertiesWithKeyframes,
+          'reveal.animated', () => reveal(RevealFilter.keyframed)),
+      row('reveal-changed', l10n.menuRevealAllModifiedProperties,
+          'reveal.changed', () => reveal(RevealFilter.modified)),
+    ],
   ];
 }
 

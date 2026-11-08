@@ -206,20 +206,21 @@ List<MenuEntry> maskRows(BuildContext context, LumitState app, LumitUiState ui) 
   }
 
   return [
-    for (final mode in BridgeMaskMode.values)
-      MenuEntry(
-        maskModeLabel(mode),
-        picked == null
-            ? null
-            : () {
-                // The mode it has already makes no undo step.
-                if (picked.mask.mode != mode) {
-                  write(maskWith(picked.mask, mode: mode));
-                }
-              },
-        checked: picked?.mask.mode == mode,
-      ),
-    MenuEntry.divider(),
+    MenuEntry.submenu(l10n.menuMaskMode, [
+      for (final mode in BridgeMaskMode.values)
+        MenuEntry(
+          maskModeLabel(mode),
+          picked == null
+              ? null
+              : () {
+                  // The mode it has already makes no undo step.
+                  if (picked.mask.mode != mode) {
+                    write(maskWith(picked.mask, mode: mode));
+                  }
+                },
+          checked: picked?.mask.mode == mode,
+        ),
+    ]),
     // Null with nothing picked, like every row above it: an enabled row that
     // did nothing when pressed said "there is no mask" only to whoever pressed
     // it twice, where a greyed one says it before the click.
@@ -438,8 +439,7 @@ Map<BridgeTransformProp, double> freshTransform(
 /// a chained pair's other half is scaled by), and centring writes the middle of
 /// the composition onto the key at the playhead when position is keyed, exactly
 /// as typing into the row does.
-List<MenuEntry> transformRows(LumitState app, LumitUiState ui,
-    {bool fit = true}) {
+List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
   final comp = ui.selectedComp;
   final frame = ui.playheadFrame.value;
 
@@ -560,11 +560,9 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui,
       action: 'layer.centre.anchor',
     ),
     MenuEntry.divider(),
-    if (fit) ...[
-      ...fitRows(app, ui),
-      MenuEntry.submenu(l10n.transformOrient, _orientRows(app, ui)),
-      MenuEntry.divider(),
-    ],
+    ...fitRows(app, ui),
+    MenuEntry.submenu(l10n.transformOrient, _orientRows(app, ui)),
+    MenuEntry.divider(),
     ...axisModeRows(app, ui),
   ];
 }

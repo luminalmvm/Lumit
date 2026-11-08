@@ -20,6 +20,10 @@ import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show newExpressionLanguage;
 import 'fx_section.dart' show FxRowHover;
 
+/// What Copy link on a row's menu put down: the row, waiting to be named from
+/// wherever Paste link is pressed.
+PropertyRef? Function(PropertyLink link)? copiedLink;
+
 /// What a link drag carries: where it began, so the drop can write there.
 class PropertyLink {
   /// The layer the drag began on, for the short form of a reference.

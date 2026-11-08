@@ -162,7 +162,7 @@ void main() {
     for (final m in _messages(arb)) {
       // A plural or select branch such as `=0{Unpacked}` is text, not a
       // placeholder.
-      final branch = RegExp(r'(=\d+|(zero|one|two|few|many|other))\s*$');
+      final branch = RegExp(r'(=\d+|\b(zero|one|two|few|many|other))\s*$');
       final used = RegExp(r'\{(\w+)\}')
           .allMatches(m.value)
           .where((x) => !branch.hasMatch(m.value.substring(0, x.start)))

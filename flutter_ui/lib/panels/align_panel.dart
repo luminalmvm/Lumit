@@ -70,54 +70,59 @@ class AlignPanel extends StatelessWidget {
                 onMenu: (place) => _menu(context, place, app, ui, boxes),
               ),
             );
-        return Container(
-          color: t.surface0,
-          padding: const EdgeInsets.all(16),
-          child: LayoutBuilder(builder: (context, box) {
-            // The grids grow with the panel up to a size that still reads as a
-            // small control, side by side or stacked, whichever lets them be
-            // bigger. A label and its gap take about 22 high; the FittedBox
-            // catches anything that doesn't fit.
-            const label = 22.0, gap = 24.0;
-            final across = math.min((box.maxWidth - 2 * gap) / 3,
-                box.maxHeight - label - _footHeight);
-            final down = math.min(box.maxWidth,
-                (box.maxHeight - 2 * gap - _footHeight) / 3 - label);
-            final side =
-                math.min(math.max(math.max(across, down), 32.0), _largestGrid);
-            return Align(
-              alignment: AlignmentDirectional.topStart,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Flex(
-                  direction: across >= down ? Axis.horizontal : Axis.vertical,
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    grid(l10n.transformAnchorPoint, true, side),
-                    const SizedBox.square(dimension: gap),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        grid(l10n.alignComposition, false, side),
-                        _FitButtons(side: side, app: app, ui: ui),
-                      ],
-                    ),
-                    const SizedBox.square(dimension: gap),
-                    labelled(
-                      l10n.alignSelection,
-                      GestureDetector(
-                        onSecondaryTapDown: (d) => _menu(
-                            context, d.globalPosition, app, ui, boxes),
-                        child: _SelectionGrid(
-                            side: side, ui: ui, picked: boxes),
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapDown: (d) =>
+              _menu(context, d.globalPosition, app, ui, boxes),
+          child: Container(
+            color: t.surface0,
+            padding: const EdgeInsets.all(16),
+            child: LayoutBuilder(builder: (context, box) {
+              // The grids grow with the panel up to a size that still reads as a
+              // small control, side by side or stacked, whichever lets them be
+              // bigger. A label and its gap take about 22 high; the FittedBox
+              // catches anything that doesn't fit.
+              const label = 22.0, gap = 24.0;
+              final across = math.min((box.maxWidth - 2 * gap) / 3,
+                  box.maxHeight - label - _footHeight);
+              final down = math.min(box.maxWidth,
+                  (box.maxHeight - 2 * gap - _footHeight) / 3 - label);
+              final side =
+                  math.min(math.max(math.max(across, down), 32.0), _largestGrid);
+              return Align(
+                alignment: AlignmentDirectional.topStart,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Flex(
+                    direction: across >= down ? Axis.horizontal : Axis.vertical,
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      grid(l10n.transformAnchorPoint, true, side),
+                      const SizedBox.square(dimension: gap),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          grid(l10n.alignComposition, false, side),
+                          _FitButtons(side: side, app: app, ui: ui),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox.square(dimension: gap),
+                      labelled(
+                        l10n.alignSelection,
+                        GestureDetector(
+                          onSecondaryTapDown: (d) => _menu(
+                              context, d.globalPosition, app, ui, boxes),
+                          child: _SelectionGrid(
+                              side: side, ui: ui, picked: boxes),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }),
+              );
+            }),
+          ),
         );
       },
     );
@@ -129,18 +134,54 @@ class AlignPanel extends StatelessWidget {
     const middle = Offset(0.5, 0.5);
     final live = picked > 0;
     final on = ui.workspace.interface;
+    MenuEntry align(String label, double? x, double? y) => MenuEntry(
+        label, picked < 2 ? null : () => ui.requestArrange(x: x, y: y));
+    // By one point of every box, or with the same gap between them all.
+    List<MenuEntry> spread(Axis axis, List<String> by) => [
+          for (final (i, label) in by.indexed)
+            MenuEntry(
+                label,
+                picked < 3
+                    ? null
+                    : () => ui.requestArrange(distribute: axis, by: i / 2)),
+          MenuEntry.divider(),
+          MenuEntry(
+              l10n.alignEqualGaps,
+              picked < 3
+                  ? null
+                  : () => ui.requestArrange(distribute: axis, gaps: true)),
+        ];
     showMenuEntriesAt(context, at, [
+      MenuEntry.submenu(l10n.alignSelection, [
+        align(l10n.viewerAlignLeft, 0, null),
+        align(l10n.viewerAlignCentre, 0.5, null),
+        align(l10n.viewerAlignRight, 1, null),
+        MenuEntry.divider(),
+        align(l10n.viewerAlignTop, null, 0),
+        align(l10n.viewerAlignMiddle, null, 0.5),
+        align(l10n.viewerAlignBottom, null, 1),
+      ]),
+      MenuEntry.submenu(
+          l10n.alignDistributeAcross,
+          spread(Axis.horizontal, [
+            l10n.alignByLeftEdges,
+            l10n.alignByCentres,
+            l10n.alignByRightEdges,
+          ])),
+      MenuEntry.submenu(
+          l10n.alignDistributeDown,
+          spread(Axis.vertical, [
+            l10n.alignByTopEdges,
+            l10n.alignByMiddles,
+            l10n.alignByBottomEdges,
+          ])),
+      MenuEntry.divider(),
       MenuEntry(l10n.alignAnchorToCentre,
           live ? () => ui.requestAlign(middle, anchor: true) : null),
       MenuEntry(l10n.alignCentreInComp,
           live ? () => ui.requestAlign(middle, anchor: false) : null),
       MenuEntry.divider(),
       ...fitRows(app, ui),
-      MenuEntry.divider(),
-      MenuEntry(l10n.alignDistributeAcross,
-          picked < 3 ? null : () => ui.requestArrange(distribute: Axis.horizontal)),
-      MenuEntry(l10n.alignDistributeDown,
-          picked < 3 ? null : () => ui.requestArrange(distribute: Axis.vertical)),
       MenuEntry.divider(),
       MenuEntry(l10n.settingsAlignToFirstPicked, () {
         on.alignToFirstPicked = !on.alignToFirstPicked;

@@ -72,6 +72,10 @@ final class FoldGroupRow extends LayerFoldRow {
   /// True when [label] is a name somebody typed (a clip's source, a renamed
   /// effect), which is drawn as typed whatever the label case.
   final bool named;
+
+  /// Whether the Audio heading's waveform lane is open, for the tick on its
+  /// menu. Null on every other heading.
+  final bool? waveform;
   const FoldGroupRow({
     required this.path,
     required this.label,
@@ -80,6 +84,7 @@ final class FoldGroupRow extends LayerFoldRow {
     this.enabled,
     this.named = false,
     this.shown,
+    this.waveform,
   }) : super(depth);
 }
 
@@ -3062,6 +3067,7 @@ List<LayerFoldRow> layerFoldRows({
       label: l10n.workspaceAudio,
       open: audioOpen,
       depth: 1,
+      waveform: audioOpen && open.contains(waveformPath(id)),
     ));
     if (audioOpen) {
       rows.add(FoldVolumeRow(scalar: volumeDb, depth: 2));

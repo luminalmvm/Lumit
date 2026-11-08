@@ -2,8 +2,8 @@
 
 use super::*;
 
-/// The copy sits right after its original with the same keys, and one undo
-/// takes it away again.
+/// The copy sits right after its original with the same keys and a name of
+/// its own, and one undo takes it away again.
 #[test]
 fn a_duplicated_effect_follows_its_original_with_its_keys() {
     let (project, layer) = project_with_layer();
@@ -36,6 +36,11 @@ fn a_duplicated_effect_follows_its_original_with_its_keys() {
         after[1].get_value("radius".into()).expect("radius"),
         before[0].get_value("radius".into()).expect("radius"),
         "the copy keeps its keys where they were"
+    );
+    assert_eq!(
+        after[1].get_info().custom_name.as_deref(),
+        Some("Gaussian blur 2"),
+        "the copy has a name of its own, so a link or an expression reaches it"
     );
 
     project.undo().expect("undone");

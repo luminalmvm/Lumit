@@ -17,8 +17,11 @@ import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show addExpressionRow;
 import '../widgets/controls.dart';
 import 'drive_chain.dart';
+import 'effect_param_row_frb.dart' show newExpressionLanguage;
 import 'graph_channels.dart' show graphChannels;
 import 'keyframe_controls_frb.dart';
+import 'property_link.dart';
+import '../state/expression_language.dart' show PropertyRef;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// What one property row can do from its menu. Anything left null is a row the
@@ -38,7 +41,17 @@ class ParamMenu {
     this.host,
     this.onCurves = false,
     this.drive,
+    this.linkTo,
+    this.linkFrom,
   });
+
+  /// This row as something another row can follow, for Copy link: what the
+  /// drop of a link drag on it would name.
+  final PropertyRef? Function(PropertyLink link)? linkTo;
+
+  /// This row as the one that follows, for Paste link: what its link mark
+  /// would drag.
+  final PropertyLink? linkFrom;
 
   /// What Drive with can wire onto this row. Null on a row that takes no
   /// driver at all.
@@ -58,7 +71,7 @@ class ParamMenu {
       List<Widget> Function(VoidCallback close) rows)? host;
 
   /// The row's stopwatch, for adding and removing keyframes.
-  final KeyframeControlsFrb? keys;
+  final RowKeys? keys;
   final VoidCallback? reset;
 
   /// False while the value is already at its default. The row stays in the menu
@@ -426,6 +439,18 @@ List<Widget> _driveRows(
   ];
 }
 
+/// Paste link: the copied row, written as this row's expression and opened
+/// in the editor, as a link dragged here would be. Greyed with nothing copied
+/// that this row can name.
+Widget _pasteLink(BuildContext context, PropertyLink link, VoidCallback done) {
+  final ref = copiedLink?.call(link);
+  final got = ref == null ? null : link.textFor(ref, newExpressionLanguage(context));
+  return _row('param-menu-paste-link', l10n.paramMenuPasteLink, () {
+    done();
+    if (got case (final text, final language)) link.write?.call(text, language);
+  }, enabled: got != null);
+}
+
 /// The groups in order, with the menu divider between those that have rows.
 List<Widget> menuGroups(List<List<Widget>> groups) {
   final out = <Widget>[];
@@ -486,6 +511,13 @@ List<Widget> _rows(BuildContext context, ParamMenu menu, VoidCallback done) {
           if (text == null) return;
           edit == null ? paste(text) : edit.run(true, () => paste(text));
         }),
+      if (menu.linkTo case final to?)
+        _row('param-menu-copy-link', l10n.paramMenuCopyLink, () {
+          done();
+          copiedLink = to;
+        }),
+      if (menu.linkFrom case final link?)
+        _pasteLink(context, link, done),
     ],
     [
       if (keys != null) ...[

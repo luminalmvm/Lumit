@@ -299,6 +299,13 @@ class CompTabsFrb extends StatelessWidget {
         fallback: comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
       );
 
+  /// Close every tab but the one at [i], which fronts.
+  void _closeOtherTabs(List<(CompositionReference, String)> comps, int i) {
+    for (final (j, (comp, _)) in comps.indexed) {
+      if (j != i) uiState.closeComp(comp.internalid, fallback: comps[i].$1);
+    }
+  }
+
   /// One draggable tab per open comp, in strip order.
   List<Widget> _tabs(
     BuildContext context,
@@ -333,6 +340,9 @@ class CompTabsFrb extends StatelessWidget {
                   position: position,
                   onChanged: uiState.model.refresh,
                   onClose: () => _closeTab(comps, i),
+                  onCloseOthers: comps.length < 2
+                      ? null
+                      : () => _closeOtherTabs(comps, i),
                 ),
                 closeKey:
                     ValueKey<String>('tl-tab-close-${comps[i].$1.internalid}'),
@@ -577,6 +587,7 @@ Future<void> showMarkerMenuFrb({
   int? regionRoom,
   int regionFrames = 1,
   String keyPrefix = 'marker-menu',
+  VoidCallback? onGoTo,
 }) async {
   final isRegion = (marker.durationFrames ?? 0) > 0;
   // A region as long as was asked for, or as long as there is room for.
@@ -589,6 +600,12 @@ Future<void> showMarkerMenuFrb({
     context: context,
     position: position,
     rows: (close) => [
+      if (onGoTo != null)
+        MenuRow(
+          key: ValueKey<String>('$keyPrefix-go-to'),
+          onPressed: () => close('go-to'),
+          child: Text(l10n.markerGoTo),
+        ),
       MenuRow(
         key: ValueKey<String>('$keyPrefix-edit'),
         onPressed: () => close('edit'),
@@ -633,6 +650,8 @@ Future<void> showMarkerMenuFrb({
           if (m.id == marker.id) edit(m) else m,
       ]);
   switch (picked) {
+    case 'go-to':
+      onGoTo?.call();
     case 'edit':
       final edited = await showMarkerSettingsFrb(
           context: context, marker: marker, spans: regionRoom != null);
@@ -734,6 +753,7 @@ Future<void> showCompTabMenuFrb({
   required Offset position,
   required VoidCallback onChanged,
   VoidCallback? onClose,
+  VoidCallback? onCloseOthers,
 }) async {
   final app = Provider.of<LumitState>(context, listen: false);
   final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -768,6 +788,12 @@ Future<void> showCompTabMenuFrb({
           onPressed: () => close('close'),
           child: Text(l10n.close),
         ),
+        MenuRow(
+          key: const ValueKey('tl-tab-menu-close-others'),
+          enabled: onCloseOthers != null,
+          onPressed: () => close('close-others'),
+          child: MenuLabel(l10n.closeOtherTabs, enabled: onCloseOthers != null),
+        ),
       ],
     ],
   );
@@ -781,6 +807,8 @@ Future<void> showCompTabMenuFrb({
       openFlowchartFrb(context, ui);
     case 'close':
       onClose?.call();
+    case 'close-others':
+      onCloseOthers?.call();
   }
 }
 
@@ -2198,6 +2226,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
       // A new region starts a second long, which is long enough to see and to
       // take hold of at any zoom the whole comp fits in.
       regionFrames: max(1, widget.fps.round()),
+      onGoTo: () => widget.onSeek(frameAtTime(widget.comp, marker.time)),
     );
   }
 

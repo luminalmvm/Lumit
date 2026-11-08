@@ -813,6 +813,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       // fold-out draws the same rows against its own column group and keeps
       // the loose layout.
       fixedColumns: widget.twoColumn && widget.valueColumn == null,
+      navigatorApart: widget.valueColumn != null,
       // An Orientation keys the turn shown, not each angle off its own curve.
       valuesAt: _isOrientation(group.axes.first.prop)
           ? (time) {
@@ -836,7 +837,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
     // The name is the row's handle for the graph editor, so it is built once
     // and drawn by whichever layout the row takes.
-    final menu = _menu(group, keyframes, cells);
+    final menu = _menu(group, keyframes, cells, transform);
     Widget name(double lit) => GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onLabelTap,
@@ -923,6 +924,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           keyframes,
           const SizedBox(width: 4),
           Expanded(child: label),
+          if (widget.valueColumn != null)
+            if (keyframes.trailingNavigator case final nav?) nav,
           if (mark != null) mark,
           if (widget.valueColumn case final col?) ...[
             SizedBox(
@@ -1359,8 +1362,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 
   /// What this row's right-click menu offers.
-  ParamMenu _menu(
-      TransformGroup group, KeyframeControlsFrb keys, List<TransformAxis> cells) {
+  ParamMenu _menu(TransformGroup group, KeyframeControlsFrb keys,
+      List<TransformAxis> cells, BridgeTransform transform) {
     final props = [for (final axis in group.axes) axis.prop];
     final defaults = [for (final p in props) _defaultOf(p)];
     final canDefault = defaults.every((d) => d != null);
@@ -1400,6 +1403,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
             shown(p).toString(), newExpressionLanguage(context)));
 
     return ParamMenu(
+      linkTo: (link) => _linkRef(link, group, cells),
+      linkFrom: _link(group, transform),
       own: group.pair != null || _turnsIn3d(group)
           ? (close) => _ownRows(group, close)
           : null,
@@ -1558,27 +1563,32 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// The mark a link is dragged from: the reference lands on every axis of
   /// the row as one op, and the editor opens on the first.
   Widget? _linkMark(TransformGroup group, BridgeTransform transform) {
+    final link = _link(group, transform);
+    return link == null
+        ? null
+        : LinkMark(name: engineLabel(group.label), link: link);
+  }
+
+  /// What this row's link mark drags, and Paste link writes through.
+  PropertyLink? _link(TransformGroup group, BridgeTransform transform) {
     final props = [for (final axis in group.axes) axis.prop];
     if (group.colour ||
         props.any((p) => read(transform, p) is BridgeScalar_Expression)) {
       return null;
     }
-    return LinkMark(
-      name: engineLabel(group.label),
-      link: PropertyLink(
-        layer: widget.layer.internallayerId,
-        from: {for (final p in props) (widget.layer.internallayerId, p)},
-        write: (text, language) {
-          _throttle.cancel();
-          _clearLive();
-          noteSetExpression(select: false);
-          widget.layer.setTransforms(props: props, values: [
-            for (final _ in props) BridgeScalar.expression(text, language),
-          ]);
-          setState(() => _staged = null);
-          widget.onChanged();
-        },
-      ),
+    return PropertyLink(
+      layer: widget.layer.internallayerId,
+      from: {for (final p in props) (widget.layer.internallayerId, p)},
+      write: (text, language) {
+        _throttle.cancel();
+        _clearLive();
+        noteSetExpression(select: false);
+        widget.layer.setTransforms(props: props, values: [
+          for (final _ in props) BridgeScalar.expression(text, language),
+        ]);
+        setState(() => _staged = null);
+        widget.onChanged();
+      },
     );
   }
 
@@ -1638,8 +1648,7 @@ void showTransformMenu(BuildContext context, Offset at, LayerReference layer,
               },
         action: 'keyframe.toggle'),
     MenuEntry.divider(),
-    // The heading has its Orient row right under it, and a long list already.
-    ...transformRows(app, ui, fit: false),
+    ...transformRows(app, ui),
     MenuEntry.divider(),
     MenuEntry(l10n.menuCopy, () {
       _copiedTransform = {

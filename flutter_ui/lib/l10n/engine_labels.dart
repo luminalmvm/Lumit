@@ -1909,6 +1909,7 @@ Map<String, String> get _built => {
       "Reveal Effects": l10n.keyRevealEffects,
       "Reveal Masks": l10n.keyRevealMasks,
       "Reveal animated properties": l10n.keyRevealAnimatedProperties,
+      "Reveal changed properties": l10n.keyRevealChangedProperties,
       "Reveal Volume": l10n.keyRevealVolume,
       "Reveal Audio, again for the waveform":
           l10n.keyRevealAudioAgainForTheWaveform,

@@ -36,7 +36,7 @@ A file or solid no composition uses has a muted name.
 | --- | --- |
 | **Items** | How many things a folder holds. |
 | **Size** | Pixel dimensions, or a sound file's sample rate. |
-| **FPS** | Frame rate, or a sound file's channels. |
+| **FPS** | Frame rate. Blank for sound. |
 | **Duration** | Length as `HH:MM:SS:FF` at the item's own rate; `HH:MM:SS:mmm` for sound. Blank for folders and stills. |
 | **Date** | When a footage item's file was last changed. |
 | **Path** | The folder a footage item's file is in. |
@@ -90,7 +90,8 @@ A click selects. A double-click **opens** the row.
 
 Footage, composition and solid rows drag onto the Timeline, where a composition lands as a
 Precomp layer and a solid as a Solid layer. **Add to composition** on the row's menu does the
-same. Dropped onto **New composition** on the bottom bar instead, they raise the same New
+same, and **Reveal in composition**, or a click on the card's uses line, opens the first
+composition that uses the item with those layers selected. Dropped onto **New composition** on the bottom bar instead, they raise the same New
 composition dialogue with the media's size, rate and length filled in, and every dropped item
 lands in the finished composition as a layer.
 

@@ -16,6 +16,7 @@ import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import 'fx_section.dart';
+import 'param_row_menu.dart';
 import 'transform_rows_frb.dart';
 
 /// What a layer's Orient can be. Towards camera is for a 3D layer, and stays on
@@ -273,7 +274,72 @@ class LayerSettingRowFrb extends StatelessWidget {
       onChanged();
     }
 
+    void lights(bool on) {
+      layer.setSwitch(switch_: BridgeLayerSwitch.acceptsLights, on_: on);
+      onChanged();
+    }
+
     final key = ValueKey<String>('$keyPrefix-${setting.name}');
+    // The row's menu: its choices by name with the one in force ticked, or its
+    // tick, then Reset, so the row answers a right press as every row does.
+    ParamMenu menuOf<T>(List<T> options, T now, String Function(T) label,
+            ValueChanged<T> pick, T fallback) =>
+        ParamMenu(
+          own: (close) => [
+            for (final (i, o) in options.indexed)
+              MenuRow(
+                key: ValueKey<String>('$keyPrefix-${setting.name}-menu-$i'),
+                onPressed: () {
+                  close();
+                  if (o != now) pick(o);
+                },
+                child: MenuLabel(label(o), ticked: o == now),
+              ),
+          ],
+          reset: () => pick(fallback),
+          canReset: now != fallback,
+        );
+    final menu = switch (setting) {
+      LayerSetting.orient => menuOf(
+          orientChoices(threeD: threeD, kind: kind, now: orient),
+          orient,
+          orientLabel,
+          (o) {
+            layer.setOrient(orient: o);
+            onChanged();
+          },
+          BridgeOrient.off),
+      LayerSetting.lightType => menuOf(BridgeLightKind.values, s.kind,
+          lightKindLabel, (k) => write(lightSettingsWith(s, kind: k)),
+          plainLight.kind),
+      LayerSetting.lightSource => ParamMenu(
+          reset: () => write(lightSettingsWith(s, source: (null,))),
+          canReset: s.source != null),
+      LayerSetting.lightBackground => menuOf(
+          const [true], s.background, (_) => setting.label,
+          (_) => write(lightSettingsWith(s, background: !s.background)),
+          plainLight.background),
+      LayerSetting.lightFalloff => menuOf(
+          BridgeLightFalloff.values,
+          s.falloff,
+          lightFalloffLabel,
+          (f) => write(lightSettingsWith(s, falloff: f)),
+          plainLight.falloff),
+      LayerSetting.lightCastsShadows => menuOf(
+          const [true], s.castsShadows, (_) => setting.label,
+          (_) => write(lightSettingsWith(s, castsShadows: !s.castsShadows)),
+          plainLight.castsShadows),
+      LayerSetting.castsShadows => menuOf(BridgeShadowMode.values,
+          m.castsShadows, shadowModeLabel, (v) => shadows(casts: v),
+          plainMaterial.castsShadows),
+      LayerSetting.acceptsShadows => menuOf(BridgeShadowMode.values,
+          m.acceptsShadows, shadowModeLabel, (v) => shadows(accepts: v),
+          plainMaterial.acceptsShadows),
+      LayerSetting.holdout => menuOf(const [true], m.holdout,
+          (_) => setting.label, (_) => shadows(holdout: !m.holdout), false),
+      LayerSetting.acceptsLights => menuOf(const [true], acceptsLights,
+          (_) => setting.label, (_) => lights(!acceptsLights), true),
+    };
     final control = switch (setting) {
       LayerSetting.orient => BareDropdown<BridgeOrient>(
           key: key,
@@ -361,11 +427,7 @@ class LayerSettingRowFrb extends StatelessWidget {
           child: HouseCheckbox(
             key: key,
             value: acceptsLights,
-            onChanged: (on) {
-              layer.setSwitch(
-                  switch_: BridgeLayerSwitch.acceptsLights, on_: on);
-              onChanged();
-            },
+            onChanged: lights,
           ),
         ),
     };
@@ -373,20 +435,27 @@ class LayerSettingRowFrb extends StatelessWidget {
         style: t.body, overflow: TextOverflow.ellipsis);
     final col = valueColumn;
     if (col == null) {
-      return fxTwoColumnRow(context: context, name: name, control: control);
+      return ParamRowMenu(
+        menu: menu,
+        child: fxTwoColumnRow(context: context, name: name, control: control),
+      );
     }
-    return Row(
-      children: [
-        // Where a stopwatch's button and the gap after it would be, so the
-        // name lines up with the keyframed rows'.
-        const SizedBox(width: fxKeyframeGutter + 10),
-        Expanded(child: name),
-        SizedBox(
-          width: col.width,
-          child: Align(alignment: AlignmentDirectional.centerStart, child: control),
-        ),
-        SizedBox(width: col.rightInset),
-      ],
+    return ParamRowMenu(
+      menu: menu,
+      child: Row(
+        children: [
+          // Where a stopwatch's button and the gap after it would be, so the
+          // name lines up with the keyframed rows'.
+          const SizedBox(width: fxKeyframeGutter + 10),
+          Expanded(child: name),
+          SizedBox(
+            width: col.width,
+            child: Align(
+                alignment: AlignmentDirectional.centerStart, child: control),
+          ),
+          SizedBox(width: col.rightInset),
+        ],
+      ),
     );
   }
 }

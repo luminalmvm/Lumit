@@ -46,7 +46,7 @@ import 'timeline_mask_rows_frb.dart';
 import 'timeline_puppet_rows_frb.dart';
 import 'timeline_shape_rows_frb.dart';
 import 'timeline_retime_row_frb.dart';
-import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
+import 'timeline_layer_menu_frb.dart' show audioRows, showMenuEntriesAt;
 import 'viewer_shapes.dart' show shapePath;
 
 /// The Timeline with no composition open: the placeholder, and a drop target
@@ -344,7 +344,32 @@ class FoldRow extends StatelessWidget {
     }
     if (path == effectsPath(id)) return _effectsMenu;
     if (path == masksPath(id)) return _masksMenu;
+    if (path == audioPath(id)) return _audioMenu;
     return null;
+  }
+
+  /// Audio: its waveform lane, then the Layer menu's own Audio rows.
+  void _audioMenu(BuildContext context, Offset at) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = _aboutThisLayer(context);
+    final entry = ui.model.byId(layer.internallayerId);
+    if (entry == null) return;
+    final id = layer.internallayerId.toString();
+    final wave = row is FoldGroupRow && ((row as FoldGroupRow).waveform ?? false);
+    final fold = onFoldPaths;
+    showMenuEntriesAt(context, at, [
+      MenuEntry(l10n.foldWaveform, () {
+        if (fold == null) {
+          onToggle(waveformPath(id));
+        } else if (wave) {
+          fold([waveformPath(id)], false);
+        } else {
+          fold([audioPath(id), waveformPath(id)], true);
+        }
+      }, action: 'reveal.audio', checked: wave),
+      MenuEntry.divider(),
+      ...audioRows(app, ui, entry),
+    ]);
   }
 
   /// The layer the heading belongs to, selected, so the shell's rows act on
@@ -476,8 +501,6 @@ class FoldRow extends StatelessWidget {
     commands.showMenu(
       context,
       at,
-      // The keymap's Enter renames in Effect controls, not here.
-      renameChord: false,
       onStartRename: commands.group == null && commands.clip == null
           ? () => foldEffectRenaming.value = path
           : null,
@@ -1176,6 +1199,7 @@ class _FlowRow extends StatelessWidget {
             comp: comp,
             onSeek: onSeek,
             rowKey: 'tl-flow-rate',
+            navigatorApart: true,
             onWrite: (next) {
               layer.setFlowInputRate(value: next.single);
               onChanged();
@@ -1183,7 +1207,7 @@ class _FlowRow extends StatelessWidget {
           );
     final line = Row(
       children: [
-        keys ?? const SizedBox(width: fxKeyframeGutter),
+        keys ?? const SizedBox(width: fxKeyframeGutter + 6),
         const SizedBox(width: 4),
         Expanded(
           child: HoverMark(
@@ -1200,6 +1224,7 @@ class _FlowRow extends StatelessWidget {
             ),
           ),
         ),
+        if (keys?.trailingNavigator case final nav?) nav,
         SizedBox(width: valueColumn.width, child: control),
       ],
     );
@@ -1316,6 +1341,7 @@ class _VolumeRowState extends State<_VolumeRow> {
           comp: widget.comp,
           onSeek: widget.onSeek,
           rowKey: widget.rowKey,
+          navigatorApart: true,
           onWrite: (next) {
             _write(next.single);
             widget.onChanged();
@@ -1330,6 +1356,7 @@ class _VolumeRowState extends State<_VolumeRow> {
               Expanded(
                   child: Text(widget.label ?? t.propertyCase(l10n.volume),
                       style: t.body)),
+              if (keys.trailingNavigator case final nav?) nav,
               if (widget.trailing != null) widget.trailing!,
               SizedBox(
                 width: widget.valueColumn.width,

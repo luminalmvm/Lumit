@@ -2978,6 +2978,16 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceApplyMaterialPreset(
           that: this, material: material, text: text, atFrame: atFrame);
 
+  /// Set `effect` to the settings a saved preset of its kind holds, as one
+  /// undo step. Its name, its id and whether it is on stay; any keyframes
+  /// start at comp frame `at_frame`, the playhead.
+  void applySavedPreset(
+          {required BridgeEffectInstance effect,
+          required String text,
+          required int atFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceApplySavedPreset(
+          that: this, effect: effect, text: text, atFrame: atFrame);
+
   /// Ask the render for this layer's mesh before it has a puppet — what
   /// arming a puppet tool does, and what makes the first pin placeable
   /// (docs/impl/puppet.md §5).
@@ -3314,6 +3324,11 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceCopyMaskPathKeys(
           that: this, id: id, times: times);
 
+  /// The masks named by `masks`, in stack order, as a document for
+  /// [`Self::paste_masks`]. Their keys keep the layer's own times.
+  String copyMasks({required List<UuidValue> masks}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceCopyMasks(that: this, masks: masks);
+
   /// The shape of this Sequence layer — where its cuts fall and how each
   /// piece is ramped — as text, for [`Self::paste_sequence_shape`].
   ///
@@ -3439,6 +3454,12 @@ class LayerReference {
   List<UuidValue> duplicateEffects({required List<UuidValue> effects}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceDuplicateEffects(
           that: this, effects: effects);
+
+  /// Copy each of `masks` in place, each copy right after its original, as
+  /// one undo step. Answers the copies' ids, in stack order.
+  List<UuidValue> duplicateMasks({required List<UuidValue> masks}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceDuplicateMasks(that: this, masks: masks);
 
   bool equals({required LayerReference layer}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
@@ -4156,6 +4177,12 @@ class LayerReference {
           required List<BridgeRational> to}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferencePasteMaskPathKeys(
           that: this, id: id, copied: copied, times: times, to: to);
+
+  /// Put the masks of a [`Self::copy_masks`] document on top of this layer's
+  /// stack, each with a fresh id and a name of its own, as one undo step.
+  /// Answers their ids.
+  List<UuidValue> pasteMasks({required String text}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferencePasteMasks(that: this, text: text);
 
   /// Cut and ramp this Sequence layer to the shape in `text`, keeping its
   /// own media.

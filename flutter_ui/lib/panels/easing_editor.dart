@@ -462,14 +462,19 @@ class _EasingEditorState extends State<EasingEditor>
       // scroll it away. The Listener does the work, from the first pointer-down.
       HouseContextMenu(
         itemBuilder: (close) => [
-          MenuRow(
-            enabled: apply != null,
-            onPressed: () {
-              close();
-              apply?.call(_curve, EaseSides.both);
-            },
-            child: MenuLabel(l10n.apply, enabled: apply != null),
-          ),
+          for (final (label, sides) in [
+            (l10n.apply, EaseSides.both),
+            (l10n.easingApplyIn, EaseSides.into),
+            (l10n.easingApplyOut, EaseSides.outOf),
+          ])
+            MenuRow(
+              enabled: apply != null,
+              onPressed: () {
+                close();
+                apply?.call(_curve, sides);
+              },
+              child: MenuLabel(label, enabled: apply != null),
+            ),
           const MenuDivider(),
           MenuRow(
             onPressed: () {

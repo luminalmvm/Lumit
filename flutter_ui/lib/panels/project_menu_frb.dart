@@ -11,7 +11,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart'
     show BridgeFootageHere, BridgeFootageShare;
@@ -25,6 +27,7 @@ import '../shell/interpret_footage_frb.dart';
 import '../shell/model_settings_dialog.dart'
     show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/status_line_frb.dart';
+import '../state/dock.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -34,6 +37,7 @@ enum _ProjectMenuAction {
   open,
   export,
   addToComp,
+  revealInComp,
   newCompFromSelection,
   openInSource,
   toggleFolder,
@@ -401,9 +405,13 @@ Future<void> showProjectMenuFrb({
               row(_ProjectMenuAction.export, l10n.menuExport,
                   key: 'export', enabled: !several),
             ],
-            if (item is! ItemReference_Folder)
+            if (item is! ItemReference_Folder) ...[
               row(_ProjectMenuAction.addToComp, l10n.projectAddToComp,
                   key: 'add-to-comp', enabled: placeable),
+              row(_ProjectMenuAction.revealInComp,
+                  l10n.projectRevealInComposition,
+                  key: 'reveal-in-comp', enabled: !several && _used(item)),
+            ],
             if (isFootage) ...[
               row(_ProjectMenuAction.newCompFromSelection,
                   l10n.projectNewCompFromSelection,
@@ -666,6 +674,8 @@ Future<void> showProjectMenuFrb({
     case _ProjectMenuAction.addToComp:
       addItemsToOpenComp(context, acts);
       onLocalEdit();
+    case _ProjectMenuAction.revealInComp:
+      revealInComposition(ui, item);
     case _ProjectMenuAction.newCompFromSelection:
       onNewComposition?.call([
         for (final target in acts)
@@ -954,12 +964,11 @@ String projectColumnName(ProjectColumn column) => switch (column) {
     };
 
 /// The menu on the column headings: which columns show, how the list is
-/// sorted, and back to how it all started. A column with no room at this width
-/// is greyed, since the panel would not draw it.
+/// sorted, and back to how it all started. A tick is the choice; a column
+/// with no room at this width comes back once the panel is wide enough.
 void showProjectColumnMenu({
   required BuildContext context,
   required Offset position,
-  required ProjectColumns room,
   required Set<ProjectColumn> hidden,
   required ValueChanged<ProjectColumn> onToggle,
   required ProjectColumn? sort,
@@ -979,13 +988,11 @@ void showProjectColumnMenu({
             if (column != ProjectColumn.name)
               MenuRow(
                 key: ValueKey<String>('project-column-${column.name}'),
-                enabled: room.shows(column),
                 onPressed: () {
                   close(null);
                   onToggle(column);
                 },
                 child: MenuLabel(projectColumnName(column),
-                    enabled: room.shows(column),
                     ticked: !hidden.contains(column)),
               ),
           const MenuDivider(),
@@ -1081,4 +1088,38 @@ String _filePathOf(FootageReference footage) {
   } catch (_) {
     return '';
   }
+}
+
+/// Whether anything shows [item]. Read as a menu opens, never in a build.
+bool _used(ItemReference item) {
+  try {
+    return item.uses() > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Open the first composition that shows [item], with the layers there that
+/// show it selected, and front the Timeline. False when nothing does.
+bool revealInComposition(LumitUiState ui, ItemReference item) {
+  final List<LayerReference> uses;
+  try {
+    uses = item.usedBy();
+  } catch (_) {
+    return false;
+  }
+  final first = uses.firstOrNull;
+  if (first == null) return false;
+  ui.setSelectedComp(CompositionReference(
+      internalproject: first.internalprojectId,
+      internalid: first.internalcompId));
+  ui.model.refresh();
+  ui.setSelection([
+    for (final layer in uses)
+      if (layer.internalcompId == first.internalcompId) layer,
+  ]);
+  setPanelVisible(ui.split, Panel.timeline, true);
+  activatePanelTab(ui.split, Panel.timeline);
+  ui.workspace.touch();
+  return true;
 }
