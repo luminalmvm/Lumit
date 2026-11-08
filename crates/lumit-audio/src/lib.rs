@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::sync::Arc;
 
 pub mod beat;
+mod loudness;
 pub mod meter;
 pub mod mix;
 pub mod peaks;
@@ -352,12 +353,22 @@ impl AudioEngine {
         let mut scrub = Scrub::default();
         let mut edge = Edge::default();
         let mut stretch = slow::Stretch::new(device_rate);
+        let mut loudness = loudness::Loudness::new(device_rate);
 
         let stream = device
             .build_output_stream(
                 &config.config(),
                 move |out: &mut [f32], _| {
-                    fill_smooth(&cb, &mut scrub, &mut edge, &mut stretch, out, channels)
+                    let meter = &mut loudness;
+                    fill_smooth(
+                        &cb,
+                        &mut scrub,
+                        &mut edge,
+                        &mut stretch,
+                        meter,
+                        out,
+                        channels,
+                    )
                 },
                 |_err| { /* device hiccup: next callback continues; never panic */ },
                 None,
@@ -409,6 +420,8 @@ impl AudioEngine {
         self.shared.playing.store(false, Ordering::Relaxed);
         *self.shared.plan.write() = Some(plan);
         self.shared.playhead.store(0, Ordering::Relaxed);
+        // Another composition: its loudness is measured from the start.
+        self.shared.meters.reset_loudness();
         self.filler.unpark();
     }
 
@@ -606,14 +619,22 @@ fn fill_smooth(
     scrub: &mut Scrub,
     edge: &mut Edge,
     stretch: &mut slow::Stretch,
+    loudness: &mut loudness::Loudness,
     out: &mut [f32],
     channels: usize,
 ) {
+    if shared.meters.take_loudness_reset() {
+        loudness.reset();
+    }
     let playing = shared.playing.load(Ordering::Relaxed);
     let began = shared.playhead.load(Ordering::Relaxed);
-    if !stretch.fill(shared, scrub, out, channels) {
-        fill(shared, scrub, out, channels);
+    if stretch.fill(shared, scrub, out, channels) {
+        // Slowed down is not the mix as it will be heard, so it is not measured.
+        loudness.pause();
+    } else {
+        fill(shared, scrub, Some(&mut *loudness), out, channels);
     }
+    shared.meters.publish_loudness(loudness.reading());
     if channels == 0 {
         return;
     }
@@ -637,14 +658,24 @@ fn fill_smooth(
 /// Each buffer is summed live from the plan's clips sounding in it
 /// ([`mix::MixPlan::mix_into`]), which is what lets an edit swap the plan and
 /// be heard immediately. A clip whose block is not in memory yet is silence
-/// for those frames, and they are counted.
-fn fill(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
+/// for those frames, and they are counted. The master's loudness is measured
+/// into `loudness` when one is given.
+fn fill(
+    shared: &Shared,
+    scrub: &mut Scrub,
+    mut loudness: Option<&mut loudness::Loudness>,
+    out: &mut [f32],
+    channels: usize,
+) {
     out.fill(0.0);
     if channels == 0 {
         return;
     }
     if !shared.playing.load(Ordering::Relaxed) {
         shared.meters.silence();
+        if let Some(loudness) = loudness {
+            loudness.pause();
+        }
         fill_scrub(shared, scrub, out, channels);
         return;
     }
@@ -657,6 +688,9 @@ fn fill(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
     };
     let Some(plan) = guard.as_ref() else {
         shared.meters.silence();
+        if let Some(loudness) = loudness {
+            loudness.pause();
+        }
         return;
     };
     let total = plan.total_frames;
@@ -672,6 +706,9 @@ fn fill(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
         let frames = wanted.min(total.saturating_sub(playhead));
         let mixed = &mut scratch[..frames * 2];
         missed += plan.mix_into(playhead, mixed, Some(&mut acc));
+        if let Some(loudness) = loudness.as_deref_mut() {
+            loudness.add(mixed);
+        }
         for (frame, s) in chunk.chunks_exact_mut(channels).zip(mixed.chunks_exact(2)) {
             frame[0] = s[0];
             if channels > 1 {

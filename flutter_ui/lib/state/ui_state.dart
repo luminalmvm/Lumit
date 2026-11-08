@@ -3891,16 +3891,89 @@ class LumitUiState extends ChangeNotifier {
   /// playhead moves to the end of what was placed, ready for the next.
   void placeSource(ViewerSurface view, {required bool insert}) {
     final comp = _selectedComp;
+    final marked = _marked(view);
+    if (comp == null || marked == null) return;
+    final at = playheadFrame.value;
+    final done = _sourceEdit(() => comp.cutPlace(
+          target: _sourceTarget(),
+          footage: marked.footage,
+          sourceIn: marked.from,
+          sourceOut: marked.to,
+          atFrame: at,
+          insert: insert,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+    if (!done) return;
+    final placed = (marked.seconds * model.fps).round();
+    final end = model.durationFrames - 1;
+    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+  }
+
+  /// The source side's Replace: the source from its In over the clip picked
+  /// in the Cut timeline, which keeps its place and its length.
+  void replaceSource(ViewerSurface view) {
+    final comp = _selectedComp;
+    final picked = cutClip.value;
+    final marked = _marked(view);
+    if (comp == null || picked == null || marked == null) return;
+    _sourceEdit(() => comp.cutReplace(
+          clip: picked.clip,
+          footage: marked.footage,
+          sourceIn: marked.from,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+  }
+
+  /// The source side's Fit to fill: the marked stretch over the work area, at
+  /// whatever speed fills it. The playhead moves to the end of it.
+  void fitSource(ViewerSurface view) {
+    final comp = _selectedComp;
+    final marked = _marked(view);
+    if (comp == null || marked == null) return;
+    final done = _sourceEdit(() => comp.cutFitToFill(
+          target: _sourceTarget(),
+          footage: marked.footage,
+          sourceIn: marked.from,
+          sourceOut: marked.to,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+    final work = done ? comp.getWorkArea() : null;
+    if (work == null) return;
+    final end = model.durationFrames - 1;
+    playheadFrame.value =
+        comp.frameAtTime(time: work.outPoint).clamp(0, end < 0 ? 0 : end);
+  }
+
+  /// A footage view's marked stretch as source times, unmarked ends reading
+  /// as the item's own, and how many seconds it runs.
+  ({FootageReference footage, BridgeRational from, BridgeRational to,
+      double seconds})? _marked(ViewerSurface view) {
     final footage = footageOf(view);
     final facts = footage == null ? null : itemFacts(footage);
-    if (comp == null || footage == null || facts == null) return;
-    if (facts.fpsNum <= 0) return;
+    if (footage == null || facts == null || facts.fpsNum <= 0) return null;
     final frames = framesOf(facts);
     final first = (view.sourceIn ?? 0).clamp(0, frames - 1);
     final last = (view.sourceOut ?? frames - 1).clamp(first, frames - 1);
     // A frame count over the item's rate is its time in seconds, exactly.
     BridgeRational seconds(int frame) =>
         BridgeRational(num: frame * facts.fpsDen, den: facts.fpsNum);
+    return (
+      footage: footage,
+      from: seconds(first),
+      to: seconds(last + 1),
+      seconds: (last + 1 - first) * facts.fpsDen / facts.fpsNum,
+    );
+  }
+
+  /// Where the source side puts a clip: the selected layer when it is a
+  /// Sequence layer, else the lowest one, else none, for a new one.
+  LayerReference? _sourceTarget() {
     // Top of the stack first, so the last one found is the lowest.
     LayerReference? target;
     final selected = selectedLayer.value?.internallayerId;
@@ -3909,31 +3982,23 @@ class LumitUiState extends ChangeNotifier {
       target = entry.layer;
       if (entry.layer.internallayerId == selected) break;
     }
-    final at = playheadFrame.value;
+    return target;
+  }
+
+  /// Run a source-side edit, say why when it is refused, and whether it went
+  /// through.
+  bool _sourceEdit(BridgeCutResult Function() edit) {
     final BridgeCutResult result;
     try {
-      result = comp.cutPlace(
-        target: target,
-        footage: footage,
-        sourceIn: seconds(first),
-        sourceOut: seconds(last + 1),
-        atFrame: at,
-        insert: insert,
-        linked: cutLinked.value,
-        withPicture: workspace.interface.cutSoundWithPicture,
-        arrival: streamsArrival,
-      );
+      result = edit();
     } catch (_) {
       // The item or the composition went away under the press.
-      return;
+      return false;
     }
     reportCut(result);
-    if (result != BridgeCutResult.done) return;
+    if (result != BridgeCutResult.done) return false;
     _app.notifyDocumentChanged();
-    final placed =
-        ((last + 1 - first) * facts.fpsDen / facts.fpsNum * model.fps).round();
-    final end = model.durationFrames - 1;
-    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+    return true;
   }
 
   /// Open the composition a Precomp layer draws, landing on the frame that

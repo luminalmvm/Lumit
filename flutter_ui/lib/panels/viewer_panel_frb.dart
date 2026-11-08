@@ -1705,6 +1705,13 @@ class _SourceBarState extends State<_SourceBar>
   bool _sound = false;
   bool _heard = false;
 
+  /// Whether Fit to fill has a work area, asked once a document revision.
+  bool _canFit = false;
+  int? _fitAskedAt;
+
+  /// How wide the bar has to be to show Replace and Fit to fill as well.
+  static const double _roomForEveryEdit = 560;
+
   ViewerSurface get view => widget.view;
   BridgeMediaInfo get facts => widget.facts;
   double get _rate => facts.fpsNum / (facts.fpsDen <= 0 ? 1 : facts.fpsDen);
@@ -1873,7 +1880,9 @@ class _SourceBarState extends State<_SourceBar>
       height: viewerStripHeightFor(t),
       decoration: viewerStripDecoration(t, widget.detached),
       padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
-      child: Row(
+      child: LayoutBuilder(builder: (context, box) {
+      final wide = box.maxWidth >= _roomForEveryEdit;
+      return Row(
         children: [
           viewerBarMark(
             key: const ValueKey('source-play'),
@@ -1898,6 +1907,29 @@ class _SourceBarState extends State<_SourceBar>
           button('overwrite', l10n.sourceOverwrite, l10n.sourceOverwriteTip,
               canPlace ? () => ui.placeSource(view, insert: false) : null,
               action: 'cut.overwrite'),
+          // The other two edits, while the bar has room. The menu and the
+          // keys have them at any width.
+          if (wide)
+            ListenableBuilder(
+              listenable: Listenable.merge([ui.model, ui.cutClip]),
+              builder: (context, _) {
+                final revision = ui.model.revision;
+                if (revision == null || revision != _fitAskedAt) {
+                  _fitAskedAt = revision;
+                  _canFit = canFit(ui);
+                }
+                return Row(children: [
+                  const SizedBox(width: viewerHeaderGap),
+                  button('replace', l10n.sourceReplace, l10n.sourceReplaceTip,
+                      canReplace(ui) ? () => ui.replaceSource(view) : null,
+                      action: 'cut.replace'),
+                  const SizedBox(width: viewerHeaderGap),
+                  button('fit', l10n.sourceFitToFill, l10n.sourceFitToFillTip,
+                      _canFit ? () => ui.fitSource(view) : null,
+                      action: 'cut.fit.fill'),
+                ]);
+              },
+            ),
           Expanded(child: _marks(t)),
           Text(
             // From the footage's own start timecode, where it has one.
@@ -1908,7 +1940,8 @@ class _SourceBarState extends State<_SourceBar>
                 fontSize: viewerTimecodeSize, color: t.textSecondary),
           ),
         ],
-      ),
+      );
+      }),
     );
   }
 }

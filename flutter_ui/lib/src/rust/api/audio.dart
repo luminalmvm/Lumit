@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
 // These functions are ignored because they are not marked as `pub`: `document_snapshot`, `level_for`, `source_peak`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Pause. The clock holds its position, so play resumes from here.
 void audioPause() => BridgeLib.instance.api.crateApiAudioAudioPause();
@@ -55,6 +55,16 @@ List<BridgeAudioMeter> audioMeters() =>
 /// Put every clip light out. Nothing else about the mix changes — this is the
 /// desk's "I have seen it", not a fix for what lit them.
 void resetAudioClip() => BridgeLib.instance.api.crateApiAudioResetAudioClip();
+
+/// The master's loudness, polled with [`audio_meters`]. The measure begins
+/// again when another composition's sound is loaded, and on
+/// [`reset_audio_loudness`].
+BridgeAudioLoudness audioLoudness() =>
+    BridgeLib.instance.api.crateApiAudioAudioLoudness();
+
+/// Start the integrated loudness and the true peak afresh.
+void resetAudioLoudness() =>
+    BridgeLib.instance.api.crateApiAudioResetAudioLoudness();
 
 /// Every output the machine offers, and which one is in use.
 ///
@@ -166,6 +176,39 @@ class BridgeAudioDevices {
           devices == other.devices &&
           active == other.active &&
           fellBack == other.fellBack;
+}
+
+/// The master's loudness (ITU-R BS.1770, EBU R128).
+class BridgeAudioLoudness {
+  /// The last three seconds, in LUFS. Minus infinity while stopped or silent.
+  final double shortTerm;
+
+  /// Everything played since the measure began, gated, in LUFS. Minus
+  /// infinity until there is something to measure.
+  final double integrated;
+
+  /// The loudest true peak since the measure began, as an amplitude, 1.0
+  /// being full scale.
+  final double truePeak;
+
+  const BridgeAudioLoudness({
+    required this.shortTerm,
+    required this.integrated,
+    required this.truePeak,
+  });
+
+  @override
+  int get hashCode =>
+      shortTerm.hashCode ^ integrated.hashCode ^ truePeak.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAudioLoudness &&
+          runtimeType == other.runtimeType &&
+          shortTerm == other.shortTerm &&
+          integrated == other.integrated &&
+          truePeak == other.truePeak;
 }
 
 /// One mixer strip's bars, or the master's (docs/09 §3.1).

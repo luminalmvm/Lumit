@@ -1,6 +1,7 @@
 // Where a track's sound goes, and the menu a sound layer wears wherever it is
-// shown. The Audio timeline's track head and the Mixer's strip are the same
-// object, so both build their menu from these rows.
+// shown. The Audio timeline's track head, the Cut timeline's sound head and the
+// Mixer's strip are the same object, so all three build their menu from these
+// rows, and the two heads add the same track rows.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -20,6 +21,7 @@ import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'normalise_commands.dart';
 import 'timeline_extras_frb.dart' show labelChips;
+import 'volume_band_frb.dart' show BandKind;
 
 /// Change one of [layer]'s sends, keeping the rest of its routing. Read at
 /// the moment of the write, from a gesture, never from a build.
@@ -294,6 +296,51 @@ List<Widget> audioLayerRows({
     ),
     const MenuDivider(),
     delete,
+  ];
+}
+
+/// What a track head adds to [audioLayerRows], the same in the Cut and Audio
+/// timelines. A row greys where it cannot act now: a track with no clips has
+/// none to select, and the top one cannot go up. [lane] is the choice of
+/// picture, where the lane has more than one to show.
+List<Widget> soundHeadRows({
+  required VoidCallback close,
+  required bool Function(BandKind kind) envelopeShown,
+  required void Function(BandKind kind) toggleEnvelope,
+  Widget? lane,
+  required VoidCallback? select,
+  required VoidCallback? moveUp,
+  required VoidCallback? moveDown,
+  required VoidCallback? minimise,
+  VoidCallback? resetHeight,
+}) {
+  Widget row(String key, String label, VoidCallback? act,
+          {String? action, bool ticked = false}) =>
+      MenuRow(
+        key: ValueKey<String>('sound-head-$key'),
+        enabled: act != null,
+        onPressed: () {
+          close();
+          act?.call();
+        },
+        child: MenuLabel(label,
+            action: action, ticked: ticked, enabled: act != null),
+      );
+  return [
+    for (final (kind, label, action) in [
+      (BandKind.volume, l10n.cutVolumeEnvelope, 'cut.envelope.volume'),
+      (BandKind.pan, l10n.cutPanEnvelope, 'cut.envelope.pan'),
+    ])
+      row(kind.name, label, () => toggleEnvelope(kind),
+          action: action, ticked: envelopeShown(kind)),
+    if (lane != null) lane,
+    const MenuDivider(),
+    row('select', l10n.cutSelectTrack, select),
+    row('up', l10n.moveUp, moveUp),
+    row('down', l10n.moveDown, moveDown),
+    row('minimise', l10n.cutMinimiseTracks, minimise,
+        action: 'cut.tracks.minimise'),
+    if (resetHeight != null) row('height', l10n.cutResetHeight, resetHeight),
   ];
 }
 

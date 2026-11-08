@@ -23,7 +23,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
-    show BridgeRational, BridgeScalar, BridgeScalar_Keyframed;
+    show BridgeRational, BridgeScalar;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -70,7 +70,8 @@ import '../widgets/name_direction.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
-import 'audio_routes_frb.dart' show audioLayerRows, audioMenuTargets;
+import 'audio_routes_frb.dart'
+    show audioLayerRows, audioMenuTargets, soundHeadRows;
 import 'audio_streams_menu_frb.dart';
 import 'audio_timeline_clips_frb.dart' show audioClipGainY;
 import 'clip_fade_popover.dart' show clipFadeShapeName;
@@ -95,7 +96,8 @@ import 'timeline_outline_row_frb.dart' show RowRenameField;
 import 'timeline_razor.dart' show RazorOverlay;
 import 'timeline_snap.dart';
 import 'timeline_toolbar_frb.dart' show timelineChromeControl;
-import 'volume_band_frb.dart' show BandKind, VolumeBand, VolumeBandState, volumeBandFloorDb;
+import 'volume_band_frb.dart'
+    show BandKind, EnvelopesShown, VolumeBand, VolumeBandState, volumeBandFloorDb;
 import 'waveform_frb.dart';
 
 part 'cut_clip_menu.dart';
@@ -928,19 +930,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// Vegas inserts a velocity envelope on one event.
   final Set<String> _speedShown = {};
 
-  /// The volume and pan lines across sound rows, by kind and row: shown
-  /// once asked for or once the property has keys, and hidden when asked.
-  final Set<String> _bandsShown = {};
-  final Set<String> _bandsHidden = {};
+  /// The volume and pan lines across sound rows.
+  final EnvelopesShown _envelopes = EnvelopesShown();
 
-  bool _bandShown(CutTrack track, BandKind kind) {
-    final key = '${kind.name}:${track.id}';
-    if (_bandsHidden.contains(key)) return false;
-    if (_bandsShown.contains(key)) return true;
-    final info = track.entry.info;
-    return (kind == BandKind.volume ? info.volumeDb : info.pan)
-        is BridgeScalar_Keyframed;
-  }
+  bool _bandShown(CutTrack track, BandKind kind) =>
+      _envelopes.of(track.entry, track.id, kind);
 
   /// V or P, as Vegas has them: the line shows or hides on [on], else the
   /// sound rows of the picked clips, else the row last pressed, else every
@@ -958,19 +952,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 ? last.toList()
                 : [for (final t in _tracks) if (t.below) t]);
     if (aim.isEmpty) return;
-    final show = !aim.every((t) => _bandShown(t, kind));
-    setState(() {
-      for (final track in aim) {
-        final key = '${kind.name}:${track.id}';
-        if (show) {
-          _bandsShown.add(key);
-          _bandsHidden.remove(key);
-        } else {
-          _bandsHidden.add(key);
-          _bandsShown.remove(key);
-        }
-      }
-    });
+    setState(() => _envelopes
+        .toggle([for (final track in aim) (track.entry, track.id)], kind));
   }
 
   /// The layer a command with a track in mind means: the picked layer when
@@ -2888,7 +2871,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         ];
 
     // A sound track is the same layer the Audio timeline and the Mixer show,
-    // so it wears their menu, with what only a track here can do beside it.
+    // so it wears their menu, with the track rows the Audio timeline's head
+    // has too.
     final ui = _ui;
     final comp = _tracksComp;
     if (track.sound && ui != null && comp != null) {
@@ -2919,25 +2903,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             _afterSound();
           },
           duplicateAction: null,
-          extra: [
-            ...envelopes(close),
-            const MenuDivider(),
-            _row(close, 'ctl-head-select', l10n.cutSelectTrack,
-                () => _selectTrack(track),
-                enabled: track.clips.isNotEmpty, ticked: false),
-            _row(close, 'ctl-head-up', l10n.moveUp, () => _moveTrack(at, at - 1),
-                enabled: _canLand(at, at - 1), ticked: false),
-            _row(close, 'ctl-head-down', l10n.moveDown,
-                () => _moveTrack(at, at + 1),
-                enabled: _canLand(at, at + 1), ticked: false),
-            _row(close, 'ctl-head-minimise', l10n.cutMinimiseTracks,
-                _minimiseTracks,
-                action: 'cut.tracks.minimise', ticked: false),
-            if (tall)
-              _row(close, 'ctl-head-height', l10n.cutResetHeight,
-                  () => _resetTrack(track),
-                  ticked: false),
-          ],
+          extra: soundHeadRows(
+            close: () => close(null),
+            envelopeShown: (kind) => _bandShown(track, kind),
+            toggleEnvelope: (kind) => _toggleEnvelope(kind, on: [track]),
+            select: track.clips.isEmpty ? null : () => _selectTrack(track),
+            moveUp: _canLand(at, at - 1) ? () => _moveTrack(at, at - 1) : null,
+            moveDown:
+                _canLand(at, at + 1) ? () => _moveTrack(at, at + 1) : null,
+            minimise: _minimiseTracks,
+            resetHeight: tall ? () => _resetTrack(track) : null,
+          ),
         ),
       );
     }

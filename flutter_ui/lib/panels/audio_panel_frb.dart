@@ -35,6 +35,7 @@ import '../state/ui_state.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'audio_loudness.dart';
 import 'audio_meters_feed.dart';
 import 'audio_routes_frb.dart';
 import 'clip_fade_popover.dart' show FadeCurveGlyph;
@@ -784,8 +785,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
 }
 
 /// The output's two bars and their scale, painted as one inside one
-/// RepaintBoundary, and the limiter's lamp, which shows only while lit and is its
-/// own tiny widget under the clip listenable.
+/// RepaintBoundary, the limiter's lamp, which shows only while lit and is its
+/// own tiny widget under the clip listenable, and the loudness under them.
 class _LevelsBlock extends StatelessWidget {
   final AudioMeterFeed feed;
   final LumitUiState ui;
@@ -805,48 +806,53 @@ class _LevelsBlock extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-        child: Stack(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            RepaintBoundary(
-              key: const ValueKey('levels-bars'),
-              child: SizedBox(
-                height: LevelBarsPainter.height,
-                width: double.infinity,
-                child: CustomPaint(
-                  painter: LevelBarsPainter(
-                    frame: feed.frame,
-                    trough: t.surface2,
-                    edge: t.hairline,
-                    body: t.success,
-                    cap: t.warning,
-                    hold: t.textPrimary,
-                    text: t.mono.copyWith(fontSize: 9, color: t.textMuted),
+            Stack(
+              children: [
+                RepaintBoundary(
+                  key: const ValueKey('levels-bars'),
+                  child: SizedBox(
+                    height: LevelBarsPainter.height,
+                    width: double.infinity,
+                    child: CustomPaint(
+                      painter: LevelBarsPainter(
+                        frame: feed.frame,
+                        trough: t.surface2,
+                        edge: t.hairline,
+                        body: t.success,
+                        cap: t.warning,
+                        hold: t.textPrimary,
+                        text: t.mono.copyWith(fontSize: 9, color: t.textMuted),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: ValueListenableBuilder<bool>(
-                valueListenable: feed.clipped,
-                builder: (context, lit, _) => IgnorePointer(
-                  ignoring: !lit,
-                  child: Opacity(
-                    opacity: lit ? 1 : 0,
-                    child: LumitTooltip(
-                      message: l10n.mixerLimiterClipped,
-                      child: HoverMark(
-                        builder: (context, over) => GestureDetector(
-                          key: const ValueKey('audio-clip-lamp'),
-                          onTap: resetMeterPeaks,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: Color.lerp(
-                                  t.error, t.textPrimary, 0.35 * over),
-                              shape: BoxShape.circle,
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: feed.clipped,
+                    builder: (context, lit, _) => IgnorePointer(
+                      ignoring: !lit,
+                      child: Opacity(
+                        opacity: lit ? 1 : 0,
+                        child: LumitTooltip(
+                          message: l10n.mixerLimiterClipped,
+                          child: HoverMark(
+                            builder: (context, over) => GestureDetector(
+                              key: const ValueKey('audio-clip-lamp'),
+                              onTap: resetMeterPeaks,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: Color.lerp(
+                                      t.error, t.textPrimary, 0.35 * over),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -854,8 +860,10 @@ class _LevelsBlock extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
+            const SizedBox(height: 6),
+            LoudnessReadout(feed: feed),
           ],
         ),
       ),

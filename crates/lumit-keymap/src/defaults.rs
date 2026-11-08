@@ -353,6 +353,8 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "Shift+O", "cut.goto.out"),
         row(Cut, ",", "cut.insert"),
         row(Cut, ".", "cut.overwrite"),
+        row(Cut, "Shift+R", "cut.replace"),
+        row(Cut, "Shift+F", "cut.fit.fill"),
         row(Cut, "Shift+Delete", "cut.delete.ripple"),
         // The tools, the trims to the playhead and the nudges, on the
         // letters editors already have under their fingers. Each shadows an

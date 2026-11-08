@@ -73,6 +73,39 @@ double volumeBandDbOfY(double y, double height,
 /// Which property a band draws and edits.
 enum BandKind { volume, pan }
 
+/// Which rows draw their volume and pan lines: a line shows once asked for or
+/// once its property has keys, and stays away once hidden. The Cut and Audio
+/// timelines keep one each, so a layer answers alike in both.
+class EnvelopesShown {
+  final Set<String> _shown = {};
+  final Set<String> _hidden = {};
+
+  bool of(BridgeLayerEntry entry, String row, BandKind kind) {
+    final key = '${kind.name}:$row';
+    if (_hidden.contains(key)) return false;
+    if (_shown.contains(key)) return true;
+    final info = entry.info;
+    return (kind == BandKind.volume ? info.volumeDb : info.pan)
+        is BridgeScalar_Keyframed;
+  }
+
+  /// Show [kind]'s line on every one of [rows], or hide it on them all when
+  /// each shows it already.
+  void toggle(List<(BridgeLayerEntry, String)> rows, BandKind kind) {
+    final show = !rows.every((r) => of(r.$1, r.$2, kind));
+    for (final (_, row) in rows) {
+      final key = '${kind.name}:$row';
+      if (show) {
+        _shown.add(key);
+        _hidden.remove(key);
+      } else {
+        _hidden.add(key);
+        _shown.remove(key);
+      }
+    }
+  }
+}
+
 /// The layer's Volume (or Pan) as a band over its lane.
 class VolumeBand extends StatefulWidget {
   final BridgeLayerEntry entry;

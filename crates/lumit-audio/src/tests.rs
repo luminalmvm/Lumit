@@ -79,13 +79,13 @@ fn callback_plays_advances_clock_and_stops_at_end() {
     let mut scrub = Scrub::default();
 
     // Paused: silence, clock still.
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert!(out.iter().all(|s| *s == 0.0));
     assert_eq!(shared.playhead.load(Ordering::Relaxed), 0);
 
     // Playing: exact samples, clock advances by frames written.
     shared.playing.store(true, Ordering::Relaxed);
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert_eq!(shared.playhead.load(Ordering::Relaxed), 256);
     assert!((out[0] - 0.0).abs() < 1e-6); // sin(0)·0.25
     let expected = (255.0f32 * 0.05).sin() * 0.25;
@@ -93,7 +93,7 @@ fn callback_plays_advances_clock_and_stops_at_end() {
 
     // Run past the end: stops exactly at the last frame, playing=false.
     for _ in 0..10 {
-        fill(&shared, &mut scrub, &mut out, 2);
+        fill(&shared, &mut scrub, None, &mut out, 2);
     }
     assert_eq!(shared.playhead.load(Ordering::Relaxed), 1000);
     assert!(!shared.playing.load(Ordering::Relaxed));
@@ -114,7 +114,7 @@ fn a_scrub_burst_sounds_while_stopped_and_leaves_the_clock_alone() {
     let mut scrub = Scrub::default();
     let mut out = vec![0.0f32; 256 * 2];
 
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert_eq!(out[0], 0.0, "the burst starts from nothing");
     assert!((out[255 * 2] - 0.5).abs() < 1e-6, "and reaches the mix");
     assert_eq!(scrub.now.at, 1256, "read from where it was asked for");
@@ -124,21 +124,21 @@ fn a_scrub_burst_sounds_while_stopped_and_leaves_the_clock_alone() {
     // A second burst before the first is over: the first fades out
     // under it, and the two together are never louder than the mix.
     shared.scrub.store(pack_scrub(2000, 600), Ordering::Relaxed);
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert_eq!(scrub.now.at, 2256);
     assert_eq!(scrub.was.left, 0, "the old burst has faded out");
     assert!(out.iter().all(|s| *s <= 0.5 + 1e-6));
 
     // Left alone, it ends, and the buffer after that is silent.
     for _ in 0..3 {
-        fill(&shared, &mut scrub, &mut out, 2);
+        fill(&shared, &mut scrub, None, &mut out, 2);
     }
     assert!(out.iter().all(|s| *s == 0.0), "a burst is not a loop");
 
     // Pressing play drops a burst that was asked for and not yet heard.
     shared.scrub.store(pack_scrub(2000, 600), Ordering::Relaxed);
     shared.playing.store(true, Ordering::Relaxed);
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert_eq!(shared.scrub.load(Ordering::Relaxed), 0);
     assert_eq!(shared.playhead.load(Ordering::Relaxed), 256);
 }
@@ -152,7 +152,7 @@ fn swapping_the_plan_keeps_the_clock_and_changes_the_sound() {
     shared.playing.store(true, Ordering::Relaxed);
     let mut out = vec![0.0f32; 128 * 2];
     let mut scrub = Scrub::default();
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert_eq!(shared.playhead.load(Ordering::Relaxed), 128);
 
     // "Mute": swap in a silent plan (no clips) of the same length.
@@ -161,7 +161,7 @@ fn swapping_the_plan_keeps_the_clock_and_changes_the_sound() {
         total_frames: 1000,
         master_gain: 1.0,
     }));
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert_eq!(
         shared.playhead.load(Ordering::Relaxed),
         256,
@@ -205,7 +205,7 @@ fn a_missing_block_is_silence_that_is_counted_and_then_filled() {
     let mut scrub = Scrub::default();
     let mut out = vec![1.0f32; 256 * 2];
 
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert!(out.iter().all(|s| *s == 0.0), "nothing decoded: silence");
     assert_eq!(shared.playhead.load(Ordering::Relaxed), 256, "and no wait");
     assert_eq!(shared.starved.load(Ordering::Relaxed), 256);
@@ -213,7 +213,7 @@ fn a_missing_block_is_silence_that_is_counted_and_then_filled() {
 
     // The filling thread's own loop, stepped by hand.
     while fill_ahead(&shared, RATE) {}
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert!(out == whole.samples[256 * 2..512 * 2], "the file, in place");
     assert_eq!(shared.starved.load(Ordering::Relaxed), 256, "nothing more");
 
@@ -222,10 +222,10 @@ fn a_missing_block_is_silence_that_is_counted_and_then_filled() {
     shared
         .scrub_wanted
         .store(pack_scrub(30_000, 400), Ordering::Relaxed);
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert!(out.iter().all(|s| *s == 0.0));
     fill_ahead(&shared, RATE);
-    fill(&shared, &mut scrub, &mut out, 2);
+    fill(&shared, &mut scrub, None, &mut out, 2);
     assert_eq!(
         scrub.now.at, 30_256,
         "the burst sounds from where it was asked"

@@ -457,6 +457,49 @@ pub fn reset_audio_clip() {
     crate::audio::reset_clip();
 }
 
+/// The master's loudness (ITU-R BS.1770, EBU R128).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeAudioLoudness {
+    /// The last three seconds, in LUFS. Minus infinity while stopped or silent.
+    pub short_term: f64,
+    /// Everything played since the measure began, gated, in LUFS. Minus
+    /// infinity until there is something to measure.
+    pub integrated: f64,
+    /// The loudest true peak since the measure began, as an amplitude, 1.0
+    /// being full scale.
+    pub true_peak: f64,
+}
+
+/// The master's loudness, polled with [`audio_meters`]. The measure begins
+/// again when another composition's sound is loaded, and on
+/// [`reset_audio_loudness`].
+#[frb(sync)]
+pub fn audio_loudness() -> BridgeAudioLoudness {
+    #[cfg(feature = "media")]
+    {
+        let r = crate::audio::loudness::loudness();
+        BridgeAudioLoudness {
+            short_term: f64::from(r.short_term),
+            integrated: f64::from(r.integrated),
+            true_peak: f64::from(r.true_peak),
+        }
+    }
+    #[cfg(not(feature = "media"))]
+    BridgeAudioLoudness {
+        short_term: f64::NEG_INFINITY,
+        integrated: f64::NEG_INFINITY,
+        true_peak: 0.0,
+    }
+}
+
+/// Start the integrated loudness and the true peak afresh.
+#[frb(sync)]
+pub fn reset_audio_loudness() {
+    #[cfg(feature = "media")]
+    crate::audio::loudness::reset_loudness();
+}
+
 /// One output the machine can play through.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]

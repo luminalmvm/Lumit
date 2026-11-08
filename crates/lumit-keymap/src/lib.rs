@@ -107,6 +107,8 @@ impl ActionId {
             "cut.goto.out" => "Go to Out",
             "cut.insert" => "Insert at the playhead",
             "cut.overwrite" => "Overwrite at the playhead",
+            "cut.replace" => "Replace the picked clip",
+            "cut.fit.fill" => "Fit to fill the work area",
             "cut.delete.ripple" => "Ripple delete",
             "cut.tool.select" => "Select clips",
             "cut.tool.razor" => "Cut clips with the razor",

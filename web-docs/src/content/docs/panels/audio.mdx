@@ -16,16 +16,27 @@ column.
 ### Levels
 
 Two bars meter the composition's output, left and right, over a scale in dB. Each draws its
-loudness, its peak behind it, and a hold line that rests on the loudest peak. The number
+average level, its peak behind it, and a hold line that rests on the loudest peak. The number
 beside a bar is its peak in dB.
 
 A lamp lights under the numbers when the limiter has held the mix back. Clicking it puts it
 out.
 
+Under the scale, the output's loudness:
+
+- **S**: short-term loudness, the last three seconds, in LUFS.
+- **I**: integrated loudness, everything played since it was reset, in LUFS. Clicking it
+  resets it.
+- **TP**: the loudest true peak since then, in dB.
+
+They follow ITU-R BS.1770 and EBU R128. Loading another composition starts them again.
+Played slowed down, nothing is measured.
+
 Right-click the bars, or any meter in the Mixer:
 
 - **Peak hold ▸**: **Off**, **3 s**, **10 s** or **Until reset**. 3 s by default.
 - **Reset peaks**: clears the hold lines and puts the limiter's lamps out.
+- **Reset loudness**: starts the integrated loudness and true peak again.
 
 ### Selected layer
 
@@ -98,7 +109,9 @@ quarters of the way up. Values up to +12 dB are typed in the dB well. A fader or
 animated Volume or Pan sets the keyframe at the playhead.
 
 The Master strip's fader sets the gain of the whole mix. Its **LIM** lamp lights when the
-limiter has held the mix back, and clicking it puts it out.
+limiter has held the mix back, and clicking it puts it out. The loudness stands beside its
+meter while the Mixer has room, and the integrated loudness alone under its dB well when it
+does not.
 
 Right-click:
 
@@ -107,8 +120,8 @@ Right-click:
 | Strip | The [track head's menu](#audio-timeline). It acts on every selected strip when the strip is one of them. |
 | Fader | **Reset volume**, **Set level…**, and **Add keyframe** or **Remove keyframe** at the playhead. |
 | Pan dial | **Reset pan**, **Set pan…**, **Full left**, **Full right**, and **Add keyframe** or **Remove keyframe**. |
-| Meters | **Peak hold ▸**, **Reset peaks**. |
-| Master | **Reset volume**, **Set level…**, **Peak hold ▸**, **Reset peaks**. |
+| Meters | **Peak hold ▸**, **Reset peaks**, **Reset loudness**. |
+| Master | **Reset volume**, **Set level…**, **Peak hold ▸**, **Reset peaks**, **Reset loudness**. |
 | Empty ground | **Insert audio layer**, **Insert bus**, **Unmute all**, **Clear solos**, **Reset all faders**. |
 
 ## Audio timeline
@@ -136,7 +149,11 @@ head for the commands below. They act on every selected track when the track is 
 | **Rename** | Turns the name into a field. |
 | **Mute**, **Solo**, **Bypass effects**, **Lock** | The track's switches. |
 | **Reset volume**, **Reset pan** | Back to 0 dB, and to the centre. On an animated row, at the playhead. |
+| **Volume envelope**, **Pan envelope** | Shows or hides the line across the track, as in the [Cut timeline](/use/cutting/#envelopes). `Shift`+`V` and `Shift`+`P` do the same on the selected tracks. |
 | **Lane ▸** | **Wave** or **Spectral**. |
+| **Select layer** | Selects every clip on the track. |
+| **Move up**, **Move down** | Moves the track past its neighbour. |
+| **Minimise all tracks** | Back to two rows, every track. |
 | **Reset height** | Back to two rows, when a track's edge has been dragged. |
 | **Output ▸**, **Send to ▸** | Where the sound goes. Not on a bus. |
 | **Detach audio** | Moves the sound of a layer with a picture to an Audio layer of its own. |

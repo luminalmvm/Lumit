@@ -38,6 +38,50 @@ void resetMeterPeaks() {
   }
 }
 
+/// Start the master's integrated loudness and its true peak afresh.
+void resetLoudness() {
+  resetAudioLoudness();
+  for (final feed in _running) {
+    feed.wake();
+  }
+}
+
+/// The master's loudness as drawn: short-term and integrated in LUFS, minus
+/// infinity while there is none, and the true peak in dB, rounded to the tenth
+/// the numbers show so a reading that has not moved on screen changes nothing.
+class LoudnessLevels {
+  final double shortTerm, integrated, truePeak;
+
+  const LoudnessLevels({
+    this.shortTerm = double.negativeInfinity,
+    this.integrated = double.negativeInfinity,
+    this.truePeak = double.negativeInfinity,
+  });
+
+  static const LoudnessLevels silence = LoudnessLevels();
+
+  factory LoudnessLevels.of(BridgeAudioLoudness l) {
+    double tenth(double v) => v.isFinite ? (v * 10).roundToDouble() / 10 : v;
+    return LoudnessLevels(
+      shortTerm: tenth(l.shortTerm),
+      integrated: tenth(l.integrated),
+      truePeak: tenth(l.truePeak > 0
+          ? 20 * math.log(l.truePeak) / math.ln10
+          : double.negativeInfinity),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LoudnessLevels &&
+      other.shortTerm == shortTerm &&
+      other.integrated == integrated &&
+      other.truePeak == truePeak;
+
+  @override
+  int get hashCode => Object.hash(shortTerm, integrated, truePeak);
+}
+
 /// One strip's reading, dB-ready: linear amplitudes straight off the tap,
 /// converted where they are drawn.
 class StripLevels {
@@ -123,6 +167,11 @@ class AudioMeterFeed {
   /// changes state, never per tick.
   final ValueNotifier<bool> clipped = ValueNotifier(false);
 
+  /// The master's loudness, its own listenable for the same reason: its
+  /// numbers rebuild when they change, and nothing else does.
+  final ValueNotifier<LoudnessLevels> loudness =
+      ValueNotifier(LoudnessLevels.silence);
+
   Timer? _timer;
   final Map<String, _Hold> _holds = {};
 
@@ -130,6 +179,11 @@ class AudioMeterFeed {
   /// engine. The application never touches it.
   @visibleForTesting
   List<BridgeAudioMeter> Function() read = audioMeters;
+
+  /// What [tick] reads the loudness with, asked only when the engine has a
+  /// master to measure.
+  @visibleForTesting
+  BridgeAudioLoudness Function() readLoudness = audioLoudness;
 
   /// About 30 frames a second: enough for a bar to read as live, and each
   /// tick is one sync crossing that copies a handful of numbers.
@@ -189,6 +243,9 @@ class AudioMeterFeed {
       frame.value = next;
     }
     if (clipped.value != anyClipped) clipped.value = anyClipped;
+    if (strips.containsKey('')) {
+      loudness.value = LoudnessLevels.of(readLoudness());
+    }
     if (strips.values.any((s) => s != StripLevels.silence)) {
       _heard = now;
     } else if (_wake != null && now.difference(_heard) > _quiet) {
@@ -215,5 +272,6 @@ class AudioMeterFeed {
     stop();
     frame.dispose();
     clipped.dispose();
+    loudness.dispose();
   }
 }

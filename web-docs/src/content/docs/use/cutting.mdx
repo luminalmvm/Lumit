@@ -44,9 +44,8 @@ playhead.
 A track wears its layer's label colour: its clips are tinted with it and their waveforms
 drawn in it. Right-click a track's header, or a plain bar, for the layer's commands: **Rename**,
 its switches, **Select layer**, **Duplicate**, **New layer**, **Move up**, **Move down**,
-**Minimise all tracks**, **Label colour** and **Delete**. A sound track has the menu it has in
-the [Audio timeline](/panels/audio/), with **Volume envelope**, **Pan envelope**, **Select layer**,
-**Move up**, **Move down** and **Minimise all tracks** added.
+**Minimise all tracks**, **Label colour** and **Delete**. A sound track has the menu a track
+head has in the [Audio timeline](/panels/audio/), less **Lane ▸**.
 **Minimise all tracks** again puts them back. **Clip colour** on a clip's menu
 gives the picked clips a colour of their own, and **Track colour** hands it back.
 
@@ -75,10 +74,14 @@ composition has the Viewer back. Drag along the strip under the picture to move 
 | **Out**, `O` | Marks the frame shown as its end. |
 | **Insert**, `,` | Places the marked stretch at the playhead and moves everything after it later. |
 | **Overwrite**, `.` | Places the marked stretch at the playhead, over what is there. |
+| **Replace**, `Shift+R` | Places the footage from its In over the clip picked in the Cut timeline, which keeps its place and length. |
+| **Fit to fill**, `Shift+F` | Places the marked stretch over the work area, at whatever speed fills it. |
 
 With no marks set, the whole item is placed. The clip lands on the selected picture track,
 or the lowest one, or a new track when the composition has none. The playhead moves to the
-end of the placed clip.
+end of the placed clip. Replace lands on the picked clip's own track, and is **refused**
+where the footage ends before the clip does. Each is one undo step. In a narrow source view
+**Replace** and **Fit to fill** are on its menu only.
 
 In and Out are kept on the footage item and saved with the project. Setting them is one
 undo step, **Mark In and Out**. An Out that is not after the In is **refused**.

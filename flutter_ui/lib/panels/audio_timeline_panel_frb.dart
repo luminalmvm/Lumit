@@ -158,6 +158,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   final Map<String, int> _trackRows = {};
   double _rowCarry = 0;
 
+  /// The volume and pan lines across tracks, kept as the Cut timeline keeps
+  /// its own.
+  final EnvelopesShown _envelopes = EnvelopesShown();
+
   /// Which layers carry sound and which have a picture, by id. Both come from
   /// probing the source, so both are asked once per layer and remembered - a
   /// build may never probe.
@@ -441,7 +445,16 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // A clip here is the clip it is in the Cut timeline, so the chords its
     // menu shows mean the same.
     final comp = ui.selectedComp;
-    switch (ui.keymap.actionFor(BridgeKeyContext.cut, event)) {
+    final action = ui.keymap.actionFor(BridgeKeyContext.cut, event);
+    switch (action) {
+      case 'cut.envelope.volume' || 'cut.envelope.pan':
+        _toggleEnvelope(
+            action == 'cut.envelope.volume' ? BandKind.volume : BandKind.pan,
+            _keyTracks(ui));
+        return true;
+      case 'cut.tracks.minimise' when _trackRows.isNotEmpty:
+        setState(_trackRows.clear);
+        return true;
       case 'cut.add.edit':
         _splitAtPlayhead(ui);
         return true;
@@ -483,6 +496,40 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       return true;
     }
     return false;
+  }
+
+  /// The tracks a key means: the picked ones, else every one.
+  List<AudioTrackRow> _keyTracks(LumitUiState ui) {
+    final tracks = [for (final t in _lastTracks) if (!t.dimmed) t];
+    final picked = [
+      for (final t in tracks)
+        if (ui.selectedLayerIds.contains(t.entry.layer.internallayerId)) t,
+    ];
+    return picked.isNotEmpty ? picked : tracks;
+  }
+
+  /// Show [kind]'s line on [tracks], or hide it when they all show it.
+  void _toggleEnvelope(BandKind kind, List<AudioTrackRow> tracks) {
+    if (tracks.isEmpty) return;
+    setState(() =>
+        _envelopes.toggle([for (final t in tracks) (t.entry, t.id)], kind));
+  }
+
+  /// Move [track]'s layer to where the track [by] places away stands.
+  void _moveTrack(AudioTrackRow track, int by) {
+    final at = _lastTracks.indexOf(track) + by;
+    final ui = _ui;
+    if (ui == null || at < 0 || at >= _lastTracks.length) return;
+    final id = _lastTracks[at].entry.layer.internallayerId;
+    final index =
+        ui.model.heldLayers.indexWhere((e) => e.layer.internallayerId == id);
+    if (index < 0) return;
+    try {
+      track.entry.layer.reorder(newIndex: index);
+    } catch (_) {
+      // A locked layer refuses, and quietly.
+    }
+    _afterStackEdit();
   }
 
   /// Turn a track's name into its field: Enter on a picked track, or the menu.
@@ -1901,23 +1948,41 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           onRename: () => _beginRename(track),
           onChanged: _afterStackEdit,
           pictureRow: track.dimmed,
-          extra: [
-            if (track.entry.info.kind != BridgeLayerKind.bus && !track.dimmed)
-              _laneSubmenu(tracks, () => close(null)),
-            if (tracks.any((t) => _trackRows.containsKey(t.id)))
-              MenuRow(
-                key: const ValueKey<String>('atl-menu-reset-height'),
-                onPressed: () {
-                  close(null);
-                  setState(() {
-                    for (final t in tracks) {
-                      _trackRows.remove(t.id);
-                    }
-                  });
-                },
-                child: MenuLabel(l10n.audioTrackResetHeight, ticked: false),
-              ),
-          ],
+          extra: soundHeadRows(
+            close: () => close(null),
+            envelopeShown: (kind) =>
+                _envelopes.of(track.entry, track.id, kind),
+            toggleEnvelope: (kind) => _toggleEnvelope(kind, tracks),
+            lane: track.entry.info.kind == BridgeLayerKind.bus || track.dimmed
+                ? null
+                : _laneSubmenu(tracks, () => close(null)),
+            select: track.entry.info.clips.isEmpty
+                ? null
+                : () {
+                    setState(() => _pickedClips = {
+                          for (final c in track.entry.info.clips)
+                            c.id.toString(),
+                        });
+                    ui.setSelection([track.entry.layer]);
+                  },
+            moveUp: _lastTracks.first == track
+                ? null
+                : () => _moveTrack(track, -1),
+            moveDown: _lastTracks.last == track
+                ? null
+                : () => _moveTrack(track, 1),
+            // The usual height is the least one here, so making every
+            // track as short as it goes puts them all back to it.
+            minimise:
+                _trackRows.isEmpty ? null : () => setState(_trackRows.clear),
+            resetHeight: tracks.any((t) => _trackRows.containsKey(t.id))
+                ? () => setState(() {
+                      for (final t in tracks) {
+                        _trackRows.remove(t.id);
+                      }
+                    })
+                : null,
+          ),
         ),
       ],
     );
@@ -3428,7 +3493,38 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       onFade: (fade) => _writeFade(track, fade),
       onCommit: (edit) => _commitClipEdit(track, edit),
     );
-    if (info.clips.isNotEmpty) return Stack(children: [clips, fades]);
+    // The volume and pan lines over the lane, under the strip the fade
+    // handles take so those stay in reach, as on a Cut sound track.
+    final bandHeight = height - audioFadeHandleHeight - 2;
+    final (fpsNum, fpsDen) = _ui!.model.fpsExact;
+    final bands = [
+      if (!track.dimmed && !razor && height > 36)
+        for (final kind in BandKind.values)
+          if (_envelopes.of(track.entry, track.id, kind))
+            Positioned(
+              key: ValueKey<String>('atl-${kind.name}-${track.id}'),
+              left: 0,
+              width: axis.width,
+              top: audioFadeHandleHeight,
+              height: bandHeight,
+              child: RepaintBoundary(
+                child: VolumeBand(
+                  entry: track.entry,
+                  axis: axis,
+                  fps: fps,
+                  fpsNum: fpsNum,
+                  fpsDen: fpsDen,
+                  barShift: 0,
+                  rowHeight: bandHeight,
+                  onChanged: _afterWrite,
+                  kind: kind,
+                ),
+              ),
+            ),
+    ];
+    if (info.clips.isNotEmpty) {
+      return Stack(children: [clips, fades, ...bands]);
+    }
     final startOffset = rationalSeconds(info.span.startOffset);
     final secondsPerPixel =
         axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
@@ -3526,6 +3622,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         // The corners of the layer's own bar: the first fade dragged on to one
         // converts it, as the first trim does.
         fades,
+        ...bands,
       ],
     );
   }

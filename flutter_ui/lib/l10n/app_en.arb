@@ -6887,6 +6887,14 @@
   "@keyOverwriteAtThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: put the marked span of the source down at the playhead, replacing what is there."
   },
+  "keyReplaceThePickedClip": "Replace the picked clip",
+  "@keyReplaceThePickedClip": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: put the source, from its In mark, over the clip picked in the Cut timeline, keeping that clip's place and length."
+  },
+  "keyFitToFillTheWorkArea": "Fit to fill the work area",
+  "@keyFitToFillTheWorkArea": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: put the marked span of the source over the Cut timeline's In to Out, sped up or slowed down to fill it."
+  },
   "keyRippleDelete": "Ripple delete",
   "@keyRippleDelete": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. An editing term: delete the selected clips and close the gap they leave."
@@ -8254,7 +8262,7 @@
   },
   "menuRevealInProject": "Reveal in Project panel",
   "@menuRevealInProject": {
-    "description": "Layer menu row: select the layer's footage or comp in the Project panel"
+    "description": "Layer menu and Source view menu row: select the layer's or the source's footage or comp in the Project panel"
   },
   "menuRevealAllModifiedProperties": "Reveal all modified properties",
   "@menuRevealAllModifiedProperties": {
@@ -8941,6 +8949,22 @@
   "sourceOverwriteTip": "Overwrite at the playhead",
   "@sourceOverwriteTip": {
     "description": "Tooltip for the source side's Overwrite button."
+  },
+  "sourceReplace": "Replace",
+  "@sourceReplace": {
+    "description": "Button and Source view menu row that puts the source, from its In mark, over the clip picked in the Cut timeline. That clip's place and length are kept."
+  },
+  "sourceReplaceTip": "Replace the picked clip",
+  "@sourceReplaceTip": {
+    "description": "Tooltip for the source side's Replace button."
+  },
+  "sourceFitToFill": "Fit to fill",
+  "@sourceFitToFill": {
+    "description": "Button and Source view menu row that puts the marked stretch of the source over the Cut timeline's In to Out, sped up or slowed down to fill it exactly."
+  },
+  "sourceFitToFillTip": "Fit to fill the work area",
+  "@sourceFitToFillTip": {
+    "description": "Tooltip for the source side's Fit to fill button. The work area is the span between the Cut timeline's In and Out."
   },
   "cutRefusedOverlap": "That would overlap another clip.",
   "@cutRefusedOverlap": {
@@ -12727,11 +12751,11 @@
   },
   "cutSelectTrack": "Select layer",
   "@cutSelectTrack": {
-    "description": "Cut timeline, layer head and clip menus: pick every clip on this layer."
+    "description": "Cut and Audio timelines, layer head and clip menus: pick every clip on this layer."
   },
   "cutResetHeight": "Reset height",
   "@cutResetHeight": {
-    "description": "Cut timeline and sequence view, menu on a track or a divider that has been dragged: back to the usual height."
+    "description": "Cut timeline, Audio timeline and sequence view, menu on a track or a divider that has been dragged: back to the usual height."
   },
   "cutResetWidth": "Reset width",
   "@cutResetWidth": {
@@ -12751,11 +12775,11 @@
   },
   "cutVolumeEnvelope": "Volume envelope",
   "@cutVolumeEnvelope": {
-    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its loudness over time, as Vegas's volume envelope. Ticked while shown."
+    "description": "Cut and Audio timelines, right-click menu on a sound track's header: show or hide the line across the track that sets its loudness over time. Ticked while shown."
   },
   "cutPanEnvelope": "Pan envelope",
   "@cutPanEnvelope": {
-    "description": "Cut timeline, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time, as Vegas's pan envelope. Ticked while shown."
+    "description": "Cut and Audio timelines, right-click menu on a sound track's header: show or hide the line across the track that sets its left-right balance over time. Ticked while shown."
   },
   "envelopePointSet": "Set value…",
   "@envelopePointSet": {
@@ -12795,7 +12819,7 @@
   },
   "cutMinimiseTracks": "Minimise all tracks",
   "@cutMinimiseTracks": {
-    "description": "Cut timeline, right-click menu on a track's header: make every track as short as it goes, or, when they all already are, put them back to the usual height. As Vegas's Minimize All Tracks."
+    "description": "Cut and Audio timelines, right-click menu on a track's header: make every track as short as it goes, or, when they all already are, put them back to the usual height."
   },
   "cutSelectToEnd": "Select to end",
   "@cutSelectToEnd": {
@@ -16122,6 +16146,34 @@
   "@mixerResetPeaks": {
     "description": "Right-click menu on a level meter: forgets the held peaks and puts the limiter's light out. The mix itself is unchanged."
   },
+  "mixerResetLoudness": "Reset loudness",
+  "@mixerResetLoudness": {
+    "description": "Right-click menu on a level meter: starts the integrated loudness and the true peak measured on the master again from now."
+  },
+  "loudnessShortTermMark": "S",
+  "@loudnessShortTermMark": {
+    "description": "Audio panel levels and the Mixer's Master strip: the letter before the short-term loudness, the last three seconds in LUFS. Keep it one or two letters."
+  },
+  "loudnessIntegratedMark": "I",
+  "@loudnessIntegratedMark": {
+    "description": "Audio panel levels and the Mixer's Master strip: the letter before the integrated loudness, everything played since it was reset, in LUFS. Keep it one or two letters."
+  },
+  "loudnessTruePeakMark": "TP",
+  "@loudnessTruePeakMark": {
+    "description": "Audio panel levels and the Mixer's Master strip: the letters before the loudest true peak since the loudness was reset, in dB. Keep it two or three letters."
+  },
+  "loudnessShortTerm": "Short-term loudness",
+  "@loudnessShortTerm": {
+    "description": "Tooltip on the short-term loudness number: the master's loudness over the last three seconds, in LUFS."
+  },
+  "loudnessIntegrated": "Integrated loudness",
+  "@loudnessIntegrated": {
+    "description": "Tooltip on the integrated loudness number: the master's loudness over everything played since it was reset, in LUFS. A click on the number resets it."
+  },
+  "loudnessTruePeak": "True peak",
+  "@loudnessTruePeak": {
+    "description": "Tooltip on the true peak number beside the loudness: the loudest point of the master between and on the samples since the loudness was reset, in dB."
+  },
   "mixerUnmuteAll": "Unmute all",
   "@mixerUnmuteAll": {
     "description": "Right-click menu on the Mixer's empty ground: turns the sound back on for every muted layer."
@@ -16141,10 +16193,6 @@
   "audioAddEffect": "Add audio effect",
   "@audioAddEffect": {
     "description": "Right-click menu on a sound layer or clip: opens the list of audio effects to add to it."
-  },
-  "audioTrackResetHeight": "Reset height",
-  "@audioTrackResetHeight": {
-    "description": "Right-click menu on an Audio timeline track head: puts a track whose bottom edge was dragged back to its usual height."
   },
   "audioTracksResetHeights": "Reset all heights",
   "@audioTracksResetHeights": {

@@ -14,6 +14,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart' show ItemReference;
 import 'package:lumit_flutter/src/rust/lib.dart' show F32Array4;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart' show UuidValue;
@@ -31,7 +32,7 @@ import '../state/viewer_view.dart';
 import '../state/viewer_views.dart';
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show addMarkerFrb, showMenuAt, workAreaFrames;
-import 'timeline_layer_menu_frb.dart' show layerMenuEntries;
+import 'timeline_layer_menu_frb.dart' show layerMenuEntries, revealInProject;
 import 'timeline_outline_row_frb.dart' show layerRowRename;
 import 'viewer_bar.dart' show durationFramesOf;
 import 'viewer_panel_frb.dart' show showViewerBackgroundPicker;
@@ -849,7 +850,16 @@ Widget viewerLayerFlyout(
   );
 }
 
-/// The source view's menu: the marks, placing what they hold, and letting it go.
+/// Whether the source side's Replace has a clip picked in the Cut timeline.
+bool canReplace(LumitUiState ui) =>
+    ui.selectedComp != null && ui.cutClip.value != null;
+
+/// Whether Fit to fill has a work area to fill. It asks the engine, so it is
+/// read on a press or once a revision, never on every build.
+bool canFit(LumitUiState ui) => ui.selectedComp?.getWorkArea() != null;
+
+/// The source view's menu: the marks, placing what they hold, finding the
+/// footage in the Project panel, and letting it go.
 List<Widget> viewerSourceRows(
   LumitUiState ui,
   ViewerSurface view,
@@ -886,7 +896,22 @@ List<Widget> viewerSourceRows(
     viewerRow(l10n.sourceOverwrite,
         canPlace ? () => ui.placeSource(view, insert: false) : null, close,
         id: 'source-menu-overwrite', action: 'cut.overwrite'),
+    viewerRow(l10n.sourceReplace,
+        canReplace(ui) ? () => ui.replaceSource(view) : null, close,
+        id: 'source-menu-replace', action: 'cut.replace'),
+    viewerRow(l10n.sourceFitToFill,
+        canFit(ui) ? () => ui.fitSource(view) : null, close,
+        id: 'source-menu-fit', action: 'cut.fit.fill'),
     const MenuDivider(),
+    viewerRow(
+        l10n.menuRevealInProject,
+        switch (ui.footageOf(view)) {
+          final footage? => () =>
+              revealInProject(ui, ItemReference.footage(footage)),
+          null => null,
+        },
+        close,
+        id: 'source-menu-reveal'),
     viewerRow(l10n.viewerMenuCloseSource, () {
       view.itemId = null;
       view.sourceIn = null;

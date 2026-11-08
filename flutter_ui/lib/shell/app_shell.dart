@@ -1306,6 +1306,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (ui.sourceView case final view?) {
           ui.placeSource(view, insert: action == 'cut.insert');
         }
+      case 'cut.replace':
+        if (ui.sourceView case final view?) ui.replaceSource(view);
+      case 'cut.fit.fill':
+        if (ui.sourceView case final view?) ui.fitSource(view);
       // The rest of the Cut context's keys act on the Cut timeline's own
       // clips, which the panel answers for on its own key handler; the
       // chord is taken here so nothing else answers it.

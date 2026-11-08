@@ -5,8 +5,9 @@
 // Each strip is the board's drawing: the layer's name underlined in its label
 // colour, a pan pot, a fader beside the stereo meters, the dB well, and the
 // mute, solo and fx switches. The Master strip swaps the pot for the limiter
-// lamp. Every part of a strip answers a right-click, and all the strips' faders
-// stand level, whichever of them have something extra to show.
+// lamp and carries the loudness beside its meter. Every part of a strip
+// answers a right-click, and all the strips' faders stand level, whichever of
+// them have something extra to show.
 //
 // **The meters run off the feed.** The rest moves only as the house controls
 // do: a picked strip's fill and a switch's light ease in. One
@@ -42,6 +43,7 @@ import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
+import 'audio_loudness.dart';
 import 'audio_meters_feed.dart';
 import 'audio_routes_frb.dart';
 import 'keyframe_controls_frb.dart';
@@ -92,8 +94,9 @@ double _faderDb(double fraction) {
   return _taper.last.$2;
 }
 
-/// The menu rows every level meter wears: how long its hold line rests, and
-/// putting the lines and the limiter's light out.
+/// The menu rows every level meter wears: how long its hold line rests,
+/// putting the lines and the limiter's light out, and starting the loudness
+/// afresh.
 List<Widget> meterRows(LumitUiState ui, VoidCallback close) {
   final settings = ui.workspace.interface;
   return [
@@ -136,6 +139,14 @@ List<Widget> meterRows(LumitUiState ui, VoidCallback close) {
         resetMeterPeaks();
       },
       child: Text(l10n.mixerResetPeaks),
+    ),
+    MenuRow(
+      key: const ValueKey<String>('meter-menu-reset-loudness'),
+      onPressed: () {
+        close();
+        resetLoudness();
+      },
+      child: Text(l10n.mixerResetLoudness),
     ),
   ];
 }
@@ -362,7 +373,10 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
         // strip keeps the room for it while any of them is, so the faders stand
         // level. While none is, it takes up nothing.
         final routed = sounding.any((e) => e.info.output != null);
-        return Container(
+        // The Master's loudness takes room beside its meter only while that
+        // costs the desk no strip.
+        return LayoutBuilder(
+          builder: (context, box) => Container(
           color: t.surface0,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -435,8 +449,17 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                       ),
                 ),
               ),
-              _MasterStrip(comp: comp, feed: _feed, routed: routed),
+              _MasterStrip(
+                comp: comp,
+                feed: _feed,
+                routed: routed,
+                loudness: _wholeStrips(
+                        box.maxWidth - _stripWidth - _loudnessWidth,
+                        sounding.length) ==
+                    _wholeStrips(box.maxWidth - _stripWidth, sounding.length),
+              ),
             ],
+          ),
           ),
         );
       },
@@ -449,6 +472,11 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
 const double _stripWidth = 62;
 const double _stripWidthMost = 96;
 
+/// The column beside the Master strip's meter that holds its loudness, and
+/// how much wider than a strip that makes the Master.
+const double _loudnessColumn = 28;
+const double _loudnessWidth = 13;
+
 /// The desk's own ground kept beside strips that all fit, for its right-click.
 const double _deskGround = 16;
 
@@ -457,12 +485,17 @@ const double _deskGround = 16;
 /// them shows whole strips and a third of the next under the fade, so it says
 /// there are more.
 double _stripWidthIn(double room, int count) {
-  if (room ~/ _stripWidth >= count) {
+  final whole = _wholeStrips(room, count);
+  if (whole == count) {
     return ((room - _deskGround) / count).clamp(_stripWidth, _stripWidthMost);
   }
-  final whole = (room / _stripWidth - 0.35).floor().clamp(1, count);
   return math.max(_stripWidth, room / (whole + 0.35));
 }
+
+/// How many of [count] strips stand whole on a desk [room] wide.
+int _wholeStrips(double room, int count) => room ~/ _stripWidth >= count
+    ? count
+    : (room / _stripWidth - 0.35).floor().clamp(1, count);
 
 /// How tall the strip's rows that must stand level across the desk are.
 const double _nameRow = 18;
@@ -964,8 +997,15 @@ class _MasterStrip extends StatefulWidget {
   /// level with theirs.
   final bool routed;
 
+  /// Whether the loudness has room to stand beside the meter, rather than
+  /// the integrated number alone under the level.
+  final bool loudness;
+
   const _MasterStrip(
-      {required this.comp, required this.feed, required this.routed});
+      {required this.comp,
+      required this.feed,
+      required this.routed,
+      required this.loudness});
 
   @override
   State<_MasterStrip> createState() => _MasterStripState();
@@ -1028,7 +1068,7 @@ class _MasterStripState extends State<_MasterStrip> {
       behavior: HitTestBehavior.opaque,
       onSecondaryTapUp: (e) => _menu(e.globalPosition),
       child: Container(
-        width: _stripWidth,
+        width: _stripWidth + (widget.loudness ? _loudnessWidth : 0),
         decoration: BoxDecoration(
           color: t.surface1,
           border: Border(left: BorderSide(color: t.hairline)),
@@ -1063,12 +1103,36 @@ class _MasterStripState extends State<_MasterStrip> {
                   ),
                   const SizedBox(width: 3),
                   MeterBand(stripId: '', feed: widget.feed),
+                  // Beside the meter, its top level with the fader's.
+                  if (widget.loudness) ...[
+                    const SizedBox(width: 5),
+                    SizedBox(
+                      width: _loudnessColumn,
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: LoudnessReadout(
+                            feed: widget.feed, layout: LoudnessLayout.column),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 4),
             _DbWell(db: db, onCommit: _write),
-            const SizedBox(height: 4 + _switchRow),
+            const SizedBox(height: 4),
+            // With no room beside the meter, the integrated loudness stands
+            // where a strip has its switches.
+            SizedBox(
+              height: _switchRow,
+              child: widget.loudness
+                  ? null
+                  : Center(
+                      child: LoudnessReadout(
+                          feed: widget.feed,
+                          layout: LoudnessLayout.integrated),
+                    ),
+            ),
           ],
         ),
       ),

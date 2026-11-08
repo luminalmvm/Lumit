@@ -1810,6 +1810,8 @@ Map<String, String> get _built => {
       "Go to Out": l10n.sourceGoToOut,
       "Insert at the playhead": l10n.keyInsertAtThePlayhead,
       "Overwrite at the playhead": l10n.keyOverwriteAtThePlayhead,
+      "Replace the picked clip": l10n.keyReplaceThePickedClip,
+      "Fit to fill the work area": l10n.keyFitToFillTheWorkArea,
       "Ripple delete": l10n.keyRippleDelete,
       "Select clips": l10n.keySelectClips,
       "Cut clips with the razor": l10n.keyCutClipsWithTheRazor,

@@ -1,6 +1,6 @@
 //! Holding a frame, a clip's speed and an overlap's kind: the calls behind
-//! Freeze frame and Hold here, New composition from selection, Speed and the
-//! Transition menu.
+//! Freeze frame and Hold here, New composition from selection, Speed, the
+//! Transition menu, and the source side's Replace and Fit to fill.
 
 use flutter_rust_bridge::frb;
 use lumit_core::anim::{Animation, Keyframe, SideInterp};
@@ -13,8 +13,10 @@ use uuid::Uuid;
 use crate::api::{
     composition::CompositionReference,
     cut::{self, BridgeCutResult},
-    effect::BridgeEffectInstance,
+    effect::{BridgeEffectInstance, BridgeRational},
+    footage::FootageReference,
     layer::LayerReference,
+    streams::BridgeStreamsArrival,
     BridgeError,
 };
 
@@ -60,6 +62,60 @@ impl CompositionReference {
         linked: bool,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut::freeze::freeze_clip(self, clip, at_frame, hold_frames, linked)
+    }
+
+    /// **Replace**: put the source from `source_in` over `clip`, which keeps
+    /// its row, its place and its length, as Overwrite would over that span.
+    /// `Limit` when the file runs out first.
+    #[frb(sync)]
+    pub fn cut_replace(
+        &self,
+        clip: Uuid,
+        footage: &FootageReference,
+        source_in: BridgeRational,
+        linked: bool,
+        with_picture: bool,
+        arrival: Option<BridgeStreamsArrival>,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        let arrival = arrival.unwrap_or(BridgeStreamsArrival::First);
+        cut::place::replace_clip(
+            self,
+            clip,
+            footage,
+            source_in,
+            linked,
+            with_picture,
+            arrival,
+        )
+    }
+
+    /// **Fit to fill**: put the source from `source_in` to `source_out` over
+    /// the work area at whatever speed fills it, as Overwrite would, on
+    /// `target` as [`Self::cut_place`] takes it. `Nothing` with no work area.
+    #[allow(clippy::too_many_arguments)]
+    #[frb(sync)]
+    pub fn cut_fit_to_fill(
+        &self,
+        target: Option<LayerReference>,
+        footage: &FootageReference,
+        source_in: BridgeRational,
+        source_out: BridgeRational,
+        linked: bool,
+        with_picture: bool,
+        arrival: Option<BridgeStreamsArrival>,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        let arrival = arrival.unwrap_or(BridgeStreamsArrival::First);
+        let target = target.map(|layer| layer.id());
+        cut::place::fit_clip(
+            self,
+            target,
+            footage,
+            source_in,
+            source_out,
+            linked,
+            with_picture,
+            arrival,
+        )
     }
 
     /// **New composition from selection**: move `clips` into a new composition

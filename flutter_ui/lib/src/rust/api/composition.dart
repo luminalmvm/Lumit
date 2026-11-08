@@ -1079,6 +1079,28 @@ class CompositionReference {
               linked: linked,
               how: how);
 
+  /// **Fit to fill**: put the source from `source_in` to `source_out` over
+  /// the work area at whatever speed fills it, as Overwrite would, on
+  /// `target` as [`Self::cut_place`] takes it. `Nothing` with no work area.
+  BridgeCutResult cutFitToFill(
+          {LayerReference? target,
+          required FootageReference footage,
+          required BridgeRational sourceIn,
+          required BridgeRational sourceOut,
+          required bool linked,
+          required bool withPicture,
+          BridgeStreamsArrival? arrival}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutFitToFill(
+              that: this,
+              target: target,
+              footage: footage,
+              sourceIn: sourceIn,
+              sourceOut: sourceOut,
+              linked: linked,
+              withPicture: withPicture,
+              arrival: arrival);
+
   /// **Freeze frame** on a clip: hold the frame it shows at `at_frame` for
   /// `hold_frames`, as a clip of its own between its two halves, with what
   /// follows moved later on every unlocked Sequence layer. With `linked` the
@@ -1279,6 +1301,25 @@ class CompositionReference {
               endFrame: endFrame,
               layers: layers,
               ripple: ripple);
+
+  /// **Replace**: put the source from `source_in` over `clip`, which keeps
+  /// its row, its place and its length, as Overwrite would over that span.
+  /// `Limit` when the file runs out first.
+  BridgeCutResult cutReplace(
+          {required UuidValue clip,
+          required FootageReference footage,
+          required BridgeRational sourceIn,
+          required bool linked,
+          required bool withPicture,
+          BridgeStreamsArrival? arrival}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutReplace(
+          that: this,
+          clip: clip,
+          footage: footage,
+          sourceIn: sourceIn,
+          linked: linked,
+          withPicture: withPicture,
+          arrival: arrival);
 
   /// Roll an edit point to `to_frame`: the clip on one side trims as the
   /// clip on the other extends, and nothing else moves.
