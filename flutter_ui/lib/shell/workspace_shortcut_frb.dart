@@ -34,34 +34,37 @@ const int workspaceSlots = 9;
 
 /// What Window ▸ Assign shortcut to this workspace does, or null — so the row
 /// greys out — when the arrangement in force is not one of the first nine on
-/// the strip.
+/// the strip. The strip's own menu names another [slot] and its [name].
 ///
 /// The result is said in the status line rather than in a dialogue of its own:
 /// binding a key is a quiet act, and the strip is where the answer shows.
 VoidCallback? assignWorkspaceShortcutAction(
   BuildContext context,
   LumitState app,
-  LumitUiState ui,
-) {
+  LumitUiState ui, {
+  int? slot,
+  String? name,
+}) {
   final workspace = ui.workspace;
-  final slot = workspace.activeWorkspaceSlot;
-  if (slot == null || slot > workspaceSlots) return null;
-  final name = workspace.activeUserWorkspace ??
+  final at = slot ?? workspace.activeWorkspaceSlot;
+  if (at == null || at > workspaceSlots) return null;
+  final called = name ??
+      workspace.activeUserWorkspace ??
       workspace.activePreset?.title ??
       '';
-  final action = 'workspace.switch.$slot';
+  final action = 'workspace.switch.$at';
   return () async {
     final chord = await showWorkspaceShortcutFrb(
       context: context,
-      workspace: name,
-      slot: slot,
+      workspace: called,
+      slot: at,
       current: ui.keymap.chordFor(action),
     );
     if (chord == null) return;
     final refusal =
         await ui.keymap.rebind(BridgeKeyContext.global, action, chord);
     app.postNotice(
-      refusal ?? l10n.workspaceShortcutSet(chordLabel(chord), name),
+      refusal ?? l10n.workspaceShortcutSet(chordLabel(chord), called),
       error: refusal != null,
     );
   };

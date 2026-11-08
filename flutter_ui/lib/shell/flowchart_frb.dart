@@ -37,7 +37,6 @@ bool openFlowchartFrb(BuildContext context, LumitUiState ui) {
     context: context,
     comp: comp,
     anchor: lastKnownPointerPosition,
-    keyHint: ui.keymap.chordFor('comp.flowchart'),
     onOpen: ui.setSelectedComp,
   );
 }
@@ -50,7 +49,6 @@ bool showFlowchartFrb({
   required CompositionReference comp,
   required ValueChanged<CompositionReference> onOpen,
   Offset? anchor,
-  String? keyHint,
   FlowchartRead read = _engineFlow,
 }) {
   final flow = read(comp);
@@ -76,7 +74,6 @@ bool showFlowchartFrb({
         flow: flow,
         read: read,
         anchor: at,
-        keyHint: keyHint,
         onOpen: onOpen,
         onClose: close,
       ),
@@ -101,7 +98,6 @@ const double _stub = 16;
 const double _pad = 12;
 const double _edge = 1;
 const double _kickerHeight = 20;
-const double _footHeight = 20;
 const double _margin = 8;
 
 class _Flowchart extends StatefulWidget {
@@ -109,7 +105,6 @@ class _Flowchart extends StatefulWidget {
   final BridgeCompFlow flow;
   final FlowchartRead read;
   final Offset? anchor;
-  final String? keyHint;
   final ValueChanged<CompositionReference> onOpen;
   final VoidCallback onClose;
 
@@ -118,7 +113,6 @@ class _Flowchart extends StatefulWidget {
     required this.flow,
     required this.read,
     required this.anchor,
-    required this.keyHint,
     required this.onOpen,
     required this.onClose,
   });
@@ -307,9 +301,9 @@ class _FlowchartState extends State<_Flowchart> {
       onKeyEvent: _onKey,
       child: LayoutBuilder(builder: (context, box) {
         final width = g.width + (_pad + _edge) * 2;
-        // Everything in the popover but the chart: its edges and padding,
-        // the kickers, the hairline and the foot.
-        final fixed = (_pad + _edge) * 2 + head + _edge + _footHeight;
+        // Everything in the popover but the chart: its edges and padding
+        // and the kickers.
+        final fixed = (_pad + _edge) * 2 + head;
         final room = box.maxHeight - _margin * 2 - fixed;
         final chart = g.height < room ? g.height : (room < 0 ? 0.0 : room);
         final anchor =
@@ -367,8 +361,6 @@ class _FlowchartState extends State<_Flowchart> {
                       ),
                     ),
                     const SizedBox(height: _pad),
-                    Container(height: _edge, color: t.hairline),
-                    _foot(t, alone),
                   ],
                 ),
               ),
@@ -511,24 +503,6 @@ class _FlowchartState extends State<_Flowchart> {
     );
   }
 
-  Widget _foot(LumitTheme t, bool alone) => Container(
-        height: _footHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Row(children: [
-          Expanded(
-            child: Text(
-              alone ? l10n.flowchartAlone : l10n.flowchartOpens,
-              key: const ValueKey('flowchart-foot'),
-              overflow: TextOverflow.ellipsis,
-              style: t.kicker,
-            ),
-          ),
-          if (widget.keyHint case final hint?) ...[
-            const SizedBox(width: 8),
-            Text(hint, style: t.kicker),
-          ],
-        ]),
-      );
 }
 
 /// Where everything in the chart sits, worked out before layout so the wires

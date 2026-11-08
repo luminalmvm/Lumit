@@ -38,6 +38,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:uuid/uuid.dart' show UuidValue;
 
+import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
@@ -104,17 +105,22 @@ import 'workspace_shortcut_frb.dart';
 /// arrangement on screen under a name of the user's own, and renaming,
 /// deleting, exporting and importing what they have saved.
 ///
-/// The four that act on a saved workspace are disabled unless one is in force —
-/// a preset's factory layout is not the user's to rename or delete. Every
+/// The three that act on a saved workspace act on [of], or on the one in
+/// force when none is named, and are disabled when there is neither, as a
+/// preset's factory layout is not the user's to rename or delete. Every
 /// outcome is said in the status line rather than in a dialogue of its own:
 /// these are quiet acts, and the strip shows the result.
-List<MenuEntry> _userWorkspaceRows(
+///
+/// In this order: save as new, rename, delete, export, import. The strip's
+/// own menu ([workspaceEntryRows]) picks from them by position.
+List<MenuEntry> userWorkspaceRows(
   BuildContext context,
   LumitState app,
-  LumitUiState ui,
-) {
+  LumitUiState ui, {
+  String? of,
+}) {
   final workspace = ui.workspace;
-  final active = workspace.activeUserWorkspace;
+  final active = of ?? workspace.activeUserWorkspace;
 
   Future<void> saveAs() async {
     // The theme's name dialogue, because a name is a name: one small field
@@ -194,6 +200,51 @@ List<MenuEntry> _userWorkspaceRows(
   ];
 }
 
+/// The right-click menu of one name on the workspace strip, a shipped
+/// [preset] or a saved [user] workspace standing in [slot]: the rows of
+/// Window ▸ Workspace, aimed at that name rather than the one in force.
+List<MenuEntry> workspaceEntryRows(
+  BuildContext context,
+  LumitState app,
+  LumitUiState ui, {
+  WorkspacePreset? preset,
+  String? user,
+  required int slot,
+}) {
+  final workspace = ui.workspace;
+  // Save as new, rename, delete, export, import, in that order.
+  final rows = userWorkspaceRows(context, app, ui, of: user);
+  final name = preset?.title ?? user ?? '';
+  return [
+    // A preset goes back to its factory arrangement. A saved workspace is
+    // whatever it was last left as, so there is nothing to put back.
+    if (preset != null) ...[
+      MenuEntry(l10n.menuResetWorkspace,
+          () => workspace.applyWorkspacePreset(preset)),
+      MenuEntry.divider(),
+    ],
+    rows[0],
+    if (user != null) ...rows.sublist(1, 4),
+    MenuEntry.divider(),
+    MenuEntry(
+        l10n.menuAssignWorkspaceShortcut,
+        assignWorkspaceShortcutAction(context, app, ui,
+            slot: slot, name: name),
+        action: slot <= workspaceSlots ? 'workspace.switch.$slot' : null),
+    rows[4],
+  ];
+}
+
+/// A menu of [rows] at [position], drawn as the bar's own are: the same
+/// rows, dividers, ticks and chords, for a right-click somewhere in the shell.
+Future<void> showMenuEntries(
+        BuildContext context, Offset position, List<MenuEntry> rows) =>
+    showLumitPopup<void>(
+      context: context,
+      position: position,
+      builder: (close) => _MenuList(items: rows, close: () => close(null)),
+    );
+
 /// One row of a menu: a label with an action, a submenu, or a divider.
 ///
 /// [action] is a keymap action id, not a callback — the chord beside the row is
@@ -231,6 +282,9 @@ class MenuEntry {
   /// full path of a recent project.
   final String? tip;
 
+  /// A mark before the name, for a menu of things that have one: the tools.
+  final LumitIcon? icon;
+
   MenuEntry(
     this.label,
     this.onPressed, {
@@ -238,6 +292,7 @@ class MenuEntry {
     this.needsPro = false,
     bool? checked,
     this.tip,
+    this.icon,
   })  : isDivider = false,
         children = null,
         todo = false,
@@ -268,7 +323,8 @@ class MenuEntry {
         _checkedNow = checked,
         live = null,
         rebuild = null,
-        tip = null;
+        tip = null,
+        icon = null;
 
   /// **An option row that leaves the menu open**, on the same terms as
   /// [MenuEntry.toggle] and for a narrower reason: the rows that pick one of
@@ -291,7 +347,8 @@ class MenuEntry {
         _checkedNow = checked,
         live = null,
         rebuild = null,
-        tip = null;
+        tip = null,
+        icon = null;
 
   MenuEntry.divider()
       : label = null,
@@ -305,7 +362,8 @@ class MenuEntry {
         _checkedNow = null,
         live = null,
         rebuild = null,
-        tip = null;
+        tip = null,
+        icon = null;
 
   MenuEntry.submenu(this.label, this.children)
       : onPressed = null,
@@ -317,7 +375,8 @@ class MenuEntry {
         _checkedNow = null,
         live = null,
         rebuild = null,
-        tip = null;
+        tip = null,
+        icon = null;
 
   /// A command the specification has and the build has not.
   MenuEntry.todo(this.label, {this.action})
@@ -330,7 +389,8 @@ class MenuEntry {
         _checkedNow = null,
         live = null,
         rebuild = null,
-        tip = null;
+        tip = null,
+        icon = null;
 
   /// A row that redraws itself while its menu is open, from [rebuild], every
   /// time [live] fires — and which does *not* close the menu when pressed.
@@ -352,7 +412,8 @@ class MenuEntry {
         needsPro = false,
         _checked = null,
         _checkedNow = null,
-        tip = null;
+        tip = null,
+        icon = null;
 
   /// The tick this row wears now: fixed for an ordinary row, re-read for a
   /// [MenuEntry.toggle] whose menu is still open after it was pressed.
@@ -704,26 +765,30 @@ class LumitMenuBarFrb extends StatelessWidget {
       if (menu.title != l10n.menuEffect) walk(menu.title, menu.items());
     }
 
+    // Each kind of thing wears its mark, so a comp is told from an effect
+    // before the badge is read.
+    final t = ThemeScope.of(context).theme;
+    Widget mark(LumitIcon icon) =>
+        lumitIcon(icon, size: iconSize, color: t.textMuted);
+    Widget glyphMark(String icon) =>
+        glyph.LumitIcon(icon, size: iconSize, colour: t.textMuted);
     // Every comp, by name: Enter fronts it in the Viewer and Timeline.
     for (final (comp, name) in app.comps()) {
       commands.add(PaletteCommand(
         label: name,
         category: l10n.paletteComps,
+        icon: mark(LumitIcon.comp),
         run: () => ui.setSelectedComp(comp),
       ));
     }
-    // Every layer of the front comp: Enter selects it.
-    try {
-      for (final each
-          in ui.selectedComp?.getLayers() ?? const <LayerReference>[]) {
-        commands.add(PaletteCommand(
-          label: each.getName(),
-          category: l10n.paletteLayer,
-          run: () => ui.setSelection([each]),
-        ));
-      }
-    } catch (_) {
-      // The comp has gone since it was fronted; it has no layers to offer.
+    // Every layer of the front comp, with its kind's mark: Enter selects it.
+    for (final entry in ui.model.layers) {
+      commands.add(PaletteCommand(
+        label: entry.info.name,
+        category: l10n.paletteLayer,
+        icon: mark(iconForKind(entry.info.kind)),
+        run: () => ui.setSelection([entry.layer]),
+      ));
     }
     // Every effect: Enter applies it to the primary layer, as the Effect menu
     // does. With no layer selected the rows stay, greyed, and say what they
@@ -733,6 +798,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       commands.add(PaletteCommand(
         label: engineLabel(effect.label),
         category: l10n.menuEffect,
+        icon: mark(LumitIcon.fx),
         disabled: layer == null ? l10n.paletteNeedsLayer : null,
         run: () {
           if (layer != null) ui.addEffect(layer, effect.name);
@@ -746,6 +812,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       commands.add(PaletteCommand(
         label: extension.name,
         category: l10n.palettePanels,
+        icon: glyphMark(LumitIcons.grid),
         run: () {
           if (!ui.extensionShown(extension.id)) {
             ui.toggleExtension(extension.id);
@@ -758,6 +825,7 @@ class LumitMenuBarFrb extends StatelessWidget {
       commands.add(PaletteCommand(
         label: panel.title,
         category: l10n.palettePanels,
+        icon: glyphMark(LumitIcons.grid),
         run: () {
           setPanelVisible(ui.split, panel, true);
           activatePanelTab(ui.split, panel);
@@ -772,12 +840,14 @@ class LumitMenuBarFrb extends StatelessWidget {
       commands.add(PaletteCommand(
         label: path,
         category: l10n.paletteSetting,
+        icon: glyphMark(LumitIcons.settings),
         run: () => showSettingsWindowFrb(context, initialPage: page),
       ));
       for (final row in settingsRowNames(page, ui)) {
         commands.add(PaletteCommand(
           label: '$path$palettePathSeparator$row',
           category: l10n.paletteSetting,
+          icon: glyphMark(LumitIcons.settings),
           run: () =>
               showSettingsWindowFrb(context, initialPage: page, row: row),
         ));
@@ -1194,14 +1264,14 @@ List<MenuSection> lumitMenus(
     (
       title: l10n.menuComposition,
       items: () => [
-            MenuEntry(l10n.newComposition,
+            MenuEntry(l10n.menuNewComposition,
                 project == null ? null : () => newCompositionFrb(context, app),
                 action: 'comp.new'),
             // Beside it, because the two make the same kind of thing by the
             // same dialogue and differ only in what is inside
             // (docs/impl/node-graph-comp.md §4.4). No chord: the keymap has
             // none to teach.
-            MenuEntry(l10n.newNodeGraph,
+            MenuEntry(l10n.menuNewNodeGraph,
                 project == null ? null : () => app.newNodeGraph(context)),
             MenuEntry.divider(),
             MenuEntry(l10n.compositionSettingsEllipsis,
@@ -1817,7 +1887,7 @@ List<MenuSection> lumitMenus(
                     () => ui.workspace.applyUserWorkspace(saved.name),
                     checked: ui.workspace.activeUserWorkspace == saved.name),
               MenuEntry.divider(),
-              ..._userWorkspaceRows(context, app, ui),
+              ...userWorkspaceRows(context, app, ui),
               MenuEntry.divider(),
               MenuEntry(l10n.menuResetWorkspace, ui.resetLayout),
             ]),
@@ -3242,6 +3312,12 @@ class _MenuListState extends State<_MenuList> {
     return Row(
       children: [
         if (ticks) menuTick(item.checked == true, colour: style?.color),
+        if (item.icon case final icon?) ...[
+          lumitIcon(icon,
+              size: iconSize,
+              color: item.enabled ? t.textSecondary : t.textDisabled),
+          const SizedBox(width: 8),
+        ],
         Expanded(
           child: item.tip == null
               ? text

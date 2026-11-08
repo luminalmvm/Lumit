@@ -13,6 +13,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../icons/icons.dart' show iconSize;
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -37,6 +38,11 @@ class PaletteCommand {
   /// Why the row cannot be run just now, shown greyed in the shortcut's place.
   /// Null for a row that can.
   final String? disabled;
+
+  /// The mark before the name, drawn by the caller, for what has one: a
+  /// comp, a layer of its kind, an effect. Every row keeps the slot, so the
+  /// names stand on one edge whether or not a row has a mark.
+  final Widget? icon;
   final VoidCallback run;
 
   const PaletteCommand({
@@ -45,6 +51,7 @@ class PaletteCommand {
     this.shortcut,
     this.ticked = false,
     this.disabled,
+    this.icon,
     required this.run,
   });
 }
@@ -197,50 +204,102 @@ class _PaletteState extends State<_Palette> {
     _run(matches[_highlighted.clamp(0, matches.length - 1)]);
   }
 
-  /// Move the highlight to row [to] of [count] and scroll it into view. Every
-  /// row is the height of the list's prototype, so the whole list divided by
-  /// the count is one row.
-  void _highlight(int to, int count) {
+  /// The list as drawn: the matches, and before anything is typed the
+  /// headings that group them, the recently run first and then each kind
+  /// under its own name. A typed query is one ranked list, where the badge
+  /// at the row's end says the kind.
+  List<Object> _entries(List<PaletteCommand> matches) {
+    if (_query.text.trim().isNotEmpty) return matches;
+    final out = <Object>[];
+    final recent = [
+      for (final m in matches)
+        if (widget.recent.contains(m.label)) m,
+    ];
+    if (recent.isNotEmpty) {
+      out
+        ..add(l10n.paletteRecent)
+        ..addAll(recent);
+    }
+    String? last;
+    for (final m in matches) {
+      if (recent.contains(m)) continue;
+      if (m.category != last) {
+        last = m.category;
+        out.add(last);
+      }
+      out.add(m);
+    }
+    return out;
+  }
+
+  /// Move the highlight to match [to] and scroll its row into view. Every
+  /// row, heading or match, is the height of the list's prototype, so the
+  /// whole list divided by the entry count is one row.
+  void _highlight(int to, List<PaletteCommand> matches) {
     setState(() => _highlighted = to);
-    if (!_scroll.hasClients || count == 0) return;
+    if (!_scroll.hasClients || matches.isEmpty) return;
+    final entries = _entries(matches);
+    final at = entries.indexOf(matches[to]);
     final position = _scroll.position;
-    final row =
-        (position.maxScrollExtent + position.viewportDimension) / count;
-    final top = to * row;
-    final bottom = top + row - position.viewportDimension;
+    final row = (position.maxScrollExtent + position.viewportDimension) /
+        entries.length;
+    // With its heading, when it is the first under one.
+    final top = (at > 0 && entries[at - 1] is String ? at - 1 : at) * row;
+    final bottom = at * row + row - position.viewportDimension;
     if (position.pixels > top) _scroll.jumpTo(top);
     if (position.pixels < bottom) _scroll.jumpTo(bottom);
   }
 
-  /// One result row. Also the list's prototype, so it is always one line.
+  /// A group's name over its rows, one row tall so the list stays regular.
+  Widget _heading(LumitTheme t, String name) => Container(
+        height: _rowHeight,
+        alignment: AlignmentDirectional.centerStart,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Text(t.kickerCase(name), style: t.kicker),
+      );
+
+  /// One line of the list, heading or match, for the prototype and the
+  /// scrolling arithmetic.
+  static const double _rowHeight = 26;
+
+  /// One result row: the mark, the name, the tick, the chord and the badge.
+  /// Under a heading the badge would say the heading again, so it goes.
   Widget _row(LumitTheme t, PaletteCommand command, {bool selected = false}) {
     final off = command.disabled != null;
-    return MenuRow(
-      selected: selected,
-      onPressed: () => _run(command),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              command.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: off ? t.body.copyWith(color: t.textDisabled) : null,
+    final badged = _query.text.trim().isNotEmpty;
+    return SizedBox(
+      height: _rowHeight,
+      child: MenuRow(
+        selected: selected,
+        onPressed: () => _run(command),
+        child: Row(
+          children: [
+            SizedBox(width: iconSize, child: command.icon),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                command.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: off ? t.body.copyWith(color: t.textDisabled) : null,
+              ),
             ),
-          ),
-          // After the name, so ticked and unticked names start in line.
-          if (command.ticked) ...[
-            menuTick(true, colour: t.textMuted),
-            const SizedBox(width: 8),
+            // After the name, so ticked and unticked names start in line.
+            if (command.ticked) ...[
+              menuTick(true, colour: t.textMuted),
+              const SizedBox(width: 8),
+            ],
+            if (command.disabled ?? command.shortcut case final note?) ...[
+              Text(note,
+                  style:
+                      off ? t.small.copyWith(color: t.textDisabled) : t.mono),
+              const SizedBox(width: 8),
+            ],
+            if (badged)
+              Text(command.category,
+                  style: t.small.copyWith(color: t.textMuted)),
           ],
-          if (command.disabled ?? command.shortcut case final note?) ...[
-            Text(note,
-                style: off ? t.small.copyWith(color: t.textDisabled) : t.mono),
-            const SizedBox(width: 8),
-          ],
-          Text(command.category,
-              style: t.small.copyWith(color: t.textMuted)),
-        ],
+        ),
       ),
     );
   }
@@ -249,6 +308,7 @@ class _PaletteState extends State<_Palette> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final matches = _matches;
+    final entries = _entries(matches);
 
     return Focus(
       onKeyEvent: (node, event) {
@@ -257,14 +317,14 @@ class _PaletteState extends State<_Palette> {
           case LogicalKeyboardKey.arrowDown:
             _highlight(
                 matches.isEmpty ? 0 : (_highlighted + 1) % matches.length,
-                matches.length);
+                matches);
             return KeyEventResult.handled;
           case LogicalKeyboardKey.arrowUp:
             _highlight(
                 matches.isEmpty
                     ? 0
                     : (_highlighted - 1 + matches.length) % matches.length,
-                matches.length);
+                matches);
             return KeyEventResult.handled;
           case LogicalKeyboardKey.enter:
             _runHighlighted(matches);
@@ -302,11 +362,16 @@ class _PaletteState extends State<_Palette> {
                   controller: _scroll,
                   padding: EdgeInsets.zero,
                   prototypeItem: _row(t, matches.first),
-                  itemCount: matches.length,
-                  itemBuilder: (context, i) => KeyedSubtree(
-                    key: ValueKey<String>('palette-item-${matches[i].label}'),
-                    child: _row(t, matches[i], selected: i == _highlighted),
-                  ),
+                  itemCount: entries.length,
+                  itemBuilder: (context, i) => switch (entries[i]) {
+                    final String name => _heading(t, name),
+                    final PaletteCommand command => KeyedSubtree(
+                        key: ValueKey<String>('palette-item-${command.label}'),
+                        child: _row(t, command,
+                            selected: matches.indexOf(command) == _highlighted),
+                      ),
+                    _ => const SizedBox.shrink(),
+                  },
                 ),
               ),
           ],

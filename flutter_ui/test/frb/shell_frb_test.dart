@@ -660,7 +660,9 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.text('Not saved yet'), findsOneWidget,
+      const dot = ValueKey('status-unsaved-dot');
+      expect(find.text('Untitled'), findsOneWidget);
+      expect(find.byKey(dot), findsNothing,
           reason: 'a fresh untouched project has nothing to lose');
 
       // The strip redraws on document notifications rather than a poll, so
@@ -668,7 +670,7 @@ void main() {
       p.state.project!.newComposition(name: 'Scene');
       p.state.notifyDocumentChanged();
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Unsaved changes'), findsOneWidget);
+      expect(find.byKey(dot), findsOneWidget);
 
       final dir = Directory.systemTemp.createTempSync('lumit-status');
       addTearDown(() => dir.deleteSync(recursive: true));
@@ -679,7 +681,9 @@ void main() {
       // As the application's own save path does once the write lands.
       p.state.notifyDocumentChanged();
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Saved'), findsOneWidget,
+      expect(find.text('probe'), findsOneWidget,
+          reason: 'the saved file names the project');
+      expect(find.byKey(dot), findsNothing,
           reason: 'the save stamped the revision clean');
     });
 

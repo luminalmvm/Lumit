@@ -45,12 +45,16 @@ import '../l10n/strings.dart';
 import '../main.dart';
 import '../panels/viewer_paint.dart' show brushShapeLabel;
 import '../state/dock.dart';
+import '../state/settings.dart' show ToolBarPosition;
 import '../state/tools.dart';
 import '../theme/motion.dart';
 import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'menu_bar_frb.dart'
+    show MenuEntry, showMenuEntries, workspaceEntryRows;
+import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import 'window_frame.dart';
 
 /// How tall the strip is, and how wide and tall one tool button is.
@@ -152,7 +156,10 @@ class LumitToolBarFrb extends StatelessWidget {
     // and Desk keep the flat strip, welded under the menu bar by a hairline.
     final pills = t.tokens.roomed;
     // Named, so a style can dress the toolbar's buttons apart from others.
-    return StylePart(name: 'toolbar', child: Container(
+    return StylePart(name: 'toolbar', child: GestureDetector(
+      onSecondaryTapUp: (d) =>
+          showMenuEntries(context, d.globalPosition, _barRows(ui)),
+      child: Container(
       height: toolBarHeightFor(t.shape),
       decoration: BoxDecoration(
         color: pills
@@ -229,7 +236,7 @@ class LumitToolBarFrb extends StatelessWidget {
           );
         },
       ),
-    ));
+    )));
   }
 }
 
@@ -287,6 +294,29 @@ class LumitTopLineToolsFrb extends StatelessWidget {
   }
 }
 
+/// The bar's own menu, on its empty stretch and on the rail: where the tools
+/// stand, which Settings also has. Option rows, so the two can be compared
+/// without reopening it.
+List<MenuEntry> _barRows(LumitUiState ui) {
+  final settings = ui.workspace.interface;
+  return [
+    MenuEntry.submenu(l10n.settingsToolBarPosition, [
+      for (final (position, label) in [
+        (ToolBarPosition.top, l10n.toolBarTop),
+        (ToolBarPosition.left, l10n.toolBarLeft),
+      ])
+        MenuEntry.option(
+          label,
+          () {
+            settings.toolBarPosition = position;
+            ui.workspace.settingsChanged();
+          },
+          checked: () => settings.toolBarPositionFor(ui.theme.shape) == position,
+        ),
+    ]),
+  ];
+}
+
 /// What stands between two groups on the row: air between pills, a hairline
 /// on the flat strip.
 Widget _gap(bool pills) =>
@@ -315,22 +345,7 @@ Widget? _toolOptions(LumitTheme t, LumitUiState ui, {required double height}) {
       widthFactor: 1,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // The mockup's hint word before the controls, under
-            // Lantern.
-            if (t.tokens.roomed) ...[
-              Text(
-                l10n.toolOptions,
-                key: const ValueKey('tool-options-hint'),
-                style: t.body.copyWith(fontSize: 12, color: t.textMuted),
-              ),
-              const SizedBox(width: 8),
-            ],
-            _ToolOptions(tools: tools, shows: shows),
-          ],
-        ),
+        child: _ToolOptions(tools: tools, shows: shows),
       ),
     ),
     height: height,
@@ -384,7 +399,10 @@ class LumitToolRailFrb extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final ui = context.watch<LumitUiState>();
     final pills = t.tokens.roomed;
-    return Container(
+    return GestureDetector(
+      onSecondaryTapUp: (d) =>
+          showMenuEntries(context, d.globalPosition, _barRows(ui)),
+      child: Container(
       width: toolRailWidth,
       decoration: BoxDecoration(
         color: pills
@@ -429,7 +447,7 @@ class LumitToolRailFrb extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -450,14 +468,30 @@ class _SnapButton extends StatelessWidget {
     final on = tools.snapping;
     return LumitTooltip(
       message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
-      child: HouseButton(
-        key: const ValueKey('tool-snapping'),
-        small: true,
-        frameless: !on,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        onPressed: () => tools.snapping = !on,
-        child: lumitIcon(LumitIcon.magnet,
-            size: iconSize, color: on ? t.textPrimary : t.textMuted),
+      child: GestureDetector(
+        // What the magnet reaches for, as View ▸ has it.
+        onSecondaryTapUp: (d) => showMenuEntries(context, d.globalPosition, [
+          MenuEntry.toggle(
+            l10n.viewerOverlaySnap,
+            () => tools.snapping = !tools.snapping,
+            checked: () => tools.snapping,
+          ),
+          MenuEntry.toggle(
+            l10n.menuSnapToGrid,
+            () => tools.snapToGrid = !tools.snapToGrid,
+            action: 'viewer.snap.grid.toggle',
+            checked: () => tools.snapToGrid,
+          ),
+        ]),
+        child: HouseButton(
+          key: const ValueKey('tool-snapping'),
+          small: true,
+          frameless: !on,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          onPressed: () => tools.snapping = !on,
+          child: lumitIcon(LumitIcon.magnet,
+              size: iconSize, color: on ? t.textPrimary : t.textMuted),
+        ),
       ),
     );
   }
@@ -972,14 +1006,12 @@ class _ToolButtonState extends State<_ToolButton> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? () => widget.tools.select(member) : null,
-          // Both routes to the hidden tools, because both are muscle memory:
-          // After Effects opens the flyout on a press-and-hold, and every other
-          // toolbar on this machine opens a menu on the right button.
+          // A press-and-hold opens the group's flyout, as it always has.
+          // The right button opens the button's own menu: the group, and
+          // what else there is to do with the tool.
           onLongPress:
               enabled && members.length > 1 ? () => _openFlyout(context) : null,
-          onSecondaryTapUp: enabled && members.length > 1
-              ? (_) => _openFlyout(context)
-              : null,
+          onSecondaryTapUp: (d) => _openMenu(context, d.globalPosition),
           child: AnimatedContainer(
             key: ValueKey<String>('tool-${widget.group.name}'),
             duration: step.duration,
@@ -1045,6 +1077,38 @@ class _ToolButtonState extends State<_ToolButton> {
   String _tooltip(ToolMode member) => member.ready
       ? member.label
       : '${member.label} · ${l10n.tipNotBuiltYet}';
+
+  /// The button's menu: every tool in the group, the one in hand ticked,
+  /// then the options' reset where the tool has options, and the way to
+  /// its key. One list for every button, so a lone tool has a menu too.
+  void _openMenu(BuildContext context, Offset at) {
+    final tools = widget.tools;
+    final face = tools.memberOf(widget.group);
+    final armed = tools.tool;
+    final hasOptions = toolOptionsFor(face, inDepth: true) != ToolOptions.none;
+    showMenuEntries(context, at, [
+      for (final member in ToolMode.builtMembersOf(widget.group))
+        MenuEntry(
+          member.label,
+          member.ready && tools.arms(widget.group)
+              ? () => tools.select(member)
+              : null,
+          // The key arms the member on the button's face, so it is that row
+          // that shows it.
+          action: member == face ? _actionFor(widget.group) : null,
+          checked: member == armed,
+          icon: member.icon,
+        ),
+      MenuEntry.divider(),
+      if (hasOptions)
+        MenuEntry(l10n.menuResetToolOptions,
+            () => tools.resetOptionsOf(widget.group)),
+      MenuEntry(
+          l10n.menuChangeShortcut,
+          () => showSettingsWindowFrb(context,
+              initialPage: SettingsPage.shortcuts)),
+    ]);
+  }
 
   void _openFlyout(BuildContext context) {
     final box = context.findRenderObject();
@@ -1155,9 +1219,11 @@ class _WorkspaceStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
     final ui = context.watch<LumitUiState>();
+    final app = context.read<LumitState>();
     final active = ui.workspace.activePreset;
-    return Row(
+    final row = Row(
       key: const ValueKey('workspace-strip'),
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1168,6 +1234,11 @@ class _WorkspaceStrip extends StatelessWidget {
             slot: i + 1,
             active: preset == active,
             onPressed: () => ui.workspace.applyWorkspacePreset(preset),
+            onMenu: (context, at) => showMenuEntries(
+                context,
+                at,
+                workspaceEntryRows(context, app, ui,
+                    preset: preset, slot: i + 1)),
           ),
         // The user's own, after the presets and in the same order the chords
         // count (docs/07 §1.4). Drawn by exactly the same rules — a workspace
@@ -1179,8 +1250,28 @@ class _WorkspaceStrip extends StatelessWidget {
             slot: WorkspacePreset.values.length + i + 1,
             active: saved.name == ui.workspace.activeUserWorkspace,
             onPressed: () => ui.workspace.applyUserWorkspace(saved.name),
+            onMenu: (context, at) => showMenuEntries(
+                context,
+                at,
+                workspaceEntryRows(context, app, ui,
+                    user: saved.name,
+                    slot: WorkspacePreset.values.length + i + 1)),
           ),
       ],
+    );
+    // Lantern's pill already makes the names a set of places. On the flat
+    // strips they sat as bare words beside the menu headings, so they stand
+    // in a track of their own, the fronted one filled.
+    if (t.tokens.roomed) return row;
+    return Container(
+      key: const ValueKey('workspace-track'),
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: t.shape == ThemeShape.desk ? t.surface2 : t.surface0,
+        borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+        border: Border.all(color: t.hairline),
+      ),
+      child: row,
     );
   }
 }
@@ -1209,13 +1300,25 @@ class _StripEntry extends StatelessWidget {
   final bool active;
   final VoidCallback onPressed;
 
+  /// Opens the name's own menu at a right-click.
+  final void Function(BuildContext context, Offset at) onMenu;
+
   const _StripEntry({
     super.key,
     required this.label,
     required this.slot,
     required this.active,
     required this.onPressed,
+    required this.onMenu,
   });
+
+  /// The name on one line, cut short past what a strip can give one of a
+  /// user's own, so a long name never pushes the rest off the bar.
+  Widget _name(String text, TextStyle style) => ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 140),
+        child: Text(text,
+            style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -1237,9 +1340,9 @@ class _StripEntry extends StatelessWidget {
             // and drops that word below the others.
             child: Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(
+              child: _name(
                 label,
-                style: t.body.copyWith(
+                t.body.copyWith(
                   fontSize: 12,
                   height: 1.0,
                   // A style that dresses the fronted button names its ink.
@@ -1266,30 +1369,20 @@ class _StripEntry extends StatelessWidget {
                     border: Border(
                         bottom: BorderSide(color: t.accent, width: 2)))
                 : null,
-            child: Text(
+            child: _name(
               t.kickerCase(label),
-              style: t.body
-                  .copyWith(color: active ? t.textPrimary : t.textMuted),
+              t.body.copyWith(color: active ? t.textPrimary : t.textMuted),
             ),
           ),
         ),
+      // A segment of the track: the fronted one wears the button's own
+      // active fill, so the strip reads as one control with one choice made.
       ThemeShape.studio => HouseButton(
           frameless: true,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          active: active,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           onPressed: onPressed,
-          child: Container(
-            padding: const EdgeInsets.only(bottom: 2),
-            // Painted over the padding, so the word doesn't move a pixel when
-            // its workspace is fronted.
-            foregroundDecoration: active
-                ? BoxDecoration(
-                    border: Border(bottom: BorderSide(color: t.accent)))
-                : null,
-            child: Text(
-              t.kickerCase(label),
-              style: active ? t.kickerOn : t.kicker,
-            ),
-          ),
+          child: _name(t.kickerCase(label), active ? t.kickerOn : t.kicker),
         ),
     };
     // The name and the chord that switches to it. A slot past the ninth has
@@ -1297,7 +1390,10 @@ class _StripEntry extends StatelessWidget {
     return LumitTooltip(
       message: label,
       action: 'workspace.switch.$slot',
-      child: button,
+      child: GestureDetector(
+        onSecondaryTapUp: (d) => onMenu(context, d.globalPosition),
+        child: button,
+      ),
     );
   }
 }

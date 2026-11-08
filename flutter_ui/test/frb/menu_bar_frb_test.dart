@@ -114,7 +114,7 @@ void main() {
     /// New composition asks for its settings first, so every route to a
     /// comp goes through the dialogue: choose the command, then press Create.
     Future<void> makeComp(WidgetTester tester) async {
-      await choose(tester, 'Composition', 'New composition');
+      await choose(tester, 'Composition', 'New composition…');
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('comp-apply')));
       await tester.pumpAndSettle();

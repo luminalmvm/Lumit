@@ -14,7 +14,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/services.dart' show HardwareKeyboard, KeyEvent;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
@@ -38,17 +40,20 @@ import 'package:lumit_flutter/src/rust/api/audio.dart'
 
 import '../state/reviews.dart' show isReviewExport;
 import '../state/settings.dart' show ScriptEvent;
+import '../state/tools.dart' show ToolModifier, ToolsState;
 import 'package:lumit_flutter/src/rust/api/script.dart'
     show disconnectLiveProgram;
 
 import 'cache_confirm_frb.dart';
 import 'export_queue_frb.dart' show exportTimeLeft;
 import 'live_endpoint_frb.dart';
+import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'profile_chip.dart';
 import 'project_history_window.dart';
 import 'review_links_window.dart';
 import 'share_dialog_frb.dart';
 import 'update_chip.dart';
+import 'welcome_frb.dart' show projectDisplayName;
 
 /// Bumped by whatever starts an export — the export dialogue, the console's
 /// snapshot — so the strip knows to start polling. Without a start signal the
@@ -341,7 +346,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                     children: [_bubble(t, const ReviewChip()), _divider(t)],
                   ),
           ),
-          _bubble(t, _savedState(t, state)),
+          _bubble(t, _projectMark(t, state)),
           // The open project's backup, beside whether it is saved.
           BackupMark(unsaved: _unsaved, wrap: (mark) => _bubble(t, mark)),
           _divider(t),
@@ -444,12 +449,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 children: readouts(line.maxWidth),
               ),
             ),
-            Expanded(
-              child: ListenableBuilder(
-                listenable: _ui.tools,
-                builder: (context, _) => _hint(t),
-              ),
-            ),
+            Expanded(child: _ModifierHint(tools: _ui.tools, bubble: _bubble)),
           ],
         ),
       );
@@ -502,29 +502,69 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// read the same answer without asking the engine a second time.
   bool _unsaved = false;
 
-  /// Saved / unsaved, at the far left. Being unsaved is a fact, not a fault,
-  /// so it reads in the ordinary text colour — the muted tint is for the
-  /// states where nothing is at risk.
-  Widget _savedState(LumitTheme t, LumitState state) {
+  /// The project, at the far left: its name, with a dot before it while it
+  /// has changes nobody has saved. Unsaved reads in the ordinary text colour
+  /// and saved in the muted one, the words are in the tooltip, and a click
+  /// saves. Being unsaved is a fact, not a fault, so no warning colour.
+  Widget _projectMark(LumitTheme t, LumitState state) {
     final project = state.project;
     var dirty = false;
+    String? path;
     try {
       dirty = project?.isDirty() ?? false;
+      path = project?.path();
     } catch (_) {
       // Closed already, as one project gives way to the next.
     }
     _unsaved = dirty;
-    final label = project == null
-        ? l10n.noProject
-        : dirty
-            ? l10n.unsavedChanges
-            : project.path() == null
-                ? l10n.notSavedYet
-                : l10n.saved;
-    return Text(
-      label,
-      key: const ValueKey('status-saved'),
-      style: dirty ? t.small : t.small.copyWith(color: t.textMuted),
+    if (project == null) {
+      return Text(l10n.noProject,
+          key: const ValueKey('status-saved'),
+          style: t.small.copyWith(color: t.textMuted));
+    }
+    final name = path == null ? l10n.projectUntitled : projectDisplayName(path);
+    final words = dirty
+        ? l10n.unsavedChanges
+        : path == null
+            ? l10n.notSavedYet
+            : l10n.saved;
+    final name0 = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 200),
+      child: Text(name,
+          key: const ValueKey('status-saved'),
+          style: dirty ? t.small : t.small.copyWith(color: t.textMuted),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis),
+    );
+    if (!dirty && path != null) {
+      return LumitTooltip(message: words, child: name0);
+    }
+    return LumitTooltip(
+      message: words,
+      action: 'file.save',
+      child: HouseButton(
+        key: const ValueKey('status-save'),
+        frameless: true,
+        small: true,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        onPressed: () => saveProjectFrb(state, _ui),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (dirty) ...[
+              Container(
+                key: const ValueKey('status-unsaved-dot'),
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                    color: t.textPrimary, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+            ],
+            name0,
+          ],
+        ),
+      ),
     );
   }
 
@@ -542,37 +582,6 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           style: t.small.copyWith(color: t.warning),
         ),
       );
-
-  /// What the armed tool's modifiers do, at the right-hand end: one muted
-  /// line, or nothing for a tool with nothing to say.
-  Widget _hint(LumitTheme t) {
-    final hint = _ui.tools.tool.hint;
-    if (hint == null) return const SizedBox.shrink();
-    return LayoutBuilder(
-      // Under a few words' width there is nothing worth cutting short, and a
-      // bubble holding three dots is worse than none.
-      builder: (context, room) => room.maxWidth < 120
-          ? const SizedBox.shrink()
-          : Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: Padding(
-                // Clear of the readout before it on a flush strip. Bubbles
-                // space themselves.
-                padding: EdgeInsetsDirectional.only(start: t.tokens.roomed ? 0 : 12),
-                child: _bubble(
-                  t,
-                  Text(
-                    hint,
-                    key: const ValueKey('status-hint'),
-                    style: t.small.copyWith(color: t.textMuted),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ),
-    );
-  }
 
   /// The notices of this run, newest first, in a menu over the line. Read as
   /// it opens, so it needs no listener of its own.
@@ -1070,9 +1079,109 @@ class _ExportProgressState extends State<_ExportProgress> {
   }
 }
 
-/// How full each tier of the frame cache is — one bar per tier, with the
-/// megabytes beside it. Clicking a tier's bar empties that tier (the disk one
-/// asks first: it deletes files rather than costing a re-render).
+/// What the held modifier key does to the armed tool, at the right-hand end,
+/// for as long as the key is down. Nothing at rest: the line is for the
+/// moment a hand is on Shift wondering what it will do, not a caption. A key
+/// held to type in a field says nothing either.
+class _ModifierHint extends StatefulWidget {
+  final ToolsState tools;
+  final Widget Function(LumitTheme t, Widget child) bubble;
+  const _ModifierHint({required this.tools, required this.bubble});
+
+  @override
+  State<_ModifierHint> createState() => _ModifierHintState();
+}
+
+class _ModifierHintState extends State<_ModifierHint> {
+  ToolModifier? _held;
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  /// Reads which modifier is down, and never takes the key.
+  bool _onKey(KeyEvent event) {
+    final keys = HardwareKeyboard.instance;
+    final mac = defaultTargetPlatform == TargetPlatform.macOS;
+    final focused = FocusManager.instance.primaryFocus?.context;
+    final typing = focused != null &&
+        (focused.widget is EditableText ||
+            focused.findAncestorWidgetOfExactType<EditableText>() != null);
+    final held = typing
+        ? null
+        : keys.isShiftPressed
+            ? ToolModifier.shift
+            : keys.isAltPressed
+                ? ToolModifier.alt
+                : (mac ? keys.isMetaPressed : keys.isControlPressed)
+                    ? ToolModifier.mod
+                    : null;
+    if (held != _held && mounted) setState(() => _held = held);
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    return ListenableBuilder(
+      listenable: widget.tools,
+      builder: (context, _) {
+        final held = _held;
+        final line = held == null ? null : widget.tools.tool.hintFor(held);
+        if (held == null || line == null) return const SizedBox.shrink();
+        return LayoutBuilder(
+          // Under a few words' width there is nothing worth cutting short.
+          builder: (context, room) => room.maxWidth < 120
+              ? const SizedBox.shrink()
+              : Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Padding(
+                    // Clear of the readout before it on a flush strip.
+                    // Bubbles space themselves.
+                    padding: EdgeInsetsDirectional.only(
+                        start: t.tokens.roomed ? 0 : 12),
+                    child: widget.bubble(
+                      t,
+                      // Keyed by the key, so a change of modifier plays in.
+                      Entrance(
+                        key: ValueKey<ToolModifier>(held),
+                        spec: scope.motion.reveal,
+                        rise: scope.motion.revealRise,
+                        child: Text.rich(
+                          TextSpan(children: [
+                            TextSpan(
+                                text: held.label,
+                                style: TextStyle(color: t.textMuted)),
+                            TextSpan(text: '  $line'),
+                          ]),
+                          key: const ValueKey('status-hint'),
+                          style: t.small,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+/// How full each tier of the frame cache is: one small bar per tier and the
+/// megabytes they hold between them. The tiers' own numbers are on hover, and
+/// a click opens them with a Clear for each (the disk one asks first: it
+/// deletes files rather than costing a re-render).
 ///
 /// **Why one bar each.** The three tiers hold different things and fill at
 /// different rates: the card's cache fills first and fastest, memory takes what
@@ -1093,105 +1202,147 @@ class _ExportProgressState extends State<_ExportProgress> {
 class CacheMeterFrb extends StatelessWidget {
   const CacheMeterFrb({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+  /// The three tiers as they stand, read fresh each time: the strip's tick
+  /// and the open detail both ask here.
+  static List<_Tier> _tiers(BuildContext context) {
     final ram = cacheStats();
     final vram = vramCacheStats();
     final disk = diskCacheStats();
-    final requests = ram.hits.toInt() + ram.misses.toInt();
+    return [
+      _Tier('ram', l10n.ramTier, ram.usedBytes.toInt(), ram.budgetBytes.toInt(),
+          clearCache),
+      _Tier('vram', l10n.vramTier, vram.usedBytes.toInt(),
+          vram.budgetBytes.toInt(), clearVramCache),
+      // The one tier whose clear destroys files rather than costing a
+      // re-render, so it asks first (docs/07 §15).
+      _Tier('disk', l10n.diskTier, disk.usedBytes.toInt(),
+          disk.budgetBytes.toInt(), () => confirmClearDiskCache(context)),
+    ];
+  }
 
-    return Row(
-      key: const ValueKey('cache-meter'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(l10n.cache, style: t.small.copyWith(color: t.textMuted)),
-        const SizedBox(width: 6),
-        _TierMeter(
-          keyName: 'cache-meter-ram',
-          label: l10n.ramTier,
-          used: ram.usedBytes.toInt(),
-          budget: ram.budgetBytes.toInt(),
-          tip: requests == 0
-              ? l10n.tipCacheEmpty
-              : l10n.tipCacheRam('${ram.hits}', '${ram.misses}'),
-          onClear: clearCache,
+  void _open(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox) return;
+    showLumitPopup<void>(
+      context: context,
+      position: box.localToGlobal(Offset.zero),
+      builder: (close) => _CacheDetail(tiers: () => _tiers(context)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final tiers = _tiers(context);
+    final used = tiers.fold<int>(0, (sum, tier) => sum + tier.used);
+    return LumitTooltip(
+      message: [for (final tier in tiers) '${tier.label} ${tier.words}']
+          .join(' · '),
+      child: HouseButton(
+        key: const ValueKey('cache-meter'),
+        frameless: true,
+        small: true,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        onPressed: () => _open(context),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(l10n.cache, style: t.small.copyWith(color: t.textMuted)),
+            const SizedBox(width: 6),
+            for (final tier in tiers) ...[
+              SizedBox(
+                  width: 18,
+                  child: HouseProgressBar(fraction: tier.fraction, height: 3)),
+              const SizedBox(width: 3),
+            ],
+            // Nothing held is nothing to read.
+            if (used > 0) ...[
+              const SizedBox(width: 3),
+              Text('${_mibText(used)} MB',
+                  textDirection: TextDirection.ltr,
+                  style: t.small.copyWith(color: t.textMuted)),
+            ],
+          ],
         ),
-        const SizedBox(width: 8),
-        _TierMeter(
-          keyName: 'cache-meter-vram',
-          label: l10n.vramTier,
-          used: vram.usedBytes.toInt(),
-          budget: vram.budgetBytes.toInt(),
-          tip: l10n.tipCacheVram,
-          onClear: clearVramCache,
-        ),
-        const SizedBox(width: 8),
-        _TierMeter(
-          keyName: 'cache-meter-disk',
-          label: l10n.diskTier,
-          used: disk.usedBytes.toInt(),
-          budget: disk.budgetBytes.toInt(),
-          tip: disk.root.isEmpty
-              ? l10n.tipCacheDiskNone
-              : l10n.tipCacheDisk(disk.root),
-          // The one tier whose clear destroys files rather than costing a
-          // re-render, so it asks first (docs/07 §15).
-          onClear: () => confirmClearDiskCache(context),
-        ),
-      ],
+      ),
     );
   }
 }
 
-/// One tier: its name, how full it is, and the megabytes. Its own widget, so all
-/// three tiers are one layout rather than three copies of it.
-class _TierMeter extends StatelessWidget {
-  final String keyName;
+/// One tier of the frame cache as the strip reads it.
+class _Tier {
+  final String id;
   final String label;
   final int used;
   final int budget;
-  final String tip;
-  final VoidCallback onClear;
+  final VoidCallback clear;
+  const _Tier(this.id, this.label, this.used, this.budget, this.clear);
 
-  const _TierMeter({
-    required this.keyName,
-    required this.label,
-    required this.used,
-    required this.budget,
-    required this.tip,
-    required this.onClear,
-  });
+  double get fraction => budget <= 0 ? 0.0 : (used / budget).clamp(0.0, 1.0);
 
+  /// Used of budget, in megabytes.
+  String get words => '${_mibText(used)} / ${_mibText(budget)} MB';
+}
+
+/// The tiers in full, over the strip: a bar each with its numbers, and a
+/// Clear for each. Redrawn after a clear, so the bar empties in front of you.
+class _CacheDetail extends StatefulWidget {
+  final List<_Tier> Function() tiers;
+  const _CacheDetail({required this.tiers});
+
+  @override
+  State<_CacheDetail> createState() => _CacheDetailState();
+}
+
+class _CacheDetailState extends State<_CacheDetail> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final fraction = budget <= 0 ? 0.0 : (used / budget).clamp(0.0, 1.0);
-    return LumitTooltip(
-      message: tip,
-      child: GestureDetector(
-        key: ValueKey<String>(keyName),
-        behavior: HitTestBehavior.opaque,
-        onTap: onClear,
-        child: HoverMark(builder: (context, lit) {
-          final ink = Color.lerp(t.textMuted, t.textPrimary, lit);
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label, style: t.small.copyWith(color: ink)),
-              const SizedBox(width: 4),
-              SizedBox(
-                  width: 32, child: HouseProgressBar(fraction: fraction)),
-              const SizedBox(width: 4),
-              // Used only: the budget is in the tooltip and in Settings, and
-              // the status line is one line shared with the notices and
-              // export.
-              Text('${_mibText(used)} MB',
-                  textDirection: TextDirection.ltr,
-                  style: t.small.copyWith(color: ink)),
-            ],
-          );
-        }),
+    return FloatSurface(
+      width: 300,
+      child: Column(
+        key: const ValueKey('cache-detail'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final tier in widget.tiers())
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 40,
+                    child: Text(tier.label,
+                        style: t.small.copyWith(color: t.textMuted)),
+                  ),
+                  Expanded(child: HouseProgressBar(fraction: tier.fraction)),
+                  const SizedBox(width: 10),
+                  // One column of figures, right-aligned, so the three
+                  // tiers read down.
+                  SizedBox(
+                    width: 120,
+                    child: Text(tier.words,
+                        textDirection: TextDirection.ltr,
+                        textAlign: TextAlign.end,
+                        style: t.small),
+                  ),
+                  const SizedBox(width: 10),
+                  HouseButton(
+                    key: ValueKey<String>('cache-clear-${tier.id}'),
+                    small: true,
+                    frameless: true,
+                    onPressed: tier.used == 0
+                        ? null
+                        : () {
+                            tier.clear();
+                            if (mounted) setState(() {});
+                          },
+                    child: Text(l10n.clear, style: t.small),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
