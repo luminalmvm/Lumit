@@ -3433,6 +3433,11 @@ fn one_turn(
                     if !state.backup_exhausted {
                         idle_backup(state);
                     }
+                    // Nothing left to draw, so nothing needs the compositor's
+                    // multisample attachment either.
+                    if state.fill_exhausted && state.backup_exhausted {
+                        state.renderer.drop_attachments();
+                    }
                 }
                 None
             }

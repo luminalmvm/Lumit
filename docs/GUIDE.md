@@ -105,6 +105,8 @@ flutter analyze
   tests check they're right, and those need a GPU.
 - GPU tests share one device per process and run one at a time. No adapter means a skip,
   unless `LUMIT_REQUIRE_GPU=1`.
+- `WGPU_POWER_PREF=low` puts the engine on a two-card machine's integrated card, to time
+  it the way a laptop without a graphics card runs it.
 - Close every project you open, in tests too. Each holds a render worker and a GPU
   connection.
 - The frb tests in `flutter_ui/test/frb/` load `target/debug/lumit_bridge.dll`. Build it
