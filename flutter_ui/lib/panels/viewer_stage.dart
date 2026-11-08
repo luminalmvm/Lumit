@@ -887,8 +887,13 @@ class ViewerStage extends StatelessWidget {
                       // the selected layer, and the Pen builds one point by
                       // point.
                       ViewerShapeLayer(
+                        // With a Path row picked the Pen edits that path, in
+                        // the gizmo, rather than drawing a new one.
                         active: uiState.tools.tool.group == ToolGroup.shape ||
-                            uiState.tools.tool == ToolMode.pen,
+                            (uiState.tools.tool == ToolMode.pen &&
+                                pathBeingEdited(
+                                        uiState.selectedProperties.value) ==
+                                    null),
                         tool: uiState.tools.tool,
                         state: state,
                         uiState: uiState,
