@@ -4517,16 +4517,17 @@ class LayerReference {
 
   /// Set one clip's playback speed, as a percentage.
   ///
-  /// The clip keeps its place on the row — its start and its length are
-  /// untouched, so an edit point already on a beat stays on it —
-  /// and the stretch of source it plays follows from the speed. Its first
-  /// frame is pinned, so re-speeding never moves where a clip begins.
+  /// The clip keeps its place on the row: its start and its length are
+  /// untouched, so an edit point already on a beat stays on it, and the
+  /// stretch of source it plays follows from the speed. Its first frame is
+  /// pinned, so re-speeding never moves where a clip begins.
   ///
   /// `end_percent` makes it a ramp, running straight from one speed to the
   /// other; leave it equal to `percent` for a constant speed. Negative runs
   /// the clip backwards. A speed that turns the clip round starts it from
   /// the far end of what it played, so Reset after Reverse plays the same
-  /// stretch forwards again.
+  /// stretch forwards again. Straight through at 100% is no retime at all,
+  /// so after a Reset the clip is as it was before it was ever retimed.
   void setClipSpeed(
           {required UuidValue clip,
           required double percent,

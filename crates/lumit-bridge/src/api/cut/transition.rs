@@ -28,6 +28,111 @@ fn running_into<'c>(clips: &'c [Clip], clip: &Clip) -> Option<&'c Clip> {
 }
 
 impl Edit<'_> {
+    /// The clips an edit on one edge of `clip` reaches, each with the edge it
+    /// is on: `clip`, and with `linked` the clips linked to it on the same
+    /// edge and the clips linked to the clip across the edit point on the
+    /// other, so a picture's sound follows wherever the picture goes.
+    fn edges(&self, clip: Uuid, end_edge: bool, linked: bool) -> Cut<Vec<(Uuid, bool)>> {
+        let mut edges: Vec<(Uuid, bool)> = self
+            .chosen(&[clip], linked)?
+            .into_iter()
+            .map(|id| (id, end_edge))
+            .collect();
+        if linked {
+            let (r, c) = self.find(clip)?;
+            let this = &self.rows[r].clips[c];
+            let meets = |o: &&Clip| {
+                o.id != clip
+                    && if end_edge {
+                        follows(this, o)
+                    } else {
+                        follows(o, this)
+                    }
+            };
+            if let Some(other) = self.rows[r].clips.iter().find(meets).map(|o| o.id) {
+                for id in self.chosen(&[other], true)? {
+                    if id != other && !edges.iter().any(|(e, _)| *e == id) {
+                        edges.push((id, !end_edge));
+                    }
+                }
+            }
+        }
+        Ok(edges)
+    }
+
+    /// A transition on one edge of `clip`: a dissolve with the clip across
+    /// it, or a fade where nothing is. With `linked` the clips linked to the
+    /// clip across take the other edge, so a picture's sound crossfades where
+    /// the picture dissolves even when only one side has a sound clip.
+    pub(super) fn transition(
+        mut self,
+        clip: Uuid,
+        end_edge: bool,
+        frames: i64,
+        linked: bool,
+    ) -> Cut {
+        let frames = frames.max(0);
+        let (frame, length) = (self.time(1)?, self.time(frames)?);
+        let edges = self.edges(clip, end_edge, linked)?;
+        // Both clips of an overlap made already, so its pair isn't made twice.
+        let mut done: Vec<Uuid> = Vec::new();
+        for (id, end_edge) in edges {
+            if done.contains(&id) {
+                continue;
+            }
+            let (r, c) = self.find(id)?;
+            let row = &self.rows[r];
+            let this = &row.clips[c];
+            // The clip across the edit point: one this edge meets, or
+            // already runs into.
+            let across = |o: &&Clip| {
+                o.id != id
+                    && if end_edge {
+                        follows(this, o)
+                    } else {
+                        follows(o, this)
+                    }
+            };
+            let Some(other) = row.clips.iter().find(across) else {
+                // Nothing to dissolve with, so the edge fades on its own.
+                let seconds = length.min(this.place_duration);
+                let slot = &mut self.rows[r].clips[c];
+                if end_edge {
+                    slot.fade_out.seconds = seconds;
+                } else {
+                    slot.fade_in.seconds = seconds;
+                }
+                continue;
+            };
+            let (outgoing, incoming) = if end_edge {
+                (this, other)
+            } else {
+                (other, this)
+            };
+            let room = (self.room(outgoing, false)?, self.room(incoming, true)?);
+            done.extend([outgoing.id, incoming.id]);
+            let incoming = incoming.id;
+            let mut next = sequence::transition::dissolve(
+                &row.clips,
+                outgoing.id,
+                incoming,
+                frames,
+                frame,
+                room,
+            )
+            .ok_or(BridgeCutResult::Limit)?;
+            // A picture dissolves in a straight line. A crossfade keeps the
+            // shape it has, which holds the level.
+            if !row.audio_only && frames > 0 {
+                for clip in next.iter_mut().filter(|c| c.id == incoming) {
+                    clip.fade_in.shape = FadeShape::Linear;
+                }
+            }
+            self.rows[r].clips = next;
+        }
+        self.commit()
+    }
+
     /// A fresh instance of the kind named, sized for `clip`'s row, or `None`
     /// for the dissolve. `Limit` for a name that isn't a kind.
     fn fresh_kind(&self, row: Uuid, clip: Uuid, kind: Option<&str>) -> Cut<Option<EffectInstance>> {
@@ -57,7 +162,7 @@ impl Edit<'_> {
         linked: bool,
     ) -> Cut {
         let frames = frames.max(0);
-        for id in self.chosen(&[clip], linked)? {
+        for (id, end_edge) in self.edges(clip, end_edge, linked)? {
             let (r, c) = self.find(id)?;
             let this = self.rows[r].clips[c].clone();
             let found = if end_edge {
@@ -72,6 +177,17 @@ impl Edit<'_> {
                     .find(|o| o.id != id && follows(o, &this))
             };
             let Some(other) = found.cloned() else {
+                // A linked sound with nothing across fades where the picture
+                // dissolves.
+                if self.rows[r].audio_only && id != clip {
+                    let seconds = self.time(frames)?.min(this.place_duration);
+                    let slot = &mut self.rows[r].clips[c];
+                    if end_edge {
+                        slot.fade_out.seconds = seconds;
+                    } else {
+                        slot.fade_in.seconds = seconds;
+                    }
+                }
                 continue;
             };
             let (outgoing, incoming) = if end_edge {

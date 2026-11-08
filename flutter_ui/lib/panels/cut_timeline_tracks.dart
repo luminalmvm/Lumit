@@ -603,6 +603,23 @@ BridgeClip? cutClipAfter(CutTrack track, BridgeClip clip) {
   return null;
 }
 
+/// [cutBadges] for [clip] on [track], less any where the clip across its end
+/// runs over it: an overlap shows its transition, not the outgoing clip's
+/// buttons.
+List<(CutBadge, Rect)> cutBadgesOf(
+    CutTrack track, BridgeClip clip, Rect box, TimelineAxis axis,
+    {required bool picture}) {
+  final next = cutEdgeOverlaps(track, clip, endEdge: true)
+      ? cutClipAcross(track, clip, endEdge: true)
+      : null;
+  final into =
+      next == null ? double.infinity : axis.xOf(next.startFrame.toInt());
+  return [
+    for (final badge in cutBadges(box, picture: picture))
+      if (badge.$2.right <= into) badge,
+  ];
+}
+
 /// [shift] held to what the source can give. The engine allows overrun, a
 /// held frame past the media's end, but an edit that reaches for frames the
 /// file has not got is nearly always a slip of the hand, so the drag stops at

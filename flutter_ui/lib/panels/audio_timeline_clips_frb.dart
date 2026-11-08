@@ -159,6 +159,11 @@ bool audioBelowTracks(List<AudioTrackRow> tracks, double y) =>
   return (left, (axis.xOf(end) - left).clamp(2.0, double.infinity));
 }
 
+/// A clip's level as its chip says it, signed and in dB: the same words in
+/// the Audio timeline and on a Cut sound clip.
+String clipGainWords(double gainDb) =>
+    '${gainDb > 0 ? '+' : ''}${gainDb.toStringAsFixed(1)} ${l10n.unitSymbolDb}';
+
 /// Where a clip's gain line lies, in the strip's own pixels: 0 dB at the top of
 /// the box, silence at its foot, on the Volume band's own floor and its linear
 /// shape (docs/impl/audio-timeline.md §5). A box is inset two pixels top and
@@ -1115,6 +1120,25 @@ class _AudioClipStripState extends State<AudioClipStrip> {
                 ),
               ),
             ),
+            // The clip's own level, while it is off 0 dB: a normalised clip
+            // looks like the others otherwise.
+            if (clip.gainDb.abs() >= 0.05) ...[
+              const SizedBox(width: 4),
+              IgnorePointer(
+                child: Container(
+                  key: ValueKey<String>('atl-clip-gain-${clip.id}'),
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color: t.surface0.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(clipRadius(t)),
+                  ),
+                  child: Text(clipGainWords(clip.gainDb),
+                      style: t.mono.copyWith(
+                          fontSize: barValueTextSize,
+                          color: t.textSecondary)),
+                ),
+              ),
+            ],
             if (room) ...[
               const SizedBox(width: 4),
               waits(

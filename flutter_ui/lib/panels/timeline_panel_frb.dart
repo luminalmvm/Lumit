@@ -1295,17 +1295,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// so the bottom bar's buttons and the shortcuts act on the same set.
   final Set<String> _graphKeySelection = {};
 
-  /// The Sequence layers whose view is open — double-clicking one
-  /// opens its clips and their speed envelope inside its own row.
-  final Set<String> _sequenceOpen = {};
-
-  /// How tall each open view's **graph** half is, by layer id, once its
-  /// divider has been dragged. Absent means the default three rows.
-  ///
-  /// Only the graph resizes: the clip strip is where the cutting happens and
-  /// it is sized for that, while how much room a speed curve wants depends
-  /// entirely on how far the ramps go.
-  final Map<String, double> _sequenceGraph = {};
+  /// The Sequence layers whose view is open, and how tall each one's graph
+  /// is, kept on the UI state so a remount (a change of look) keeps them.
+  Set<String> get _sequenceOpen => _ui!.sequenceOpen;
+  Map<String, double> get _sequenceGraph => _ui!.sequenceGraph;
 
   /// How much taller each open view makes its layer's row.
   Map<String, double> get _sequenceExtra => {

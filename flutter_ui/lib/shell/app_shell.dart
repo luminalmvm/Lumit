@@ -1285,6 +1285,16 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else if (ui.sourceView case final view?) {
           ui.markSource(view, markIn: action == 'cut.mark.in');
         }
+      // Shift+I and Shift+O stand the source on its marks.
+      case 'cut.goto.in' || 'cut.goto.out':
+        final view = ui.sourceView;
+        final mark =
+            action == 'cut.goto.in' ? view?.sourceIn : view?.sourceOut;
+        if (view == null || mark == null) {
+          handled = false;
+        } else {
+          ui.seekFootageView(view, mark);
+        }
       // The two ways of putting the marked span down at the playhead.
       case 'cut.insert' || 'cut.overwrite':
         if (ui.sourceView case final view?) {

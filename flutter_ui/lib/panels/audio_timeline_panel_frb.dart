@@ -64,6 +64,7 @@ import 'audio_timeline_fades_frb.dart';
 import 'audio_timeline_rows_frb.dart';
 import 'clip_fade_popover.dart';
 import 'clip_fades.dart';
+import 'cut_timeline_panel_frb.dart' show openClipInSource;
 import 'cut_timeline_tracks.dart'
     show cutClipsCopiedIn, cutClipsHeld, cutDuplicateFrames;
 import 'easing_curve.dart' show ApplyEasing, EaseSides, EasingCurve;
@@ -458,6 +459,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           when _clipsHeld && _pickedClips.isNotEmpty && comp != null:
         final ids = [for (final (_, c) in _pickedOnTracks()) c.id];
         _afterCut(_cut(() => comp.cutPasteAttributes(clips: ids)));
+        return true;
+      case final String trim
+          when trim.startsWith('cut.trim.') &&
+              _pickedClips.isNotEmpty &&
+              comp != null:
+        _trimClips(comp, _pickedOnTracks(), ui.playheadFrame.value,
+            start: trim.contains('.start'), ripple: trim.endsWith('.ripple'));
         return true;
     }
     if (ui.keymap.actionFor(BridgeKeyContext.timeline, event) !=
@@ -2572,7 +2580,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                       row('trim-$key', label, () {
                         _trimClips(comp, picked!, playhead,
                             start: start, ripple: ripple);
-                      }, dismiss, enabled: canSplit),
+                      }, dismiss,
+                          action: 'cut.trim.${start ? 'start' : 'end'}'
+                              '${ripple ? '.ripple' : ''}',
+                          enabled: canSplit),
                   ],
                 ),
               ),
@@ -2700,6 +2711,16 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               }),
               child: MenuLabel(l10n.audioAddEffect, ticked: false),
             ),
+            // What opens or looks at the clip, as Cut has them.
+            if ((picked?.length ?? 0) <= 1) ...[
+              if (ui.currentViewerPane != null &&
+                  !clip.sourceIsComp &&
+                  !clip.sourceIsSolid)
+                row('open-source', l10n.cutOpenInSource,
+                    () => openClipInSource(ui, comp, layer, clip), close),
+              row('effect-controls', l10n.effectControls,
+                  () => _showClipEffects(ui, layer, clip), close),
+            ],
             if ((picked?.length ?? 0) > 1)
               row('fold', l10n.cutNewCompositionFromSelection, () {
                 CompositionReference? made;
@@ -2880,6 +2901,26 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   /// One end of each picked clip the playhead is inside brought to the playhead,
   /// closing the room behind it with [ripple]. One undo step.
+  /// The clip's own stack in Effect controls, brought up. Another layer
+  /// picked lets the clip go, so the panel follows the pick again.
+  void _showClipEffects(
+      LumitUiState ui, LayerReference layer, BridgeClip clip) {
+    ui.setSelection([layer]);
+    ui.cutClip.value = (layer: layer, clip: clip.id);
+    void release() {
+      if (ui.selectedLayer.value?.internallayerId == layer.internallayerId) {
+        return;
+      }
+      ui.selectedLayers.removeListener(release);
+      if (ui.cutClip.value?.clip == clip.id) ui.cutClip.value = null;
+    }
+
+    ui.selectedLayers.addListener(release);
+    setPanelVisible(ui.split, Panel.effectControls, true);
+    activatePanelTab(ui.split, Panel.effectControls);
+    ui.workspace.touch();
+  }
+
   void _trimClips(CompositionReference comp,
       List<(AudioTrackRow, BridgeClip)> picked, int playhead,
       {required bool start, required bool ripple}) {

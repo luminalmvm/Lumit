@@ -13,6 +13,7 @@
 // selection moves (the rebuild gates).
 
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -339,6 +340,74 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         ),
       );
 
+  /// A picker's row that answers a right-click with the picker's choices.
+  Widget _withOptions<T>(
+    BuildContext context, {
+    required List<T> options,
+    required T current,
+    required String Function(T) label,
+    required ValueChanged<T> onPick,
+    required Widget child,
+  }) =>
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (e) => showMenuAt<void>(
+          context: context,
+          position: e.globalPosition,
+          width: 200,
+          rows: (close) => [
+            for (final option in options)
+              MenuRow.option(
+                onPressed: () {
+                  close(null);
+                  onPick(option);
+                },
+                child: MenuLabel(label(option), ticked: option == current),
+              ),
+          ],
+        ),
+        child: child,
+      );
+
+  /// Sensitivity's menu: the value's own rows, as a number well has them.
+  void _sensitivityMenu(BuildContext context, Offset at) => showMenuAt<void>(
+        context: context,
+        position: at,
+        width: 170,
+        rows: (close) => [
+          MenuRow(
+            key: const ValueKey('beats-sensitivity-reset'),
+            enabled: _sensitivity != 50,
+            onPressed: () {
+              close(null);
+              setState(() => _sensitivity = 50);
+            },
+            child: MenuLabel(l10n.reset, enabled: _sensitivity != 50),
+          ),
+          const MenuDivider(),
+          MenuRow(
+            onPressed: () {
+              close(null);
+              Clipboard.setData(
+                  ClipboardData(text: _sensitivity.round().toString()));
+            },
+            child: MenuLabel(l10n.paramMenuCopyValue),
+          ),
+          MenuRow(
+            onPressed: () async {
+              close(null);
+              final data = await Clipboard.getData(Clipboard.kTextPlain);
+              final parsed =
+                  data?.text == null ? null : parseNumberField(data!.text!);
+              if (parsed != null && mounted) {
+                setState(() => _sensitivity = parsed.toDouble().clamp(0, 100));
+              }
+            },
+            child: MenuLabel(l10n.paramMenuPasteValue),
+          ),
+        ],
+      );
+
   Widget _beats(
     BuildContext context,
     LumitTheme t,
@@ -362,55 +431,80 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [
-            _label(t, l10n.beatsSource),
-            _dropdown(
-              BareDropdown<String>(
-                key: const ValueKey('beats-source'),
-                value: _source,
-                options: [
-                  '',
-                  for (final entry in sounding)
-                    entry.layer.internallayerId.toString(),
-                ],
-                label: sourceName,
-                onChanged: (v) => setState(() => _source = v),
+          _withOptions<String>(
+            context,
+            options: [
+              '',
+              for (final entry in sounding)
+                entry.layer.internallayerId.toString(),
+            ],
+            current: _source,
+            label: sourceName,
+            onPick: (v) => setState(() => _source = v),
+            child: Row(children: [
+              _label(t, l10n.beatsSource),
+              _dropdown(
+                BareDropdown<String>(
+                  key: const ValueKey('beats-source'),
+                  value: _source,
+                  options: [
+                    '',
+                    for (final entry in sounding)
+                      entry.layer.internallayerId.toString(),
+                  ],
+                  label: sourceName,
+                  onChanged: (v) => setState(() => _source = v),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
           const SizedBox(height: 6),
-          Row(children: [
-            _label(t, l10n.beatsSensitivity),
-            Expanded(
-              child: HouseSlider(
-                key: const ValueKey('beats-sensitivity'),
-                value: _sensitivity,
-                min: 0,
-                max: 100,
-                decimals: 0,
-                // Fits beside its value readout at the panel's floor width;
-                // the slider does not stretch (its rail is its travel).
-                width: 110,
-                onChanged: (v) => setState(() => _sensitivity = v),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapUp: (e) => _sensitivityMenu(context, e.globalPosition),
+            child: Row(children: [
+              _label(t, l10n.beatsSensitivity),
+              Expanded(
+                child: HouseSlider(
+                  key: const ValueKey('beats-sensitivity'),
+                  value: _sensitivity,
+                  min: 0,
+                  max: 100,
+                  decimals: 0,
+                  // Fits beside its value readout at the panel's floor width;
+                  // the slider does not stretch (its rail is its travel).
+                  width: 110,
+                  onChanged: (v) => setState(() => _sensitivity = v),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
           const SizedBox(height: 6),
-          Row(children: [
-            _label(t, l10n.beatsRange),
-            _dropdown(
-              BareDropdown<BeatRange>(
-                key: const ValueKey('beats-range'),
-                value: _range,
-                options: BeatRange.values,
-                label: (r) => switch (r) {
-                  BeatRange.wholeComp => l10n.beatsRangeWholeComp,
-                  BeatRange.workArea => l10n.beatsRangeWorkArea,
-                },
-                onChanged: (v) => setState(() => _range = v),
+          _withOptions<BeatRange>(
+            context,
+            options: BeatRange.values,
+            current: _range,
+            label: (r) => switch (r) {
+              BeatRange.wholeComp => l10n.beatsRangeWholeComp,
+              BeatRange.workArea => l10n.beatsRangeWorkArea,
+            },
+            onPick: (v) => setState(() => _range = v),
+            child: Row(children: [
+              _label(t, l10n.beatsRange),
+              _dropdown(
+                BareDropdown<BeatRange>(
+                  key: const ValueKey('beats-range'),
+                  value: _range,
+                  options: BeatRange.values,
+                  label: (r) => switch (r) {
+                    BeatRange.wholeComp => l10n.beatsRangeWholeComp,
+                    BeatRange.workArea => l10n.beatsRangeWorkArea,
+                  },
+                  onChanged: (v) => setState(() => _range = v),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
           const SizedBox(height: 6),
           Row(children: [
             _label(t, l10n.beatsMinSpacing),
@@ -446,6 +540,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
                     min: 0,
                     max: 300,
                     decimals: 2,
+                    resetTo: 0,
                     onChanged: (v) => setState(
                         () => _bpmOverride = v.toDouble().clamp(0, 300)),
                   ),
@@ -594,6 +689,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // The layer's audio menu from anywhere in its block, the buttons
+        // included. A value keeps its own.
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onSecondaryTapUp: (e) => showMenuAt<void>(
@@ -622,54 +719,62 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               },
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-            child: Row(children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: t.labelColour(picked.info.label),
-                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+                child: Row(children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: t.labelColour(picked.info.label),
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: _rename != null
+                        ? RowRenameField(
+                            controller: _rename!,
+                            onCommit: () => _endRename(picked, commit: true),
+                            onCancel: () => _endRename(picked, commit: false),
+                          )
+                        : Text(
+                            picked.info.name,
+                            style: t.bodyPrimary,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                  ),
+                ]),
+              ),
+              Entrance(
+                key: ValueKey(
+                    'audio-selected-in-${entry.layer.internallayerId}'),
+                spec: _settled
+                    ? ThemeScope.of(context).motion.reveal
+                    : MotionSpec.still,
+                rise: ThemeScope.of(context).motion.revealRise,
+                child: _SelectedLayerBlock(
+                  key: ValueKey(
+                      'audio-selected-${entry.layer.internallayerId}'),
+                  comp: comp,
+                  entry: entry,
+                  // A silent layer keeps the template buttons: *Drive with
+                  // audio…* exists to move a visual layer's parameters with
+                  // the music. It loses the rows that would be lying on it.
+                  canSound: canSound,
+                  onChanged: () {
+                    ui.model.refresh();
+                    comp.audioPrepare();
+                  },
                 ),
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _rename != null
-                    ? RowRenameField(
-                        controller: _rename!,
-                        onCommit: () => _endRename(picked, commit: true),
-                        onCancel: () => _endRename(picked, commit: false),
-                      )
-                    : Text(
-                        picked.info.name,
-                        style: t.bodyPrimary,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-              ),
-            ]),
-          ),
-        ),
-        Entrance(
-          key: ValueKey('audio-selected-in-${entry.layer.internallayerId}'),
-          spec: _settled
-              ? ThemeScope.of(context).motion.reveal
-              : MotionSpec.still,
-          rise: ThemeScope.of(context).motion.revealRise,
-          child: _SelectedLayerBlock(
-            key: ValueKey('audio-selected-${entry.layer.internallayerId}'),
-            comp: comp,
-            entry: entry,
-            // A silent layer keeps the template buttons — *Drive with audio…*
-            // exists precisely to move a visual layer's parameters with the
-            // music — and loses the rows that would be lying on it.
-            canSound: canSound,
-            onChanged: () {
-              ui.model.refresh();
-              comp.audioPrepare();
-            },
+            ],
           ),
         ),
         _hair(t),
@@ -766,7 +871,6 @@ class LevelBarsPainter extends CustomPainter {
   static const double _barHeight = 6;
   static const double _rowStep = 12;
   static const double _leftGutter = 12;
-  static const double _rightGutter = 44;
   static const List<int> _scale = [-48, -36, -24, -12, 0];
 
   final ValueListenable<AudioMeterFrame> frame;
@@ -792,6 +896,18 @@ class LevelBarsPainter extends CustomPainter {
     )..layout(minWidth: width);
     painter.paint(canvas, at);
   }
+
+  /// The readout's room at the right: the widest reading in this face and
+  /// a little more, so the bars take what is left and a number is never cut.
+  late final double _rightGutter = () {
+    final widest = TextPainter(
+      text: TextSpan(text: '-00.0', style: text),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final room = widest.width + 6;
+    widest.dispose();
+    return room;
+  }();
 
   @override
   void paint(Canvas canvas, Size size) {

@@ -159,14 +159,35 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _header(t),
-        Expanded(child: _body(t, ui_)),
-      ],
+    // The header answers a right-click as the trace does: it is the same
+    // instrument's settings.
+    return _menu(
+      ui_,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(t),
+          Expanded(child: _body(t, ui_)),
+        ],
+      ),
     );
   }
+
+  /// The instrument's settings, from anywhere on the panel.
+  Widget _menu(LumitUiState state, Widget child) => _ScopeMenu(
+        kind: _kind,
+        rgb: _rgb,
+        graticule: _graticule,
+        themed: state.workspace.themedScopes,
+        onKind: (k) => _pick(kind: k),
+        onRgb: (on) => _pick(rgb: on),
+        onGraticule: (on) => setState(() => _graticule = on),
+        onThemed: (on) {
+          state.workspace.setThemedScopes(on);
+          _pick();
+        },
+        child: child,
+      );
 
   Widget _header(LumitTheme t) => Container(
         height: 26,
@@ -219,57 +240,44 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     // instrument shows an empty plot for the moment, never the old picture
     // under the new scale.
     final trace = _traceKind == _asked ? _trace : null;
-    return _ScopeMenu(
-      kind: _kind,
-      rgb: _rgb,
-      graticule: _graticule,
-      themed: themed,
-      onKind: (k) => _pick(kind: k),
-      onRgb: (on) => _pick(rgb: on),
-      onGraticule: (on) => setState(() => _graticule = on),
-      onThemed: (on) {
-        state.workspace.setThemedScopes(on);
-        _pick();
-      },
-      child: Container(
-        color: t.surface0,
-        child: LayoutBuilder(
-          builder: (context, box) {
-            final plot = _plotRect(box.biggest);
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned.fromRect(
-                  rect: plot,
-                  child: ColoredBox(
-                    color: plotFill,
-                    child: trace == null
-                        ? null
-                        : RawImage(
-                            key: const ValueKey('scope-trace'),
-                            image: trace,
-                            fit: BoxFit.fill,
-                            // A 256-column trace stretched across a wide
-                            // panel: bilinear gives a phosphor's glow,
-                            // nearest gives bars.
-                            filterQuality: FilterQuality.low,
-                          ),
+    return Container(
+      color: t.surface0,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final plot = _plotRect(box.biggest);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fromRect(
+                rect: plot,
+                child: ColoredBox(
+                  color: plotFill,
+                  child: trace == null
+                      ? null
+                      : RawImage(
+                          key: const ValueKey('scope-trace'),
+                          image: trace,
+                          fit: BoxFit.fill,
+                          // A 256-column trace stretched across a wide
+                          // panel: bilinear gives a phosphor's glow,
+                          // nearest gives bars.
+                          filterQuality: FilterQuality.low,
+                        ),
+                ),
+              ),
+              if (_graticule)
+                CustomPaint(
+                  key: const ValueKey('scope-graticule'),
+                  painter: _GraticulePainter(
+                    kind: _kind,
+                    plot: plot,
+                    line: line,
+                    label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                   ),
                 ),
-                if (_graticule)
-                  CustomPaint(
-                    key: const ValueKey('scope-graticule'),
-                    painter: _GraticulePainter(
-                      kind: _kind,
-                      plot: plot,
-                      line: line,
-                      label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
+            ],
+          );
+        },
       ),
     );
   }

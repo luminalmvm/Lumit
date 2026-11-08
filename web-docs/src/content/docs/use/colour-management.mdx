@@ -69,13 +69,14 @@ tone-map curve read pixels as Rec. 709 whatever the configuration's primaries ar
 ## Grade a layer
 
 The **Grade** panel in the **Colour** workspace draws the selected layer's colour effects as
-wheels, primaries, curves and a look.
+wheels, primaries, a look and curves. With several layers selected, every change lands on
+all of them as one undo step.
 
 - The eyedropper beside **Temperature** sets **Temperature** and **Tint** from a pixel that
   should be grey. Drag across the picture to watch it change, and let go to keep it. A keyed
   row takes a key at the playhead. Later effects on the layer are left out of the sum, so
   a pixel changed by one may need a second pick.
-- **Preset** in the **Look** section lists the presets in the **Looks** group of the
+- The picker in the **Look** section lists the presets in the **Looks** group of the
   [preset library](/use/presets/). Picking one replaces the colour effects on every selected
   layer, as one undo step. **Save look…** at its foot writes the layer's colour effects as a
   preset in that group, which it makes on the first save.

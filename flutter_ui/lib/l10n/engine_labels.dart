@@ -1806,6 +1806,8 @@ Map<String, String> get _built => {
       "Next edit point": l10n.keyNextEditPoint,
       "Mark in": l10n.keyMarkIn,
       "Mark out": l10n.keyMarkOut,
+      "Go to In": l10n.sourceGoToIn,
+      "Go to Out": l10n.sourceGoToOut,
       "Insert at the playhead": l10n.keyInsertAtThePlayhead,
       "Overwrite at the playhead": l10n.keyOverwriteAtThePlayhead,
       "Ripple delete": l10n.keyRippleDelete,

@@ -103,6 +103,8 @@ impl ActionId {
             "expression.add" => "Add an expression",
             "cut.mark.in" => "Mark in",
             "cut.mark.out" => "Mark out",
+            "cut.goto.in" => "Go to In",
+            "cut.goto.out" => "Go to Out",
             "cut.insert" => "Insert at the playhead",
             "cut.overwrite" => "Overwrite at the playhead",
             "cut.delete.ripple" => "Ripple delete",

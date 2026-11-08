@@ -31,7 +31,7 @@ import 'timeline_extras_frb.dart'
         clipFillSelectedAlpha,
         clipWaveColours;
 import 'audio_timeline_clips_frb.dart'
-    show audioClipGainY, audioClipHeader, clipHolds;
+    show audioClipGainY, audioClipHeader, clipGainWords, clipHolds;
 import 'waveform_frb.dart';
 
 /// The room a box leaves at the top and foot of its track.
@@ -91,6 +91,10 @@ class CutTrackPainter extends CustomPainter {
   final Set<String> selected;
   final ValueListenable<CutDrag?> drag;
   final ValueListenable<CutHover?> hover;
+
+  /// The clip under the pointer, by id: its buttons show while it is, and on
+  /// a picked clip. Null over no clip.
+  final ValueListenable<String?> overClip;
   final Map<String, ui.Image?> thumbs;
   final Map<String, BridgeAudioPeaks> peaks;
 
@@ -136,6 +140,7 @@ class CutTrackPainter extends CustomPainter {
     required this.selected,
     required this.drag,
     required this.hover,
+    required this.overClip,
     required this.thumbs,
     required this.peaks,
     required this.soundOnPicture,
@@ -552,7 +557,11 @@ class CutTrackPainter extends CustomPainter {
             ..strokeWidth = 2
             ..color = colours.drop);
     }
-    final badges = cutBadges(box, picture: !sound);
+    // The buttons on the clip in hand or under the pointer only. A clip with
+    // effects keeps its lit fx in the chips at rest.
+    final badges = overClip.value == id || selected.contains(id)
+        ? cutBadgesOf(track, clip, box, axis, picture: !sound)
+        : const <(CutBadge, Rect)>[];
     if (sound) {
       // The wave has the whole box, as Vegas draws it, and the name stands
       // over it on a ground of its own.
@@ -753,6 +762,8 @@ class CutTrackPainter extends CustomPainter {
         (nameOf('${past > 0 ? '+' : ''}${past.toStringAsFixed(2)}'), true),
       if (clip.blend case final blend? when blend < blendNames.length)
         (nameOf(blendNames[blend]), true),
+      // Its own level off 0 dB, so a normalised clip reads as one.
+      if (clip.gainDb.abs() >= 0.05) (nameOf(clipGainWords(clip.gainDb)), true),
       // Said by the fx button where the clip has room for one.
       if (clip.effects.isNotEmpty && badges.isEmpty) (nameOf('fx'), clip.fx),
     ];

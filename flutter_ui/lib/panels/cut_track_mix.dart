@@ -347,6 +347,22 @@ class _MixBarState extends State<_MixBar> {
               borderRadius: BorderRadius.circular(2),
             ),
             child: Stack(fit: StackFit.expand, children: [
+              // At rest the bar is a hairline with its value drawn along it,
+              // so the word over it names a control.
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 1,
+                child: ColoredBox(color: t.hairline),
+              ),
+              Positioned(
+                left: math.min(from, to),
+                width: (to - from).abs(),
+                bottom: 0,
+                height: 1,
+                child: ColoredBox(color: fill.withValues(alpha: 0.6)),
+              ),
               Positioned(
                 left: math.min(from, to),
                 width: (to - from).abs(),

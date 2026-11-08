@@ -1470,62 +1470,6 @@ impl<'a> Edit<'a> {
         self.commit()
     }
 
-    fn transition(mut self, clip: Uuid, end_edge: bool, frames: i64, linked: bool) -> Cut {
-        let frames = frames.max(0);
-        let (frame, length) = (self.time(1)?, self.time(frames)?);
-        for id in self.chosen(&[clip], linked)? {
-            let (r, c) = self.find(id)?;
-            let row = &self.rows[r];
-            let this = &row.clips[c];
-            // The clip across the edit point: one this edge meets, or
-            // already runs into.
-            let across = |o: &&Clip| {
-                o.id != id
-                    && if end_edge {
-                        follows(this, o)
-                    } else {
-                        follows(o, this)
-                    }
-            };
-            let Some(other) = row.clips.iter().find(across) else {
-                // Nothing to dissolve with, so the edge fades on its own.
-                let seconds = length.min(this.place_duration);
-                let slot = &mut self.rows[r].clips[c];
-                if end_edge {
-                    slot.fade_out.seconds = seconds;
-                } else {
-                    slot.fade_in.seconds = seconds;
-                }
-                continue;
-            };
-            let (outgoing, incoming) = if end_edge {
-                (this, other)
-            } else {
-                (other, this)
-            };
-            let room = (self.room(outgoing, false)?, self.room(incoming, true)?);
-            let incoming = incoming.id;
-            let mut next = sequence::transition::dissolve(
-                &row.clips,
-                outgoing.id,
-                incoming,
-                frames,
-                frame,
-                room,
-            )
-            .ok_or(BridgeCutResult::Limit)?;
-            // A picture dissolves in a straight line. A crossfade keeps the
-            // shape it has, which holds the level.
-            if !row.audio_only && frames > 0 {
-                for clip in next.iter_mut().filter(|c| c.id == incoming) {
-                    clip.fade_in.shape = FadeShape::Linear;
-                }
-            }
-            self.rows[r].clips = next;
-        }
-        self.commit()
-    }
-
     fn remove_span(
         mut self,
         start_frame: i64,

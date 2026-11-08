@@ -387,15 +387,18 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                     // panel shows, and where they are.
                     : Listener(
                         onPointerSignal: _wheel,
-                        child: HouseScrollbar(
-                        controller: _strips,
-                        crossAxisMargin: 2,
-                        child: EdgeFade(
                         child: LayoutBuilder(
                         builder: (context, box) {
                           final width =
                               _stripWidthIn(box.maxWidth, sounding.length);
-                          return ListView(
+                          return HouseScrollbar(
+                        controller: _strips,
+                        crossAxisMargin: 2,
+                        // Shown for as long as strips are out of sight.
+                        thumbVisibility:
+                            width * sounding.length > box.maxWidth + 0.5,
+                        child: EdgeFade(
+                        child: ListView(
                         controller: _strips,
                         scrollDirection: Axis.horizontal,
                         children: [
@@ -424,10 +427,10 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                               ),
                             ),
                         ],
+                      ),
+                      ),
                       );
                         },
-                      ),
-                      ),
                       ),
                       ),
                 ),
@@ -450,12 +453,15 @@ const double _stripWidthMost = 96;
 const double _deskGround = 16;
 
 /// How wide each of [count] strips stands on a desk [room] wide. They share
-/// the room, so a spare inch goes to the names, and a desk too narrow for all
-/// of them shows whole strips rather than part of one under the Master.
+/// the room, so a spare inch goes to the names. A desk too narrow for all of
+/// them shows whole strips and a third of the next under the fade, so it says
+/// there are more.
 double _stripWidthIn(double room, int count) {
-  final whole = (room ~/ _stripWidth).clamp(1, count);
-  if (whole < count) return room / whole;
-  return ((room - _deskGround) / count).clamp(_stripWidth, _stripWidthMost);
+  if (room ~/ _stripWidth >= count) {
+    return ((room - _deskGround) / count).clamp(_stripWidth, _stripWidthMost);
+  }
+  final whole = (room / _stripWidth - 0.35).floor().clamp(1, count);
+  return math.max(_stripWidth, room / (whole + 0.35));
 }
 
 /// How tall the strip's rows that must stand level across the desk are.

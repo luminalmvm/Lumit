@@ -1691,6 +1691,53 @@ class _SourceBarState extends State<_SourceBar>
     if (frame >= last) _stop();
   }
 
+  /// The In and Out marks and the length between them, beside the playhead's
+  /// time: all three where they fit, the length alone where only it does.
+  Widget _marks(LumitTheme t) {
+    final from = view.sourceIn, to = view.sourceOut;
+    if (from == null && to == null) return const SizedBox.shrink();
+    final start = facts.startFrame.toInt();
+    String at(int frame) => timecodeOfRate(
+        frame + start, facts.fpsNum, facts.fpsDen,
+        dropFrame: facts.startDropFrame);
+    final a = from ?? 0;
+    final b = to ?? LumitUiState.framesOf(facts) - 1;
+    final length = timecodeOfRate(b - a + 1, facts.fpsNum, facts.fpsDen);
+    final face = t.mono.copyWith(fontSize: viewerTimecodeSize);
+    final label = face.copyWith(color: t.textMuted);
+    final value = face.copyWith(color: t.textSecondary);
+    final whole = TextSpan(children: [
+      TextSpan(text: '${l10n.sourceMarkIn} ', style: label),
+      TextSpan(text: '${at(a)}   ', style: value),
+      TextSpan(text: '${l10n.sourceMarkOut} ', style: label),
+      TextSpan(text: '${at(b)}   ', style: value),
+      TextSpan(text: '$length   ', style: label),
+    ]);
+    final short = TextSpan(text: '$length   ', style: label);
+    return LayoutBuilder(builder: (context, box) {
+      double wide(TextSpan s) {
+        final p = TextPainter(text: s, textDirection: TextDirection.ltr)
+          ..layout();
+        final w = p.width;
+        p.dispose();
+        return w;
+      }
+
+      final shown = wide(whole) <= box.maxWidth
+          ? whole
+          : wide(short) <= box.maxWidth
+              ? short
+              : null;
+      return Align(
+        alignment: Alignment.centerRight,
+        child: shown == null
+            ? null
+            : Text.rich(shown,
+                key: const ValueKey('source-marks'), maxLines: 1),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -1737,7 +1784,7 @@ class _SourceBarState extends State<_SourceBar>
           button('overwrite', l10n.sourceOverwrite, l10n.sourceOverwriteTip,
               canPlace ? () => ui.placeSource(view, insert: false) : null,
               action: 'cut.overwrite'),
-          const Spacer(),
+          Expanded(child: _marks(t)),
           Text(
             // From the footage's own start timecode, where it has one.
             timecodeOfRate(view.sourceFrame + facts.startFrame.toInt(),

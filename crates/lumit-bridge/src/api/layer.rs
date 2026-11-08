@@ -4476,49 +4476,6 @@ impl LayerReference {
             .collect())
     }
 
-    /// Set one clip's playback speed, as a percentage.
-    ///
-    /// The clip keeps its place on the row — its start and its length are
-    /// untouched, so an edit point already on a beat stays on it —
-    /// and the stretch of source it plays follows from the speed. Its first
-    /// frame is pinned, so re-speeding never moves where a clip begins.
-    ///
-    /// `end_percent` makes it a ramp, running straight from one speed to the
-    /// other; leave it equal to `percent` for a constant speed. Negative runs
-    /// the clip backwards. A speed that turns the clip round starts it from
-    /// the far end of what it played, so Reset after Reverse plays the same
-    /// stretch forwards again.
-    #[frb(sync)]
-    pub fn set_clip_speed(
-        &self,
-        clip: Uuid,
-        percent: f64,
-        end_percent: f64,
-    ) -> Result<(), BridgeError> {
-        let layer = self.item()?;
-        let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind else {
-            return Err(BridgeError::NotSequence);
-        };
-        let index = clips
-            .iter()
-            .position(|c| c.id == clip)
-            .ok_or(BridgeError::InvalidLayer)?;
-        let rate = |v: f64| {
-            lumit_core::time::Rational::from_f64_on_grid(
-                v / 100.0,
-                lumit_core::time::Rational::FLICK_DEN,
-            )
-            .map_err(|_| BridgeError::InvalidTime)
-        };
-        let mut clips = clips.clone();
-        let backwards = clips[index].source_out < clips[index].source_in;
-        if backwards != (percent + end_percent < 0.0) {
-            clips[index].source_in = clips[index].source_out;
-        }
-        clips[index] = clips[index].with_ramp(rate(percent)?, rate(end_percent)?);
-        self.commit_clips(clips)
-    }
-
     /// Replace one clip's whole retime map, keyed in clip-local time.
     ///
     /// The envelope in the sequence view writes through here: it speaks the

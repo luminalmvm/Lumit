@@ -3782,6 +3782,17 @@ class LumitUiState extends ChangeNotifier {
   /// panel reads its folder again.
   final ValueNotifier<int> presetsChanged = ValueNotifier(0);
 
+  /// The Sequence layers whose view is open in the Timeline, by layer id:
+  /// double-clicking one opens its clips and their speed envelope inside its
+  /// own row.
+  final Set<String> sequenceOpen = {};
+
+  /// How tall each open view's **graph** half is, by layer id, once its
+  /// divider has been dragged. Absent means the default three rows. Only the
+  /// graph resizes: the clip strip is sized for cutting, while the room a
+  /// speed curve wants depends on how far the ramps go.
+  final Map<String, double> sequenceGraph = {};
+
   /// How tall each row of the Cut timeline stands where it has been dragged
   /// off the usual height, by composition id and then row id. Kept in the
   /// session beside [viewerLooks], so a project reopens with its rows as

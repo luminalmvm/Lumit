@@ -125,6 +125,14 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   static const double _plotMin = 120;
   static const double _listFoot = 8;
 
+  /// From this width the curve takes a column of its own, up to
+  /// [_plotWideMax] across.
+  static const double _wideAt = 680;
+  static const double _plotWideMax = 480;
+
+  /// A section heading's height: its 18 and its padding above and below.
+  static const double _headingHeight = 28;
+
   /// The look each layer is wearing and the grade it brought, by layer. A look
   /// isn't kept in the document, so this lasts until the grade is touched or
   /// its effects change.
@@ -177,19 +185,35 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   LumitState get app => Provider.of<LumitState>(context, listen: false);
 
   LayerReference? get _layer => ui.selectedLayer.value;
-  BridgeLayerInfo? get _info =>
-      _layer == null ? null : ui.model.byId(_layer!.internallayerId)?.info;
+  BridgeLayerInfo? get _info => _infoOf(_layer);
+  BridgeLayerInfo? _infoOf(LayerReference? layer) =>
+      layer == null ? null : ui.model.byId(layer.internallayerId)?.info;
 
-  /// The first instance of [fx] on the layer, or null when none is there.
-  BridgeEffectInstanceInfo? _instance(GradeFx fx) {
-    for (final e in _info?.effects ?? const <BridgeEffectInstanceInfo>[]) {
+  /// The layers an edit lands on: the one shown first, then every other
+  /// picked layer that can wear a grade.
+  List<LayerReference> get _targets {
+    final shown = _layer;
+    if (shown == null) return const [];
+    return [
+      shown,
+      for (final layer in ui.selectedLayers.value)
+        if (layer.internallayerId != shown.internallayerId)
+          if (_infoOf(layer) case final info? when gradeable(info.kind)) layer,
+    ];
+  }
+
+  /// The first instance of [fx] on the layer, the shown one unless [on]
+  /// says otherwise, or null when none is there.
+  BridgeEffectInstanceInfo? _instance(GradeFx fx, [BridgeLayerInfo? on]) {
+    for (final e
+        in (on ?? _info)?.effects ?? const <BridgeEffectInstanceInfo>[]) {
       if (e.name == fx.matchName) return e;
     }
     return null;
   }
 
-  BridgeEffectValue? _value(GradeFx fx, String id) {
-    for (final v in _instance(fx)?.values ?? const <BridgeParamValue>[]) {
+  BridgeEffectValue? _value(GradeFx fx, String id, [BridgeLayerInfo? on]) {
+    for (final v in _instance(fx, on)?.values ?? const <BridgeParamValue>[]) {
       if (v.id == id) return v.value;
     }
     return null;
@@ -343,11 +367,17 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   }
 
   // --- Writing ---------------------------------------------------------------
+  //
+  // Every write lands on each of [_targets], in the one undo step. The drag's
+  // preview draws the shown layer alone, as the renderer previews one layer;
+  // the rest take the value on release.
 
   /// A gesture begins: everything it writes, the effect it may add included,
   /// is one undo step until [_touchEnd].
   void _touchStart() {
-    if (_layer case final layer?) _worn.remove(layer.internallayerId);
+    for (final layer in _targets) {
+      _worn.remove(layer.internallayerId);
+    }
     final project = app.project;
     if (project == null) return;
     project.beginUndoGroup();
@@ -382,14 +412,16 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     ui.model.refresh();
   }
 
-  /// The id of [fx] on the layer, adding it in its place when it is not
-  /// there yet. Inside a touch, so the add is part of the gesture's step.
-  UuidValue? _ensure(GradeFx fx) {
-    final layer = _layer;
+  /// The id of [fx] on [on], the shown layer by default, adding it in its
+  /// place when it is not there yet. Inside a touch, so the add is part of
+  /// the gesture's step.
+  UuidValue? _ensure(GradeFx fx, [LayerReference? on]) {
+    final layer = on ?? _layer;
     if (layer == null) return null;
-    final have = _instance(fx);
+    final info = _infoOf(layer);
+    final have = _instance(fx, info);
     if (have != null) return have.id;
-    final before = {for (final e in _info?.effects ?? const []) e.id};
+    final before = {for (final e in info?.effects ?? const []) e.id};
     try {
       layer.addEffect(name: fx.matchName);
     } catch (_) {
@@ -408,12 +440,12 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     int? target;
     for (final other in GradeFx.values) {
       if (other == fx) break;
-      final at = _instance(other);
+      final at = _instance(other, info);
       if (at != null) target = ids.indexOf(at.id) + 1;
     }
     if (target == null) {
       for (final other in GradeFx.values.skip(fx.index + 1)) {
-        final at = _instance(other);
+        final at = _instance(other, info);
         if (at != null) {
           target = ids.indexOf(at.id);
           break;
@@ -443,17 +475,25 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     _restage!();
   }
 
-  void _write(GradeFx fx, String param, BridgeEffectValue value) {
-    final layer = _layer;
-    final id = _ensure(fx);
-    if (layer != null && id != null) _editor.write(layer, id, param, value);
+  /// [valueFor] makes each layer's value from what that layer holds, so a
+  /// keyed row keeps its keys. [all] false writes the shown layer alone, for
+  /// a key or an expression, which belong to the one row they were set on.
+  void _write(GradeFx fx, String param,
+      BridgeEffectValue Function(BridgeLayerInfo? on) valueFor,
+      {bool all = true}) {
+    for (final layer in all ? _targets : [if (_layer case final l?) l]) {
+      final info = _infoOf(layer);
+      final id = _ensure(fx, layer);
+      if (id != null) _editor.write(layer, id, param, valueFor(info));
+    }
     _touchEnd();
     _tell();
   }
 
-  BridgeScalar _scalarFor(GradeFx fx, String id, double v) {
+  BridgeScalar _scalarFor(GradeFx fx, String id, double v,
+      [BridgeLayerInfo? on]) {
     final comp = ui.selectedComp;
-    final was = _value(fx, id);
+    final was = _value(fx, id, on);
     final (lo, hi) = switch (_kind(fx, id)) {
       BridgeParamKind_Float(:final hardMin, :final hardMax) => (
           hardMin ?? double.negativeInfinity,
@@ -472,16 +512,17 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   void _liveFloat(GradeFx fx, String id, double v) =>
       _live(fx, id, BridgeEffectValue.float(_scalarFor(fx, id, v)));
 
-  void _writeFloat(GradeFx fx, String id, double v) =>
-      _write(fx, id, BridgeEffectValue.float(_scalarFor(fx, id, v)));
+  void _writeFloat(GradeFx fx, String id, double v) => _write(
+      fx, id, (on) => BridgeEffectValue.float(_scalarFor(fx, id, v, on)));
 
-  BridgeEffectValue _colourFor(GradeFx fx, String id, List<double> rgb) {
+  BridgeEffectValue _colourFor(GradeFx fx, String id, List<double> rgb,
+      [BridgeLayerInfo? on]) {
     final comp = ui.selectedComp;
     final (lo, hi) = switch (_kind(fx, id)) {
       BridgeParamKind_Colour(:final min, :final max) => (min, max),
       _ => (0.0, 1.0),
     };
-    final was = _value(fx, id);
+    final was = _value(fx, id, on);
     BridgeScalar at(BridgeScalar? s, double v) {
       final clamped = v.clamp(lo, hi).toDouble();
       return s == null || comp == null
@@ -502,20 +543,25 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   /// as one step. A keyed value takes the default at the playhead, as an
   /// Effect controls row's reset does, so the animation stays.
   void _reset(List<GradeFx> fxs, {Set<String>? only}) {
-    final layer = _layer;
-    if (layer == null) return;
-    _worn.remove(layer.internallayerId);
+    final targets = _targets;
+    if (targets.isEmpty) return;
     asOneUndoStep(app.project, () {
-      for (final fx in fxs) {
-        final at = _instance(fx);
-        if (at == null) continue;
-        final values = <String, BridgeEffectValue>{};
-        for (final p in _schema[fx]!.values) {
-          if (only != null && !only.contains(p.id)) continue;
-          final d = defaultEffectValue(p.kind);
-          if (d != null) values[p.id] = _defaultAtPlayhead(_value(fx, p.id), d);
+      for (final layer in targets) {
+        _worn.remove(layer.internallayerId);
+        final info = _infoOf(layer);
+        for (final fx in fxs) {
+          final at = _instance(fx, info);
+          if (at == null) continue;
+          final values = <String, BridgeEffectValue>{};
+          for (final p in _schema[fx]!.values) {
+            if (only != null && !only.contains(p.id)) continue;
+            final d = defaultEffectValue(p.kind);
+            if (d != null) {
+              values[p.id] = _defaultAtPlayhead(_value(fx, p.id, info), d);
+            }
+          }
+          if (values.isNotEmpty) _editor.writeAll(layer, at.id, values);
         }
-        if (values.isNotEmpty) _editor.writeAll(layer, at.id, values);
       }
     });
     _tell();
@@ -553,31 +599,45 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   static bool _colourKeyedScalar(BridgeColour c) =>
       [c.r, c.g, c.b, c.a].any((s) => s is BridgeScalar_Keyframed);
 
-  void _setBypassed(List<GradeFx> fxs, bool off) => _bypassIds(
-      {for (final fx in fxs) _instance(fx)?.id}.nonNulls.toSet(), off);
+  /// The section's effects on [on].
+  Set<UuidValue> _idsOf(List<GradeFx> fxs, BridgeLayerInfo on) =>
+      {for (final fx in fxs) _instance(fx, on)?.id}.nonNulls.toSet();
 
-  void _bypassIds(Set<UuidValue> ids, bool off) {
-    final layer = _layer;
-    if (layer == null) return;
-    asOneUndoStep(app.project, () {
+  static Set<UuidValue> _wholeGrade(BridgeLayerInfo on) =>
+      gradeEffectIds(on).toSet();
+
+  void _setBypassed(List<GradeFx> fxs, bool off) =>
+      _bypassWhere((on) => _idsOf(fxs, on), off);
+
+  void _bypassWhere(Set<UuidValue> Function(BridgeLayerInfo) idsOf, bool off) {
+    _eachTarget((layer, ids) {
       for (final h in layer.getEffects()) {
         if (ids.contains(h.id())) {
           layer.setEffectEnabled(effect: h, enabled: !off);
         }
       }
-    });
-    _tell();
+    }, idsOf);
   }
 
-  void _remove(List<GradeFx> fxs) =>
-      _removeIds({for (final fx in fxs) _instance(fx)?.id}.nonNulls.toSet());
+  void _remove(List<GradeFx> fxs) => _removeWhere((on) => _idsOf(fxs, on));
 
-  void _removeIds(Set<UuidValue> ids) {
-    final layer = _layer;
-    if (layer == null) return;
-    asOneUndoStep(app.project, () {
+  void _removeWhere(Set<UuidValue> Function(BridgeLayerInfo) idsOf) {
+    _eachTarget((layer, ids) {
       for (final h in layer.getEffects()) {
         if (ids.contains(h.id())) layer.removeEffect(effect: h);
+      }
+    }, idsOf);
+  }
+
+  /// [run] on every target layer with the effects [idsOf] picks there, as one
+  /// step.
+  void _eachTarget(void Function(LayerReference, Set<UuidValue>) run,
+      Set<UuidValue> Function(BridgeLayerInfo) idsOf) {
+    final targets = _targets;
+    if (targets.isEmpty) return;
+    asOneUndoStep(app.project, () {
+      for (final layer in targets) {
+        if (_infoOf(layer) case final info?) run(layer, idsOf(info));
       }
     });
     _tell();
@@ -660,7 +720,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
               () => rowParam == null
                   ? _reset(fxs)
                   : _reset([rowFx!], only: {rowParam})),
-        _row('grade-section-bypass', l10n.fxBypass, close,
+        _row('grade-section-bypass', l10n.gradeBypassPart(_part(fxs)), close,
             () => _setBypassed(fxs, !off),
             ticked: off),
       ],
@@ -672,7 +732,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       if (param != null)
         paramLastRows(context, param, close, tickColumn: true),
       [
-        _row('grade-section-remove', l10n.gradeRemove, close,
+        _row('grade-section-remove', l10n.gradeRemovePart(_part(fxs)), close,
             () => _remove(fxs)),
       ],
       _gradeRows(close),
@@ -680,6 +740,20 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       _removeRows(close),
     ]);
   }
+
+  /// What a section's or a row's Bypass and Remove act on, for their names: a
+  /// heading's whole section, or the one effect behind a row.
+  static String _part(List<GradeFx> fxs) => fxs.length > 1
+      ? 'primaries'
+      : switch (fxs.single) {
+          GradeFx.colourBalance => 'balance',
+          GradeFx.curves => 'curves',
+          GradeFx.lut => 'look',
+          GradeFx.exposure => 'exposure',
+          GradeFx.contrast => 'contrast',
+          GradeFx.saturation => 'saturation',
+          GradeFx.temperature => 'temperature',
+        };
 
   /// Copy grade and Paste grade, on any layer that can wear a grade.
   List<Widget> _clipboardRows(VoidCallback close) {
@@ -698,7 +772,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   List<Widget> _removeRows(VoidCallback close) => [
         if (_anyPresent)
           _row('grade-menu-remove', l10n.gradeRemoveAll, close,
-              () => _removeIds(_gradeIds)),
+              () => _removeWhere(_wholeGrade)),
       ];
 
   /// The rows that act on the whole grade, each only while it can.
@@ -711,7 +785,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             () => _reset(GradeFx.values)),
       if (present)
         _row('grade-menu-bypass', l10n.gradeBypassAll, close,
-            () => _bypassIds(_gradeIds, !off),
+            () => _bypassWhere(_wholeGrade, !off),
             ticked: off),
       if (present && reveal)
         _row('grade-menu-reveal', l10n.gradeRevealInEffectControls, close,
@@ -762,25 +836,28 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
               comp: comp,
               onSeek: (frame) => ui.playheadFrame.value = frame,
               rowKey: 'grade-${fx.matchName}-$id',
-              onWrite: (next) => _write(fx, id, rebuilt(next)),
+              onWrite: (next) =>
+                  _write(fx, id, (_) => rebuilt(next), all: false),
             ),
       setExpression: v is BridgeEffectValue_Float && expression == null
           ? () => _write(
               fx,
               id,
-              BridgeEffectValue.float(BridgeScalar.expression(
-                  _float(fx, id).toString(), newExpressionLanguage(context))))
+              (_) => BridgeEffectValue.float(BridgeScalar.expression(
+                  _float(fx, id).toString(), newExpressionLanguage(context))),
+              all: false)
           : null,
       removeExpression: expression == null
           ? null
           : () => _write(
               fx,
               id,
-              BridgeEffectValue.float(BridgeScalar.static_(
+              (_) => BridgeEffectValue.float(BridgeScalar.static_(
                   sampleScalarWithContext(
                       scalar: expression,
                       time: timeOfFrame(comp, ui.playheadFrame.value),
-                      layer: layer)))),
+                      layer: layer))),
+              all: false),
       graphPath: '${effectPath('${layer.internallayerId}', '${at.id}')}/$id',
     );
   }
@@ -791,8 +868,13 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   Widget build(BuildContext context) {
     final ui = this.ui;
     return ListenableBuilder(
-      listenable: Listenable.merge(
-          [ui.model, ui.selectedLayer, ui.playheadFrame, ui.selectedEffects]),
+      listenable: Listenable.merge([
+        ui.model,
+        ui.selectedLayer,
+        ui.selectedLayers,
+        ui.playheadFrame,
+        ui.selectedEffects
+      ]),
       builder: (context, _) {
         final t = ThemeScope.of(context).theme;
         final info = _info;
@@ -808,23 +890,53 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                 child: Container(
                   color: t.surface0,
                   child: LayoutBuilder(builder: (context, viewport) {
-                    WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => _fitPlot(viewport.maxHeight));
+                    // A wide pane puts the curve in a column of its own,
+                    // as tall as the pane, beside the rest.
+                    final wide = viewport.maxWidth >= _wideAt;
+                    if (!wide) {
+                      WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => _fitPlot(viewport.maxHeight));
+                    }
                     return EdgeFade(
                       axis: Axis.vertical,
                       child: SingleChildScrollView(
                         primary: false,
                         padding: const EdgeInsets.only(bottom: _listFoot),
-                        child: Column(
-                          key: _content,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _balance(t, enabled),
-                            _basics(t, enabled),
-                            _curves(t, enabled),
-                            _look(t, enabled),
-                          ],
-                        ),
+                        child: wide
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        _balance(t, enabled),
+                                        _basics(t, enabled),
+                                        _look(t, enabled),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: _curves(t, enabled,
+                                        room: viewport.maxHeight -
+                                            _listFoot -
+                                            _headingHeight),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                key: _content,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _balance(t, enabled),
+                                  _basics(t, enabled),
+                                  _look(t, enabled),
+                                  _curves(t, enabled),
+                                ],
+                              ),
                       ),
                     );
                   }),
@@ -837,8 +949,9 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     );
   }
 
-  /// The curve takes what the other sections leave, so Look stays on screen;
-  /// below its least it keeps that and the pane scrolls.
+  /// The curve, last, takes what the other sections leave, so it shows whole;
+  /// below its least it keeps that and the pane scrolls. Look sits above it,
+  /// where a short pane still shows it.
   void _fitPlot(double viewport) {
     final box = _content.currentContext?.findRenderObject() as RenderBox?;
     if (!mounted || box == null || !box.hasSize) return;
@@ -857,7 +970,11 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             children: [
               Expanded(
                 child: Text(
-                  enabled ? info!.name : '',
+                  !enabled
+                      ? ''
+                      : _targets.length > 1
+                          ? l10n.gradeLayerCount(_targets.length)
+                          : info!.name,
                   style: t.small.copyWith(color: t.textMuted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -901,7 +1018,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
 
   Widget _balance(LumitTheme t, bool enabled) {
     const fx = GradeFx.colourBalance;
-    Widget wheel(String id, double size) {
+    Widget wheel(String id, double size, {required bool numbers}) {
       final rgb = _colour(fx, id);
       final neutral = _defaultColour(fx, id)[0];
       final (reach, span) = _wheelRanges[id]!;
@@ -925,22 +1042,43 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
               keyed: keyed,
               onStart: _touchStart,
               onLive: (c) => _live(fx, id, _colourFor(fx, id, c)),
-              onCommit: (c) => _write(fx, id, _colourFor(fx, id, c)),
+              onCommit: (c) =>
+                  _write(fx, id, (on) => _colourFor(fx, id, c, on)),
               onCancel: _touchCancel,
             ),
             const SizedBox(height: 4),
-            Text(
-              label,
-              style: t.small.copyWith(
-                color: keyed
-                    ? t.animated
-                    : !enabled
-                        ? t.textDisabled
-                        : changed
-                            ? t.textSecondary
-                            : t.textMuted,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: t.small.copyWith(
+                    color: keyed
+                        ? t.animated
+                        : !enabled
+                            ? t.textDisabled
+                            : changed
+                                ? t.textSecondary
+                                : t.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _wheelNumber(id, rgb, null, enabled, keyed),
+              ],
             ),
+            if (numbers)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < 3; i++) ...[
+                      if (i > 0) const SizedBox(width: 6),
+                      _wheelNumber(id, rgb, i, enabled, keyed),
+                    ],
+                  ],
+                ),
+              ),
           ],
         ),
       );
@@ -958,8 +1096,11 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             final per = (box.maxWidth - 2 * 8) / 3 - 16;
             final across = per >= 56;
             final size = across ? per.clamp(56.0, 88.0) : 72.0;
+            // The channel numbers under each wheel, where three fit.
+            final numbers = !across || (box.maxWidth - 2 * 8) / 3 >= 104;
             final wheels = [
-              for (final id in const ['lift', 'gamma', 'gain']) wheel(id, size)
+              for (final id in const ['lift', 'gamma', 'gain'])
+                wheel(id, size, numbers: numbers)
             ];
             return across
                 ? Row(
@@ -977,6 +1118,70 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
           }),
         ),
       ],
+    );
+  }
+
+  /// One of a wheel's numbers: a channel, or with [channel] null the master,
+  /// which moves the three together as the bar does. Typed or dragged, it
+  /// writes the whole colour, as the wheel does.
+  Widget _wheelNumber(
+      String id, List<double> rgb, int? channel, bool enabled, bool keyed) {
+    const fx = GradeFx.colourBalance;
+    final (lo, hi) = switch (_kind(fx, id)) {
+      BridgeParamKind_Colour(:final min, :final max) => (min, max),
+      _ => (0.0, 1.0),
+    };
+    final neutral = _defaultColour(fx, id)[0];
+    final master = wheelMaster(rgb);
+    List<double> next(num v) => channel == null
+        ? [for (final c in rgb) c + v.toDouble() - master]
+        : [for (var i = 0; i < 3; i++) i == channel ? v.toDouble() : rgb[i]];
+    void commit(num v) =>
+        _write(fx, id, (on) => _colourFor(fx, id, next(v), on));
+    final field = DragValueField(
+      key: ValueKey<String>('grade-wheel-$id-${channel ?? 'master'}'),
+      bare: true,
+      value: channel == null ? master : rgb[channel],
+      min: lo,
+      max: hi,
+      speed: _wheelRanges[id]!.$2 / 100,
+      decimals: 2,
+      signed: neutral == 0,
+      keyed: keyed,
+      resetTo: neutral,
+      onChangeStart: _touchStart,
+      onChangeLive: (v) => _live(fx, id, _colourFor(fx, id, next(v))),
+      onChangeEnd: commit,
+      onDragCancel: _touchCancel,
+      onChanged: (v) {
+        _touchStart();
+        commit(v);
+      },
+    );
+    const channels = ['red', 'green', 'blue'];
+    return IgnorePointer(
+      ignoring: !enabled,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: channel == null
+            ? field
+            // A channel's own colour under its number says which it is.
+            : LumitTooltip(
+                message: engineLabel(
+                    _schema[GradeFx.curves]![channels[channel]]!.label),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    field,
+                    Container(
+                      width: 12,
+                      height: 1.5,
+                      color: curveChannelColour(channels[channel]),
+                    ),
+                  ],
+                ),
+              ),
+      ),
     );
   }
 
@@ -1008,16 +1213,18 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   /// Both rows as one write, so one undo step takes the whole pick back.
   void _neutralPick(DropperSample s) {
     const fx = GradeFx.temperature;
-    final layer = _layer;
     final solved = _neutralFor(s);
     if (!_neutralTouched) _touchStart();
     _neutralTouched = false;
-    final id = _ensure(fx);
-    if (layer != null && id != null) {
+    for (final layer in _targets) {
+      final info = _infoOf(layer);
+      final id = _ensure(fx, layer);
+      if (id == null) continue;
       _editor.writeAll(layer, id, {
-        'temperature':
-            BridgeEffectValue.float(_scalarFor(fx, 'temperature', solved.temperature)),
-        'tint': BridgeEffectValue.float(_scalarFor(fx, 'tint', solved.tint)),
+        'temperature': BridgeEffectValue.float(
+            _scalarFor(fx, 'temperature', solved.temperature, info)),
+        'tint':
+            BridgeEffectValue.float(_scalarFor(fx, 'tint', solved.tint, info)),
       });
     }
     _touchEnd();
@@ -1104,7 +1311,9 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     );
   }
 
-  Widget _curves(LumitTheme t, bool enabled) {
+  /// [room] is the height the curve may take in a wide pane's own column;
+  /// otherwise it takes what [_fitPlot] measured.
+  Widget _curves(LumitTheme t, bool enabled, {double? room}) {
     const fx = GradeFx.curves;
     const ids = ['master', 'red', 'green', 'blue'];
     final labels = [for (final id in ids) engineLabel(_schema[fx]![id]!.label)];
@@ -1123,10 +1332,10 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
               final column = channelColumnWidth(labels) + channelColumnGap;
               // Grows with the pane: the curve a colourist draws wants room,
               // and a small square beside long sliders reads as an afterthought.
-              final plot = _plot = math.min(
-                      box.maxWidth - column,
-                      _plotRoom.clamp(_plotMin, _plotMax).toDouble())
-                  .clamp(48.0, _plotMax)
+              final most = room == null ? _plotMax : _plotWideMax;
+              final plot = _plot = math.min(box.maxWidth - column,
+                      (room ?? _plotRoom).clamp(_plotMin, most).toDouble())
+                  .clamp(48.0, most)
                   .toDouble();
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1146,7 +1355,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                         },
                         onCommit: (p) {
                           if (_touches == 0) _touchStart();
-                          _write(fx, id, curveValue(p));
+                          _write(fx, id, (_) => curveValue(p));
                         },
                       ),
                     ),
@@ -1246,7 +1455,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                       _write(
                           fx,
                           'file',
-                          const BridgeEffectValue.file(BridgeFileParam(
+                          (_) => const BridgeEffectValue.file(BridgeFileParam(
                               paths: [], index: BridgeScalar.static_(0))));
                     },
                   ),
@@ -1360,7 +1569,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     _write(
         GradeFx.lut,
         'file',
-        BridgeEffectValue.file(BridgeFileParam(
+        (_) => BridgeEffectValue.file(BridgeFileParam(
             paths: [path], index: const BridgeScalar.static_(0))));
   }
 }

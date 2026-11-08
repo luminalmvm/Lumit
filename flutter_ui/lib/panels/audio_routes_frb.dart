@@ -158,11 +158,12 @@ List<Widget> audioLayerRows({
       targets.any((t) => levelMoved(t.info.volumeDb, comp, frame));
   final panOff = targets.any((t) => levelMoved(t.info.pan, comp, frame));
 
-  Widget switchRow(String key, String label, bool ticked, VoidCallback act) =>
+  Widget switchRow(String key, String label, bool ticked, VoidCallback act,
+          {String? action}) =>
       MenuRow(
         key: ValueKey<String>('audio-menu-$key'),
         onPressed: act,
-        child: MenuLabel(label, ticked: ticked),
+        child: MenuLabel(label, ticked: ticked, action: action),
       );
 
   // A bus goes to the master and has nothing to choose.
@@ -184,7 +185,8 @@ List<Widget> audioLayerRows({
         action: renameAction, ticked: false, enabled: canRename),
   );
   final lock = switchRow('lock', l10n.switchLock, switches.locked,
-      () => flip(BridgeLayerSwitch.locked, !switches.locked));
+      () => flip(BridgeLayerSwitch.locked, !switches.locked),
+      action: 'layer.lock.toggle');
   final detach = MenuRow(
     key: const ValueKey<String>('audio-menu-detach'),
     onPressed: () async {

@@ -332,6 +332,8 @@ pub fn default_keymap() -> Keymap {
         // in the Timeline.
         row(Cut, "I", "cut.mark.in"),
         row(Cut, "O", "cut.mark.out"),
+        row(Cut, "Shift+I", "cut.goto.in"),
+        row(Cut, "Shift+O", "cut.goto.out"),
         row(Cut, ",", "cut.insert"),
         row(Cut, ".", "cut.overwrite"),
         row(Cut, "Shift+Delete", "cut.delete.ripple"),

@@ -361,9 +361,23 @@
   "@gradePrimaries": {
     "description": "Grade panel: the heading over the primary sliders (exposure, contrast, saturation, temperature, tint)."
   },
-  "gradeRemove": "Remove",
-  "@gradeRemove": {
-    "description": "Grade panel section menu: removes the section's effects from the layer."
+  "gradeBypassPart": "{part, select, balance{Bypass balance} primaries{Bypass primaries} curves{Bypass curves} look{Bypass look} exposure{Bypass exposure} contrast{Bypass contrast} saturation{Bypass saturation} other{Bypass temperature and tint}}",
+  "@gradeBypassPart": {
+    "description": "Grade panel menu on a section heading or a row: switches that part of the grade off, or back on. Ticked while off. {part} names it: a section (balance, primaries, curves, look) or, on a primaries row, the one effect behind it; temperature and tint are one effect.",
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
+  },
+  "gradeRemovePart": "{part, select, balance{Remove balance} primaries{Remove primaries} curves{Remove curves} look{Remove look} exposure{Remove exposure} contrast{Remove contrast} saturation{Remove saturation} other{Remove temperature and tint}}",
+  "@gradeRemovePart": {
+    "description": "Grade panel menu on a section heading or a row: removes that part of the grade's effects from the layer. {part} names it, as in gradeBypassPart.",
+    "placeholders": {
+      "part": {
+        "type": "String"
+      }
+    }
   },
   "gradeCopy": "Copy grade",
   "@gradeCopy": {
@@ -417,6 +431,15 @@
   "gradeRevealInEffectControls": "Reveal in Effect controls",
   "@gradeRevealInEffectControls": {
     "description": "Grade panel menu: selects the grade's effects in the Effect controls panel and brings that panel up."
+  },
+  "gradeLayerCount": "{count} layers",
+  "@gradeLayerCount": {
+    "description": "Grade panel header, in place of the layer's name while more than one layer is selected: every edit lands on all of them. {count} is always 2 or more.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "holdout": "Holdout",
   "@holdout": {
@@ -511,21 +534,21 @@
   "@clear": {
     "description": "Tooltip on the button that empties a value."
   },
-  "clipCopyRowShape": "Copy the whole row's shape",
-  "@clipCopyRowShape": {
-    "description": "Context-menu item: copy the speed curve of every clip on the layer."
-  },
-  "clipCopyShape": "Copy this clip's shape",
-  "@clipCopyShape": {
-    "description": "Context-menu item on a clip in a Sequence layer: copy its speed curve."
+  "clipCopyLayerCuts": "Copy the layer's cuts",
+  "@clipCopyLayerCuts": {
+    "description": "Menu row on a clip, or the room, in a Sequence layer's open row: copy where every cut on the layer falls and how each clip's speed runs, without the media, to put onto another Sequence layer."
   },
   "clipDelete": "Delete clip",
   "@clipDelete": {
     "description": "Context-menu item: remove a clip from a Sequence layer."
   },
-  "clipPasteShape": "Paste shape onto this layer",
-  "@clipPasteShape": {
-    "description": "Context-menu item: apply a copied speed curve here."
+  "clipPasteLayerCuts": "Paste the layer's cuts",
+  "@clipPasteLayerCuts": {
+    "description": "Menu row on a clip, or the room, in a Sequence layer's open row: cut this Sequence layer where the copied one was cut and give each clip the copied speeds, keeping this layer's own media."
+  },
+  "sequenceViewClose": "Close clips",
+  "@sequenceViewClose": {
+    "description": "Menu row on the room of a Sequence layer's open row: closes the row back to its bar, as a double-click on the layer does. Not the same as Close gap beside it."
   },
   "clipResetSpeed": "Reset speed",
   "@clipResetSpeed": {
@@ -8850,6 +8873,14 @@
   "sourceMarkOut": "Out",
   "@sourceMarkOut": {
     "description": "Button under the source picture that marks the current frame as the end of the stretch to place. Kept to one short word."
+  },
+  "sourceGoToIn": "Go to In",
+  "@sourceGoToIn": {
+    "description": "Source view menu row, and its shortcut's name in Settings → Keymap: stand the source on its In mark. In is the mark the In button sets."
+  },
+  "sourceGoToOut": "Go to Out",
+  "@sourceGoToOut": {
+    "description": "Source view menu row, and its shortcut's name in Settings → Keymap: stand the source on its Out mark. Out is the mark the Out button sets."
   },
   "sourceMarkOutTip": "Mark Out at this frame",
   "@sourceMarkOutTip": {

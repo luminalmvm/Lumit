@@ -825,6 +825,8 @@ List<Widget> viewerSourceRows(
 ) {
   final canPlace = ui.selectedComp != null;
   final marked = view.sourceIn != null || view.sourceOut != null;
+  VoidCallback? seekTo(int? frame) =>
+      frame == null ? null : () => ui.seekFootageView(view, frame);
   return [
     viewerRow(l10n.sourceMarkIn, () => ui.markSource(view, markIn: true), close,
         id: 'source-menu-in', action: 'cut.mark.in'),
@@ -841,6 +843,10 @@ List<Widget> viewerSourceRows(
             : null,
         close,
         id: 'source-menu-clear'),
+    viewerRow(l10n.sourceGoToIn, seekTo(view.sourceIn), close,
+        id: 'source-menu-go-in', action: 'cut.goto.in'),
+    viewerRow(l10n.sourceGoToOut, seekTo(view.sourceOut), close,
+        id: 'source-menu-go-out', action: 'cut.goto.out'),
     const MenuDivider(),
     viewerRow(l10n.sourceInsert,
         canPlace ? () => ui.placeSource(view, insert: true) : null, close,

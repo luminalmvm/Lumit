@@ -2,6 +2,8 @@
 // and the commands that change it. A view over the layer's one Retime, so the
 // graph, the Timeline's row and this panel can never disagree.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -153,8 +155,8 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
             _ui.model.byId(clip.layer.internallayerId)?.info.label
         : first?.info.label;
     void toSpeed(double percent) => clip != null
-        ? setClipsSpeed(context, clips, percent)
-        : stretchToSpeed(context, targets, percent);
+        ? setClipsSpeed(context, clips, math.max(1, percent.abs()))
+        : stretchToSpeed(context, targets, math.max(1, percent.abs()));
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -172,14 +174,16 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                 Expanded(child: control),
               ],
             );
+        // Backwards reads as a negative speed. What is set keeps the clip's
+        // own direction and takes the number's size.
         final speedWell = DragValueField(
           key: const ValueKey('retime-speed'),
-          value: speed.abs(),
-          min: 1,
+          value: speed,
+          min: -10000,
           max: 10000,
           decimals: 2,
           suffix: l10n.unitSymbolPercent,
-          resetTo: 100,
+          resetTo: speed < 0 ? -100 : 100,
           onChangeLive: (v) => setState(() => _liveSpeed = v.toDouble()),
           onChangeEnd: (v) {
             setState(() => _liveSpeed = null);
@@ -373,6 +377,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                       line: keys.isEmpty ? t.textMuted : t.textSecondary,
                       normal: t.hairlineStrong,
                       head: t.accent,
+                      tick: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                     ),
                   ),
                   ValueListenableBuilder<int>(
@@ -382,11 +387,20 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                       final inside = (entry != null || clip != null) &&
                           frame >= inFrame &&
                           frame <= outFrame;
+                      // On a clip's first or last frame, the speed of its
+                      // first or last stretch, not the stillness past it.
                       final speed = !inside
                           ? null
-                          : keys.isEmpty
+                          : keys.length < 2
                               ? 100.0
-                              : evaluateKeysSpeed(keys, at) * 100;
+                              : evaluateKeysSpeed(
+                                      keys,
+                                      at.clamp(
+                                          rationalSeconds(keys.first.time) +
+                                              1e-6,
+                                          rationalSeconds(keys.last.time) -
+                                              1e-6)) *
+                                  100;
                       if (speed == null) return const SizedBox.shrink();
                       final source = keys.isEmpty || !inside
                           ? null
@@ -648,6 +662,9 @@ class _SpeedStripPainter extends CustomPainter {
   final ValueNotifier<int> playhead;
   final Color ground, fill, line, normal, head;
 
+  /// The face the 100% and nought marks are written in.
+  final TextStyle tick;
+
   _SpeedStripPainter({
     required this.keys,
     required this.clock,
@@ -660,7 +677,17 @@ class _SpeedStripPainter extends CustomPainter {
     required this.line,
     required this.normal,
     required this.head,
+    required this.tick,
   }) : super(repaint: playhead);
+
+  void _mark(Canvas canvas, String words, double y) {
+    final text = TextPainter(
+      text: TextSpan(text: words, style: tick),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    text.paint(canvas, Offset(3, y - text.height - 1));
+    text.dispose();
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -694,6 +721,9 @@ class _SpeedStripPainter extends CustomPainter {
     final rule = yOf(100);
     canvas.drawLine(
         Offset(0, rule), Offset(size.width, rule), Paint()..color = normal);
+    // The marks the Sequence envelope has, on the rule and on nought.
+    _mark(canvas, '100${l10n.unitSymbolPercent}', rule);
+    _mark(canvas, '0', zero);
     canvas.drawPath(
         curve,
         Paint()
@@ -717,5 +747,6 @@ class _SpeedStripPainter extends CustomPainter {
       old.fps != fps ||
       old.line != line ||
       old.fill != fill ||
-      old.ground != ground;
+      old.ground != ground ||
+      old.tick != tick;
 }

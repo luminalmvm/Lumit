@@ -1,10 +1,12 @@
-//! Holding a frame and an overlap's kind: the calls behind Freeze frame and
-//! Hold here, New composition from selection and the Transition menu.
+//! Holding a frame, a clip's speed and an overlap's kind: the calls behind
+//! Freeze frame and Hold here, New composition from selection, Speed and the
+//! Transition menu.
 
 use flutter_rust_bridge::frb;
 use lumit_core::anim::{Animation, Keyframe, SideInterp};
 use lumit_core::model::LayerKind;
 use lumit_core::sequence::transition::{swept_rows, KINDS};
+use lumit_core::sequence::Clip;
 use lumit_core::time::{CompTime, Rational};
 use uuid::Uuid;
 
@@ -199,5 +201,51 @@ impl LayerReference {
             .transition
             .as_ref()
             .map(|e| BridgeEffectInstance::new(e.clone(), offset)))
+    }
+
+    /// Set one clip's playback speed, as a percentage.
+    ///
+    /// The clip keeps its place on the row: its start and its length are
+    /// untouched, so an edit point already on a beat stays on it, and the
+    /// stretch of source it plays follows from the speed. Its first frame is
+    /// pinned, so re-speeding never moves where a clip begins.
+    ///
+    /// `end_percent` makes it a ramp, running straight from one speed to the
+    /// other; leave it equal to `percent` for a constant speed. Negative runs
+    /// the clip backwards. A speed that turns the clip round starts it from
+    /// the far end of what it played, so Reset after Reverse plays the same
+    /// stretch forwards again. Straight through at 100% is no retime at all,
+    /// so after a Reset the clip is as it was before it was ever retimed.
+    #[frb(sync)]
+    pub fn set_clip_speed(
+        &self,
+        clip: Uuid,
+        percent: f64,
+        end_percent: f64,
+    ) -> Result<(), BridgeError> {
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        let rate = |v: f64| {
+            Rational::from_f64_on_grid(v / 100.0, Rational::FLICK_DEN)
+                .map_err(|_| BridgeError::InvalidTime)
+        };
+        let backwards = clips[index].source_out < clips[index].source_in;
+        if backwards != (percent + end_percent < 0.0) {
+            clips[index].source_in = clips[index].source_out;
+        }
+        let was = &clips[index];
+        clips[index] = if percent == 100.0 && end_percent == 100.0 {
+            let source_out = was
+                .source_in
+                .checked_add(was.place_duration)
+                .map_err(|_| BridgeError::InvalidTime)?;
+            Clip {
+                retime: None,
+                source_out,
+                ..was.clone()
+            }
+        } else {
+            was.with_ramp(rate(percent)?, rate(end_percent)?)
+        };
+        self.commit_clips(clips)
     }
 }
