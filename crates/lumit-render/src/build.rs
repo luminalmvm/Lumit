@@ -1297,7 +1297,20 @@ fn points_input_in(
             .and_then(|comp| {
                 CloneToPoints::distributed(consumer, comp, layer, t, context, projection)
             });
-        if let Some(stream) = made {
+        if let Some(mut stream) = made {
+            // Drivers give each copy its own value here too.
+            if let Some(rows) = driven_rows(consumer) {
+                lumit_core::fx::drivers::per_copy::drive_rows(
+                    graph,
+                    consumer.id,
+                    &mut stream,
+                    rows,
+                    t,
+                    context,
+                    Some(audio),
+                    projection,
+                );
+            }
             found.streams.push(stream);
             found.from.push(None);
             return found;
