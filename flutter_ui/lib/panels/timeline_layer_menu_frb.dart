@@ -17,6 +17,8 @@ import '../shell/menu_bar_frb.dart';
 import '../shell/menu_layer_frb.dart';
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
+import 'layer_source_menu.dart';
+import 'text_animation_presets.dart' show textPresetRows;
 import '../state/dock.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
@@ -159,6 +161,10 @@ List<MenuEntry> layerMenuEntries(
             action: 'layer.retime.hold'),
       ]),
     MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
+    if (kind == BridgeLayerKind.text)
+      MenuEntry.submenu(l10n.menuAnimateText, textPresetRows(app, ui)),
+    if (canReplaceSource(entry))
+      ReplaceSourceEntry(() => replaceSourceRows(app, ui)),
     if (creates.isNotEmpty) MenuEntry.submenu(l10n.menuCreate, creates),
     if (kind == BridgeLayerKind.footage)
       MenuEntry(
@@ -212,6 +218,7 @@ List<MenuEntry> layerMenuEntries(
             ? null
             : editing(() => _trimToWorkArea(app, ui, comp, unlocked))),
     MenuEntry.divider(),
+    MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
     MenuEntry.submenu(l10n.menuArrange, arrangeRows(app, ui)),
     MenuEntry.submenu(l10n.columnParent, _parentRows(app, ui, entry, unlocked)),
     MenuEntry.submenu(l10n.menuBlendingMode, blendRows(app, ui)),

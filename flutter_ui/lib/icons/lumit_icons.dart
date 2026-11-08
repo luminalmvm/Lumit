@@ -340,6 +340,28 @@ abstract final class LumitIcons {
   /// The transfer curve on its axes: values going up the side and coming out flat at the top is the whole of what the switch does to the ones above 1. Value draws a zigzag on the same axes and the two never share a surface.
   static const String toneMap =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h12M2 13V4" opacity=".4"/><path d="M3 13C8 13 8 4.5 13.5 4.5"/></svg>';
+  static const String alignEdgeLeft =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v12"/><rect x="5" y="3.5" width="8.5" height="3" rx=".5"/><rect x="5" y="9.5" width="5.5" height="3" rx=".5"/></svg>';
+  static const String alignEdgeCentre =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v1.5M8 6.5v3M8 12.5V14"/><rect x="3" y="3.5" width="10" height="3" rx=".5"/><rect x="5" y="9.5" width="6" height="3" rx=".5"/></svg>';
+  static const String alignEdgeRight =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2v12"/><rect x="2.5" y="3.5" width="8.5" height="3" rx=".5"/><rect x="5.5" y="9.5" width="5.5" height="3" rx=".5"/></svg>';
+  static const String alignEdgeTop =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12"/><rect x="3.5" y="5" width="3" height="8.5" rx=".5"/><rect x="9.5" y="5" width="3" height="5.5" rx=".5"/></svg>';
+  static const String alignEdgeMiddle =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h1.5M6.5 8h3M12.5 8H14"/><rect x="3.5" y="3" width="3" height="10" rx=".5"/><rect x="9.5" y="5" width="3" height="6" rx=".5"/></svg>';
+  static const String alignEdgeBottom =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13.5h12"/><rect x="3.5" y="2.5" width="3" height="8.5" rx=".5"/><rect x="9.5" y="5.5" width="3" height="5.5" rx=".5"/></svg>';
+  static const String distributeAcross =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v12M13.5 2v12"/><rect x="6" y="4" width="4" height="8" rx=".5"/></svg>';
+  static const String distributeDown =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12M2 13.5h12"/><rect x="4" y="6" width="8" height="4" rx=".5"/></svg>';
+  static const String fitToComp =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1"/><rect x="5" y="5.5" width="6" height="5" rx=".5"/></svg>';
+  static const String fitToCompWidth =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3v10M13.5 3v10M5 8h6M6.5 6.5L5 8l1.5 1.5M9.5 6.5L11 8l-1.5 1.5"/></svg>';
+  static const String fitToCompHeight =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h10M3 13.5h10M8 5v6M6.5 6.5L8 5l1.5 1.5M6.5 9.5L8 11l1.5-1.5"/></svg>';
 
   // --- Project ---
   static const String folder =
@@ -612,6 +634,17 @@ abstract final class LumitIcons {
     'Quality': quality,
     'Scopes': scopes,
     'Tone map': toneMap,
+    'Align edge left': alignEdgeLeft,
+    'Align edge centre': alignEdgeCentre,
+    'Align edge right': alignEdgeRight,
+    'Align edge top': alignEdgeTop,
+    'Align edge middle': alignEdgeMiddle,
+    'Align edge bottom': alignEdgeBottom,
+    'Distribute across': distributeAcross,
+    'Distribute down': distributeDown,
+    'Fit to comp': fitToComp,
+    'Fit to comp width': fitToCompWidth,
+    'Fit to comp height': fitToCompHeight,
     'Folder': folder,
     'New folder': newFolder,
     'Composition': composition,

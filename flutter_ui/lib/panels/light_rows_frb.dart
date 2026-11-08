@@ -6,6 +6,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -17,8 +18,30 @@ import '../widgets/layer_picker.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
 
+/// What a layer's Orient can be. Towards camera is for a 3D layer, and stays on
+/// the list of one that has it, so the row can always say what it holds.
+List<BridgeOrient> orientChoices({
+  required bool threeD,
+  required BridgeLayerKind kind,
+  BridgeOrient now = BridgeOrient.off,
+}) =>
+    [
+      BridgeOrient.off,
+      BridgeOrient.alongPath,
+      if ((threeD && kind != BridgeLayerKind.camera) ||
+          now == BridgeOrient.towardsCamera)
+        BridgeOrient.towardsCamera,
+    ];
+
+String orientLabel(BridgeOrient orient) => switch (orient) {
+      BridgeOrient.off => l10n.off,
+      BridgeOrient.alongPath => l10n.orientAlongPath,
+      BridgeOrient.towardsCamera => l10n.orientTowardsCamera,
+    };
+
 /// One choice row.
 enum LayerSetting {
+  orient,
   lightType,
   lightSource,
   lightBackground,
@@ -31,6 +54,7 @@ enum LayerSetting {
 
   /// The heading the row sits under.
   TransformSection get section => switch (this) {
+        orient => TransformSection.transform,
         lightType ||
         lightSource ||
         lightBackground ||
@@ -42,6 +66,7 @@ enum LayerSetting {
       };
 
   String get label => switch (this) {
+        orient => l10n.transformOrient,
         lightType => l10n.lightType,
         lightSource => l10n.lightSource,
         lightBackground => l10n.lightShowInBackground,
@@ -81,9 +106,15 @@ List<LayerSetting> layerSettings({
   required BridgeLayerKind kind,
   BridgeLightSettings? light,
   bool threeD = false,
+  bool twoNode = false,
 }) {
   if (kind != BridgeLayerKind.light) {
     return [
+      // A two-node camera is aimed already, and sound has nothing to turn.
+      if (!twoNode &&
+          kind != BridgeLayerKind.audio &&
+          kind != BridgeLayerKind.bus)
+        LayerSetting.orient,
       if (threeD &&
           kind != BridgeLayerKind.camera &&
           kind != BridgeLayerKind.nullLayer) ...[
@@ -195,6 +226,11 @@ class LayerSettingRowFrb extends StatelessWidget {
   final bool acceptsLights;
   final VoidCallback onChanged;
 
+  /// The layer's Orient, and what decides which choices it has.
+  final BridgeOrient orient;
+  final bool threeD;
+  final BridgeLayerKind kind;
+
   /// The Timeline's value column, or null in the Effect controls panel, which
   /// lays the row out as its two columns.
   final ValueColumn? valueColumn;
@@ -208,6 +244,9 @@ class LayerSettingRowFrb extends StatelessWidget {
     this.material,
     this.acceptsLights = true,
     required this.onChanged,
+    this.orient = BridgeOrient.off,
+    this.threeD = false,
+    this.kind = BridgeLayerKind.footage,
     this.valueColumn,
     this.keyPrefix = 'tf',
   });
@@ -236,6 +275,17 @@ class LayerSettingRowFrb extends StatelessWidget {
 
     final key = ValueKey<String>('$keyPrefix-${setting.name}');
     final control = switch (setting) {
+      LayerSetting.orient => BareDropdown<BridgeOrient>(
+          key: key,
+          dense: valueColumn != null,
+          value: orient,
+          options: orientChoices(threeD: threeD, kind: kind, now: orient),
+          label: orientLabel,
+          onChanged: (o) {
+            layer.setOrient(orient: o);
+            onChanged();
+          },
+        ),
       LayerSetting.lightType => BareDropdown<BridgeLightKind>(
           key: key,
           dense: valueColumn != null,

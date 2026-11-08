@@ -412,6 +412,16 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the other layers' edges and middles are things to land on. On by
+  /// default: lining one thing up with another is most of what a drag is for.
+  bool _snapToLayers = true;
+  bool get snapToLayers => _snapToLayers;
+  set snapToLayers(bool value) {
+    if (_snapToLayers == value) return;
+    _snapToLayers = value;
+    notifyListeners();
+  }
+
   /// Put [group]'s options back as they ship, for the tool's own menu. The
   /// starting values are the ones below, so each is written once.
   void resetOptionsOf(ToolGroup group) {

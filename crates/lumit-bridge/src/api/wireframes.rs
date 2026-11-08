@@ -529,7 +529,14 @@ impl CompositionReference {
                     .map(|m| m.map(|c| c.map(f64::from)))
             };
             // Orientation in the rotations, and the z of anchor and scale.
-            let placed = tr.placement_at(lt, !layer.is_3d(), &|p| p.value_at(lt));
+            let mut placed =
+                lumit_core::orient::placed_at(layer, lt, !layer.is_3d(), &|p| p.value_at(lt));
+            if tr.orient == lumit_core::orient::Orient::TowardsCamera {
+                let context = lumit_core::model::comp_context(&doc, comp, t);
+                let read = lumit_core::model::context_reader(&context, t);
+                let solves = lumit_render::track::solves_for(&doc);
+                lumit_core::orient::face_camera(comp, layer, t, &read, solves, &mut placed);
+            }
             let place = |anchor: P2, scale: P2| -> Place {
                 let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
                 let own = lumit_gpu::composite::place_matrix_3d(

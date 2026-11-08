@@ -371,6 +371,28 @@ Widget _compToggleButton(
 /// razor row stays on the button: the ground has no razor to hand over.
 /// The empty ground under the outline's rows opens it too, with no [frame],
 /// so "here" is the playhead.
+/// What Expand all and Collapse all run, null for a row with nothing to do.
+typedef TimelineFoldRows = ({VoidCallback? expand, VoidCallback? collapse});
+
+/// The two rows, on the ground's menu and the headings' alike.
+List<Widget> timelineFoldRows(TimelineFoldRows fold, VoidCallback close) {
+  Widget row(String id, String text, String action, VoidCallback? run) =>
+      MenuRow(
+        key: ValueKey<String>('tl-$id'),
+        enabled: run != null,
+        onPressed: () {
+          close();
+          run?.call();
+        },
+        child: MenuLabel(text, action: action, enabled: run != null),
+      );
+  return [
+    row('expand-all', l10n.expandAll, 'timeline.expand.all', fold.expand),
+    row('collapse-all', l10n.collapseAll, 'timeline.collapse.all',
+        fold.collapse),
+  ];
+}
+
 Future<void> showTimelineMoreMenu(
   BuildContext context, {
   required CompositionReference comp,
@@ -380,6 +402,7 @@ Future<void> showTimelineMoreMenu(
   bool razor = false,
   VoidCallback? onToggleRazor,
   required VoidCallback onChanged,
+  TimelineFoldRows? fold,
 }) async {
   final box = context.findRenderObject();
   if (box is! RenderBox) return;
@@ -392,7 +415,7 @@ Future<void> showTimelineMoreMenu(
     // layout pulls it back up on screen rather than running off below —
     // which is why the anchor no longer guesses at an offset.
     position: position ?? box.localToGlobal(Offset.zero),
-    width: 200,
+    width: 240,
     rows: (close) => [
       SubmenuRow(
         key: const ValueKey('tl-add-layer'),
@@ -425,6 +448,10 @@ Future<void> showTimelineMoreMenu(
           onPressed: () => close('paste'),
           child: MenuLabel(l10n.menuPaste, action: 'edit.paste')),
       const MenuDivider(),
+      if (fold != null) ...[
+        ...timelineFoldRows(fold, () => close(null)),
+        const MenuDivider(),
+      ],
       MenuRow(
           key: const ValueKey('tl-work-in'),
           onPressed: () => close('work-in'),

@@ -39,6 +39,7 @@ mod lights;
 mod material;
 mod model;
 mod moments;
+mod orient;
 mod overlap_key;
 pub mod pool;
 mod projection;
@@ -2793,6 +2794,7 @@ fn feed_depth(
     lt: f64,
     read: &dyn Fn(&lumit_core::anim::Property) -> f64,
 ) {
+    orient::feed(h, tr, lt);
     let (x, y, z) = tr.orientation_at(lt, read);
     let values = [x, y, z, read(&tr.anchor_z), read(&tr.scale_z)];
     if values != [0.0, 0.0, 0.0, 0.0, 100.0] || tr.after_effects_order {

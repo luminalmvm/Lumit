@@ -16,11 +16,13 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show MenuEntry, menuEntriesFlyout;
 import '../state/preview_throttle.dart';
 import '../state/text_documents.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'text_animation_presets.dart' show textPresetRows;
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// One change to a text document: the document in, the changed one out.
@@ -63,6 +65,8 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
   Widget styleMenu(LumitUiState ui, TextTarget target, Widget child) =>
       textPanelMenu(
         context,
+        animate: textPresetRows(
+            Provider.of<LumitState>(context, listen: false), ui),
         onCopy: () => _copiedStyle = target.document.style,
         onPaste: _copiedStyle == null
             ? null
@@ -248,6 +252,7 @@ Widget textPanelMenu(
   required VoidCallback? onPaste,
   required VoidCallback onReset,
   required Widget child,
+  List<MenuEntry>? animate,
 }) =>
     GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -278,6 +283,15 @@ Widget textPanelMenu(
               onPressed: () => run(onReset),
               child: Text(l10n.reset),
             ),
+            if (animate != null) ...[
+              const MenuDivider(),
+              SubmenuRow(
+                key: const ValueKey('text-menu-animate'),
+                closeParent: () => close(null),
+                submenu: (dismiss) => menuEntriesFlyout(animate, dismiss),
+                child: Text(l10n.menuAnimateText),
+              ),
+            ],
           ];
         },
       ),

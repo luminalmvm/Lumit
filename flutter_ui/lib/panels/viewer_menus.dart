@@ -549,6 +549,9 @@ List<Widget> viewerGuideRows(
     viewerRow(l10n.menuSnapToGrid,
         () => ui.tools.snapToGrid = !ui.tools.snapToGrid, close,
         action: 'viewer.snap.grid.toggle', ticked: ui.tools.snapToGrid),
+    viewerRow(l10n.menuSnapToLayers,
+        () => ui.tools.snapToLayers = !ui.tools.snapToLayers, close,
+        id: 'viewer-guides-snap-layers', ticked: ui.tools.snapToLayers),
     viewerRow(l10n.viewerMenuLockGuides, () {
       final on = ui.workspace.interface;
       on.viewerGuidesLocked = !on.viewerGuidesLocked;

@@ -77,6 +77,20 @@ Hold `Ctrl+Alt` and drag a selected layer's bar to stagger by hand: `Cmd+Option`
 bar under the pointer follows it, and the ones between are spaced evenly. With the first
 layer's bar in hand, the last layer moves the whole distance.
 
+## Replace a layer's source
+
+**Replace source**, on the row menu and the **Layer** menu, points the selected layers at
+another item of the project, or at a file with **Choose…**. `Alt`+drag an item from the Project
+panel onto a layer's row or bar does the same.
+
+Footage, solid and precomp layers take each other's sources. The transform, keys, masks, effects
+and markers stay, and the anchor point keeps its place on the picture. A name that was the
+old source's follows the new one. A layer that becomes a solid loses its Retime, and the status
+line says so.
+
+A picture layer refuses a file with no picture, and a precomp refuses a composition that
+contains it.
+
 ## Copy and paste
 
 **Edit ▸ Cut / Copy / Paste** can copy whole layers if selected and can be pasted into

@@ -32,6 +32,33 @@ where it is.
 
 Every property can be animated. See [Keyframes](/use/keyframes/).
 
+## Orient
+
+**Orient**, at the top of **Transform** and under **Layer ▸ Transform**, turns a layer by
+itself. The layer's own Rotation adds to the turn.
+
+| Choice | What it does |
+| --- | --- |
+| **Off** | No turn. |
+| **Along path** | The layer's x axis follows the way Position is heading at that frame. A camera looks that way. A layer stopped on its path keeps pointing the way it last went. |
+| **Towards camera** | A 3D layer faces the active camera. |
+
+What is parented to the layer turns with it, and motion blur sees the turn.
+
+## Fit to comp
+
+**Layer ▸ Transform** writes Scale and Position so a layer's box sits in the middle of the
+frame, keeping its shape, as one undo step. A keyed row takes a key at the playhead.
+
+| Row | Shortcut | The box |
+| --- | --- | --- |
+| **Fit to comp** | `Ctrl+Alt+Shift+F` | Sits inside the frame. With `Shift` held, covers it. |
+| **Fill comp** | | Covers the frame. |
+| **Fit to comp width** | `Ctrl+Alt+Shift+H` | Is as wide as the frame. |
+| **Fit to comp height** | `Ctrl+Alt+Shift+G` | Is as tall as the frame. |
+
+A 3D layer is fitted as if seen square on.
+
 ## Separate axes
 
 Anchor point, position and scale are each one row with a value box per axis. Right-click

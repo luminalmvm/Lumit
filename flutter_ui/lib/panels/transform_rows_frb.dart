@@ -538,7 +538,8 @@ class TransformRowsFrb extends StatelessWidget {
   /// own chrome (the Effect controls panel's hairline-separated rows). A
   /// section's choice rows come first in it, as they do in the fold-out.
   List<Widget> rows(BuildContext context) {
-    final settings = layerSettings(kind: kind, light: light, threeD: threeD);
+    final settings = layerSettings(
+        kind: kind, light: light, threeD: threeD, twoNode: twoNode);
     final out = <Widget>[];
     TransformSection? last;
     final seen = <TransformSection>{};
@@ -562,6 +563,9 @@ class TransformRowsFrb extends StatelessWidget {
           material: material,
           acceptsLights: acceptsLights,
           onChanged: onChanged,
+          orient: transform.orient,
+          threeD: threeD,
+          kind: kind,
           keyPrefix: keyPrefix,
         ));
       }
@@ -1600,7 +1604,8 @@ void showTransformMenu(BuildContext context, Offset at, LayerReference layer,
               },
         action: 'keyframe.toggle'),
     MenuEntry.divider(),
-    ...transformRows(app, ui),
+    // The heading has its Orient row right under it, and a long list already.
+    ...transformRows(app, ui, fit: false),
     MenuEntry.divider(),
     MenuEntry(l10n.menuCopy, () {
       _copiedTransform = {
@@ -1730,6 +1735,7 @@ BridgeTransform writeScalar(
   final material = tf.material;
   final depth = tf.depth;
   return BridgeTransform(
+    orient: tf.orient,
     anchorX: pick(BridgeTransformProp.anchorX, tf.anchorX),
     anchorY: pick(BridgeTransformProp.anchorY, tf.anchorY),
     positionX: pick(BridgeTransformProp.positionX, tf.positionX),

@@ -2314,6 +2314,7 @@ pub struct BridgeTransform {
     /// Percent, 100 = natural size.
     pub scale_x: BridgeScalar,
     pub scale_y: BridgeScalar,
+    pub orient: crate::api::orient::BridgeOrient,
     /// Degrees, about z — the 2D rotation.
     pub rotation: BridgeScalar,
     pub rotation_x: BridgeScalar,
@@ -2898,6 +2899,7 @@ impl BridgeTransform {
             position_z: BridgeScalar::read_at(&group.position_z, offset),
             scale_x: BridgeScalar::read_at(&group.scale_x, offset),
             scale_y: BridgeScalar::read_at(&group.scale_y, offset),
+            orient: crate::api::orient::BridgeOrient::of(group.orient),
             rotation: BridgeScalar::read_at(&group.rotation, offset),
             rotation_x: BridgeScalar::read_at(&group.rotation_x, offset),
             rotation_y: BridgeScalar::read_at(&group.rotation_y, offset),

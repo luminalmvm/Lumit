@@ -1,14 +1,13 @@
 ---
 title: The Align panel
-description: Moves the selected layers' anchor points, or lines the layers up with the composition.
+description: Moves the selected layers' anchor points, or lines the layers up with the composition or each other.
 sidebar:
   order: 11
 ---
 
 import Shot from "../../../components/Shot.astro";
 
-The **Align** panel holds two grids of nine dots, one for each corner, edge middle and the
-centre of a layer's box. **Window ▸ Panels ▸ Align** opens it.
+The **Align** panel holds three grids. **Window ▸ Panels ▸ Align** opens it.
 
 <Shot file="align.png" caption="The Align panel, with a layer selected." eager/>
 
@@ -16,11 +15,22 @@ centre of a layer's box. **Window ▸ Panels ▸ Align** opens it.
 | --- | --- |
 | **Anchor point** | Moves each selected layer's anchor point to that point of its box. The picture stays where it is. |
 | **Composition** | Moves each selected layer so that point of its box meets the same point of the composition: top left to top left, centre to centre. |
+| **Selection** | Lines the selected layers' boxes up with the box round them all: left, centre, right, top, middle or bottom. Two or more layers. |
+
+The two buttons under **Selection** distribute the layers across and down, three or more of
+them. The outermost two stay and the middles between them are spaced evenly. With `Shift`
+held the gaps between the boxes are.
+
+The three buttons under **Composition** are **Fit to comp**, **Fit to comp width** and
+**Fit to comp height**. See [Transform](/use/transform/#fit-to-comp).
 
 - A click is one undo step for the whole selection.
-- Right-click a grid for **Anchor to centre** and **Centre in composition**.
+- Right-click a grid for **Anchor to centre**, **Centre in composition**, the fit and distribute
+  rows, and **Align to the first picked layer**, which lines the selection up with that
+  layer's edge instead. **Settings** has the same switch.
 - A layer whose Anchor point or Position is keyed keeps its anchor point, and a notice says so.
-- A layer whose Position is keyed stays put under **Composition**.
+- A keyed Position takes a key at the playhead under **Composition** and **Selection**.
+- A Position driven by an expression stays put.
 - The grids are greyed with nothing selected, or only cameras, lights and audio layers.
 - Nothing moves unless a Viewer showing the composition is open.
 

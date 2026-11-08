@@ -487,6 +487,11 @@ class _SnapButton extends StatelessWidget {
             action: 'viewer.snap.grid.toggle',
             checked: () => tools.snapToGrid,
           ),
+          MenuEntry.toggle(
+            l10n.menuSnapToLayers,
+            () => tools.snapToLayers = !tools.snapToLayers,
+            checked: () => tools.snapToLayers,
+          ),
         ]),
         child: HouseButton(
           key: const ValueKey('tool-snapping'),

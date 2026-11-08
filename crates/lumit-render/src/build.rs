@@ -303,10 +303,7 @@ fn drawn(
     lt: f64,
     context: &Arc<ExpressionContext>,
 ) -> lumit_gpu::composite::MbSample {
-    let read = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
-    let p = layer
-        .transform
-        .placement_at(lt, !layer.switches.three_d, &read);
+    let p = crate::placement::drawn_placement(layer, lt, context);
     let at = p.flat_position();
     lumit_gpu::composite::MbSample {
         position: (at.0 as f32, at.1 as f32),
@@ -410,6 +407,7 @@ pub fn reparented(
     // A 3D layer keeps its rotations and its Orientation takes the turn, as
     // After Effects does it, unless an expression drives the Orientation.
     let reorient = layer.switches.three_d
+        && tr.orient.is_off()
         && !tr
             .orientation
             .iter()
@@ -443,13 +441,13 @@ pub fn reparented(
     edit(P::PositionY, to.position.1, false, along(1));
     edit(P::ScaleX, sx, false, None);
     edit(P::ScaleY, sy, false, None);
-    if !reorient {
+    if !reorient && tr.orient.is_off() {
         edit(P::Rotation, rz, true, Some(1.0));
     }
     // A 2D layer's hidden 3D values are kept for when it goes 3D again.
     if layer.switches.three_d {
         edit(P::PositionZ, to.z, false, along(2));
-        if !reorient {
+        if !reorient && tr.orient.is_off() {
             edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
             edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
         }

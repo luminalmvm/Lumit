@@ -32,7 +32,10 @@ import '../panels/keyframe_controls_frb.dart'
     show scalarWithValueAt, scaledScalar;
 import '../panels/effect_param_row_frb.dart' show offeredStyles;
 import '../panels/graph_maths.dart' show evaluateKeys;
+import '../panels/layer_fit.dart';
 import '../panels/layer_fold_frb.dart';
+import '../panels/light_rows_frb.dart'
+    show LayerSetting, layerSettings, orientChoices, orientLabel;
 import '../panels/shape_entries.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
@@ -380,7 +383,8 @@ double _transformDefault(BridgeTransformProp prop) => switch (prop) {
 /// a chained pair's other half is scaled by), and centring writes the middle of
 /// the composition onto the key at the playhead when position is keyed, exactly
 /// as typing into the row does.
-List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
+List<MenuEntry> transformRows(LumitState app, LumitUiState ui,
+    {bool fit = true}) {
   final comp = ui.selectedComp;
   final frame = ui.playheadFrame.value;
 
@@ -543,7 +547,35 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
       action: 'layer.centre.anchor',
     ),
     MenuEntry.divider(),
+    if (fit) ...[
+      ...fitRows(app, ui),
+      MenuEntry.submenu(l10n.transformOrient, _orientRows(app, ui)),
+      MenuEntry.divider(),
+    ],
     ...axisModeRows(app, ui),
+  ];
+}
+
+/// Layer ▸ Transform ▸ Orient, for the selection.
+List<MenuEntry> _orientRows(LumitState app, LumitUiState ui) {
+  final picked = selectedEntries(ui);
+  final first = picked.firstOrNull;
+  bool can(BridgeLayerEntry e) => layerSettings(
+          kind: e.info.kind,
+          light: e.info.light,
+          threeD: e.info.switches.threeD,
+          twoNode: e.info.camera?.twoNode ?? false)
+      .contains(LayerSetting.orient);
+  return [
+    for (final orient in orientChoices(
+        threeD: picked.any((e) => e.info.switches.threeD),
+        kind: first?.info.kind ?? BridgeLayerKind.footage))
+      MenuEntry(
+        orientLabel(orient),
+        onSelection(app, ui, (e) => e.layer.setOrient(orient: orient),
+            when: can),
+        checked: first?.info.transform.orient == orient,
+      ),
   ];
 }
 

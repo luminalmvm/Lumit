@@ -10,6 +10,7 @@ import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
@@ -85,6 +86,7 @@ void main() {
       BridgeScalar? scale,
     }) =>
         BridgeTransform(
+          orient: BridgeOrient.off,
           anchorX: st(0),
           anchorY: st(0),
           positionX: st(centre),

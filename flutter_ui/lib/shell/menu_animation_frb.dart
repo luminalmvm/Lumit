@@ -29,7 +29,7 @@ import '../panels/graph_edits.dart';
 import '../panels/graph_maths.dart';
 import '../panels/layer_fold_frb.dart'
     show asOneUndoStep, transformGroupPath;
-import '../panels/text_animator_rows_frb.dart' show addTextAnimator;
+import '../panels/text_animation_presets.dart' show textPresetRows;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, transformGroups;
 import '../state/comp_time.dart';
@@ -355,18 +355,10 @@ MenuEntry keyframeSpeedRow(
   );
 }
 
-/// Animation ▸ Animate text: one more animator on every selected Text layer,
-/// each arriving with its five property groups and its one range selector
-/// already on it.
-MenuEntry animateTextRow(LumitState app, LumitUiState ui) => MenuEntry(
-      l10n.menuAnimateText,
-      onSelection(
-        app,
-        ui,
-        (entry) => addTextAnimator(entry.layer),
-        when: (entry) => entry.info.kind == BridgeLayerKind.text,
-      ),
-    );
+/// Animation ▸ Animate text: a blank animator or a named animation on every
+/// selected Text layer.
+MenuEntry animateTextRow(LumitState app, LumitUiState ui) =>
+    MenuEntry.submenu(l10n.menuAnimateText, textPresetRows(app, ui));
 
 /// Animation ▸ Add expression: an expression on every picked property row,
 /// replacing whatever it held.

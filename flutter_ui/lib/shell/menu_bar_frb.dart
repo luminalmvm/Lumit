@@ -44,6 +44,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
+import '../panels/layer_source_menu.dart';
 import '../panels/layer_fold_frb.dart' show RevealFilter, asOneUndoStep;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
@@ -1418,6 +1419,7 @@ List<MenuSection> lumitMenus(
             MenuEntry.submenu(
                 l10n.shapeExpandAllCopies, expandAllCopiesRows(app, ui)),
             MenuEntry.submenu(l10n.menuTransform, transformRows(app, ui)),
+            ReplaceSourceEntry(() => replaceSourceRows(app, ui)),
             // Audio ▸ — what to do with the *sound* of a layer that has some.
             // Detach puts it on a row of its own, muting the picture's row, so it
             // can be cut and ridden in the audio surfaces without the picture
@@ -1636,10 +1638,6 @@ List<MenuSection> lumitMenus(
             keyframeSpeedRow(context, app, ui),
             MenuEntry.divider(),
             animateTextRow(app, ui),
-            // A text animator carries exactly one range selector and it arrives
-            // with the animator, so there is nothing for this to add until more
-            // than one selector exists to have.
-            MenuEntry.todo(l10n.menuAddTextSelector),
             MenuEntry.divider(),
             addExpressionRow(context, app, ui),
             MenuEntry.submenu(
@@ -1736,6 +1734,11 @@ List<MenuSection> lumitMenus(
               () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
               action: 'viewer.snap.grid.toggle',
               checked: () => ui.tools.snapToGrid,
+            ),
+            MenuEntry.toggle(
+              l10n.menuSnapToLayers,
+              () => ui.tools.snapToLayers = !ui.tools.snapToLayers,
+              checked: () => ui.tools.snapToLayers,
             ),
             MenuEntry.divider(),
             // The 3D view of the view in front, After Effects' rows: a view

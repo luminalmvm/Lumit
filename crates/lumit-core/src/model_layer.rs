@@ -126,6 +126,18 @@ pub fn card_layer(
     layer
 }
 
+impl crate::model::LayerKind {
+    /// Whether a layer of this kind shows an item of the project, and so can
+    /// be pointed at another one.
+    #[must_use]
+    pub fn has_source(&self) -> bool {
+        matches!(
+            self,
+            Self::Footage { .. } | Self::Solid { .. } | Self::Precomp { .. }
+        )
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

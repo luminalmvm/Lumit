@@ -39,6 +39,7 @@ pub mod model_part;
 /// Occlusion culling: the full-frame opaque layer that hides what is under it.
 pub mod occlusion;
 pub mod ops;
+pub mod orient;
 pub mod paint;
 pub mod pixels;
 /// The planes tier's document half: which effects ask a model for a plane of

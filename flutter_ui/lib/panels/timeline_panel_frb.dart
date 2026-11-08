@@ -75,6 +75,7 @@ export 'timeline_extras_frb.dart' show rulerLabelStepSeconds, rulerLabelOf;
 import 'timeline_metrics_frb.dart';
 import 'timeline_layer_rows_frb.dart';
 import 'timeline_bar_frb.dart';
+import 'layer_source_menu.dart' show canReplaceSource, replaceLayerSources;
 import 'timeline_toolbar_frb.dart';
 import 'timeline_outline_frb.dart';
 import 'timeline_lane_area_frb.dart';
@@ -684,6 +685,52 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         }
       });
 
+  /// The layers Expand all and Collapse all act on: the selected ones, or every
+  /// one with none selected.
+  List<BridgeLayerEntry> get _foldTargets {
+    final ui = _ui;
+    if (ui == null) return const [];
+    final picked = ui.selectedLayerIds;
+    return [
+      for (final e in ui.model.layers)
+        if (picked.isEmpty || picked.contains(e.layer.internallayerId)) e,
+    ];
+  }
+
+  /// Open each layer and the groups under it, as far as the rows that show
+  /// what is keyed. An effect stays shut, or one Levels would fill the panel.
+  void _expandLayers() => setState(() {
+        for (final entry in _foldTargets) {
+          final id = entry.layer.internallayerId.toString();
+          _setOpen(id, true);
+          _open.addAll([
+            transformPath(id),
+            if (entry.info.effects.isNotEmpty) effectsPath(id),
+            if (entry.info.masks.isNotEmpty) masksPath(id),
+          ]);
+        }
+      });
+
+  /// Shut each layer and forget what was open inside it.
+  void _collapseLayers() => setState(() {
+        for (final entry in _foldTargets) {
+          final id = entry.layer.internallayerId.toString();
+          _shutLayerDeep(id);
+          _dropSelectionUnder(id);
+        }
+      });
+
+  /// The two rows' actions, null where there is nothing to do.
+  TimelineFoldRows _foldRows() {
+    final ids = [
+      for (final e in _foldTargets) e.layer.internallayerId.toString()
+    ];
+    return (
+      expand: ids.any((id) => !_isOpen(id)) ? _expandLayers : null,
+      collapse: ids.any(_isOpen) ? _collapseLayers : null,
+    );
+  }
+
   /// Every row [path]'s twirl could carry with it, as the paths [_open] is
   /// keyed by: the selected layers for a layer's twirl, the selected
   /// properties for a heading's. Never both, or shutting a picked heading
@@ -1024,11 +1071,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// by name, for anyone who looks for them on the headings first.
   Future<void> _showColumnMenu(Offset position) async {
     final timings = _ui?.renderTimings;
+    final fold = _foldRows();
     final picked = await showMenuAt<String>(
       context: context,
       position: position,
-      width: 170,
+      width: 240,
       rows: (close) => [
+        ...timelineFoldRows(fold, () => close(null)),
+        const MenuDivider(),
         for (final group in _toggleableGroups)
           MenuRow(
             key: ValueKey<String>('tl-column-menu-${group.name}'),
@@ -3132,6 +3182,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (action == 'timeline.fit.keys') {
       return _fitKeys(ui);
     }
+    if (action == 'timeline.expand.all') {
+      _foldRows().expand?.call();
+      return true;
+    }
+    if (action == 'timeline.collapse.all') {
+      _foldRows().collapse?.call();
+      return true;
+    }
     if (action == 'graph.ease' ||
         action == 'graph.ease.in' ||
         action == 'graph.ease.out') {
@@ -4078,6 +4136,27 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return at < 0 ? 0 : at;
   }
 
+  /// The id of the row an Alt drag is over, for the row's highlight.
+  String? _replacing;
+
+  /// The layer whose row is under the window point [global], or null.
+  BridgeLayerEntry? _layerUnder(List<BridgeLayerEntry> layers,
+      List<double> heights, Offset global, DensityTokens density) {
+    final box = _dropArea.currentContext?.findRenderObject();
+    if (box is! RenderBox) return null;
+    final y = box.globalToLocal(global).dy -
+        density.navigatorBand -
+        density.ruler +
+        (_vLane.hasClients ? _vLane.offset : 0);
+    if (y < 0) return null;
+    var bottom = 0.0;
+    for (var i = 0; i < layers.length && i < heights.length; i++) {
+      bottom += heights[i];
+      if (y < bottom) return layers[i];
+    }
+    return null;
+  }
+
   /// The gutter down the right of a scrollable half: a block level with that
   /// half's header (After Effects keeps the same reserved corner), then the
   /// scrollbar itself. Reserved whether or not a thumb shows, so the columns
@@ -4381,7 +4460,50 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 details.data is FootageDragData ||
                 details.data is CompDragData ||
                 details.data is SolidDragData,
+            // With Alt held the row under the pointer is the one that changes,
+            // so it lights up.
+            onMove: (details) {
+              final over = HardwareKeyboard.instance.isAltPressed
+                  ? _layerUnder(layers, blockHeights, details.offset, t.density)
+                  : null;
+              final id = over?.layer.internallayerId.toString();
+              if (id != _replacing) {
+                setState(() => _highlighted = _replacing = id);
+              }
+            },
+            onLeave: (_) {
+              if (_replacing != null) {
+                setState(() => _highlighted = _replacing = null);
+              }
+            },
             onAcceptWithDetails: (details) {
+              _replacing = null;
+              // Alt on a row: that layer takes the item as its source, with the
+              // rest of the selection if it is in one.
+              if (HardwareKeyboard.instance.isAltPressed) {
+                final over = _layerUnder(
+                    layers, blockHeights, details.offset, t.density);
+                final item = switch (details.data) {
+                  FootageDragData(:final footage) =>
+                    ItemReference.footage(footage.first),
+                  CompDragData(comp: final dropped) =>
+                    ItemReference.composition(dropped),
+                  SolidDragData(:final solid) => ItemReference.solid(solid),
+                  _ => null,
+                };
+                if (over != null && item != null) {
+                  final picked = ui.selectedLayerIds
+                      .contains(over.layer.internallayerId);
+                  final state = Provider.of<LumitState>(context, listen: false);
+                  replaceLayerSources(
+                      state,
+                      (picked ? selectedEntries(ui) : [over])
+                          .where(canReplaceSource)
+                          .toList(),
+                      item);
+                  return;
+                }
+              }
               // Where the pointer let go, not the top of the stack: dropping
               // between two layers means "here", and a stack that ignores it
               // has to be re-sorted by hand after every drop.
@@ -4686,6 +4808,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           playhead: ui.playheadFrame,
           position: at,
           onChanged: ui.model.refresh,
+          fold: _foldRows(),
         );
     return SizedBox(
       width: outlineViewport,
@@ -5486,6 +5609,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
                       onSelect: (l) => _selectLayer(ui, l, among: layers),
                       onChanged: ui.model.refresh,
+                      foldRows: _foldRows,
                       cacheRevision: _cacheRevision!,
                       dragPreview: _barDrag,
                       bounds: _barBounds,

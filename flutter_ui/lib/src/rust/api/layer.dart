@@ -14,6 +14,7 @@ import 'footage.dart';
 import 'graph.dart';
 import 'model.dart';
 import 'model_rows.dart';
+import 'orient.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -2612,6 +2613,7 @@ class BridgeTransform {
   /// Percent, 100 = natural size.
   final BridgeScalar scaleX;
   final BridgeScalar scaleY;
+  final BridgeOrient orient;
 
   /// Degrees, about z — the 2D rotation.
   final BridgeScalar rotation;
@@ -2645,6 +2647,7 @@ class BridgeTransform {
     required this.positionZ,
     required this.scaleX,
     required this.scaleY,
+    required this.orient,
     required this.rotation,
     required this.rotationX,
     required this.rotationY,
@@ -2664,6 +2667,7 @@ class BridgeTransform {
       positionZ.hashCode ^
       scaleX.hashCode ^
       scaleY.hashCode ^
+      orient.hashCode ^
       rotation.hashCode ^
       rotationX.hashCode ^
       rotationY.hashCode ^
@@ -2685,6 +2689,7 @@ class BridgeTransform {
           positionZ == other.positionZ &&
           scaleX == other.scaleX &&
           scaleY == other.scaleY &&
+          orient == other.orient &&
           rotation == other.rotation &&
           rotationX == other.rotationX &&
           rotationY == other.rotationY &&
@@ -3092,6 +3097,13 @@ class LayerReference {
           {required List<UuidValue> selected, required int frame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceCanProjectFromCamera(
           that: this, selected: selected, frame: frame);
+
+  /// Whether this layer can take another source: footage, a solid or a
+  /// precomp.
+  bool canReplaceSource() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCanReplaceSource(
+        that: this,
+      );
 
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
@@ -4079,6 +4091,10 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceNewDriver(that: this, name: name);
 
+  /// The turn at comp frame `frame`, `None` with Orient off.
+  BridgeOrientTurn? orientTurnAt({required int frame}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceOrientTurnAt(that: this, frame: frame);
+
   /// Append copied effects to this layer's stack, **timed to the playhead**:
   /// whatever the earliest keyframe among them was, it lands at
   /// `at_frame` and the rest keep their spacing.
@@ -4644,6 +4660,9 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetModelSettings(
           that: this, settings: settings);
 
+  void setOrient({required BridgeOrient orient}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetOrient(that: this, orient: orient);
+
   /// Set the Pan, as one undoable step — the same shape as the Volume, and
   /// animatable in exactly the same way.
   void setPan({required BridgeScalar value}) => BridgeLib.instance.api
@@ -4751,6 +4770,14 @@ class LayerReference {
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetShapePathKeys(
           that: this, id: id, keys: keys);
+
+  /// Point this layer at `item`, keeping its transform, keys, masks, effects
+  /// and markers. An anchor keeps its place on the picture as the size
+  /// changes, a name that was the old source's follows the new one, and a
+  /// Retime goes when the layer becomes a solid, which has no time to remap.
+  /// Returns whether it did. One undo step.
+  bool setSourceItem({required ItemReference item}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetSourceItem(that: this, item: item);
 
   /// Move or trim the layer. One op, so a drag that changes the in point and
   /// the start offset together — a slip edit — is still one undo step.

@@ -35,7 +35,7 @@ import 'timeline_bar_frb.dart';
 import 'timeline_key_lane_frb.dart';
 import 'timeline_key_block_frb.dart';
 import 'timeline_group_row_frb.dart';
-import 'timeline_toolbar_frb.dart' show showTimelineMoreMenu;
+import 'timeline_toolbar_frb.dart' show TimelineFoldRows, showTimelineMoreMenu;
 
 /// One selected keyframe, and where it sits: which row's curve it belongs to,
 /// which key of that curve it is, what frame it reads and where its lane is in
@@ -217,6 +217,9 @@ class LayerArea extends StatelessWidget {
   final ValueChanged<LayerReference> onSelect;
   final VoidCallback onChanged;
 
+  /// Expand all and Collapse all, asked as the ground's menu opens.
+  final TimelineFoldRows Function()? foldRows;
+
   /// Fires when something may have changed which frames are held — a frame
   /// arriving or the idle fill banking one — so the bar repaints then rather
   /// than polling the cache on every frame it draws.
@@ -363,6 +366,7 @@ class LayerArea extends StatelessWidget {
     required this.onSeek,
     required this.onSelect,
     required this.onChanged,
+    this.foldRows,
     required this.cacheRevision,
     required this.dragPreview,
     required this.bounds,
@@ -696,6 +700,7 @@ class LayerArea extends StatelessWidget {
                     position: d.globalPosition,
                     frame: axis.frameAt(d.localPosition.dx),
                     onChanged: onChanged,
+                    fold: foldRows?.call(),
                   ),
                   child: EdgeFade(
                   axis: Axis.vertical,

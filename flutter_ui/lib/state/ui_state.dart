@@ -563,6 +563,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Where a selected camera is and which way it faces, for its 3D handles.
   final CameraPoses cameraPoses = CameraPoses();
+  final OrientTurns orientTurns = OrientTurns();
 
   /// Which tool the toolbar has armed (docs/07 §1.7).
   ///
@@ -2612,6 +2613,16 @@ class LumitUiState extends ChangeNotifier {
 
   void requestAlign(Offset at, {required bool anchor}) =>
       alignRequest.value = (++_alignRequests, anchor: anchor, at: at);
+
+  /// The selection lined up with itself or spaced out, for the Align panel.
+  /// [x] and [y] are the point of each box to bring together, 0 to 1, null for
+  /// an axis left alone; [distribute] the axis to space them along.
+  final ValueNotifier<(int, {double? x, double? y, Axis? distribute})?>
+      arrangeRequest = ValueNotifier(null);
+
+  void requestArrange({double? x, double? y, Axis? distribute}) =>
+      arrangeRequest.value =
+          (++_alignRequests, x: x, y: y, distribute: distribute);
 
   /// The armed dropper, or null when the tool is not armed (docs/07 §7).
   ///

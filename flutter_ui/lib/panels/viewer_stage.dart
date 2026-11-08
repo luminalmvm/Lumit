@@ -20,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:provider/provider.dart';
@@ -347,11 +348,16 @@ class ViewerStage extends StatelessWidget {
           revision: revision,
           frame: uiState.playheadFrame.value,
           outlined: outlined.contains(entry.layer.internallayerId.toString()));
+      BridgeOrientTurn? turnOf(BridgeLayerEntry e) => uiState.orientTurns.of(e,
+          frame: uiState.playheadFrame.value,
+          revision: revision,
+          generation: uiState.solveLanded.value);
       final map = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft,
           viewScale: viewScale,
           view: rows,
           time: () => at,
+          orientTurn: turnOf,
           cameraPose: (camera) => uiState.cameraPoses.ownOf(camera.layer,
               id: camera.layer.internallayerId,
               frame: uiState.playheadFrame.value,
@@ -408,6 +414,7 @@ class ViewerStage extends StatelessWidget {
             isStill(tf.scaleY) &&
             isStill(tf.rotation),
         rotationDegrees: rotation,
+        orientDegrees: turnOf(entry)?.degrees ?? 0,
         marker: light,
         cube: cube,
         cubeFrame: uiState.playheadFrame.value,
@@ -1334,11 +1341,13 @@ ViewerLayerMap layerMapOf(
   required List<double> Function() view,
   BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
   BridgeRational Function()? time,
+  BridgeOrientTurn? Function(BridgeLayerEntry)? orientTurn,
 }) {
   final tf = transformOf(entry);
   double at(BridgeScalar s, BridgeTransformProp p) => read(s, entry.layer, p);
   final parent = parentMatrix(entry, byId, transformOf, read,
-      cameraPose: cameraPose, time: time);
+      cameraPose: cameraPose, time: time, orientTurn: orientTurn);
+  final turn = orientTurn?.call(entry);
   final m = parent?.storage;
   return ViewerLayerMap.of(
     positionX: at(tf.positionX, BridgeTransformProp.positionX),
@@ -1347,7 +1356,8 @@ ViewerLayerMap layerMapOf(
     anchorY: at(tf.anchorY, BridgeTransformProp.anchorY),
     scaleXPercent: at(tf.scaleX, BridgeTransformProp.scaleX),
     scaleYPercent: at(tf.scaleY, BridgeTransformProp.scaleY),
-    rotationDegrees: at(tf.rotation, BridgeTransformProp.rotation),
+    rotationDegrees:
+        at(tf.rotation, BridgeTransformProp.rotation) + (turn?.degrees ?? 0),
     origin: origin,
     viewScale: viewScale,
     parent: m == null
@@ -1360,8 +1370,10 @@ ViewerLayerMap layerMapOf(
             z: at(tf.positionZ, BridgeTransformProp.positionZ),
             rotationX: at(tf.rotationX, BridgeTransformProp.rotationX),
             rotationY: at(tf.rotationY, BridgeTransformProp.rotationY),
-            outside: _outsideOf(
-                entry, tf, at, outsideOf(orientationOf(tf, at, time))),
+            outside: _withTurn(
+                turn,
+                _outsideOf(
+                    entry, tf, at, outsideOf(orientationOf(tf, at, time)))),
             anchorZ: _depthAt(tf, at, BridgeTransformProp.anchorZ, 0),
             scaleZ: _depthAt(tf, at, BridgeTransformProp.scaleZ, 100),
             aeOrder: tf.depth?.afterEffectsOrder ?? false,
@@ -1420,6 +1432,13 @@ List<double>? _outsideOf(
   return outside == null ? look : mul3(look, outside);
 }
 
+/// [outside] with an Orient's turn outside it.
+List<double>? _withTurn(BridgeOrientTurn? turn, List<double>? outside) {
+  final rows = turn?.rows;
+  if (rows == null) return outside;
+  return outside == null ? rows : mul3(rows, outside);
+}
+
 /// [rows]' turn, row by row, in the order [tf]'s layer turns in.
 List<double> rowsTurnOf(BridgeTransform tf, Vec3 rows) =>
     rowsTurn(rows, ae: tf.depth?.afterEffectsOrder ?? false);
@@ -1453,6 +1472,7 @@ Matrix4? parentMatrix(
   double Function(BridgeScalar, LayerReference, BridgeTransformProp) read, {
   BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
   BridgeRational Function()? time,
+  BridgeOrientTurn? Function(BridgeLayerEntry)? orientTurn,
 }) {
   Matrix4? world;
   final seen = {entry.layer.internallayerId};
@@ -1485,14 +1505,18 @@ Matrix4? parentMatrix(
       at(tf.positionY, BridgeTransformProp.positionY),
       flat ? 0.0 : at(tf.positionZ, BridgeTransformProp.positionZ),
     );
+    final turn = orientTurn?.call(up);
     final Vec3 rows = (
       flat ? 0.0 : at(tf.rotationX, BridgeTransformProp.rotationX),
       flat ? 0.0 : at(tf.rotationY, BridgeTransformProp.rotationY),
-      at(tf.rotation, BridgeTransformProp.rotation),
+      at(tf.rotation, BridgeTransformProp.rotation) + (turn?.degrees ?? 0),
     );
-    // An aimed light's aim, then the Orientation, outside the rotations.
-    final outside =
-        flat ? null : _outsideOf(up, tf, at, outsideOf(orientationOf(tf, at, time)));
+    // An Orient's turn, an aimed light's aim, then the Orientation, outside
+    // the rotations.
+    final outside = flat
+        ? null
+        : _withTurn(
+            turn, _outsideOf(up, tf, at, outsideOf(orientationOf(tf, at, time))));
     final r = rowsTurnOf(tf, rows);
     final m = outside == null ? r : mul3(outside, r);
     final own = Matrix4.translationValues(position.$1, position.$2, position.$3)
@@ -1602,6 +1626,10 @@ BridgeLayerEntry? layerAtCompPoint(
           viewScale: 1,
           view: () => rows,
           time: () => time,
+          orientTurn: (e) => uiState.orientTurns.of(e,
+              frame: frame,
+              revision: revision,
+              generation: uiState.solveLanded.value),
           cameraPose: (camera) {
             try {
               return camera.layer.cameraOwnPoseAt(frame: frame);

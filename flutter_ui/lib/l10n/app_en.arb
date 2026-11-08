@@ -7310,6 +7310,14 @@
   "@keyFitTheKeyframesToThePanel": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. F in the Timeline's Layers mode: zoom time to span the keyframes of the selected layers, or of all layers."
   },
+  "keyExpandAllLayers": "Expand all layers",
+  "@keyExpandAllLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCollapseAllLayers": "Collapse all layers",
+  "@keyCollapseAllLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyZoomTool": "Zoom tool",
   "@keyZoomTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7610,10 +7618,6 @@
   "menuAddMarkerHere": "Add marker here",
   "@menuAddMarkerHere": {
     "description": "Timeline: a row of the right-click menu on the time ruler's own ground. It makes a composition marker at the frame under the pointer."
-  },
-  "menuAddTextSelector": "Add text selector",
-  "@menuAddTextSelector": {
-    "description": "Menu item."
   },
   "menuAddToExportQueue": "Add to export queue…",
   "@menuAddToExportQueue": {
@@ -8242,6 +8246,10 @@
   "menuSnapToGrid": "Snap to grid",
   "@menuSnapToGrid": {
     "description": "Menu item."
+  },
+  "menuSnapToLayers": "Snap to layers",
+  "@menuSnapToLayers": {
+    "description": "Menu row with a tick: a layer dragged in the Viewer lands on the edges and middles of the other layers."
   },
   "menuSwitch3dView": "Switch 3D view",
   "@menuSwitch3dView": {
@@ -9124,6 +9132,22 @@
   "@replaceFootageEllipsis": {
     "description": "Project panel, a footage item's right-click menu: point the item at a different file. The same command as Relink, offered under this name when the file is not missing. The ellipsis means a file dialogue opens."
   },
+  "menuReplaceSource": "Replace source",
+  "@menuReplaceSource": {
+    "description": "Menu row on a layer: it takes another item of the project as its source and keeps everything else. Also shown on an item dragged with Alt held."
+  },
+  "replaceSourceChoose": "Choose…",
+  "@replaceSourceChoose": {
+    "description": "Last row under Replace source: pick a file to import and use."
+  },
+  "replaceSourceRefused": "A layer can't use that source",
+  "@replaceSourceRefused": {
+    "description": "Status line: a layer refused the new source, such as a picture layer given a sound file."
+  },
+  "replaceSourceRetimeRemoved": "Retime was removed",
+  "@replaceSourceRetimeRemoved": {
+    "description": "Status line: a layer that became a solid had a Retime, which a solid has no use for."
+  },
   "reloadFootage": "Reload footage",
   "@reloadFootage": {
     "description": "Project panel, a footage item's right-click menu: read the file again, so a run of stills that has grown since it was imported gets its new length."
@@ -10005,6 +10029,42 @@
   "textAnimatorRemove": "Remove",
   "@textAnimatorRemove": {
     "description": "Button on one animator's heading row in the Animators section that deletes that animator."
+  },
+  "textAnimatorReverse": "Reverse",
+  "@textAnimatorReverse": {
+    "description": "Button on a text animator's heading: play its keys the other way round, so an animation in becomes one out."
+  },
+  "textAnimatorBlank": "Blank animator",
+  "@textAnimatorBlank": {
+    "description": "Menu row under Animate text: a new animator that changes nothing yet."
+  },
+  "textPresetFadeByLetter": "Fade in by letter",
+  "@textPresetFadeByLetter": {
+    "description": "Menu row under Animate text: the letters fade in one after another over a second."
+  },
+  "textPresetFadeByWord": "Fade in by word",
+  "@textPresetFadeByWord": {
+    "description": "Menu row under Animate text: the words fade in one after another over a second."
+  },
+  "textPresetTypeOn": "Type on",
+  "@textPresetTypeOn": {
+    "description": "Menu row under Animate text: the letters appear one at a time, as if typed."
+  },
+  "textPresetRiseByLetter": "Rise by letter",
+  "@textPresetRiseByLetter": {
+    "description": "Menu row under Animate text: the letters rise into place and fade in one after another."
+  },
+  "textPresetFallByWord": "Fall in by word",
+  "@textPresetFallByWord": {
+    "description": "Menu row under Animate text: the words drop into place and fade in one after another."
+  },
+  "textPresetScaleByLetter": "Scale in by letter",
+  "@textPresetScaleByLetter": {
+    "description": "Menu row under Animate text: the letters grow from nothing one after another."
+  },
+  "textPresetTrackingIn": "Tracking in",
+  "@textPresetTrackingIn": {
+    "description": "Menu row under Animate text: the letters start spread apart and close up."
   },
   "textAnimatorShape": "Shape",
   "@textAnimatorShape": {
@@ -11307,6 +11367,22 @@
   "@alignComposition": {
     "description": "Align panel: heading over the grid of nine dots that moves each selected layer so that point of its box meets the same point of the composition (top left to top left, centre to centre)."
   },
+  "alignSelection": "Selection",
+  "@alignSelection": {
+    "description": "Align panel: heading over the buttons that line the selected layers up with each other. Also the Viewer menu row that opens the same six."
+  },
+  "alignDistributeAcross": "Distribute across",
+  "@alignDistributeAcross": {
+    "description": "Align panel and Viewer menu: space the selected layers evenly from left to right."
+  },
+  "alignDistributeDown": "Distribute down",
+  "@alignDistributeDown": {
+    "description": "Align panel and Viewer menu: space the selected layers evenly from top to bottom."
+  },
+  "settingsAlignToFirstPicked": "Align to the first picked layer",
+  "@settingsAlignToFirstPicked": {
+    "description": "A setting: lining up the selection goes to the first picked layer rather than the box round them all."
+  },
   "alignAnchorToCentre": "Anchor to centre",
   "@alignAnchorToCentre": {
     "description": "Align panel, right-click: move the selected layers' anchor points to the middle of their boxes."
@@ -11314,6 +11390,22 @@
   "alignCentreInComp": "Centre in composition",
   "@alignCentreInComp": {
     "description": "Align panel, right-click: move the selected layers to the middle of the composition."
+  },
+  "menuFitToComp": "Fit to comp",
+  "@menuFitToComp": {
+    "description": "Menu row: scale the layer so its box sits inside the frame, keeping its shape, and centre it."
+  },
+  "menuFillComp": "Fill comp",
+  "@menuFillComp": {
+    "description": "Menu row: scale the layer so its box covers the frame, keeping its shape, and centre it."
+  },
+  "menuFitToCompWidth": "Fit to comp width",
+  "@menuFitToCompWidth": {
+    "description": "Menu row: scale the layer so its box is as wide as the frame, keeping its shape, and centre it."
+  },
+  "menuFitToCompHeight": "Fit to comp height",
+  "@menuFitToCompHeight": {
+    "description": "Menu row: scale the layer so its box is as tall as the frame, keeping its shape, and centre it."
   },
   "staggerOffset": "Offset per layer",
   "@staggerOffset": {
@@ -11518,6 +11610,18 @@
   "transformAnchorPoint": "Anchor point",
   "@transformAnchorPoint": {
     "description": "The point a layer rotates and scales about."
+  },
+  "transformOrient": "Orient",
+  "@transformOrient": {
+    "description": "A row at the top of Transform: whether the layer turns by itself. Also a submenu of Layer > Transform."
+  },
+  "orientAlongPath": "Along path",
+  "@orientAlongPath": {
+    "description": "Orient choice: the layer turns to face the way it is moving."
+  },
+  "orientTowardsCamera": "Towards camera",
+  "@orientTowardsCamera": {
+    "description": "Orient choice on a 3D layer: the layer always faces the camera."
   },
   "transformAnchorPointX": "Anchor point x",
   "@transformAnchorPointX": {
@@ -19631,6 +19735,18 @@
   "keyCentreTheAnchorPointInTheLayer": "Centre the anchor point in the layer",
   "@keyCentreTheAnchorPointInTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFitTheLayerToTheComposition": "Fit the layer to the composition",
+  "@keyFitTheLayerToTheComposition": {
+    "description": "Settings â†’ Keymap: what a shortcut does, in the tableâ€™s left column."
+  },
+  "keyFitTheLayerToTheCompositionWidth": "Fit the layer to the composition's width",
+  "@keyFitTheLayerToTheCompositionWidth": {
+    "description": "Settings â†’ Keymap: what a shortcut does, in the tableâ€™s left column."
+  },
+  "keyFitTheLayerToTheCompositionHeight": "Fit the layer to the composition's height",
+  "@keyFitTheLayerToTheCompositionHeight": {
+    "description": "Settings â†’ Keymap: what a shortcut does, in the tableâ€™s left column."
   },
   "keySetTheMaskSFeather": "Set the mask's feather",
   "@keySetTheMaskSFeather": {

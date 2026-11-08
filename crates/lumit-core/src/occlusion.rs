@@ -153,6 +153,9 @@ impl Affine {
 /// anchor, in the renderer's own order (`lumit_gpu::composite::place_matrix`).
 fn placement(layer: &Layer, lt: f64) -> Option<Affine> {
     let tr = &layer.transform;
+    if !tr.orient.is_off() {
+        return None;
+    }
     let props = [
         &tr.anchor_x,
         &tr.anchor_y,

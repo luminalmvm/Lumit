@@ -1930,6 +1930,8 @@ Map<String, String> get _built => {
       "Zoom out": l10n.keyZoomOut,
       "Zoom to fit": l10n.keyZoomToFit,
       "Fit the keyframes to the panel": l10n.keyFitTheKeyframesToThePanel,
+      "Expand all layers": l10n.keyExpandAllLayers,
+      "Collapse all layers": l10n.keyCollapseAllLayers,
       "Rename the layer": l10n.keyRenameTheLayer,
       "Rename the selected item": l10n.keyRenameTheSelectedItem,
       "Duplicate the selected item": l10n.keyDuplicateTheSelectedItem,
@@ -2045,6 +2047,9 @@ Map<String, String> get _built => {
           l10n.keyCentreTheLayerInTheComposition,
       "Centre the anchor point in the layer":
           l10n.keyCentreTheAnchorPointInTheLayer,
+      "Fit the layer to the composition": l10n.keyFitTheLayerToTheComposition,
+      "Fit the layer to the composition's width": l10n.keyFitTheLayerToTheCompositionWidth,
+      "Fit the layer to the composition's height": l10n.keyFitTheLayerToTheCompositionHeight,
       "Set the mask's feather": l10n.keySetTheMaskSFeather,
       "Invert the mask": l10n.keyInvertTheMask,
       "Show or hide the layer controls": l10n.keyShowOrHideTheLayerControls,

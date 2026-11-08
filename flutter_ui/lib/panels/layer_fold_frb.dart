@@ -2562,6 +2562,15 @@ List<LayerFoldRow> layerFoldRows({
     open: transformOpen,
     depth: 1,
   ));
+  if (transformOpen &&
+      layerSettings(
+              kind: meshKindOf(info),
+              light: info.light,
+              threeD: info.switches.threeD,
+              twoNode: info.camera?.twoNode ?? false)
+          .contains(LayerSetting.orient)) {
+    rows.add(FoldSettingRow(LayerSetting.orient, info, depth: 2));
+  }
   for (final group in groups) {
     if (group.section != TransformSection.transform) continue;
     if (transformOpen || open.contains(transformGroupPath(id, group))) {

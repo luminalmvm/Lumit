@@ -1332,7 +1332,11 @@ class _LumitAppViewState extends State<LumitAppView> {
             'layer.order.top' ||
             'layer.order.bottom':
         handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
-      case 'layer.centre' || 'layer.centre.anchor':
+      case 'layer.centre' ||
+            'layer.centre.anchor' ||
+            'layer.fit' ||
+            'layer.fit.width' ||
+            'layer.fit.height':
         handled = MenuEntry.pressAction(transformRows(state, ui), action);
       case 'layer.project.from.camera':
         handled =
@@ -1432,6 +1436,9 @@ bool _pressedOnce(String action) =>
       'layer.unlock.all',
       'layer.centre',
       'layer.centre.anchor',
+      'layer.fit',
+      'layer.fit.width',
+      'layer.fit.height',
       'layer.settings',
       'mask.feather',
       'mask.invert',

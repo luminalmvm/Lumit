@@ -452,6 +452,10 @@ class InterfaceSettings {
   /// Whether the Viewer's rulers count in percent of the frame, not in pixels.
   bool viewerRulerPercent;
 
+  /// Whether lining the selection up goes to the first picked layer's edge,
+  /// rather than the edge of the box round them all.
+  bool alignToFirstPicked;
+
   /// Whether an orbit in the Viewer turns the other way across, and up and
   /// down. Off by default.
   bool invertOrbitAcross;
@@ -622,6 +626,7 @@ class InterfaceSettings {
     this.waveformsFromBottom = false,
     this.showToneMap = false,
     this.viewerGuidesLocked = false,
+    this.alignToFirstPicked = false,
     this.viewerRulerPercent = false,
     this.invertOrbitAcross = false,
     this.invertOrbitUpDown = false,
@@ -677,6 +682,7 @@ class InterfaceSettings {
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
         'viewer_guides_locked': viewerGuidesLocked,
+        'align_to_first_picked': alignToFirstPicked,
         'viewer_ruler_percent': viewerRulerPercent,
         'invert_orbit_across': invertOrbitAcross,
         'invert_orbit_up_down': invertOrbitUpDown,
@@ -776,6 +782,7 @@ class InterfaceSettings {
         // engaged tone map is disengaged with it rather than left stranded.
         showToneMap: j['show_tone_map'] as bool? ?? false,
         viewerGuidesLocked: j['viewer_guides_locked'] as bool? ?? false,
+        alignToFirstPicked: j['align_to_first_picked'] as bool? ?? false,
         viewerRulerPercent: j['viewer_ruler_percent'] as bool? ?? false,
         invertOrbitAcross: j['invert_orbit_across'] as bool? ?? false,
         invertOrbitUpDown: j['invert_orbit_up_down'] as bool? ?? false,

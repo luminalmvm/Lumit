@@ -1725,6 +1725,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsEffectGraphsUseThemeColour,
               value: ui.workspace.themedEffectGraphs,
               set: ui.workspace.setThemedEffectGraphs),
+          _flag(t, 'settings-align-first', l10n.settingsAlignToFirstPicked,
+              value: settings.alignToFirstPicked, set: (on) {
+            settings.alignToFirstPicked = on;
+            ui.workspace.settingsChanged();
+          }),
           _row(
             t,
             l10n.settingsSurround,

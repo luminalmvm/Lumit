@@ -6713,6 +6713,16 @@ mod tests {
                 comp.layers.insert(0, adj);
                 (doc, comp_id, 15)
             }),
+            ("a layer turned along its path", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (_, top) = matrix_top(&mut doc, comp_id, blue);
+                let comp = doc.comp_mut(comp_id).unwrap();
+                let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+                l.transform.orient = lumit_core::orient::Orient::AlongPath;
+                l.transform.position_x = ramp(0.0, 64.0, 1);
+                l.transform.position_y = ramp(0.0, 32.0, 1);
+                (doc, comp_id, 15)
+            }),
             // The anti-aliasing row (docs/impl/anti-aliasing.md §5,
             // test 3): the count is a PROJECT property, so both walks read the
             // same one — an export that anti-aliased differently from the

@@ -208,6 +208,9 @@ class LayerBox {
   /// back to its first turn the moment the knob was touched.
   final double rotationDegrees;
 
+  /// What the layer's Orient adds to that on the picture, on a flat layer.
+  final double orientDegrees;
+
   /// The layer's puppet, or null on a layer nobody has pinned — which
   /// is most layers. Read from the model with everything else, so drawing the
   /// pins over the picture costs no bridge calls.
@@ -245,6 +248,7 @@ class LayerBox {
     required this.draggable,
     required this.scalable,
     required this.rotationDegrees,
+    this.orientDegrees = 0,
     this.masks = const [],
     this.shapeContents = const [],
     this.pickedItem,
@@ -284,6 +288,7 @@ class LayerBox {
         draggable: draggable,
         scalable: scalable,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+        orientDegrees: orientDegrees,
         masks: masks,
         shapeContents: shapeContents,
         pickedItem: pickedItem,
@@ -312,7 +317,8 @@ class LayerBox {
   /// The same box with the layer turned to [degrees] — the shape a rotation in
   /// flight has, before it is committed.
   LayerBox turnedTo(double degrees) =>
-      copyWith(map: map.turnedTo(degrees), rotationDegrees: degrees);
+      copyWith(
+          map: map.turnedTo(degrees + orientDegrees), rotationDegrees: degrees);
 
   /// The box's four corners in screen space, clockwise from the layer's own
   /// top-left. A rotated layer therefore gives a rotated quad, not an
@@ -1254,6 +1260,7 @@ BridgeTransform transformWithMotionHandle(
 BridgeTransform _withPosition(
         BridgeTransform tf, BridgeScalar x, BridgeScalar y) =>
     BridgeTransform(
+      orient: tf.orient,
       anchorX: tf.anchorX,
       anchorY: tf.anchorY,
       positionX: x,
@@ -2092,6 +2099,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
     widget.uiState.alignRequest.addListener(_onAlignRequest);
+    widget.uiState.arrangeRequest.addListener(_onArrangeRequest);
     // Chained, as the panels chain theirs: Delete with path points selected
     // is about the points, and anything else goes on down the chain.
     _priorDeleteClaim = widget.uiState.deleteClaim;
@@ -2157,6 +2165,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     sayInHand(this, const []);
     HardwareKeyboard.instance.removeHandler(_onKey);
     widget.uiState.alignRequest.removeListener(_onAlignRequest);
+    widget.uiState.arrangeRequest.removeListener(_onArrangeRequest);
     if (widget.uiState.deleteClaim == _deleteClaim) {
       widget.uiState.deleteClaim = _priorDeleteClaim;
     }
@@ -2513,6 +2522,29 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return any ? Rect.fromLTRB(left, top, right, bottom) : null;
   }
 
+  /// The boxes of the layers a drag can land on: the ones in the picture now,
+  /// less what is being dragged, and less a locked layer or a guide layer.
+  List<Rect> _snapBoxes() {
+    final ui = widget.uiState;
+    if (!ui.tools.snapToLayers) return const [];
+    final dragged = ui.selectedLayerIds;
+    final byId = {
+      for (final e in ui.model.heldLayers) e.layer.internallayerId: e
+    };
+    final t = ui.playheadFrame.value / ui.model.heldFps;
+    double seconds(BridgeRational r) => r.num / r.den;
+    return [
+      for (final box in widget.boxes)
+        if (!box.marker && !dragged.contains(box.id))
+          if (byId[box.id] case final entry?
+              when !entry.info.switches.locked &&
+                  !entry.info.switches.guide &&
+                  t >= seconds(entry.info.span.inPoint) &&
+                  t < seconds(entry.info.span.outPoint))
+            if (_rectOf([box]) case final rect?) rect,
+    ];
+  }
+
   /// The travel the move actually uses, and the lines that took it: the
   /// pointer's own, kept to the axis it has gone furthest along while Shift is
   /// held, then pulled onto the nearest line within the magnet's reach.
@@ -2535,6 +2567,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
     final rect = _selectionRect();
     if (rect == null) return free;
+    final boxes = _snapBoxes();
     List<double> targets(bool vertical) => viewerSnapTargets(
           guides: widget.uiState.guides,
           vertical: vertical,
@@ -2542,6 +2575,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           compSize: widget.compSize,
           grid: tools.snapToGrid,
           divisions: ViewerOverlayPainter.divisions,
+          boxes: boxes,
         );
     return snapViewerDrag(
       box: rect,
@@ -2765,6 +2799,36 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
                 for (final to in _Align.values)
                   viewerRow(to.title, () => _align(to.x, to.y), dismiss,
                       id: 'viewer-align-${to.name}'),
+                const MenuDivider(),
+                viewerSub(
+                  l10n.alignSelection,
+                  dismiss,
+                  (inner) => [
+                    for (final to in _Align.values)
+                      viewerRow(
+                          to.title,
+                          _arrangeable.length < 2
+                              ? null
+                              : () => _alignSelection(to.x, to.y),
+                          inner,
+                          id: 'viewer-align-selection-${to.name}'),
+                  ],
+                  id: 'viewer-align-selection',
+                ),
+                viewerRow(
+                    l10n.alignDistributeAcross,
+                    _arrangeable.length < 3
+                        ? null
+                        : () => _distribute(Axis.horizontal),
+                    dismiss,
+                    id: 'viewer-distribute-across'),
+                viewerRow(
+                    l10n.alignDistributeDown,
+                    _arrangeable.length < 3
+                        ? null
+                        : () => _distribute(Axis.vertical),
+                    dismiss,
+                    id: 'viewer-distribute-down'),
               ],
               id: 'viewer-menu-align',
             ),
@@ -3085,40 +3149,125 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     );
   }
 
-  /// Move each selected layer so a point of its box meets the same point of
-  /// the composition, [x] and [y] from 0 to 1 across and down, null for an
-  /// axis left alone. The box is the one the outline draws, so what lines up
-  /// is what is seen. A layer with a keyed position stays where it is, as it
-  /// does under a drag.
-  void _align(double? x, double? y) {
+  /// The selected layers that can be lined up: a box to line up, and a
+  /// Position no expression drives. A keyed one takes a key at the playhead.
+  List<LayerBox> get _arrangeable => [
+        for (final box in _selected)
+          if (!box.marker &&
+              box.transform?.positionX is! BridgeScalar_Expression &&
+              box.transform?.positionY is! BridgeScalar_Expression &&
+              _rectOf([box]) != null)
+            box
+      ];
+
+  /// Move each of [boxes] by what [wanted] asks of its box on screen, as one
+  /// undo step. Seen through a camera a move also changes how big the box
+  /// looks, so a few steps close in on the edge rather than landing near it.
+  void _moveBoxes(List<LayerBox> boxes, Offset Function(Rect rect) wanted) {
     final moves = <(LayerBox, double, double, double?)>[];
-    for (final box in _selected) {
-      if (!box.draggable || _rectOf([box]) == null) continue;
+    for (final box in boxes) {
       var (px, py) = (box.map.px, box.map.py);
-      // Seen through a camera a move also changes how big the box looks, so
-      // a few steps close in on the edge rather than landing near it.
       for (var i = 0; i < (box.map.projected ? 4 : 1); i++) {
         final moved = i == 0
             ? box
             : box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(px, py));
         final rect = _rectOf([moved]);
         if (rect == null) break;
-        // Both measured from the composition's corner, at the view's scale.
-        final scale = box.map.viewScale;
-        final r = rect.shift(-box.map.origin);
-        final frame = widget.compSize * scale;
-        final d = Offset(
-              x == null ? 0 : (frame.width - r.width) * x - r.left,
-              y == null ? 0 : (frame.height - r.height) * y - r.top,
-            ) /
-            scale;
-        final step = moved.map.positionStep(d);
+        final step = moved.map.positionStep(wanted(rect) / box.map.viewScale);
         px += step.dx;
         py += step.dy;
       }
       moves.add((box, px, py, null));
     }
     _place(moves);
+  }
+
+  /// Move each selected layer so a point of its box meets the same point of
+  /// the composition, [x] and [y] from 0 to 1 across and down, null for an
+  /// axis left alone. The box is the one the outline draws, so what lines up
+  /// is what is seen.
+  void _align(double? x, double? y) {
+    final frame = widget.picture;
+    _moveBoxes(
+      _arrangeable,
+      (r) => Offset(
+        x == null ? 0 : frame.left + (frame.width - r.width) * x - r.left,
+        y == null ? 0 : frame.top + (frame.height - r.height) * y - r.top,
+      ),
+    );
+  }
+
+  /// Bring the same point of each selected layer's box together, on the box
+  /// round them all, or on the first picked layer's when Settings says so.
+  void _alignSelection(double? x, double? y) {
+    final boxes = _arrangeable;
+    if (boxes.length < 2) return;
+    final ui = widget.uiState;
+    final first = ui.workspace.interface.alignToFirstPicked
+        ? boxes
+            .where((b) =>
+                b.id == ui.selectedLayers.value.firstOrNull?.internallayerId)
+            .firstOrNull
+        : null;
+    final around = _rectOf(first == null ? boxes : [first])!;
+    _moveBoxes(
+      boxes,
+      (r) => Offset(
+        x == null ? 0 : around.left + (around.width - r.width) * x - r.left,
+        y == null ? 0 : around.top + (around.height - r.height) * y - r.top,
+      ),
+    );
+  }
+
+  /// Space the selected layers' middles evenly between the two outermost, or
+  /// with Shift held the gaps between their boxes.
+  void _distribute(Axis axis) {
+    final boxes = _arrangeable;
+    if (boxes.length < 3) return;
+    final across = axis == Axis.horizontal;
+    double middle(Rect r) => across ? r.center.dx : r.center.dy;
+    double extent(Rect r) => across ? r.width : r.height;
+    final rects = {for (final box in boxes) box: _rectOf([box])!};
+    final order = boxes.toList()
+      ..sort((a, b) => middle(rects[a]!).compareTo(middle(rects[b]!)));
+    final wanted = <LayerBox, double>{};
+    final (first, last) = (rects[order.first]!, rects[order.last]!);
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      final near = across ? first.left : first.top;
+      final far = across ? last.right : last.bottom;
+      final used = rects.values.fold(0.0, (sum, r) => sum + extent(r));
+      final gap = (far - near - used) / (order.length - 1);
+      var at = near;
+      for (final box in order) {
+        final size = extent(rects[box]!);
+        wanted[box] = at + size / 2;
+        at += size + gap;
+      }
+    } else {
+      final step = (middle(last) - middle(first)) / (order.length - 1);
+      for (var i = 0; i < order.length; i++) {
+        wanted[order[i]] = middle(first) + step * i;
+      }
+    }
+    final moves = <(LayerBox, double, double, double?)>[];
+    for (final box in order) {
+      final by = wanted[box]! - middle(rects[box]!);
+      final step = box.map.positionStep(
+          (across ? Offset(by, 0) : Offset(0, by)) / box.map.viewScale);
+      moves.add((box, box.map.px + step.dx, box.map.py + step.dy, null));
+    }
+    _place(moves);
+  }
+
+  /// A press in the Align panel's Selection grid. Only the active view answers.
+  void _onArrangeRequest() {
+    final request = widget.uiState.arrangeRequest.value;
+    if (request == null || !mounted || !_activeView) return;
+    if (request.distribute case final axis?) {
+      _distribute(axis);
+    } else {
+      _alignSelection(request.x, request.y);
+    }
   }
 
   /// A dot on the Align panel. Only the active view answers, or two Viewers
@@ -4452,6 +4601,7 @@ BridgeTransform transformWith(
   final camera = tf.camera;
   final depth = tf.depth;
   return BridgeTransform(
+    orient: tf.orient,
     anchorX: put(anchorX, tf.anchorX),
     anchorY: put(anchorY, tf.anchorY),
     positionX: put(positionX, tf.positionX),

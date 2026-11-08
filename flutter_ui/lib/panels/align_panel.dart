@@ -1,9 +1,10 @@
-// The Align panel: two grids of nine dots. A dot on the first moves the
-// selected layers' anchors to that point of their boxes without moving the
-// picture. A dot on the second moves each layer so that point of its box
-// meets the same point of the composition. The Viewer does both, with the
-// code behind its Anchor point tool and its right-click Align. A right-click
-// offers the two a person wants most, the middle of each.
+// The Align panel: three grids. A dot on the first moves the selected layers'
+// anchors to that point of their boxes without moving the picture. A dot on the
+// second moves each layer so that point of its box meets the same point of the
+// composition. The third lines the selected layers up with each other and
+// spaces them out. The Viewer does all of it, with the code behind its Anchor
+// point tool and its right-click Align. A right-click offers the same again by
+// name.
 
 import 'dart:math' as math;
 
@@ -12,13 +13,20 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show MenuEntry;
 import '../shell/menu_layer_frb.dart' show selectedEntries;
 import '../widgets/controls.dart';
-import 'timeline_extras_frb.dart' show showMenuAt;
+import 'layer_fit.dart';
+import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 
 /// The most a grid grows to. Past this the dots are only taking up room.
 const double _largestGrid = 112;
+
+/// The height of the row of buttons under the composition's grid.
+const double _footHeight = 26;
 
 class AlignPanel extends StatelessWidget {
   const AlignPanel({super.key});
@@ -26,18 +34,22 @@ class AlignPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    final app = Provider.of<LumitState>(context, listen: false);
     return ListenableBuilder(
       listenable: Listenable.merge([ui.model, ui.selectedLayers]),
       builder: (context, _) {
         final t = ThemeScope.of(context).theme;
         // Cameras, lights and sound have no box to line up.
-        final live = selectedEntries(ui).any((e) => !const {
-              BridgeLayerKind.camera,
-              BridgeLayerKind.light,
-              BridgeLayerKind.audio,
-              BridgeLayerKind.bus,
-            }.contains(e.info.kind));
-        Widget grid(String label, bool anchor, double side) => Column(
+        final boxes = selectedEntries(ui)
+            .where((e) => !const {
+                  BridgeLayerKind.camera,
+                  BridgeLayerKind.light,
+                  BridgeLayerKind.audio,
+                  BridgeLayerKind.bus,
+                }.contains(e.info.kind))
+            .length;
+        final live = boxes > 0;
+        Widget labelled(String label, Widget child) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(label,
@@ -45,15 +57,18 @@ class AlignPanel extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 6),
-                _DotGrid(
-                  key: ValueKey<String>(anchor ? 'align-anchor' : 'align-comp'),
-                  size: side,
-                  onPick: live
-                      ? (at) => ui.requestAlign(at, anchor: anchor)
-                      : null,
-                  onMenu: (place) => _menu(context, place, ui, live),
-                ),
+                child,
               ],
+            );
+        Widget grid(String label, bool anchor, double side) => labelled(
+              label,
+              _DotGrid(
+                key: ValueKey<String>(anchor ? 'align-anchor' : 'align-comp'),
+                size: side,
+                onPick:
+                    live ? (at) => ui.requestAlign(at, anchor: anchor) : null,
+                onMenu: (place) => _menu(context, place, app, ui, boxes),
+              ),
             );
         return Container(
           color: t.surface0,
@@ -64,11 +79,12 @@ class AlignPanel extends StatelessWidget {
             // bigger. A label and its gap take about 22 high; the FittedBox
             // catches anything that doesn't fit.
             const label = 22.0, gap = 24.0;
-            final across =
-                math.min((box.maxWidth - gap) / 2, box.maxHeight - label);
-            final down =
-                math.min(box.maxWidth, (box.maxHeight - gap) / 2 - label);
-            final side = math.max(math.max(across, down), 32.0);
+            final across = math.min((box.maxWidth - 2 * gap) / 3,
+                box.maxHeight - label - _footHeight);
+            final down = math.min(box.maxWidth,
+                (box.maxHeight - 2 * gap - _footHeight) / 3 - label);
+            final side =
+                math.min(math.max(math.max(across, down), 32.0), _largestGrid);
             return Align(
               alignment: AlignmentDirectional.topStart,
               child: FittedBox(
@@ -76,12 +92,27 @@ class AlignPanel extends StatelessWidget {
                 child: Flex(
                   direction: across >= down ? Axis.horizontal : Axis.vertical,
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    grid(l10n.transformAnchorPoint, true,
-                        math.min(side, _largestGrid)),
+                    grid(l10n.transformAnchorPoint, true, side),
                     const SizedBox.square(dimension: gap),
-                    grid(l10n.alignComposition, false,
-                        math.min(side, _largestGrid)),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        grid(l10n.alignComposition, false, side),
+                        _FitButtons(side: side, app: app, ui: ui),
+                      ],
+                    ),
+                    const SizedBox.square(dimension: gap),
+                    labelled(
+                      l10n.alignSelection,
+                      GestureDetector(
+                        onSecondaryTapDown: (d) => _menu(
+                            context, d.globalPosition, app, ui, boxes),
+                        child: _SelectionGrid(
+                            side: side, ui: ui, picked: boxes),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -92,32 +123,152 @@ class AlignPanel extends StatelessWidget {
     );
   }
 
-  /// The middle of each, by the same road a press on a dot takes.
-  void _menu(BuildContext context, Offset at, LumitUiState ui, bool live) {
+  /// The panel's commands by name, by the same road a press takes.
+  void _menu(BuildContext context, Offset at, LumitState app, LumitUiState ui,
+      int picked) {
     const middle = Offset(0.5, 0.5);
-    showMenuAt<void>(
-      context: context,
-      position: at,
-      rows: (close) => [
-        MenuRow(
-          key: const ValueKey('align-menu-anchor'),
-          enabled: live,
-          onPressed: () {
-            close(null);
-            ui.requestAlign(middle, anchor: true);
-          },
-          child: MenuLabel(l10n.alignAnchorToCentre, enabled: live),
+    final live = picked > 0;
+    final on = ui.workspace.interface;
+    showMenuEntriesAt(context, at, [
+      MenuEntry(l10n.alignAnchorToCentre,
+          live ? () => ui.requestAlign(middle, anchor: true) : null),
+      MenuEntry(l10n.alignCentreInComp,
+          live ? () => ui.requestAlign(middle, anchor: false) : null),
+      MenuEntry.divider(),
+      ...fitRows(app, ui),
+      MenuEntry.divider(),
+      MenuEntry(l10n.alignDistributeAcross,
+          picked < 3 ? null : () => ui.requestArrange(distribute: Axis.horizontal)),
+      MenuEntry(l10n.alignDistributeDown,
+          picked < 3 ? null : () => ui.requestArrange(distribute: Axis.vertical)),
+      MenuEntry.divider(),
+      MenuEntry(l10n.settingsAlignToFirstPicked, () {
+        on.alignToFirstPicked = !on.alignToFirstPicked;
+        ui.workspace.settingsChanged();
+      }, checked: on.alignToFirstPicked),
+    ]);
+  }
+}
+
+/// A small icon button, the panel's one kind.
+Widget _iconButton({
+  required Key key,
+  required String tip,
+  required String glyph,
+  required VoidCallback? onPressed,
+  required double size,
+}) =>
+    SizedBox.square(
+      dimension: size,
+      child: LumitTooltip(
+        message: tip,
+        child: HouseButton(
+          key: key,
+          frameless: true,
+          small: true,
+          padding: EdgeInsets.zero,
+          onPressed: onPressed,
+          child: Center(child: LumitIcon(glyph)),
         ),
-        MenuRow(
-          key: const ValueKey('align-menu-comp'),
-          enabled: live,
-          onPressed: () {
-            close(null);
-            ui.requestAlign(middle, anchor: false);
-          },
-          child: MenuLabel(l10n.alignCentreInComp, enabled: live),
-        ),
-      ],
+      ),
+    );
+
+/// Fit to comp, width and height, under the composition's grid.
+class _FitButtons extends StatelessWidget {
+  final double side;
+  final LumitState app;
+  final LumitUiState ui;
+
+  const _FitButtons({required this.side, required this.app, required this.ui});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = fitRows(app, ui);
+    final cell = side / 3;
+    Widget button(int row, String id, String glyph) => _iconButton(
+          key: ValueKey<String>('align-fit-$id'),
+          tip: rows[row].label ?? '',
+          glyph: glyph,
+          onPressed: rows[row].onPressed,
+          size: math.min(cell, _footHeight),
+        );
+    return SizedBox(
+      width: side,
+      height: _footHeight,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          button(0, 'comp', LumitIcons.fitToComp),
+          button(2, 'width', LumitIcons.fitToCompWidth),
+          button(3, 'height', LumitIcons.fitToCompHeight),
+        ],
+      ),
+    );
+  }
+}
+
+/// Six buttons lining the selection up with itself, and two spacing it out,
+/// taking up the room a grid of dots does.
+class _SelectionGrid extends StatelessWidget {
+  final double side;
+  final LumitUiState ui;
+
+  /// How many layers with a box are picked.
+  final int picked;
+
+  const _SelectionGrid(
+      {required this.side, required this.ui, required this.picked});
+
+  @override
+  Widget build(BuildContext context) {
+    // The same size as the fit buttons, so the columns meet the dots beside.
+    final cell = math.min(side / 3, _footHeight);
+    Widget align(String id, String tip, String glyph, double? x, double? y) =>
+        _iconButton(
+          key: ValueKey<String>('align-selection-$id'),
+          tip: tip,
+          glyph: glyph,
+          onPressed:
+              picked < 2 ? null : () => ui.requestArrange(x: x, y: y),
+          size: cell,
+        );
+    Widget distribute(String id, String tip, String glyph, Axis axis) =>
+        _iconButton(
+          key: ValueKey<String>('align-distribute-$id'),
+          tip: tip,
+          glyph: glyph,
+          onPressed:
+              picked < 3 ? null : () => ui.requestArrange(distribute: axis),
+          size: cell,
+        );
+    return SizedBox.square(
+      dimension: side,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            align('left', l10n.viewerAlignLeft, LumitIcons.alignEdgeLeft, 0, null),
+            align('centre', l10n.viewerAlignCentre, LumitIcons.alignEdgeCentre,
+                0.5, null),
+            align('right', l10n.viewerAlignRight, LumitIcons.alignEdgeRight, 1,
+                null),
+          ]),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            align('top', l10n.viewerAlignTop, LumitIcons.alignEdgeTop, null, 0),
+            align('middle', l10n.viewerAlignMiddle, LumitIcons.alignEdgeMiddle,
+                null, 0.5),
+            align('bottom', l10n.viewerAlignBottom, LumitIcons.alignEdgeBottom,
+                null, 1),
+          ]),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            distribute('across', l10n.alignDistributeAcross,
+                LumitIcons.distributeAcross, Axis.horizontal),
+            distribute('down', l10n.alignDistributeDown,
+                LumitIcons.distributeDown, Axis.vertical),
+            SizedBox.square(dimension: cell),
+          ]),
+        ],
+      ),
     );
   }
 }

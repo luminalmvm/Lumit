@@ -65,6 +65,7 @@ composites over it.
 - **Lift** removes a span and leaves the gap, **extract** removes it and closes the gap.
   **Match frame** loads a clip's footage into the source view on the frame the comp shows.
 - **Anchor point**: the point the transform pivots around. Position places it.
+- **Orient**: whether a layer turns by itself, along its motion path or towards the camera.
 - **Parenting**: a layer can follow another layer's transform. No cycles.
 - **Switches**: per-layer toggles. Visible, audible, solo, lock, shy, quality, motion blur,
   adjustment, 3D, collapse.

@@ -1090,14 +1090,40 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
 }
 
 /// The floating label shown under the pointer while a row is dragged.
-class _DragFeedbackFrb extends StatelessWidget {
+class _DragFeedbackFrb extends StatefulWidget {
   final String name;
   final LumitIcon icon;
   const _DragFeedbackFrb({required this.name, this.icon = LumitIcon.footage});
 
   @override
+  State<_DragFeedbackFrb> createState() => _DragFeedbackFrbState();
+}
+
+class _DragFeedbackFrbState extends State<_DragFeedbackFrb> {
+  bool _replacing = HardwareKeyboard.instance.isAltPressed;
+
+  bool _onKey(KeyEvent _) {
+    final alt = HardwareKeyboard.instance.isAltPressed;
+    if (alt != _replacing) setState(() => _replacing = alt);
+    return false;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final (name, icon) = (widget.name, widget.icon);
     return FloatSurface(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1109,6 +1135,11 @@ class _DragFeedbackFrb extends StatelessWidget {
                 color: icon == LumitIcon.comp ? t.textMuted : t.labelColour(1)),
             const SizedBox(width: 6),
             Text(name, style: t.small),
+            if (_replacing) ...[
+              const SizedBox(width: 8),
+              Text(l10n.menuReplaceSource,
+                  style: t.small.copyWith(color: t.accent)),
+            ],
           ],
         ),
       ),

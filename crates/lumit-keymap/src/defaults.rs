@@ -167,6 +167,9 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Alt+Shift+PageDown", "layer.shift.later10"),
         row(Global, "Mod+Home", "layer.centre"),
         row(Global, "Mod+Alt+Home", "layer.centre.anchor"),
+        row(Global, "Mod+Alt+Shift+F", "layer.fit"),
+        row(Global, "Mod+Alt+Shift+H", "layer.fit.width"),
+        row(Global, "Mod+Alt+Shift+G", "layer.fit.height"),
         // The mask whose row is picked in the Timeline.
         row(Global, "Mod+Shift+F", "mask.feather"),
         row(Global, "Mod+Shift+I", "mask.invert"),
@@ -244,6 +247,8 @@ pub fn default_keymap() -> Keymap {
         // Layers mode's own F, beside the graph's: the keys of the selected
         // layers, or of every layer, across the lanes.
         row(Timeline, "F", "timeline.fit.keys"),
+        row(Timeline, "Mod+Alt+`", "timeline.collapse.all"),
+        row(Timeline, "Mod+Alt+Shift+`", "timeline.expand.all"),
         row(Timeline, "Enter", "layer.rename"),
         // Enter renames the selected thing wherever one is selected:
         // the item in the Project panel, the effect in Effect controls — the
