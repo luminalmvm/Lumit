@@ -1401,21 +1401,26 @@ impl Compositor {
         // multisample treatment the composite does, resolving into `temp` —
         // which is what the fp32 add pass then reads, single-sample as ever.
         let aa_samples = aa_samples.max(1);
+        // The composite's kept attachment when the shapes agree: every
+        // placement clears it before drawing.
         let temp_msaa = (aa_samples > 1).then(|| {
-            ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("mb-temp-msaa"),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
+            self.attachment(
+                ctx,
+                &wgpu::TextureDescriptor {
+                    label: Some("mb-temp-msaa"),
+                    size: wgpu::Extent3d {
+                        width: tw,
+                        height: th,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: aa_samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: ctx.working(),
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
                 },
-                mip_level_count: 1,
-                sample_count: aa_samples,
-                dimension: wgpu::TextureDimension::D2,
-                format: ctx.working(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            })
+            )
         });
         let temp_msaa_view = temp_msaa
             .as_ref()
@@ -1592,6 +1597,9 @@ impl Compositor {
         }
         drop(encoder);
         drop((keep, add_binds));
+        if let Some(msaa) = temp_msaa {
+            self.give_back(ctx, msaa);
+        }
         target
     }
 
