@@ -888,7 +888,9 @@ class LumitMenuBarFrb extends StatelessWidget {
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
       try {
-        layer.loadPreset(text: await readEffectPreset(path: preset.path));
+        layer.pasteEffects(
+            text: await readEffectPreset(path: preset.path),
+            atFrame: ui.playheadFrame.value);
       } catch (_) {
         return;
       }
@@ -1625,7 +1627,7 @@ List<MenuSection> lumitMenus(
     (
       title: l10n.menuAnimation,
       items: () => [
-            saveAnimationPresetRow(ui),
+            saveAnimationPresetRow(context, ui),
             applyAnimationPresetRow(app, ui),
             MenuEntry.divider(),
             // The four keyframe commands act on the property rows the Timeline has

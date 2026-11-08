@@ -70,12 +70,18 @@ class EffectDragData {
         presetPath = path;
 
   /// Put what was dragged onto [layer]'s stack, or with [clip] onto that
-  /// clip's own. Quiet when the engine refuses or the file has gone: the
-  /// drop then simply did nothing.
-  Future<void> landOn(LayerReference layer, {UuidValue? clip}) async {
+  /// clip's own. A preset's keys start at the comp frame [atFrame]. Quiet when
+  /// the engine refuses or the file has gone: the drop then simply did nothing.
+  Future<void> landOn(LayerReference layer,
+      {UuidValue? clip, required int atFrame}) async {
     try {
       if (presetPath case final path?) {
-        layer.loadPreset(text: await readEffectPreset(path: path), clip: clip);
+        final text = await readEffectPreset(path: path);
+        if (clip != null) {
+          layer.loadPreset(text: text, clip: clip);
+        } else {
+          layer.pasteEffects(text: text, atFrame: atFrame);
+        }
       } else if (clip != null) {
         layer.addClipEffect(clip: clip, name: name);
       } else {

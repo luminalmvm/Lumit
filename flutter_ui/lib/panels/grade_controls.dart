@@ -170,6 +170,10 @@ class GradeSlider extends StatefulWidget {
   /// The rows of the right-click menu, or none for a row with no menu.
   final List<Widget> Function(VoidCallback close)? menu;
 
+  /// What sits after the number. The rows of a section all give one, so their
+  /// numbers line up.
+  final Widget? trailing;
+
   const GradeSlider({
     super.key,
     required this.label,
@@ -188,6 +192,7 @@ class GradeSlider extends StatefulWidget {
     this.enabled = true,
     this.keyed = false,
     this.menu,
+    this.trailing,
   });
 
   @override
@@ -344,6 +349,7 @@ class _GradeSliderState extends State<GradeSlider> {
               ),
             ),
           ),
+          if (widget.trailing case final trailing?) trailing,
         ],
       );
     });

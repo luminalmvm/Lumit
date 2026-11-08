@@ -1027,6 +1027,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       case SettingsPage.audio:
         _chooseAudioDevice(workspace, null);
         _setAudioOffset(workspace, 0);
+        workspace.setNormaliseTargetDb(-1);
       case SettingsPage.autosave:
         _setAutosave(workspace, minutes: 5, keep: 5);
       case SettingsPage.export:
@@ -2468,6 +2469,24 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 decimals: 0,
                 suffix: ' ms',
                 onChanged: (ms) => _setAudioOffset(ui.workspace, ms.round()),
+              ),
+            ),
+          ),
+          _row(
+            t,
+            l10n.settingsNormaliseTo,
+            SizedBox(
+              width: 70,
+              height: settingsControlHeight,
+              child: DragValueField(
+                key: const ValueKey('settings-normalise-target'),
+                value: ui.workspace.normaliseTargetDb,
+                min: -24,
+                max: 0,
+                decimals: 1,
+                suffix: ' dB',
+                onChanged: (db) => setState(
+                    () => ui.workspace.setNormaliseTargetDb(db.toDouble())),
               ),
             ),
           ),

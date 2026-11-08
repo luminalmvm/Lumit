@@ -165,6 +165,7 @@ Not interchangeable.
 | **Playhead** | The current time. Not *CTI* |
 | **Scopes** | Waveform, RGB parade, vectorscope, histogram |
 | **Grade panel** | The selected layer's grade as wheels, primaries, curves and a look, over its Colour effects |
+| **Look** | A preset of Colour effects in the library's Looks group, picked from the Grade panel. It takes the place of the layer's grade |
 | **Easing panel** | One curve shape applied to selected keyframe spans |
 | **Retime panel** | The selected layer's speed, length, freeze, reverse and in-between frames |
 | **Text panel** | Sets a text layer's font, size, spacing and outline |

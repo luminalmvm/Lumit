@@ -836,7 +836,10 @@ void main() {
 
       await mount(tester, p,
           groups: () =>
-              [BridgePresetInfo(name: 'Audio rig', path: path, group: '')]);
+              [
+                BridgePresetInfo(
+                    name: 'Audio rig', path: path, group: '', keyed: false)
+              ]);
       await tester.tapAt(const Offset(600, 500));
       await tester.pump();
       p.uiState.activePane.value = Panel.graph.pane();

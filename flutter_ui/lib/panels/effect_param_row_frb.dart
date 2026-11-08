@@ -1456,7 +1456,7 @@ class EffectParamRowFrb extends StatelessWidget {
       }
 
       final before = value;
-      return _DropperButton(
+      return DropperButton(
         id: 'fx-$id-${param.id}',
         tip: l10n.tipPickFocalPoint,
         arm: (ui) => ui.armDropper(DropperArm(
@@ -1741,7 +1741,7 @@ class EffectParamRowFrb extends StatelessWidget {
           // it (docs/07 §6.1). **Dragging sweeps it**: the parameter
           // takes the colour under the pointer as it travels, previewed the
           // whole way, and the release is the one edit.
-          _DropperButton(
+          DropperButton(
             id: 'fx-$id-${param.id}',
             tip: l10n.tipSampleFromViewer,
             arm: (ui) => ui.armDropper(DropperArm(
@@ -2432,7 +2432,7 @@ class EffectPointRowFrb extends StatelessWidget {
         ],
         if (pickPixels != null) ...[
           const SizedBox(width: effectRiderGap),
-          _DropperButton(
+          DropperButton(
             id: 'fx-$id-${xParam.id}',
             glyph: LumitIcons.pointPicker,
             tip: l10n.tipPickOnViewer,
@@ -3334,7 +3334,7 @@ class EffectStackEditor {
 ///
 /// It lights while *this* parameter's pick is the armed one, so a dropper armed
 /// from one row and forgotten is visible from across the panel.
-class _DropperButton extends StatelessWidget {
+class DropperButton extends StatelessWidget {
   /// This button's arm id — compared with the armed one to know when to light.
   final String id;
   final String tip;
@@ -3345,8 +3345,9 @@ class _DropperButton extends StatelessWidget {
   /// point picker exactly as a colour parameter gets an eyedropper).
   final String glyph;
 
-  const _DropperButton(
-      {required this.id,
+  const DropperButton(
+      {super.key,
+      required this.id,
       required this.tip,
       required this.arm,
       this.glyph = LumitIcons.eyedropper});
@@ -3611,7 +3612,7 @@ class _PartsFieldState extends State<_PartsField> {
           ),
         ),
         const SizedBox(width: effectRiderGap),
-        _DropperButton(
+        DropperButton(
           id: widget.arm,
           tip: l10n.tipPickParts,
           arm: _arm,

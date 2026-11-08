@@ -1276,7 +1276,10 @@ fn feed_effect_stack(
                     // for this row alone, and Beat trigger's. Depth points' Camera
                     // row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
-                        && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
+                        && matches!(
+                            e.effect.match_name.as_str(),
+                            "audio_level" | "beat_trigger" | "audio_spectrum"
+                        )
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
                         .flatten()

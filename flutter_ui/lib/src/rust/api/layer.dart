@@ -7,6 +7,7 @@ import '../api.dart';
 import '../frb_generated.dart';
 import '../lib.dart';
 import 'assets.dart';
+import 'audio.dart';
 import 'composition.dart';
 import 'effect.dart';
 import 'folder.dart';
@@ -4091,23 +4092,46 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceNewDriver(that: this, name: name);
 
+  /// The gain line each of `clips` needs for its loudest sample, over the
+  /// stretch of the file it plays, to land at `target_db`. A clip that isn't
+  /// on this layer, or has no sound or nothing but silence, isn't in the
+  /// answer.
+  ///
+  /// Reads and writes nothing in the document: the caller writes the answers
+  /// once they are all in, as one undo step. Not sync, because the first ask
+  /// for a file decodes it.
+  Future<List<BridgeClipLevel>> normaliseClips(
+          {required List<UuidValue> clips, required double targetDb}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceNormaliseClips(
+          that: this, clips: clips, targetDb: targetDb);
+
+  /// The Volume this layer needs for its loudest sample, over the stretch of
+  /// the file it plays, to land at `target_db`. None for a layer with no file
+  /// of its own to read, or one with nothing but silence on it.
+  ///
+  /// Not sync, for the reason [`Self::normalise_clips`] isn't.
+  Future<double?> normaliseLayer({required double targetDb}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceNormaliseLayer(
+          that: this, targetDb: targetDb);
+
   /// The turn at comp frame `frame`, `None` with Orient off.
   BridgeOrientTurn? orientTurnAt({required int frame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceOrientTurnAt(that: this, frame: frame);
 
-  /// Append copied effects to this layer's stack, **timed to the playhead**:
-  /// whatever the earliest keyframe among them was, it lands at
-  /// `at_frame` and the rest keep their spacing.
+  /// Lay a copied stack or a preset onto this layer, **timed to the playhead**:
+  /// whatever its earliest keyframe was, it lands at `at_frame` and the rest
+  /// keep their spacing, across the effects, the transform keys and the text
+  /// animators alike.
   ///
-  /// The owner's rule, and the one that makes a copied animation useful: an
-  /// effect copied from a layer that flashes at 4 s and pasted while the
+  /// An effect copied from a layer that flashes at 4 s and pasted while the
   /// playhead sits at 12 s flashes at 12 s, not off the end of the comp.
-  /// Effects with no keyframes at all paste unchanged — there is no timing to
-  /// place. Each arrives with a fresh instance id, exactly as a preset does.
+  /// Nothing keyed has no timing to place. Each effect arrives with a fresh
+  /// instance id. A list the layer can't take is left out: text animators off
+  /// a text layer, transform keys on a layer with no picture.
   ///
   /// `at_frame` is a **comp** frame; the shift is worked out in the target
-  /// layer's own local time, so pasting onto a layer that starts later does
-  /// not double-count its offset.
+  /// layer's own local time, so a layer that starts later does not
+  /// double-count its offset. One commit, so one undo.
   void pasteEffects({required String text, required int atFrame}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferencePasteEffects(
           that: this, text: text, atFrame: atFrame);
@@ -4310,6 +4334,22 @@ class LayerReference {
   String savePreset({required String name, UuidValue? only}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSavePreset(
           that: this, name: name, only: only);
+
+  /// A `.lumfx` document of the chosen parts of this layer: the effects named
+  /// by `effects` with the drivers that feed them, its transform keys, and its
+  /// text animators. An empty `effects` takes no effects. Named `name`, and
+  /// handed back as text, as [`Self::save_preset`] hands it back.
+  String savePresetParts(
+          {required String name,
+          required List<UuidValue> effects,
+          required bool transformKeys,
+          required bool textAnimators}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSavePresetParts(
+          that: this,
+          name: name,
+          effects: effects,
+          transformKeys: transformKeys,
+          textAnimators: textAnimators);
 
   /// The parts of this Model layer or 3D precomp, `None` for any other layer.
   /// Not sync, as a model not read yet is read now.

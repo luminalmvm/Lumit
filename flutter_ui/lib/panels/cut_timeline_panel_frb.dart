@@ -82,6 +82,7 @@ import 'cut_track_mix.dart';
 import 'graph_maths.dart'
     show envelopeStretchedOnto, keysOf, rationalSeconds;
 import 'layer_fold_frb.dart' show asOneUndoStep, timeOfSubframe;
+import 'normalise_commands.dart';
 import 'placeholder.dart';
 import 'speed_envelope.dart';
 import 'timeline_bar_frb.dart' show BarGrab;
@@ -3317,6 +3318,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               if (l.info.kind == BridgeLayerKind.bus) l,
           ],
           frame: ui.playheadFrame.value,
+          normaliseTargetDb: ui.workspace.normaliseTargetDb,
           closeParent: () => close(null),
           onRename: () => _startRename(track),
           onChanged: () {
@@ -3677,6 +3679,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                   follows: !track.entry.info.pitchFollowsSpeed);
               _afterCut(BridgeCutResult.done);
             }, ticked: !track.entry.info.pitchFollowsSpeed),
+          if (heard && clip.audible)
+            _row(close, 'ctl-menu-normalise', l10n.audioNormalise, () async {
+              final app = Provider.of<LumitState>(context, listen: false);
+              await normaliseClips(app, ui.workspace.normaliseTargetDb, [
+                for (final pick in _selected)
+                  if (_trackOfClip[pick] case final at?)
+                    if (_tracks[at].clip(pick) case final c?)
+                      if (_tracks[at].entry.info.switches.audible && c.audible)
+                        (_tracks[at].entry.layer, c.id),
+              ], then: () {
+                if (!mounted) return;
+                app.notifyDocumentChanged();
+                _afterWrite();
+              });
+            }),
           // A picture clip's sound, taken off onto a sound track of its own,
           // or brought back from the clip it was taken onto.
           if (canDetach && heard && clip.audible)
@@ -4640,7 +4657,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final hit = _clipAt(global);
     _dropOn.value = null;
     if (hit == null) return;
-    await data.landOn(hit.track.entry.layer, clip: hit.clip.id);
+    await data.landOn(hit.track.entry.layer,
+        clip: hit.clip.id, atFrame: _ui?.playheadFrame.value ?? 0);
     if (!mounted) return;
     Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
     _afterWrite();

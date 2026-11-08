@@ -3226,7 +3226,7 @@ impl LayerReference {
     /// Bring effects from a preset or the clipboard up to this build, as a
     /// project's are when it opens, for this layer. `wired` says whether an
     /// instance's row has a wire into it.
-    fn migrate_in(
+    pub(crate) fn migrate_in(
         &self,
         effects: &mut [EffectInstance],
         wired: &dyn Fn(Uuid, &str) -> bool,
@@ -3245,7 +3245,7 @@ impl LayerReference {
     /// This layer as it leaves the project, on the clipboard or in a preset.
     /// A file an effect reads has the path it had, and not its copy's in this
     /// machine's cache.
-    fn leaving(&self) -> Result<Layer, BridgeError> {
+    pub(crate) fn leaving(&self) -> Result<Layer, BridgeError> {
         let doc = {
             let project = self.project()?;
             let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -3380,110 +3380,6 @@ impl LayerReference {
         let wiring = lumit_core::preset::wiring_of(&graph, &full, &ids);
         lumit_core::preset::to_json_wired(&name, &taken, wiring)
             .map_err(|_| BridgeError::InvalidPreset)
-    }
-
-    /// Append copied effects to this layer's stack, **timed to the playhead**:
-    /// whatever the earliest keyframe among them was, it lands at
-    /// `at_frame` and the rest keep their spacing.
-    ///
-    /// The owner's rule, and the one that makes a copied animation useful: an
-    /// effect copied from a layer that flashes at 4 s and pasted while the
-    /// playhead sits at 12 s flashes at 12 s, not off the end of the comp.
-    /// Effects with no keyframes at all paste unchanged — there is no timing to
-    /// place. Each arrives with a fresh instance id, exactly as a preset does.
-    ///
-    /// `at_frame` is a **comp** frame; the shift is worked out in the target
-    /// layer's own local time, so pasting onto a layer that starts later does
-    /// not double-count its offset.
-    #[frb(sync)]
-    pub fn paste_effects(&self, text: String, at_frame: i64) -> Result<(), BridgeError> {
-        let preset =
-            lumit_core::preset::from_json(&text).map_err(|_| BridgeError::InvalidPreset)?;
-
-        // Comp frame -> the layer's own clock, the space keyframes live in.
-        let comp = self.composition()?;
-        let layer = self.item()?;
-        let at_comp = comp
-            .frame_rate
-            .time_of_frame(at_frame.max(0))
-            .map_err(|_| BridgeError::InvalidTime)?;
-        let at_local = at_comp
-            .delta(layer.start_offset)
-            .map_err(|_| BridgeError::InvalidTime)?;
-        let land = |boxes: &mut [lumit_core::model::EffectInstance],
-                    first: Option<lumit_core::time::Rational>|
-         -> Result<(), BridgeError> {
-            if let Some(first) = first {
-                let delta = at_local
-                    .0
-                    .checked_sub(first)
-                    .map_err(|_| BridgeError::InvalidTime)?;
-                lumit_core::preset::shift_keys(boxes, delta);
-            }
-            Ok(())
-        };
-
-        // Copied with their wiring, the effects come back with
-        // their drivers and wires, every id fresh, set down to the right of
-        // what the graph already holds. One commit, so one undo.
-        if let Some(wiring) = &preset.wiring {
-            let right = layer
-                .graph
-                .layout
-                .iter()
-                .map(|(_, xy)| xy[0])
-                .fold(f64::MIN, f64::max);
-            let at = if right == f64::MIN {
-                [0.0, 0.0]
-            } else {
-                [right + 240.0, 0.0]
-            };
-            let mut added = lumit_core::preset::group_instantiated(wiring, at);
-            let first = [&added.effects, &added.nodes]
-                .into_iter()
-                .filter_map(|boxes| lumit_core::preset::first_key_time(boxes))
-                .min();
-            land(&mut added.effects, first)?;
-            land(&mut added.nodes, first)?;
-            let mut graph = layer.graph.clone();
-            graph.nodes.extend(added.nodes);
-            graph.edges.extend(added.edges);
-            graph.layout.extend(added.layout);
-            self.migrate_in(
-                &mut added.effects,
-                &lumit_core::fx::builtins::wired_in(&graph),
-            )?;
-            let mut effects = layer.effects.clone();
-            effects.extend(added.effects);
-            graph.prune_rows(&effects);
-            let op = lumit_core::ops::Op::Batch {
-                ops: vec![
-                    lumit_core::fx::effects::particulate::set_effects(
-                        self.comp_id,
-                        &layer,
-                        effects,
-                    ),
-                    lumit_core::ops::Op::SetLayerGraph {
-                        comp: self.comp_id,
-                        layer: self.layer_id,
-                        graph: Box::new(graph),
-                    },
-                ],
-            };
-            let proj = self.project()?;
-            let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-            proj.store.commit(op).map_err(BridgeError::OpError)?;
-            return Ok(());
-        }
-
-        let mut fresh = lumit_core::preset::instantiated(&preset);
-        let first = lumit_core::preset::first_key_time(&fresh);
-        land(&mut fresh, first)?;
-        self.migrate_in(&mut fresh, &|_, _| false)?;
-        self.with_effects(move |effects| {
-            effects.extend(fresh);
-            Ok(())
-        })
     }
 
     /// Serialise this layer's effect stack to `.lumfx` JSON: the whole of it,

@@ -77,6 +77,7 @@ import 'key_block.dart' show KeyStretch;
 import 'layer_fold_frb.dart';
 import '../state/share.dart';
 import '../widgets/share_marks.dart';
+import 'normalise_commands.dart';
 import 'placeholder.dart';
 import 'spectral_lane_frb.dart';
 import 'timeline_bar_frb.dart' show BarGrab;
@@ -1875,6 +1876,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           targets: targets,
           buses: buses,
           frame: ui.playheadFrame.value,
+          normaliseTargetDb: ui.workspace.normaliseTargetDb,
           closeParent: () => close(null),
           onRename: () => _beginRename(track),
           onChanged: _afterStackEdit,
@@ -2601,6 +2603,18 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             },
             child: MenuLabel(l10n.menuKeepPitch, ticked: !follows),
           ),
+          row('normalise', l10n.audioNormalise, () async {
+            final app = Provider.of<LumitState>(context, listen: false);
+            final target = ui.workspace.normaliseTargetDb;
+            if (picked != null) {
+              await normaliseClips(app, target,
+                  [for (final (on, c) in picked) (on.entry.layer, c.id)],
+                  then: _afterWrite);
+            } else {
+              await normaliseLayers(app, comp, playhead, target, [track.entry],
+                  then: _afterWrite);
+            }
+          }, close),
           _laneSubmenu([track], close),
           if (clip != null) ...[
             if (clip.takes.length > 1)

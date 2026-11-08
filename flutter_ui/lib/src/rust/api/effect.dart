@@ -1621,14 +1621,19 @@ class BridgePresetInfo {
   /// top of the library.
   final String group;
 
+  /// Whether it carries transform keys or text animators as well as effects.
+  final bool keyed;
+
   const BridgePresetInfo({
     required this.name,
     required this.path,
     required this.group,
+    required this.keyed,
   });
 
   @override
-  int get hashCode => name.hashCode ^ path.hashCode ^ group.hashCode;
+  int get hashCode =>
+      name.hashCode ^ path.hashCode ^ group.hashCode ^ keyed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1637,7 +1642,8 @@ class BridgePresetInfo {
           runtimeType == other.runtimeType &&
           name == other.name &&
           path == other.path &&
-          group == other.group;
+          group == other.group &&
+          keyed == other.keyed;
 }
 
 /// An exact rational time in seconds, as `num / den`.

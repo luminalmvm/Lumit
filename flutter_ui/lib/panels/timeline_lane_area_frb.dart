@@ -7,9 +7,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
@@ -940,7 +942,12 @@ class LayerArea extends StatelessWidget {
                                           // must not redraw the bar above it.
                                           onlyLit: true,
                                           onEffectDropped: (data) => data
-                                              .landOn(rows[i].entry.layer)
+                                              .landOn(rows[i].entry.layer,
+                                                  atFrame: Provider.of<LumitUiState>(
+                                                          context,
+                                                          listen: false)
+                                                      .playheadFrame
+                                                      .value)
                                               .then((_) => onChanged()),
                                           builder: (context, mine) => Bar(
                                             key: ValueKey<String>(

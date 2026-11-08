@@ -134,7 +134,10 @@ void main() {
 
       await mount(tester, p,
           presetsLister: () =>
-              [BridgePresetInfo(name: 'Soft glow', path: path, group: '')]);
+              [
+                BridgePresetInfo(
+                    name: 'Soft glow', path: path, group: '', keyed: false)
+              ]);
 
       expect(find.text('Saved presets'), findsOneWidget);
       final row = find.byKey(const ValueKey('preset-item-Soft glow'));

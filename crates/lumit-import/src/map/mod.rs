@@ -34,6 +34,7 @@
 
 mod curves;
 pub mod effects;
+mod fx_audio;
 mod fx_colour;
 mod fx_distort;
 mod fx_energy;

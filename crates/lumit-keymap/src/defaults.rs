@@ -267,6 +267,10 @@ pub fn default_keymap() -> Keymap {
         row(Project, "Mod+Alt+V", "footage.interpretation.apply"),
         row(Effects, "Enter", "effect.rename"),
         row(Effects, "Mod+D", "effect.duplicate"),
+        // The Grade panel's Copy grade and Paste grade, from anywhere, so a
+        // grade goes across a dozen shots with one key each.
+        row(Global, "Alt+Shift+C", "grade.copy"),
+        row(Global, "Alt+Shift+V", "grade.paste"),
         row(Timeline, "X", "layer.toggle.visible"),
         // --- Graph editor ---
         row(Graph, "F9", "graph.ease"),

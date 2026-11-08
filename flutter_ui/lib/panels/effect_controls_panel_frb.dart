@@ -37,7 +37,6 @@
 // shape exists.
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:lumit_flutter/state/share.dart';
@@ -101,6 +100,7 @@ import '../state/drag_payloads.dart';
 import 'effect_commands.dart';
 import 'param_row_menu.dart' show menuGroups;
 import 'placeholder.dart';
+import 'preset_save.dart';
 import 'row_filter.dart';
 import 'flow_rows_frb.dart';
 import 'source_rows_frb.dart';
@@ -300,7 +300,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     final path = await pickPresetToOpen();
                     if (path == null) return;
                     try {
-                      layer.loadPreset(text: await readEffectPreset(path: path));
+                      layer.pasteEffects(
+                          text: await readEffectPreset(path: path),
+                          atFrame: ui.playheadFrame.value);
                     } catch (_) {
                       // Not a preset: the picker will take any file.
                       app.postNotice(l10n.presetFileNotPreset, error: true);
@@ -331,19 +333,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   }
 
   /// Save the layer's whole stack as a preset in the library.
-  Future<void> _saveStackPreset(LumitUiState ui, LayerReference layer) async {
-    final path = await pickPresetSaveLocation('preset.lumfx',
-        initialDirectory: presetsDirPath());
-    if (path == null) return;
-    final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
-    try {
-      File(path).writeAsStringSync(layer.savePreset(name: name));
-    } catch (_) {
-      // A folder that will not take the file. The document is untouched.
-      return;
-    }
-    ui.presetsChanged.value++;
-  }
+  Future<void> _saveStackPreset(LumitUiState ui, LayerReference layer) =>
+      saveLayerPreset(context, ui, layer);
 
   /// The effect whose heading is an inline rename editor, or null.
   UuidValue? _renamingEffect;
@@ -1127,7 +1118,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 spanFrames: span.$2,
                 child: DragTarget<EffectDragData>(
                 onAcceptWithDetails: (details) async {
-                  await details.data.landOn(layer, clip: clipId);
+                  await details.data.landOn(layer,
+                      clip: clipId, atFrame: ui.playheadFrame.value);
                   if (mounted) changed();
                 },
                 builder: (context, candidate, _) => _DropGround(
@@ -1474,7 +1466,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           // rows and the graph panels are the other places that take one.
           child: DragTarget<EffectDragData>(
             onAcceptWithDetails: (details) async {
-              await details.data.landOn(layer);
+              await details.data.landOn(layer, atFrame: ui.playheadFrame.value);
               ui.model.refresh();
             },
             builder: (context, candidate, _) => _DropGround(

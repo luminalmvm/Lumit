@@ -336,6 +336,43 @@
   "@gradeRemove": {
     "description": "Grade panel section menu: removes the section's effects from the layer."
   },
+  "gradeCopy": "Copy grade",
+  "@gradeCopy": {
+    "description": "Grade panel menu: puts the layer's colour effects on the effect clipboard."
+  },
+  "gradePaste": "Paste grade",
+  "@gradePaste": {
+    "description": "Grade panel menu: the grade on the clipboard takes the place of the grade on every selected layer."
+  },
+  "gradeSaveLook": "Save look…",
+  "@gradeSaveLook": {
+    "description": "Grade panel: the row at the foot of the look picker that saves the layer's grade as a preset."
+  },
+  "gradeSaveLookTitle": "Save look",
+  "@gradeSaveLookTitle": {
+    "description": "Title of the window that asks what a saved look is called."
+  },
+  "gradeLookPreset": "Preset",
+  "@gradeLookPreset": {
+    "description": "Grade panel, Look section: the name of the row that picks a saved look."
+  },
+  "gradeLookReplace": "Replace {name}?",
+  "@gradeLookReplace": {
+    "description": "Asked before a saved look is written over one of the same name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "gradeLookReplaceYes": "Replace",
+  "@gradeLookReplaceYes": {
+    "description": "The button that writes over a saved look of the same name."
+  },
+  "gradePickNeutral": "Pick a neutral",
+  "@gradePickNeutral": {
+    "description": "Grade panel: tooltip on the eyedropper that sets Temperature and Tint from a pixel that should be grey. Also the caption over the magnifier."
+  },
   "gradeBefore": "Before",
   "@gradeBefore": {
     "description": "Grade panel: tooltip on the button that shows the picture without the grade for as long as it is held."
@@ -1267,6 +1304,38 @@
   "fxQuarter": "Quarter",
   "@fxQuarter": {
     "description": "Effect controls — a Flow resolution option on Roto brush: measure the flow at a quarter of the source size."
+  },
+  "fxAudioSpectrum": "Audio spectrum",
+  "@fxAudioSpectrum": {
+    "description": "Effect name: draws a sound as bars, a line, a ring of bars or a waveform."
+  },
+  "fxBands": "Bands",
+  "@fxBands": {
+    "description": "Effect controls: a control on Audio spectrum: how many bars, or points along a line."
+  },
+  "fxBars": "Bars",
+  "@fxBars": {
+    "description": "Effect controls: a choice on Audio spectrum: each band of the sound drawn as a bar."
+  },
+  "fxStartFrequency": "Start frequency",
+  "@fxStartFrequency": {
+    "description": "Effect controls: a control on Audio spectrum: the lowest pitch drawn, in hertz."
+  },
+  "fxEndFrequency": "End frequency",
+  "@fxEndFrequency": {
+    "description": "Effect controls: a control on Audio spectrum: the highest pitch drawn, in hertz."
+  },
+  "fxHueSpread": "Hue spread",
+  "@fxHueSpread": {
+    "description": "Effect controls: a control on Audio spectrum: how far the colours turn round the wheel from the first band to the last."
+  },
+  "fxSmoothing": "Smoothing",
+  "@fxSmoothing": {
+    "description": "Effect controls: a control on Audio spectrum: how many frames before this one are averaged in."
+  },
+  "fxWaveform": "Waveform",
+  "@fxWaveform": {
+    "description": "Effect controls: a choice on Audio spectrum: the sound drawn as its raw wave."
   },
   "fxRadioWaves": "Radio waves",
   "@fxRadioWaves": {
@@ -6890,6 +6959,14 @@
   "@keySwitchThePickedClipsToTheirPreviousTake": {
     "description": "Keyboard shortcut action in the Cut timeline: each picked clip plays the previous of its takes. Vegas puts this on Shift+T."
   },
+  "keyCopyTheLayerSGrade": "Copy the layer's grade",
+  "@keyCopyTheLayerSGrade": {
+    "description": "Keyboard shortcut action: puts the selected layer's colour effects on the effect clipboard."
+  },
+  "keyPasteTheGradeOntoTheSelectedLayers": "Paste the grade onto the selected layers",
+  "@keyPasteTheGradeOntoTheSelectedLayers": {
+    "description": "Keyboard shortcut action: the grade on the clipboard takes the place of the grade on every selected layer."
+  },
   "keyPasteAClipSAttributesOntoThePickedClips": "Paste a clip's attributes onto the picked clips",
   "@keyPasteAClipSAttributesOntoThePickedClips": {
     "description": "Keyboard shortcut action in the Cut timeline: the copied clip's settings, such as its effects, are given to the picked clips. Vegas puts this on Ctrl+Shift+V."
@@ -9264,6 +9341,26 @@
   "saved": "Saved",
   "@saved": {
     "description": "Bottom strip: the project matches what is on disk."
+  },
+  "presetSaveTitle": "Save preset",
+  "@presetSaveTitle": {
+    "description": "Title of the window that asks which parts of a layer go in a preset."
+  },
+  "presetPartEffects": "Effects",
+  "@presetPartEffects": {
+    "description": "Save preset window: a tick for putting the layer's effects in the preset."
+  },
+  "presetPartTransformKeys": "Transform keys",
+  "@presetPartTransformKeys": {
+    "description": "Save preset window: a tick for putting the keyframes on the layer's transform rows in the preset."
+  },
+  "presetPartTextAnimators": "Text animators",
+  "@presetPartTextAnimators": {
+    "description": "Save preset window: a tick for putting a text layer's animators in the preset."
+  },
+  "presetHasKeys": "Has keys",
+  "@presetHasKeys": {
+    "description": "Effects & presets panel: tooltip on the mark beside a preset that carries transform keys or text animators."
   },
   "savedPresets": "Saved presets",
   "@savedPresets": {
@@ -14372,6 +14469,10 @@
   "@settingsAudioNoDevice": {
     "description": "Settings window, Audio: the line under the output device row when the machine offers no sound output at all, so nothing can be played."
   },
+  "settingsNormaliseTo": "Normalise to",
+  "@settingsNormaliseTo": {
+    "description": "Settings window, Audio: the level, in dB, that Normalise puts a sound's loudest sample at."
+  },
   "settingsAudioOffset": "Audio offset",
   "@settingsAudioOffset": {
     "description": "Settings window, Audio: the name of the row that sets how many milliseconds late the sound is heard on this setup, so playback can line the picture up with it. Above zero holds the picture back for late sound, such as through Bluetooth headphones; below zero holds the sound back."
@@ -15804,6 +15905,10 @@
   "mixerNoSound": "No sound",
   "@mixerNoSound": {
     "description": "Empty-state line in the Mixer panel when the fronted composition has no audio-capable layers, so there are no strips to draw."
+  },
+  "audioNormalise": "Normalise",
+  "@audioNormalise": {
+    "description": "Menu row on a sound clip or a sound layer: sets its level so its loudest sample lands at the level in Settings. Each by its own loudest sample."
   },
   "audioResetVolume": "Reset volume",
   "@audioResetVolume": {

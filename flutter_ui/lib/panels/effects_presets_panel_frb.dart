@@ -67,6 +67,7 @@ import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
 import 'expressions_panel_frb.dart' show panelBar;
+import 'preset_save.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 class EffectsPresetsPanelFrb extends StatefulWidget {
@@ -415,7 +416,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     project?.beginUndoGroup();
     try {
       for (final layer in layers) {
-        await data.landOn(layer, clip: clip?.clip);
+        await data.landOn(layer,
+            clip: clip?.clip, atFrame: ui.playheadFrame.value);
       }
     } finally {
       project?.endUndoGroup();
@@ -496,15 +498,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// the listing will find it. Save takes the first selected layer, the primary.
   Future<void> _save(List<LayerReference> layers) async {
     final picker = widget.savePicker;
-    final path = picker != null
-        ? await picker()
-        : await pickPresetSaveLocation('preset.lumfx',
-            initialDirectory: presetsDirPath());
-    if (path == null) return;
-    // The preset's display name is its file's stem, matching the egui frontend.
-    final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
-    File(path).writeAsStringSync(layers.first.savePreset(name: name));
-    _refreshPresets();
+    await saveLayerPreset(context, _boundUi!, layers.first,
+        picker: picker == null ? null : (_) => picker());
   }
 
   Future<void> _load(List<LayerReference> layers) async {
@@ -518,7 +513,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
       return;
     }
     try {
-      layers.first.loadPreset(text: text);
+      layers.first.pasteEffects(
+          text: text, atFrame: _boundUi!.playheadFrame.value);
     } catch (_) {
       // Not a preset: the picker will take any file, so this is a normal
       // thing for a user to do and not something to shout about.
@@ -1067,6 +1063,7 @@ Widget _libraryRow(
   required VoidCallback onToggleFavourite,
   required VoidCallback onApply,
   required String starKey,
+  bool keyed = false,
 }) {
   final t = ThemeScope.of(context).theme;
   return HoverFill(
@@ -1096,6 +1093,15 @@ Widget _libraryRow(
                 ),
               ),
             ),
+            if (keyed)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: LumitTooltip(
+                  message: l10n.presetHasKeys,
+                  child: glyph.LumitIcon(LumitIcons.selectedKey,
+                      size: 10, colour: t.textMuted),
+                ),
+              ),
           ],
         ),
       ),
@@ -1166,6 +1172,7 @@ class _PresetRow extends StatelessWidget {
         child: Padding(
           padding: EdgeInsetsDirectional.only(start: indent),
           child: _libraryRow(
+            keyed: preset.keyed,
             context,
             label: preset.name,
             favourite: favourite,

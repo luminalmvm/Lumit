@@ -134,6 +134,8 @@ fn build(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
         "scribble" => scribble(conv, path, node, row),
         "stroke" => stroke(conv, path, node, row),
         "energy_line" => super::fx_energy::energy_line(conv, path, node, row),
+        "audio_spectrum" => super::fx_audio::audio_spectrum(conv, path, node, row),
+        "audio_waveform" => super::fx_audio::audio_waveform(conv, path, node, row),
 
         // --- Temporal ----------------------------------------------------
         "echo" => echo(conv, path, node, row),

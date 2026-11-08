@@ -14,7 +14,6 @@
 // pair — so a key eased from this menu and one eased on the strip cannot come
 // out different.
 
-import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -27,6 +26,7 @@ import '../panels/expression_editor.dart';
 import '../panels/graph_channels.dart';
 import '../panels/graph_edits.dart';
 import '../panels/graph_maths.dart';
+import '../panels/preset_save.dart';
 import '../panels/layer_fold_frb.dart'
     show asOneUndoStep, transformGroupPath;
 import '../panels/text_animation_presets.dart' show textPresetRows;
@@ -468,24 +468,14 @@ Future<String?> Function() animationPresetOpenPicker = pickPresetToOpen;
 /// the picker's business and writing it is Dart's. The preset's display name is
 /// its file's stem, as the panel names it, so one saved from here and one saved
 /// from there are the same document.
-MenuEntry saveAnimationPresetRow(LumitUiState ui) {
+MenuEntry saveAnimationPresetRow(BuildContext context, LumitUiState ui) {
   final layer = ui.selectedLayer.value;
   return MenuEntry(
     l10n.menuSaveAnimationPreset,
     layer == null
         ? null
-        : () async {
-            final path = await animationPresetSavePicker('preset.lumfx');
-            if (path == null) return;
-            final name =
-                path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
-            try {
-              File(path).writeAsStringSync(layer.savePreset(name: name));
-            } catch (_) {
-              // A folder that will not take the file, or a layer that went away
-              // under the open dialogue. The document is untouched either way.
-            }
-          },
+        : () => saveLayerPreset(context, ui, layer,
+            picker: animationPresetSavePicker),
   );
 }
 
@@ -502,14 +492,16 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
         ? null
         : () async {
             final path = await animationPresetOpenPicker();
-            if (path != null) await applyPresetFile(app, layer, path);
+            if (path != null) {
+              await applyPresetFile(app, layer, path, ui.playheadFrame.value);
+            }
           },
   );
 }
 
 /// The preset at [path] onto [layer], as one undo step.
 Future<void> applyPresetFile(
-    LumitState app, LayerReference layer, String path) async {
+    LumitState app, LayerReference layer, String path, int frame) async {
   final String text;
   try {
     text = await readEffectPreset(path: path);
@@ -518,7 +510,7 @@ Future<void> applyPresetFile(
   }
   asOneUndoStep(app.project, () {
     try {
-      layer.loadPreset(text: text);
+      layer.pasteEffects(text: text, atFrame: frame);
     } catch (_) {}
   });
   app.notifyDocumentChanged();

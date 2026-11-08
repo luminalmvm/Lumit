@@ -618,6 +618,8 @@ pub struct BridgePresetInfo {
     /// The group it is filed in, with `/` between nested groups. Empty at the
     /// top of the library.
     pub group: String,
+    /// Whether it carries transform keys or text animators as well as effects.
+    pub keyed: bool,
 }
 
 /// Every `.lumfx` in the preset library and its groups, sorted by name — what the
@@ -781,6 +783,8 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
         // them is parsed properly at load time.
         effects: Option<serde_json::Value>,
         nodes: Option<serde_json::Value>,
+        transform: Option<serde_json::Value>,
+        animators: Option<serde_json::Value>,
     }
     let mut out: Vec<BridgePresetInfo> = Vec::new();
     for folder in crate::api::presets::folders_under(dir) {
@@ -818,6 +822,7 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
                 name,
                 path: path.to_string_lossy().into_owned(),
                 group: group.clone(),
+                keyed: named.transform.is_some() || named.animators.is_some(),
             })
         }));
     }

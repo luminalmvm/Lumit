@@ -221,6 +221,8 @@ impl ActionId {
             "layer.trim.out" => "Trim the layer's out point to the playhead",
             "layer.split" => "Split the layer at the playhead",
             "layer.duplicate" => "Duplicate the layer",
+            "grade.copy" => "Copy the layer's grade",
+            "grade.paste" => "Paste the grade onto the selected layers",
             "layer.precompose" => "Pre-compose the layer",
             "layer.group" => "Group the selected layers",
             "layer.ungroup" => "Ungroup",

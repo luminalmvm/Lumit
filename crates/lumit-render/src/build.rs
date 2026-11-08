@@ -3087,17 +3087,24 @@ fn comp_walk(
                     .collect::<Vec<_>>()
             })
             .map(|(e, param, self_default)| {
-                if e.effect.match_name == "energy_line" {
-                    return energy_line_path::path(
-                        doc,
-                        comp,
-                        e,
-                        param,
-                        self_default,
-                        layer,
-                        slt,
-                        t_comp,
-                    );
+                match e.effect.match_name.as_str() {
+                    "energy_line" => {
+                        return energy_line_path::path(
+                            doc,
+                            comp,
+                            e,
+                            param,
+                            self_default,
+                            layer,
+                            slt,
+                            t_comp,
+                        );
+                    }
+                    "audio_spectrum" if param == "levels" => {
+                        let layer = layer.map(|l| l.id);
+                        return audio_spectrum_levels::levels(doc, comp, e, layer, slt, t_comp);
+                    }
+                    _ => {}
                 }
                 // The one rule the driver walk also asks, so a wire reads
                 // the path the picture draws.
@@ -6904,6 +6911,7 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     }
 }
 
+mod audio_spectrum_levels;
 mod energy_line_path;
 mod moments;
 pub(crate) mod motion_blur;

@@ -5,9 +5,10 @@
 
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `document_snapshot`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `document_snapshot`, `level_for`, `source_peak`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Pause. The clock holds its position, so play resumes from here.
 void audioPause() => BridgeLib.instance.api.crateApiAudioAudioPause();
@@ -223,4 +224,26 @@ class BridgeAudioMeter {
           rmsLeft == other.rmsLeft &&
           rmsRight == other.rmsRight &&
           clipped == other.clipped;
+}
+
+/// What one clip's gain has to be for its peak to land where it was asked.
+class BridgeClipLevel {
+  final UuidValue clip;
+  final double db;
+
+  const BridgeClipLevel({
+    required this.clip,
+    required this.db,
+  });
+
+  @override
+  int get hashCode => clip.hashCode ^ db.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeClipLevel &&
+          runtimeType == other.runtimeType &&
+          clip == other.clip &&
+          db == other.db;
 }

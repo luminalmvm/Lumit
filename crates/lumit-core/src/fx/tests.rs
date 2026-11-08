@@ -6380,8 +6380,9 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 6,
-        "Scanlines, the two flares, Transform points, Energy line and Depth points are the six today"
+        declaring, 7,
+        "Scanlines, the two flares, Transform points, Energy line, Audio spectrum and Depth \
+         points are the seven today"
     );
 }
 
@@ -6761,6 +6762,12 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
+            ("audio_spectrum", "from_x"),
+            ("audio_spectrum", "from_y"),
+            ("audio_spectrum", "to_x"),
+            ("audio_spectrum", "to_y"),
+            ("audio_spectrum", "height"),
+            ("audio_spectrum", "thickness"),
             ("energy_line", "start_x"),
             ("energy_line", "start_y"),
             ("energy_line", "end_x"),

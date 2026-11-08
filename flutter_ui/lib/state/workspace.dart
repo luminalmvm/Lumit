@@ -864,6 +864,14 @@ class Workspace extends ChangeNotifier {
   /// The Effect controls panel's keyframe strip: whether it is shown, and
   /// how wide its column is. A preference for the reason the plot size is:
   /// how someone lays the panel out is theirs to keep.
+  /// The ticks Save preset last left: which parts of a layer go in the file.
+  bool presetSaveEffects = true;
+  bool presetSaveKeys = true;
+  bool presetSaveAnimators = true;
+
+  /// Where Normalise puts a sound's loudest sample, in dB.
+  double normaliseTargetDb = -1;
+
   bool fxKeyStrip = true;
   double fxKeyStripWidth = 220;
 
@@ -1660,6 +1668,19 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setPresetSaveParts(
+      {required bool effects, required bool keys, required bool animators}) {
+    presetSaveEffects = effects;
+    presetSaveKeys = keys;
+    presetSaveAnimators = animators;
+    settingsChanged();
+  }
+
+  void setNormaliseTargetDb(double db) {
+    normaliseTargetDb = db;
+    settingsChanged();
+  }
+
   void setFxKeyStrip(bool shown) {
     fxKeyStrip = shown;
     settingsChanged();
@@ -2217,6 +2238,10 @@ class Workspace extends ChangeNotifier {
         'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
+        'preset_save_effects': presetSaveEffects,
+        'preset_save_keys': presetSaveKeys,
+        'preset_save_animators': presetSaveAnimators,
+        'normalise_target_db': normaliseTargetDb,
         'fx_key_strip': fxKeyStrip,
         'fx_key_strip_width': fxKeyStripWidth,
         'themed_viewer_surround': themedViewerSurround,
@@ -2441,6 +2466,10 @@ class Workspace extends ChangeNotifier {
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     // Absent means a file written before the size could be chosen: medium.
     curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;
+    presetSaveEffects = j['preset_save_effects'] as bool? ?? true;
+    presetSaveKeys = j['preset_save_keys'] as bool? ?? true;
+    presetSaveAnimators = j['preset_save_animators'] as bool? ?? true;
+    normaliseTargetDb = (j['normalise_target_db'] as num?)?.toDouble() ?? -1;
     fxKeyStrip = j['fx_key_strip'] as bool? ?? true;
     fxKeyStripWidth = (j['fx_key_strip_width'] as num?)?.toDouble() ?? 220;
     themedViewerSurround = j['themed_viewer_surround'] == true;

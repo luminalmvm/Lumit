@@ -18,6 +18,7 @@ import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'normalise_commands.dart';
 import 'timeline_extras_frb.dart' show labelChips;
 
 /// Change one of [layer]'s sends, keeping the rest of its routing. Read at
@@ -119,6 +120,7 @@ List<Widget> audioLayerRows({
   bool pictureRow = false,
   String? renameAction = 'layer.rename',
   String? duplicateAction = 'layer.duplicate',
+  double normaliseTargetDb = -1,
 }) {
   final info = entry.info;
   final switches = info.switches;
@@ -235,6 +237,18 @@ List<Widget> audioLayerRows({
       },
       child: MenuLabel(l10n.audioResetPan, ticked: false, enabled: panOff),
     ),
+    if (!isBus)
+      MenuRow(
+        key: const ValueKey<String>('audio-menu-normalise'),
+        onPressed: () async {
+          closeParent();
+          await normaliseLayers(app, comp, frame, normaliseTargetDb, [
+            for (final t in targets)
+              if (t.info.kind != BridgeLayerKind.bus) t,
+          ], then: onChanged);
+        },
+        child: MenuLabel(l10n.audioNormalise, ticked: false),
+      ),
     ...extra,
     const MenuDivider(),
     if (!isBus)

@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/grade_clipboard.dart' show copyGrade, pasteGrade;
 import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
@@ -1149,6 +1150,10 @@ class _LumitAppViewState extends State<LumitAppView> {
       // `Ctrl+C` on a selected layer did nothing while the menu row worked.
       case 'edit.copy':
         handled = copySelectionFrb(ui);
+      case 'grade.copy':
+        handled = copyGrade(ui);
+      case 'grade.paste':
+        handled = pasteGrade(state, ui);
       case 'edit.cut':
         handled = cutSelectionFrb(state, ui);
       case 'edit.paste':
@@ -1461,7 +1466,7 @@ Future<void> openPresetOrTheme(
     if (layer == null) {
       app.postNotice(l10n.selectALayer);
     } else {
-      await applyPresetFile(app, layer, preset);
+      await applyPresetFile(app, layer, preset, ui.playheadFrame.value);
     }
   }
   final theme = themePathFromArgs(asked);

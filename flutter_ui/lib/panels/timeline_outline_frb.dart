@@ -8,9 +8,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
@@ -1024,7 +1026,10 @@ class Outline extends StatelessWidget {
           selection: selection,
           layerId: rows[i].id,
           onEffectDropped: (data) =>
-              data.landOn(rows[i].entry.layer).then((_) => onChanged()),
+              data.landOn(rows[i].entry.layer,
+                  atFrame: Provider.of<LumitUiState>(context, listen: false)
+                      .playheadFrame
+                      .value).then((_) => onChanged()),
           builder: (context, mine) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

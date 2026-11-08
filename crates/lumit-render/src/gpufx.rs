@@ -28,6 +28,7 @@ use lumit_gpu::GpuContext;
 
 use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
+mod audio_spectrum;
 mod energy_line;
 pub mod lfx;
 pub mod ofx;
@@ -461,6 +462,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scribble,
     &Stroke,
     &energy_line::EnergyLine,
+    &audio_spectrum::AudioSpectrum,
     &crate::gpufx_particulate::Particulate,
     &Grid,
     &Scatter,

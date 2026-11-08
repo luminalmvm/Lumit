@@ -9,12 +9,15 @@
 // still works on the same effects, which is where their keyframes are set;
 // a keyed value here takes a key at the playhead, as a keyed row does.
 
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/presets.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -22,8 +25,11 @@ import 'package:uuid/uuid.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../shell/settings_account.dart' show askBefore;
+import '../shell/theme_name_dialog.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart';
+import '../state/dropper.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -31,13 +37,16 @@ import '../widgets/curve_editor.dart';
 import 'effect_controls_panel_frb.dart' show curveChannelColour;
 import 'effect_param_row_frb.dart'
     show
+        DropperButton,
         EffectStackEditor,
         curvePointsOf,
         curveValue,
         defaultEffectValue,
         newExpressionLanguage,
         scalarValueAt;
+import 'grade_clipboard.dart';
 import 'grade_controls.dart';
+import 'grade_looks.dart';
 import 'grade_wheel.dart';
 import 'keyframe_controls_frb.dart'
     show KeyframeControlsFrb, scalarWithValueAt;
@@ -75,17 +84,6 @@ enum _Section {
   final List<GradeFx> effects;
 }
 
-/// The layers a grade can sit on: the ones that draw a picture.
-bool _gradeable(BridgeLayerKind kind) => switch (kind) {
-      BridgeLayerKind.camera ||
-      BridgeLayerKind.light ||
-      BridgeLayerKind.nullLayer ||
-      BridgeLayerKind.audio ||
-      BridgeLayerKind.bus =>
-        false,
-      _ => true,
-    };
-
 /// How far a wheel's rim reaches, and how far its bar travels, per colour.
 /// Lift adds, so a little goes a long way; Gamma and Gain multiply, and
 /// Gamma's rim stops where its floor of 0.1 is, so the dot never jumps back.
@@ -115,6 +113,16 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   };
 
   int _curveChannel = 0;
+
+  /// The look each layer is wearing and the grade it brought, by layer. A look
+  /// isn't kept in the document, so this lasts until the grade is touched or
+  /// its effects change.
+  final Map<UuidValue, (String, List<UuidValue>)> _worn = {};
+
+  /// Whether a white balance pick has opened its undo group, and whether it
+  /// had to add the Temperature effect to preview on.
+  bool _neutralTouched = false;
+  bool _neutralAdded = false;
 
   /// Undo groups opened by a gesture and not yet closed.
   int _touches = 0;
@@ -288,7 +296,20 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       };
 
   bool get _anyChanged => _Section.values.any(_changed);
-  bool get _anyPresent => GradeFx.values.any((fx) => _instance(fx) != null);
+
+  /// The whole grade: every colour effect on the layer, the ones with no control
+  /// here as well, since Copy grade and a look carry those too.
+  Set<UuidValue> get _gradeIds =>
+      _info == null ? const {} : gradeEffectIds(_info!).toSet();
+
+  bool get _anyPresent => _gradeIds.isNotEmpty;
+
+  bool get _gradeOff {
+    final ids = _gradeIds;
+    return ids.isNotEmpty &&
+        _info!.effects.every((e) => !ids.contains(e.id) || !e.enabled);
+  }
+
   bool _bypassed(List<GradeFx> fxs) {
     final here = [for (final fx in fxs) _instance(fx)].nonNulls.toList();
     return here.isNotEmpty && here.every((e) => !e.enabled);
@@ -299,6 +320,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   /// A gesture begins: everything it writes, the effect it may add included,
   /// is one undo step until [_touchEnd].
   void _touchStart() {
+    if (_layer case final layer?) _worn.remove(layer.internallayerId);
     final project = app.project;
     if (project == null) return;
     project.beginUndoGroup();
@@ -440,6 +462,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   void _reset(List<GradeFx> fxs, {Set<String>? only}) {
     final layer = _layer;
     if (layer == null) return;
+    _worn.remove(layer.internallayerId);
     asOneUndoStep(app.project, () {
       for (final fx in fxs) {
         final at = _instance(fx);
@@ -488,10 +511,12 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   static bool _colourKeyedScalar(BridgeColour c) =>
       [c.r, c.g, c.b, c.a].any((s) => s is BridgeScalar_Keyframed);
 
-  void _setBypassed(List<GradeFx> fxs, bool off) {
+  void _setBypassed(List<GradeFx> fxs, bool off) => _bypassIds(
+      {for (final fx in fxs) _instance(fx)?.id}.nonNulls.toSet(), off);
+
+  void _bypassIds(Set<UuidValue> ids, bool off) {
     final layer = _layer;
     if (layer == null) return;
-    final ids = {for (final fx in fxs) _instance(fx)?.id}.nonNulls.toSet();
     asOneUndoStep(app.project, () {
       for (final h in layer.getEffects()) {
         if (ids.contains(h.id())) {
@@ -502,10 +527,12 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     _tell();
   }
 
-  void _remove(List<GradeFx> fxs) {
+  void _remove(List<GradeFx> fxs) =>
+      _removeIds({for (final fx in fxs) _instance(fx)?.id}.nonNulls.toSet());
+
+  void _removeIds(Set<UuidValue> ids) {
     final layer = _layer;
     if (layer == null) return;
-    final ids = {for (final fx in fxs) _instance(fx)?.id}.nonNulls.toSet();
     asOneUndoStep(app.project, () {
       for (final h in layer.getEffects()) {
         if (ids.contains(h.id())) layer.removeEffect(effect: h);
@@ -515,10 +542,12 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   }
 
   /// Pick the section's effects in Effect controls and bring the panel up.
-  void _reveal(List<GradeFx> fxs) {
+  void _reveal(List<GradeFx> fxs, {bool whole = false}) {
     final layer = _layer;
     if (layer == null) return;
-    final ids = [for (final fx in fxs) _instance(fx)?.id].nonNulls.toList();
+    final ids = whole
+        ? _gradeIds.toList()
+        : [for (final fx in fxs) _instance(fx)?.id].nonNulls.toList();
     if (ids.isEmpty) return;
     ui.setEffectSelection(layer, ids);
     setPanelVisible(ui.split, Panel.effectControls, true);
@@ -534,7 +563,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     final layer = _layer;
     final comp = ui.selectedComp;
     if (layer == null || comp == null) return;
-    final ids = {for (final fx in GradeFx.values) _instance(fx)?.id}.nonNulls;
+    final ids = _gradeIds;
     final handles = layer.getEffects();
     for (final h in handles) {
       if (ids.contains(h.id())) h.setEnabled(enabled: false);
@@ -557,14 +586,16 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   // --- Menus -----------------------------------------------------------------
 
   MenuRow _row(String key, String label, VoidCallback close, VoidCallback run,
-          {bool ticked = false}) =>
+          {bool ticked = false, bool enabled = true, String? action}) =>
       MenuRow(
         key: ValueKey<String>(key),
+        enabled: enabled,
         onPressed: () {
           close();
           run();
         },
-        child: MenuLabel(label, ticked: ticked),
+        child:
+            MenuLabel(label, ticked: ticked, enabled: enabled, action: action),
       );
 
   /// A section's or a row's menu: what it can do now, with a row's key and
@@ -603,33 +634,55 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             () => _remove(fxs)),
       ],
       _gradeRows(close),
+      _clipboardRows(close),
+      _removeRows(close),
     ]);
   }
+
+  /// Copy grade and Paste grade, on any layer that can wear a grade.
+  List<Widget> _clipboardRows(VoidCallback close) {
+    final ui = this.ui;
+    final info = _info;
+    if (info == null || !gradeable(info.kind)) return const [];
+    return [
+      _row('grade-menu-copy', l10n.gradeCopy, close, () => copyGrade(ui),
+          enabled: canCopyGrade(ui), action: 'grade.copy'),
+      _row('grade-menu-paste', l10n.gradePaste, close,
+          () => pasteGrade(app, ui),
+          enabled: canPasteGrade(ui), action: 'grade.paste'),
+    ];
+  }
+
+  List<Widget> _removeRows(VoidCallback close) => [
+        if (_anyPresent)
+          _row('grade-menu-remove', l10n.gradeRemoveAll, close,
+              () => _removeIds(_gradeIds)),
+      ];
 
   /// The rows that act on the whole grade, each only while it can.
   List<Widget> _gradeRows(VoidCallback close, {bool reveal = false}) {
     final present = _anyPresent;
-    final off = _bypassed(GradeFx.values);
+    final off = _gradeOff;
     return [
       if (_anyChanged)
         _row('grade-menu-reset', l10n.gradeResetAll, close,
             () => _reset(GradeFx.values)),
       if (present)
         _row('grade-menu-bypass', l10n.gradeBypassAll, close,
-            () => _setBypassed(GradeFx.values, !off),
+            () => _bypassIds(_gradeIds, !off),
             ticked: off),
       if (present && reveal)
         _row('grade-menu-reveal', l10n.gradeRevealInEffectControls, close,
-            () => _reveal(GradeFx.values)),
-      if (present)
-        _row('grade-menu-remove', l10n.gradeRemoveAll, close,
-            () => _remove(GradeFx.values)),
+            () => _reveal(GradeFx.values, whole: true)),
     ];
   }
 
-  /// The panel's own menu: empty, so no menu, while the layer has no grade.
-  List<Widget> _groundMenu(VoidCallback close) =>
-      _gradeRows(close, reveal: true);
+  /// The panel's own menu: empty, so no menu, on a layer that can't be graded.
+  List<Widget> _groundMenu(VoidCallback close) => menuGroups([
+        _gradeRows(close, reveal: true),
+        _clipboardRows(close),
+        _removeRows(close),
+      ]);
 
   /// The key and expression rows of one parameter's menu: the same rows its
   /// Effect controls row has, acting on the same keys and the same curve.
@@ -702,7 +755,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         final t = ThemeScope.of(context).theme;
         final info = _info;
         final enabled =
-            info != null && ui.selectedComp != null && _gradeable(info.kind);
+            info != null && ui.selectedComp != null && gradeable(info.kind);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -713,6 +766,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                 child: Container(
                   color: t.surface0,
                   child: ListView(
+                    primary: false,
                     padding: const EdgeInsets.only(bottom: 8),
                     children: [
                       _balance(t, enabled),
@@ -731,43 +785,46 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   }
 
   Widget _header(LumitTheme t, BridgeLayerInfo? info, bool enabled) =>
-      Container(
-        height: 26,
-        color: t.surface1,
-        padding: const EdgeInsets.only(left: gradeInset, right: 4),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                enabled ? info!.name : '',
-                style: t.small.copyWith(color: t.textMuted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (enabled && _anyPresent)
-              Listener(
-                onPointerDown: (_) => _beforeDown(),
-                onPointerUp: (_) => _beforeUp(),
-                onPointerCancel: (_) => _beforeUp(),
-                child: GradeIconButton(
-                  key: const ValueKey('grade-before'),
-                  // The effect bypass glyph: held, the grade is bypassed. The
-                  // layer's eye one panel down means hide, which this is not.
-                  glyph: LumitIcons.bypass,
-                  tip: l10n.gradeBefore,
-                  active: _before,
-                  onPressed: () {},
+      GradeMenu(
+        rows: _groundMenu,
+        child: Container(
+          height: 26,
+          color: t.surface1,
+          padding: const EdgeInsets.only(left: gradeInset, right: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  enabled ? info!.name : '',
+                  style: t.small.copyWith(color: t.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            if (enabled && _anyChanged)
-              GradeIconButton(
-                key: const ValueKey('grade-reset-all'),
-                glyph: LumitIcons.reset,
-                tip: l10n.gradeResetAll,
-                onPressed: () => _reset(GradeFx.values),
-              ),
-          ],
+              if (enabled && _anyPresent)
+                Listener(
+                  onPointerDown: (_) => _beforeDown(),
+                  onPointerUp: (_) => _beforeUp(),
+                  onPointerCancel: (_) => _beforeUp(),
+                  child: GradeIconButton(
+                    key: const ValueKey('grade-before'),
+                    // The effect bypass glyph: held, the grade is bypassed. The
+                    // layer's eye one panel down means hide, which this is not.
+                    glyph: LumitIcons.bypass,
+                    tip: l10n.gradeBefore,
+                    active: _before,
+                    onPressed: () {},
+                  ),
+                ),
+              if (enabled && _anyChanged)
+                GradeIconButton(
+                  key: const ValueKey('grade-reset-all'),
+                  glyph: LumitIcons.reset,
+                  tip: l10n.gradeResetAll,
+                  onPressed: () => _reset(GradeFx.values),
+                ),
+            ],
+          ),
         ),
       );
 
@@ -861,8 +918,83 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     );
   }
 
+  /// The number a pick reads the picture against is the document's, never a
+  /// preview's: the window of pixels the dropper reads is cut from the frame
+  /// the document draws, so the picture it sees has the rows as they stand.
+  BridgeWhiteBalance _neutralFor(DropperSample s) {
+    const fx = GradeFx.temperature;
+    return whiteBalanceFor(
+      r: s.r,
+      g: s.g,
+      b: s.b,
+      temperature: _float(fx, 'temperature'),
+      tint: _float(fx, 'tint'),
+    );
+  }
+
+  void _neutralLive(DropperSample s) {
+    const fx = GradeFx.temperature;
+    final solved = _neutralFor(s);
+    if (!_neutralTouched) {
+      _touchStart();
+      _neutralTouched = true;
+      _neutralAdded = _instance(fx) == null;
+    }
+    _liveFloat(fx, 'temperature', solved.temperature);
+    _liveFloat(fx, 'tint', solved.tint);
+  }
+
+  /// Both rows as one write, so one undo step takes the whole pick back.
+  void _neutralPick(DropperSample s) {
+    const fx = GradeFx.temperature;
+    final layer = _layer;
+    final solved = _neutralFor(s);
+    if (!_neutralTouched) _touchStart();
+    _neutralTouched = false;
+    final id = _ensure(fx);
+    if (layer != null && id != null) {
+      _editor.writeAll(layer, id, {
+        'temperature':
+            BridgeEffectValue.float(_scalarFor(fx, 'temperature', solved.temperature)),
+        'tint': BridgeEffectValue.float(_scalarFor(fx, 'tint', solved.tint)),
+      });
+    }
+    _touchEnd();
+    _tell();
+  }
+
+  /// Abandoned: the preview goes, and the effect too if the pick brought it.
+  void _neutralRevert() {
+    if (!_neutralTouched) return;
+    _neutralTouched = false;
+    if (_neutralAdded) _remove(const [GradeFx.temperature]);
+    _touchCancel();
+  }
+
+  Widget _neutralDropper(bool enabled) {
+    const fx = GradeFx.temperature;
+    if (!enabled ||
+        _floatLocked(fx, 'temperature') ||
+        _floatLocked(fx, 'tint')) {
+      return const SizedBox(width: 18);
+    }
+    return DropperButton(
+      id: 'grade-neutral',
+      tip: l10n.gradePickNeutral,
+      arm: (ui) => ui.armDropper(DropperArm(
+        id: 'grade-neutral',
+        reads: DropperReads.colour,
+        label: l10n.gradePickNeutral,
+        onPreview: _neutralLive,
+        onPick: _neutralPick,
+        onRevert: _neutralRevert,
+      )),
+    );
+  }
+
   Widget _basics(LumitTheme t, bool enabled) {
-    Widget row(GradeFx fx, String id, {int decimals = 1, bool signed = false}) {
+    Widget row(GradeFx fx, String id,
+        {int decimals = 1, bool signed = false, Widget? trailing}) {
       final (min, max) = _range(fx, id);
       final (hardMin, hardMax) = _hardRange(fx, id);
       final neutral = _defaultFloat(fx, id);
@@ -894,6 +1026,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         onCancel: _touchCancel,
         menu: (close) => _menuFor([fx], close,
             changed: changed, rowFx: fx, rowParam: id),
+        trailing: trailing ?? const SizedBox(width: 18),
       );
     }
 
@@ -904,7 +1037,8 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         row(GradeFx.exposure, 'stops', decimals: 2, signed: true),
         row(GradeFx.contrast, 'contrast'),
         row(GradeFx.saturation, 'saturation'),
-        row(GradeFx.temperature, 'temperature', signed: true),
+        row(GradeFx.temperature, 'temperature',
+            signed: true, trailing: _neutralDropper(enabled)),
         row(GradeFx.temperature, 'tint', signed: true),
       ],
     );
@@ -986,6 +1120,35 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       children: [
         _heading(_Section.look, l10n.fxLook),
         GradeMenu(
+          rows: _groundMenu,
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: gradeInset, vertical: 1),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 74,
+                  child: Text(l10n.gradeLookPreset,
+                      style: t.small.copyWith(
+                          color: enabled ? t.textMuted : t.textDisabled)),
+                ),
+                Flexible(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: LookPicker(
+                      key: const ValueKey('grade-look'),
+                      enabled: enabled,
+                      current: _wornLook,
+                      onSave: enabled && canCopyGrade(ui) ? _saveLook : null,
+                      onPick: _pickLook,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        GradeMenu(
           rows: (close) =>
               _menuFor([fx], close, changed: _changed(_Section.look)),
           child: Padding(
@@ -1060,6 +1223,73 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
           ),
       ],
     );
+  }
+
+  /// The look on the layer, while its grade is still the one the look brought.
+  String? get _wornLook {
+    final info = _info;
+    final worn = _layer == null ? null : _worn[_layer!.internallayerId];
+    if (info == null || worn == null) return null;
+    final ids = gradeEffectIds(info);
+    final same = ids.length == worn.$2.length &&
+        Iterable.generate(ids.length).every((i) => ids[i] == worn.$2[i]);
+    return same ? worn.$1 : null;
+  }
+
+  /// A look takes the place of the grade on every selected layer.
+  Future<void> _pickLook(BridgePresetInfo look) async {
+    final String text;
+    try {
+      text = await readEffectPreset(path: look.path);
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    final ui = this.ui;
+    layGrade(app, ui, text);
+    if (!mounted) return;
+    setState(() {
+      for (final layer in ui.selectedLayers.value) {
+        final info = ui.model.byId(layer.internallayerId)?.info;
+        if (info != null) {
+          _worn[layer.internallayerId] = (look.name, gradeEffectIds(info));
+        }
+      }
+    });
+  }
+
+  /// Write the layer's grade as a preset in the Looks group, which is made on
+  /// the first save.
+  Future<void> _saveLook() async {
+    final layer = _layer;
+    final info = _info;
+    if (layer == null || info == null) return;
+    final name = await askThemeName(context,
+        title: l10n.gradeSaveLookTitle, suggested: '', confirm: l10n.save);
+    final library = presetsDirPath();
+    if (name == null || library == null || !mounted) return;
+    // The name can hold what a file's name can't.
+    final stem = name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
+    final sep = Platform.pathSeparator;
+    final file = File('$library$sep$looksGroup$sep$stem.lumfx');
+    if (file.existsSync() &&
+        !await askBefore(
+            context, l10n.gradeLookReplace(name), l10n.gradeLookReplaceYes)) {
+      return;
+    }
+    if (!mounted) return;
+    try {
+      makePresetGroup(group: looksGroup);
+      final ids = gradeEffectIds(info);
+      file.writeAsStringSync(layer.savePresetParts(
+          name: name, effects: ids, transformKeys: false, textAnimators: false));
+      setState(() => _worn[layer.internallayerId] = (name, ids));
+    } catch (_) {
+      // A folder that will not take the file. The document is untouched.
+      return;
+    }
+    ui.presetsChanged.value++;
+    app.postNotice(l10n.presetSavedNotice);
   }
 
   Future<void> _pickLut() async {

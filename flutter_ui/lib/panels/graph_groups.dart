@@ -389,7 +389,8 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     final before = File(graphGroupFile(dir, called, groupExtension));
     final had = at != null && before.existsSync()
         ? SavedGroup.read(
-            BridgePresetInfo(name: called, path: before.path, group: ''))
+            BridgePresetInfo(
+                name: called, path: before.path, group: '', keyed: false))
         : null;
     final details = await askGroupDetails(
       context,
