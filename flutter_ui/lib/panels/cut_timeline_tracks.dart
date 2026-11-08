@@ -178,6 +178,29 @@ Object? cutClipsCopiedIn;
 bool cutClipsHeld(Object? project) =>
     project != null && identical(project, cutClipsCopiedIn);
 
+/// How far a copy of [picked] lands from them: straight after them, or at the
+/// far end of the [tracks] they sit on where something is in the way, since a
+/// clip that lands on another overwrites it.
+int cutDuplicateFrames(
+    List<BridgeClip> picked, Iterable<List<BridgeClip>> tracks) {
+  final ids = {for (final clip in picked) clip.id.toString()};
+  final from = picked.map((clip) => clip.startFrame.toInt()).reduce(min);
+  final to = picked.map((clip) => clip.endFrame.toInt()).reduce(max);
+  final span = to - from;
+  var last = to;
+  var clear = true;
+  for (final clips in tracks) {
+    for (final clip in clips) {
+      if (ids.contains(clip.id.toString())) continue;
+      last = max(last, clip.endFrame.toInt());
+      if (clip.startFrame.toInt() < to + span && clip.endFrame.toInt() > to) {
+        clear = false;
+      }
+    }
+  }
+  return clear ? span : last - from;
+}
+
 bool _cuttable(BridgeLayerEntry entry) => switch (entry.info.kind) {
       BridgeLayerKind.camera ||
       BridgeLayerKind.light ||

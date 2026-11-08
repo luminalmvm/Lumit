@@ -114,6 +114,9 @@ class _FoldingRowState extends State<FoldingRow> {
     if (box is! RenderBox) return;
     final t = ThemeScope.of(context).theme;
     final items = [for (final i in _folded) widget.items[i]];
+    // A folded switch says it is on as an unfolded one does, and a list with
+    // no switch on it has no column to keep for the tick.
+    final ticks = items.any((item) => item.selected);
     showLumitPopup<void>(
       context: context,
       position: box.localToGlobal(Offset(0, box.size.height)),
@@ -126,7 +129,7 @@ class _FoldingRowState extends State<FoldingRow> {
           children: [
             for (final item in items)
               MenuRow(
-                selected: item.selected,
+                enabled: item.onPressed != null,
                 onPressed: () {
                   close(null);
                   item.onPressed?.call();
@@ -134,6 +137,7 @@ class _FoldingRowState extends State<FoldingRow> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (ticks) menuTick(item.selected),
                     SizedBox(width: iconSize, child: item.icon),
                     const SizedBox(width: 8),
                     Text(

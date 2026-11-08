@@ -134,7 +134,7 @@ head for the commands below. They act on every selected track when the track is 
 | Command | What it does |
 | --- | --- |
 | **Rename** | Turns the name into a field. |
-| **Mute**, **Solo**, **Bypass effects** | The track's switches. |
+| **Mute**, **Solo**, **Bypass effects**, **Lock** | The track's switches. |
 | **Reset volume**, **Reset pan** | Back to 0 dB, and to the centre. On an animated row, at the playhead. |
 | **Lane ▸** | **Wave** or **Spectral**. |
 | **Reset height** | Back to two rows, when a track's edge has been dragged. |
@@ -149,9 +149,9 @@ Right-click the empty ground under the tracks for **Insert audio layer**, **Inse
 **Paste**, **Select all** and **Add marker here**. With no tracks, **Insert audio layer** is
 on the lane. A new track goes above the selected one, or at the bottom.
 
-A layer with a picture as well as sound is drawn faded and cannot be worked on here beyond
-its menu. Its **Detach audio** switch moves its sound to an Audio layer of its own and mutes
-the original, which leaves the list.
+A layer with a picture as well as sound is drawn faded. Its menu has **Rename**, **Detach
+audio**, **Lock** and **Delete**. Its **Detach audio** switch moves its sound to an Audio layer
+of its own and mutes the original, which leaves the list.
 
 ### Clips
 
@@ -170,24 +170,26 @@ Right-click a clip. The commands act on every selected clip when the clip is one
 
 | Command | What it does |
 | --- | --- |
-| **Split at playhead** | Cuts the clip at the playhead. Disabled with the playhead off the clip. |
-| **Fade in ▸**, **Fade out ▸** | Sets the shape of the fade: **Linear**, **Fast**, **Slow**, **Smooth** or **Sharp**. |
+| **Split** | Cuts the clip at the playhead. `Ctrl`+`K` does it too. Disabled with the playhead off the clip. |
+| **Trim to playhead ▸** | Brings the clip's start or end to the playhead, with or without closing the room. |
+| **Transition ▸** | **Fade in ▸** or **Fade out ▸** sets the shape of the fade: **Linear**, **Fast**, **Slow**, **Smooth** or **Sharp**. |
 | **Keep pitch** | Whether the track's sound keeps its pitch when it plays faster or slower. |
 | **Lane ▸** | **Wave** or **Spectral**. |
 | **Bypass effects** | Switches off the clip's effects, when it has any. |
 | **Add audio effect ▸** | Adds to the clip's stack. |
 | **Take ▸** | Picks a take, or deletes the one showing, when the clip has several. |
 | **Audio streams ▸**, **Split audio streams**, **Merge audio streams** | As on a layer, when the clip's file has more than one [audio stream](/use/audio/#audio-streams). |
-| **Open as composition** | Makes a composition of the clip and opens it. |
-| **Cut**, **Copy**, **Paste** | **Paste** places at the playhead, on this track. |
+| **New composition from clip** | Makes a composition of the clip and opens it. |
+| **Cut**, **Copy**, **Paste**, **Duplicate** | **Paste** places at the playhead, on this track. **Duplicate** places a copy after the clip, or past the end of the track where something is in the way. |
 | **Paste attributes** | Puts the copied clip's effects, levels, fades and speed on the selected clips. |
 | **Group**, **Ungroup** | Joins two or more selected clips, or lets one go. |
 | **Select to end** | Selects this clip and those after it on the track. |
+| **Select layer** | Selects every clip on the track. |
 | **Clip colour ▸** | The track's colour, or one of the label colours. |
 | **Delete clip** | Removes the clip and leaves a gap. |
-| **Ripple delete** | Removes the clip and moves what follows back. |
+| **Ripple delete** | Removes the clip and moves what follows back. `Shift`+`Delete` does it too. |
 
-An Audio layer not yet cut has **Split at playhead**, the fades, **Keep pitch**, **Lane ▸**,
+An Audio layer not yet cut has **Split**, **Transition ▸**, **Keep pitch**, **Lane ▸**,
 **Clip colour ▸** and **Delete**.
 
 Right-click a gap on a track for **Paste**, **Select all**, **Close gap** and **Add marker

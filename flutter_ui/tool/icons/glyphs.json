@@ -67,7 +67,8 @@
     },
     {
      "name": "Razor",
-     "body": "<path d=\"M12 2.5L5 9.5\"/><path d=\"M5 9.5l-2 4 4-2z\" fill=\"currentColor\"/><path d=\"M9 5.5l1.5 1.5\"/>"
+     "body": "<path d=\"M6 4H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H5\"/><path d=\"M10 12h2.5a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H11\"/><path d=\"M10 2 6 14\"/>",
+     "comment": "A clip with the cut running through it. A tilted blade would be the Eraser beside it."
     },
     {
      "name": "Anchor",
@@ -224,8 +225,8 @@
     },
     {
      "name": "Auto ripple",
-     "body": "<rect x=\"2\" y=\"4\" width=\"4.5\" height=\"8\" rx=\"1\"/><path d=\"M9 5.5a4 4 0 0 1 0 5\"/><path d=\"M12 4a7 7 0 0 1 0 8\"/>",
-     "comment": "A clip and the ripple running on from it."
+     "body": "<rect x=\"1.5\" y=\"4\" width=\"3.5\" height=\"8\" rx=\"1\"/><rect x=\"11\" y=\"4\" width=\"3.5\" height=\"8\" rx=\"1\"/><path d=\"M9.5 8H6.5M8 6.5 6.5 8 8 9.5\"/>",
+     "comment": "Two clips, and the later one coming back to close the gap."
     },
     {
      "name": "Crossfade",
@@ -234,8 +235,8 @@
     },
     {
      "name": "Quantise",
-     "body": "<path d=\"M2 12.5h12\"/><path d=\"M4 12.5V10M8 12.5V10M12 12.5V10\"/><circle cx=\"8\" cy=\"5\" r=\"2\"/>",
-     "comment": "A point sat over the tick it will land on."
+     "body": "<path d=\"M3 3v10M8 3v10M13 3v10\"/><circle cx=\"8\" cy=\"8\" r=\"2\" fill=\"currentColor\"/>",
+     "comment": "A beat grid, with a point sat on one of its lines."
     }
    ]
   },
@@ -404,7 +405,8 @@
     },
     {
      "name": "Speed",
-     "body": "<path d=\"M2 12h12\"/><path d=\"M3 12c2-7 8-7 10 0z\" fill=\"currentColor\" opacity=\".35\"/>"
+     "body": "<path d=\"M2 13.5h12\" opacity=\".55\"/><path d=\"M2 11h3.5l5-7H14\"/>",
+     "comment": "The speed line itself, ramping up over its clip."
     },
     {
      "name": "Auto",

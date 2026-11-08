@@ -29,7 +29,8 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/keymap.dart';
-import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutPaste, BridgeCutResult;
+import 'package:lumit_flutter/src/rust/api/cut.dart'
+    show BridgeCutMove, BridgeCutPaste, BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeAudioStreams;
@@ -63,6 +64,8 @@ import 'audio_timeline_fades_frb.dart';
 import 'audio_timeline_rows_frb.dart';
 import 'clip_fade_popover.dart';
 import 'clip_fades.dart';
+import 'cut_timeline_tracks.dart'
+    show cutClipsCopiedIn, cutClipsHeld, cutDuplicateFrames;
 import 'easing_curve.dart' show ApplyEasing, EaseSides, EasingCurve;
 import 'effect_controls_panel_frb.dart' show showAddEffectMenu;
 import 'graph_channels.dart' show GraphChannel, graphChannels;
@@ -432,6 +435,17 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     }
     final ui = _ui;
     if (ui == null || ui.activePanel != Panel.audioTimeline) return false;
+    // A clip here is the clip it is in the Cut timeline, so the two chords
+    // its menu shows mean the same.
+    switch (ui.keymap.actionFor(BridgeKeyContext.cut, event)) {
+      case 'cut.add.edit':
+        _splitAtPlayhead(ui);
+        return true;
+      case 'cut.delete.ripple':
+        if (_pickedClips.isEmpty) return false;
+        _rippleDeletePicked(ui);
+        return true;
+    }
     if (ui.keymap.actionFor(BridgeKeyContext.timeline, event) !=
         'layer.rename') {
       return false;
@@ -601,9 +615,15 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     if (ids.isEmpty) return false;
     final result = _cut(() => comp.cutCopy(clips: ids, linked: false));
     ui.reportCut(result);
-    if (result == BridgeCutResult.done) _copiedClips = true;
-    return result == BridgeCutResult.done;
+    if (result != BridgeCutResult.done) return false;
+    _copiedClips = true;
+    cutClipsCopiedIn = Provider.of<LumitState>(context, listen: false).project;
+    return true;
   }
+
+  /// Whether a paste would have clips to land, wherever they were copied.
+  bool get _clipsHeld =>
+      cutClipsHeld(Provider.of<LumitState>(context, listen: false).project);
 
   /// Put the copied clips down at the playhead: on [onto], or on the track of
   /// the pick. Says whether there was anything to put down.
@@ -1857,6 +1877,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           closeParent: () => close(null),
           onRename: () => _beginRename(track),
           onChanged: _afterStackEdit,
+          pictureRow: track.dimmed,
           extra: [
             if (track.entry.info.kind != BridgeLayerKind.bus && !track.dimmed)
               _laneSubmenu(tracks, () => close(null)),
@@ -2256,11 +2277,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         const MenuDivider(),
         MenuRow(
           key: const ValueKey<String>('atl-menu-ground-paste'),
+          enabled: _clipsHeld,
           onPressed: () {
             close(null);
             _pasteClips();
           },
-          child: MenuLabel(l10n.menuPaste, action: 'edit.paste'),
+          child: MenuLabel(l10n.menuPaste,
+              action: 'edit.paste', enabled: _clipsHeld),
         ),
         _selectAllRow(() => close(null)),
         if (frame != null) ...[
@@ -2284,11 +2307,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       rows: (close) => [
         MenuRow(
           key: const ValueKey<String>('atl-menu-gap-paste'),
+          enabled: _clipsHeld,
           onPressed: () {
             close(null);
             _pasteClips(onto: track.entry.layer);
           },
-          child: MenuLabel(l10n.menuPaste, action: 'edit.paste'),
+          child: MenuLabel(l10n.menuPaste,
+              action: 'edit.paste', enabled: _clipsHeld),
         ),
         _selectAllRow(() => close(null)),
         const MenuDivider(),
@@ -2472,8 +2497,15 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                       'atl-fade-${into ? 'in' : 'out'}-${preset.id}-${clip?.id ?? track.id}'),
                   onPressed: () {
                     dismiss();
-                    _onClip(track, clip,
-                        (c) => _setFadeShape(track, c, preset.shape, into: into));
+                    _onClip(track, clip, (held) {
+                      for (final (on, c) in picked ?? [(track, held)]) {
+                        try {
+                          _setFadeShape(on, c, preset.shape, into: into);
+                        } catch (_) {
+                          // A locked track refuses, and the rest still take it.
+                        }
+                      }
+                    });
                   },
                   child: fadeShapeLabel(preset,
                       falling: !into,
@@ -2503,20 +2535,61 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       rows: (closeWith) {
         void close() => closeWith(null);
         return [
-          row('split', l10n.clipSplitAtPlayhead, () {
+          row('split', l10n.cutMenuSplit, () {
             _onClip(track, clip, (_) => layer.cutClipAt(frame: playhead));
-          }, close, enabled: canSplit),
+          }, close, action: 'cut.add.edit', enabled: canSplit),
+          if (clip != null)
+            SubmenuRow(
+              key: ValueKey<String>('atl-clip-trim-${clip.id}'),
+              closeParent: close,
+              submenu: (dismiss) => FloatSurface(
+                width: 220,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final (key, label, start, ripple) in [
+                      ('start', l10n.cutTrimStart, true, false),
+                      ('end', l10n.cutTrimEnd, false, false),
+                      ('ripple-start', l10n.cutRippleTrimStart, true, true),
+                      ('ripple-end', l10n.cutRippleTrimEnd, false, true),
+                    ])
+                      row('trim-$key', label, () {
+                        _trimClips(comp, picked!, playhead,
+                            start: start, ripple: ripple);
+                      }, dismiss, enabled: canSplit),
+                  ],
+                ),
+              ),
+              child: MenuLabel(l10n.cutTrimMenu, ticked: false),
+            ),
           SubmenuRow(
-            key: ValueKey<String>('atl-clip-fade-in-${clip?.id ?? track.id}'),
+            key: ValueKey<String>('atl-clip-transition-${clip?.id ?? track.id}'),
             closeParent: close,
-            submenu: (dismiss) => shapes(dismiss, into: true),
-            child: MenuLabel(l10n.clipFadeIn, ticked: false),
-          ),
-          SubmenuRow(
-            key: ValueKey<String>('atl-clip-fade-out-${clip?.id ?? track.id}'),
-            closeParent: close,
-            submenu: (dismiss) => shapes(dismiss, into: false),
-            child: MenuLabel(l10n.clipFadeOut, ticked: false),
+            submenu: (dismissAll) => FloatSurface(
+              width: 150,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SubmenuRow(
+                    key: ValueKey<String>(
+                        'atl-clip-fade-in-${clip?.id ?? track.id}'),
+                    closeParent: dismissAll,
+                    submenu: (dismiss) => shapes(dismiss, into: true),
+                    child: MenuLabel(l10n.clipFadeIn),
+                  ),
+                  SubmenuRow(
+                    key: ValueKey<String>(
+                        'atl-clip-fade-out-${clip?.id ?? track.id}'),
+                    closeParent: dismissAll,
+                    submenu: (dismiss) => shapes(dismiss, into: false),
+                    child: MenuLabel(l10n.clipFadeOut),
+                  ),
+                ],
+              ),
+            ),
+            child: MenuLabel(l10n.cutTransitionMenu, ticked: false),
           ),
           MenuRow(
             key: ValueKey<String>('atl-keep-pitch-${track.id}'),
@@ -2529,19 +2602,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           ),
           _laneSubmenu([track], close),
           if (clip != null) ...[
-            if (clip.effects.isNotEmpty)
-              row('bypass', l10n.cutBypassEffects, () {
-                _toggleClipFx(track, clip);
-              }, close, ticked: !clip.fx),
-            SubmenuRow(
-              key: ValueKey<String>('atl-clip-add-audio-effect-${clip.id}'),
-              closeParent: close,
-              submenu: (dismiss) => audioEffectFlyout(dismiss, (name) {
-                layer.addClipEffect(clip: clip.id, name: name);
-                _afterStackEdit();
-              }),
-              child: MenuLabel(l10n.audioAddEffect, ticked: false),
-            ),
             if (clip.takes.length > 1)
               SubmenuRow(
                 key: ValueKey<String>('atl-clip-takes-${clip.id}'),
@@ -2597,8 +2657,22 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               row('merge-streams', l10n.menuMergeAudioStreams,
                   () => _clipStreams(comp, clip, split: false), close),
             ],
+            const MenuDivider(),
+            SubmenuRow(
+              key: ValueKey<String>('atl-clip-add-audio-effect-${clip.id}'),
+              closeParent: close,
+              submenu: (dismiss) => audioEffectFlyout(dismiss, (name) {
+                layer.addClipEffect(clip: clip.id, name: name);
+                _afterStackEdit();
+              }),
+              child: MenuLabel(l10n.audioAddEffect, ticked: false),
+            ),
             if (!clip.sourceIsSolid)
-              row('open-comp', l10n.cutOpenAsComposition, () {
+              row(
+                  'open-comp',
+                  clip.sourceIsComp
+                      ? l10n.cutOpenComposition
+                      : l10n.cutNewCompositionFromClip, () {
                 CompositionReference? made;
                 try {
                   made = comp.cutClipToComposition(clip: clip.id);
@@ -2619,10 +2693,12 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             row('copy', l10n.menuCopy, () => _copyClips(), close,
                 action: 'edit.copy'),
             row('paste', l10n.menuPaste, () => _pasteClips(onto: layer), close,
-                action: 'edit.paste'),
+                action: 'edit.paste', enabled: _clipsHeld),
+            row('duplicate', l10n.menuDuplicate,
+                () => _duplicateClips(comp, picked!), close),
             row('paste-attributes', l10n.cutPasteAttributes, () {
               _afterCut(_cut(() => comp.cutPasteAttributes(clips: ids)));
-            }, close),
+            }, close, enabled: _clipsHeld),
             const MenuDivider(),
             row('group', l10n.cutGroup, () => _groupClips(join: true), close,
                 enabled: ids.length > 1),
@@ -2633,6 +2709,11 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               setState(() => _pickedClips = {
                     for (final c in info.clips)
                       if (c.startFrame >= clip.startFrame) c.id.toString(),
+                  });
+            }, close),
+            row('select-track', l10n.cutSelectTrack, () {
+              setState(() => _pickedClips = {
+                    for (final c in info.clips) c.id.toString(),
                   });
             }, close),
           ],
@@ -2657,6 +2738,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             ),
             child: MenuLabel(l10n.clipColour, ticked: false),
           ),
+          if (clip != null && clip.effects.isNotEmpty)
+            row('bypass', l10n.cutBypassEffects, () {
+              _toggleClipFx(track, clip);
+            }, close, ticked: !clip.fx),
           const MenuDivider(),
           if (picked != null) ...[
             row('delete', l10n.clipDelete, () {
@@ -2664,11 +2749,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               // cut to.
               _deleteClips(picked);
             }, close, action: 'edit.delete.selection'),
-            row('ripple-delete', l10n.cutRippleDelete, () {
-              _afterCut(_cut(() =>
-                  comp.cutDelete(clips: ids, ripple: true, linked: false)));
-              setState(() => _pickedClips = const {});
-            }, close),
+            row('ripple-delete', l10n.cutRippleDelete,
+                () => _rippleDeletePicked(ui), close,
+                action: 'cut.delete.ripple'),
           ] else
             row('delete-layer', l10n.delete, () {
               layer.delete();
@@ -2692,6 +2775,80 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       }
     });
     _afterWrite();
+  }
+
+  /// Cut at the playhead: the tracks of the picked clips, or the picked tracks,
+  /// or every track. A faded picture row has no sound here to cut.
+  void _splitAtPlayhead(LumitUiState ui) {
+    final tracks = [for (final t in _lastTracks) if (!t.dimmed) t];
+    final holding = {for (final (track, _) in _pickedOnTracks()) track};
+    final picked = holding.isNotEmpty
+        ? holding
+        : tracks.where(
+            (t) => ui.selectedLayerIds.contains(t.entry.layer.internallayerId));
+    final made = razorCut(
+        razorTargets(
+          [for (final t in picked.isEmpty ? tracks : picked) t.entry],
+          ui.playheadFrame.value,
+          clicked: null,
+          allLayers: true,
+        ),
+        ui.playheadFrame.value);
+    if (made.cut) _afterWrite();
+  }
+
+  /// The picked clips gone, and what follows each moved back to close the room.
+  void _rippleDeletePicked(LumitUiState ui) {
+    final comp = ui.selectedComp;
+    if (comp == null) return;
+    final ids = [for (final (_, clip) in _pickedOnTracks()) clip.id];
+    _afterCut(
+        _cut(() => comp.cutDelete(clips: ids, ripple: true, linked: false)));
+    setState(() => _pickedClips = const {});
+  }
+
+  /// A copy of the picked clips, straight after them or past the end of their
+  /// tracks where something is in the way.
+  void _duplicateClips(CompositionReference comp,
+      List<(AudioTrackRow, BridgeClip)> picked) {
+    final clips = [for (final (_, clip) in picked) clip];
+    _afterCut(_cut(() => comp.cutDuplicate(
+          clips: [for (final clip in clips) clip.id],
+          grabbed: clips.first.id,
+          byFrames: cutDuplicateFrames(clips, [
+            for (final track in {for (final (track, _) in picked) track})
+              track.entry.info.clips,
+          ]),
+          target: null,
+          linked: false,
+          how: BridgeCutMove(
+            overlap: _ui?.workspace.interface.cutAutoCrossfade ?? false,
+            ripple: false,
+            nudgeTicks: 0,
+          ),
+        )));
+  }
+
+  /// One end of each picked clip the playhead is inside brought to the playhead,
+  /// closing the room behind it with [ripple]. One undo step.
+  void _trimClips(CompositionReference comp,
+      List<(AudioTrackRow, BridgeClip)> picked, int playhead,
+      {required bool start, required bool ripple}) {
+    var result = BridgeCutResult.nothing;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      for (final (_, clip) in picked) {
+        if (clip.startFrame >= playhead || playhead >= clip.endFrame) continue;
+        result = _cut(() => comp.cutTrim(
+              clip: clip.id,
+              startFrame: start ? playhead : clip.startFrame,
+              endFrame: start ? clip.endFrame : playhead,
+              ripple: ripple,
+              linked: false,
+              overlap: _ui?.workspace.interface.cutAutoCrossfade ?? false,
+            ));
+      }
+    });
+    _afterCut(result);
   }
 
   /// The razor, aimed at the row that was clicked - or, with Shift, at every

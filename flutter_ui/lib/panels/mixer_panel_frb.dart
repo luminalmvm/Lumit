@@ -251,9 +251,7 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
     ];
     final raised = [
       for (final e in sounding)
-        if (e.info.volumeDb is! BridgeScalar_Static ||
-            (e.info.volumeDb as BridgeScalar_Static).field0 != 0)
-          e,
+        if (levelMoved(e.info.volumeDb, comp, ui.playheadFrame.value)) e,
     ];
     void changed() {
       ui.model.refresh();
@@ -393,7 +391,11 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                         controller: _strips,
                         crossAxisMargin: 2,
                         child: EdgeFade(
-                        child: ListView(
+                        child: LayoutBuilder(
+                        builder: (context, box) {
+                          final width =
+                              _stripWidthIn(box.maxWidth, sounding.length);
+                          return ListView(
                         controller: _strips,
                         scrollDirection: Axis.horizontal,
                         children: [
@@ -412,6 +414,7 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                                 comp: comp,
                                 entry: entry,
                                 desk: sounding,
+                                width: width,
                                 routed: routed,
                                 feed: _feed,
                                 onChanged: () {
@@ -421,6 +424,8 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                               ),
                             ),
                         ],
+                      );
+                        },
                       ),
                       ),
                       ),
@@ -436,8 +441,22 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
   }
 }
 
-/// The width the board draws a strip at.
+/// The width the board draws a strip at, and the most one takes when the desk
+/// has room for its name.
 const double _stripWidth = 62;
+const double _stripWidthMost = 96;
+
+/// The desk's own ground kept beside strips that all fit, for its right-click.
+const double _deskGround = 16;
+
+/// How wide each of [count] strips stands on a desk [room] wide. They share
+/// the room, so a spare inch goes to the names, and a desk too narrow for all
+/// of them shows whole strips rather than part of one under the Master.
+double _stripWidthIn(double room, int count) {
+  final whole = (room ~/ _stripWidth).clamp(1, count);
+  if (whole < count) return room / whole;
+  return ((room - _deskGround) / count).clamp(_stripWidth, _stripWidthMost);
+}
 
 /// How tall the strip's rows that must stand level across the desk are.
 const double _nameRow = 18;
@@ -451,6 +470,9 @@ class _MixerStrip extends StatefulWidget {
   /// Every strip on the desk, which a menu on a picked strip acts across.
   final List<BridgeLayerEntry> desk;
 
+  /// How wide the desk has this strip stand.
+  final double width;
+
   /// Whether any strip on the desk is routed, so this one keeps a line for it.
   final bool routed;
   final AudioMeterFeed feed;
@@ -461,6 +483,7 @@ class _MixerStrip extends StatefulWidget {
     required this.comp,
     required this.entry,
     required this.desk,
+    required this.width,
     required this.routed,
     required this.feed,
     required this.onChanged,
@@ -532,6 +555,8 @@ class _MixerStripState extends State<_MixerStrip> {
         closeParent: () => close(null),
         onRename: _beginRename,
         onChanged: widget.onChanged,
+        renameAction: null,
+        duplicateAction: null,
       ),
     );
   }
@@ -628,7 +653,7 @@ class _MixerStripState extends State<_MixerStrip> {
         min: _faderFloorDb,
         max: 12,
         decimals: 1,
-        suffix: ' dB',
+        suffix: ' ${l10n.unitSymbolDb}',
       );
 
   void _potMenu(Offset at) => _valueMenu(
@@ -693,12 +718,13 @@ class _MixerStripState extends State<_MixerStrip> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onSecondaryTapUp: (e) => _stripMenu(e.globalPosition),
+        child: SizedBox(
+        width: widget.width,
         child: ValueListenableBuilder<List<LayerReference>>(
         valueListenable: ui.selectedLayers,
         builder: (context, picked, child) => AnimatedContainer(
           duration: mark.duration,
           curve: mark.curve,
-          width: _stripWidth,
           decoration: BoxDecoration(
             color: picked.any((l) => l.internallayerId == layer.internallayerId)
                 ? rowSelectionFill(t)
@@ -715,6 +741,7 @@ class _MixerStripState extends State<_MixerStrip> {
                 builder: (context, frame, _) =>
                     _body(context, t, info, layer, id, switches, frame),
               ),
+        ),
         ),
       ),
     );
@@ -739,8 +766,7 @@ class _MixerStripState extends State<_MixerStrip> {
                   behavior: HitTestBehavior.opaque,
                   onDoubleTap: _beginRename,
                   child: Container(
-                    constraints:
-                        const BoxConstraints(maxWidth: _stripWidth - 8),
+                    constraints: BoxConstraints(maxWidth: widget.width - 8),
                     decoration: BoxDecoration(
                       border: Border(
                         bottom: BorderSide(
@@ -772,11 +798,11 @@ class _MixerStripState extends State<_MixerStrip> {
     }
     return SizedBox(
       height: _routeRow,
-      width: _stripWidth - 8,
+      width: widget.width - 8,
       child: bus == null
           ? null
           : Text(
-              '→ $bus',
+              l10n.mixerRoutedTo(bus),
               style: t.caption.copyWith(color: t.textMuted),
               maxLines: 1,
               softWrap: false,

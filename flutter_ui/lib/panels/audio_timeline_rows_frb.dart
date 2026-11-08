@@ -544,9 +544,11 @@ class AudioTrackOutlineRow extends StatelessWidget {
             child: SizedBox(
               width: audioTrackChipWidth,
               child: Center(
+                // Brighter than the dimmed row it stands on, being the one
+                // thing there that answers.
                 child: glyph.LumitIcon(LumitIcons.unlink,
                     size: iconSize,
-                    colour: Color.lerp(t.textMuted, t.textPrimary, lit)),
+                    colour: Color.lerp(t.textSecondary, t.textPrimary, lit)),
               ),
             ),
           ),

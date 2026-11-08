@@ -303,6 +303,7 @@ class _MixBarState extends State<_MixBar> {
     final value = t.mono.copyWith(
         fontSize: 9, color: changed ? t.textPrimary : t.textMuted);
     final fill = changed ? widget.fill : t.textMuted;
+    final held = changed || _live != null;
     return LayoutBuilder(builder: (context, box) {
       final width = box.maxWidth.isFinite ? box.maxWidth : 120.0;
       double xOf(double v) =>
@@ -312,7 +313,11 @@ class _MixBarState extends State<_MixBar> {
       final to = xOf(shown);
       final bar = HoverMark(
         cursor: SystemMouseCursors.resizeLeftRight,
-        builder: (context, lit) => GestureDetector(
+        builder: (context, lit) {
+          // A value at its usual place is its name alone until the pointer
+          // comes, so eight rows at full say nothing eight times.
+          final bar = held ? 1.0 : lit;
+          return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onHorizontalDragStart: (_) => setState(() => _live = widget.value),
           onHorizontalDragUpdate: (d) {
@@ -338,7 +343,7 @@ class _MixBarState extends State<_MixBar> {
             height: _barHeight,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: t.surface2,
+              color: t.surface2.withValues(alpha: t.surface2.a * bar),
               borderRadius: BorderRadius.circular(2),
             ),
             child: Stack(fit: StackFit.expand, children: [
@@ -350,7 +355,7 @@ class _MixBarState extends State<_MixBar> {
                 // Lifts a shade under the pointer.
                 child: ColoredBox(
                     color: fill.withValues(
-                        alpha: (changed ? 0.25 : 0.1) + 0.2 * lit)),
+                        alpha: ((changed ? 0.25 : 0.1) + 0.2 * lit) * bar)),
               ),
               // The origin, so Pan at centre reads as a centred slider.
               if (widget.origin != null)
@@ -359,32 +364,37 @@ class _MixBarState extends State<_MixBar> {
                   width: 1,
                   top: 0,
                   bottom: 0,
-                  child: ColoredBox(color: t.textMuted),
+                  child: ColoredBox(
+                      color: t.textMuted.withValues(alpha: t.textMuted.a * bar)),
                 ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 child: Row(children: [
-                  // Too narrow for both, the value wins.
-                  if (width >= 72) ...[
+                  // Too narrow for both, the value wins once there is one to show.
+                  if (width >= 72 || bar == 0) ...[
                     Text(widget.label,
                         style: t.small.copyWith(color: t.textMuted),
                         maxLines: 1),
                     const SizedBox(width: 4),
                   ],
                   Expanded(
-                    child: Text(
-                      widget.text(shown),
-                      style: value,
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Opacity(
+                      opacity: bar,
+                      child: Text(
+                        widget.text(shown),
+                        style: value,
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ]),
               ),
             ]),
           ),
-        ),
+          );
+        },
       );
       return IgnorePointer(
         ignoring: !widget.enabled,

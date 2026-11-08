@@ -612,6 +612,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               closeParent: () => close(null),
               onRename: () => setState(() => _rename =
                   TextEditingController(text: picked.info.name)),
+              renameAction: null,
+              duplicateAction: null,
               onChanged: () {
                 ui.model.refresh();
                 comp.audioPrepare();
@@ -792,9 +794,10 @@ class LevelBarsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final master = frame.value.master;
-    _bar(canvas, size, 0, 'L', master.rmsLeft, master.peakLeft, master.holdLeft);
-    _bar(canvas, size, 1, 'R', master.rmsRight, master.peakRight,
-        master.holdRight);
+    _bar(canvas, size, 0, l10n.audioMeterLeft, master.rmsLeft, master.peakLeft,
+        master.holdLeft);
+    _bar(canvas, size, 1, l10n.audioMeterRight, master.rmsRight,
+        master.peakRight, master.holdRight);
     final width = size.width - _leftGutter - _rightGutter;
     final tickTop = _rowStep * 2 - 2;
     for (final db in _scale) {

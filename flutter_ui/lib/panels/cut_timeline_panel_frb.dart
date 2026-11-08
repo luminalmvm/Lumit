@@ -66,6 +66,7 @@ import '../widgets/name_direction.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
+import 'audio_routes_frb.dart' show audioLayerRows, audioMenuTargets;
 import 'audio_streams_menu_frb.dart';
 import 'audio_timeline_clips_frb.dart' show audioClipGainY;
 import 'clip_fade_popover.dart' show clipFadeShapeName;
@@ -713,6 +714,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             focused.findAncestorWidgetOfExactType<EditableText>() != null)) {
       return false;
     }
+    // Enter names the track in hand, as it names a row in the layer Timeline.
+    if (event is KeyDownEvent &&
+        _renaming == null &&
+        ui.keymap.actionFor(BridgeKeyContext.timeline, event) ==
+            'layer.rename' &&
+        ui.selectedLayers.value.length == 1) {
+      final picked = ui.selectedLayers.value.single.internallayerId;
+      for (final track in _tracks) {
+        if (track.kind == CutTrackKind.layerSound ||
+            track.entry.layer.internallayerId != picked ||
+            track.entry.info.switches.locked) {
+          continue;
+        }
+        _startRename(track);
+        return true;
+      }
+    }
     final action = ui.keymap.actionFor(BridgeKeyContext.cut, event);
     if (action == null) return false;
     // A held key repeats a nudge, a zoom and a step to the next edit point;
@@ -1136,14 +1154,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
   /// F: what the clip under the playhead is showing, on the track in hand
   /// or the top-most one with a clip there, loaded into the source view and
-  /// stood on that frame. Nothing without a source view to load it into.
+  /// stood on that frame, which puts a source side in the Viewer if none is
+  /// there.
   void _matchFrame(LumitUiState ui, CompositionReference? comp) {
-    if (comp == null || ui.sourceView == null) return;
+    if (comp == null) return;
     final hit = _match(comp, ui.playheadFrame.value, _selectedTrackLayer(ui));
     if (hit == null) {
       ui.reportCut(BridgeCutResult.nothing);
       return;
     }
+    ui.showSourceView();
     ui.openFootageViewAt(hit.footage, hit.sourceTime);
   }
 
@@ -1166,7 +1186,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _openAsComposition(ui, comp, clip);
       return;
     }
-    if (ui.sourceView == null || clip.sourceIsSolid) return;
+    if (clip.sourceIsSolid) return;
     final at = ui.playheadFrame.value;
     final start = clip.startFrame.toInt();
     final inside = at >= start && at < clip.endFrame.toInt();
@@ -1175,6 +1195,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       ui.reportCut(BridgeCutResult.nothing);
       return;
     }
+    ui.showSourceView();
     ui.openFootageViewAt(hit.footage, hit.sourceTime,
         markIn: clip.sourceIn, markOut: clip.sourceOut);
   }
@@ -3118,6 +3139,70 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     // kept to its picture row.
     final own = track.kind != CutTrackKind.layerSound;
     final tall = _heightsHere?.containsKey(track.id) ?? false;
+    Iterable<Widget> envelopes(void Function(void) close) => [
+          for (final (kind, label, action) in [
+            (BandKind.volume, l10n.cutVolumeEnvelope, 'cut.envelope.volume'),
+            (BandKind.pan, l10n.cutPanEnvelope, 'cut.envelope.pan'),
+          ])
+            _row(close, 'ctl-head-${kind.name}', label,
+                () => _toggleEnvelope(kind, on: [track]),
+                action: action, ticked: _bandShown(track, kind)),
+        ];
+
+    // A sound track is the same layer the Audio timeline and the Mixer show,
+    // so it wears their menu, with what only a track here can do beside it.
+    final ui = _ui;
+    final comp = _tracksComp;
+    if (track.sound && ui != null && comp != null) {
+      return showMenuAt<void>(
+        context: context,
+        position: global,
+        width: 230,
+        rows: (close) => audioLayerRows(
+          theme: t,
+          comp: comp,
+          app: Provider.of<LumitState>(context, listen: false),
+          entry: track.entry,
+          targets: audioMenuTargets(
+              track.entry,
+              [for (final other in _tracks) if (other.sound) other.entry],
+              ui.selectedLayerIds),
+          buses: [
+            for (final l in ui.model.layers)
+              if (l.info.kind == BridgeLayerKind.bus) l,
+          ],
+          frame: ui.playheadFrame.value,
+          closeParent: () => close(null),
+          onRename: () => _startRename(track),
+          onChanged: () {
+            Provider.of<LumitState>(context, listen: false)
+                .notifyDocumentChanged();
+            _afterSound();
+          },
+          duplicateAction: null,
+          extra: [
+            ...envelopes(close),
+            const MenuDivider(),
+            _row(close, 'ctl-head-select', l10n.cutSelectTrack,
+                () => _selectTrack(track),
+                enabled: track.clips.isNotEmpty, ticked: false),
+            _row(close, 'ctl-head-up', l10n.moveUp, () => _moveTrack(at, at - 1),
+                enabled: _canLand(at, at - 1), ticked: false),
+            _row(close, 'ctl-head-down', l10n.moveDown,
+                () => _moveTrack(at, at + 1),
+                enabled: _canLand(at, at + 1), ticked: false),
+            _row(close, 'ctl-head-minimise', l10n.cutMinimiseTracks,
+                _minimiseTracks,
+                action: 'cut.tracks.minimise', ticked: false),
+            if (tall)
+              _row(close, 'ctl-head-height', l10n.cutResetHeight,
+                  () => _resetTrack(track),
+                  ticked: false),
+          ],
+        ),
+      );
+    }
+
     void flip(BridgeLayerSwitch which, bool on) {
       try {
         _tracksComp?.setSwitchOnLayers(
@@ -3151,15 +3236,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         if (own)
           _row(close, 'ctl-head-rename', l10n.rename,
               () => _startRename(track),
-              ticked: false),
-        if (track.below)
-          for (final (kind, label, action) in [
-            (BandKind.volume, l10n.cutVolumeEnvelope, 'cut.envelope.volume'),
-            (BandKind.pan, l10n.cutPanEnvelope, 'cut.envelope.pan'),
-          ])
-            _row(close, 'ctl-head-${kind.name}', label,
-                () => _toggleEnvelope(kind, on: [track]),
-                action: action, ticked: _bandShown(track, kind)),
+              action: 'layer.rename', ticked: false),
+        if (track.below) ...envelopes(close),
         if (own && isFootage)
           _row(close, 'ctl-head-to-sequence', l10n.menuConvertToSequenceLayer,
               () => convert(layer.convertToSequenced),
@@ -3173,7 +3251,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           _row(close, 'ctl-head-audible', l10n.switchAudible,
               () => flip(BridgeLayerSwitch.audible, !s.audible),
               ticked: s.audible),
-        if (track.kind == CutTrackKind.picture || track.sound)
+        if (track.kind == CutTrackKind.picture)
           _row(close, 'ctl-head-solo', l10n.switchSolo,
               () => flip(BridgeLayerSwitch.solo, !s.solo),
               ticked: s.solo),
@@ -3240,7 +3318,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               layer.delete();
             } catch (_) {}
             _afterCut(BridgeCutResult.done);
-          }, ticked: false),
+          }, action: 'edit.delete.selection', ticked: false),
         ],
       ],
     );
@@ -3509,26 +3587,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       rows: (close) {
         final sound = soundRows(close);
         return [
-          // What the clip is. A solid has nothing inside it to open.
-          if (ui.sourceView != null &&
-              !clip.sourceIsComp &&
-              !clip.sourceIsSolid)
-            _row(close, 'ctl-menu-open-source', l10n.cutOpenInSource,
-                () => _openClip(ui, comp, track, clip),
-                enabled: one),
-          if (!clip.sourceIsSolid)
-            _row(close, 'ctl-menu-open-comp', l10n.cutOpenAsComposition,
-                () => _openAsComposition(ui, comp, clip),
-                enabled: one),
-          _row(close, 'ctl-menu-effects', l10n.effectControls,
-              () => _badge(ui, track, clip, CutBadge.fx),
-              enabled: one),
-          if (picture)
-            _row(close, 'ctl-menu-pan-crop', l10n.cutPanCropMenu,
-                () => _badge(ui, track, clip, CutBadge.panCrop),
-                enabled: one),
-          const MenuDivider(),
-          // What can be done to it along the time.
+          // What an editor reaches for all day comes first: what can be done
+          // to it along the time.
           _row(close, 'ctl-menu-split', l10n.cutMenuSplit,
               () => _addEdit(ui, comp, all: false),
               action: 'cut.add.edit', enabled: inside),
@@ -3623,6 +3683,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                   () => _pasteSpeed(ui),
                   enabled: speedLineClipboard != null, ticked: false),
             ]),
+          if (sound.length == 1)
+            sound.single
+          else if (sound.isNotEmpty)
+            _flyout(close, 'ctl-menu-sound', l10n.cutSoundMenu, sound,
+                width: 240),
           // A picture clip's own blend mode, or its track's.
           if (track.kind == CutTrackKind.picture)
             SubmenuRow(
@@ -3658,11 +3723,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               ),
               child: Text(l10n.tipBlendMode),
             ),
-          if (sound.length == 1)
-            sound.single
-          else if (sound.isNotEmpty)
-            _flyout(close, 'ctl-menu-sound', l10n.cutSoundMenu, sound,
-                width: 240),
           // The clip's takes, the one showing ticked: picked to show it, or
           // deleted. Takes come from footage dropped on the clip with Alt.
           if (clip.takes.length > 1)
@@ -3682,6 +3742,32 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                       _cut(() => comp.cutDeleteTake(clip: clip.id, take: 0))),
                   ticked: false),
             ], width: 240),
+          const MenuDivider(),
+          // What opens or looks at the clip. A solid has nothing inside it to
+          // open, and making a composition of a clip changes the document, so
+          // it stands last of these.
+          if (ui.currentViewerPane != null &&
+              !clip.sourceIsComp &&
+              !clip.sourceIsSolid)
+            _row(close, 'ctl-menu-open-source', l10n.cutOpenInSource,
+                () => _openClip(ui, comp, track, clip),
+                enabled: one),
+          _row(close, 'ctl-menu-effects', l10n.effectControls,
+              () => _badge(ui, track, clip, CutBadge.fx),
+              enabled: one),
+          if (picture)
+            _row(close, 'ctl-menu-pan-crop', l10n.cutPanCropMenu,
+                () => _badge(ui, track, clip, CutBadge.panCrop),
+                enabled: one),
+          if (!clip.sourceIsSolid)
+            _row(
+                close,
+                'ctl-menu-open-comp',
+                clip.sourceIsComp
+                    ? l10n.cutOpenComposition
+                    : l10n.cutNewCompositionFromClip,
+                () => _openAsComposition(ui, comp, clip),
+                enabled: one),
           const MenuDivider(),
           _row(close, 'ctl-menu-cut', l10n.menuCut,
               () => _copyFromMenu(ui, comp, cut: true),
@@ -3794,25 +3880,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           if (_tracks[at].clip(id) case final clip?) (at, clip),
     ];
     if (picked.isEmpty) return;
-    final from =
-        picked.map((p) => p.$2.startFrame.toInt()).reduce(min);
-    final to = picked.map((p) => p.$2.endFrame.toInt()).reduce(max);
-    final span = to - from;
-    var last = to;
-    var clear = true;
-    for (final at in {for (final p in picked) p.$1}) {
-      for (final clip in _tracks[at].clips) {
-        if (_selected.contains(clip.id.toString())) continue;
-        last = max(last, clip.endFrame.toInt());
-        if (clip.startFrame.toInt() < to + span && clip.endFrame.toInt() > to) {
-          clear = false;
-        }
-      }
-    }
     _afterCut(_cut(() => comp.cutDuplicate(
           clips: [for (final p in picked) p.$2.id],
           grabbed: picked.first.$2.id,
-          byFrames: clear ? span : last - from,
+          byFrames: cutDuplicateFrames(
+            [for (final p in picked) p.$2],
+            [for (final at in {for (final p in picked) p.$1}) _tracks[at].clips],
+          ),
           target: null,
           linked: _linked,
           how: _how(copy: true),

@@ -657,7 +657,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
             DockSplit(
               DockAxis.horizontal,
               [DockPane(Panel.cutTimeline), DockPane(Panel.mixer)],
-              [0.86, 0.14],
+              [0.82, 0.18],
             ),
           ],
           [0.53, 0.47],

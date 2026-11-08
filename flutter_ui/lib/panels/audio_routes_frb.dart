@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
+import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
@@ -56,6 +57,14 @@ List<BridgeLayerEntry> audioMenuTargets(BridgeLayerEntry clicked,
   ];
 }
 
+/// Whether a volume or a pan stands off zero at [frame]. A keyed one resets at
+/// the playhead, so one already at zero there has nothing to reset.
+bool levelMoved(BridgeScalar scalar, CompositionReference comp, int frame) =>
+    (scalar is BridgeScalar_Static
+        ? scalar.field0
+        : sampledScalar(scalar, timeOfFrame(comp, frame))) !=
+    0;
+
 /// The audio effects, sorted, as a flyout. Opened from a strip, a track head or
 /// a clip, and [onAdd] puts the one picked where that row means.
 Widget audioEffectFlyout(VoidCallback dismiss, ValueChanged<String> onAdd) {
@@ -91,7 +100,10 @@ Widget audioEffectFlyout(VoidCallback dismiss, ValueChanged<String> onAdd) {
 /// The menu a sound layer wears, grouped: the layer's own commands, where its
 /// sound goes, the copy, its label, and Delete last. [extra] is what only the
 /// surface it opened on knows about, such as a track's lane picture or a strip's
-/// fader, and stands after the layer's own switches.
+/// fader, and stands after the layer's own switches. A [pictureRow] is a picture
+/// layer whose sound has yet to be detached, and until it is, nothing that mixes
+/// it can act. [renameAction] and [duplicateAction] are the keys that do those
+/// two on the surface the menu opened on, null where they do something else.
 List<Widget> audioLayerRows({
   required LumitTheme theme,
   required CompositionReference comp,
@@ -104,6 +116,9 @@ List<Widget> audioLayerRows({
   required VoidCallback onRename,
   required VoidCallback onChanged,
   List<Widget> extra = const [],
+  bool pictureRow = false,
+  String? renameAction = 'layer.rename',
+  String? duplicateAction = 'layer.duplicate',
 }) {
   final info = entry.info;
   final switches = info.switches;
@@ -137,11 +152,9 @@ List<Widget> audioLayerRows({
     onChanged();
   }
 
-  // A keyed level resets at the playhead, as typing a number would write it.
-  bool off(BridgeScalar scalar) =>
-      scalar is! BridgeScalar_Static || scalar.field0 != 0;
-  final volumeOff = targets.any((t) => off(t.info.volumeDb));
-  final panOff = targets.any((t) => off(t.info.pan));
+  final volumeOff =
+      targets.any((t) => levelMoved(t.info.volumeDb, comp, frame));
+  final panOff = targets.any((t) => levelMoved(t.info.pan, comp, frame));
 
   Widget switchRow(String key, String label, bool ticked, VoidCallback act) =>
       MenuRow(
@@ -158,23 +171,49 @@ List<Widget> audioLayerRows({
       info.kind != BridgeLayerKind.audio &&
       switches.audible &&
       entry.layer.hasPicture();
+  final rename = MenuRow(
+    key: const ValueKey<String>('audio-menu-rename'),
+    enabled: canRename,
+    onPressed: () {
+      closeParent();
+      onRename();
+    },
+    child: MenuLabel(l10n.rename,
+        action: renameAction, ticked: false, enabled: canRename),
+  );
+  final lock = switchRow('lock', l10n.switchLock, switches.locked,
+      () => flip(BridgeLayerSwitch.locked, !switches.locked));
+  final detach = MenuRow(
+    key: const ValueKey<String>('audio-menu-detach'),
+    onPressed: () async {
+      closeParent();
+      await detachLayerAudio(app, entry);
+      onChanged();
+    },
+    child: MenuLabel(l10n.menuDetachAudio, ticked: false),
+  );
+  final delete = MenuRow(
+    key: const ValueKey<String>('audio-menu-delete'),
+    enabled: !locked,
+    onPressed: () {
+      closeParent();
+      each((t) => t.layer.delete());
+    },
+    child: MenuLabel(l10n.delete,
+        action: 'edit.delete.selection', ticked: false, enabled: !locked),
+  );
+  if (pictureRow) {
+    return [rename, detach, lock, const MenuDivider(), delete];
+  }
   return [
-    MenuRow(
-      key: const ValueKey<String>('audio-menu-rename'),
-      enabled: canRename,
-      onPressed: () {
-        closeParent();
-        onRename();
-      },
-      child: MenuLabel(l10n.rename,
-          action: 'layer.rename', ticked: false, enabled: canRename),
-    ),
+    rename,
     switchRow('mute', l10n.audioMute, !switches.audible,
         () => flip(BridgeLayerSwitch.audible, !switches.audible)),
     switchRow('solo', l10n.switchSolo, switches.solo,
         () => flip(BridgeLayerSwitch.solo, !switches.solo)),
     switchRow('bypass', l10n.cutBypassEffects, !switches.fx,
         () => flip(BridgeLayerSwitch.fx, !switches.fx)),
+    lock,
     const MenuDivider(),
     MenuRow(
       key: const ValueKey<String>('audio-menu-reset-volume'),
@@ -207,16 +246,7 @@ List<Widget> audioLayerRows({
         closeParent: closeParent,
         onChanged: onChanged,
       ),
-    if (canDetach)
-      MenuRow(
-        key: const ValueKey<String>('audio-menu-detach'),
-        onPressed: () async {
-          closeParent();
-          await detachLayerAudio(app, entry);
-          onChanged();
-        },
-        child: MenuLabel(l10n.menuDetachAudio, ticked: false),
-      ),
+    if (canDetach) detach,
     SubmenuRow(
       key: const ValueKey<String>('audio-menu-add-effect'),
       closeParent: closeParent,
@@ -233,7 +263,7 @@ List<Widget> audioLayerRows({
         each((t) => t.layer.duplicate());
       },
       child: MenuLabel(l10n.menuDuplicate,
-          action: 'layer.duplicate', ticked: false, enabled: !locked),
+          action: duplicateAction, ticked: false, enabled: !locked),
     ),
     SubmenuRow(
       key: const ValueKey<String>('audio-menu-label'),
@@ -247,16 +277,7 @@ List<Widget> audioLayerRows({
       child: MenuLabel(l10n.tipLabelColour, ticked: false),
     ),
     const MenuDivider(),
-    MenuRow(
-      key: const ValueKey<String>('audio-menu-delete'),
-      enabled: !locked,
-      onPressed: () {
-        closeParent();
-        each((t) => t.layer.delete());
-      },
-      child: MenuLabel(l10n.delete,
-          action: 'edit.delete.selection', ticked: false, enabled: !locked),
-    ),
+    delete,
   ];
 }
 

@@ -12452,9 +12452,13 @@
   "@cutRemoveFadeOut": {
     "description": "Cut timeline, clip menu: clear the fade at the clip's end."
   },
-  "cutOpenAsComposition": "Open as composition",
-  "@cutOpenAsComposition": {
-    "description": "Cut timeline, clip menu: make a composition holding the clip's footage, point the clip at it, and bring that composition to the front. A clip already playing a composition opens it."
+  "cutNewCompositionFromClip": "New composition from clip",
+  "@cutNewCompositionFromClip": {
+    "description": "Cut timeline and Audio timeline, clip menu: make a composition holding the clip's footage, point the clip at it, and bring that composition to the front."
+  },
+  "cutOpenComposition": "Open composition",
+  "@cutOpenComposition": {
+    "description": "Cut timeline and Audio timeline, clip menu of a clip that already plays a composition: bring that composition to the front."
   },
   "blendColourBurn": "Colour burn",
   "@blendColourBurn": {
@@ -15546,6 +15550,23 @@
   "@mixerMaster": {
     "description": "The Mixer panel's right-hand strip: the fader over the summed mix, ahead of the limiter. A mixing-desk term."
   },
+  "mixerRoutedTo": "to {bus}",
+  "@mixerRoutedTo": {
+    "description": "Mixer panel, under a strip's name: the bus this layer's sound goes to instead of the master.",
+    "placeholders": {
+      "bus": {
+        "type": "String"
+      }
+    }
+  },
+  "audioMeterLeft": "L",
+  "@audioMeterLeft": {
+    "description": "Audio panel, level meter: the letter beside the left channel's bar."
+  },
+  "audioMeterRight": "R",
+  "@audioMeterRight": {
+    "description": "Audio panel, level meter: the letter beside the right channel's bar."
+  },
   "mixerNoSound": "No sound",
   "@mixerNoSound": {
     "description": "Empty-state line in the Mixer panel when the fronted composition has no audio-capable layers, so there are no strips to draw."
@@ -17820,10 +17841,6 @@
   "clipFadeOut": "Fade out",
   "@clipFadeOut": {
     "description": "Audio timeline, clip menu: the submenu of shapes for the fade at the clip's end."
-  },
-  "clipSplitAtPlayhead": "Split at playhead",
-  "@clipSplitAtPlayhead": {
-    "description": "Audio timeline, clip menu: cut the clip in two where the playhead stands."
   },
   "clipFadeLinear": "Linear",
   "@clipFadeLinear": {
