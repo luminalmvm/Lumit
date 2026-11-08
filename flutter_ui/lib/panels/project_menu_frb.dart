@@ -1,9 +1,10 @@
-// The Project panel's context menu — everything a right-click on a row offers.
+// The Project panel's context menus: a row's, the blank ground's and the column
+// headings'.
 //
-// **In plain terms**: the list that appears when you right-click something in
+// **In plain terms**: the lists that appear when you right-click something in
 // the Project panel, and the code that carries out whichever line was picked.
-// It is one function because the menu is one gesture: the rows it draws and
-// the work it does after the click are two halves of the same answer.
+// Each is one function because a menu is one gesture: the rows it draws and the
+// work it does after the click are two halves of the same answer.
 
 import 'dart:async';
 
@@ -19,7 +20,10 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/dialog_frame.dart' show askLumitChoice;
+import '../shell/export_dialog_frb.dart' show showExportDialogFrb;
 import '../shell/interpret_footage_frb.dart';
+import '../shell/model_settings_dialog.dart'
+    show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/status_line_frb.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
@@ -27,7 +31,15 @@ import '../widgets/controls.dart';
 import 'project_columns_frb.dart';
 
 enum _ProjectMenuAction {
-  newNodeGraph,
+  open,
+  export,
+  addToComp,
+  newCompFromSelection,
+  openInSource,
+  toggleFolder,
+  newFolder,
+  copy,
+  paste,
   compSettings,
   duplicate,
   interpret,
@@ -129,15 +141,81 @@ Future<bool> deleteProjectItems(
 Widget _menuChipTip(String? message, Widget chip) =>
     message == null ? chip : LumitTooltip(message: message, child: chip);
 
+/// How wide the panel's menus are, with room for a row's chord.
+const double _menuWidth = 240;
+
+/// A submenu's list, which scrolls when there is more of it than fits.
+Widget _flyout(List<Widget> rows) => FloatSurface(
+      width: _menuWidth,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 400),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          ),
+        ),
+      ),
+    );
+
+/// Put [items] in the open composition, on top of its stack, as a drop on the
+/// Timeline does: footage end to end, a comp as a precomp, and a solid as a
+/// layer. One undo step. A comp that would hold itself is refused and passed
+/// over.
+void addItemsToOpenComp(BuildContext context, List<ItemReference> items) {
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final comp = ui.selectedComp;
+  if (comp == null) return;
+  final project = Provider.of<LumitState>(context, listen: false).project;
+  project?.beginUndoGroup();
+  try {
+    final footage = [
+      for (final item in items)
+        if (item case ItemReference_Footage(:final field0)) field0,
+    ];
+    if (footage.isNotEmpty) {
+      final placed = comp.addFootageLayers(
+          footage: footage,
+          asSequence: ui.workspace.interface.videoAsSequenceLayer,
+          row: 0,
+          arrival: ui.streamsArrival,
+          endToEnd: true,
+          lightNames: modelLightNames());
+      // A 3D model asks how it sits as it lands.
+      showDroppedModelSettingsFrb(context, placed);
+    }
+    for (final item in items) {
+      try {
+        switch (item) {
+          case ItemReference_Composition(:final field0):
+            comp.addPrecompLayer(comp: field0, row: 0);
+          case ItemReference_Solid(:final field0):
+            comp.addSolidItemLayer(solid: field0, row: 0);
+          case _:
+        }
+      } catch (_) {}
+    }
+  } finally {
+    project?.endUndoGroup();
+  }
+  ui.model.refresh();
+}
+
 /// The project context menu.
+///
+/// The item's own commands, then the clipboard, then where it is filed and its
+/// colour, with Delete last.
 Future<void> showProjectMenuFrb({
   required BuildContext context,
   required ItemReference item,
   required bool missing,
   required Offset position,
-  required VoidCallback onFindMissing,
   required VoidCallback onLocalEdit,
   Future<void> Function()? onRelink,
+
+  /// Narrow the list to what is missing. Null while nothing is.
+  VoidCallback? onFindMissing,
 
   /// Put the row into its in-place rename editor. Null where the menu is
   /// raised from somewhere with no row to edit.
@@ -185,6 +263,29 @@ Future<void> showProjectMenuFrb({
   /// time by the engine's own design, and starting four would be refused three
   /// times over.
   List<ItemReference>? targets,
+
+  /// Whether everything [targets] holds is already at the top of the project,
+  /// where Move to root has nothing to do.
+  bool atRoot = false,
+
+  /// Whether the file has sound, once it has been probed.
+  bool hasAudio = true,
+
+  /// Take [targets] for the panel's paste.
+  VoidCallback? onCopy,
+
+  /// Paste what was taken. Null while nothing has been.
+  VoidCallback? onPaste,
+
+  /// A folder's row: whether it is open, and the twirl.
+  bool folderOpen = true,
+  VoidCallback? onToggleFolder,
+
+  /// A new folder inside this one.
+  VoidCallback? onNewFolder,
+
+  /// Make a comp from these items, the panel's own New composition.
+  void Function(List<FootageReference> footage)? onNewComposition,
 }) async {
   final isFootage = item is ItemReference_Footage;
   // Where this footage is in a shared project, and who has it. Read once,
@@ -230,326 +331,310 @@ Future<void> showProjectMenuFrb({
     ItemReference_Footage(:final field0) => field0.sequenceRate(),
     _ => null,
   };
+  final picked = targets ?? [item];
+  final several = picked.length > 1;
+  // Something picked can go in the open comp, which can't hold itself.
+  final placeable = openComp != null &&
+      picked.any((target) => switch (target) {
+            ItemReference_Composition(:final field0) => field0 != openComp,
+            ItemReference_Folder() => false,
+            _ => true,
+          });
   // Read here rather than inside the popup's builder: the popup is raised in
   // its own route, so it has no ThemeScope of the panel's above it.
   final menuTheme = ThemeScope.of(context).theme;
   final action = await showLumitPopup<_ProjectMenuAction>(
     context: context,
     position: position,
-    builder: (close) => FloatSurface(
-      width: 210,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The panel's own New node graph (docs/impl/node-graph-comp.md
-          // §4.4). It is here rather than beside New composition in the bottom
-          // bar because the bar keeps its three words, and this menu is the
-          // panel's only other surface.
+    builder: (close) {
+      Widget row(
+        _ProjectMenuAction act,
+        String text, {
+        String? key,
+        String? chord,
+        bool enabled = true,
+        bool? ticked,
+      }) =>
           MenuRow(
-            key: const ValueKey('project-menu-new-node-graph'),
-            onPressed: () => close(_ProjectMenuAction.newNodeGraph),
-            child: Text(l10n.newNodeGraph),
-          ),
-          if (isComp)
-            MenuRow(
-              onPressed: () => close(_ProjectMenuAction.compSettings),
-              child: Text(l10n.compositionSettingsEllipsis),
-            ),
-          MenuRow(
-            key: const ValueKey('project-menu-duplicate'),
-            onPressed: () => close(_ProjectMenuAction.duplicate),
-            child: Text(l10n.menuDuplicate),
-          ),
-          // Every kind can be renamed from here. It matters most for a comp,
-          // whose second click opens it rather than renaming it.
-          MenuRow(
-            key: const ValueKey('project-menu-rename'),
-            onPressed: () => close(_ProjectMenuAction.rename),
-            child: Text(l10n.rename),
-          ),
-          // One command under two names: a broken row is relinked, and a row
-          // whose file is there is pointed at another one. The engine takes
-          // either, so the menu only chooses the word.
-          if (isFootage)
-            MenuRow(
-              key: const ValueKey('project-menu-relink'),
-              onPressed: () => close(_ProjectMenuAction.relink),
-              child: Text(
-                  missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis),
-            ),
-          if (isFootage && !missing && !kIsWeb)
-            MenuRow(
-              key: const ValueKey('project-menu-reload'),
-              onPressed: () => close(_ProjectMenuAction.reload),
-              child: Text(l10n.reloadFootage),
-            ),
-          if (isFootage && !missing && !kIsWeb)
-            MenuRow(
-              key: const ValueKey('project-menu-reveal'),
-              onPressed: () => close(_ProjectMenuAction.reveal),
-              child: Text(l10n.projectShowInFolder),
-            ),
-          if (blend)
-            MenuRow(
-              key: const ValueKey('project-menu-edit-in-blender'),
-              onPressed: () => close(_ProjectMenuAction.editInBlender),
-              child: Text(l10n.menuEditInBlender),
-            ),
-          // How the file is read. Remember takes this row's reading and
-          // Apply gives the last one remembered to everything picked.
-          if (isFootage && !missing) ...[
-            MenuRow(
-              key: const ValueKey('project-menu-interpret'),
-              onPressed: () => close(_ProjectMenuAction.interpret),
-              child: Text(l10n.interpretFootageEllipsis),
-            ),
-            MenuRow(
-              key: const ValueKey('project-menu-remember-interpretation'),
-              onPressed: () => close(_ProjectMenuAction.rememberInterpretation),
-              child: Text(l10n.rememberInterpretation),
-            ),
-            if (rememberedInterpretation != null)
-              MenuRow(
-                key: const ValueKey('project-menu-apply-interpretation'),
-                onPressed: () => close(_ProjectMenuAction.applyInterpretation),
-                child: Text(l10n.applyInterpretation),
+            key: key == null ? null : ValueKey<String>('project-menu-$key'),
+            enabled: enabled,
+            onPressed: () => close(act),
+            child: MenuLabel(text,
+                action: chord, enabled: enabled, ticked: ticked),
+          );
+      return FloatSurface(
+        width: _menuWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // What this kind of thing is for.
+            if (item is ItemReference_Folder) ...[
+              row(_ProjectMenuAction.toggleFolder,
+                  folderOpen ? l10n.collapse : l10n.expand,
+                  key: 'toggle-folder'),
+              row(_ProjectMenuAction.newFolder, l10n.newFolder,
+                  key: 'new-folder'),
+              row(_ProjectMenuAction.makeProxy, l10n.makeProxies,
+                  key: 'make-proxies'),
+            ],
+            if (isComp) ...[
+              row(_ProjectMenuAction.open, l10n.projectOpen,
+                  key: 'open', enabled: !several),
+              row(_ProjectMenuAction.compSettings,
+                  l10n.compositionSettingsEllipsis,
+                  key: 'comp-settings',
+                  chord: 'comp.settings',
+                  enabled: !several),
+              row(_ProjectMenuAction.export, l10n.menuExport,
+                  key: 'export', enabled: !several),
+            ],
+            if (item is! ItemReference_Folder)
+              row(_ProjectMenuAction.addToComp, l10n.projectAddToComp,
+                  key: 'add-to-comp', enabled: placeable),
+            if (isFootage) ...[
+              row(_ProjectMenuAction.newCompFromSelection,
+                  l10n.projectNewCompFromSelection,
+                  key: 'new-comp'),
+              if (openComp != null && hasAudio)
+                row(_ProjectMenuAction.addAudioOnly, l10n.addAudioOnly,
+                    key: 'add-audio-only'),
+              if (ui.hasSourceView && !missing)
+                row(_ProjectMenuAction.openInSource, l10n.projectOpenInSource,
+                    key: 'open-in-source', enabled: !several),
+            ],
+            // What the item is on disc, which only footage has.
+            if (isFootage) ...[
+              const MenuDivider(),
+              // One command under two names: a broken row is relinked, and a
+              // row whose file is there is pointed at another one. The engine
+              // takes either, so the menu only chooses the word.
+              row(_ProjectMenuAction.relink,
+                  missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis,
+                  key: 'relink', enabled: !several),
+              if (onFindMissing != null)
+                row(_ProjectMenuAction.findMissing, l10n.findMissingFootage,
+                    key: 'find-missing'),
+              if (!missing && !kIsWeb) ...[
+                row(_ProjectMenuAction.reload, l10n.reloadFootage,
+                    key: 'reload'),
+                row(_ProjectMenuAction.reveal, l10n.projectShowInFolder,
+                    key: 'reveal', enabled: !several),
+              ],
+              if (blend)
+                row(_ProjectMenuAction.editInBlender, l10n.menuEditInBlender,
+                    key: 'edit-in-blender'),
+              // How the file is read. Remember takes this row's reading and
+              // Apply gives the last one remembered to everything picked.
+              if (!missing)
+                SubmenuRow(
+                  key: const ValueKey('project-menu-interpret-group'),
+                  closeParent: () => close(null),
+                  submenu: (dismiss) => _flyout([
+                    row(_ProjectMenuAction.interpret,
+                        l10n.interpretFootageEllipsis,
+                        key: 'interpret', chord: 'footage.interpret'),
+                    row(_ProjectMenuAction.rememberInterpretation,
+                        l10n.rememberInterpretation,
+                        key: 'remember-interpretation',
+                        chord: 'footage.interpretation.remember'),
+                    row(_ProjectMenuAction.applyInterpretation,
+                        l10n.applyInterpretation,
+                        key: 'apply-interpretation',
+                        chord: 'footage.interpretation.apply',
+                        enabled: rememberedInterpretation != null),
+                  ]),
+                  child: Text(l10n.projectInterpret),
+                ),
+              // Four commands and no dialogue: attach a file, make one, read
+              // from it or not, forget it. The last two only once there is a
+              // proxy, so the menu never lists a word that would do nothing.
+              SubmenuRow(
+                key: const ValueKey('project-menu-proxy-group'),
+                closeParent: () => close(null),
+                submenu: (dismiss) => _flyout([
+                  row(_ProjectMenuAction.setProxy, l10n.setProxyEllipsis,
+                      key: 'set-proxy',
+                      enabled: !several,
+                      ticked: proxy == null ? null : false),
+                  row(_ProjectMenuAction.makeProxy, l10n.makeProxy,
+                      key: 'make-proxy', ticked: proxy == null ? null : false),
+                  if (proxy != null) ...[
+                    const MenuDivider(),
+                    row(_ProjectMenuAction.useProxy, l10n.useProxy,
+                        key: 'use-proxy', ticked: proxy.enabled),
+                    row(_ProjectMenuAction.clearProxy, l10n.clearProxy,
+                        key: 'clear-proxy', ticked: false),
+                  ],
+                ]),
+                child: Text(l10n.projectProxy),
               ),
-          ],
-          // **The rate of a run of stills** (docs/07 §3.1). Stills carry no
-          // rate of their own, so an imported run plays at 25 until this
-          // field says otherwise, and it is the one part of a sequence the
-          // project stores. A field on the menu rather than a submenu of
-          // choices: a run corrected from a 3D render is as likely to want
-          // 12 as 24, and typing it is one gesture where hunting a list is
-          // two. It sits beside Relink, because both are about what the item
-          // on disk is.
-          if (item case ItemReference_Footage(:final field0))
-            if (sequenceRate case final rate?)
+            ],
+            // **The rate of a run of stills** (docs/07 §3.1). Stills carry no
+            // rate of their own, so an imported run plays at 25 until this
+            // field says otherwise, and it is the one part of a sequence the
+            // project stores. A field on the menu rather than a submenu of
+            // choices: a run corrected from a 3D render is as likely to want
+            // 12 as 24, and typing it is one gesture where hunting a list is
+            // two.
+            if (item case ItemReference_Footage(:final field0))
+              if (sequenceRate case final rate?)
+                Padding(
+                  key: const ValueKey('project-menu-sequence-rate'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  child: Row(
+                    children: [
+                      // The label takes whatever the well and its unit leave,
+                      // so a longer word in another language shortens rather
+                      // than pushing the field off the menu.
+                      Expanded(
+                        child: Text(l10n.sequenceRate, style: menuTheme.small),
+                      ),
+                      _SequenceRateField(
+                        theme: menuTheme,
+                        rate: rate,
+                        onRate: (fpsNum, fpsDen) {
+                          close(null);
+                          field0.setSequenceRate(fpsNum: fpsNum, fpsDen: fpsDen);
+                          onLocalEdit();
+                        },
+                      ),
+                      const SizedBox(width: 6),
+                      Text(l10n.unitFps, style: menuTheme.small),
+                    ],
+                  ),
+                ),
+            // Footage this computer has not got, in a project kept online: it
+            // comes from Lumit's server, when the server has it.
+            if (shared != null &&
+                online &&
+                shared.here != BridgeFootageHere.original) ...[
+              if (shared.here == BridgeFootageHere.missing && standInOnline)
+                row(_ProjectMenuAction.shareStandIn, l10n.shareGetStandIn,
+                    key: 'share-stand-in'),
+              if (originalOnline != null)
+                row(
+                    _ProjectMenuAction.shareOriginal,
+                    l10n.shareGetOriginal((originalOnline / (1 << 20)).ceil()),
+                    key: 'share-original')
+              else
+                MenuRow(
+                  key: const ValueKey('project-menu-share-original'),
+                  onPressed: () {},
+                  enabled: false,
+                  child: Text(l10n.shareOnlineNoOriginal),
+                ),
+            ],
+            // Footage this computer has not got, in a shared project where
+            // someone has: ask them for a stand-in to cut with, or the file.
+            if (shared != null &&
+                shared.holders.isNotEmpty &&
+                shared.here != BridgeFootageHere.original) ...[
+              if (shared.here == BridgeFootageHere.missing)
+                row(_ProjectMenuAction.shareStandIn, l10n.shareGetStandIn,
+                    key: 'share-stand-in'),
+              row(
+                  _ProjectMenuAction.shareOriginal,
+                  l10n.shareGetOriginal(
+                      (shared.bytes.toInt() / (1 << 20)).ceil()),
+                  key: 'share-original'),
+            ],
+            const MenuDivider(),
+            row(_ProjectMenuAction.rename, l10n.rename,
+                key: 'rename', chord: 'item.rename', enabled: !several),
+            row(_ProjectMenuAction.copy, l10n.menuCopy,
+                key: 'copy', chord: 'edit.copy'),
+            row(_ProjectMenuAction.paste, l10n.menuPaste,
+                key: 'paste', chord: 'edit.paste', enabled: onPaste != null),
+            row(_ProjectMenuAction.duplicate, l10n.menuDuplicate,
+                key: 'duplicate', chord: 'item.duplicate'),
+            const MenuDivider(),
+            // Filing, the mouse way: the drag onto a folder row is the other.
+            if (onMoveToFolder != null && folders.isNotEmpty)
+              SubmenuRow(
+                key: const ValueKey('project-menu-move-to-folder'),
+                closeParent: () => close(null),
+                submenu: (dismiss) => _flyout([
+                  for (final (name, folder) in folders)
+                    MenuRow(
+                      key: ValueKey<String>(
+                          'project-menu-folder-${projectItemId(folder)}'),
+                      onPressed: () {
+                        dismiss();
+                        onMoveToFolder(folder);
+                      },
+                      child: Text(name, overflow: TextOverflow.ellipsis),
+                    ),
+                ]),
+                child: Text(l10n.moveToFolder),
+              ),
+            if (!atRoot)
+              row(_ProjectMenuAction.moveToRoot, l10n.moveToRoot,
+                  key: 'move-to-root'),
+            // The colour tag, as the strip itself rather than a submenu: the
+            // chips ARE the choice, so putting them on the menu row costs one
+            // click where a submenu costs two and a hover in between. The same
+            // shape the Timeline's layer swatch offers, and the same palette.
+            if (onSetLabel != null)
               Padding(
-                key: const ValueKey('project-menu-sequence-rate'),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 child: Row(
                   children: [
-                    // The label takes whatever the well and its unit leave, so
-                    // a longer word in another language shortens rather than
-                    // pushing the field off the menu.
-                    Expanded(
-                      child: Text(l10n.sequenceRate, style: menuTheme.small),
-                    ),
-                    _SequenceRateField(
-                      theme: menuTheme,
-                      rate: rate,
-                      onRate: (fpsNum, fpsDen) {
-                        close(null);
-                        field0.setSequenceRate(fpsNum: fpsNum, fpsDen: fpsDen);
-                        onLocalEdit();
-                      },
-                    ),
-                    const SizedBox(width: 6),
-                    Text(l10n.unitFps, style: menuTheme.small),
-                  ],
-                ),
-              ),
-          if (isFootage)
-            MenuRow(
-              onPressed: () => close(_ProjectMenuAction.findMissing),
-              child: Text(l10n.findMissingFootage),
-            ),
-          // Footage this computer has not got, in a project kept online: it
-          // comes from Lumit's server, when the server has it.
-          if (shared != null &&
-              online &&
-              shared.here != BridgeFootageHere.original) ...[
-            if (shared.here == BridgeFootageHere.missing && standInOnline)
-              MenuRow(
-                key: const ValueKey('project-menu-share-stand-in'),
-                onPressed: () => close(_ProjectMenuAction.shareStandIn),
-                child: Text(l10n.shareGetStandIn),
-              ),
-            if (originalOnline != null)
-              MenuRow(
-                key: const ValueKey('project-menu-share-original'),
-                onPressed: () => close(_ProjectMenuAction.shareOriginal),
-                child: Text(
-                    l10n.shareGetOriginal((originalOnline / (1 << 20)).ceil())),
-              )
-            else
-              MenuRow(
-                key: const ValueKey('project-menu-share-original'),
-                onPressed: () {},
-                enabled: false,
-                child: Text(l10n.shareOnlineNoOriginal),
-              ),
-          ],
-          // Footage this computer has not got, in a shared project where
-          // someone has: ask them for a stand-in to cut with, or the file.
-          if (shared != null &&
-              shared.holders.isNotEmpty &&
-              shared.here != BridgeFootageHere.original) ...[
-            if (shared.here == BridgeFootageHere.missing)
-              MenuRow(
-                key: const ValueKey('project-menu-share-stand-in'),
-                onPressed: () => close(_ProjectMenuAction.shareStandIn),
-                child: Text(l10n.shareGetStandIn),
-              ),
-            MenuRow(
-              key: const ValueKey('project-menu-share-original'),
-              onPressed: () => close(_ProjectMenuAction.shareOriginal),
-              child: Text(l10n.shareGetOriginal(
-                  (shared.bytes.toInt() / (1 << 20)).ceil())),
-            ),
-          ],
-          // The sound of this clip, on its own row. Offered only with a
-          // comp open to put it in — placing a layer nowhere is not an action.
-          if (isFootage && openComp != null)
-            MenuRow(
-              key: const ValueKey('project-menu-add-audio-only'),
-              onPressed: () => close(_ProjectMenuAction.addAudioOnly),
-              child: Text(l10n.addAudioOnly),
-            ),
-          // **Proxies, on the item's own menu** (docs/07 §3.3). Four
-          // commands and no dialogue: attach a file, make one, read from it or
-          // not, forget it. Offered on footage alone — a comp and a folder
-          // have no media reference for a stand-in to stand in for — and the
-          // last two only once there is a proxy, so the menu never lists a
-          // word that would do nothing.
-          // A folder offers the one that makes sense for everything in it.
-          if (item is ItemReference_Folder)
-            MenuRow(
-              key: const ValueKey('project-menu-make-proxies'),
-              onPressed: () => close(_ProjectMenuAction.makeProxy),
-              child: Text(l10n.makeProxies),
-            ),
-          if (isFootage) ...[
-            MenuRow(
-              key: const ValueKey('project-menu-set-proxy'),
-              onPressed: () => close(_ProjectMenuAction.setProxy),
-              child: Text(l10n.setProxyEllipsis),
-            ),
-            MenuRow(
-              key: const ValueKey('project-menu-make-proxy'),
-              onPressed: () => close(_ProjectMenuAction.makeProxy),
-              child: Text(l10n.makeProxy),
-            ),
-            if (proxy != null) ...[
-              // Ticked, in the shape the layer menu's Accepts lights uses: a
-              // word says what the tick means, where a glyph could not.
-              MenuRow(
-                key: const ValueKey('project-menu-use-proxy'),
-                onPressed: () => close(_ProjectMenuAction.useProxy),
-                child: Row(
-                  children: [
-                    menuTick(proxy.enabled),
-                    Expanded(child: Text(l10n.useProxy)),
-                  ],
-                ),
-              ),
-              MenuRow(
-                key: const ValueKey('project-menu-clear-proxy'),
-                onPressed: () => close(_ProjectMenuAction.clearProxy),
-                child: Text(l10n.clearProxy),
-              ),
-            ],
-          ],
-          // The colour tag, as the strip itself rather than a submenu: the
-          // chips ARE the choice, so putting them on the menu row costs one
-          // click where a submenu costs two and a hover in between. The same
-          // shape the Timeline's layer swatch offers, and the same palette.
-          if (onSetLabel != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(l10n.label, style: menuTheme.small),
-                  const SizedBox(width: 6),
-                  for (var i = 0; i < LumitTheme.labelCount; i++)
-                    _menuChipTip(
-                      // The neutral chip is the way back, and what it goes back
-                      // *to* depends on where the item sits (A12): inside a
-                      // tagged folder it hands the row back to the folder's
-                      // colour, outside one it leaves the row with none. Same
-                      // chip, two words — the colours themselves say what they
-                      // are, so only this one is named.
-                      i == 0
-                          ? (inherited != 0
-                              ? l10n.tipLabelInherit
-                              : l10n.tipLabelNoColour)
-                          : null,
-                      HoverMark(
-                        swells: true,
-                        builder: (context, lit) => GestureDetector(
-                          key: ValueKey<String>('project-menu-label-$i'),
-                          onTap: () {
-                            onSetLabel(i);
-                            close(null);
-                          },
-                          child: Container(
-                            width: 10,
-                            height: 10,
-                            margin: const EdgeInsetsDirectional.only(end: 2),
-                            decoration: BoxDecoration(
-                              color: menuTheme.labelColour(i),
-                              shape: BoxShape.circle,
-                              border: i == label
-                                  ? Border.all(color: menuTheme.textPrimary)
-                                  : null,
-                            ),
-                            foregroundDecoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: menuTheme.textPrimary
-                                      .withValues(alpha: 0.7 * lit)),
+                    Expanded(child: Text(l10n.label, style: menuTheme.body)),
+                    for (var i = 0; i < LumitTheme.labelCount; i++)
+                      _menuChipTip(
+                        // The neutral chip is the way back, and what it goes
+                        // back *to* depends on where the item sits (A12):
+                        // inside a tagged folder it hands the row back to the
+                        // folder's colour, outside one it leaves the row with
+                        // none. Same chip, two words. The colours themselves
+                        // say what they are, so only this one is named.
+                        i == 0
+                            ? (inherited != 0
+                                ? l10n.tipLabelInherit
+                                : l10n.tipLabelNoColour)
+                            : null,
+                        HoverMark(
+                          swells: true,
+                          builder: (context, lit) => GestureDetector(
+                            key: ValueKey<String>('project-menu-label-$i'),
+                            onTap: () {
+                              onSetLabel(i);
+                              close(null);
+                            },
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              margin: const EdgeInsetsDirectional.only(start: 2),
+                              decoration: BoxDecoration(
+                                color: menuTheme.labelColour(i),
+                                shape: BoxShape.circle,
+                                border: i == label
+                                    ? Border.all(color: menuTheme.textPrimary)
+                                    : null,
+                              ),
+                              foregroundDecoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: menuTheme.textPrimary
+                                        .withValues(alpha: 0.7 * lit)),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-          // Filing, the mouse way — the drag onto a folder row is the other
-          // one. A submenu rather than a dialogue: the folders are a short
-          // list the panel already knows, so picking one is one hover and one
-          // click, the same shape Effects & presets offers its categories in.
-          if (onMoveToFolder != null && folders.isNotEmpty)
-            SubmenuRow(
-              key: const ValueKey('project-menu-move-to-folder'),
-              closeParent: () => close(null),
-              submenu: (dismiss) => FloatSurface(
-                width: 210,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final (name, folder) in folders)
-                      MenuRow(
-                        key: ValueKey<String>(
-                            'project-menu-folder-${projectItemId(folder)}'),
-                        onPressed: () {
-                          dismiss();
-                          onMoveToFolder(folder);
-                        },
-                        child: Text(name),
-                      ),
                   ],
                 ),
               ),
-              child: Text(l10n.moveToFolder),
-            ),
-          MenuRow(
-            onPressed: () => close(_ProjectMenuAction.moveToRoot),
-            child: Text(l10n.moveToRoot),
-          ),
-          MenuRow(
-            onPressed: () => close(_ProjectMenuAction.delete),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
-    ),
+            const MenuDivider(),
+            row(_ProjectMenuAction.delete, l10n.delete,
+                key: 'delete', chord: 'edit.delete.selection'),
+          ],
+        ),
+      );
+    },
   );
   if (action == null) return;
 
@@ -558,13 +643,34 @@ Future<void> showProjectMenuFrb({
   // that one that has gone, or cannot do it, leaves the rest standing.
   final acts = targets ?? [item];
   switch (action) {
-    case _ProjectMenuAction.newNodeGraph:
-      // The one funnel every route to a node graph goes through: it asks for
-      // the settings, makes the comp and fronts it. The panel re-reads after,
-      // as it does for its own edits.
-      await Provider.of<LumitState>(context, listen: false)
-          .newNodeGraph(context);
+    case _ProjectMenuAction.open:
+      if (item case ItemReference_Composition(:final field0)) {
+        ui.setSelectedComp(field0);
+      }
+    case _ProjectMenuAction.export:
+      if (item case ItemReference_Composition(:final field0)) {
+        await showExportDialogFrb(context: context, comp: field0);
+      }
+    case _ProjectMenuAction.addToComp:
+      addItemsToOpenComp(context, acts);
       onLocalEdit();
+    case _ProjectMenuAction.newCompFromSelection:
+      onNewComposition?.call([
+        for (final target in acts)
+          if (target case ItemReference_Footage(:final field0)) field0,
+      ]);
+    case _ProjectMenuAction.openInSource:
+      if (item case ItemReference_Footage(:final field0)) {
+        ui.openFootageView(field0);
+      }
+    case _ProjectMenuAction.toggleFolder:
+      onToggleFolder?.call();
+    case _ProjectMenuAction.newFolder:
+      onNewFolder?.call();
+    case _ProjectMenuAction.copy:
+      onCopy?.call();
+    case _ProjectMenuAction.paste:
+      onPaste?.call();
     case _ProjectMenuAction.compSettings:
       if (item case ItemReference_Composition(:final field0)) {
         // Reachable now that the dialog takes a CompositionReference rather than
@@ -620,13 +726,15 @@ Future<void> showProjectMenuFrb({
         unawaited(field0.editInBlender());
       }
     case _ProjectMenuAction.findMissing:
-      onFindMissing();
+      onFindMissing?.call();
     case _ProjectMenuAction.addAudioOnly:
-      if (item case ItemReference_Footage(:final field0)) {
-        openComp?.addAudioLayer(
-            footage: field0, arrival: ui.streamsArrival);
-        onLocalEdit();
-      }
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
+        if (target case ItemReference_Footage(:final field0)) {
+          openComp?.addAudioLayer(footage: field0, arrival: ui.streamsArrival);
+        }
+      });
+      onLocalEdit();
     case _ProjectMenuAction.setProxy:
       if (item case ItemReference_Footage(:final field0)) {
         final path = proxyPicker != null
@@ -716,6 +824,183 @@ Future<void> showProjectMenuFrb({
     case _ProjectMenuAction.delete:
       if (await deleteProjectItems(context, acts)) onLocalEdit();
   }
+}
+
+/// The menu on the panel's own ground: what to make, what to paste, and how the
+/// list is ordered and opened.
+void showProjectGroundMenu({
+  required BuildContext context,
+  required Offset position,
+  required VoidCallback? onNewComposition,
+  required VoidCallback? onNewNodeGraph,
+  required VoidCallback? onNewFolder,
+  required VoidCallback? onImport,
+  required VoidCallback? onImportFolder,
+  required VoidCallback? onPaste,
+  required VoidCallback? onSelectAll,
+  required ProjectColumn? sort,
+  required ValueChanged<ProjectColumn?> onSort,
+  required VoidCallback? onExpandAll,
+  required VoidCallback? onCollapseAll,
+  required VoidCallback? onFindMissing,
+  required bool useProxies,
+  required VoidCallback? onToggleProxies,
+  required bool thumbnails,
+  required VoidCallback onToggleThumbnails,
+}) {
+  showLumitPopup<void>(
+    context: context,
+    position: position,
+    builder: (close) {
+      Widget row(String key, String text, VoidCallback? run,
+              {String? chord, bool? ticked}) =>
+          MenuRow(
+            key: ValueKey<String>('project-ground-$key'),
+            enabled: run != null,
+            onPressed: () {
+              close(null);
+              run?.call();
+            },
+            child: MenuLabel(text,
+                action: chord, enabled: run != null, ticked: ticked),
+          );
+      return FloatSurface(
+        width: _menuWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            row('new-comp', l10n.newComposition, onNewComposition,
+                chord: 'comp.new'),
+            row('new-node-graph', l10n.newNodeGraph, onNewNodeGraph),
+            row('new-folder', l10n.newFolder, onNewFolder),
+            const MenuDivider(),
+            row('import', l10n.menuImport, onImport, chord: 'file.import'),
+            row('import-folder', l10n.menuImportFolder, onImportFolder),
+            const MenuDivider(),
+            row('paste', l10n.menuPaste, onPaste, chord: 'edit.paste'),
+            row('select-all', l10n.menuSelectAll, onSelectAll,
+                chord: 'edit.select.all'),
+            const MenuDivider(),
+            SubmenuRow(
+              key: const ValueKey('project-ground-sort'),
+              closeParent: () => close(null),
+              submenu: (dismiss) => _flyout(_sortRows(sort, (c) {
+                dismiss();
+                onSort(c);
+              })),
+              child: Text(l10n.projectSortBy),
+            ),
+            if (onExpandAll != null)
+              row('expand-all', l10n.expandAll, onExpandAll),
+            if (onCollapseAll != null)
+              row('collapse-all', l10n.collapseAll, onCollapseAll),
+            if (onFindMissing != null) ...[
+              const MenuDivider(),
+              row('find-missing', l10n.findMissingFootage, onFindMissing),
+            ],
+            const MenuDivider(),
+            row('use-proxies', l10n.projectUseProxies, onToggleProxies,
+                ticked: useProxies),
+            row('thumbnails', l10n.settingsThumbnailsOnFootageRows,
+                onToggleThumbnails,
+                ticked: thumbnails),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// One row per thing the list can be sorted by, the project's own order first.
+List<Widget> _sortRows(
+        ProjectColumn? sort, ValueChanged<ProjectColumn?> onSort) =>
+    [
+      MenuRow(
+        key: const ValueKey('project-sort-none'),
+        onPressed: () => onSort(null),
+        child: MenuLabel(l10n.projectSortOrder, ticked: sort == null),
+      ),
+      const MenuDivider(),
+      for (final column in ProjectColumn.values)
+        MenuRow(
+          key: ValueKey<String>('project-sort-by-${column.name}'),
+          onPressed: () => onSort(column),
+          child: MenuLabel(projectColumnName(column), ticked: sort == column),
+        ),
+    ];
+
+/// The word a column goes by in a menu.
+String projectColumnName(ProjectColumn column) => switch (column) {
+      ProjectColumn.name => l10n.name,
+      ProjectColumn.items => l10n.projectColumnItems,
+      ProjectColumn.size => l10n.projectColumnSize,
+      ProjectColumn.fps => l10n.unitFps,
+      ProjectColumn.duration => l10n.duration,
+      ProjectColumn.date => l10n.projectColumnDate,
+      ProjectColumn.path => l10n.projectColumnPath,
+    };
+
+/// The menu on the column headings: which columns show, how the list is
+/// sorted, and back to how it all started. A column with no room at this width
+/// is greyed, since the panel would not draw it.
+void showProjectColumnMenu({
+  required BuildContext context,
+  required Offset position,
+  required ProjectColumns room,
+  required Set<ProjectColumn> hidden,
+  required ValueChanged<ProjectColumn> onToggle,
+  required ProjectColumn? sort,
+  required ValueChanged<ProjectColumn?> onSort,
+  required VoidCallback onReset,
+}) {
+  showLumitPopup<void>(
+    context: context,
+    position: position,
+    builder: (close) => FloatSurface(
+      width: _menuWidth,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final column in ProjectColumn.values)
+            if (column != ProjectColumn.name)
+              MenuRow(
+                key: ValueKey<String>('project-column-${column.name}'),
+                enabled: room.shows(column),
+                onPressed: () {
+                  close(null);
+                  onToggle(column);
+                },
+                child: MenuLabel(projectColumnName(column),
+                    enabled: room.shows(column),
+                    ticked: !hidden.contains(column)),
+              ),
+          const MenuDivider(),
+          SubmenuRow(
+            key: const ValueKey('project-column-sort'),
+            closeParent: () => close(null),
+            submenu: (dismiss) => _flyout(_sortRows(sort, (c) {
+              dismiss();
+              onSort(c);
+            })),
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(start: 16),
+              child: Text(l10n.projectSortBy),
+            ),
+          ),
+          MenuRow(
+            key: const ValueKey('project-column-reset'),
+            onPressed: () {
+              close(null);
+              onReset();
+            },
+            child: MenuLabel(l10n.projectResetColumns, ticked: false),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// The rate field on the Project panel's menu: the speed of one run of stills,

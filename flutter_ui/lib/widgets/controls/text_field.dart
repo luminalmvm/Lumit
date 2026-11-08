@@ -6,9 +6,108 @@ import 'package:flutter/material.dart';
 import '../../theme/style_sheet.dart';
 import 'package:flutter/services.dart';
 
+import '../../l10n/strings.dart';
 import '../autofill.dart';
 import 'base.dart';
 import 'buttons.dart';
+import 'menus.dart';
+import 'popups.dart';
+
+/// Cut, Copy, Paste and Select all for [field], in Lumit's own menu at [at].
+///
+/// A press outside the selection moves the caret there first, and a press on
+/// it keeps it, so Copy takes what was showing as picked. Clicking a row must
+/// not count as clicking away from the field, which would commit an inline
+/// rename, hence the tap region.
+Future<void> showTextFieldMenu(
+    BuildContext context, EditableTextState field, Offset at) async {
+  final value = field.textEditingValue;
+  final selection = value.selection;
+  final under = field.renderEditable.getPositionForPoint(at).offset;
+  if (!selection.isValid ||
+      under < selection.start ||
+      under > selection.end) {
+    field.userUpdateTextEditingValue(
+        value.copyWith(selection: TextSelection.collapsed(offset: under)),
+        SelectionChangedCause.tap);
+  }
+  var canPaste = field.pasteEnabled;
+  if (canPaste) {
+    try {
+      canPaste = await Clipboard.hasStrings();
+    } catch (_) {
+      // A clipboard that won't say keeps the row, and Paste then does nothing.
+    }
+  }
+  if (!context.mounted) return;
+  final picked = field.textEditingValue.selection;
+  final some = picked.isValid && !picked.isCollapsed;
+  final text = field.textEditingValue.text;
+  Widget row(String key, String label, String action, bool enabled,
+          void Function() run, void Function() close) =>
+      MenuRow(
+        key: ValueKey<String>('text-menu-$key'),
+        enabled: enabled,
+        onPressed: () {
+          close();
+          run();
+        },
+        child: MenuLabel(label, action: action, enabled: enabled),
+      );
+  await showLumitPopup<void>(
+    context: context,
+    position: at,
+    builder: (close) {
+      void shut() => close(null);
+      return TextFieldTapRegion(
+        child: FloatSurface(
+          width: 180,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              row('cut', l10n.menuCut, 'edit.cut', some && field.cutEnabled,
+                  () => field.cutSelection(SelectionChangedCause.toolbar), shut),
+              row('copy', l10n.menuCopy, 'edit.copy', some && field.copyEnabled,
+                  () => field.copySelection(SelectionChangedCause.toolbar),
+                  shut),
+              row('paste', l10n.menuPaste, 'edit.paste', canPaste,
+                  () => field.pasteText(SelectionChangedCause.toolbar), shut),
+              const MenuDivider(),
+              row(
+                  'select-all',
+                  l10n.menuSelectAll,
+                  'edit.select.all',
+                  text.isNotEmpty && field.selectAllEnabled,
+                  () => field.selectAll(SelectionChangedCause.toolbar),
+                  shut),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// A text field's gestures, with the right press opening [showTextFieldMenu].
+class TextFieldGestures extends TextSelectionGestureDetectorBuilder {
+  TextFieldGestures({required super.delegate, required this.context});
+
+  final BuildContext context;
+  Offset _at = Offset.zero;
+
+  @override
+  void onSecondaryTapDown(TapDownDetails details) {
+    super.onSecondaryTapDown(details);
+    _at = details.globalPosition;
+  }
+
+  @override
+  void onSecondaryTap() {
+    final field = delegate.editableTextKey.currentState;
+    if (field != null) showTextFieldMenu(context, field, _at);
+  }
+}
 
 /// A single-line text box in the house style. The dialogs each grew their own
 /// copy of this; it belongs here.
@@ -151,7 +250,7 @@ class _HouseTextFieldState extends State<HouseTextField>
   // Made once, not per build: it keeps where a drag started, and the field
   // rebuilds on every selection change. A new one mid-drag forgot how far the
   // text had scrolled, so selecting in scrolled code jumped.
-  late final _gestures = TextSelectionGestureDetectorBuilder(delegate: this);
+  late final _gestures = TextFieldGestures(delegate: this, context: context);
   OverlayEntry? _overlay;
 
   @override

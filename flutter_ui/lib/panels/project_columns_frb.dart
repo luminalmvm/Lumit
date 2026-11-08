@@ -253,14 +253,16 @@ class ProjectColumns {
   factory ProjectColumns.forWidth(
     double width, {
     Map<ProjectColumn, double> widths = defaultProjectColumnWidths,
+    Set<ProjectColumn> hidden = const {},
   }) =>
       ProjectColumns(
-        items: width >= _widthForItems,
-        size: width >= _widthForSize,
-        fps: width >= _widthForFps,
-        duration: width >= _widthForDuration,
-        date: width >= _widthForDate,
-        path: width >= _widthForPath,
+        items: width >= _widthForItems && !hidden.contains(ProjectColumn.items),
+        size: width >= _widthForSize && !hidden.contains(ProjectColumn.size),
+        fps: width >= _widthForFps && !hidden.contains(ProjectColumn.fps),
+        duration: width >= _widthForDuration &&
+            !hidden.contains(ProjectColumn.duration),
+        date: width >= _widthForDate && !hidden.contains(ProjectColumn.date),
+        path: width >= _widthForPath && !hidden.contains(ProjectColumn.path),
         panelWidth: width,
         widths: widths,
       );

@@ -13,6 +13,7 @@ import '../state/workspace.dart';
 import '../widgets/controls.dart';
 import 'stagger.dart';
 import 'text_target.dart' show textCell;
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// Put the Stagger panel up and in front: what Layer ▸ Stagger layers… and
 /// the row menu do.
@@ -79,7 +80,41 @@ class _StaggerPanelFrbState extends State<StaggerPanelFrb> {
         final live =
             selectedEntries(_ui).where((e) => !e.info.switches.locked).length >
                 1;
-        return Container(
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapDown: (d) => showMenuAt<void>(
+            context: context,
+            position: d.globalPosition,
+            rows: (close) {
+              void run(void Function() act) {
+                close(null);
+                act();
+              }
+
+              return [
+                MenuRow(
+                  key: const ValueKey('stagger-menu-apply'),
+                  enabled: live,
+                  onPressed: () => run(() => _apply(workspace.staggerStep)),
+                  child: MenuLabel(l10n.staggerApply, enabled: live),
+                ),
+                MenuRow(
+                  key: const ValueKey('stagger-menu-line-up'),
+                  enabled: live,
+                  onPressed: () => run(() => _apply(0)),
+                  child: MenuLabel(l10n.staggerLineUp, enabled: live),
+                ),
+                const MenuDivider(),
+                MenuRow(
+                  key: const ValueKey('stagger-menu-reset'),
+                  onPressed: () => run(() => setState(() => workspace.setStagger(
+                      step: 1, order: LayerStaggerOrder.topDown))),
+                  child: Text(l10n.reset),
+                ),
+              ];
+            },
+          ),
+          child: Container(
           color: t.surface0,
           child: ListView(
             padding: const EdgeInsets.only(top: 6),
@@ -127,27 +162,30 @@ class _StaggerPanelFrbState extends State<StaggerPanelFrb> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                // Under the values, so the buttons read as what the two rows
+                // above are for.
+                padding:
+                    const EdgeInsetsDirectional.fromSTEB(102, 8, 10, 8),
                 child: Row(
                   children: [
+                    HouseButton(
+                      key: const ValueKey('stagger-apply'),
+                      onPressed:
+                          live ? () => _apply(workspace.staggerStep) : null,
+                      child: Text(l10n.staggerApply),
+                    ),
+                    const SizedBox(width: 8),
                     HouseButton(
                       key: const ValueKey('stagger-line-up'),
                       onPressed: live ? () => _apply(0) : null,
                       child: Text(l10n.staggerLineUp),
-                    ),
-                    const SizedBox(width: 8),
-                    HouseButton(
-                      key: const ValueKey('stagger-apply'),
-                      primary: true,
-                      onPressed:
-                          live ? () => _apply(workspace.staggerStep) : null,
-                      child: Text(l10n.staggerApply),
                     ),
                   ],
                 ),
               ),
             ],
           ),
+        ),
         );
       },
     );

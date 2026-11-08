@@ -19,8 +19,11 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show selectedChannels;
+import '../shell/theme_name_dialog.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart' show Panel;
 import '../state/expression_language.dart';
@@ -28,9 +31,25 @@ import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/autofill.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'effect_param_row_frb.dart' show ExpressionTextEditingController;
 import 'graph_channels.dart';
 import 'graph_edits.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
+
+/// A bar that keeps its layout at [least] wide, and slides sideways with a fade
+/// at the cut edge when the panel is squeezed narrower than that.
+Widget panelBar({required double least, required Widget child}) =>
+    LayoutBuilder(
+      builder: (context, box) => box.maxWidth >= least
+          ? child
+          : EdgeFade(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(width: least, child: child),
+              ),
+            ),
+    );
 
 class ExpressionsPanelFrb extends StatefulWidget {
   const ExpressionsPanelFrb({super.key});
@@ -246,6 +265,120 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     );
   }
 
+  /// A saved expression's menu.
+  void _rowMenu(LumitState app, LumitUiState ui, String name, Offset at) {
+    final canApply = _targets(ui).isNotEmpty;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        void run(void Function() act) {
+          close(null);
+          act();
+        }
+
+        return [
+          MenuRow(
+            key: const ValueKey('expr-menu-apply'),
+            enabled: canApply,
+            onPressed: () => run(() {
+              _pick(ui, name);
+              _apply(app, ui);
+            }),
+            child: MenuLabel(l10n.apply, enabled: canApply),
+          ),
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('expr-menu-rename'),
+            onPressed: () => run(() => _renameSaved(ui, name)),
+            child: Text(l10n.renameEllipsis),
+          ),
+          MenuRow(
+            key: const ValueKey('expr-menu-duplicate'),
+            onPressed: () => run(() => _duplicateSaved(ui, name)),
+            child: Text(l10n.menuDuplicate),
+          ),
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('expr-menu-delete'),
+            onPressed: () => run(() => _deleteSaved(ui, name)),
+            child: Text(l10n.delete),
+          ),
+        ];
+      },
+    );
+  }
+
+  /// The menu on the list's ground.
+  void _groundMenu(LumitState app, LumitUiState ui, Offset at) {
+    final any = ui.workspace.savedExpressions.isNotEmpty;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        void run(void Function() act) {
+          close(null);
+          act();
+        }
+
+        return [
+          MenuRow(
+            key: const ValueKey('expr-ground-new'),
+            onPressed: () => run(() => _new(ui)),
+            child: Text(l10n.newExpression),
+          ),
+          MenuRow(
+            key: const ValueKey('expr-ground-import'),
+            onPressed: () => run(() => _import(app, ui)),
+            child: Text(l10n.menuImport),
+          ),
+          MenuRow(
+            key: const ValueKey('expr-ground-export'),
+            enabled: any,
+            onPressed: () => run(() => _export(app, ui)),
+            child: MenuLabel(l10n.menuExport, enabled: any),
+          ),
+        ];
+      },
+    );
+  }
+
+  Future<void> _renameSaved(LumitUiState ui, String name) async {
+    final to = await askThemeName(context,
+        title: l10n.rename, suggested: name, confirm: l10n.rename);
+    if (to == null || to == name || !mounted) return;
+    final saved = ui.workspace.savedExpressions;
+    if (saved.containsKey(to)) return;
+    ui.workspace.saveExpression(
+        to, saved[name] ?? '', ui.workspace.savedExpressionLanguage(name));
+    ui.workspace.deleteExpression(name);
+    setState(() {
+      if (_picked == name) {
+        _picked = to;
+        _name.text = to;
+      }
+    });
+  }
+
+  /// A copy under the next free name.
+  void _duplicateSaved(LumitUiState ui, String name) {
+    final saved = ui.workspace.savedExpressions;
+    var copy = l10n.expressionCopyName(name);
+    for (var n = 2; saved.containsKey(copy); n++) {
+      copy = '${l10n.expressionCopyName(name)} $n';
+    }
+    ui.workspace.saveExpression(
+        copy, saved[name] ?? '', ui.workspace.savedExpressionLanguage(name));
+    _pick(ui, copy);
+  }
+
+  void _deleteSaved(LumitUiState ui, String name) {
+    ui.workspace.deleteExpression(name);
+    setState(() {
+      if (_picked == name) _picked = null;
+    });
+  }
+
   void _save(LumitUiState ui) {
     final name = _name.text.trim();
     ui.workspace.saveExpression(name, _code.text, _language);
@@ -311,6 +444,22 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           key,
     ]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
+    // A mark on the bar over the list, greyed when it can do nothing.
+    Widget mark(String key, String tip, String icon, VoidCallback? onPressed) =>
+        LumitTooltip(
+          message: tip,
+          child: HouseButton(
+            key: ValueKey<String>(key),
+            small: true,
+            frameless: true,
+            padding: const EdgeInsets.all(1),
+            onPressed: onPressed,
+            child: glyph.LumitIcon(icon,
+                size: 16,
+                colour: onPressed == null ? t.textDisabled : t.textMuted),
+          ),
+        );
+
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -318,59 +467,76 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           height: 26,
           color: t.surface1,
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: HouseTextField(
-            key: const ValueKey('expr-search'),
-            controller: _search,
-            focusNode: _searchFocus,
-            hint: l10n.searchExpressions,
-            width: double.infinity,
+          child: panelBar(
+            least: 140,
+            child: Row(
+            children: [
+              // With nothing saved there is nothing to search.
+              if (saved.isNotEmpty)
+                Expanded(
+                  child: HouseTextField(
+                    key: const ValueKey('expr-search'),
+                    controller: _search,
+                    focusNode: _searchFocus,
+                    hint: l10n.searchExpressions,
+                    width: double.infinity,
+                  ),
+                )
+              else
+                const Spacer(),
+              const SizedBox(width: 4),
+              mark('expr-new', l10n.newExpression, LumitIcons.addEffect,
+                  () => _new(ui)),
+              mark('expr-import', l10n.menuImport, LumitIcons.import,
+                  () => _import(app, ui)),
+              mark('expr-export', l10n.menuExport, LumitIcons.export,
+                  saved.isEmpty ? null : () => _export(app, ui)),
+            ],
+          ),
           ),
         ),
-        Expanded(
-          flex: 3,
-          child: saved.isEmpty
-              ? Center(child: Text(l10n.noExpressionsYet, style: t.small))
-              : ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  children: [
-                    for (final name in names)
-                      HoverFill(
-                        faint: true,
-                        child: GestureDetector(
-                          key: ValueKey<String>('expr-item-$name'),
-                          behavior: HitTestBehavior.opaque,
-                          // On the down stroke, so the second press of a
-                          // double-click applies what the first one loaded.
-                          onTapDown: (_) => _pick(ui, name),
-                          onDoubleTap: () => _apply(app, ui),
-                          child: Container(
-                            height: 20,
-                            color: name == _picked ? t.selectionFill : null,
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 10),
-                            alignment: Alignment.centerLeft,
-                            child: Text(name,
-                                style: t.body,
-                                overflow: TextOverflow.ellipsis),
-                          ),
+        // The list only takes room with something in it, and the editor has
+        // the panel to itself until then.
+        if (saved.isNotEmpty)
+          Expanded(
+            flex: 2,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onSecondaryTapDown: (d) =>
+                  _groundMenu(app, ui, d.globalPosition),
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                children: [
+                  for (final name in names)
+                    HoverFill(
+                      faint: true,
+                      child: GestureDetector(
+                        key: ValueKey<String>('expr-item-$name'),
+                        behavior: HitTestBehavior.opaque,
+                        // On the down stroke, so the second press of a
+                        // double-click applies what the first one loaded.
+                        onTapDown: (_) => _pick(ui, name),
+                        onDoubleTap: () => _apply(app, ui),
+                        onSecondaryTapDown: (d) =>
+                            _rowMenu(app, ui, name, d.globalPosition),
+                        child: Container(
+                          height: 20,
+                          color: name == _picked ? t.selectionFill : null,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(name,
+                              style: t.body, overflow: TextOverflow.ellipsis),
                         ),
                       ),
-                  ],
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-          child: HouseTextField(
-            key: const ValueKey('expr-name'),
-            controller: _name,
-            hint: l10n.name,
-            width: double.infinity,
+                    ),
+                ],
+              ),
+            ),
           ),
-        ),
         Expanded(
-          flex: 2,
+          flex: 3,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+            padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
             // Ctrl+Enter keeps the edit without leaving the text.
             child: Focus(
               canRequestFocus: false,
@@ -406,86 +572,88 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
               [ui.selectedProperties, ui.model, ui.playheadFrame]),
           builder: (context, _) => _readout(t, ui),
         ),
-        // Apply follows the Timeline's selection, so only the bar listens.
+        // Apply follows the Timeline's selection, so only the bar listens. The
+        // language says how the text reads, the name and Save keep it, and
+        // Apply is what the panel is for, at the right where the eye ends up.
         ListenableBuilder(
           listenable: Listenable.merge([ui.selectedProperties, ui.model]),
           builder: (context, _) {
             final hasTarget = _targets(ui).isNotEmpty;
             final hasCode = _code.text.trim().isNotEmpty;
-            Widget button(String key, String label, VoidCallback? onPressed) =>
-                HouseButton(
-                  key: ValueKey<String>(key),
-                  small: true,
-                  frameless: true,
-                  onPressed: onPressed,
-                  child: Text(label, style: t.small),
-                );
+            final language = SizedBox(
+              width: 92,
+              child: ExpressionLanguagePicker(
+                key: const ValueKey('expr-language'),
+                dense: true,
+                value: _language,
+                onChanged: (language) {
+                  setState(() => _language = language);
+                  _commitLinked();
+                },
+              ),
+            );
+            final name = Expanded(
+              child: HouseTextField(
+                key: const ValueKey('expr-name'),
+                controller: _name,
+                hint: l10n.name,
+                width: double.infinity,
+              ),
+            );
+            final saveButton = HouseButton(
+              key: const ValueKey('expr-save'),
+              small: true,
+              onPressed:
+                  _name.text.trim().isEmpty || !hasCode ? null : () => _save(ui),
+              child: Text(l10n.save),
+            );
+            final applyButton = HouseButton(
+              key: const ValueKey('expr-apply'),
+              small: true,
+              onPressed: hasTarget && hasCode ? () => _apply(app, ui) : null,
+              child: Text(l10n.apply),
+            );
+            const gap = SizedBox(width: 6);
+            // One line with room for it, and two when the panel is narrower,
+            // so Apply never slides out of sight.
             return Container(
-              height: 26,
               color: t.surface1,
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              // The buttons scroll sideways when docked narrow, as the preset
-              // bar does. The language keeps the bar's right-hand end.
-              child: Row(children: [
-                Expanded(
-                    child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                    button('expr-new', l10n.newExpression, () => _new(ui)),
-                    button(
-                      'expr-save',
-                      l10n.save,
-                      _name.text.trim().isEmpty || !hasCode
-                          ? null
-                          : () => _save(ui),
-                    ),
-                    button(
-                      'expr-delete',
-                      l10n.delete,
-                      _picked == null
-                          ? null
-                          : () {
-                              ui.workspace.deleteExpression(_picked!);
-                              setState(() => _picked = null);
-                            },
-                    ),
-                    button(
-                      'expr-apply',
-                      l10n.apply,
-                      hasTarget && hasCode ? () => _apply(app, ui) : null,
-                    ),
-                    button('expr-import', l10n.menuImport,
-                        () => _import(app, ui)),
-                    button(
-                      'expr-export',
-                      l10n.menuExport,
-                      ui.workspace.savedExpressions.isEmpty
-                          ? null
-                          : () => _export(app, ui),
-                    ),
-                    if (!hasTarget) ...[
-                      const SizedBox(width: 10),
-                      Text(l10n.selectAProperty,
-                          style: t.small.copyWith(color: t.textMuted)),
-                    ],
-                  ],
-                  ),
-                )),
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 92,
-                  child: ExpressionLanguagePicker(
-                    key: const ValueKey('expr-language'),
-                    dense: true,
-                    value: _language,
-                    onChanged: (language) {
-                      setState(() => _language = language);
-                      _commitLinked();
-                    },
-                  ),
-                ),
-              ]),
+              child: LayoutBuilder(
+                builder: (context, box) => box.maxWidth >= 300
+                    ? SizedBox(
+                        height: 28,
+                        child: Row(children: [
+                          language,
+                          gap,
+                          name,
+                          gap,
+                          saveButton,
+                          gap,
+                          applyButton,
+                        ]),
+                      )
+                    : panelBar(
+                        least: 160,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              height: 28,
+                              child: Row(children: [name, gap, saveButton]),
+                            ),
+                            SizedBox(
+                              height: 28,
+                              child: Row(children: [
+                                language,
+                                const Spacer(),
+                                applyButton,
+                              ]),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
             );
           },
         ),

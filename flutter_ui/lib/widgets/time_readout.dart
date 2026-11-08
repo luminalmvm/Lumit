@@ -236,7 +236,7 @@ class _TimeReadoutState extends State<TimeReadout>
               }
               return KeyEventResult.ignored;
             },
-            child: TextSelectionGestureDetectorBuilder(delegate: this)
+            child: TextFieldGestures(delegate: this, context: context)
                 .buildGestureDetector(
               child: EditableText(
                 key: textFieldKey,

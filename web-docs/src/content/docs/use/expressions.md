@@ -56,7 +56,7 @@ choice.
 | --- | --- |
 | A property's editor | In the dropdown under the text, or the row's right-click menu |
 | **Animation ▸ Add expression** | In the dropdown under the text, at the right |
-| **Window ▸ Expressions** | In the dropdown at the right of the bottom bar |
+| **Window ▸ Expressions** | In the dropdown at the left of the bottom bar |
 | An Expression box in the node graph | In the same dropdown, under **Edit expression…** |
 
 A new expression starts in Rhai. **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ New expressions
@@ -165,7 +165,7 @@ expressions.
   editor starts with it.
 - **Save** stores the script and its language under the name in the name field. A name
   already in the list is replaced.
-- **Delete** removes the selected entry.
+- Right-click an entry for **Apply**, **Rename…**, **Duplicate** and **Delete**.
 - **Apply** puts the script on every property row selected in the Timeline, in the language
   the dropdown shows. Double-clicking an entry does the same.
 - **Export…** writes every saved expression to one file. **Import…** adds a file's

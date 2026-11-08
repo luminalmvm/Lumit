@@ -11,6 +11,7 @@
 // or a file edited by hand, must open rather than hang the interface. Ten levels
 // is far past any real nesting and cheap to enforce.
 
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -21,8 +22,8 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../state/dock.dart';
 import '../widgets/controls.dart';
-import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
 
 /// How far the tree will walk before it stops, whatever the document says.
@@ -42,18 +43,14 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
   /// Which precomp rows are open, by layer id.
   final Set<String> _open = {};
 
+  /// Every precomp row drawn, by layer id, for Expand all.
+  final Set<String> _openable = {};
+
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
     final ui = Provider.of<LumitUiState>(context);
-    final comp = ui.selectedComp;
-    if (comp == null) {
-      return PlaceholderPanel(
-        icon: LumitIcon.nodes,
-        title: l10n.panelHierarchy,
-        hint: l10n.selectACompositionFirst,
-      );
-    }
+    // Nothing to show is nothing shown: no comp, or a comp with no layers.
+    if (ui.selectedComp == null) return const SizedBox.expand();
 
     // The fronted comp's rows come from the read model — zero bridge calls;
     // an expanded precomp's inside is read as it opens.
@@ -61,19 +58,89 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
       listenable: ui.model,
       builder: (context, _) {
         final rows = <Widget>[];
+        _openable.clear();
         _walkEntries(context, ui.model.layers, ui, rows, 0);
-
-        if (rows.isEmpty) {
-          return Center(
-            child: Text(l10n.hierarchyEmpty, style: t.small),
-          );
-        }
-        return ListView(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          children: rows,
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapDown: (d) =>
+              _menu(context, d.globalPosition, ui, null, null),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            children: rows,
+          ),
         );
       },
     );
+  }
+
+  /// The menu on a row, or with no [layer] on the ground under the rows.
+  ///
+  /// The row's menu is the seam for the Timeline's own layer menu: when that is
+  /// exported from `timeline_outline_row_frb.dart`, its rows belong under the
+  /// ones here, so a layer has the one menu wherever it is shown.
+  void _menu(BuildContext context, Offset at, LumitUiState ui,
+      LayerReference? layer, CompositionReference? nested) {
+    final id = layer?.internallayerId.toString();
+    // Read here: a menu is a gesture. A text layer or a camera has no item.
+    final source = layer?.getSourceItem();
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        void run(void Function() act) {
+          close(null);
+          act();
+        }
+
+        return [
+          if (nested != null) ...[
+            MenuRow(
+              key: const ValueKey('hierarchy-open-comp'),
+              onPressed: () => run(() => ui.openNestedComp(layer!, nested)),
+              child: Text(l10n.projectOpen),
+            ),
+            MenuRow(
+              key: const ValueKey('hierarchy-toggle'),
+              onPressed: () => run(() => setState(() {
+                    if (!_open.remove(id)) _open.add(id!);
+                  })),
+              child: Text(_open.contains(id) ? l10n.collapse : l10n.expand),
+            ),
+          ],
+          if (layer != null)
+            MenuRow(
+              key: const ValueKey('hierarchy-reveal'),
+              enabled: source != null,
+              onPressed: () => run(() => _revealInProject(ui, source!)),
+              child:
+                  MenuLabel(l10n.revealInProject, enabled: source != null),
+            ),
+          if (layer != null && _openable.isNotEmpty) const MenuDivider(),
+          if (_openable.isNotEmpty) ...[
+            MenuRow(
+              key: const ValueKey('hierarchy-expand-all'),
+              onPressed: () => run(() => setState(() => _open.addAll(_openable))),
+              child: Text(l10n.expandAll),
+            ),
+            MenuRow(
+              key: const ValueKey('hierarchy-collapse-all'),
+              enabled: _open.isNotEmpty,
+              onPressed: () => run(() => setState(_open.clear)),
+              child: MenuLabel(l10n.collapseAll, enabled: _open.isNotEmpty),
+            ),
+          ],
+        ];
+      },
+    );
+  }
+
+  /// Front the Project panel with [item] picked in it.
+  void _revealInProject(LumitUiState ui, ItemReference item) {
+    setPanelVisible(ui.split, Panel.project, true);
+    activatePanelTab(ui.split, Panel.project);
+    ui.activePane.value = Panel.project.pane();
+    ui.workspace.touch();
+    ui.projectPickRequest.value = item;
   }
 
   void _walkEntries(
@@ -92,11 +159,13 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
       final kind = info.kind;
       final nested = kind == BridgeLayerKind.precomp ? _compOf(layer) : null;
       final open = _open.contains(id);
+      if (nested != null) _openable.add(id);
 
       rows.add(_HierarchyRow(
         key: ValueKey<String>('hierarchy-row-$id'),
         name: info.name,
         kind: kind,
+        label: info.label,
         depth: depth,
         // The whole selection, not just the primary: a layer chosen in
         // the Timeline with Ctrl held reads as chosen here too, or the two
@@ -124,6 +193,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
         onOpenComp: nested == null
             ? null
             : () => setState(() => ui.openNestedComp(layer, nested)),
+        onMenu: (at) => _menu(context, at, ui, layer, nested),
       ));
 
       if (nested != null && open) {
@@ -144,6 +214,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
 class _HierarchyRow extends StatelessWidget {
   final String name;
   final BridgeLayerKind kind;
+  final int label;
   final int depth;
   final bool selected;
   final bool expandable;
@@ -151,16 +222,19 @@ class _HierarchyRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onToggle;
   final VoidCallback? onOpenComp;
+  final ValueChanged<Offset> onMenu;
 
   const _HierarchyRow({
     super.key,
     required this.name,
     required this.kind,
+    required this.label,
     required this.depth,
     required this.selected,
     required this.expandable,
     required this.open,
     required this.onTap,
+    required this.onMenu,
     this.onToggle,
     this.onOpenComp,
   });
@@ -172,45 +246,86 @@ class _HierarchyRow extends StatelessWidget {
       faint: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        onDoubleTap: onOpenComp,
+        onSecondaryTapDown: (d) {
+          if (!selected) onTap();
+          onMenu(d.globalPosition);
+        },
         child: Container(
           height: 22,
           color: selected ? t.surface2 : null,
-          padding:
-              EdgeInsetsDirectional.only(start: 6 + depth * _indent, end: 6),
-          child: Row(
+          child: Stack(
             children: [
-              SizedBox(
-                width: 14,
-                child: expandable
-                    ? HoverMark(
-                        builder: (context, lit) => GestureDetector(
+              // A line down from each level above, joining a precomp to what
+              // is inside it.
+              for (var level = 0; level < depth; level++)
+                PositionedDirectional(
+                  start: 6 + level * _indent + 6,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(width: 1, color: t.hairline),
+                ),
+              Padding(
+                padding: EdgeInsetsDirectional.only(
+                    start: 6 + depth * _indent, end: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: _indent,
+                      child: expandable
+                          ? HoverMark(
+                              builder: (context, lit) => GestureDetector(
+                                key: ValueKey<String>('hierarchy-twirl-$name'),
+                                behavior: HitTestBehavior.opaque,
+                                onTap: onToggle,
+                                child: TwirlTurn(
+                                  open: open,
+                                  child: lumitIcon(
+                                    open
+                                        ? LumitIcon.twirlOpen
+                                        : LumitIcon.twirlClosed,
+                                    size: iconSize,
+                                    color: Color.lerp(
+                                        t.textMuted, t.textPrimary, lit)!,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : null,
+                    ),
+                    // On the down stroke beside the twirl, not on it: waiting
+                    // out a double-click on a precomp read as the panel lagging.
+                    Expanded(
+                      child: Listener(
+                        onPointerDown: (e) {
+                          if (e.buttons == kPrimaryButton) onTap();
+                        },
+                        child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: onToggle,
-                          child: TwirlTurn(
-                            open: open,
-                            child: lumitIcon(
-                              open
-                                  ? LumitIcon.twirlOpen
-                                  : LumitIcon.twirlClosed,
-                              size: iconSize,
-                              color:
-                                  Color.lerp(t.textMuted, t.textPrimary, lit)!,
-                            ),
+                          onDoubleTap: onOpenComp,
+                          child: Row(
+                            children: [
+                              lumitIcon(iconForKind(kind),
+                                  size: iconSize,
+                                  color: label != 0
+                                      ? t.labelColour(label)
+                                      : t.textMuted),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(name,
+                                    style: t.body.copyWith(
+                                        color: selected
+                                            ? t.textPrimary
+                                            : t.textSecondary),
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                            ],
                           ),
                         ),
-                      )
-                    : null,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              lumitIcon(iconForKind(kind), size: iconSize, color: t.textMuted),
-              const SizedBox(width: 6),
-              Expanded(
-                child:
-                    Text(name, style: t.body, overflow: TextOverflow.ellipsis),
-              ),
-              if (expandable)
-                Text('precomp', style: t.small.copyWith(color: t.textMuted)),
             ],
           ),
         ),

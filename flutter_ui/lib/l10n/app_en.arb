@@ -6406,10 +6406,6 @@
   "@graphicsDeviceReset": {
     "description": "Status line notice, shown once when the graphics card has been reset under Lumit (a driver update, a watchdog reset, a laptop switching GPUs) and the engine has already rebuilt its renderer. Nothing is lost and there is nothing for the user to do."
   },
-  "hierarchyEmpty": "This composition has no layers yet",
-  "@hierarchyEmpty": {
-    "description": "Empty-state line in the Hierarchy panel."
-  },
   "importFootage": "Import footage",
   "@importFootage": {
     "description": "Button, menu item and tooltip: bring media files into the project."
@@ -8752,19 +8748,6 @@
     "description": "Project panel column heading: when a footage item's file was last changed. Clicking it sorts by that. Shown in capitals by the style, so write it sentence case.",
     "type": "text"
   },
-  "projectFooterComposition": "Composition",
-  "@projectFooterComposition": {
-    "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
-  },
-  "projectFooterFolder": "Folder",
-  "@projectFooterFolder": {
-    "description": "Label on the Project panel's bottom-bar button that makes a new folder. Shown in capitals by the style.",
-    "type": "text"
-  },
-  "projectFooterImport": "Import",
-  "@projectFooterImport": {
-    "description": "Label on the Project panel's bottom-bar button that brings footage into the project. Shown in capitals by the style."
-  },
   "projectMissingCount": "{count, plural, =1{1 missing} other{{count} missing}}",
   "@projectMissingCount": {
     "description": "First half of the Project panel's bottom-bar count, printed before the item total and separated from it by a middle dot: how many files cannot be found. Clicking it filters the panel to just those.",
@@ -8792,9 +8775,30 @@
       }
     }
   },
+  "projectPickedCount": "{picked} of {total}",
+  "@projectPickedCount": {
+    "description": "Project panel, the bottom bar's count while more than one row is picked: how many of all the items.",
+    "placeholders": {
+      "picked": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "projectUsedCount": "{count, plural, =0{Not used} =1{Used once} other{Used {count} times}}",
+  "@projectUsedCount": {
+    "description": "Project panel, the preview card: how many layers, clips and nodes use the picked item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "projectSummary": "{compositions, plural, =1{1 composition} other{{compositions} compositions}} · {footage} footage · {solids, plural, =1{1 solid} other{{solids} solids}} · {folders, plural, =1{1 folder} other{{folders} folders}}",
   "@projectSummary": {
-    "description": "Project panel, the preview card at the top while nothing is selected: how many of each kind of item the panel lists. Footage counts footage items and has no plural.",
+    "description": "Project panel, the tooltip on the bottom bar's count: how many of each kind of item the panel lists. Footage counts footage items and has no plural.",
     "placeholders": {
       "compositions": {
         "type": "int"
@@ -8809,11 +8813,6 @@
         "type": "int"
       }
     }
-  },
-  "projectItemInUse": "in use",
-  "@projectItemInUse": {
-    "description": "Badge beside a Project panel item that some composition places as a layer. Lower case on purpose — it sits in a line of facts.",
-    "type": "text"
   },
   "projectItemMissing": "missing",
   "@projectItemMissing": {
@@ -8880,19 +8879,19 @@
   "@projectSettings": {
     "description": "Title of the window holding settings that travel with the project file."
   },
-  "projectTypeComposition": "composition",
+  "projectTypeComposition": "Composition",
   "@projectTypeComposition": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is. Lower case on purpose."
   },
-  "projectTypeFolder": "folder",
+  "projectTypeFolder": "Folder",
   "@projectTypeFolder": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is. Lower case on purpose."
   },
-  "projectTypeFootage": "footage",
+  "projectTypeFootage": "Footage",
   "@projectTypeFootage": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is. Lower case on purpose."
   },
-  "projectTypeSolid": "solid",
+  "projectTypeSolid": "Solid",
   "@projectTypeSolid": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is: a plain block of one colour. Lower case on purpose."
   },
@@ -8951,6 +8950,62 @@
   "projectShowInFolder": "Show in folder",
   "@projectShowInFolder": {
     "description": "Project panel right-click menu, on a footage item whose file is there: opens the folder the file is in, in the desktop's own file manager, with the file selected."
+  },
+  "projectOpen": "Open",
+  "@projectOpen": {
+    "description": "Project panel, row menu on a composition: bring it to the front in the Timeline."
+  },
+  "projectAddToComp": "Add to composition",
+  "@projectAddToComp": {
+    "description": "Project panel, row menu: put the picked items in the open composition as layers."
+  },
+  "projectNewCompFromSelection": "New composition from selection",
+  "@projectNewCompFromSelection": {
+    "description": "Project panel, row menu on footage: make a composition sized and timed to the picked footage."
+  },
+  "projectOpenInSource": "Open in source view",
+  "@projectOpenInSource": {
+    "description": "Project panel, row menu on footage: load the clip into the Viewer's source side."
+  },
+  "projectInterpret": "Interpret",
+  "@projectInterpret": {
+    "description": "Project panel, row menu on footage: the submenu of how the file is read."
+  },
+  "projectProxy": "Proxy",
+  "@projectProxy": {
+    "description": "Project panel, row menu on footage: the submenu of the file's proxy."
+  },
+  "projectSortBy": "Sort by",
+  "@projectSortBy": {
+    "description": "Project panel, menu on the blank ground and on the headings: the submenu of what the list is sorted by."
+  },
+  "projectSortOrder": "Project order",
+  "@projectSortOrder": {
+    "description": "Project panel, Sort by submenu: the order the items were made in, not sorted by a column."
+  },
+  "projectResetColumns": "Reset columns",
+  "@projectResetColumns": {
+    "description": "Project panel, menu on the headings: every column back on, at its first width, and the list unsorted."
+  },
+  "projectUseProxies": "Use proxies",
+  "@projectUseProxies": {
+    "description": "Project panel, menu on the blank ground: a tick for reading every item with a proxy from that proxy."
+  },
+  "expand": "Expand",
+  "@expand": {
+    "description": "Menu row on a folder or a heading: show what is inside it."
+  },
+  "collapse": "Collapse",
+  "@collapse": {
+    "description": "Menu row on a folder or a heading: hide what is inside it."
+  },
+  "expandAll": "Expand all",
+  "@expandAll": {
+    "description": "Menu row on a list: open every folder or heading in it."
+  },
+  "collapseAll": "Collapse all",
+  "@collapseAll": {
+    "description": "Menu row on a list: shut every folder or heading in it."
   },
   "tipOpenFolder": "Open folder",
   "@tipOpenFolder": {
@@ -9020,6 +9075,15 @@
   "presetMoveTo": "Move to",
   "@presetMoveTo": {
     "description": "Effects & presets panel: right-click menu row on a saved preset that opens the list of groups it can be moved into."
+  },
+  "presetDeleteQuestion": "Delete the preset {name}?",
+  "@presetDeleteQuestion": {
+    "description": "Effects & presets, the question before a saved preset's file is deleted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "presetDeleteGroup": "{count, plural, =1{Delete “{name}” and the preset in it?} other{Delete “{name}” and the {count} presets in it?}}",
   "@presetDeleteGroup": {
@@ -9116,6 +9180,10 @@
   "selectACompositionFirst": "Select a composition in the Project panel.",
   "@selectACompositionFirst": {
     "description": "Empty-state line in a panel that needs a composition before it can show anything."
+  },
+  "revealInProject": "Reveal in Project panel",
+  "@revealInProject": {
+    "description": "Menu on a layer: show what the layer is made from, picked in the Project panel."
   },
   "selectALayer": "Select a layer",
   "@selectALayer": {
@@ -11058,6 +11126,14 @@
   "alignComposition": "Composition",
   "@alignComposition": {
     "description": "Align panel: heading over the grid of nine dots that moves each selected layer so that point of its box meets the same point of the composition (top left to top left, centre to centre)."
+  },
+  "alignAnchorToCentre": "Anchor to centre",
+  "@alignAnchorToCentre": {
+    "description": "Align panel, right-click: move the selected layers' anchor points to the middle of their boxes."
+  },
+  "alignCentreInComp": "Centre in composition",
+  "@alignCentreInComp": {
+    "description": "Align panel, right-click: move the selected layers to the middle of the composition."
   },
   "staggerOffset": "Offset per layer",
   "@staggerOffset": {
@@ -15348,10 +15424,6 @@
   "@clearProxy": {
     "description": "Project panel row menu, on a footage row that has a proxy: forget it. The file on disk is left alone."
   },
-  "projectFooterProxies": "Proxies",
-  "@projectFooterProxies": {
-    "description": "Project panel bottom bar, the project-wide switch: whether every preview reads from proxies where there are any. Displayed in capitals by the panel."
-  },
   "tipUseProxiesOn": "Using proxies",
   "@tipUseProxiesOn": {
     "description": "Tooltip on the Project panel's project-wide proxies switch while it is on."
@@ -16353,9 +16425,13 @@
   "@effectFromAudioPlugin": {
     "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect is an audio plugin (CLAP or VST3) installed on this machine."
   },
-  "effectBuiltIn": "Built in",
-  "@effectBuiltIn": {
-    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect ships with Lumit."
+  "effectAddToSelected": "Add to selected",
+  "@effectAddToSelected": {
+    "description": "Effects & presets, menu on an effect or a preset: put it on every selected layer."
+  },
+  "effectManualPage": "Manual page",
+  "@effectManualPage": {
+    "description": "Effects & presets, menu on an effect: open its page in the manual."
   },
   "switchPluginOff": "Switch this plugin off",
   "@switchPluginOff": {
@@ -17761,7 +17837,7 @@
   "@nodeNoRows": {
     "description": "The Node panel's empty state when the picked box carries no values at all, which is the Output box of a node graph. One line under the panel's name."
   },
-  "projectTypeNodeGraph": "node graph",
+  "projectTypeNodeGraph": "Node graph",
   "@projectTypeNodeGraph": {
     "description": "The word beside a selected item's name in the Project panel saying what kind of item it is: a composition whose picture is made by boxes and wires rather than a layer stack. Lower case on purpose, like the other type words."
   },
@@ -18112,10 +18188,6 @@
   "@panelParagraph": {
     "description": "The name of the panel that sets how a text layer's lines are aligned and spaced. A panel name, so a noun."
   },
-  "textNewText": "New text",
-  "@textNewText": {
-    "description": "Text and Paragraph panels: heading shown when no text layer is selected, so the settings apply to the next text the Type tool makes."
-  },
   "textFont": "Font",
   "@textFont": {
     "description": "Text panel: label beside the font family picker."
@@ -18209,9 +18281,13 @@
   "@textMore": {
     "description": "Text panel: button that reveals the less used controls below the main ones."
   },
-  "textLess": "Less",
-  "@textLess": {
-    "description": "Text panel: button that hides the less used controls again."
+  "textCopyStyle": "Copy style",
+  "@textCopyStyle": {
+    "description": "Text and Paragraph panels, right-click: take this layer's style to put on another."
+  },
+  "textPasteStyle": "Paste style",
+  "@textPasteStyle": {
+    "description": "Text and Paragraph panels, right-click: put the style last copied on the selected text."
   },
   "tipTextFauxBold": "Faux bold",
   "@tipTextFauxBold": {
@@ -18293,17 +18369,18 @@
   "@searchExpressions": {
     "description": "Placeholder in the Expressions panel's search box. It searches the saved expressions by name and by what their script says."
   },
-  "noExpressionsYet": "No expressions saved yet",
-  "@noExpressionsYet": {
-    "description": "Empty-state line in the Expressions panel, before the user has saved an expression."
-  },
-  "newExpression": "New",
+  "newExpression": "New expression",
   "@newExpression": {
     "description": "Button in the Expressions panel: clear the editor to write a new expression. When the selected property already has an expression, the editor starts with that."
   },
-  "selectAProperty": "Select a property",
-  "@selectAProperty": {
-    "description": "Shown beside the Expressions panel's Apply button when no property row is selected in the Timeline, so there is nowhere for the expression to go."
+  "expressionCopyName": "{name} copy",
+  "@expressionCopyName": {
+    "description": "Expressions panel: the name a duplicated saved expression starts with.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "viewerGpuMismatch": "The preview can't be shown, because Lumit is rendering on the NVIDIA graphics card and drawing its window with the other one. Switch to NVIDIA Performance mode, or start Lumit with PRIME render offload.",
   "@viewerGpuMismatch": {
