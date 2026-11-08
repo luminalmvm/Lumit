@@ -267,7 +267,11 @@ mod tests {
         let quarter = cpu::gradient_ramp(&g, 0.25);
         assert!((quarter[1] - 0.75).abs() < 1e-6);
         // Two colours ignore the ones in between.
-        let two = Gradient { colours: 0, ..plain() }.packed();
+        let two = Gradient {
+            colours: 0,
+            ..plain()
+        }
+        .packed();
         assert_eq!(cpu::gradient_ramp(&two, 0.5), [0.5, 0.5, 0.5]);
     }
 }

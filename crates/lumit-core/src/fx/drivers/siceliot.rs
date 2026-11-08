@@ -676,7 +676,11 @@ impl EffectDef for TimeNodeDef {
 /// Speed, plus Offset. Without a comp, frames read as seconds.
 #[must_use]
 pub fn time_value(p: &TimeNode, lt: f64, fps: f64) -> f32 {
-    let count = if p.units == 1 && fps > 0.0 { lt * fps } else { lt };
+    let count = if p.units == 1 && fps > 0.0 {
+        lt * fps
+    } else {
+        lt
+    };
     (count * f64::from(p.speed) + f64::from(p.offset)) as f32
 }
 
@@ -710,7 +714,10 @@ mod tests {
         assert!((stagger(&s, 1.0) - 50.0).abs() < 1e-3);
         let mut e = s;
         (e.ease_out, e.ease_in) = (100.0, 100.0);
-        assert!((stagger(&e, 0.5) - 30.0).abs() < 0.5, "a symmetric ease keeps the middle");
+        assert!(
+            (stagger(&e, 0.5) - 30.0).abs() < 0.5,
+            "a symmetric ease keeps the middle"
+        );
         assert!(stagger(&e, 0.2) < 15.0, "eased out of the first copy");
         assert!(stagger(&e, 0.8) > 45.0, "eased into the last copy");
         assert!((stagger(&e, 1.0) - 50.0).abs() < 1e-3);
@@ -860,6 +867,9 @@ mod tests {
         assert!((time_value(&p, 1.5, 24.0) - 4.0).abs() < 1e-6);
         let frames = TimeNode { units: 1, ..p };
         assert!((time_value(&frames, 1.5, 24.0) - 73.0).abs() < 1e-4);
-        assert!((time_value(&frames, 1.5, 0.0) - 4.0).abs() < 1e-6, "no comp: seconds");
+        assert!(
+            (time_value(&frames, 1.5, 0.0) - 4.0).abs() < 1e-6,
+            "no comp: seconds"
+        );
     }
 }

@@ -9147,10 +9147,22 @@ mod tests {
                 .0
         };
         let looped = build(true);
-        assert_eq!(frame(&looped, 20), frame(&looped, 5), "a lap later, the same picture");
-        assert_ne!(frame(&looped, 5), frame(&looped, 10), "the source moves within a lap");
+        assert_eq!(
+            frame(&looped, 20),
+            frame(&looped, 5),
+            "a lap later, the same picture"
+        );
+        assert_ne!(
+            frame(&looped, 5),
+            frame(&looped, 10),
+            "the source moves within a lap"
+        );
         let plain = build(false);
-        assert_ne!(frame(&plain, 5), frame(&looped, 5), "the loop lays the source over");
+        assert_ne!(
+            frame(&plain, 5),
+            frame(&looped, 5),
+            "the loop lays the source over"
+        );
     }
 
     /// **A stamp shown at another moment is rendered at that moment.**
@@ -9253,7 +9265,10 @@ mod tests {
         eprintln!("DEBUG full {full} ({fw}x{fh}) half {half} ({hw}x{hh})");
         assert!(full > 0, "the lattice drew nothing");
         let ratio = half as f32 * 4.0 / full as f32;
-        assert!((0.7..1.3).contains(&ratio), "half resolution drew {ratio} of the area");
+        assert!(
+            (0.7..1.3).contains(&ratio),
+            "half resolution drew {ratio} of the area"
+        );
 
         // Stamped: a small white layer cloned onto the lattice of a full-frame
         // one, at a half and a quarter.
@@ -9291,7 +9306,10 @@ mod tests {
         for scale in [0.5, 0.25] {
             let ratio = lit(scale, &mut r) / full;
             eprintln!("DEBUG stamps at {scale}: {ratio}");
-            assert!((0.7..1.3).contains(&ratio), "stamps at {scale} drew {ratio} of the area");
+            assert!(
+                (0.7..1.3).contains(&ratio),
+                "stamps at {scale} drew {ratio} of the area"
+            );
         }
     }
 

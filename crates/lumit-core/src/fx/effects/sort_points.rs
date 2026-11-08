@@ -121,9 +121,11 @@ impl SortPoints {
         let key = |i: usize| -> f32 {
             let [x, y, _] = input.position.get(i).copied().unwrap_or_default();
             match self.sort_by {
-                BY_SHUFFLE => {
-                    points::draw(self.seed, input.id.get(i).copied().unwrap_or(i as u64), SHUFFLE)
-                }
+                BY_SHUFFLE => points::draw(
+                    self.seed,
+                    input.id.get(i).copied().unwrap_or(i as u64),
+                    SHUFFLE,
+                ),
                 BY_X => x,
                 BY_Y => y,
                 BY_DISTANCE => (x - cx).hypot(y - cy),

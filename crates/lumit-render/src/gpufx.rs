@@ -5400,7 +5400,10 @@ impl GpuEffect for CloneDeformer {
             if (ow, oh) == (w, h) {
                 return Some(read);
             }
-            let (dx, dy) = ((i64::from(w) - i64::from(ow)) / 2, (i64::from(h) - i64::from(oh)) / 2);
+            let (dx, dy) = (
+                (i64::from(w) - i64::from(ow)) / 2,
+                (i64::from(h) - i64::from(oh)) / 2,
+            );
             let mut out = vec![0.0; (w * h * 4) as usize];
             for y in 0..i64::from(oh) {
                 for x in 0..i64::from(ow) {
@@ -5418,10 +5421,14 @@ impl GpuEffect for CloneDeformer {
         let sched = aux.schedule();
         let grow = sched.map_or([0.0; 2], |s| [s.grow[0] as f32, s.grow[1] as f32]);
         let reads = Reads {
-            copies: sched.and_then(|s| s.clone_shapes.as_deref()).map(|c| &c.copies[..]),
+            copies: sched
+                .and_then(|s| s.clone_shapes.as_deref())
+                .map(|c| &c.copies[..]),
             other: other.as_deref(),
             boolean: sched.and_then(|s| s.boolean_shape.as_deref()),
-            result: sched.and_then(|s| s.clone_shapes.as_deref()).and_then(|c| c.result.as_deref()),
+            result: sched
+                .and_then(|s| s.clone_shapes.as_deref())
+                .and_then(|c| c.result.as_deref()),
         };
         inst.apply(&mut rgba, w, h, k, grow, &reads);
         lumit_gpu::fx::common::upload_linear_f32(ctx, &rgba, w, h)
@@ -7350,7 +7357,8 @@ mod tests {
                 .zip(&gpu)
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0f32, f32::max);
-            eprintln!("copy blend {blend}: worst |Δ| {worst:.3e}");            assert!(worst < 2e-2, "copy blend {blend}: worst |Δ| {worst}");
+            eprintln!("copy blend {blend}: worst |Δ| {worst:.3e}");
+            assert!(worst < 2e-2, "copy blend {blend}: worst |Δ| {worst}");
         }
     }
 

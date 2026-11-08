@@ -436,7 +436,13 @@ impl PointsAlongPath {
 
     /// A point Deform has moved: off the path along the normal at `at`, and
     /// facing the way the bent path runs there.
-    fn deformed(self, at: [f32; 2], facing: [f32; 2], far: f32, length: f32) -> ([f32; 2], [f32; 2]) {
+    fn deformed(
+        self,
+        at: [f32; 2],
+        facing: [f32; 2],
+        far: f32,
+        length: f32,
+    ) -> ([f32; 2], [f32; 2]) {
         if self.deform == 0 {
             return (at, facing);
         }

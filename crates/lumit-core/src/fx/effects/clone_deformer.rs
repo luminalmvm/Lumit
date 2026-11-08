@@ -29,8 +29,8 @@ use crate::fx::builtins::MAP_PLACEMENT_OPTIONS;
 use crate::fx::points::PointsStream;
 use crate::fx::{
     params::ParamId, params::Params, params::Value, registry::EffectDef, registry::EffectMetadata,
-    registry::ResolveCx, schema::EffectSchema, schema::EnabledCond,
-    schema::EnabledWhen, schema::ParamGroup,
+    registry::ResolveCx, schema::EffectSchema, schema::EnabledCond, schema::EnabledWhen,
+    schema::ParamGroup,
 };
 use crate::mask::MaskPolyline;
 use lumit_fx_macros::Effect;
@@ -73,7 +73,12 @@ const fn group(
 pub const DEFORMER_GROUPS: &[ParamGroup] = &[
     group(
         "Align",
-        &["align_horizontal", "align_vertical", "position_x", "position_y"],
+        &[
+            "align_horizontal",
+            "align_vertical",
+            "position_x",
+            "position_y",
+        ],
         Some(("deformer", &[DEFORM_ALIGN])),
     ),
     group(
@@ -81,7 +86,11 @@ pub const DEFORMER_GROUPS: &[ParamGroup] = &[
         &["boolean_layer", "boolean_layer_placement", "operation"],
         Some(("deformer", &[DEFORM_BOOLEAN])),
     ),
-    group("Round corners", &["radius"], Some(("deformer", &[DEFORM_ROUND]))),
+    group(
+        "Round corners",
+        &["radius"],
+        Some(("deformer", &[DEFORM_ROUND])),
+    ),
 ];
 
 /// A Position row is not read while its axis is None.
@@ -364,8 +373,14 @@ pub fn cover(
     if edges.is_empty() || w == 0 || h == 0 {
         return;
     }
-    let lo_y = edges.iter().map(|e| e[0][1].min(e[1][1])).fold(f32::MAX, f32::min);
-    let hi_y = edges.iter().map(|e| e[0][1].max(e[1][1])).fold(f32::MIN, f32::max);
+    let lo_y = edges
+        .iter()
+        .map(|e| e[0][1].min(e[1][1]))
+        .fold(f32::MAX, f32::min);
+    let hi_y = edges
+        .iter()
+        .map(|e| e[0][1].max(e[1][1]))
+        .fold(f32::MIN, f32::max);
     let (y0, y1) = (
         (lo_y.floor().max(0.0) as u32).min(h),
         (hi_y.ceil().max(0.0) as u32).min(h),
@@ -403,7 +418,12 @@ pub fn cover(
                     continue;
                 }
                 let last = (end.ceil() as usize).min(w as usize);
-                for (px, cell) in row.iter_mut().enumerate().take(last).skip(start.floor() as usize) {
+                for (px, cell) in row
+                    .iter_mut()
+                    .enumerate()
+                    .take(last)
+                    .skip(start.floor() as usize)
+                {
                     let l = start.max(px as f32);
                     let r = end.min(px as f32 + 1.0);
                     if r > l {
@@ -436,7 +456,12 @@ pub fn alpha_bounds(alpha: impl Fn(usize) -> f32, w: u32, h: u32) -> Option<[f32
                 let (x, y) = (x as f32, y as f32);
                 b = Some(match b {
                     None => [x, y, x + 1.0, y + 1.0],
-                    Some(b) => [b[0].min(x), b[1].min(y), b[2].max(x + 1.0), b[3].max(y + 1.0)],
+                    Some(b) => [
+                        b[0].min(x),
+                        b[1].min(y),
+                        b[2].max(x + 1.0),
+                        b[3].max(y + 1.0),
+                    ],
                 });
             }
         }
@@ -523,7 +548,14 @@ impl CloneDeformer {
     /// The Boolean layer's outline in this raster, by Map placement. `None`
     /// where the layer has no outline. `k` is the raster factor and `grow`
     /// the room round the art.
-    fn boolean_cover(self, shape: &BooleanShape, w: u32, h: u32, k: f32, grow: [f32; 2]) -> Option<Vec<f32>> {
+    fn boolean_cover(
+        self,
+        shape: &BooleanShape,
+        w: u32,
+        h: u32,
+        k: f32,
+        grow: [f32; 2],
+    ) -> Option<Vec<f32>> {
         let mut c = vec![0.0; (w * h) as usize];
         // The frame the layer is laid on, px@comp.
         let frame = [
@@ -560,7 +592,15 @@ impl CloneDeformer {
 
     /// The deformer on a premultiplied `w`×`h` picture at raster factor `k`,
     /// `grow` the room round the art.
-    pub fn apply(self, rgba: &mut Vec<f32>, w: u32, h: u32, k: f32, grow: [f32; 2], reads: &Reads<'_>) {
+    pub fn apply(
+        self,
+        rgba: &mut Vec<f32>,
+        w: u32,
+        h: u32,
+        k: f32,
+        grow: [f32; 2],
+        reads: &Reads<'_>,
+    ) {
         let n = (w * h) as usize;
         if rgba.len() < n * 4 {
             return;
@@ -613,7 +653,12 @@ impl CloneDeformer {
             DEFORM_ROUND => {
                 if reads.result.is_some() && vector {
                     // The rounded outline is drawn below; the colours stay.
-                    finish(rgba, Some(&outline_cover(reads, w, h, k)), before.as_deref(), self.mix);
+                    finish(
+                        rgba,
+                        Some(&outline_cover(reads, w, h, k)),
+                        before.as_deref(),
+                        self.mix,
+                    );
                     return;
                 }
                 // Vector rounds the sharp edge; Raster the picture's alpha.
@@ -625,7 +670,8 @@ impl CloneDeformer {
                 match edge.as_mut() {
                     Some(e) => *e = round,
                     None => {
-                        for (px, (&r, &a)) in rgba.chunks_exact_mut(4).zip(round.iter().zip(&alpha)) {
+                        for (px, (&r, &a)) in rgba.chunks_exact_mut(4).zip(round.iter().zip(&alpha))
+                        {
                             let k = if a > 1e-5 { r / a } else { 0.0 };
                             for v in px.iter_mut() {
                                 *v *= k;
@@ -687,7 +733,12 @@ impl CloneDeformer {
     /// Round corners rounds every corner. `None` where the paths cannot say,
     /// a Boolean whose layer has no outline.
     #[must_use]
-    pub fn on_paths(self, input: &Outline, boolean: Option<&BooleanShape>, frame: [f32; 2]) -> Option<Outline> {
+    pub fn on_paths(
+        self,
+        input: &Outline,
+        boolean: Option<&BooleanShape>,
+        frame: [f32; 2],
+    ) -> Option<Outline> {
         match self.deformer {
             DEFORM_ALIGN => {
                 let Some(b) = outline_bounds(input, 1.0) else {
@@ -731,12 +782,24 @@ fn outline_cover(reads: &Reads<'_>, w: u32, h: u32, k: f32) -> Vec<f32> {
 fn placed(shape: &BooleanShape, placement: u32, frame: [f32; 2]) -> Outline {
     let (contours, scale, offset) = match placement {
         0 => (&shape.placed, [1.0; 2], [0.0; 2]),
-        1 => (&shape.own, [0, 1].map(|i| frame[i] / shape.size[i].max(1e-6)), [0.0; 2]),
-        _ => (&shape.own, [1.0; 2], [0, 1].map(|i| (frame[i] - shape.size[i]) * 0.5)),
+        1 => (
+            &shape.own,
+            [0, 1].map(|i| frame[i] / shape.size[i].max(1e-6)),
+            [0.0; 2],
+        ),
+        _ => (
+            &shape.own,
+            [1.0; 2],
+            [0, 1].map(|i| (frame[i] - shape.size[i]) * 0.5),
+        ),
     };
     contours
         .iter()
-        .map(|c| c.iter().map(|p| [p[0] * scale[0] + offset[0], p[1] * scale[1] + offset[1]]).collect())
+        .map(|c| {
+            c.iter()
+                .map(|p| [p[0] * scale[0] + offset[0], p[1] * scale[1] + offset[1]])
+                .collect()
+        })
         .collect()
 }
 
@@ -757,7 +820,11 @@ pub fn overlay(a: &Outline, b: &Outline, operation: u32) -> Outline {
     let wide = |o: &Outline| -> Vec<Vec<[f64; 2]>> {
         o.iter()
             .filter(|c| c.len() >= 3)
-            .map(|c| c.iter().map(|p| [f64::from(p[0]), f64::from(p[1])]).collect())
+            .map(|c| {
+                c.iter()
+                    .map(|p| [f64::from(p[0]), f64::from(p[1])])
+                    .collect()
+            })
             .collect()
     };
     let (a, b) = (wide(a), wide(b));
@@ -781,11 +848,17 @@ pub fn filleted(contour: &[[f32; 2]], radius: f32) -> Vec<[f32; 2]> {
     for i in 0..n {
         let p = contour[i];
         let (a, b) = (contour[(i + n - 1) % n], contour[(i + 1) % n]);
-        let (la, lb) = ((a[0] - p[0]).hypot(a[1] - p[1]), (b[0] - p[0]).hypot(b[1] - p[1]));
+        let (la, lb) = (
+            (a[0] - p[0]).hypot(a[1] - p[1]),
+            (b[0] - p[0]).hypot(b[1] - p[1]),
+        );
         if la < 1e-6 || lb < 1e-6 {
             continue;
         }
-        let (ua, ub) = ([(a[0] - p[0]) / la, (a[1] - p[1]) / la], [(b[0] - p[0]) / lb, (b[1] - p[1]) / lb]);
+        let (ua, ub) = (
+            [(a[0] - p[0]) / la, (a[1] - p[1]) / la],
+            [(b[0] - p[0]) / lb, (b[1] - p[1]) / lb],
+        );
         // Half the angle between the two sides.
         let half = (ua[0] * ub[0] + ua[1] * ub[1]).clamp(-1.0, 1.0).acos() * 0.5;
         if !(1e-4..=std::f32::consts::FRAC_PI_2 - 1e-3).contains(&half) {
@@ -796,8 +869,14 @@ pub fn filleted(contour: &[[f32; 2]], radius: f32) -> Vec<[f32; 2]> {
         let r = reach * half.tan();
         let bis = [ua[0] + ub[0], ua[1] + ub[1]];
         let bl = bis[0].hypot(bis[1]);
-        let c = [p[0] + bis[0] / bl * r / half.sin(), p[1] + bis[1] / bl * r / half.sin()];
-        let (s, e) = ([p[0] + ua[0] * reach, p[1] + ua[1] * reach], [p[0] + ub[0] * reach, p[1] + ub[1] * reach]);
+        let c = [
+            p[0] + bis[0] / bl * r / half.sin(),
+            p[1] + bis[1] / bl * r / half.sin(),
+        ];
+        let (s, e) = (
+            [p[0] + ua[0] * reach, p[1] + ua[1] * reach],
+            [p[0] + ub[0] * reach, p[1] + ub[1] * reach],
+        );
         let a0 = (s[1] - c[1]).atan2(s[0] - c[0]);
         let mut sweep = (e[1] - c[1]).atan2(e[0] - c[0]) - a0;
         if sweep > std::f32::consts::PI {
@@ -806,7 +885,9 @@ pub fn filleted(contour: &[[f32; 2]], radius: f32) -> Vec<[f32; 2]> {
             sweep += std::f32::consts::TAU;
         }
         // About a segment every 3 px of arc, at least one a 12th of a turn.
-        let steps = ((sweep.abs() * r / 3.0).ceil() as usize).max((sweep.abs() / 0.52).ceil() as usize).clamp(1, 64);
+        let steps = ((sweep.abs() * r / 3.0).ceil() as usize)
+            .max((sweep.abs() / 0.52).ceil() as usize)
+            .clamp(1, 64);
         for k in 0..=steps {
             let t = a0 + sweep * k as f32 / steps as f32;
             out.push([c[0] + r * t.cos(), c[1] + r * t.sin()]);
@@ -834,7 +915,8 @@ fn edt_1d(f: &[f32], out: &mut [f32], v: &mut [usize], z: &mut [f32]) {
         }
         loop {
             let p = v[k];
-            let s = ((f[q] + (q * q) as f32) - (f[p] + (p * p) as f32)) / (2.0 * (q as f32 - p as f32));
+            let s =
+                ((f[q] + (q * q) as f32) - (f[p] + (p * p) as f32)) / (2.0 * (q as f32 - p as f32));
             if s <= z[k] && k > 0 {
                 k -= 1;
                 continue;
@@ -865,7 +947,12 @@ fn edt_1d(f: &[f32], out: &mut [f32], v: &mut [usize], z: &mut [f32]) {
 fn envelope(mut d: Vec<f32>, w: u32, h: u32) -> Vec<f32> {
     let (w, h) = (w as usize, h as usize);
     let m = w.max(h);
-    let (mut f, mut out, mut v, mut z) = (vec![0.0; m], vec![0.0; m], vec![0usize; m], vec![0.0; m + 1]);
+    let (mut f, mut out, mut v, mut z) = (
+        vec![0.0; m],
+        vec![0.0; m],
+        vec![0usize; m],
+        vec![0.0; m + 1],
+    );
     for x in 0..w {
         for y in 0..h {
             f[y] = d[y * w + x];
@@ -886,7 +973,9 @@ fn envelope(mut d: Vec<f32>, w: u32, h: u32) -> Vec<f32> {
 /// Distance from each pixel's centre to the nearest pixel `seed` says yes to,
 /// raster px.
 fn distance_to(seed: impl Fn(usize) -> bool, w: u32, h: u32) -> Vec<f32> {
-    let d = (0..(w * h) as usize).map(|i| if seed(i) { 0.0 } else { f32::INFINITY }).collect();
+    let d = (0..(w * h) as usize)
+        .map(|i| if seed(i) { 0.0 } else { f32::INFINITY })
+        .collect();
     let mut d = envelope(d, w, h);
     d.iter_mut().for_each(|v| *v = v.sqrt());
     d
@@ -907,7 +996,16 @@ fn pieces(solid: &[bool], w: u32, h: u32) -> (Vec<u32>, usize) {
         stack.push(start);
         while let Some(i) = stack.pop() {
             let (x, y) = ((i % w) as i64, (i / w) as i64);
-            for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+            for (dx, dy) in [
+                (-1, -1),
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ] {
                 let (nx, ny) = (x + dx, y + dy);
                 if nx < 0 || ny < 0 || nx >= w as i64 || ny >= h as i64 {
                     continue;
@@ -960,7 +1058,11 @@ pub fn rounded(alpha: &[f32], w: u32, h: u32, radius: f32) -> Vec<f32> {
     // How far past the nearest disc's rim, near enough: r² grows by 2r a px.
     (0..alpha.len())
         .map(|i| {
-            let r = disc.get(label[i] as usize).copied().unwrap_or(radius).max(0.5);
+            let r = disc
+                .get(label[i] as usize)
+                .copied()
+                .unwrap_or(radius)
+                .max(0.5);
             alpha[i].min((0.5 - reach[i] / (2.0 * (r + 1.0))).clamp(0.0, 1.0))
         })
         .collect()

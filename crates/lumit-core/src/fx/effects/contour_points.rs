@@ -66,9 +66,9 @@ pub fn centre_of(piece: &[[f32; 2]]) -> ([f32; 2], f32) {
     area *= 0.5;
     if area.abs() < 1e-6 {
         let k = n.max(1) as f64;
-        let (sx, sy) = piece
-            .iter()
-            .fold((0.0, 0.0), |(sx, sy), p| (sx + f64::from(p[0]), sy + f64::from(p[1])));
+        let (sx, sy) = piece.iter().fold((0.0, 0.0), |(sx, sy), p| {
+            (sx + f64::from(p[0]), sy + f64::from(p[1]))
+        });
         return ([(sx / k) as f32, (sy / k) as f32], 0.0);
     }
     (

@@ -204,7 +204,11 @@ fn with_copy(
     match path {
         [r] => {
             let from = reach(entries, *r);
-            let mut out = if whole { entries[..from].to_vec() } else { Vec::new() };
+            let mut out = if whole {
+                entries[..from].to_vec()
+            } else {
+                Vec::new()
+            };
             out.extend(baked_nth(&entries[from..*r], copy, n));
             out.extend(after(&entries[r + 1..]));
             out

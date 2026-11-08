@@ -855,16 +855,19 @@ fn a_parametric_rectangle_draws_its_numbers_and_a_keyed_width_moves_it() {
 /// item, its fill, its outline, a modifier and a group.
 #[test]
 fn an_eye_switched_off_leaves_its_part_out() {
-    let draw = |contents: &[ShapeEntry]| {
-        rasterise_contents(contents, 40, 20, 0.0, 0.0, 40.0, 20.0, 0.0)
-    };
+    let draw =
+        |contents: &[ShapeEntry]| rasterise_contents(contents, 40, 20, 0.0, 0.0, 40.0, 20.0, 0.0);
     let mut over = item(square(0.0, 0.0, 20.0));
     over.fill = Some(colour::still(LinearColour([0.0, 0.0, 1.0, 1.0])));
     let mut hidden = over.clone();
     hidden.hidden = true;
     let under = item(square(0.0, 0.0, 20.0));
     let rgba = draw(&entries(vec![under.clone(), hidden.clone()]));
-    assert_eq!(rgb_at(&rgba, 40, 10, 10), [255, 0, 0], "the hidden item is not drawn");
+    assert_eq!(
+        rgb_at(&rgba, 40, 10, 10),
+        [255, 0, 0],
+        "the hidden item is not drawn"
+    );
     assert_eq!(
         modifier::items(&entries(vec![under.clone(), hidden])).len(),
         2,
@@ -877,7 +880,11 @@ fn an_eye_switched_off_leaves_its_part_out() {
     outlined.fill_hidden = true;
     let rgba = draw(&entries(vec![outlined.clone()]));
     assert_eq!(alpha_at(&rgba, 40, 10, 10), 0, "no fill inside");
-    assert_eq!(rgb_at(&rgba, 40, 4, 10), [0, 255, 0], "the outline still there");
+    assert_eq!(
+        rgb_at(&rgba, 40, 4, 10),
+        [0, 255, 0],
+        "the outline still there"
+    );
     outlined.fill_hidden = false;
     outlined.stroke_hidden = true;
     let rgba = draw(&entries(vec![outlined]));
@@ -893,11 +900,18 @@ fn an_eye_switched_off_leaves_its_part_out() {
     }
     let rgba = draw(&contents);
     assert_eq!(alpha_at(&rgba, 40, 3, 3), 255, "the original");
-    assert_eq!(alpha_at(&rgba, 40, 13, 3), 0, "no copy from a hidden repeater");
+    assert_eq!(
+        alpha_at(&rgba, 40, 13, 3),
+        0,
+        "no copy from a hidden repeater"
+    );
 
     let mut group = modifier::ShapeGroup::new("Group", entries(vec![under]));
     group.hidden = true;
-    assert!(draw(&[ShapeEntry::Group(group)]).iter().all(|&b| b == 0), "a hidden group draws nothing");
+    assert!(
+        draw(&[ShapeEntry::Group(group)]).iter().all(|&b| b == 0),
+        "a hidden group draws nothing"
+    );
 }
 
 #[test]
@@ -922,8 +936,16 @@ fn an_items_own_modifier_acts_on_it_alone_and_a_global_one_on_every_item() {
             .map(|m| m.kind.label())
             .collect::<Vec<_>>()
     };
-    assert_eq!(kinds(0), ["Repeater", "Trim paths"], "its own, then the global one");
-    assert_eq!(kinds(1), ["Offset paths", "Trim paths"], "not the first item's repeater");
+    assert_eq!(
+        kinds(0),
+        ["Repeater", "Trim paths"],
+        "its own, then the global one"
+    );
+    assert_eq!(
+        kinds(1),
+        ["Offset paths", "Trim paths"],
+        "not the first item's repeater"
+    );
 }
 
 /// A Shape layer whose path is keyed to move sets its picture down where the
@@ -936,7 +958,9 @@ fn a_keyed_path_moves_the_layers_picture_with_it() {
     it.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
     let layer = crate::edits::base_layer(
         "Box".to_owned(),
-        crate::model::LayerKind::Shape { contents: entries(vec![it]) },
+        crate::model::LayerKind::Shape {
+            contents: entries(vec![it]),
+        },
         crate::time::Rational::new(2, 1).expect("two seconds"),
         crate::model::TransformGroup::default(),
     );

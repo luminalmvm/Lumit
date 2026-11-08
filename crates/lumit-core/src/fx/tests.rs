@@ -11059,7 +11059,14 @@ fn set_row(inst: &mut EffectInstance, id: &str, value: EffectValue) {
 
 /// Two solid layers in one comp, the second `dx` px to the right, with a
 /// rectangle mask on the second: what Path reads another layer's path from.
-fn two_solids(dx: f64) -> (crate::model::Composition, Layer, Layer, Arc<ExpressionContext>) {
+fn two_solids(
+    dx: f64,
+) -> (
+    crate::model::Composition,
+    Layer,
+    Layer,
+    Arc<ExpressionContext>,
+) {
     use crate::model::*;
     use crate::time::{Duration, FrameRate};
     let solid = SolidDef {
@@ -11121,21 +11128,41 @@ fn clone_to_points_distributions_make_their_own_points() {
     assert!(CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).is_none());
 
     set_row(&mut e, "distribution", EffectValue::Choice(DIST_GRID));
-    set_row(&mut e, "dist_columns", EffectValue::Float(Property::fixed(3.0)));
-    set_row(&mut e, "dist_rows", EffectValue::Float(Property::fixed(2.0)));
+    set_row(
+        &mut e,
+        "dist_columns",
+        EffectValue::Float(Property::fixed(3.0)),
+    );
+    set_row(
+        &mut e,
+        "dist_rows",
+        EffectValue::Float(Property::fixed(2.0)),
+    );
     let grid = CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).unwrap();
     assert_eq!(grid.len(), 6);
     let xs: Vec<f32> = grid.position.iter().map(|p| p[0]).collect();
-    assert_eq!(xs[..3], [840.0, 960.0, 1080.0], "Grid's spacing round Position");
+    assert_eq!(
+        xs[..3],
+        [840.0, 960.0, 1080.0],
+        "Grid's spacing round Position"
+    );
 
     set_row(&mut e, "distribution", EffectValue::Choice(DIST_LAYOUT));
-    set_row(&mut e, "dist_count", EffectValue::Float(Property::fixed(4.0)));
+    set_row(
+        &mut e,
+        "dist_count",
+        EffectValue::Float(Property::fixed(4.0)),
+    );
     let line = CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).unwrap();
     assert_eq!(line.len(), 4);
 
     // Path on the other layer: its mask, seen from this one, 100 px across.
     set_row(&mut e, "distribution", EffectValue::Choice(DIST_PATH));
-    set_row(&mut e, "dist_count", EffectValue::Float(Property::fixed(2.0)));
+    set_row(
+        &mut e,
+        "dist_count",
+        EffectValue::Float(Property::fixed(2.0)),
+    );
     set_row(&mut e, "path_layer", EffectValue::Layer(Some(target.id)));
     let along = CloneToPoints::distributed(&e, &comp, &owner, 0.0, &context, flat).unwrap();
     let own = crate::mask::mask_path_at(&target.masks, None, true, 0.0);
@@ -11143,7 +11170,9 @@ fn clone_to_points_distributions_make_their_own_points() {
     assert!((along.position[0][0] - (own.points[0][0] + 100.0)).abs() < 1e-3);
     assert!((along.position[0][1] - own.points[0][1]).abs() < 1e-3);
     // The path layer is read, never stamped.
-    assert!(CloneToPoints::rows(&e).iter().all(|(row, _)| *row != "path_layer"));
+    assert!(CloneToPoints::rows(&e)
+        .iter()
+        .all(|(row, _)| *row != "path_layer"));
 }
 
 /// **Layout lines the copies up by their own size**: each starts Spacing past
@@ -11190,15 +11219,19 @@ fn deform_moves_points_along_the_path_normal() {
     };
     let s = along.stream(&path, points::Projection::FLAT);
     // A quarter of the way into the wave: its crest, up off the path.
-    assert!((s.position[0][1] + 10.0).abs() < 1e-3, "{:?}", s.position[0]);
+    assert!(
+        (s.position[0][1] + 10.0).abs() < 1e-3,
+        "{:?}",
+        s.position[0]
+    );
     assert!(s.position[0][0].abs() < 1e-3);
     // At the crest the bent path runs level again.
     assert!(s.rotation[0].abs() < 1e-2, "{}", s.rotation[0]);
-    let off = PointsAlongPath {
-        deform: 0,
-        ..along
-    };
-    assert_eq!(off.stream(&path, points::Projection::FLAT).position[0], [0.0, 0.0, 0.0]);
+    let off = PointsAlongPath { deform: 0, ..along };
+    assert_eq!(
+        off.stream(&path, points::Projection::FLAT).position[0],
+        [0.0, 0.0, 0.0]
+    );
 }
 
 /// **Align lines the group's bounds up on Position**: Raster by the picture's
@@ -11281,7 +11314,11 @@ fn clone_deformer_vector_boolean_cuts_by_the_outlines() {
     d.apply(&mut rgba, w, h, 1.0, [0.0; 2], &reads);
     let px = |x: u32| &rgba[((w + x) * 4) as usize..((w + x) * 4 + 4) as usize];
     // Left of the cut: the copy, opaque, its colour white.
-    assert!((px(1)[3] - 1.0).abs() < 1e-5 && (px(1)[0] - 1.0).abs() < 1e-5, "{:?}", px(1));
+    assert!(
+        (px(1)[3] - 1.0).abs() < 1e-5 && (px(1)[0] - 1.0).abs() < 1e-5,
+        "{:?}",
+        px(1)
+    );
     // Right of it: cut away.
     assert_eq!(px(6)[3], 0.0);
 }
@@ -11329,7 +11366,10 @@ fn clone_to_points_places_the_clone_rows() {
     let mut stack = vec![e];
     crate::fx::builtins::backfill_builtin_params(&mut stack);
     assert!(stack[0].param("layer_transform").is_none());
-    assert_eq!(map_placement(&stack[0], "clone_layer"), MapPlacement::AsPlaced);
+    assert_eq!(
+        map_placement(&stack[0], "clone_layer"),
+        MapPlacement::AsPlaced
+    );
 }
 
 /// **Round corners rounds a square's corners and leaves its sides**: the
@@ -11341,7 +11381,11 @@ fn clone_deformer_rounds_outward_corners() {
     let alpha: Vec<f32> = (0..w * h)
         .map(|i| {
             let (x, y) = (i % w, i / w);
-            if (5..35).contains(&x) && (5..35).contains(&y) { 1.0 } else { 0.0 }
+            if (5..35).contains(&x) && (5..35).contains(&y) {
+                1.0
+            } else {
+                0.0
+            }
         })
         .collect();
     let r = rounded(&alpha, w, h, 8.0);
@@ -11353,7 +11397,13 @@ fn clone_deformer_rounds_outward_corners() {
     assert!(at(9, 9) > 0.5);
     // A strip 6 px tall keeps its body under a radius of 8.
     let strip: Vec<f32> = (0..w * h)
-        .map(|i| if (5..35).contains(&(i % w)) && (17..23).contains(&(i / w)) { 1.0 } else { 0.0 })
+        .map(|i| {
+            if (5..35).contains(&(i % w)) && (17..23).contains(&(i / w)) {
+                1.0
+            } else {
+                0.0
+            }
+        })
         .collect();
     let r = rounded(&strip, w, h, 8.0);
     assert_eq!(r[(20 * w + 20) as usize], 1.0);
@@ -11396,7 +11446,13 @@ fn closed_path_copies_are_length_over_count_apart_and_offset_pushes_them_off() {
     let path = crate::mask::MaskPolyline {
         expansion: 0.0,
         feather: 0.0,
-        points: vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0], [0.0, 0.0]],
+        points: vec![
+            [0.0, 0.0],
+            [100.0, 0.0],
+            [100.0, 100.0],
+            [0.0, 100.0],
+            [0.0, 0.0],
+        ],
         arc: vec![0.0, 100.0, 200.0, 300.0, 400.0],
         closed: true,
         corners: Vec::new(),
@@ -11441,7 +11497,14 @@ fn copies_on_a_flattened_curve_face_the_curve() {
         arc.push(arc.last().unwrap() + (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]));
     }
     let chord = arc[1];
-    let path = crate::mask::MaskPolyline { expansion: 0.0, feather: 0.0, points, arc, closed: true, corners: Vec::new() };
+    let path = crate::mask::MaskPolyline {
+        expansion: 0.0,
+        feather: 0.0,
+        points,
+        arc,
+        closed: true,
+        corners: Vec::new(),
+    };
     // At the top, running clockwise: +x.
     for s in [0.0, chord * 6.0] {
         let [x, y] = smooth_tangent(&path, s);
@@ -11461,19 +11524,31 @@ fn copies_on_a_flattened_curve_face_the_curve() {
 fn clone_deformer_cuts_and_fillets_on_the_paths() {
     use effects::clone_deformer::{filleted, overlay};
     let square = vec![vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]];
-    let bar = vec![vec![[-10.0, 45.0], [110.0, 45.0], [110.0, 55.0], [-10.0, 55.0]]];
+    let bar = vec![vec![
+        [-10.0, 45.0],
+        [110.0, 45.0],
+        [110.0, 55.0],
+        [-10.0, 55.0],
+    ]];
     let slices = overlay(&bar, &square, 4);
     assert_eq!(slices.len(), 2);
-    let top = slices.iter().find(|c| c.iter().all(|p| p[1] <= 45.0 + 1e-3)).expect("a top slice");
+    let top = slices
+        .iter()
+        .find(|c| c.iter().all(|p| p[1] <= 45.0 + 1e-3))
+        .expect("a top slice");
     let round = filleted(top, 20.0);
     // The corner is gone, the middle of the side stays.
     assert!(round.iter().all(|p| (p[0] - 0.0).hypot(p[1] - 0.0) > 5.0));
-    assert!(round.iter().any(|p| p[1].abs() < 1e-3 && p[0] > 19.0 && p[0] < 81.0));
+    assert!(round
+        .iter()
+        .any(|p| p[1].abs() < 1e-3 && p[0] > 19.0 && p[0] < 81.0));
     let thin = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 4.0], [0.0, 4.0]];
     let round = filleted(&thin, 20.0);
     let ys: Vec<f32> = round.iter().map(|p| p[1]).collect();
     assert!(ys.iter().cloned().fold(f32::MIN, f32::max) > 3.9);
-    assert!(round.iter().any(|p| (p[0] - 50.0).abs() < 49.0 && p[1] > 3.9));
+    assert!(round
+        .iter()
+        .any(|p| (p[0] - 50.0).abs() < 49.0 && p[1] > 3.9));
 }
 
 /// The square `x`, `y`, `side` as a closed flattened path.
@@ -11596,7 +11671,10 @@ fn contour_points_puts_a_point_on_each_piece() {
     let [x, y, _] = points.position[0];
     assert!((x - 5.0).abs() < 1e-3 && (y - 5.0).abs() < 1e-3, "{x} {y}");
     let [x, y, _] = points.position[1];
-    assert!((x - 110.0).abs() < 1e-3 && (y - 10.0).abs() < 1e-3, "{x} {y}");
+    assert!(
+        (x - 110.0).abs() < 1e-3 && (y - 10.0).abs() < 1e-3,
+        "{x} {y}"
+    );
     let circle = 2.0 * (400.0 / std::f32::consts::PI).sqrt();
     assert!((points.size[1] - circle).abs() < 1e-2);
 }
@@ -11629,18 +11707,34 @@ fn time_loop_moments_follow_the_type() {
         fade_length: 1.0,
         ..TimeLoop::read(Params::EMPTY)
     };
-    let cycle = TimeLoop { loop_type: 0, ..base };
+    let cycle = TimeLoop {
+        loop_type: 0,
+        ..base
+    };
     assert_eq!(cycle.moments(6.0).now, 1.0);
     assert!(cycle.moments(6.0).next.is_none());
-    let pong = TimeLoop { loop_type: 1, ..base };
+    let pong = TimeLoop {
+        loop_type: 1,
+        ..base
+    };
     assert_eq!(pong.moments(7.0).now, 3.0, "two seconds back from the end");
-    let fade = TimeLoop { loop_type: 2, ..base };
+    let fade = TimeLoop {
+        loop_type: 2,
+        ..base
+    };
     let at = |t: f64| fade.moments(t);
-    assert_eq!((at(0.0).now, at(0.0).next, at(0.0).next_share), (0.0, Some(5.0), 1.0));
+    assert_eq!(
+        (at(0.0).now, at(0.0).next, at(0.0).next_share),
+        (0.0, Some(5.0), 1.0)
+    );
     let half = at(0.5);
     assert_eq!((half.now, half.next), (0.5, Some(5.5)));
     assert!((half.next_share - 0.5).abs() < 1e-6);
     assert_eq!((at(1.0).now, at(1.0).next), (1.0, None));
     assert_eq!(at(4.99).now, 4.99);
-    assert_eq!(at(5.0).next, Some(5.0), "round again, the next lap shows in full");
+    assert_eq!(
+        at(5.0).next,
+        Some(5.0),
+        "round again, the next lap shows in full"
+    );
 }

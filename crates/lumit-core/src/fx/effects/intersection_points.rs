@@ -62,7 +62,14 @@ pub fn crossings(path: &MaskPolyline) -> Vec<([f32; 2], f32)> {
     }
     let boxes: Vec<[f32; 4]> = edges
         .iter()
-        .map(|(a, b, ..)| [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])])
+        .map(|(a, b, ..)| {
+            [
+                a[0].min(b[0]),
+                a[1].min(b[1]),
+                a[0].max(b[0]),
+                a[1].max(b[1]),
+            ]
+        })
         .collect();
     let mut out: Vec<(usize, f32, [f32; 2], f32)> = Vec::new();
     for (i, &(a0, a1, ka, ia, na)) in edges.iter().enumerate() {
@@ -222,6 +229,9 @@ impl EffectDef for IntersectionPointsDef {
     }
 
     fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
-        push(IntersectionPoints::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
+        push(
+            IntersectionPoints::DERIVED_PX_SCALE,
+            Value::Float(cx.px_scale),
+        );
     }
 }

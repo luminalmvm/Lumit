@@ -1150,8 +1150,7 @@ fn feed_effect_stack(
         // row values alone do not name: the source at those moments joins.
         if allow_after_effects_refs && e.effect.match_name == "time_loop" {
             h.update(b"time-loop/");
-            for (layer, at) in
-                lumit_core::fx::effects::time_loop::TimeLoop::planned(e, comp, t, lt)
+            for (layer, at) in lumit_core::fx::effects::time_loop::TimeLoop::planned(e, comp, t, lt)
             {
                 feed_f64(h, at);
                 let Some(src) = comp.layers.iter().find(|l| l.id == layer) else {

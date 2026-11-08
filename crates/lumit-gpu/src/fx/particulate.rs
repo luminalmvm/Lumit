@@ -456,9 +456,7 @@ impl FxEngine {
                     },
                     wgpu::BindGroupEntry {
                         binding: 7,
-                        resource: wgpu::BindingResource::TextureView(
-                            &base_view,
-                        ),
+                        resource: wgpu::BindingResource::TextureView(&base_view),
                     },
                 ],
             })

@@ -354,7 +354,18 @@ impl FxEngine {
         let ph = (count as u32).div_ceil(pw).max(1);
         let target = work_texture(ctx, pw, ph, "fx-points-stood");
         let plain = SpriteFit::default();
-        self.points_pass(ctx, src, w, h, field, op, &target, Some((pw, ph)), &plain, Lay::Over);
+        self.points_pass(
+            ctx,
+            src,
+            w,
+            h,
+            field,
+            op,
+            &target,
+            Some((pw, ph)),
+            &plain,
+            Lay::Over,
+        );
 
         let bytes = target.format().block_copy_size(None).unwrap_or(8);
         let padded = (pw * bytes).div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
@@ -562,8 +573,16 @@ impl FxEngine {
                     usage: wgpu::BufferUsages::STORAGE,
                 });
             let mut enc = ctx.encoder("fx-points-tiles");
-            let layer =
-                self.particulate_tiles(ctx, &mut enc, [&empty, &draw_bind], &args, w, h, count, base);
+            let layer = self.particulate_tiles(
+                ctx,
+                &mut enc,
+                [&empty, &draw_bind],
+                &args,
+                w,
+                h,
+                count,
+                base,
+            );
             drop(enc);
             return Some(layer);
         }

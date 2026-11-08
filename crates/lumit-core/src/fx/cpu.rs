@@ -2247,7 +2247,11 @@ pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 3] {
     for m in p.mid.iter().take(p.mids.min(3) as usize) {
         let to = [m[0], m[1], m[2]];
         if t <= m[3] {
-            let k = if m[3] > at { (t - at) / (m[3] - at) } else { 1.0 };
+            let k = if m[3] > at {
+                (t - at) / (m[3] - at)
+            } else {
+                1.0
+            };
             return std::array::from_fn(|c| from[c] + (to[c] - from[c]) * k);
         }
         (at, from) = (m[3], to);

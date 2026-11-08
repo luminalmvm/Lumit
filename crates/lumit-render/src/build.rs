@@ -1110,7 +1110,8 @@ fn clone_deformer_carriage(
             .and_then(|id| comp.layers.iter().find(|l| l.id == id))
             .and_then(|target| {
                 let (own, size) = outline(target, t_comp)?;
-                let placed = lumit_core::fx::points::layer_path(comp, layer, target, t_comp, &context);
+                let placed =
+                    lumit_core::fx::points::layer_path(comp, layer, target, t_comp, &context);
                 Some(Arc::new(d::BooleanShape {
                     own,
                     size,
@@ -1142,28 +1143,27 @@ fn clone_deformer_carriage(
     let drivers = lumit_core::fx::drivers::ResolvedDrivers::default();
     // An effect's rows at this moment, px rows in px@comp.
     let rows_of = |x: &lumit_core::model::EffectInstance| {
-        lumit_core::fx::resolved::resolve_instance(x, &drivers, lt, diag, 1.0, &markers, context.clone())
+        lumit_core::fx::resolved::resolve_instance(
+            x,
+            &drivers,
+            lt,
+            diag,
+            1.0,
+            &markers,
+            context.clone(),
+        )
     };
     let copies = above
         .filter(|_| vector)
         .filter(|x| x.effect.match_name == "clone_to_points")
         .and_then(|x| {
             let def = lumit_core::fx::catalogue::BUILTIN_DEFS.get(&x.effect.match_name)?;
-            let mut stream = points_input_for(
-                layer,
-                x,
-                def,
-                lt,
-                0.0,
-                projection,
-                &context,
-                audio,
-                clone,
-            )
-            .streams
-            .into_iter()
-            .next()
-            .filter(|s| !s.is_empty())?;
+            let mut stream =
+                points_input_for(layer, x, def, lt, 0.0, projection, &context, audio, clone)
+                    .streams
+                    .into_iter()
+                    .next()
+                    .filter(|s| !s.is_empty())?;
             stream.projection = projection;
             // Every picture the copies show, each a Shape layer's outline as it
             // sits on this layer, in a picture the size of this layer's, as the
@@ -1178,8 +1178,7 @@ fn clone_deformer_carriage(
                     if !matches!(l.kind, LayerKind::Shape { .. }) {
                         return None;
                     }
-                    let line =
-                        lumit_core::fx::points::layer_path(comp, layer, l, p.time, &context);
+                    let line = lumit_core::fx::points::layer_path(comp, layer, l, p.time, &context);
                     let contours = d::contours_of(&line);
                     (!contours.is_empty()).then_some((contours, [fw as f32, fh as f32]))
                 })
@@ -1187,7 +1186,10 @@ fn clone_deformer_carriage(
             let rows = rows_of(x);
             let p = rows.iter().next()?.params;
             let inst = CloneToPoints {
-                time_step: p.float(CloneToPoints::DERIVED_TIME_STEP, CloneToPoints::read(p).time_step),
+                time_step: p.float(
+                    CloneToPoints::DERIVED_TIME_STEP,
+                    CloneToPoints::read(p).time_step,
+                ),
                 ..CloneToPoints::read(p)
             };
             let of = CloneToPoints::handed(p, pictures.len());
@@ -1285,9 +1287,7 @@ fn points_input_in(
     }
     // A Clone to points whose Distribution is not Points input makes its
     // own points, in place of the wire.
-    if let Some(layer) = layer
-        .filter(|_| consumer.effect.match_name == "clone_to_points")
-    {
+    if let Some(layer) = layer.filter(|_| consumer.effect.match_name == "clone_to_points") {
         use lumit_core::fx::effects::clone_to_points::CloneToPoints;
         let made = context
             .comp
@@ -2201,12 +2201,8 @@ fn comp_walk(
                     // its parents show it, so scaling it up never blurs it.
                     // The effects read the raster factor off the texture, so
                     // they keep their size.
-                    let shown = shape_raster_scale(world_placement(
-                        comp,
-                        layer,
-                        t_comp,
-                        context.clone(),
-                    ));
+                    let shown =
+                        shape_raster_scale(world_placement(comp, layer, t_comp, context.clone()));
                     let most = (SHAPE_RASTER_MAX / natural_w.max(natural_h)).max(1.0);
                     let k = f64::from(shown).clamp(1.0, most);
                     let w = (natural_w * k).round().max(1.0) as u32;
@@ -3085,54 +3081,55 @@ fn comp_walk(
     // shows, one or two, each as the layer is at that moment and placed by
     // its transform then. `TimeLoop::planned` says which, as the planner and
     // the frame key ask it too.
-    let time_loop_pictures = |owner: uuid::Uuid,
-                              e: &lumit_core::model::EffectInstance|
-     -> LayerInputDraw {
-        use lumit_core::fx::effects::time_loop::TimeLoop;
-        let lt = comp
-            .layers
-            .iter()
-            .find(|l| l.id == owner)
-            .map_or(t_comp, |l| lumit_core::time::layer_time(t_comp, l.start_offset.0));
-        let whole = doc.comp(comp.id).unwrap_or(comp);
-        LayerInputDraw::Several(
-            TimeLoop::planned(e, whole, t_comp, lt)
-                .into_iter()
-                .map(|(_, at)| {
-                    if at.to_bits() == t_comp.to_bits() {
-                        return layer_slot(e, "source")
-                            .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer);
-                    }
-                    let mut probe = Probe::Picture {
-                        effect: e,
-                        row: "source",
-                        found: None,
-                    };
-                    comp_walk(
-                        doc,
-                        comp,
-                        at,
-                        frame_t,
-                        frame_pixels,
-                        &mut visited_path.clone(),
-                        None,
-                        true,
-                        Walk {
-                            clone: clone_number,
-                            values: &[],
-                            rebuild: with.rebuild,
-                            seen_through: None,
-                        },
-                        Some(&mut probe),
-                    );
-                    match probe {
-                        Probe::Picture { found: Some(d), .. } => LayerInputDraw::Layer(d),
-                        _ => LayerInputDraw::Absent,
-                    }
-                })
-                .collect(),
-        )
-    };
+    let time_loop_pictures =
+        |owner: uuid::Uuid, e: &lumit_core::model::EffectInstance| -> LayerInputDraw {
+            use lumit_core::fx::effects::time_loop::TimeLoop;
+            let lt = comp
+                .layers
+                .iter()
+                .find(|l| l.id == owner)
+                .map_or(t_comp, |l| {
+                    lumit_core::time::layer_time(t_comp, l.start_offset.0)
+                });
+            let whole = doc.comp(comp.id).unwrap_or(comp);
+            LayerInputDraw::Several(
+                TimeLoop::planned(e, whole, t_comp, lt)
+                    .into_iter()
+                    .map(|(_, at)| {
+                        if at.to_bits() == t_comp.to_bits() {
+                            return layer_slot(e, "source")
+                                .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer);
+                        }
+                        let mut probe = Probe::Picture {
+                            effect: e,
+                            row: "source",
+                            found: None,
+                        };
+                        comp_walk(
+                            doc,
+                            comp,
+                            at,
+                            frame_t,
+                            frame_pixels,
+                            &mut visited_path.clone(),
+                            None,
+                            true,
+                            Walk {
+                                clone: clone_number,
+                                values: &[],
+                                rebuild: with.rebuild,
+                                seen_through: None,
+                            },
+                            Some(&mut probe),
+                        );
+                        match probe {
+                            Probe::Picture { found: Some(d), .. } => LayerInputDraw::Layer(d),
+                            _ => LayerInputDraw::Absent,
+                        }
+                    })
+                    .collect(),
+            )
+        };
 
     // A probe wants one thing made at this walk's time and nothing else.
     match probe {
@@ -3531,220 +3528,221 @@ fn comp_walk(
             .enumerate()
             .map(|(k, &(at, e, def))| {
                 let made = (|| {
-                // A pinned effect is evaluated at the true playhead, so
-                // its schedule is scanned there too: the picture and the
-                // particles it draws must be of one moment.
-                let t = if e.sample_temporally { slt } else { frame_slt };
-                let context = Arc::new(ExpressionContext {
-                    document: expr_doc.clone(),
-                    comp: Some(comp.id),
-                    layer: owner.map(|l| l.id),
-                    comp_time: t_comp,
-                    current_depth: 0,
-                    inputs: None,
-                });
-                // **The stream a wire brings in**: nothing at all for a
-                // producer, and for a consumer the producer's own stream
-                // evaluated by the very function the driver walk reads
-                // (points-stream.md §3.3). In px@comp — the units a stream is
-                // data in — and rescaled into the raster by whichever
-                // consumer draws it.
-                let drive_projection =
-                    projection.unwrap_or(lumit_core::fx::points::Projection::FLAT);
-                let mut wired = match owner {
-                    Some(layer) => points_input_for(
-                        layer,
-                        e,
-                        def,
-                        t,
-                        dt,
-                        projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
-                        &context,
-                        &audio,
-                        clone_number,
-                    ),
-                    // A group carries no graph, so no wire can bring a stream
-                    // in: the consumer's documented empty input.
-                    None => PointsInput::default(),
-                };
-                // The room this op's picture has round the art. The points
-                // are drawn that far in, which is one more move on the end
-                // of the camera's. A stream keeps its own positions, so a
-                // driver and another layer read what they always did.
-                let grow = room
-                    .filter(|_| room_from.is_some_and(|from| k >= from))
-                    .map_or([0, 0], |(texels, _)| texels);
-                let scale = room.map_or(1.0, |(_, scale)| scale.max(1e-6));
-                let inset = [grow[0] as f32 / scale, grow[1] as f32 / scale];
-                let moved = |p: lumit_core::fx::points::Projection| {
-                    let [mut x, mut y, w] = p.m;
-                    for ((x, y), w) in x.iter_mut().zip(y.iter_mut()).zip(w) {
-                        *x += inset[0] * w;
-                        *y += inset[1] * w;
-                    }
-                    lumit_core::fx::points::Projection { m: [x, y, w] }
-                };
-                let projection = if grow == [0, 0] {
-                    projection
-                } else {
-                    for stream in &mut wired.streams {
-                        stream.projection = moved(stream.projection);
-                    }
-                    Some(moved(projection.unwrap_or_default()))
-                };
-                let size = |l: &lumit_core::model::Layer| pixels_for(l).map(|p| p.3);
-                let projection =
-                    crate::realise::scene::placement(expr_doc, comp, owner, e, t_comp, &size)
-                        .or(projection);
-                // The Text layer that Text to points and Label points read.
-                let (text, label) = owner.map_or_else(Default::default, |layer| {
-                    text_carriage(comp, layer, e, t_comp, expr_doc)
-                });
-                let late = late(&wired);
-                // A stream made on the card gets its drivers when
-                // it arrives, as one made here got them in points_input_for.
-                let late_drive = owner
-                    .filter(|_| late.first().is_some_and(|(entry, _)| *entry == 0))
-                    .and_then(|layer| {
-                        let rows = driven_rows(e)?;
-                        let (graph, consumer, context) =
-                            (layer.graph.clone(), e.id, context.clone());
-                        let (flat, doc, comp_id) = (drive_projection, doc.clone(), comp.id);
-                        Some(lumit_core::fx::points::LateDrive(Arc::new(
-                            move |stream: &mut lumit_core::fx::points::PointsStream| {
-                                // The comp's sound, so an Audio level wired in
-                                // hears the same mix here as anywhere else.
-                                let audio = doc.comp(comp_id).map(|comp| {
-                                    crate::audio_tap::DocumentAudio::new(&doc, comp, t_comp)
-                                });
-                                let audio = audio
-                                    .as_ref()
-                                    .map(|a| a as &dyn lumit_core::fx::registry::AudioTap);
-                                lumit_core::fx::drivers::per_copy::drive_rows(
-                                    &graph, consumer, stream, rows, t, &context, audio, flat,
-                                );
-                            },
-                        )))
+                    // A pinned effect is evaluated at the true playhead, so
+                    // its schedule is scanned there too: the picture and the
+                    // particles it draws must be of one moment.
+                    let t = if e.sample_temporally { slt } else { frame_slt };
+                    let context = Arc::new(ExpressionContext {
+                        document: expr_doc.clone(),
+                        comp: Some(comp.id),
+                        layer: owner.map(|l| l.id),
+                        comp_time: t_comp,
+                        current_depth: 0,
+                        inputs: None,
                     });
-                let input_from = wired.from.first().copied().flatten();
-                let ports_from: Vec<u32> = wired
-                    .from
-                    .iter()
-                    .skip(1)
-                    .map(|f| f.unwrap_or(u32::MAX))
-                    .collect();
-                let input = wired.streams;
-                // **A generator has no births to schedule**: its points
-                // are arithmetic over its own parameters, and what it wants
-                // from this carriage is the camera and the clock. A *consumer*
-                // has none either, for the plainer reason that it makes no
-                // points at all. Asked by the schema rather than by name, so a
-                // producer that grows an Emit rate later needs no edit here.
-                if !def.schema().params.iter().any(|p| p.id == "emit_rate") {
-                    return lumit_core::fx::points::PointsSchedule {
-                        schedule: lumit_core::fx::points::Schedule::default(),
-                        t,
-                        projection,
-                        late,
-                        late_drive: late_drive.clone(),
-                        ports_from,
-                        input,
-                        input_from,
-                        text,
-                        label,
-                        grow,
-                        stepped: None,
-                        trails: None,
-                        clone_shapes: None,
-                        boolean_shape: None,
-                    };
-                }
-                // **A Particulate with Trails on** draws every frame from the
-                // in point on the card, each from the driver walk at its own
-                // time, so there is nothing to scan here.
-                if let Some(layer) =
-                    owner.filter(|_| lumit_core::fx::points::stepped::carried(comp, e))
-                {
-                    return lumit_core::fx::points::PointsSchedule {
-                        schedule: lumit_core::fx::points::Schedule::default(),
-                        t,
-                        projection,
-                        late,
-                        late_drive: late_drive.clone(),
-                        ports_from,
-                        input,
-                        input_from,
-                        text,
-                        label,
-                        grow,
-                        stepped: None,
-                        trails: Some(crate::trails::carriage(
-                            expr_doc,
-                            comp,
+                    // **The stream a wire brings in**: nothing at all for a
+                    // producer, and for a consumer the producer's own stream
+                    // evaluated by the very function the driver walk reads
+                    // (points-stream.md §3.3). In px@comp — the units a stream is
+                    // data in — and rescaled into the raster by whichever
+                    // consumer draws it.
+                    let drive_projection =
+                        projection.unwrap_or(lumit_core::fx::points::Projection::FLAT);
+                    let mut wired = match owner {
+                        Some(layer) => points_input_for(
                             layer,
                             e,
-                            clone_number,
-                            inset,
-                        )),
-                        clone_shapes: None,
-                        boolean_shape: None,
-                    };
-                }
-                // **A Particulate that walks does it on the host**, through
-                // the driver walk a wire reads, and the card only draws where
-                // it got to.
-                let walked = owner
-                    .filter(|_| lumit_core::fx::points::stepped::wanted(comp, e))
-                    .map(|layer| {
-                        lumit_core::fx::drivers::effect_stream_in(
-                            &layer.graph,
-                            e.id,
+                            def,
                             t,
-                            context.clone(),
-                            Some(&audio),
-                            lumit_core::fx::points::Projection::FLAT,
-                            None,
+                            dt,
+                            projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
+                            &context,
+                            &audio,
                             clone_number,
-                        )
-                        .unwrap_or_default()
+                        ),
+                        // A group carries no graph, so no wire can bring a stream
+                        // in: the consumer's documented empty input.
+                        None => PointsInput::default(),
+                    };
+                    // The room this op's picture has round the art. The points
+                    // are drawn that far in, which is one more move on the end
+                    // of the camera's. A stream keeps its own positions, so a
+                    // driver and another layer read what they always did.
+                    let grow = room
+                        .filter(|_| room_from.is_some_and(|from| k >= from))
+                        .map_or([0, 0], |(texels, _)| texels);
+                    let scale = room.map_or(1.0, |(_, scale)| scale.max(1e-6));
+                    let inset = [grow[0] as f32 / scale, grow[1] as f32 / scale];
+                    let moved = |p: lumit_core::fx::points::Projection| {
+                        let [mut x, mut y, w] = p.m;
+                        for ((x, y), w) in x.iter_mut().zip(y.iter_mut()).zip(w) {
+                            *x += inset[0] * w;
+                            *y += inset[1] * w;
+                        }
+                        lumit_core::fx::points::Projection { m: [x, y, w] }
+                    };
+                    let projection = if grow == [0, 0] {
+                        projection
+                    } else {
+                        for stream in &mut wired.streams {
+                            stream.projection = moved(stream.projection);
+                        }
+                        Some(moved(projection.unwrap_or_default()))
+                    };
+                    let size = |l: &lumit_core::model::Layer| pixels_for(l).map(|p| p.3);
+                    let projection =
+                        crate::realise::scene::placement(expr_doc, comp, owner, e, t_comp, &size)
+                            .or(projection);
+                    // The Text layer that Text to points and Label points read.
+                    let (text, label) = owner.map_or_else(Default::default, |layer| {
+                        text_carriage(comp, layer, e, t_comp, expr_doc)
                     });
-                if walked.is_some() {
-                    return lumit_core::fx::points::PointsSchedule {
-                        schedule: lumit_core::fx::points::Schedule::default(),
+                    let late = late(&wired);
+                    // A stream made on the card gets its drivers when
+                    // it arrives, as one made here got them in points_input_for.
+                    let late_drive = owner
+                        .filter(|_| late.first().is_some_and(|(entry, _)| *entry == 0))
+                        .and_then(|layer| {
+                            let rows = driven_rows(e)?;
+                            let (graph, consumer, context) =
+                                (layer.graph.clone(), e.id, context.clone());
+                            let (flat, doc, comp_id) = (drive_projection, doc.clone(), comp.id);
+                            Some(lumit_core::fx::points::LateDrive(Arc::new(
+                                move |stream: &mut lumit_core::fx::points::PointsStream| {
+                                    // The comp's sound, so an Audio level wired in
+                                    // hears the same mix here as anywhere else.
+                                    let audio = doc.comp(comp_id).map(|comp| {
+                                        crate::audio_tap::DocumentAudio::new(&doc, comp, t_comp)
+                                    });
+                                    let audio = audio
+                                        .as_ref()
+                                        .map(|a| a as &dyn lumit_core::fx::registry::AudioTap);
+                                    lumit_core::fx::drivers::per_copy::drive_rows(
+                                        &graph, consumer, stream, rows, t, &context, audio, flat,
+                                    );
+                                },
+                            )))
+                        });
+                    let input_from = wired.from.first().copied().flatten();
+                    let ports_from: Vec<u32> = wired
+                        .from
+                        .iter()
+                        .skip(1)
+                        .map(|f| f.unwrap_or(u32::MAX))
+                        .collect();
+                    let input = wired.streams;
+                    // **A generator has no births to schedule**: its points
+                    // are arithmetic over its own parameters, and what it wants
+                    // from this carriage is the camera and the clock. A *consumer*
+                    // has none either, for the plainer reason that it makes no
+                    // points at all. Asked by the schema rather than by name, so a
+                    // producer that grows an Emit rate later needs no edit here.
+                    if !def.schema().params.iter().any(|p| p.id == "emit_rate") {
+                        return lumit_core::fx::points::PointsSchedule {
+                            schedule: lumit_core::fx::points::Schedule::default(),
+                            t,
+                            projection,
+                            late,
+                            late_drive: late_drive.clone(),
+                            ports_from,
+                            input,
+                            input_from,
+                            text,
+                            label,
+                            grow,
+                            stepped: None,
+                            trails: None,
+                            clone_shapes: None,
+                            boolean_shape: None,
+                        };
+                    }
+                    // **A Particulate with Trails on** draws every frame from the
+                    // in point on the card, each from the driver walk at its own
+                    // time, so there is nothing to scan here.
+                    if let Some(layer) =
+                        owner.filter(|_| lumit_core::fx::points::stepped::carried(comp, e))
+                    {
+                        return lumit_core::fx::points::PointsSchedule {
+                            schedule: lumit_core::fx::points::Schedule::default(),
+                            t,
+                            projection,
+                            late,
+                            late_drive: late_drive.clone(),
+                            ports_from,
+                            input,
+                            input_from,
+                            text,
+                            label,
+                            grow,
+                            stepped: None,
+                            trails: Some(crate::trails::carriage(
+                                expr_doc,
+                                comp,
+                                layer,
+                                e,
+                                clone_number,
+                                inset,
+                            )),
+                            clone_shapes: None,
+                            boolean_shape: None,
+                        };
+                    }
+                    // **A Particulate that walks does it on the host**, through
+                    // the driver walk a wire reads, and the card only draws where
+                    // it got to.
+                    let walked = owner
+                        .filter(|_| lumit_core::fx::points::stepped::wanted(comp, e))
+                        .map(|layer| {
+                            lumit_core::fx::drivers::effect_stream_in(
+                                &layer.graph,
+                                e.id,
+                                t,
+                                context.clone(),
+                                Some(&audio),
+                                lumit_core::fx::points::Projection::FLAT,
+                                None,
+                                clone_number,
+                            )
+                            .unwrap_or_default()
+                        });
+                    if walked.is_some() {
+                        return lumit_core::fx::points::PointsSchedule {
+                            schedule: lumit_core::fx::points::Schedule::default(),
+                            t,
+                            projection,
+                            late,
+                            late_drive: late_drive.clone(),
+                            ports_from,
+                            input,
+                            input_from,
+                            text,
+                            label,
+                            grow,
+                            stepped: walked,
+                            trails: None,
+                            clone_shapes: None,
+                            boolean_shape: None,
+                        };
+                    }
+                    let schedule =
+                        birth_schedule(e, t, dt, &context, owner.map(|l| &l.graph), &audio);
+                    lumit_core::fx::points::PointsSchedule {
+                        schedule,
                         t,
                         projection,
                         late,
-                        late_drive: late_drive.clone(),
+                        late_drive,
                         ports_from,
                         input,
                         input_from,
                         text,
                         label,
                         grow,
-                        stepped: walked,
+                        stepped: None,
                         trails: None,
                         clone_shapes: None,
                         boolean_shape: None,
-                    };
-                }
-                let schedule = birth_schedule(e, t, dt, &context, owner.map(|l| &l.graph), &audio);
-                lumit_core::fx::points::PointsSchedule {
-                    schedule,
-                    t,
-                    projection,
-                    late,
-                    late_drive,
-                    ports_from,
-                    input,
-                    input_from,
-                    text,
-                    label,
-                    grow,
-                    stepped: None,
-                    trails: None,
-                    clone_shapes: None,
-                    boolean_shape: None,
-                }
+                    }
                 })();
                 // A Clone deformer's outlines ride beside the stream.
                 let mut made = made;

@@ -49,6 +49,7 @@
 //! for what gives way, and [`CloneToPoints::picture_of`] chooses a stamp's
 //! picture. The planner, the builder and the draw all go through them.
 
+use crate::expression::ExpressionContext;
 use crate::fx::drivers::{clone_index, per_copy};
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
 use crate::fx::points::{self, Column, PointsStream, SpriteFit};
@@ -57,7 +58,6 @@ use crate::fx::{
     registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
     schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
-use crate::expression::ExpressionContext;
 use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer};
 use lumit_fx_macros::Effect;
 use std::sync::Arc;
@@ -198,7 +198,13 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
     },
     ParamGroup {
         label: "",
-        params: &["path_layer", "dist_align", "dist_length", "dist_travel", "dist_offset"],
+        params: &[
+            "path_layer",
+            "dist_align",
+            "dist_length",
+            "dist_travel",
+            "dist_offset",
+        ],
         collapsed: false,
         visible_when: Some(("distribution", &[DIST_PATH])),
         visible_when_lens_elements: None,
@@ -775,9 +781,17 @@ pub fn smooth_tangent(path: &crate::mask::MaskPolyline, s: f32) -> [f32; 2] {
         return path.tangent_at(s);
     }
     let s = s.clamp(0.0, path.length());
-    let e = path.arc.partition_point(|&a| a <= s).saturating_sub(1).min(n - 2);
+    let e = path
+        .arc
+        .partition_point(|&a| a <= s)
+        .saturating_sub(1)
+        .min(n - 2);
     let span = path.arc[e + 1] - path.arc[e];
-    let u = if span > 0.0 { ((s - path.arc[e]) / span).clamp(0.0, 1.0) } else { 0.0 };
+    let u = if span > 0.0 {
+        ((s - path.arc[e]) / span).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let own = path.edge_tangent(e);
     // The edge on the far side of vertex `v` from edge `e`, round the join
     // of a closed path.
@@ -792,22 +806,38 @@ pub fn smooth_tangent(path: &crate::mask::MaskPolyline, s: f32) -> [f32; 2] {
         Some(path.edge_tangent(other))
     };
     let at = |v: usize| match beyond(v) {
-        Some(t) if t[0] * own[0] + t[1] * own[1] > 30f32.to_radians().cos() => [t[0] + own[0], t[1] + own[1]],
+        Some(t) if t[0] * own[0] + t[1] * own[1] > 30f32.to_radians().cos() => {
+            [t[0] + own[0], t[1] + own[1]]
+        }
         _ => own,
     };
     let (a, b) = (at(e), at(e + 1));
     let [x, y] = [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
     let l = x.hypot(y);
-    if l > 0.0 { [x / l, y / l] } else { own }
+    if l > 0.0 {
+        [x / l, y / l]
+    } else {
+        own
+    }
 }
 
 /// Offset: every point `px` off `path`, along the normal where it stands, to
 /// the left of the way the path runs, as Points along path's Deform moves one.
 /// A point that faces the way the path runs faces the eased way of
 /// [`smooth_tangent`] instead of its chord's.
-pub fn push_off_path(stream: &mut PointsStream, path: &crate::mask::MaskPolyline, px: f32, align: bool) {
+pub fn push_off_path(
+    stream: &mut PointsStream,
+    path: &crate::mask::MaskPolyline,
+    px: f32,
+    align: bool,
+) {
     let length = path.length();
-    for ((p, r), far) in stream.position.iter_mut().zip(&mut stream.rotation).zip(&stream.index) {
+    for ((p, r), far) in stream
+        .position
+        .iter_mut()
+        .zip(&mut stream.rotation)
+        .zip(&stream.index)
+    {
         let [x, y] = smooth_tangent(path, far * length);
         if align {
             *r = y.atan2(x);
@@ -1242,7 +1272,12 @@ impl CloneToPoints {
                     ..super::points_along_path::PointsAlongPath::read(Params::EMPTY)
                 }
                 .stream(&path, projection);
-                push_off_path(&mut along, &path, number("dist_offset", d.dist_offset), align);
+                push_off_path(
+                    &mut along,
+                    &path,
+                    number("dist_offset", d.dist_offset),
+                    align,
+                );
                 along
             }
             _ => {
