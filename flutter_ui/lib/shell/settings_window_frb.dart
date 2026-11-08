@@ -59,7 +59,6 @@ import 'package:provider/provider.dart';
 
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
-import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
 import '../state/app_icon.dart';

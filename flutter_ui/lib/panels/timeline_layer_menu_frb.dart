@@ -24,6 +24,7 @@ import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import 'audio_streams_menu_frb.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep, hasFlow;
+import 'retime_commands.dart' show reverseRow;
 import 'sequence_view_frb.dart';
 import 'stagger_panel_frb.dart' show showStaggerPanel;
 import 'timeline_extras_frb.dart' show showLabelPicker;
@@ -159,6 +160,7 @@ List<MenuEntry> layerMenuEntries(
               app.notifyDocumentChanged();
             }),
             action: 'layer.retime.hold'),
+        MenuEntry(l10n.easingReverse, reverseRow(context, ui)),
       ]),
     MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
     if (kind == BridgeLayerKind.text)

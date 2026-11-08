@@ -67,6 +67,7 @@ import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
+import '../panels/retime_commands.dart' show reverseRow;
 import '../panels/stagger_panel_frb.dart' show showStaggerPanel;
 import 'ae_report_frb.dart';
 import 'backups_window.dart';
@@ -1488,6 +1489,7 @@ List<MenuSection> lumitMenus(
             MenuEntry(_retimeLabel(layer),
                 _retimeable(layer) ? onLayer((l) => app.toggleRetime(l)) : null,
                 action: 'layer.retime.enable'),
+            MenuEntry(l10n.easingReverse, reverseRow(context, ui)),
             // In and out of the clip-editing surface, for anyone — the Vegas
             // preference decides what an *import* becomes, never what a layer is
             // allowed to be. Offered here and on a layer's right-click. Coming

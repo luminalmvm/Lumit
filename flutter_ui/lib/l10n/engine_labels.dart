@@ -2105,6 +2105,7 @@ Map<String, String> get _built => {
       "3D switch": l10n.hist3dSwitch,
       "Edit clips": l10n.histEditClips,
       "Change layer kind": l10n.histChangeLayerKind,
+      "Set orient": l10n.histSetOrient,
       "Adjustment switch": l10n.histAdjustmentSwitch,
       "Audible switch": l10n.histAudibleSwitch,
       "Visible switch": l10n.histVisibleSwitch,

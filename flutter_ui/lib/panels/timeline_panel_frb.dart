@@ -32,6 +32,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:math';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -3371,8 +3372,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   DateTime? _lastReveal;
   int _revealTaps = 0;
 
-  /// How long a second `U` still counts as the same gesture. AE's own window;
-  /// long enough to type deliberately, short enough that a `U` a moment later
+  /// How long a second `U` still counts as the same gesture. Timed on `clock`,
+  /// which a widget test drives, so a slow machine cannot split `UU` in two.
+  /// Long enough to type deliberately, short enough that a `U` a moment later
   /// starts again rather than collapsing what you just opened.
   static const Duration _revealWindow = Duration(milliseconds: 500);
 
@@ -3408,7 +3410,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         : [for (final entry in ui.model.layers) entry.layer];
     if (layers.isEmpty) return false;
 
-    final now = DateTime.now();
+    final now = clock.now();
     final last = _lastReveal;
     _revealTaps = (last != null && now.difference(last) <= _revealWindow)
         ? _revealTaps + 1
@@ -3566,7 +3568,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   bool _revealAudioTap(LumitUiState ui) {
     final selected = ui.selectedLayerIds;
     if (selected.isEmpty) return false;
-    final now = DateTime.now();
+    final now = clock.now();
     final last = _lastAudioReveal;
     _audioRevealTaps = (last != null && now.difference(last) <= _revealWindow)
         ? _audioRevealTaps + 1

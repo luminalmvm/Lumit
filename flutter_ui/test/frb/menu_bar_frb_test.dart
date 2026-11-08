@@ -578,13 +578,13 @@ void main() {
       await tester.pump();
 
       await choose(tester, 'Layer', 'Shapes from text', under: 'Create');
-      await tester.pump();
+      await settleFrb(tester, until: () => comp.getLayers().length == 2);
       expect(comp.getLayers(), hasLength(2), reason: 'a copy beside it');
       expect(text.getText()!.text, 'Text',
           reason: 'the original is kept, still saying what it said');
 
       await choose(tester, 'Layer', 'Points from text', under: 'Create');
-      await tester.pump();
+      await settleFrb(tester, until: () => comp.getLayers().length == 3);
       expect(comp.getLayers(), hasLength(3));
       expect(
           comp

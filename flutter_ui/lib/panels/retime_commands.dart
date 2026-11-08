@@ -370,6 +370,13 @@ void reverseLayers(BuildContext context, List<BridgeLayerEntry> targets) {
   });
 }
 
+/// Reverse as a menu row on the selection, greyed when nothing picked can be
+/// retimed. The layer menu and the Layer menu both use it.
+VoidCallback? reverseRow(BuildContext context, LumitUiState ui) {
+  final targets = retimeTargets(ui);
+  return targets.isEmpty ? null : () => reverseLayers(context, targets);
+}
+
 /// One straight run at 100% again, keeping the Retime.
 void resetSpeed(BuildContext context, List<BridgeLayerEntry> targets) =>
     _forEach(context, targets, (entry) {

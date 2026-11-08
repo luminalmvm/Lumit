@@ -81,7 +81,7 @@ void main() {
       viewerBars: ViewerBars.bottom,
       toolBarPosition: ToolBarPosition.left,
       rangeSliders: false,
-      rightClickOpensNodeSearch: false,
+      rightClickOpensNodeSearch: true,
       tabOpensNodeSearch: false,
       shiftAOpensNodeSearch: false,
       wireStyle: WireStyle.angled,
@@ -90,6 +90,7 @@ void main() {
       peakHoldSeconds: 10,
       viewerGuidesLocked: true,
       viewerRulerPercent: true,
+      alignToFirstPicked: true,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -129,7 +130,7 @@ void main() {
     expect(back.viewerBars, ViewerBars.bottom);
     expect(back.toolBarPosition, ToolBarPosition.left);
     expect(back.rangeSliders, isFalse);
-    expect(back.rightClickOpensNodeSearch, isFalse);
+    expect(back.rightClickOpensNodeSearch, isTrue);
     expect(back.tabOpensNodeSearch, isFalse);
     expect(back.shiftAOpensNodeSearch, isFalse);
     expect(back.wireStyle, WireStyle.angled);
@@ -138,9 +139,10 @@ void main() {
     expect(back.peakHoldSeconds, 10);
     expect(back.viewerGuidesLocked, isTrue);
     expect(back.viewerRulerPercent, isTrue);
+    expect(back.alignToFirstPicked, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 49);
+    expect(all.toJson().keys.length, 50);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

@@ -17621,6 +17621,10 @@
   "@histChangeLayerKind": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histSetOrient": "Set orient",
+  "@histSetOrient": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. Orient is whether a layer turns by itself, along its motion path or towards the camera."
+  },
   "histAdjustmentSwitch": "Adjustment switch",
   "@histAdjustmentSwitch": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
@@ -19208,7 +19212,7 @@
   "@paramMenuRevealInGraph": {
     "description": "Right-click menu on a property row: pick the property in the Timeline and show its curve in the graph."
   },
-  "tipLinkProperty": "Drag onto the property to follow",
+  "tipLinkProperty": "Link",
   "@tipLinkProperty": {
     "description": "Tooltip of the small link mark at the end of a property row (shown on hover) and in the expression editor's footer: dragging it onto another property row writes an expression that reads that property."
   },

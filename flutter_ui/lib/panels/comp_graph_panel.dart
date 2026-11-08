@@ -774,9 +774,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
   // --- A box's own controls -----------------------------------------------
 
-  /// One parameter row on an open box: the Node panel's row, drawn from the
-  /// values the canvas holds. It writes through the same op the panel's edit
-  /// does and previews through the same request.
+  /// One parameter row on an open box: its name and its value at the
+  /// playhead, read from the values the canvas holds. It only reads; the Node
+  /// panel's row is where the value is set.
   Widget _paramRow(String key, String param) {
     final info = _infos[key];
     final held = _params[key];
@@ -2348,8 +2348,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       focusNode: _canvasFocus,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        // Only the canvas itself: a value well on a box, or a rename field,
-        // is typing these.
+        // Only the canvas itself: a rename field is typing these.
         if (node.hasPrimaryFocus &&
             (event.logicalKey == LogicalKeyboardKey.delete ||
                 event.logicalKey == LogicalKeyboardKey.backspace)) {
