@@ -756,6 +756,7 @@ impl HeadlessRenderer {
         // ponytail: a 32-bit project builds its engine again each time it is
         // opened. Keep the whole map if that gets noticed.
         let fx = parts.fx.remove(&lumit_gpu::WORKING_FORMAT)?;
+        parts.compositor.drop_attachment();
         Some(lumit_gpu::SharedGpu {
             ctx: gpu,
             colour: parts.colour,
@@ -1819,12 +1820,11 @@ impl HeadlessRenderer {
         self.pool.keep(item, frame, target_width);
     }
 
-    /// Keep the multisample attachment from frame to frame
-    /// ([`lumit_gpu::composite::Compositor::keep_attachment`]). Set on the renderer an
-    /// export writes through, which draws every frame at one size.
-    pub fn keep_attachments(&mut self) {
+    /// Let go of the multisample attachment kept between frames
+    /// ([`lumit_gpu::composite::Compositor::drop_attachment`]).
+    pub fn drop_attachments(&mut self) {
         if let Some(parts) = &self.parts {
-            parts.compositor.keep_attachment();
+            parts.compositor.drop_attachment();
         }
     }
 

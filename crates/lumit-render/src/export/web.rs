@@ -76,7 +76,6 @@ pub fn start(
     let sound = frame::sound(&spec, c, audio, &span);
     let mut renderer = HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
     renderer.refuse_substitution();
-    renderer.keep_attachments();
     renderer.sync_colour(&doc);
     spec.check_with_colour(renderer.colour())?;
     renderer.set_colour_output(spec.colour_space.ocio_name().map(str::to_owned));
