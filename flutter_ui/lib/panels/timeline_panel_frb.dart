@@ -3220,7 +3220,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       return true;
     }
     if (action == 'layer.split') {
-      return splitSelectionAtPlayhead(ui);
+      return splitSelectionAtPlayhead(
+          ui, Provider.of<LumitState>(context, listen: false).project);
     }
     if (action == 'layer.move.in' ||
         action == 'layer.move.out' ||

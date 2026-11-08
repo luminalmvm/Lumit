@@ -348,13 +348,18 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
   void _addEdit(LumitUiState ui, CompositionReference? comp,
       {required bool all}) {
     if (comp == null) return;
-    _afterCut(_cut(() => comp.cutRazor(
-          layers: all || cutPicked.isEmpty
-              ? const []
-              : [for (final track in _candidateTracks()) track.entry.layer],
-          atFrame: ui.playheadFrame.value,
-          linked: _linked,
-        )));
+    var result = BridgeCutResult.nothing;
+    asOneUndoStep(
+        Provider.of<LumitState>(context, listen: false).project,
+        () => result = _cut(() => comp.cutRazor(
+              layers: all || cutPicked.isEmpty
+                  ? const []
+                  : [for (final track in _candidateTracks()) track.entry.layer],
+              atFrame: ui.playheadFrame.value,
+              linked: _linked,
+            )),
+        name: 'Split');
+    _afterCut(result);
   }
 
   /// The picked clips held by the engine for a paste. Says whether it took any.

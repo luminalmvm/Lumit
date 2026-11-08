@@ -41,6 +41,11 @@ String engineLabel(String english) => _table[english] ?? english;
 /// Whether [english] is a label this table knows — what the sync test asserts.
 bool hasEngineLabel(String english) => _table.containsKey(english);
 
+/// What deleting the things called [names] reads as in Edit > History: the
+/// thing's own name for one, else the command's.
+String deleteStepName(List<String> names) =>
+    names.length == 1 ? l10n.histDeleteNamed(names.single) : 'Delete';
+
 /// The table for the language in use, built once for it. It is asked for a
 /// word at a time, by a sort of the whole effects list among others, and
 /// building a thousand entries for each word was most of what a keystroke in
@@ -2132,6 +2137,12 @@ Map<String, String> get _built => {
       "Grade": l10n.histGrade,
       "Paste grade": l10n.histPasteGrade,
       "Apply look": l10n.histApplyLook,
+      // Named by the interface for its commonest commands. "Split" is the
+      // effect's own word above; a step naming its thing ("Delete Glow")
+      // arrives already in the reader's words, since no table could hold it.
+      "Precompose": l10n.precompose,
+      "Animate text": l10n.menuAnimateText,
+      "Delete": l10n.delete,
       "Change layer kind": l10n.histChangeLayerKind,
       "Set orient": l10n.histSetOrient,
       "Adjustment switch": l10n.histAdjustmentSwitch,

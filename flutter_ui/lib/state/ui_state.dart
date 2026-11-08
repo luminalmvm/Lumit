@@ -17,10 +17,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart'
     show ApplyEasing, EasingCurve;
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show effectLabelOf;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart'
-    show RevealFilter, effectPath;
+    show RevealFilter, asOneUndoStep, effectPath;
 import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart'
@@ -2466,7 +2468,8 @@ class LumitUiState extends ChangeNotifier {
         fx.id
     };
     try {
-      layer.addEffect(name: name);
+      asOneUndoStep(_app.project, () => layer.addEffect(name: name),
+          name: l10n.histAddNamed(effectLabelOf(name)));
     } catch (_) {
       return false;
     }

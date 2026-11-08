@@ -55,7 +55,7 @@ import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/viewer_shape3d.dart' show addShape3d, shape3dTools;
 import '../panels/timeline_group_row_frb.dart';
-import '../panels/timeline_razor.dart' show razorCut, razorTargets;
+import '../panels/timeline_razor.dart' show splitSelectionAtPlayhead;
 import '../panels/timeline_mask_rows_frb.dart'
     show copyPickedMasks, deletePickedMasks, duplicatePickedMasks,
         pasteMasksOnto, pickedMasks;
@@ -1340,7 +1340,8 @@ List<MenuSection> lumitMenus(
                     ? null
                     : () => duplicateSelectionFrb(app, ui),
                 action: 'layer.duplicate'),
-            MenuEntry(l10n.menuSplitLayer, onComp((c) => _splitAtPlayhead(ui)),
+            MenuEntry(l10n.menuSplitLayer,
+                onComp((c) => splitSelectionAtPlayhead(ui, app.project)),
                 action: 'layer.split'),
             MenuEntry(l10n.menuSelectAll,
                 comp == null ? null : () => ui.setSelection(comp.getLayers()),
@@ -2709,11 +2710,15 @@ void redoFrb(LumitState app) {
 /// Delete key alike.
 void deleteLayersFrb(
     LumitState app, LumitUiState ui, Iterable<LayerReference> layers) {
+  final names = [
+    for (final layer in layers)
+      ui.model.byId(layer.internallayerId)?.info.name ?? '',
+  ];
   asOneUndoStep(app.project, () {
     for (final layer in layers) {
       layer.delete();
     }
-  });
+  }, name: deleteStepName(names));
   ui.clearSelection();
   app.notifyDocumentChanged();
 }
@@ -2934,22 +2939,6 @@ VoidCallback? trimCompAction(LumitState app, CompositionReference? comp) {
     comp.trimToWorkArea();
     app.notifyDocumentChanged();
   };
-}
-
-/// Split the selected layers at the playhead, as the shortcut does: a
-/// Sequence layer gains an edit point there, and any other layer becomes two,
-/// which are left selected.
-void _splitAtPlayhead(LumitUiState ui) {
-  final frame = ui.playheadFrame.value;
-  final selected = ui.selectedLayerIds;
-  final made = razorCut([
-    for (final entry in razorTargets(ui.model.layers, frame,
-        clicked: null, allLayers: true))
-      if (selected.contains(entry.layer.internallayerId)) entry,
-  ], frame);
-  if (!made.cut) return;
-  if (made.halves.isNotEmpty) ui.setSelection(made.halves);
-  ui.model.refresh();
 }
 
 /// The menu's *Add marker* — the same call the keyboard makes, so the two

@@ -68,6 +68,22 @@ String? prefixChipName(LumitUiState ui) {
   return null;
 }
 
+/// Whether stopping at the picked point would show anything other than the
+/// finished picture: some enabled effect that draws comes after it. A box on a
+/// node graph or in a shader always counts, since the graph decides that.
+bool prefixChipDiffers(LumitUiState ui) {
+  final point = ui.viewerPrefixPoint;
+  if (point == null || ui.viewerShaderPoint != null) return true;
+  if (ui.viewerGraphPoint != null) return true;
+  final effects = ui.model.byId(point.$1.internallayerId)?.info.effects;
+  if (effects == null) return true;
+  // The Source box stops before every effect.
+  final at = point.$2 == null
+      ? -1
+      : effects.indexWhere((on) => on.id == point.$2);
+  return effects.skip(at + 1).any((on) => on.enabled && !on.audio);
+}
+
 /// The chip itself. Returns a [Positioned], so it goes straight into the
 /// Viewer's stage stack beside the selection tag — one line at the hookup, and
 /// nothing of the Viewer's own layout to disturb.
@@ -129,8 +145,12 @@ class ViewerPrefixChip extends StatelessWidget {
       ]),
       builder: (context, _) {
         final name = prefixChipName(uiState);
-        if (name == null) return const SizedBox.shrink();
         final on = uiState.atSelectedEffect.value;
+        // Off and stopping where the picture already ends, it would change
+        // nothing, so it stays out of the way.
+        if (name == null || (!on && !prefixChipDiffers(uiState))) {
+          return const SizedBox.shrink();
+        }
         return Positioned(
           // Mirrors the selection tag across the picture: the tag says what is
           // selected, the chip says what is being looked at.

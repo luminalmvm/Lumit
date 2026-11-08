@@ -153,7 +153,8 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
   final comp = ui.selectedComp;
   return [
     MenuEntry(l10n.textAnimatorBlank,
-        onSelection(app, ui, (entry) => addTextAnimator(entry.layer), when: isText)),
+        onSelection(app, ui, (entry) => addTextAnimator(entry.layer),
+            when: isText, name: 'Animate text')),
     MenuEntry.divider(),
     for (final preset in TextAnimationPreset.values)
       MenuEntry(
@@ -166,6 +167,7 @@ List<MenuEntry> textPresetRows(LumitState app, LumitUiState ui) {
                 (entry) => addTextPreset(
                     entry.layer, preset, comp, ui.playheadFrame.value),
                 when: isText,
+                name: preset.title,
               ),
       ),
   ];

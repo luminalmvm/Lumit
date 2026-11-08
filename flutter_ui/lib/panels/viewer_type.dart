@@ -55,6 +55,7 @@ import '../state/layer_bounds.dart' show measuredText;
 import '../state/text_documents.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'viewer_gizmo.dart';
 import 'viewer_shape_layer.dart' show ShapeSpace;
 import 'viewer_tool_cursor.dart';
@@ -1032,19 +1033,29 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// committing them separately made the first `Ctrl+Z` undo a pivot the user
   /// had never moved, leaving the words exactly where they were and the undo
   /// looking broken.
+  ///
+  /// A layer still wearing the name it was made with takes the first line as
+  /// its name in the same step, so a comp of titles doesn't read Text, Text.
   void _write(LayerReference layer, BridgeTextDocument document) {
-    if (!_created) {
-      layer.setText(document: document);
-      return;
-    }
-    final placed = _recentredAnchor(layer, document);
-    layer.setTextPlaced(
-      document: document,
-      anchorX: placed.anchor.dx,
-      anchorY: placed.anchor.dy,
-      positionX: placed.position.dx,
-      positionY: placed.position.dy,
-    );
+    final words = document.text.trim().split(RegExp(r'[\r\n]')).first.trim();
+    asOneUndoStep(widget.state.project, () {
+      if (!_created) {
+        layer.setText(document: document);
+      } else {
+        final placed = _recentredAnchor(layer, document);
+        layer.setTextPlaced(
+          document: document,
+          anchorX: placed.anchor.dx,
+          anchorY: placed.anchor.dy,
+          positionX: placed.position.dx,
+          positionY: placed.position.dy,
+        );
+      }
+      // The engine's own name for a new text layer.
+      if (words.isNotEmpty && layer.getName() == 'Text') {
+        layer.rename(name: words);
+      }
+    });
   }
 
   /// The open edit's document saying [text]. Everything else is carried

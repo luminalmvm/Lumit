@@ -20,8 +20,10 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 
 import '../icons/icons.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart' show ProjectReference;
 
 /// How big the scissors pointer is drawn, in screen pixels.
 const double razorCursorSize = 16;
@@ -244,9 +246,10 @@ class _RazorCutLinePainter extends CustomPainter {
       old.at != at || old.lineX != lineX || old.mark != mark;
 }
 
-/// Split the selected layers at the playhead, the Split layer command. The
-/// halves take the selection. False when nothing picked spans the playhead.
-bool splitSelectionAtPlayhead(LumitUiState ui) {
+/// Split the selected layers at the playhead, the Split layer command, as one
+/// undo step. The halves take the selection. False when nothing picked spans
+/// the playhead.
+bool splitSelectionAtPlayhead(LumitUiState ui, ProjectReference? project) {
   final frame = ui.playheadFrame.value;
   final selected = ui.selectedLayerIds;
   final targets = [
@@ -255,7 +258,9 @@ bool splitSelectionAtPlayhead(LumitUiState ui) {
       if (selected.contains(entry.layer.internallayerId)) entry,
   ];
   if (targets.isEmpty) return false;
-  final made = razorCut(targets, frame);
+  var made = (cut: false, halves: <LayerReference>[]);
+  asOneUndoStep(project, () => made = razorCut(targets, frame),
+      name: 'Split');
   if (made.cut) {
     if (made.halves.isNotEmpty) ui.setSelection(made.halves);
     ui.model.refresh();

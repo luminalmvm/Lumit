@@ -12,6 +12,7 @@ import 'package:lumit_flutter/src/rust/api/streams.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../l10n/engine_labels.dart' show deleteStepName;
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart';
 import '../shell/menu_layer_frb.dart';
@@ -217,7 +218,9 @@ List<MenuEntry> layerMenuEntries(
         () => duplicateLayersFrb(app, ui, [for (final e in entries) e.layer]),
         action: 'layer.duplicate'),
     MenuEntry(l10n.menuSplitLayer, editing(() {
-      if (splitSelectionAtPlayhead(ui)) app.notifyDocumentChanged();
+      if (splitSelectionAtPlayhead(ui, app.project)) {
+        app.notifyDocumentChanged();
+      }
     }), action: 'layer.split'),
     MenuEntry(
         l10n.menuTrimToWorkArea,
@@ -320,7 +323,7 @@ List<MenuEntry> layerMenuEntries(
                 e.layer.delete();
               } catch (_) {}
             }
-          });
+          }, name: deleteStepName([for (final e in unlocked) e.info.name]));
           ui.clearSelection();
           app.notifyDocumentChanged();
         }),

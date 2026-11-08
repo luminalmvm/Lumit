@@ -19,6 +19,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart'
     show BridgeFootageHere, BridgeFootageShare;
 import 'package:provider/provider.dart';
 
+import '../l10n/engine_labels.dart' show deleteStepName;
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/dialog_frame.dart' show askLumitChoice;
@@ -69,10 +70,12 @@ enum _ProjectMenuAction {
 /// Do [act] to each of [items] as one undo step, passing over any that has
 /// gone, such as a clip deleted with its folder a moment ago.
 void eachInOneUndo(LumitState state, List<ItemReference> items,
-    void Function(ItemReference item) act) {
+    void Function(ItemReference item) act,
+    {String? name}) {
   final project = state.project;
-  final group = items.length > 1 && project != null;
+  final group = (name != null || items.length > 1) && project != null;
   if (group) project.beginUndoGroup();
+  if (group && name != null) project.nameUndoGroup(name: name);
   try {
     for (final item in items) {
       try {
@@ -146,8 +149,17 @@ Future<bool> deleteProjectItems(
     );
     if (go != true || !context.mounted) return false;
   }
+  final names = <String>[];
+  for (final item in items) {
+    try {
+      names.add(item.name());
+    } catch (_) {
+      names.add('');
+    }
+  }
   eachInOneUndo(Provider.of<LumitState>(context, listen: false), items,
-      (item) => item.delete());
+      (item) => item.delete(),
+      name: deleteStepName(names));
   return true;
 }
 

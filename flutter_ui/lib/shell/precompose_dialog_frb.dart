@@ -17,10 +17,12 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -41,6 +43,7 @@ Future<void> showPrecomposeDialogFrb({
   UuidValue? group,
 }) async {
   if (selectedLayers.isEmpty) return;
+  final project = Provider.of<LumitState>(context, listen: false).project;
 
   // The same layer twice is a selection quirk, not two layers: it would make
   // the engine refuse a single-layer Leave, and pack a duplicate on Move.
@@ -84,15 +87,18 @@ Future<void> showPrecomposeDialogFrb({
           adjustDuration: adjustDuration,
           openNewComp: openNewComp,
         );
-        final LayerReference precomp;
+        late final LayerReference precomp;
         try {
-          precomp = comp.precompose(
-            layerIds: ids,
-            name: name,
-            leaveAttributes: leave,
-            adjustDuration: adjustDuration,
-            group: group,
-          );
+          asOneUndoStep(
+              project,
+              () => precomp = comp.precompose(
+                    layerIds: ids,
+                    name: name,
+                    leaveAttributes: leave,
+                    adjustDuration: adjustDuration,
+                    group: group,
+                  ),
+              name: 'Precompose');
         } catch (_) {
           // The dialogue stays open saying so, rather than closing on a move
           // that never happened.

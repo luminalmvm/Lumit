@@ -7,6 +7,7 @@
 //    Effect controls stack and a box picked on the graph are one selection,
 //    so they must be one chip and not two behaviours;
 //  * it names the effect it would stop at, the user's own name included;
+//  * it stays away where stopping would change nothing: the last effect;
 //  * it clears when the selection can no longer name a single point, and the
 //    picture goes back with it — a chip outliving its selection would leave
 //    the Viewer showing a truncated composition with nothing saying why;
@@ -110,6 +111,11 @@ void main() {
       await tester.pump();
       expect(chip(), findsOneWidget);
       expect(find.text('at ${effectLabelOf('blur')}'), findsOneWidget);
+
+      p.uiState.setEffectSelection(p.layer, [effects.last.id()]);
+      await tester.pump();
+      expect(chip(), findsNothing,
+          reason: 'the last effect is where the picture ends anyway');
     });
 
     /// The point is derived from the selection rather than stored beside it, so

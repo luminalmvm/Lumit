@@ -130,13 +130,13 @@ class EffectCommands {
 
   /// Run [op] on each of the handles, in stack order, as one undo step.
   void withEach(BuildContext context, void Function(BridgeEffectInstance) op,
-      {bool reversed = false}) {
+      {bool reversed = false, String? name}) {
     final handles = _handles(context);
     asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
       for (final handle in reversed ? handles.reversed : handles) {
         op(handle);
       }
-    });
+    }, name: name);
   }
 
   /// On or off. All of them take this effect's new state rather than each
@@ -197,7 +197,12 @@ class EffectCommands {
 
   /// The handles off their list.
   void remove(BuildContext context) {
-    withEach(context, (e) => layer.removeEffect(effect: e));
+    final names = [
+      for (final e in _handles(context))
+        e.getInfo().customName ?? effectLabelOf(e.getInfo().name),
+    ];
+    withEach(context, (e) => layer.removeEffect(effect: e),
+        name: deleteStepName(names));
     onStackChanged();
   }
 

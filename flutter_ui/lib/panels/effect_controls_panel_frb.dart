@@ -638,6 +638,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         ui.selectedEffectsLayer ?? ui.selectedLayer.value ?? _lastLayer;
     final picked = ui.selectedEffects.value.toSet();
     if (layer == null || picked.isEmpty) return false;
+    final names = [
+      for (final fx in ui.model.byId(layer.internallayerId)?.info.effects ??
+          const <BridgeEffectInstanceInfo>[])
+        if (picked.contains(fx.id)) fx.customName ?? effectLabelOf(fx.name),
+    ];
     try {
       asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
           () {
@@ -646,7 +651,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
             layer.removeEffect(effect: instance);
           }
         }
-      });
+      }, name: deleteStepName(names));
     } catch (_) {
       // The effects went away under the selection; there is nothing here to
       // report and nothing left to remove.

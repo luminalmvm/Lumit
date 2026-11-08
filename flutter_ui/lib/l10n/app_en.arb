@@ -18018,6 +18018,24 @@
   "@histApplyLook": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a look from the Grade panel put on layers."
   },
+  "histAddNamed": "Add {name}",
+  "@histAddNamed": {
+    "description": "A row of the Edit > History window, and the Edit menu's Undo row: an effect put on a layer. {name} is the effect's name, such as Glow.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "histDeleteNamed": "Delete {name}",
+  "@histDeleteNamed": {
+    "description": "A row of the Edit > History window, and the Edit menu's Undo row: one thing deleted. {name} is the effect's, layer's or item's name, such as Glow or Logo.png.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "histChangeLayerKind": "Change layer kind",
   "@histChangeLayerKind": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."

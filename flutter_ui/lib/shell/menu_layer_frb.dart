@@ -97,6 +97,7 @@ VoidCallback? onSelection(
   LumitUiState ui,
   void Function(BridgeLayerEntry) body, {
   bool Function(BridgeLayerEntry)? when,
+  String? name,
 }) {
   final entries = [
     for (final entry in selectedEntries(ui))
@@ -113,7 +114,7 @@ VoidCallback? onSelection(
           // this particular command. The rest of the selection still runs.
         }
       }
-    });
+    }, name: name);
     app.notifyDocumentChanged();
   };
 }
