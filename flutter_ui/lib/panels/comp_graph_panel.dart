@@ -36,6 +36,7 @@ import 'package:lumit_flutter/src/rust/api/comp_graph.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
+import 'package:lumit_flutter/src/rust/api/graph_looks.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
@@ -531,10 +532,12 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     final params = <String, CompBoxRows>{};
     var notes = const <BridgeGraphNote>[];
     var ties = const <BridgeWireTie>[];
+    BridgeCompNodeLooks? looks;
     if (graph != null) {
       try {
         notes = widget.comp.getNodeGraphNotes();
         ties = widget.comp.getNodeGraphTies();
+        looks = widget.comp.getNodeGraphLooks();
         final ports = {for (final n in graph.nodes) n.id: n.inputs};
         for (final instance in widget.comp.getNodeGraphInstances()) {
           final id = instance.id();
@@ -562,6 +565,11 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       _graph = graph;
       _notes = notes;
       _ties = ties;
+      _colours = {
+        for (final c in looks?.colours ?? const <BridgeCompNodeColour>[])
+          compNodeKey(c.node): c.colour,
+      };
+      _folded = {...?looks?.collapsed.map(compNodeKey)};
       _infos = infos;
       _params = params;
       _byKey = {
@@ -762,6 +770,8 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                 ? graphNodeWidth
                 : graphNodeOpenWidth,
         foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
+        colour: _colours[key] ?? 0,
+        collapsed: _folded.contains(key),
       ));
     }
     return GraphLayout(boxes);
@@ -1649,8 +1659,10 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       onRename: fx || node.kind == BridgeCompNodeKind.read
           ? () => setState(() => _renaming = key)
           : null,
-      expanded: fx ? graph.wiring.exposed.any((e) => compNodeKey(e) == key) : null,
-      onExpand: fx ? () => _toggleExposed(key) : null,
+      expanded: fx && !_folded.contains(key)
+          ? graph.wiring.exposed.any((e) => compNodeKey(e) == key)
+          : null,
+      onExpand: fx && !_folded.contains(key) ? () => _toggleExposed(key) : null,
       enterLabel: enter,
       onEnter: enter == null ? null : () => _enterBox(node),
       onAddNode: outputAlone ? () => _feedOutput(key) : null,
@@ -1676,8 +1688,38 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           ? null
           : () => ui.setAtSelectedEffect(!ui.atSelectedEffect.value),
       onDisconnectAll: wired ? _disconnectPicked : null,
+      collapsed: _folded.contains(key),
+      onCollapse: () => _restyle(key, collapsed: !_folded.contains(key)),
+      colour: _colours[key] ?? 0,
+      onColour: (colour) => _restyle(key, colour: colour),
       onDelete: outputAlone ? null : _deleteSelected,
     );
+  }
+
+  /// Each box's colour and fold, read with the graph, by box key.
+  Map<String, int> _colours = const {};
+  Set<String> _folded = const {};
+
+  /// Colour or fold the pressed box, and the rest of the pick with it, as one
+  /// undo step.
+  void _restyle(String key, {int? colour, bool? collapsed}) {
+    final nodes = [
+      for (final k in _targets(key))
+        if (_byKey[k]?.id case final id?) id,
+    ];
+    try {
+      if (colour != null) {
+        widget.comp.setNodeGraphBoxColour(nodes: nodes, colour: colour);
+      }
+      if (collapsed != null) {
+        widget.comp
+            .setNodeGraphBoxCollapsed(nodes: nodes, collapsed: collapsed);
+      }
+    } catch (_) {
+      // The comp moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
   }
 
   /// The search, its pick landing in front of the Output: on the wire into it

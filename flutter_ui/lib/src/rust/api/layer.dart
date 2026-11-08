@@ -13,6 +13,7 @@ import 'effect.dart';
 import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
+import 'graph_looks.dart';
 import 'model.dart';
 import 'model_rows.dart';
 import 'orient.dart';
@@ -3696,6 +3697,12 @@ class LayerReference {
         that: this,
       );
 
+  /// How this layer's graph draws its boxes.
+  BridgeNodeLooks getGraphLooks() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphLooks(
+        that: this,
+      );
+
   /// The notes on this layer's graph canvas.
   List<BridgeGraphNote> getGraphNotes() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphNotes(
@@ -4655,6 +4662,18 @@ class LayerReference {
           required BridgeGraphWiring wiring}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetGraph(
           that: this, drivers: drivers, wiring: wiring);
+
+  /// Fold `nodes` down to their heading, or open them again.
+  void setGraphBoxCollapsed(
+          {required List<BridgeNodeRef> nodes, required bool collapsed}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetGraphBoxCollapsed(
+          that: this, nodes: nodes, collapsed: collapsed);
+
+  /// Tint `nodes` with chip `colour`; chip 0 takes the tint away.
+  void setGraphBoxColour(
+          {required List<BridgeNodeRef> nodes, required int colour}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetGraphBoxColour(
+          that: this, nodes: nodes, colour: colour);
 
   /// Replace the notes on this layer's graph canvas, as one undo step. A
   /// note is added, moved, reworded and deleted this way.

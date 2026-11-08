@@ -9399,11 +9399,11 @@
   },
   "expand": "Expand",
   "@expand": {
-    "description": "Menu row on a folder or a heading: show what is inside it."
+    "description": "Menu row on a folder, a heading or a box on a node canvas: show what is inside it."
   },
   "collapse": "Collapse",
   "@collapse": {
-    "description": "Menu row on a folder or a heading: hide what is inside it."
+    "description": "Menu row on a folder, a heading or a box on a node canvas: hide what is inside it, so a box shows its heading alone."
   },
   "expandAll": "Expand all",
   "@expandAll": {
@@ -12379,6 +12379,15 @@
   "viewerViewActiveCamera": "Active camera",
   "@viewerViewActiveCamera": {
     "description": "Entry in the Viewer bar's 3D view menu, and the one it starts on: the picture is what the composition's own camera sees, which is also what an export gets."
+  },
+  "viewerViewActiveCameraNamed": "Active camera · {name}",
+  "@viewerViewActiveCameraNamed": {
+    "description": "The Active camera entry of the Viewer bar's 3D view menu while a camera layer is in use at the playhead. {name} is that layer's name, as the Timeline shows it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "viewerViewBack": "Back",
   "@viewerViewBack": {
@@ -15606,6 +15615,10 @@
   "graphDisconnectAll": "Disconnect all",
   "@graphDisconnectAll": {
     "description": "Graph panel: right-click row on a box that takes every wire off it."
+  },
+  "graphBoxColour": "Colour",
+  "@graphBoxColour": {
+    "description": "Graph panel: right-click row on a box that opens a row of label colours to tint the box's header with. The first, grey, takes the tint away. A noun."
   },
   "graphShowSockets": "Show all sockets",
   "@graphShowSockets": {

@@ -1516,6 +1516,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui!.selectPropertyShowsGraph) {
       _ui!.selectPropertyShowsGraph = false;
       if (!_graph) _setMode(TimelineMode.graph);
+      // The curve's row opens and comes into view, so the outline names
+      // what the graph is drawing.
+      final parts = path.split('/');
+      setState(() {
+        for (var i = 1; i < parts.length; i++) {
+          _setOpen(parts.sublist(0, i).join('/'), true);
+        }
+        _foldToShow = path;
+      });
     }
     if (_selectedProperties.length == 1 && _selectedProperties.first == path) {
       return;
@@ -1891,10 +1900,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         if (foldRowPath(row.id, fold) == path) {
           if (!_vOutline.hasClients) return;
           final view = _vOutline.position;
-          // Enough for the part's own rows under it. A Retime has none.
-          final block = fold is FoldRetimeRow
-              ? row.rowHeight
-              : row.rowHeight * 11;
+          // Enough for a part's own rows under it. A property row has none.
+          final block = fold is FoldGroupRow
+              ? row.rowHeight * 11
+              : row.rowHeight;
           if (at >= view.pixels &&
               at + block <= view.pixels + view.viewportDimension) {
             return;

@@ -245,6 +245,7 @@ const double _stripHeight = 22;
 const double _rowHeight = 26;
 const double _headingHeight = 20;
 const double _margin = 8;
+const double _listMax = 260;
 
 class _FxConsoleState extends State<_FxConsole> {
   final TextEditingController _query = TextEditingController();
@@ -433,10 +434,8 @@ class _FxConsoleState extends State<_FxConsole> {
           final anchor =
               widget.anchor ?? Offset(box.maxWidth / 2, box.maxHeight / 2);
           // The search row lands on the pointer, pulled in so the whole
-          // popover fits; the list is capped to the room below it. 56 is the
-          // least list the clamp guarantees room for — two rows and the
-          // vertical padding — so a pointer at the very bottom still shows a
-          // usable console rather than a bar with nothing under it.
+          // popover fits, its longest list included: a pointer near the
+          // bottom lifts the console rather than cutting its list short.
           final left = _fit(
               anchor.dx - width / 2, _margin, box.maxWidth - width - _margin);
           final top = _fit(
@@ -445,7 +444,7 @@ class _FxConsoleState extends State<_FxConsole> {
               box.maxHeight -
                   _searchRowHeight -
                   _stripHeight -
-                  56 -
+                  _listMax -
                   _margin);
           final room = box.maxHeight -
               top -
@@ -693,7 +692,7 @@ class _FxConsoleState extends State<_FxConsole> {
       rows.add(_entryRow(t, entry, hot: i == _highlighted));
     }
     return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
+      constraints: BoxConstraints(maxHeight: room.clamp(48.0, _listMax)),
       // ponytail: children not builder — a console list is at most a few
       // hundred rows; switch back to a builder if a plugin catalogue makes
       // the open-frame build measurable.

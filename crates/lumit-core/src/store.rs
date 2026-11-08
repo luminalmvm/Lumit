@@ -2565,6 +2565,7 @@ mod tests {
         let wired = LayerGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![Edge {

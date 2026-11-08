@@ -508,10 +508,12 @@ Future<int?> showLabelPicker(
 
 /// The label picker's row of chips, [onPick] told which was tapped. The
 /// colour submenus on the Cut and Audio timelines wear the same row.
+/// [selected], where given, is ringed: the colour already in use.
 Widget labelChips(
   LumitTheme t, {
   required String keyPrefix,
   required void Function(int) onPick,
+  int? selected,
 }) =>
     Padding(
       padding: const EdgeInsets.all(6),
@@ -533,7 +535,13 @@ Widget labelChips(
                     borderRadius:
                         BorderRadius.circular(t.tokens.controlRadius),
                   ),
-                  foregroundDecoration: chipRing(t, lit),
+                  // The colour in use wears the ring at full strength.
+                  foregroundDecoration: i == selected
+                      ? BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(t.tokens.controlRadius),
+                          border: Border.all(color: t.textPrimary))
+                      : chipRing(t, lit),
                 ),
               ),
             ),

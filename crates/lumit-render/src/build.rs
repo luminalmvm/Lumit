@@ -9073,6 +9073,7 @@ mod render_below_at_tests {
         graph.graph = Some(CompGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

@@ -764,6 +764,7 @@ fn a_node_graph_effects_demands_join_the_layers_window() {
     let graph = CompGraph {
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         edges: vec![
             wire(&provided, OUTPUT_PORT.id, &echo, INPUT_PORT.id),
             wire(&echo, OUTPUT_PORT.id, &out, INPUT_PORT.id),

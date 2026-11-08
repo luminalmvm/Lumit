@@ -8009,9 +8009,7 @@ impl LayerReference {
             .map(BridgeEffectInstance::get_effects)
             .collect();
         let mut graph = crate::api::graph::wiring_into(wiring, nodes);
-        let held = self.item()?.graph;
-        graph.notes = held.notes;
-        graph.ties = held.ties;
+        graph.keep_canvas(self.item()?.graph);
 
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;

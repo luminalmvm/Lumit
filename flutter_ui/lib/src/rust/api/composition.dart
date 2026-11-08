@@ -15,6 +15,7 @@ import 'export.dart';
 import 'folder.dart';
 import 'footage.dart';
 import 'graph.dart';
+import 'graph_looks.dart';
 import 'layer.dart';
 import 'model.dart';
 import 'model_rows.dart';
@@ -29,6 +30,7 @@ import 'shape.dart';
 import 'share.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'state/prefix.dart';
 import 'streams.dart';
 import 'wire_tie.dart';
 import 'wireframes.dart';
@@ -1667,6 +1669,12 @@ class CompositionReference {
         that: this,
       );
 
+  /// How this node graph draws its boxes.
+  BridgeCompNodeLooks getNodeGraphLooks() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetNodeGraphLooks(
+        that: this,
+      );
+
   /// The notes on this node graph's canvas.
   List<BridgeGraphNote> getNodeGraphNotes() => BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceGetNodeGraphNotes(
@@ -2553,6 +2561,20 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetNodeGraph(
               that: this, instances: instances, wiring: wiring);
+
+  /// Fold `nodes` down to their heading, or open them again.
+  void setNodeGraphBoxCollapsed(
+          {required List<UuidValue> nodes, required bool collapsed}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetNodeGraphBoxCollapsed(
+              that: this, nodes: nodes, collapsed: collapsed);
+
+  /// Tint `nodes` with chip `colour`; chip 0 takes the tint away.
+  void setNodeGraphBoxColour(
+          {required List<UuidValue> nodes, required int colour}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetNodeGraphBoxColour(
+              that: this, nodes: nodes, colour: colour);
 
   /// Replace the notes on this node graph's canvas, as one undo step.
   void setNodeGraphNotes({required List<BridgeGraphNote> notes}) =>

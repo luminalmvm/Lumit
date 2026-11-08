@@ -579,10 +579,9 @@ List<(String, String, VoidCallback)> _newLayerKinds(
 /// the four interpolations — and nothing after them, since the owner removed
 /// Reverse, Copy and Paste at playhead from the bar (2026-08-31).
 /// In **graph view** it is the graph's own commands (docs/07 §5.3): the eases,
-/// the tangent modes and the auto-fit toggle (the graph is chosen in its own
-/// corner, [GraphLensSwitch]). Every
-/// button keeps the face, the tooltip and the widget key it had on the lane
-/// bar — this is a move, not a redesign.
+/// the tangent modes and Break handles (the graph is chosen in its own
+/// corner, [GraphLensSwitch]). Both shapes draw glyphs named by their
+/// tooltips, so the two views share one face.
 class KeyCommandStrip extends StatelessWidget {
   /// Set in **Layers mode**: the keyframe strip.
   final bool strip;
@@ -620,34 +619,6 @@ class KeyCommandStrip extends StatelessWidget {
     this.onEaseBlock,
   });
 
-  Widget _button(
-    LumitTheme t, {
-    required String keyName,
-    required String label,
-    required String tip,
-    required bool on,
-    required VoidCallback onPressed,
-    String? action,
-  }) =>
-      LumitTooltip(
-        message: tip,
-        action: action,
-        child: HouseButton(
-          key: ValueKey<String>(keyName),
-          small: true,
-          // The one in force wears the button's own `hairline_strong` idle
-          // edge; the rest are frameless. **No accent** — §3.1's accent list
-          // is closed and a lens or an ease is not on it, so which is in force
-          // reads from the frame and the brighter label, as the mode tabs do.
-          frameless: !on,
-          // 18px bottom bar: one pixel of the button's own edge is
-          // all the room a 9px kicker leaves above and below it.
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          onPressed: onPressed,
-          child: Text(t.kickerCase(label), style: on ? t.kickerOn : t.kicker),
-        ),
-      );
-
   /// A strip command drawn as a glyph of the set: the interpolation
   /// entries, whose shapes — a line, an eased curve, a step, a curve that
   /// overshoots — say more at 16px than four capitalised words did. The word
@@ -659,10 +630,12 @@ class KeyCommandStrip extends StatelessWidget {
     required String mark,
     required String word,
     required VoidCallback onPressed,
+    String? tip,
     String? action,
+    bool on = false,
   }) =>
       LumitTooltip(
-        message: word,
+        message: tip ?? word,
         action: action,
         child: HouseButton(
           key: ValueKey<String>(keyName),
@@ -672,10 +645,13 @@ class KeyCommandStrip extends StatelessWidget {
           // button's 1px edge is the whole of an 18px bottom bar.
           padding: const EdgeInsets.symmetric(horizontal: 4),
           onPressed: onPressed,
-          // A command, not a toggle: it rests at the column's muted strength,
-          // the way the magnet and the shy filter rest when off.
+          // A command rests at the column's muted strength, the way the
+          // magnet and the shy filter rest when off; a toggle that is on
+          // takes the foreground, as the column toggles beside it do.
           child: glyph.LumitIcon(mark,
-              size: iconSize, colour: t.textMuted, semanticLabel: word),
+              size: iconSize,
+              colour: on ? t.textPrimary : t.textMuted,
+              semanticLabel: word),
         ),
       );
 
@@ -704,38 +680,24 @@ class KeyCommandStrip extends StatelessWidget {
           child: Padding(padding: EdgeInsets.only(left: gap), child: button),
         );
     FoldItem glyphItem(String keyName, String mark, String word,
-        {required VoidCallback onPressed, String? action, double gap = 2}) {
+        {required VoidCallback onPressed,
+        String? tip,
+        String? action,
+        bool on = false,
+        double gap = 2}) {
       return item(
           _glyphButton(t,
               keyName: keyName,
               mark: mark,
               word: word,
-              action: action,
-              onPressed: onPressed),
-          label: word,
-          mark: mark,
-          gap: gap,
-          onPressed: onPressed);
-    }
-
-    FoldItem wordItem(String keyName, String label, String tip,
-        {required VoidCallback onPressed,
-        String? action,
-        bool on = false,
-        double gap = 2,
-        bool keep = false}) {
-      return item(
-          _button(t,
-              keyName: keyName,
-              label: label,
               tip: tip,
               action: action,
               on: on,
               onPressed: onPressed),
-          label: label,
+          label: word,
+          mark: mark,
           on: on,
           gap: gap,
-          keep: keep,
           onPressed: onPressed);
     }
 
@@ -802,17 +764,20 @@ class KeyCommandStrip extends StatelessWidget {
               // the Layers / Graph switch ([GraphLensSwitch]).
               //
               // The selected keys' easing, one click each — the F9 family's
-              // buttons (docs/07 §5.3).
-              wordItem('graph-interp-linear', l10n.easeLinear,
-                  l10n.tipLinearKeyframes,
+              // buttons (docs/07 §5.3), in the strip's own glyphs.
+              glyphItem('graph-interp-linear', LumitIcons.linear,
+                  l10n.easeLinear,
+                  tip: l10n.tipLinearKeyframes,
                   gap: 0,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.linear())),
-              wordItem('graph-interp-bezier', l10n.easeEasy, l10n.tipEasyEase,
+              glyphItem('graph-interp-bezier', LumitIcons.easeInOut,
+                  l10n.easeEasy,
+                  tip: l10n.tipEasyEase,
                   action: 'graph.ease',
                   onPressed: () => onInterp?.call(easyEase)),
-              wordItem('graph-interp-hold', l10n.easeHold,
-                  l10n.tipHoldKeyframes,
+              glyphItem('graph-interp-hold', LumitIcons.hold, l10n.easeHold,
+                  tip: l10n.tipHoldKeyframes,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.hold())),
               // The shaped ease, one step along from the one-click three: same
@@ -830,15 +795,16 @@ class KeyCommandStrip extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(left: 2),
                       child: Builder(
-                        builder: (buttonContext) => _button(t,
+                        builder: (buttonContext) => _glyphButton(t,
                             keyName: 'graph-interp-easing',
-                            label: l10n.easeCustom,
+                            mark: LumitIcons.bezier,
+                            word: l10n.easeCustom,
                             tip: l10n.tipEasingEditor,
-                            on: false,
                             onPressed: () => onOpenEasing?.call(buttonContext)),
                       ),
                     ),
                     label: l10n.easeCustom,
+                    mark: LumitIcons.bezier,
                     onPressed: () => onOpenEasing?.call(context)),
               // Tangents — Auto / Clamp / Free (§6.3), after the ease
               // presets. A run of three like the eases
@@ -847,20 +813,22 @@ class KeyCommandStrip extends StatelessWidget {
               // has no one answer to light. Which mode a side is in is legible
               // where it matters — in the handle, which stops following its
               // neighbours the moment it is dragged.
-              wordItem('graph-tangent-auto', l10n.graphTangentAuto,
-                  l10n.tipTangentAuto,
+              glyphItem('graph-tangent-auto', LumitIcons.auto,
+                  l10n.graphTangentAuto,
+                  tip: l10n.tipTangentAuto,
                   gap: 12,
                   onPressed: () => onTangentMode?.call(TangentMode.auto)),
-              wordItem('graph-tangent-clamp', l10n.graphTangentClamp,
-                  l10n.tipTangentClamp,
+              glyphItem('graph-tangent-clamp', LumitIcons.clamp,
+                  l10n.graphTangentClamp,
+                  tip: l10n.tipTangentClamp,
                   onPressed: () => onTangentMode?.call(TangentMode.clamp)),
-              wordItem('graph-tangent-free', l10n.graphTangentFree,
-                  l10n.tipTangentFree,
+              glyphItem('graph-tangent-free', LumitIcons.free,
+                  l10n.graphTangentFree,
+                  tip: l10n.tipTangentFree,
                   onPressed: () => onTangentMode?.call(TangentMode.free)),
-              wordItem(
-                  'graph-break-handles',
+              glyphItem('graph-break-handles', LumitIcons.unlink,
                   l10n.graphBreakHandles,
-                  breakHandles
+                  tip: breakHandles
                       ? l10n.tipBreakHandlesOn
                       : l10n.tipBreakHandlesOff,
                   gap: 12,

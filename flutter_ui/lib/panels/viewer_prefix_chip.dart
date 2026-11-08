@@ -43,6 +43,11 @@ import 'viewer_panel_frb.dart'
 /// Read from [LumitUiState.model], which is the frontend's own held copy of the
 /// document, so this is a map lookup and never a call across the bridge.
 String? prefixChipName(LumitUiState ui) {
+  // A box inside a Custom shader names itself by the word its canvas handed
+  // over.
+  if (ui.viewerShaderPoint case final shader?) {
+    return ui.shaderGraphWords[shader.node];
+  }
   // A node graph's box names itself (docs/impl/node-graph-comp.md §4.5). The
   // label rode in with the pick, so this is a field read; a driver, a value
   // Input and the Output make no picture and name no point.
@@ -86,7 +91,9 @@ class ViewerPrefixChip extends StatelessWidget {
             id: 'viewer-at-view-here', ticked: on),
         // A layer's point is a box on its graph; a node graph's box is
         // already on the canvas it was picked on.
-        if (point != null && uiState.viewerGraphPoint == null)
+        if (point != null &&
+            uiState.viewerGraphPoint == null &&
+            uiState.viewerShaderPoint == null)
           viewerRow(
               l10n.fxMenuRevealGraph,
               () => uiState.revealBox(
@@ -116,6 +123,8 @@ class ViewerPrefixChip extends StatelessWidget {
         // And a node graph's box is picked on its own canvas, which is a third
         // surface with a notifier of its own.
         uiState.compGraphNode,
+        // And a box inside a Custom shader, on the shader's own canvas.
+        uiState.shaderGraphNode,
         uiState.model,
       ]),
       builder: (context, _) {

@@ -521,6 +521,11 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       null => _Inner.fresh(),
     };
     final view = shaderGraphView(graph: graph.encode());
+    // The boxes that make a value, by the name the Viewer's chip gives them.
+    _ui?.shaderGraphWords = {
+      for (final n in view.nodes)
+        if (n.outputs.isNotEmpty) n.id: n.label ?? shaderNodeWord(n.kind),
+    };
     setState(() {
       _graph = graph;
       _view = view;
@@ -1012,7 +1017,11 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
 
   void _boxMenu(int id, Offset at) {
     final graph = _graph;
+    final ui = _ui;
     if (graph == null) return;
+    // The right press picked the box; say so now rather than after the next
+    // frame, so the rows below read this box.
+    _publishPick();
     final wired = graph.edges.any((e) => e['from'] == id || e['to'] == id);
     // The Result box alone copies to nothing and goes nowhere: a graph has
     // one.
@@ -1035,6 +1044,13 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
               next.edges.removeWhere((e) => e['from'] == id || e['to'] == id);
               _commit(next);
             },
+      // The Viewer's chip, from the box: the shader's Result reads this box
+      // instead. The right press has picked it, so the chip's point is this.
+      viewHere:
+          ui?.viewerShaderPoint == null ? null : ui!.atSelectedEffect.value,
+      onViewHere: ui?.viewerShaderPoint == null
+          ? null
+          : () => ui!.setAtSelectedEffect(!ui.atSelectedEffect.value),
       onDelete: resultAlone ? null : _deleteSelected,
     );
   }

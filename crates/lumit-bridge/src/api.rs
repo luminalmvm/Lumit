@@ -30,6 +30,7 @@ pub mod flare;
 pub mod folder;
 pub mod footage;
 pub mod graph;
+pub mod graph_looks;
 pub mod handler;
 pub mod history;
 pub mod import;

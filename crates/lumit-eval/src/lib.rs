@@ -3036,6 +3036,7 @@ mod tests {
         let wired = LayerGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle.clone()],
@@ -4848,6 +4849,7 @@ mod tests {
         comp.graph = Some(CompGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

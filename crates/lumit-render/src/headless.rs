@@ -5005,6 +5005,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     read(a, plate),
                     read(b, black),
@@ -5854,6 +5855,7 @@ mod tests {
             c.graph = Some(CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes,
                 edges: vec![GraphEdge {
                     from: read,
@@ -6796,6 +6798,7 @@ mod tests {
                 l.graph = LayerGraph {
                     notes: Vec::new(),
                     ties: Vec::new(),
+                    looks: Default::default(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![wiggle],
@@ -7901,6 +7904,7 @@ mod tests {
                 l.graph = LayerGraph {
                     notes: Vec::new(),
                     ties: Vec::new(),
+                    looks: Default::default(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![remap],
@@ -8604,6 +8608,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8655,6 +8660,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8718,6 +8724,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Input {
                         id: src,
@@ -8809,6 +8816,7 @@ mod tests {
         let graph = LayerGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![sampler],

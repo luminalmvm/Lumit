@@ -593,6 +593,21 @@ bool cameraFromView(LumitState app, LumitUiState ui) {
   return true;
 }
 
+/// The camera layer the comp looks through at [seconds]: the topmost one
+/// that is switched on and live then, as the engine picks it. Off the read
+/// model, so it costs no bridge call.
+BridgeLayerEntry? activeCameraAt(LumitUiState ui, double seconds) {
+  double at(BridgeRational r) =>
+      r.den.toInt() == 0 ? 0 : r.num.toDouble() / r.den.toDouble();
+  return ui.model.heldLayers
+      .where((e) =>
+          e.info.kind == BridgeLayerKind.camera &&
+          e.info.switches.visible &&
+          seconds >= at(e.info.span.inPoint) &&
+          seconds < at(e.info.span.outPoint))
+      .firstOrNull;
+}
+
 /// Move the comp's active camera to where the active view looks from, as
 /// one undo step that keys what is keyed: Blender's camera to view. A
 /// two-node camera's point of interest goes to the middle of the view's 1:1
@@ -611,16 +626,7 @@ bool cameraToView(LumitState app, LumitUiState ui) {
     // A comp that has gone.
     return false;
   }
-  double seconds(BridgeRational r) =>
-      r.den.toInt() == 0 ? 0 : r.num.toDouble() / r.den.toDouble();
-  final t = rate <= 0 ? 0.0 : frame / rate;
-  final camera = ui.model.heldLayers
-      .where((e) =>
-          e.info.kind == BridgeLayerKind.camera &&
-          e.info.switches.visible &&
-          t >= seconds(e.info.span.inPoint) &&
-          t < seconds(e.info.span.outPoint))
-      .firstOrNull;
+  final camera = activeCameraAt(ui, rate <= 0 ? 0.0 : frame / rate);
   if (camera == null) {
     app.postNotice(l10n.noCameraToMove);
     return false;

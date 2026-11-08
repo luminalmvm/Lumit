@@ -11,7 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
-import 'timeline_extras_frb.dart' show showMenuAt;
+import 'timeline_extras_frb.dart' show labelChips, showMenuAt;
 
 /// What a socket's colour means, for its tooltip.
 String graphPortWord(BridgePortType type) => switch (type) {
@@ -34,8 +34,11 @@ class _Row {
   final String? action;
   final bool enabled;
   final bool? ticked;
+
+  /// A flyout instead of a command, built with what closes the whole menu.
+  final Widget Function(VoidCallback dismiss)? submenu;
   const _Row(this.key, this.text, this.run,
-      {this.action, this.enabled = true, this.ticked});
+      {this.action, this.enabled = true, this.ticked, this.submenu});
 }
 
 /// The groups' rows with a line between each pair, empty groups dropped.
@@ -56,18 +59,26 @@ Future<void> _show(
       for (final (i, g) in kept.indexed) ...[
         if (i > 0) const MenuDivider(),
         for (final r in g)
-          MenuRow(
-            key: ValueKey<String>('graph-menu-${r.key}'),
-            enabled: r.enabled,
-            onPressed: () {
-              close(null);
-              r.run!();
-            },
-            child: MenuLabel(r.text,
-                action: r.action,
-                enabled: r.enabled,
-                ticked: ticks ? (r.ticked ?? false) : null),
-          ),
+          if (r.submenu case final submenu?)
+            SubmenuRow(
+              key: ValueKey<String>('graph-menu-${r.key}'),
+              closeParent: () => close(null),
+              submenu: submenu,
+              child: MenuLabel(r.text, ticked: ticks ? false : null),
+            )
+          else
+            MenuRow(
+              key: ValueKey<String>('graph-menu-${r.key}'),
+              enabled: r.enabled,
+              onPressed: () {
+                close(null);
+                r.run!();
+              },
+              child: MenuLabel(r.text,
+                  action: r.action,
+                  enabled: r.enabled,
+                  ticked: ticks ? (r.ticked ?? false) : null),
+            ),
       ],
     ],
   );
@@ -101,6 +112,10 @@ Future<void> showGraphBoxMenu(
   VoidCallback? onReveal,
   VoidCallback? onManual,
   VoidCallback? onDisconnectAll,
+  bool? collapsed,
+  VoidCallback? onCollapse,
+  int colour = 0,
+  ValueChanged<int>? onColour,
   VoidCallback? onDelete,
 }) =>
     _show(context, at, [
@@ -137,6 +152,21 @@ Future<void> showGraphBoxMenu(
         _Row('reveal', l10n.graphRevealEffect, onReveal),
         _Row('manual', l10n.fxMenuManual, onManual),
         _Row('disconnect-all', l10n.graphDisconnectAll, onDisconnectAll),
+      ],
+      [
+        _Row('collapse', (collapsed ?? false) ? l10n.expand : l10n.collapse,
+            onCollapse),
+        // The Timeline's label chips; the first, the quiet one, takes the
+        // colour away.
+        _Row('colour', l10n.graphBoxColour, onColour == null ? null : () {},
+            submenu: (dismiss) => FloatSurface(
+                  child: labelChips(ThemeScope.of(context).theme,
+                      keyPrefix: 'graph-menu-colour', selected: colour,
+                      onPick: (i) {
+                    dismiss();
+                    onColour?.call(i);
+                  }),
+                )),
       ],
       [
         _Row('delete', l10n.delete, onDelete, action: 'edit.delete.selection'),

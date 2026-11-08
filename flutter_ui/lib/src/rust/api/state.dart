@@ -21,7 +21,7 @@ import 'solid.dart';
 part 'state.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `phase_fraction`, `report_phase`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
@@ -237,32 +237,6 @@ class BridgeFrameProfile {
           view == other.view;
 }
 
-/// Which box of which node graph the Viewer is reading the picture at.
-///
-/// The comp is named as well as the box because a stale chip must be harmless:
-/// a point naming another composition's box cuts nothing, exactly as a layer
-/// point naming another composition's layer does.
-class BridgeGraphPoint {
-  final UuidValue comp;
-  final UuidValue node;
-
-  const BridgeGraphPoint({
-    required this.comp,
-    required this.node,
-  });
-
-  @override
-  int get hashCode => comp.hashCode ^ node.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is BridgeGraphPoint &&
-          runtimeType == other.runtimeType &&
-          comp == other.comp &&
-          node == other.node;
-}
-
 /// One layer's measured cost for the frame just made.
 class BridgeLayerTiming {
   final String layer;
@@ -312,66 +286,6 @@ sealed class BridgeOpened with _$BridgeOpened {
   const factory BridgeOpened.openElsewhere({
     required bool focused,
   }) = BridgeOpened_OpenElsewhere;
-}
-
-/// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's
-/// point.
-///
-/// **In plain terms.** Picking an effect and turning the chip on shows the
-/// composition rendered with that layer's stack stopping after the picked
-/// effect and nothing past it. The point is named by the layer it is on (which
-/// carries its composition) and the effect instance it stops after, which is
-/// everything the engine needs to shorten the stack.
-///
-/// It rides the ordinary render request, so the picture comes back down the one
-/// frame transport at the Viewer's own quality — this names a *way of looking*,
-/// not a second viewport.
-class BridgePrefixPoint {
-  /// The layer whose stack is cut, and — through its `comp_id` — the
-  /// composition the cut belongs to. A point naming another composition's
-  /// layer cuts nothing, so a stale chip is harmless rather than wrong.
-  ///
-  /// `None` on a node graph's point, which names a comp and a box in
-  /// [`Self::graph`] instead: a node graph has no layers to cut.
-  final LayerReference? layer;
-
-  /// The effect instance the stack stops **after**. An effect the layer no
-  /// longer carries cuts nothing, for the same reason.
-  ///
-  /// `None` is the layer's **own picture**, before any effect at all — the
-  /// Source box on the node canvas, which is a point on the chain like every
-  /// other box and so takes the chip like every other box (N4). The engine
-  /// has always been able to answer it (`graph::prefix_len` reads
-  /// `NodeRef::Source` as "keep nought"); there was simply no way to say it
-  /// here.
-  final UuidValue? effect;
-
-  /// The **node graph's** own point: the box the picture is read at
-  /// (docs/impl/node-graph-comp.md §4.5). `None` for the layer's chip and
-  /// for no chip at all.
-  ///
-  /// A field beside the other two rather than a shape of its own, so the
-  /// point stays one small copyable record and a caller that names a layer
-  /// writes exactly what it wrote before.
-  final BridgeGraphPoint? graph;
-
-  const BridgePrefixPoint({
-    this.layer,
-    this.effect,
-    this.graph,
-  });
-
-  @override
-  int get hashCode => layer.hashCode ^ effect.hashCode ^ graph.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is BridgePrefixPoint &&
-          runtimeType == other.runtimeType &&
-          layer == other.layer &&
-          effect == other.effect &&
-          graph == other.graph;
 }
 
 /// How far the frame the user is waiting for has got (docs/13 §7.1).

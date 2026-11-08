@@ -28,6 +28,7 @@ import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import '../widgets/time_readout.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_camera.dart' show activeCameraAt;
 import 'viewer_menus.dart';
 import 'viewer_overlays.dart';
 import 'viewer_panel_frb.dart' show showViewerBackgroundPicker;
@@ -1070,6 +1071,12 @@ class _ViewPicker extends StatelessWidget {
     void open(BuildContext context, Offset at) {
       // Asked as the menu opens, never on a rebuild.
       final models = ui.holdsModels(viewId);
+      final camera =
+          activeCameraAt(ui, ui.playheadFrame.value / ui.model.fps)?.info.name;
+      String title(ViewerView v) =>
+          v == ViewerView.activeCamera && camera != null
+              ? l10n.viewerViewActiveCameraNamed(camera)
+              : v.title;
       showMenuAt<void>(
         context: context,
         position: at,
@@ -1083,7 +1090,7 @@ class _ViewPicker extends StatelessWidget {
                 close(null);
                 ui.setViewerView(v, viewId: viewId);
               },
-              child: MenuLabel(v.title,
+              child: MenuLabel(title(v),
                   ticked: v == view,
                   action: v.action ??
                       switch ([

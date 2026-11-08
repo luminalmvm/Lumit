@@ -58,6 +58,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setHardwareDecode,
         setLargestPicture;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
@@ -131,12 +132,15 @@ const BridgeColourSummary noColourConfig = BridgeColourSummary(
 /// sits, which the canvas reads and commits through, and the words the
 /// breadcrumb reads, captured on the double-click so drawing them costs no
 /// call. [layerName] is null for a shader in a node graph, which has no layer.
+/// [layer] or [comp] says where the Viewer finds the shader for View here.
 typedef ShaderGraphEntry = ({
   InstanceHome home,
   UuidValue effect,
   String compName,
   String? layerName,
   String effectName,
+  LayerReference? layer,
+  CompositionReference? comp,
 });
 
 /// A project the account keeps online, as Lumit's server lists it: what the
@@ -1950,6 +1954,11 @@ class LumitUiState extends ChangeNotifier {
   /// list of boxes on a click.
   final ValueNotifier<int?> shaderGraphNode = ValueNotifier(null);
 
+  /// The word each box of the open inner graph goes by, for the boxes that
+  /// make a value and so can be looked at. Handed over by the canvas on
+  /// each read, so the Viewer's chip names a box without a call.
+  Map<int, String> shaderGraphWords = const {};
+
   /// Where each inner graph's canvas was left **this session**, by effect
   /// instance id: the pan and the zoom come back on re-entry (§4.2 — standing
   /// somewhere in a graph is a way of working on it, not an edit to it), and
@@ -1981,6 +1990,8 @@ class LumitUiState extends ChangeNotifier {
       compName: compName,
       layerName: layerName,
       effectName: effectName,
+      layer: layer,
+      comp: null,
     );
   }
 
@@ -2001,6 +2012,8 @@ class LumitUiState extends ChangeNotifier {
       compName: compName,
       layerName: null,
       effectName: effectName,
+      layer: null,
+      comp: comp,
     );
   }
 
@@ -2245,8 +2258,22 @@ class LumitUiState extends ChangeNotifier {
     return BridgeGraphPoint(comp: comp.internalid, node: box.id);
   }
 
+  /// The box inside the open Custom shader the picture is read at, with the
+  /// shader it is in. Null unless a box that makes a value is picked there;
+  /// the Result is the shader's own picture.
+  ({ShaderGraphEntry entry, int node})? get viewerShaderPoint {
+    final entry = shaderGraphEntry.value;
+    final node = shaderGraphNode.value;
+    if (entry == null || node == null) return null;
+    if (!shaderGraphWords.containsKey(node)) return null;
+    return (entry: entry, node: node);
+  }
+
   /// How [_atNodes] remembers one point.
   String? get _chipNodeKey {
+    if (viewerShaderPoint case final shader?) {
+      return 'shader:${shader.entry.effect}/${shader.node}';
+    }
     if (viewerGraphPoint case final graph?) {
       return 'graph:${graph.comp}/${graph.node}';
     }
@@ -2264,6 +2291,19 @@ class LumitUiState extends ChangeNotifier {
   /// point and so cuts nothing.
   BridgePrefixPoint? get viewerPrefix {
     if (!atSelectedEffect.value) return null;
+    // A box inside a Custom shader: the shader's point, and the box its
+    // Result reads instead.
+    if (viewerShaderPoint case (:final entry, :final node)) {
+      if (entry.comp case final comp?) {
+        return BridgePrefixPoint(
+            graph: BridgeGraphPoint(comp: comp.internalid, node: entry.effect),
+            shaderNode: node);
+      }
+      if (entry.layer case final layer?) {
+        return BridgePrefixPoint(
+            layer: layer, effect: entry.effect, shaderNode: node);
+      }
+    }
     // A node graph has no layers to cut, so its point names a comp and a box.
     if (viewerGraphPoint case final graph?) {
       return BridgePrefixPoint(graph: graph);
@@ -2812,6 +2852,8 @@ class LumitUiState extends ChangeNotifier {
     graphNode.addListener(_followSelectionWithChip);
     // And the node graph's own pick, which names a point the same way.
     compGraphNode.addListener(_followSelectionWithChip);
+    // And a box picked inside a Custom shader.
+    shaderGraphNode.addListener(_followSelectionWithChip);
     // And the same for the comp the model itself is bound to: it can be undone
     // out of existence while it is the one being looked at.
     model.addListener(_frontLiveCompIfFrontedOneHasGone);

@@ -2319,7 +2319,7 @@ impl CompositionReference {
         frame: u64,
         scale: f32,
         mode: BridgePlaybackMode,
-        prefix: Option<crate::api::state::BridgePrefixPoint>,
+        prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
         view: u32,
         active: bool,
     ) -> Result<(), BridgeError> {
@@ -3395,9 +3395,7 @@ impl CompositionReference {
             .collect();
         crate::api::track::settle(&before, &mut nodes);
         let mut graph = crate::api::comp_graph::wiring_into(wiring, nodes);
-        let held = self.graph_of(&doc)?;
-        graph.notes = held.notes.clone();
-        graph.ties = held.ties.clone();
+        graph.keep_canvas(self.graph_of(&doc)?);
         self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
