@@ -9280,7 +9280,9 @@ mod tests {
             let v = match p.id.as_str() {
                 "spacing_x" => 32.0,
                 "spacing_y" => 24.0,
-                "size" => 12.0,
+                // A copy is its layer where it sits in the comp, so at 100
+                // each is the white layer at its own size.
+                "size" => 100.0,
                 _ => continue,
             };
             p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
@@ -9293,9 +9295,13 @@ mod tests {
         let l = &mut comp.layers[1];
         l.effects = effects;
         l.graph = graph;
-        // The source out of the frame, so only the stamps are lit.
+        // The source hidden, so only the stamps are lit, and in the middle
+        // of the comp: a copy carries the layer's place, so moved out of
+        // frame it would take the copies with it.
         let t = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
-        t.transform.position_x = Property::fixed(-500.0);
+        t.switches.visible = false;
+        t.transform.position_x = Property::fixed(f64::from(cw) * 0.5);
+        t.transform.position_y = Property::fixed(f64::from(ch) * 0.5);
         let doc = DocumentStore::new(doc).snapshot();
         let lit = |scale: f32, r: &mut HeadlessRenderer| {
             let (px, _, _) = r.render_rgba(&doc, comp_id, 0, scale).expect("renders");
