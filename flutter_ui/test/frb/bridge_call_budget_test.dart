@@ -1704,11 +1704,12 @@ void main() {
     testWidgets('dragging a path point previews the picture', (tester) async {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
+      final item = UuidValue.fromString(const Uuid().v4());
       final shape = comp.addShapeLayer(
         name: 'Square',
         contents: [
           BridgeShapeItem(
-            id: UuidValue.fromString(const Uuid().v4()),
+            id: item,
             name: 'Rectangle',
             vertices: const [
               BridgeVertex(
@@ -1751,6 +1752,10 @@ void main() {
       p.uiState
         ..setSelectedComp(comp)
         ..setSelection([shape]);
+      // A shape's points are offered while its Path row is picked.
+      p.uiState.selectedProperties.value = [
+        '${shape.internallayerId}/contents/$item/path'
+      ];
       p.uiState.model.refresh();
 
       await tester.pumpWidget(hostPanel(
