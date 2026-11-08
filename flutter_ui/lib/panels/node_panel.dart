@@ -48,6 +48,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
+import '../theme/theme.dart' show LumitTheme;
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import 'comp_graph_panel.dart'
@@ -77,7 +78,7 @@ import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphThumb;
 import 'shader_node_view.dart';
-import 'timeline_extras_frb.dart' show showMenuAt;
+import 'timeline_extras_frb.dart' show showCompTabMenuFrb, showMenuAt;
 import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
@@ -130,6 +131,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   String _layerName = '';
   List<BridgeCompNode> _compIndex = const [];
   String _compName = '';
+
+  /// The listed boxes' colours, by box key, read with the list.
+  Map<String, int> _colours = const {};
 
   /// While a list row's menu is up the list stays, though the right-click
   /// has made that row's box the pick on the canvas. It stays after the menu
@@ -288,12 +292,19 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     _lastNode = picked == null ? null : node;
     var index = const <BridgeGraphNode>[];
     var name = '';
+    var colours = const <String, int>{};
     if (layer != null) {
       try {
         name = layer.getInfo().name;
         // Every box, the Source and the Layer out with the rest, so a layer
         // with no effects still lists what its graph has.
-        if (picked == null || _holdIndex) index = layer.getGraph().nodes;
+        if (picked == null || _holdIndex) {
+          index = layer.getGraph().nodes;
+          colours = {
+            for (final c in layer.getGraphLooks().colours)
+              if (c.colour != 0) graphNodeKey(c.node): c.colour,
+          };
+        }
       } catch (_) {
         // The layer has gone; there is nothing to list.
       }
@@ -305,6 +316,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       _input = null;
       _index = index;
       _layerName = name;
+      _colours = colours;
       _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
@@ -355,9 +367,16 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     _lastCompNode = box == null ? null : picked;
     var index = const <BridgeCompNode>[];
     var name = '';
+    var colours = const <String, int>{};
     try {
       name = comp.getSettings().name;
-      if (box == null || _holdIndex) index = comp.getNodeGraph().nodes;
+      if (box == null || _holdIndex) {
+        index = comp.getNodeGraph().nodes;
+        colours = {
+          for (final c in comp.getNodeGraphLooks().colours)
+            if (c.colour != 0) compNodeKey(c.node): c.colour,
+        };
+      }
     } catch (_) {
       // The comp has gone; there is nothing to list.
     }
@@ -368,6 +387,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       _input = input;
       _compIndex = index;
       _compName = name;
+      _colours = colours;
       _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
@@ -926,7 +946,13 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(context, _compName),
+          // The graph's name is the composition, with its menu.
+          _header(context, _compName,
+              onMenu: (at) => showCompTabMenuFrb(
+                  context: context,
+                  comp: comp,
+                  position: at,
+                  onChanged: ui.model.refresh)),
           Expanded(child: _compIndexList(context, ui)),
         ],
       );
@@ -982,6 +1008,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// Input boxes among the Fx ones.
   Widget _compIndexList(BuildContext context, LumitUiState ui) {
     final t = ThemeScope.of(context).theme;
+    final dots = _compIndex.any((n) => _colours[compNodeKey(n.id)] != null);
     return EdgeFade(axis: Axis.vertical, child: ListView(
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
@@ -1017,6 +1044,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                           : lumitIcon(LumitIcon.nodes,
                               size: 12, color: t.textMuted),
                     ),
+                    if (dots) _dot(t, _colours[compNodeKey(n.id)]),
                     Expanded(
                       child: Text(
                         _boxName(n),
@@ -1040,6 +1068,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// canvas. A bypassed box reads quiet, as its card does.
   Widget _indexList(BuildContext context, LumitUiState ui) {
     final t = ThemeScope.of(context).theme;
+    final dots = _index.any((n) => _colours[graphNodeKey(n.node)] != null);
     return EdgeFade(axis: Axis.vertical, child: ListView(
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
@@ -1079,6 +1108,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                             size: 12, color: t.textMuted),
                       },
                     ),
+                    if (dots) _dot(t, _colours[graphNodeKey(n.node)]),
                     Expanded(
                       child: Text(
                         n.customName ?? engineLabel(n.label),
@@ -1097,6 +1127,26 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       ],
     ));
   }
+
+  /// A box's colour as a dot before its name, the Timeline's label mark. The
+  /// room is kept on every row while any box in the list has a colour, so
+  /// the names keep one edge.
+  Widget _dot(LumitTheme t, int? colour) => SizedBox(
+        width: 12,
+        child: colour == null
+            ? null
+            : Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: t.labelColour(colour),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+      );
 
   /// What a box with no parameters is called: the item's name for a Read, the
   /// Input's own word, and the engine's word for the Output.

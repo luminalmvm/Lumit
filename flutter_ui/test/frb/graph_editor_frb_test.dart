@@ -649,7 +649,7 @@ void main() {
       final frame = p.comp.frameAtTime(time: opacityKeys(p.layer)[1].time);
       final pill = find.byKey(const ValueKey('graph-value-hint'));
       expect(
-          find.descendant(of: pill, matching: find.text('f$frame')),
+          find.descendant(of: pill, matching: find.text('F$frame')),
           findsOneWidget,
           reason: 'the frame alone');
 

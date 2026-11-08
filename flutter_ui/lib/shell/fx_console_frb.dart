@@ -1,13 +1,12 @@
 // The Ctrl+Space console: one search popover floating where the pointer is.
 //
-// **In plain terms.** One box, four bands, top to bottom: a search row (the
+// **In plain terms.** One box, three bands, top to bottom: a search row (the
 // magnifier, the query, and a kicker naming the key that opened it), a strip
-// of category kickers to browse by, the matching rows — grouped under small
-// inline kicker headings, the Settings-nav grammar, each row its name and a
-// small preview swatch — and one quiet sentence saying
-// what choosing a row will do. The radial ring the console used to raise, and
-// the hush it drew over the work, are gone by the owner's ruling: the list is
-// the offer, open from the first frame, and typing narrows it.
+// of category kickers to browse by, and the matching rows, grouped under small
+// inline kicker headings, the Settings-nav grammar. The radial ring the
+// console used to raise, and the hush it drew over the work, are gone by the
+// owner's ruling: the list is the offer, open from the first frame, and typing
+// narrows it.
 //
 // The console opens **where the mouse is**, so the eye never travels: type
 // "gau", press Enter, and Gaussian blur is on every selected layer. The search
@@ -16,8 +15,8 @@
 // can be compared without setting up an export.
 //
 // The graph opens this same surface — Ctrl+Space with the canvas focused, or a
-// wire let go over empty ground: what a caller contributes is the list, the
-// kicker naming its key, and the foot sentence.
+// wire let go over empty ground: what a caller contributes is the list and
+// the kicker naming its key.
 //
 // **The console applies things; it does not know how.** Every entry carries a
 // callback the caller supplied, exactly as the command palette does (docs/07
@@ -74,6 +73,15 @@ class FxConsoleEntry {
   /// The row's page in the manual, where it has one.
   final String? manual;
 
+  /// A saved preset's library rows, where the row is one: Rename and Delete
+  /// only on the user's own.
+  final VoidCallback? onRename;
+  final VoidCallback? onReveal;
+  final VoidCallback? onDelete;
+
+  /// Its Move to row, built by the caller, which knows the library's groups.
+  final Widget Function(VoidCallback closeMenu)? moveTo;
+
   const FxConsoleEntry({
     required this.label,
     required this.kind,
@@ -82,6 +90,10 @@ class FxConsoleEntry {
     this.favourite,
     this.onFavourite,
     this.manual,
+    this.onRename,
+    this.onReveal,
+    this.onDelete,
+    this.moveTo,
   });
 }
 
@@ -729,7 +741,35 @@ class _FxConsoleState extends State<_FxConsole> {
               },
               child: MenuLabel(l10n.effectManualPage, ticked: false),
             ),
+          if (entry.onReveal != null) const MenuDivider(),
+          if (entry.onRename case final rename?)
+            _libraryRow(close, l10n.renameEllipsis, rename),
+          if (entry.onReveal case final reveal?)
+            _libraryRow(close, l10n.projectShowInFolder, reveal),
+          // A pick there closes the console too, as its path has moved.
+          if (entry.moveTo case final moveTo?)
+            moveTo(() {
+              close(null);
+              widget.onClose();
+            }),
+          if (entry.onDelete case final delete?) ...[
+            const MenuDivider(),
+            _libraryRow(close, l10n.delete, delete),
+          ],
         ],
+      );
+
+  /// A saved preset's library row. The console goes first, as the list it
+  /// shows would be out of date.
+  Widget _libraryRow(
+          void Function(void) close, String label, VoidCallback act) =>
+      MenuRow(
+        onPressed: () {
+          close(null);
+          widget.onClose();
+          act();
+        },
+        child: MenuLabel(label, ticked: false),
       );
 
   Widget _entryRow(LumitTheme t, FxConsoleEntry entry, {required bool hot}) =>

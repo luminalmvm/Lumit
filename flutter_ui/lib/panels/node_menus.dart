@@ -282,6 +282,10 @@ Future<void> showGraphCanvasMenu(
   VoidCallback? onAddNote,
   VoidCallback? onGroup,
   bool canGroup = true,
+  VoidCallback? onCollapseAll,
+  bool canCollapseAll = true,
+  VoidCallback? onExpandAll,
+  bool canExpandAll = true,
 }) =>
     _show(context, at, [
       [
@@ -301,6 +305,12 @@ Future<void> showGraphCanvasMenu(
         _Row('add-note', l10n.tipGraphNote, onAddNote),
         _Row('group', l10n.graphGroup, onGroup,
             action: 'layer.group', enabled: canGroup),
+      ],
+      [
+        _Row('collapse-all', l10n.collapseAll, onCollapseAll,
+            enabled: canCollapseAll),
+        _Row('expand-all', l10n.expandAll, onExpandAll,
+            enabled: canExpandAll),
       ],
     ]);
 

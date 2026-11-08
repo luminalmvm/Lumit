@@ -73,7 +73,7 @@ import 'graph_ties.dart';
 import 'placeholder.dart';
 import 'shader_editor.dart' show InstanceHome;
 import 'shader_graph.dart' show ShaderGraphThumb;
-import 'timeline_extras_frb.dart' show DoubleTap;
+import 'timeline_extras_frb.dart' show DoubleTap, showCompTabMenuFrb;
 import 'viewer_tool_cursor.dart' show handPanLayer;
 
 /// This canvas's idea of identity, as [graphNodeKey] is the layer canvas's.
@@ -312,6 +312,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   /// build, which is what the budget test is guarding.
   BridgeCompGraph? _graph;
 
+  /// The composition's name, for the toolbar. Read with the graph.
+  String _name = '';
+
   /// Its boxes by key, so a gesture holding a key alone can reach the box.
   Map<String, BridgeCompNode> _byKey = const {};
 
@@ -517,7 +520,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   void _reload() {
     if (!mounted) return;
     BridgeCompGraph? graph;
+    var name = '';
     try {
+      name = widget.comp.getSettings().name;
       graph = widget.comp.getNodeGraph();
     } catch (_) {
       // The comp has gone, or is not a node graph after all; the placeholder
@@ -563,6 +568,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     }
     setState(() {
       _graph = graph;
+      _name = name;
       _notes = notes;
       _ties = ties;
       _colours = {
@@ -1849,7 +1855,23 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       onAddNote: addNote,
       onGroup: groupPicked,
       canGroup: canGroup,
+      onCollapseAll: _byKey.isEmpty ? null : () => _foldAll(true),
+      canCollapseAll: _byKey.keys.any((k) => !_folded.contains(k)),
+      onExpandAll: _byKey.isEmpty ? null : () => _foldAll(false),
+      canExpandAll: _byKey.keys.any(_folded.contains),
     );
+  }
+
+  /// Fold or open every box, as one undo step.
+  void _foldAll(bool collapsed) {
+    try {
+      widget.comp.setNodeGraphBoxCollapsed(
+          nodes: [for (final n in _byKey.values) n.id], collapsed: collapsed);
+    } catch (_) {
+      // The comp moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
   }
 
   /// Every wire off the picked boxes, in one write.
@@ -2415,6 +2437,22 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Row(
           children: [
+            // The graph's name is the composition: its menu, as its tab has.
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapUp: (d) => showCompTabMenuFrb(
+                  context: context,
+                  comp: widget.comp,
+                  position: d.globalPosition,
+                  onChanged: () => _ui?.model.refresh(),
+                ),
+                child: Text(_name,
+                    key: const ValueKey('comp-graph-name'),
+                    style: t.body.copyWith(color: t.textMuted),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ),
             // The controls fold into one mark when the panel is narrow.
             graphToolbarFold(
               markKey: const ValueKey('comp-graph-toolbar-more'),

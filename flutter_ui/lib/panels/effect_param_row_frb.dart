@@ -4115,8 +4115,11 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
                       ),
                     ),
                   ),
+                // Never wider than the column, so alone in a narrow one the
+                // number gives way rather than striping the row.
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 78),
+                  constraints: BoxConstraints(
+                      maxWidth: box.maxWidth < 78 ? box.maxWidth : 78),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

@@ -238,6 +238,7 @@ impl ActionId {
             "layer.ungroup" => "Ungroup",
             "layer.retime.enable" => "Give the layer a Retime",
             "layer.retime.hold" => "Hold the frame at the playhead",
+            "layer.retime.ramp" => "Ramp the speed from the playhead",
             "layer.new.solid" => "New Solid layer",
             "layer.new.text" => "New Text layer",
             "layer.new.camera" => "New Camera layer",

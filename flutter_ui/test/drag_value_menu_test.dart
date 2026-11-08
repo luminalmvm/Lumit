@@ -26,6 +26,11 @@ Widget _harness(Widget child) => Directionality(
 void main() {
   testWidgets('right-click offers Reset / Copy / Paste; Reset uses the default',
       (tester) async {
+    // The menu reads the clipboard before it opens, so Paste can grey.
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform, (call) async => null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
     num? changed;
     await tester.pumpWidget(_harness(DragValueField(
       value: 42,

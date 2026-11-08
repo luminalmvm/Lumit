@@ -140,6 +140,7 @@ pub fn default_keymap() -> Keymap {
         // a second can bind it.
         row(Global, "Mod+Alt+T", "layer.retime.enable"),
         row(Global, "Mod+Shift+R", "layer.retime.hold"),
+        row(Global, "Mod+Alt+R", "layer.retime.ramp"),
         // Layer ▸ New. After Effects' own chords, so the rows read the way
         // anyone arriving from there expects. Spot and Area lights have no
         // chord there and ship without one here.

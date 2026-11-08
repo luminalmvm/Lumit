@@ -1940,6 +1940,7 @@ Map<String, String> get _built => {
       "Ungroup": l10n.keyUngroup,
       "Give the layer a Retime": l10n.keyGiveTheLayerARetime,
       "Hold the frame at the playhead": l10n.keyHoldTheFrameAtThePlayhead,
+      "Ramp the speed from the playhead": l10n.keyRampTheSpeedFromThePlayhead,
       "Apply the last effect again": l10n.keyApplyTheLastEffectAgain,
       "Remove every effect from the selected layers":
           l10n.keyRemoveEveryEffectFromTheSelectedLayers,

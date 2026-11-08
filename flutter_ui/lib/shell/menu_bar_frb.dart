@@ -43,6 +43,9 @@ import 'package:lumit_flutter/src/rust/api/cache.dart'
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/presets.dart'
+    show listPresetGroups, movePreset;
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../icons/icons.dart';
@@ -55,6 +58,8 @@ import '../panels/grade_clipboard.dart'
     show canCopyGrade, canPasteGrade, copyGrade, pasteGrade;
 import '../panels/layer_source_menu.dart';
 import '../panels/normalise_commands.dart' show normaliseLayers;
+import '../panels/preset_save.dart'
+    show deletePreset, isOwnPreset, presetMoveToRow, renamePreset;
 import '../panels/layer_fold_frb.dart' show RevealFilter, asOneUndoStep;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
@@ -1018,6 +1023,28 @@ class LumitMenuBarFrb extends StatelessWidget {
                   ui.workspace.isFavouriteEffect('preset:${preset.name}'),
               onFavourite: () =>
                   ui.workspace.toggleFavouriteEffect('preset:${preset.name}'),
+              onRename: isOwnPreset(preset)
+                  ? () => renamePreset(context, ui, preset)
+                  : null,
+              onReveal: () => revealInFolder(path: preset.path),
+              onDelete: isOwnPreset(preset)
+                  ? () => deletePreset(context, ui, preset)
+                  : null,
+              moveTo: isOwnPreset(preset)
+                  ? (closeMenu) => presetMoveToRow(
+                        preset: preset,
+                        groups: listPresetGroups(),
+                        closeParent: closeMenu,
+                        onMove: (group) {
+                          try {
+                            movePreset(path: preset.path, group: group);
+                          } catch (_) {
+                            // A name already taken there: nothing moves.
+                          }
+                          ui.presetsChanged.value++;
+                        },
+                      )
+                  : null,
             ),
           // Then the effects, the overwhelmingly common reason to open this.
           for (final effect in listEffects())
@@ -1638,7 +1665,8 @@ List<MenuSection> lumitMenus(
               // selected layers: the chord's own command.
               MenuEntry(l10n.retimeFreeze, freezeRow(context, ui),
                   action: 'layer.retime.hold'),
-              MenuEntry(l10n.retimeRamp, rampRow(context, ui)),
+              MenuEntry(l10n.retimeRamp, rampRow(context, ui),
+                  action: 'layer.retime.ramp'),
             ]),
             // In and out of the clip-editing surface, for anyone — the Vegas
             // preference decides what an *import* becomes, never what a layer is

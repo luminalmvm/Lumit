@@ -858,6 +858,13 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'layer.retime.hold':
         holdHere(context, ui);
+      case 'layer.retime.ramp':
+        final ramp = rampRow(context, ui);
+        if (ramp == null) {
+          handled = false;
+        } else {
+          ramp();
+        }
       // The Effect menu's two rows above its categories.
       case 'effect.apply.last':
         final layers = ui.selectedLayers.value;

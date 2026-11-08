@@ -2385,22 +2385,38 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   void _canvasMenu(GraphLayout layout, Offset at, Offset position) {
     final ui = _ui;
     if (ui == null) return;
+    final nodes = [
+      for (final n in _graph?.nodes ?? const <BridgeGraphNode>[]) n.node
+    ];
     showGraphCanvasMenu(
       context,
       position,
       onAddNode: () => _openSearch(at),
       onPaste: () => _pasteEffects(ui),
       canPaste: ui.clipboard.kind == ClipboardKind.effects,
-      onSelectAll: () => setState(() => _pick([
-            for (final n in _graph?.nodes ?? const <BridgeGraphNode>[]) n.node
-          ])),
+      onSelectAll: () => setState(() => _pick(nodes)),
       onFrameSelected: () => _frameSelected(_viewport, layout),
       canFrameSelected: _selection.isNotEmpty,
       onFrameAll: () => _frameAll(_viewport, layout),
       onAddNote: addNote,
       onGroup: groupPicked,
       canGroup: canGroup,
+      onCollapseAll: nodes.isEmpty ? null : () => _foldAll(nodes, true),
+      canCollapseAll: nodes.any((n) => !_isCollapsed(graphNodeKey(n))),
+      onExpandAll: nodes.isEmpty ? null : () => _foldAll(nodes, false),
+      canExpandAll: nodes.any((n) => _isCollapsed(graphNodeKey(n))),
     );
+  }
+
+  /// Fold or open every box, as one undo step.
+  void _foldAll(List<BridgeNodeRef> nodes, bool collapsed) {
+    try {
+      _layer?.setGraphBoxCollapsed(nodes: nodes, collapsed: collapsed);
+    } catch (_) {
+      // The layer moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
   }
 
   /// Every stored wire off the picked boxes, in one write. The chain's wires

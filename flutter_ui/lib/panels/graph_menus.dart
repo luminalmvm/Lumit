@@ -496,6 +496,7 @@ extension _GraphMenus on GraphEditorFrbState {
                       (e) => frame >= e.info.inFrame && frame < e.info.outFrame)
                   ? () => askToRamp(context, retimed, const [], global)
                   : null,
+              action: 'layer.retime.ramp',
               keyName: 'graph-plot-ramp'),
           const MenuDivider(),
         ],

@@ -4,6 +4,7 @@
 // Only a part the layer actually has is offered. The ticks are remembered from
 // last time. The engine hands back the text and Dart writes it, as ever.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -14,6 +15,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import '../l10n/strings.dart';
 import '../shell/dialog_frame.dart';
 import '../shell/settings_account.dart' show askBefore;
+import '../shell/theme_name_dialog.dart' show askThemeName;
 import '../state/file_dialogs.dart';
 import '../state/workspace.dart';
 import '../widgets/controls.dart';
@@ -80,6 +82,108 @@ Future<bool> saveLayerPreset(
   ui.presetsChanged.value++;
   return true;
 }
+
+/// Whether [preset] is the user's own, and so theirs to rename or delete.
+/// The ones that come with Lumit are kept outside the library.
+bool isOwnPreset(BridgePresetInfo preset) {
+  final library = presetsDirPath();
+  return library != null &&
+      preset.path.toLowerCase().startsWith(library.toLowerCase());
+}
+
+/// Rename a saved preset: the name in the file, and the file with it.
+Future<void> renamePreset(
+    BuildContext context, LumitUiState ui, BridgePresetInfo preset) async {
+  final name = await askThemeName(context,
+      title: l10n.rename, suggested: preset.name, confirm: l10n.rename);
+  if (name == null || name == preset.name || !context.mounted) return;
+  final from = File(preset.path);
+  // The name can hold what a file's name can't.
+  final stem = name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
+  final to = File('${from.parent.path}${Platform.pathSeparator}$stem.lumfx');
+  try {
+    if (to.existsSync()) throw const FileSystemException();
+    final document =
+        jsonDecode(await from.readAsString()) as Map<String, dynamic>;
+    document['name'] = name;
+    await to
+        .writeAsString(const JsonEncoder.withIndent('  ').convert(document));
+    await from.delete();
+  } catch (_) {
+    // A name already taken, or a file that has gone: nothing changes.
+    ui.presetsChanged.value++;
+    return;
+  }
+  if (ui.workspace.isFavouriteEffect('preset:${preset.name}')) {
+    ui.workspace.toggleFavouriteEffect('preset:${preset.name}');
+    ui.workspace.toggleFavouriteEffect('preset:$name');
+  }
+  ui.presetsChanged.value++;
+}
+
+/// Delete a saved preset's file, asking first as it can't be undone.
+Future<void> deletePreset(
+    BuildContext context, LumitUiState ui, BridgePresetInfo preset) async {
+  if (!await askBefore(
+      context, l10n.presetDeleteQuestion(preset.name), l10n.delete)) {
+    return;
+  }
+  if (ui.workspace.isFavouriteEffect('preset:${preset.name}')) {
+    ui.workspace.toggleFavouriteEffect('preset:${preset.name}');
+  }
+  try {
+    File(preset.path).deleteSync();
+  } catch (_) {}
+  ui.presetsChanged.value++;
+}
+
+/// Move to ▸ on a saved preset's menu: the library's groups, each indented
+/// by [indent] a level, with the one the preset is in picked.
+Widget presetMoveToRow({
+  required BridgePresetInfo preset,
+  required List<String> groups,
+  required VoidCallback closeParent,
+  required void Function(String group) onMove,
+  double indent = 18,
+}) =>
+    SubmenuRow(
+      key: const ValueKey('preset-move-to'),
+      closeParent: closeParent,
+      submenu: (dismiss) => FloatSurface(
+        width: 220,
+        // A big library has dozens of groups, so the list scrolls.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 400),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final group in ['', ...groups])
+                  MenuRow(
+                    key: ValueKey<String>('preset-move-to-$group'),
+                    selected: group == preset.group,
+                    onPressed: () {
+                      dismiss();
+                      onMove(group);
+                    },
+                    child: Padding(
+                      padding: EdgeInsetsDirectional.only(
+                          start: '/'.allMatches(group).length * indent),
+                      child: Text(
+                          group.isEmpty
+                              ? l10n.savedPresets
+                              : group.substring(group.lastIndexOf('/') + 1),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      child: MenuLabel(l10n.presetMoveTo, ticked: false),
+    );
 
 /// Where a preset called [name] goes in the library, asking first before one
 /// of that name is written over. Null when that was refused, or there is no

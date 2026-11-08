@@ -40,7 +40,6 @@
 // category. Groups are made, renamed and deleted from their right-click menu,
 // and a preset moves by dragging it onto a group or from its own menu.
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -665,17 +664,9 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             '${group.replaceAll('/', Platform.pathSeparator)}');
   }
 
-  /// Whether this preset is the user's own, and so theirs to rename or delete.
-  /// The ones that come with Lumit are kept outside the library.
-  bool _isOwnPreset(BridgePresetInfo preset) {
-    final library = presetsDirPath();
-    return library != null &&
-        preset.path.toLowerCase().startsWith(library.toLowerCase());
-  }
-
   /// The menu on a saved preset.
   void _presetMenu(Offset at, LumitUiState ui, BridgePresetInfo preset) {
-    final own = _isOwnPreset(preset);
+    final own = isOwnPreset(preset);
     final canApply = _canApply(ui);
     final favourite =
         ui.workspace.isFavouriteEffect(_presetFavouriteKey(preset.name));
@@ -707,7 +698,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           if (own)
             MenuRow(
               key: const ValueKey('preset-rename'),
-              onPressed: () => run(() => _renamePreset(ui, preset)),
+              onPressed: () => run(() => renamePreset(context, ui, preset)),
               child: MenuLabel(l10n.renameEllipsis, ticked: false),
             ),
           MenuRow(
@@ -716,101 +707,25 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             child: MenuLabel(l10n.projectShowInFolder, ticked: false),
           ),
           if (own)
-            SubmenuRow(
-              key: const ValueKey('preset-move-to'),
+            presetMoveToRow(
+              preset: preset,
+              groups: _groups,
+              indent: _indent,
               closeParent: () => close(null),
-              submenu: (dismiss) => FloatSurface(
-                width: 220,
-                // A big library has dozens of groups, so the list scrolls.
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 400),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final group in ['', ..._groups])
-                          MenuRow(
-                            key: ValueKey<String>('preset-move-to-$group'),
-                            selected: group == preset.group,
-                            onPressed: () {
-                              dismiss();
-                              _changeLibrary(() =>
-                                  movePreset(path: preset.path, group: group));
-                            },
-                            child: Padding(
-                              padding: EdgeInsetsDirectional.only(
-                                  start:
-                                      '/'.allMatches(group).length * _indent),
-                              child: Text(
-                                  group.isEmpty
-                                      ? l10n.savedPresets
-                                      : group
-                                          .substring(group.lastIndexOf('/') + 1),
-                                  overflow: TextOverflow.ellipsis),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              child: MenuLabel(l10n.presetMoveTo, ticked: false),
+              onMove: (group) => _changeLibrary(
+                  () => movePreset(path: preset.path, group: group)),
             ),
           if (own) ...[
             const MenuDivider(),
             MenuRow(
               key: const ValueKey('preset-delete'),
-              onPressed: () => run(() => _deletePreset(ui, preset)),
+              onPressed: () => run(() => deletePreset(context, ui, preset)),
               child: MenuLabel(l10n.delete, ticked: false),
             ),
           ],
         ];
       },
     );
-  }
-
-  /// Rename a saved preset: the name in the file, and the file with it.
-  Future<void> _renamePreset(
-      LumitUiState ui, BridgePresetInfo preset) async {
-    final name = await askThemeName(context,
-        title: l10n.rename, suggested: preset.name, confirm: l10n.rename);
-    if (name == null || name == preset.name || !mounted) return;
-    final from = File(preset.path);
-    // The name can hold what a file's name can't.
-    final stem = name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '-');
-    final to = File('${from.parent.path}${Platform.pathSeparator}$stem.lumfx');
-    try {
-      if (to.existsSync()) throw const FileSystemException();
-      final document =
-          jsonDecode(await from.readAsString()) as Map<String, dynamic>;
-      document['name'] = name;
-      await to.writeAsString(
-          const JsonEncoder.withIndent('  ').convert(document));
-      await from.delete();
-    } catch (_) {
-      // A name already taken, or a file that has gone: nothing changes.
-      _refreshPresets();
-      return;
-    }
-    if (ui.workspace.isFavouriteEffect(_presetFavouriteKey(preset.name))) {
-      ui.workspace.toggleFavouriteEffect(_presetFavouriteKey(preset.name));
-      ui.workspace.toggleFavouriteEffect(_presetFavouriteKey(name));
-    }
-    _refreshPresets();
-  }
-
-  /// Delete a saved preset's file, asking first as it can't be undone.
-  Future<void> _deletePreset(
-      LumitUiState ui, BridgePresetInfo preset) async {
-    if (!await askBefore(context, l10n.presetDeleteQuestion(preset.name),
-        l10n.delete)) {
-      return;
-    }
-    if (ui.workspace.isFavouriteEffect(_presetFavouriteKey(preset.name))) {
-      ui.workspace.toggleFavouriteEffect(_presetFavouriteKey(preset.name));
-    }
-    _changeLibrary(() => File(preset.path).deleteSync());
   }
 
   Future<void> _newGroup(String parent) async {
