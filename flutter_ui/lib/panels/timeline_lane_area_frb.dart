@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/marquee.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'expression_editor.dart';
@@ -682,7 +683,24 @@ class LayerArea extends StatelessWidget {
                     // layer rather than stopping at it: a lane area that ran out of
                     // rows half way down read as a hole in the table, and a click in
                     // that hole reached nothing to deselect against.
-                    child: LayoutBuilder(
+                    //
+                    // A right-click no bar or key took opens the bottom strip's
+                    // menu, and "here" is the frame under the pointer. Round
+                    // the rows rather than behind them, as a layer's own lane
+                    // would catch the press first.
+                    child: GestureDetector(
+                  onSecondaryTapUp: (d) => showTimelineMoreMenu(
+                    context,
+                    comp: comp,
+                    playhead: playhead,
+                    position: d.globalPosition,
+                    frame: axis.frameAt(d.localPosition.dx),
+                    onChanged: onChanged,
+                  ),
+                  child: EdgeFade(
+                  axis: Axis.vertical,
+                  reach: 16,
+                  child: LayoutBuilder(
                   builder: (context, box) => SingleChildScrollView(
                     controller: vScroll,
                     child: ConstrainedBox(
@@ -775,24 +793,6 @@ class LayerArea extends StatelessWidget {
                                 // the click is reported by position.
                                 onClear: onDeselectAll,
                                 onTapAt: _tapGround,
-                              ),
-                            ),
-                            // A right-click on the ground opens the bottom
-                            // strip's menu, and "here" is the frame under the
-                            // pointer. Translucent, so the marquee behind it
-                            // still gets every press; the bars and keys above
-                            // take their own.
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.translucent,
-                                onSecondaryTapUp: (d) => showTimelineMoreMenu(
-                                  context,
-                                  comp: comp,
-                                  playhead: playhead,
-                                  position: d.globalPosition,
-                                  frame: axis.frameAt(d.localPosition.dx),
-                                  onChanged: onChanged,
-                                ),
                               ),
                             ),
                             // The ground inside the block box moves the block.
@@ -1197,7 +1197,7 @@ class LayerArea extends StatelessWidget {
                       ),
                     ),
                   ),
-                )),
+                )))),
               ],
             ),
             // Each marker's line, from the ruler down through every row.

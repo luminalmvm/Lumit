@@ -67,6 +67,7 @@ import '../state/tools.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 // The ruler helpers moved with the ruler (shared with the graph editor); the
 // re-export keeps their long-standing import path alive for their tests.
 export 'timeline_extras_frb.dart' show rulerLabelStepSeconds, rulerLabelOf;
@@ -4679,6 +4680,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required double outlineWidth,
   }) {
     final t = ThemeScope.of(context).theme;
+    void groundMenu(Offset at) => showTimelineMoreMenu(
+          context,
+          comp: comp,
+          playhead: ui.playheadFrame,
+          position: at,
+          onChanged: ui.model.refresh,
+        );
     return SizedBox(
       width: outlineViewport,
       // A column, to match the lane side's: rows, then a
@@ -4717,13 +4725,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             // the outline, not across the panel: the lane
                             // side gives their height to a taller, easier
                             // to grab time ruler (docs/07 §4.1).
-                            Toolbar(
-                              model: ui.model,
-                              playhead: ui.playheadFrame,
-                              onSeek: ui.scrubTo,
-                              mode: _mode,
-                              onMode: _setMode,
-                              onSearch: (v) => setState(() => _search = v),
+                            GestureDetector(
+                              onSecondaryTapUp: (d) =>
+                                  groundMenu(d.globalPosition),
+                              child: Toolbar(
+                                model: ui.model,
+                                playhead: ui.playheadFrame,
+                                onSeek: ui.scrubTo,
+                                mode: _mode,
+                                onMode: _setMode,
+                                onSearch: (v) => setState(() => _search = v),
+                              ),
                             ),
                             // The second row of the outline: the column
                             // headers, in both views (the graph's own
@@ -4769,17 +4781,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                           ? _vOutline.offset
                                           : 0);
                                   if (d.localPosition.dy < foot) return;
-                                  showTimelineMoreMenu(
-                                    context,
-                                    comp: comp,
-                                    playhead: ui.playheadFrame,
-                                    position: d.globalPosition,
-                                    onChanged: ui.model.refresh,
-                                  );
+                                  groundMenu(d.globalPosition);
                                 },
                                 // The viewport's own height, which is what
                                 // the row list windows itself against.
-                                child: LayoutBuilder(
+                                child: EdgeFade(
+                                    axis: Axis.vertical,
+                                    reach: 16,
+                                    child: LayoutBuilder(
                                     builder: (context, box) =>
                                         NotificationListener<
                                             ScrollMetricsNotification>(
@@ -4833,7 +4842,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             },
                                             onChanged: ui.model.refresh,
                                           ),
-                                        ))),
+                                        )))),
                               ),
                             ),
                           ],
@@ -5034,7 +5043,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // it is laid out at its own width and the toggles really do keep
           // the rest. As a flexible half it left the toggles scrolling inside
           // the other half with empty bar beside them.
-          Row(children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapUp: (d) => _showColumnMenu(d.globalPosition),
+            child: Row(children: [
             Flexible(
               flex: _graph ? 1 : 0,
               child: KeyCommandStrip(
@@ -5075,7 +5087,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               onToggleHideShy: () => setState(() => _hideShy = !_hideShy),
               onChanged: ui.model.refresh,
             )),
-          ]),
+          ])),
         ],
       ),
     );

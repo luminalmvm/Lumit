@@ -38,6 +38,7 @@ import '../l10n/strings.dart';
 import '../state/comp_time.dart' show sampledScalar;
 import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
+import 'timeline_extras_frb.dart' show addMarkerFrb, showRulerMenu;
 import '../widgets/controls.dart';
 import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
 import 'fx_section.dart';
@@ -957,8 +958,31 @@ class _FxRuler extends StatelessWidget {
     required this.onSeek,
   });
 
-  void _seek(double x) => onSeek(
-      spanStart + axis.frameAt(x).clamp(0, axis.frames < 0 ? 0 : axis.frames));
+  int _frameAt(double x) =>
+      spanStart + axis.frameAt(x).clamp(0, axis.frames < 0 ? 0 : axis.frames);
+
+  void _seek(double x) => onSeek(_frameAt(x));
+
+  /// The same menu the Timeline's ruler has.
+  void _menu(BuildContext context, TapUpDetails d) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final comp = ui.selectedComp;
+    if (comp == null) return;
+    showRulerMenu(
+      context,
+      comp: comp,
+      at: d.globalPosition,
+      frame: _frameAt(d.localPosition.dx),
+      addMarker: (frame) async {
+        addMarkerFrb(comp, frame: frame);
+        ui.model.refresh();
+      },
+      setWork: (span) {
+        comp.setWorkArea(span: span);
+        ui.model.refresh();
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -969,6 +993,7 @@ class _FxRuler extends StatelessWidget {
       onTapDown: (d) => _seek(d.localPosition.dx),
       onHorizontalDragStart: (d) => _seek(d.localPosition.dx),
       onHorizontalDragUpdate: (d) => _seek(d.localPosition.dx),
+      onSecondaryTapUp: (d) => _menu(context, d),
       child: ClipRect(
         child: CustomPaint(
           painter: _FxRulerPainter(

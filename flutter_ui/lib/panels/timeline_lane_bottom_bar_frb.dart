@@ -165,10 +165,54 @@ class LaneBottomBar extends StatelessWidget {
     );
   }
 
+  /// What the bar's own controls do, by name and with their chords.
+  void _menu(BuildContext context, Offset at) {
+    void nudge(bool inward) =>
+        onZoom(zoomNudged(zoom, inward: inward, maxZoom: maxZoom));
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        MenuRow row(String label, String action, bool enabled, VoidCallback run) =>
+            MenuRow(
+              key: ValueKey<String>('tl-lane-bar-$action'),
+              enabled: enabled,
+              onPressed: () {
+                close(null);
+                run();
+              },
+              child: MenuLabel(label, action: action, enabled: enabled),
+            );
+        return [
+          row(l10n.keyZoomToFit, 'timeline.zoom.fit', zoom > 1,
+              () => onZoom(1)),
+          row(l10n.keyZoomIn, 'timeline.zoom.in', zoom < maxZoom,
+              () => nudge(true)),
+          row(l10n.keyZoomOut, 'timeline.zoom.out', zoom > 1,
+              () => nudge(false)),
+          if (magnet case final on?) ...[
+            const MenuDivider(),
+            MenuRow(
+              key: const ValueKey('tl-lane-bar-snap'),
+              onPressed: () {
+                close(null);
+                onToggleMagnet?.call();
+              },
+              child: MenuLabel(l10n.cutSnap, ticked: on),
+            ),
+          ],
+        ];
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (d) => _menu(context, d.globalPosition),
+      child: Container(
       // Keyed so the density tests have a secondary row they can measure
       // whole; every other one is a strip with no handle on it.
       key: const ValueKey('tl-lane-bottom-bar'),
@@ -285,6 +329,7 @@ class LaneBottomBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }

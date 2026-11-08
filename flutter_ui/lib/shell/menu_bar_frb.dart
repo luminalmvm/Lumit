@@ -44,7 +44,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
-import '../panels/layer_fold_frb.dart' show RevealFilter;
+import '../panels/layer_fold_frb.dart' show RevealFilter, asOneUndoStep;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/viewer_shape3d.dart' show addShape3d, shape3dTools;
@@ -2375,12 +2375,18 @@ void redoFrb(LumitState app) {
 /// Duplicate every layer in [layers]. One function for the Edit menu, the
 /// chord and the Timeline row's own menu, so they all copy the same set. A
 /// layer that refuses leaves the rest standing.
-void duplicateLayersFrb(Iterable<LayerReference> layers) {
-  for (final layer in layers) {
-    try {
-      layer.duplicate();
-    } catch (_) {}
-  }
+void duplicateLayersFrb(
+    LumitState app, LumitUiState ui, Iterable<LayerReference> layers) {
+  final copies = <LayerReference>[];
+  asOneUndoStep(app.project, () {
+    for (final layer in layers) {
+      try {
+        copies.add(layer.duplicate());
+      } catch (_) {}
+    }
+  });
+  if (copies.isNotEmpty) ui.setSelection(copies);
+  app.notifyDocumentChanged();
 }
 
 /// What Duplicate takes, finest selection first as Copy does: the picked
@@ -2397,7 +2403,7 @@ bool duplicateSelectionFrb(LumitState app, LumitUiState ui) {
       return false;
     }
   } else if (ui.selectedLayers.value.isNotEmpty) {
-    duplicateLayersFrb(ui.selectedLayers.value);
+    duplicateLayersFrb(app, ui, ui.selectedLayers.value);
   } else {
     return false;
   }

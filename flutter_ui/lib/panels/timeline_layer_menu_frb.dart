@@ -17,6 +17,7 @@ import '../shell/menu_bar_frb.dart';
 import '../shell/menu_layer_frb.dart';
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
+import '../state/dock.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import 'audio_streams_menu_frb.dart';
@@ -28,6 +29,16 @@ import 'timeline_group_row_frb.dart'
     show groupSelectedLayers, ungroupSelection;
 import 'timeline_razor.dart' show splitSelectionAtPlayhead;
 import 'transform_rows_frb.dart' show hasThreeDSwitch;
+
+/// Front the Project panel with [item] picked in it. Picking a layer fronts
+/// Effect controls, so the pick alone would land behind that tab.
+void revealInProject(LumitUiState ui, ItemReference item) {
+  setPanelVisible(ui.split, Panel.project, true);
+  activatePanelTab(ui.split, Panel.project);
+  ui.activePane.value = Panel.project.pane();
+  ui.workspace.touch();
+  ui.projectPickRequest.value = item;
+}
 
 /// A list of menu entries floated at [position], as a right-click menu.
 Future<void> showMenuEntriesAt(
@@ -102,6 +113,8 @@ List<MenuEntry> layerMenuEntries(
   final source = _sourceItem(layer);
 
   return [
+    if (source case final ItemReference_Composition precomp)
+      MenuEntry(l10n.projectOpen, () => ui.openNestedComp(layer, precomp.field0)),
     if (onRename != null)
       MenuEntry(l10n.rename, many || locked ? null : onRename,
           action: 'layer.rename'),
@@ -182,10 +195,10 @@ List<MenuEntry> layerMenuEntries(
         action: 'edit.copy'),
     MenuEntry(l10n.menuPaste, () => pasteSelectionFrb(app, ui, comp, layer),
         action: 'edit.paste'),
-    MenuEntry(l10n.menuDuplicate, () {
-      duplicateLayersFrb([for (final e in entries) e.layer]);
-      app.notifyDocumentChanged();
-    }, action: 'layer.duplicate'),
+    MenuEntry(
+        l10n.menuDuplicate,
+        () => duplicateLayersFrb(app, ui, [for (final e in entries) e.layer]),
+        action: 'layer.duplicate'),
     MenuEntry(l10n.menuSplitLayer, editing(() {
       if (splitSelectionAtPlayhead(ui)) app.notifyDocumentChanged();
     }), action: 'layer.split'),
@@ -277,8 +290,7 @@ List<MenuEntry> layerMenuEntries(
         action: 'layer.precompose'),
     if (many) MenuEntry(l10n.menuStaggerLayers, () => showStaggerPanel(ui)),
     if (source != null)
-      MenuEntry(l10n.menuRevealInProject,
-          () => ui.projectPickRequest.value = source),
+      MenuEntry(l10n.menuRevealInProject, () => revealInProject(ui, source)),
     MenuEntry.divider(),
     MenuEntry(
         l10n.delete,

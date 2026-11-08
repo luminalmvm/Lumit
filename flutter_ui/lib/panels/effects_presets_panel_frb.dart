@@ -61,9 +61,10 @@ import '../shell/theme_name_dialog.dart';
 import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
-import '../state/external_links.dart' show lumitDocsUrl, openExternalLink;
+import '../state/external_links.dart' show effectManualUrl, openExternalLink;
 import '../state/file_dialogs.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
 import 'expressions_panel_frb.dart' show panelBar;
 import 'timeline_extras_frb.dart' show showMenuAt;
@@ -250,7 +251,6 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
       effects.sort(byEffectLabel);
     }
     _categories = grouped.keys.toList();
-    final layers = ui.selectedLayers.value;
     final anyFavourite = (widget.effectsLister ?? listEffects)()
             .any((e) => ui.workspace.isFavouriteEffect(e.name)) ||
         _presets.any((p) =>
@@ -296,15 +296,26 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                   key: const ValueKey('fx-search'),
                   controller: _search,
                   focusNode: _searchFocus,
-                  hint: l10n.searchEffectsAndPresets,
+                  hint: l10n.search,
                   width: 160,
                 ),
               ),
               const SizedBox(width: 4),
-              _barButton(t, 'preset-load', l10n.loadPresetEllipsis,
-                  LumitIcons.import, layers.isEmpty ? null : () => _load(layers)),
-              _barButton(t, 'preset-save', l10n.savePresetEllipsis,
-                  LumitIcons.export, layers.isEmpty ? null : () => _save(layers)),
+              // This panel isn't rebuilt when the selection moves.
+              ValueListenableBuilder<List<LayerReference>>(
+                valueListenable: ui.selectedLayers,
+                builder: (context, layers, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _barButton(t, 'preset-load', l10n.loadPresetEllipsis,
+                        LumitIcons.import,
+                        layers.isEmpty ? null : () => _load(layers)),
+                    _barButton(t, 'preset-save', l10n.savePresetEllipsis,
+                        LumitIcons.export,
+                        layers.isEmpty ? null : () => _save(layers)),
+                  ],
+                ),
+              ),
             ],
           ),
           ),
@@ -327,7 +338,10 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onSecondaryTapDown: (d) => _groundMenu(d.globalPosition, ui),
-              child: ListView(
+              child: EdgeFade(
+                axis: Axis.vertical,
+                reach: 16,
+                child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 children: _favouritesOnly
                     ? favouriteRows
@@ -347,7 +361,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                                 key: ValueKey<String>('fx-item-${effect.name}'),
                                 effect: effect,
                                 onApply: () => _apply(ui, effect.name),
-                                canApply: _canApply(ui),
+                                canApply: () => _canApply(ui),
                                 favourite:
                                     ui.workspace.isFavouriteEffect(effect.name),
                                 onToggleFavourite: () => _star(ui, effect.name),
@@ -355,6 +369,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                               ),
                         ],
                       ],
+              ),
               ),
             );
           }),
@@ -894,7 +909,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             key: ValueKey<String>('fav-item-${effect.name}'),
             effect: effect,
             onApply: () => _apply(ui, effect.name),
-            canApply: _canApply(ui),
+            canApply: () => _canApply(ui),
             favourite: true,
             onToggleFavourite: () => _star(ui, effect.name),
             onCatalogueChanged: () => setState(() {}),
@@ -1172,29 +1187,12 @@ const String _ofxNamespace = 'ofx';
 /// VST3, which the browser has no reason to tell apart.
 const String _audioNamespace = 'audio';
 
-/// A built-in effect's page in the manual, or null for a plugin's or an
-/// extension's, which have none. The pages are named after what the panel calls
-/// the effect and its category, except that the manual keeps the Controls that
-/// drive other values, Wiggle and the like, in a section of their own.
-String? _manualPage(BridgeEffectInfo effect) {
-  if (effect.namespace != 'builtin') return null;
-  String slug(String words) => words
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-      .replaceAll(RegExp(r'^-|-$'), '');
-  final page = slug(effect.label);
-  final category = slug(effect.categoryLabel);
-  final section =
-      category == 'controls' && !page.contains('control') ? 'drivers' : category;
-  return '${lumitDocsUrl}effects/$section/$page/';
-}
-
 class _EffectRow extends StatelessWidget {
   final BridgeEffectInfo effect;
   final VoidCallback onApply;
 
-  /// Whether a layer or a clip is there to take it.
-  final bool canApply;
+  /// Whether a layer or a clip is there to take it, asked as the menu opens.
+  final bool Function() canApply;
   final bool favourite;
   final VoidCallback onToggleFavourite;
 
@@ -1218,6 +1216,13 @@ class _EffectRow extends StatelessWidget {
   void _menu(BuildContext context, Offset at) {
     final audio = effect.namespace == _audioNamespace;
     final plugin = effect.namespace == _ofxNamespace || audio;
+    final applies = canApply();
+    final manual = effectManualUrl(
+      name: effect.name,
+      category: effect.category,
+      label: effect.label,
+      namespace: effect.namespace,
+    );
     showLumitPopup<void>(
       context: context,
       position: at,
@@ -1229,13 +1234,13 @@ class _EffectRow extends StatelessWidget {
             children: [
               MenuRow(
                 key: ValueKey<String>('fx-apply-${effect.name}'),
-                enabled: canApply,
+                enabled: applies,
                 onPressed: () {
                   close(null);
                   onApply();
                 },
                 child: MenuLabel(l10n.effectAddToSelected,
-                    enabled: canApply, ticked: false),
+                    enabled: applies, ticked: false),
               ),
               MenuRow(
                 key: ValueKey<String>('fx-favourite-${effect.name}'),
@@ -1245,7 +1250,7 @@ class _EffectRow extends StatelessWidget {
                 },
                 child: MenuLabel(l10n.tipFavourite, ticked: favourite),
               ),
-              if (_manualPage(effect) case final page?)
+              if (manual case final page?)
                 MenuRow(
                   key: ValueKey<String>('fx-manual-${effect.name}'),
                   onPressed: () {

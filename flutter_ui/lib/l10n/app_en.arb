@@ -7675,15 +7675,17 @@
   "@menuCloseProject": {
     "description": "Menu item."
   },
-  "menuCombineAxesOf": "Combine {property} axes",
-  "@menuCombineAxesOf": {
-    "description": "Layer ▸ Transform and Animation ▸ Separate dimensions submenu item: puts a transform property's separated axes back on one row. {property} is the property's own name — Anchor point, Position or Scale.",
-    "placeholders": {
-      "property": {
-        "type": "String",
-        "example": "Position"
-      }
-    }
+  "menuCombineAnchorAxes": "Combine anchor point axes",
+  "@menuCombineAnchorAxes": {
+    "description": "Layer ▸ Transform: puts Anchor point's separated axes back on one row."
+  },
+  "menuCombinePositionAxes": "Combine position axes",
+  "@menuCombinePositionAxes": {
+    "description": "Layer ▸ Transform: puts Position's separated axes back on one row."
+  },
+  "menuCombineScaleAxes": "Combine scale axes",
+  "@menuCombineScaleAxes": {
+    "description": "Layer ▸ Transform: puts Scale's separated axes back on one row."
   },
   "menuCommandPalette": "Command palette…",
   "@menuCommandPalette": {
@@ -7940,6 +7942,10 @@
   "@menuLumitOnlineGuides": {
     "description": "Menu item."
   },
+  "menuCompMarkers": "Markers…",
+  "@menuCompMarkers": {
+    "description": "Timeline, right-click on the empty lanes: opens the window listing the composition's markers."
+  },
   "menuMarkers": "Markers",
   "@menuMarkers": {
     "description": "Menu item."
@@ -8117,15 +8123,17 @@
   "@menuSelectSameLabel": {
     "description": "Select similar row: every layer with this layer's label colour"
   },
-  "menuSeparateAxesOf": "Separate {property} axes",
-  "@menuSeparateAxesOf": {
-    "description": "Layer ▸ Transform and Animation ▸ Separate dimensions submenu item: gives a transform property's axes a row and a curve each. {property} is the property's own name — Anchor point, Position or Scale.",
-    "placeholders": {
-      "property": {
-        "type": "String",
-        "example": "Position"
-      }
-    }
+  "menuSeparateAnchorAxes": "Separate anchor point axes",
+  "@menuSeparateAnchorAxes": {
+    "description": "Layer ▸ Transform: gives Anchor point's axes a row and a curve each."
+  },
+  "menuSeparatePositionAxes": "Separate position axes",
+  "@menuSeparatePositionAxes": {
+    "description": "Layer ▸ Transform: gives Position's axes a row and a curve each."
+  },
+  "menuSeparateScaleAxes": "Separate scale axes",
+  "@menuSeparateScaleAxes": {
+    "description": "Layer ▸ Transform: gives Scale's axes a row and a curve each."
   },
   "menuSeparateDimensions": "Separate dimensions",
   "@menuSeparateDimensions": {
@@ -16550,10 +16558,6 @@
   "@settingsEffectGraphsUseThemeColour": {
     "description": "Settings window, Appearance: the name of the switch that draws an effect's own graph - the Levels histogram, a Curves channel - entirely in the theme's colours. With it off the red, green and blue channel views draw in red, green and blue."
   },
-  "searchEffectsAndPresets": "Search effects & presets",
-  "@searchEffectsAndPresets": {
-    "description": "Placeholder in the Effects & presets panel's search box. It searches the built-in effects and the user's saved presets alike."
-  },
   "favourites": "Favourites",
   "@favourites": {
     "description": "The heading above the starred effects and presets, at the top of the Effects & presets panel."
@@ -16570,9 +16574,9 @@
   "@tipViewerMoreControls": {
     "description": "Hover text on the overflow mark at the left of the Viewer's bottom bar. It appears only when the Viewer is docked too narrow for the bar to hold the transparency grid, guides, channel, exposure and snapshot controls, and opens all of them in a small floating strip."
   },
-  "columnCompose": "Compose",
+  "columnCompose": "Matte and blend",
   "@columnCompose": {
-    "description": "Timeline column-cluster name, seen on the floating tag while the MATTE / BLEND pair of column headings is dragged to a new place in the outline. Not a heading itself: the two headings above the cells keep their own words."
+    "description": "Timeline column-cluster name, seen in the columns menu and on the floating tag while the MATTE / BLEND pair of column headings is dragged to a new place in the outline. Not a heading itself: the two headings above the cells keep their own words."
   },
   "settingsChromeLabels": "Chrome labels",
   "@settingsChromeLabels": {

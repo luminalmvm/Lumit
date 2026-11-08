@@ -217,8 +217,9 @@ const double _widthForPath = projectHeaderPadLeft +
     projectPathColumn;
 /// Date comes last, once there is room for it beside everything else.
 const double _widthForDate = _widthForPath + projectRowGap + projectDateColumn;
-const double _widthForFps = 230;
-const double _widthForSize = 190;
+// What a name needs ahead of them, with a row's indent, twirl and mark.
+const double _widthForFps = 300;
+const double _widthForSize = 240;
 
 /// Which optional columns a given panel width can carry, how wide each of them
 /// has been dragged, and — because the two answers cannot be given apart —

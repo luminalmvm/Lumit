@@ -45,9 +45,9 @@ const double _dragSlop = 6.0;
 /// run out — the width its narrowest useful arrangement lays out at without
 /// overflowing — and `panel_width_sweep_test` is what keeps them honest.
 double panelMinWidth(Panel panel) => switch (panel) {
-      // A row is a twirl, a type mark, a name, its state badges and the
-      // metadata columns still standing at this width; that is what 300 buys.
-      Panel.project => 300,
+      // Its columns give way on their own down to here, so nothing is cut at
+      // the panel's edge above it (`projectMinWidth`).
+      Panel.project => 180,
       // The picture itself will draw at any size, and both strips slide on
       // their own below the width they want, so the Viewer's floor is only
       // about there being a picture worth looking at.
@@ -1045,20 +1045,20 @@ class _TabGroup extends StatelessWidget {
           // The pill strip scrolls when the group is narrower than its
           // tabs, as egui_tiles' tab bar does, and fades at the end that has
           // more.
-          _TitleLine(
-            panel: active.id.panel.name,
-            // The empty end of the strip answers for the fronted tab, so
-            // Add panel is there whether or not the pointer finds a tab.
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onSecondaryTapUp: (d) => _showPaneMenu(
-                context,
-                d.globalPosition,
-                pane: active.id,
-                group: tabs,
-                onClose: onClose,
-                onGroupChanged: onChanged,
-              ),
+          // The empty end of the strip answers for the fronted tab, so Add
+          // panel is there whether or not the pointer finds a tab.
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onSecondaryTapUp: (d) => _showPaneMenu(
+              context,
+              d.globalPosition,
+              pane: active.id,
+              group: tabs,
+              onClose: onClose,
+              onGroupChanged: onChanged,
+            ),
+            child: _TitleLine(
+              panel: active.id.panel.name,
               child: EdgeFade(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,

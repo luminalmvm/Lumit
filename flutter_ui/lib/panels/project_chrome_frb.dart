@@ -455,6 +455,9 @@ Widget projectScrollStrip(LumitTheme t, ScrollController hScroll) => SizedBox(
       ),
     );
 
+/// What `13 items` needs on the bottom bar.
+const double _footerCountRoom = 48;
+
 /// The bottom bar: the new-item controls at the left, the count at the right.
 /// Marks with tooltips, never words: the marks are the same at every width.
 ///
@@ -559,7 +562,7 @@ Widget projectFooter(
             );
           }),
         ],
-        const Spacer(),
+        const SizedBox(width: _footerGap),
         // The missing half reads *before* the total, so the bar ends on the
         // item count (the owner's order). The two stay separate strings: a
         // translator sees each phrase whole, and the order is the layout's
@@ -568,6 +571,12 @@ Widget projectFooter(
         // truncating text (§12A.6's step 1), and the missing half used to be
         // fixed — which meant a narrow bar carrying a broken item overflowed
         // rather than shortening.
+        Expanded(
+            // Too narrow for a short count, it goes rather than being cut.
+            child: LayoutBuilder(
+                builder: (context, box) => box.maxWidth < _footerCountRoom
+                    ? const SizedBox.shrink()
+                    : Row(mainAxisAlignment: MainAxisAlignment.end, children: [
         if (missing > 0)
           Flexible(
               child: LumitTooltip(
@@ -608,6 +617,7 @@ Widget projectFooter(
             ),
           ),
         ),
+        ]))),
       ],
     ),
   );

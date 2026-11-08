@@ -22,10 +22,10 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
-import '../state/dock.dart';
 import '../widgets/controls.dart';
-import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 import 'timeline_extras_frb.dart';
+import 'timeline_layer_menu_frb.dart' show revealInProject;
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
 /// How far the tree will walk before it stops, whatever the document says.
 const int _maxDepth = 10;
@@ -117,7 +117,7 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
             MenuRow(
               key: const ValueKey('hierarchy-reveal'),
               enabled: source != null,
-              onPressed: () => run(() => _revealInProject(ui, source!)),
+              onPressed: () => run(() => revealInProject(ui, source!)),
               child:
                   MenuLabel(l10n.revealInProject, enabled: source != null),
             ),
@@ -138,15 +138,6 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
         ];
       },
     );
-  }
-
-  /// Front the Project panel with [item] picked in it.
-  void _revealInProject(LumitUiState ui, ItemReference item) {
-    setPanelVisible(ui.split, Panel.project, true);
-    activatePanelTab(ui.split, Panel.project);
-    ui.activePane.value = Panel.project.pane();
-    ui.workspace.touch();
-    ui.projectPickRequest.value = item;
   }
 
   void _walkEntries(

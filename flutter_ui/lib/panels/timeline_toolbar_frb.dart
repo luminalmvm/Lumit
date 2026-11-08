@@ -215,8 +215,13 @@ class Toolbar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 220),
-                child: timelineChromeControl(
-                    t, LayerSearchFrb(onChanged: onSearch, width: 1e9)),
+                // A field shows its menu without claiming the press, so this
+                // claims it from the row's menu round it.
+                child: GestureDetector(
+                  onSecondaryTapUp: (_) {},
+                  child: timelineChromeControl(
+                      t, LayerSearchFrb(onChanged: onSearch, width: 1e9)),
+                ),
               ),
             ),
           ),
@@ -436,7 +441,7 @@ Future<void> showTimelineMoreMenu(
       MenuRow(
           key: const ValueKey('tl-markers'),
           onPressed: () => close('markers'),
-          child: Text(l10n.menuMarkers)),
+          child: Text(l10n.menuCompMarkers)),
       MenuRow(
           key: const ValueKey('tl-detect-beats'),
           onPressed: () => close('beats'),

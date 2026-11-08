@@ -74,6 +74,7 @@ import '../state/timecode.dart';
 import '../state/workspace.dart' show Workspace;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'project_chrome_frb.dart';
 import 'project_columns_frb.dart';
 import 'project_menu_frb.dart';
@@ -1305,7 +1306,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
                   // row becomes a widget when the list reaches it. Every row is
                   // the same height, so the list never has to measure one it
                   // has not built.
-                  child: ListView.builder(
+                  child: EdgeFade(
+                    axis: Axis.vertical,
+                    reach: 16,
+                    child: ListView.builder(
                     controller: _vScroll,
                     hitTestBehavior: HitTestBehavior.deferToChild,
                     // A little ground under the last row, so a full list still
@@ -1317,6 +1321,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
                     // filtered or sorted.
                     itemBuilder: (context, i) =>
                         _treeRow(rows[i], cols, shaded: i.isOdd),
+                  ),
                   ),
                 ),
               ),

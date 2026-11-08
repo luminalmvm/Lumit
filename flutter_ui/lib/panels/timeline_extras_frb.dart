@@ -113,7 +113,17 @@ class CompTabsFrb extends StatelessWidget {
                   style: t.kickerOn),
             ),
           ),
-          Expanded(child: _strip(context, t, comps, selected)),
+          // The strip's empty end lifts the pane and has its menu, as the word
+          // ahead of it does.
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const DockPaneHandle(child: SizedBox.expand()),
+                _strip(context, t, comps, selected),
+              ],
+            ),
+          ),
           // The single filled action this surface is allowed (§3.1, §12A.1):
           // the same Export the File menu and the command palette run, one
           // click from the composition it would write.
@@ -276,6 +286,7 @@ class CompTabsFrb extends StatelessWidget {
   ) {
     return ListView(
       scrollDirection: Axis.horizontal,
+      hitTestBehavior: HitTestBehavior.deferToChild,
       children: _tabs(context, t, comps, selected),
     );
   }
@@ -2193,53 +2204,14 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// The right-click menu on the ruler's own ground: a marker or a work-area
   /// edge at [frame], the one under the pointer. A ruler with nothing to
   /// commit to offers nothing.
-  Future<void> _groundMenu(Offset at, int frame) async {
-    final setWork = widget.onWorkArea;
-    if (setWork == null && widget.onMarkersChanged == null) return;
-    final picked = await showMenuAt<String>(
-      context: context,
-      position: at,
-      rows: (close) => [
-        if (widget.onMarkersChanged != null)
-          MenuRow(
-              key: const ValueKey('tl-ruler-add-marker'),
-              onPressed: () => close('marker'),
-              child: Text(l10n.menuAddMarkerHere)),
-        if (setWork != null) ...[
-          if (widget.onMarkersChanged != null) const MenuDivider(),
-          MenuRow(
-              key: const ValueKey('tl-ruler-work-in'),
-              onPressed: () => close('work-in'),
-              child: Text(l10n.workAreaStart)),
-          MenuRow(
-              key: const ValueKey('tl-ruler-work-out'),
-              onPressed: () => close('work-out'),
-              child: Text(l10n.workAreaEnd)),
-          MenuRow(
-              key: const ValueKey('tl-ruler-work-clear'),
-              onPressed: () => close('work-clear'),
-              child: Text(l10n.workAreaClear)),
-        ],
-      ],
-    );
-    if (picked == null || !mounted) return;
-    switch (picked) {
-      case 'marker':
-        await _createMarkerAt(frame);
-      case 'work-clear':
-        setWork?.call(null);
-      case _:
-        // A comp with no frames has no valid span: it keeps the one it has.
-        try {
-          setWork?.call(workAreaWith(
-            comp: widget.comp,
-            current: widget.comp.getWorkArea(),
-            wanted: frame,
-            isStart: picked == 'work-in',
-          ));
-        } catch (_) {}
-    }
-  }
+  Future<void> _groundMenu(Offset at, int frame) => showRulerMenu(
+        context,
+        comp: widget.comp,
+        at: at,
+        frame: frame,
+        addMarker: widget.onMarkersChanged == null ? null : _createMarkerAt,
+        setWork: widget.onWorkArea,
+      );
 
   /// Whether [x], in the ruler's own pixels, lands in either work-area
   /// handle's reach — the same [_workHandleWidth] the handles claim.
@@ -3622,6 +3594,62 @@ void addMarkerFrb(
   String label = '',
 }) =>
     writeMarkers(comp, markersWithFrb(comp, frame: frame, label: label));
+
+/// The menu on a ruler's ground, with [frame] as its "here": a marker there,
+/// and the work area's ends. Either half stays out where its callback is null.
+Future<void> showRulerMenu(
+  BuildContext context, {
+  required CompositionReference comp,
+  required Offset at,
+  required int frame,
+  Future<void> Function(int frame)? addMarker,
+  ValueChanged<BridgeSpan?>? setWork,
+}) async {
+  if (setWork == null && addMarker == null) return;
+  final picked = await showMenuAt<String>(
+    context: context,
+    position: at,
+    rows: (close) => [
+      if (addMarker != null)
+        MenuRow(
+            key: const ValueKey('tl-ruler-add-marker'),
+            onPressed: () => close('marker'),
+            child: Text(l10n.menuAddMarkerHere)),
+      if (setWork != null) ...[
+        if (addMarker != null) const MenuDivider(),
+        MenuRow(
+            key: const ValueKey('tl-ruler-work-in'),
+            onPressed: () => close('work-in'),
+            child: Text(l10n.workAreaStart)),
+        MenuRow(
+            key: const ValueKey('tl-ruler-work-out'),
+            onPressed: () => close('work-out'),
+            child: Text(l10n.workAreaEnd)),
+        MenuRow(
+            key: const ValueKey('tl-ruler-work-clear'),
+            onPressed: () => close('work-clear'),
+            child: Text(l10n.workAreaClear)),
+      ],
+    ],
+  );
+  if (picked == null || !context.mounted) return;
+  switch (picked) {
+    case 'marker':
+      await addMarker?.call(frame);
+    case 'work-clear':
+      setWork?.call(null);
+    case _:
+      // A comp with no frames has no valid span: it keeps the one it has.
+      try {
+        setWork?.call(workAreaWith(
+          comp: comp,
+          current: comp.getWorkArea(),
+          wanted: frame,
+          isStart: picked == 'work-in',
+        ));
+      } catch (_) {}
+  }
+}
 
 /// [comp]'s marker list with one marker placed at [frame] — the shared
 /// placement rule, used both when a marker is added and when one is dragged

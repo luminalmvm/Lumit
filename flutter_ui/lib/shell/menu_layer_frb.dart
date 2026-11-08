@@ -570,15 +570,27 @@ List<MenuEntry> axisModeRows(LumitState app, LumitUiState ui) {
   final lead = selectedEntries(ui).firstOrNull;
 
   return [
-    for (final (pair, label) in [
-      (BridgeTransformPair.anchor, l10n.transformAnchorPoint),
-      (BridgeTransformPair.position, l10n.transformPosition),
-      (BridgeTransformPair.scale, l10n.transformScale),
+    for (final (pair, separate, combine) in [
+      (
+        BridgeTransformPair.anchor,
+        l10n.menuSeparateAnchorAxes,
+        l10n.menuCombineAnchorAxes
+      ),
+      (
+        BridgeTransformPair.position,
+        l10n.menuSeparatePositionAxes,
+        l10n.menuCombinePositionAxes
+      ),
+      (
+        BridgeTransformPair.scale,
+        l10n.menuSeparateScaleAxes,
+        l10n.menuCombineScaleAxes
+      ),
     ])
       MenuEntry(
         lead != null && modeOf(lead, pair) == BridgeAxisMode.separated
-            ? l10n.menuCombineAxesOf(label)
-            : l10n.menuSeparateAxesOf(label),
+            ? combine
+            : separate,
         onSelection(app, ui, (entry) {
           final now = modeOf(entry, pair);
           // Scale goes back to linked, as it does from the row's own menu.

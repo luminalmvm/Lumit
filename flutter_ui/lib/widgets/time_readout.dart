@@ -25,6 +25,7 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../l10n/strings.dart';
 import 'controls.dart';
 
 /// The width of [characters] characters of [style], measured once per style
@@ -190,6 +191,44 @@ class _TimeReadoutState extends State<TimeReadout>
     super.dispose();
   }
 
+  /// The time as text, in and out, as a field's menu has it.
+  void _menu(Offset at) {
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) => FloatSurface(
+        width: 160,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MenuRow(
+              key: const ValueKey('time-readout-copy'),
+              onPressed: () {
+                close(null);
+                Clipboard.setData(
+                    ClipboardData(text: widget.format(widget.frame)));
+              },
+              child: Text(l10n.menuCopy),
+            ),
+            MenuRow(
+              key: const ValueKey('time-readout-paste'),
+              onPressed: () async {
+                close(null);
+                final data = await Clipboard.getData(Clipboard.kTextPlain);
+                final frame = widget.parse(data?.text?.trim() ?? '');
+                if (frame == null || !mounted) return;
+                widget.onCommit(
+                    frame.clamp(widget.minFrame, widget.maxFrame));
+              },
+              child: Text(l10n.menuPaste),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _beginEdit() {
     final text = (widget.editFormat ?? widget.format)(widget.frame);
     setState(() {
@@ -289,6 +328,10 @@ class _TimeReadoutState extends State<TimeReadout>
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _editing ? null : _beginEdit,
+        // Being typed into, the field has its own menu.
+        onSecondaryTapUp: (d) {
+          if (!_editing) _menu(d.globalPosition);
+        },
         onHorizontalDragStart: widget.draggable
             ? (_) {
                 _dragAccum = 0;
