@@ -177,20 +177,21 @@ Script: `lumit.folder.new({ ... })`. MCP tool: `folder_new`.
 
 ## layer.add
 
-Add a null, camera, solid, footage or precomp layer to a comp.
+Add a null, camera, solid, footage, precomp, text, shape, adjustment or light layer to a comp.
 
 Script: `lumit.layer.add({ ... })`. MCP tool: `layer_add`.
 
 | Argument | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
-| `kind` | `"null"`, `"camera"`, `"solid"`, `"footage"`, `"precomp"` | yes |  |
+| `kind` | `"null"`, `"camera"`, `"solid"`, `"footage"`, `"precomp"`, `"text"`, `"shape"`, `"adjustment"`, `"light"` | yes |  |
 | `item` | string |  | For footage: the footage item's id or name. For a precomp: the comp's |
 | `name` | string |  |  |
 | `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
 | `colour` | list of 3 numbers (0 to 1) |  | For a solid: its colour as a colour picker shows it, 0 to 1. White if left out |
 | `width` | integer (1 to 16384) |  | For a solid, the comp's if left out |
 | `height` | integer (1 to 16384) |  |  |
+| `fields` | object |  | Any of the layer's fields as a .lum file keeps them, laid over the new layer as layer.write lays them. A text layer turns about the middle of its words unless these set its anchor |
 
 ## shape.add
 
@@ -204,6 +205,43 @@ Script: `lumit.shape.add({ ... })`. MCP tool: `shape_add`.
 | `name` | string |  |  |
 | `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
 | `items` | list of object | yes | The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one |
+
+## layer.read
+
+One layer whole, in the form a .lum file keeps it, to change and give back to layer.write.
+
+Script: `lumit.layer.read({ ... })`. MCP tool: `layer_read`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+
+## layer.write
+
+Change any part of a layer, in the form a .lum file keeps it: its kind and contents, text, transform, masks, effects, styles, paint, switches and the rest.
+
+Script: `lumit.layer.write({ ... })`. MCP tool: `layer_write`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `fields` | object | yes | Laid over the layer as JSON Merge Patch does: objects merge key by key, null takes a field away, anything else replaces it, and a choice such as {"Keyframed": [...]} replaces another such as {"Static": 1}. Times are exact seconds as [num, den], colours linear-light RGBA. The layer keeps its id and its place |
+
+## comp.write
+
+Change a comp's motion blur, lighting or node graph, in the form a .lum file keeps them.
+
+Script: `lumit.comp.write({ ... })`. MCP tool: `comp_write`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `fields` | object | yes | Each laid over the comp's own as JSON Merge Patch does |
+| `fields.motion_blur` | object |  |  |
+| `fields.lighting` | object |  |  |
+| `fields.graph` | object |  |  |
 
 ## layer.composite
 
@@ -344,7 +382,7 @@ Script: `lumit.effect.get({ ... })`. MCP tool: `effect_get`.
 
 ## effect.add
 
-Add an effect to the bottom of a layer's stack, by Lumit's name for it or After Effects'.
+Add an effect to the bottom of a layer's stack, by Lumit's name for it or the name an imported project gives it.
 
 Script: `lumit.effect.add({ ... })`. MCP tool: `effect_add`.
 
@@ -352,7 +390,7 @@ Script: `lumit.effect.add({ ... })`. MCP tool: `effect_add`.
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
 | `layer` | string | yes | The layer's id, or its name in the comp |
-| `effect` | string | yes | Lumit's id or name for the effect, or After Effects' match name or name, such as ADBE Gaussian Blur 2 |
+| `effect` | string | yes | Lumit's id or name for the effect, or the match name or name an imported project gives it, such as ADBE Gaussian Blur 2 |
 | `name` | string |  | The name it shows |
 
 ## effect.set

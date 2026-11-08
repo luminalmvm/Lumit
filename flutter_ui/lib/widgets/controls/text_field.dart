@@ -6,9 +6,103 @@ import 'package:flutter/material.dart';
 import '../../theme/style_sheet.dart';
 import 'package:flutter/services.dart';
 
+import '../../l10n/strings.dart';
 import '../autofill.dart';
 import 'base.dart';
 import 'buttons.dart';
+import 'menus.dart';
+import 'popups.dart';
+
+/// Cut, Copy, Paste and Select all for [field], in Lumit's own menu at [at].
+///
+/// A press outside the selection moves the caret there first, and a press on
+/// it keeps it, so Copy takes what was showing as picked. Clicking a row must
+/// not count as clicking away from the field, which would commit an inline
+/// rename, hence the tap region.
+Future<void> showTextFieldMenu(
+    BuildContext context, EditableTextState field, Offset at) async {
+  final value = field.textEditingValue;
+  final selection = value.selection;
+  final under = field.renderEditable.getPositionForPoint(at).offset;
+  if (!selection.isValid ||
+      under < selection.start ||
+      under > selection.end) {
+    field.userUpdateTextEditingValue(
+        value.copyWith(selection: TextSelection.collapsed(offset: under)),
+        SelectionChangedCause.tap);
+  }
+  // Paste is offered without asking the clipboard first: the ask is a round
+  // trip to the system, and a menu that waits on it opens late. With nothing
+  // to paste the row does nothing.
+  final canPaste = field.pasteEnabled;
+  final picked = field.textEditingValue.selection;
+  final some = picked.isValid && !picked.isCollapsed;
+  final text = field.textEditingValue.text;
+  Widget row(String key, String label, String action, bool enabled,
+          void Function() run, void Function() close) =>
+      MenuRow(
+        key: ValueKey<String>('text-menu-$key'),
+        enabled: enabled,
+        onPressed: () {
+          close();
+          run();
+        },
+        child: MenuLabel(label, action: action, enabled: enabled),
+      );
+  await showLumitPopup<void>(
+    context: context,
+    position: at,
+    builder: (close) {
+      void shut() => close(null);
+      return TextFieldTapRegion(
+        child: FloatSurface(
+          width: 180,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              row('cut', l10n.menuCut, 'edit.cut', some && field.cutEnabled,
+                  () => field.cutSelection(SelectionChangedCause.toolbar), shut),
+              row('copy', l10n.menuCopy, 'edit.copy', some && field.copyEnabled,
+                  () => field.copySelection(SelectionChangedCause.toolbar),
+                  shut),
+              row('paste', l10n.menuPaste, 'edit.paste', canPaste,
+                  () => field.pasteText(SelectionChangedCause.toolbar), shut),
+              const MenuDivider(),
+              row(
+                  'select-all',
+                  l10n.menuSelectAll,
+                  'edit.select.all',
+                  text.isNotEmpty && field.selectAllEnabled,
+                  () => field.selectAll(SelectionChangedCause.toolbar),
+                  shut),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// A text field's gestures, with the right press opening [showTextFieldMenu].
+class TextFieldGestures extends TextSelectionGestureDetectorBuilder {
+  TextFieldGestures({required super.delegate, required this.context});
+
+  final BuildContext context;
+  Offset _at = Offset.zero;
+
+  @override
+  void onSecondaryTapDown(TapDownDetails details) {
+    super.onSecondaryTapDown(details);
+    _at = details.globalPosition;
+  }
+
+  @override
+  void onSecondaryTap() {
+    final field = delegate.editableTextKey.currentState;
+    if (field != null) showTextFieldMenu(context, field, _at);
+  }
+}
 
 /// A single-line text box in the house style. The dialogs each grew their own
 /// copy of this; it belongs here.
@@ -151,7 +245,7 @@ class _HouseTextFieldState extends State<HouseTextField>
   // Made once, not per build: it keeps where a drag started, and the field
   // rebuilds on every selection change. A new one mid-drag forgot how far the
   // text had scrolled, so selecting in scrolled code jumped.
-  late final _gestures = TextSelectionGestureDetectorBuilder(delegate: this);
+  late final _gestures = TextFieldGestures(delegate: this, context: context);
   OverlayEntry? _overlay;
 
   @override
@@ -369,7 +463,7 @@ class _HouseTextFieldState extends State<HouseTextField>
       },
     );
 
-    Overlay.of(context, rootOverlay: true).insert(_overlay!);
+    rootOverlayOf(context)!.insert(_overlay!);
   }
 
   void hideOverlay() {
@@ -414,7 +508,7 @@ class _HouseTextFieldState extends State<HouseTextField>
       // its text's): with an alignment the box expands to bounded
       // constraints instead of shrink-wrapping the 11px line — the project
       // panel's 20px search well rendered 16 without this.
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       // A style's inner shadows, so a well can sit sunk into its panel.
       foregroundDecoration: widget.frameless
           ? null
@@ -427,14 +521,10 @@ class _HouseTextFieldState extends State<HouseTextField>
           : dress(BoxDecoration(
               color: widget.fill ?? t.surface0,
               borderRadius: wellCorners(t),
-              // `animated`, not `accent`: a focused well is the one focus that
-              // means "you are about to change a value" (§3.1, §6.5), and the
-              // drawings draw the focused well's edge in that token.
-              // [DragValueField] has answered focus this way all along; a well
-              // you type into rather than scrub had simply never answered at
-              // all.
+              // The accent, as every field: `animated` is the keyed colour,
+              // and a well edged in it read as a keyed value.
               border: wellBorder(
-                  t, _focus.hasFocus ? t.animated : t.hairline,
+                  t, _focus.hasFocus ? t.accent : t.hairline,
                   lit: _focus.hasFocus),
             ), partStyle(context, t, 'well',
                 states: {if (_focus.hasFocus) 'focus'})),
@@ -445,7 +535,11 @@ class _HouseTextFieldState extends State<HouseTextField>
           fit: widget.topAlign ? StackFit.expand : StackFit.loose,
           children: [
             if (hint != null && widget.controller.text.isEmpty)
-              Text(hint, style: t.body.copyWith(color: t.textMuted)),
+              Text(hint,
+                  style: t.body.copyWith(color: t.textMuted),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis),
             // Focus on the *down* stroke, not the resolved tap: a press that
             // slides straight into a drag is someone selecting text in one
             // motion, and the field must already be theirs when the drag's

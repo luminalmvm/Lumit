@@ -13,8 +13,9 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,8 @@ import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 
 import 'frb_test_support.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A real 1×1 PNG, so the widget that is handed it decodes rather than falling
 /// into its error builder — the point of the test that renders one is that a
@@ -92,8 +95,15 @@ void main() {
     testWidgets('the × forgets one project and opens none', (tester) async {
       final p = await mount(tester, recents: paths);
 
+      // The × comes up with the pointer, so the pointer goes there first.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(
+          location:
+              tester.getCenter(find.byKey(const ValueKey('welcome-recent-row-1'))));
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('welcome-recent-close-1')));
       await tester.pump();
+      await mouse.removePointer();
 
       expect(p.uiState.workspace.recentProjects, [paths.last, paths.first],
           reason: 'the middle row went and the other two stayed');

@@ -10,6 +10,10 @@
 use crate::{ColourEngine, GpuContext};
 use glam::Mat4;
 
+mod cut;
+mod join;
+pub mod order;
+
 /// Premultiplied "over": the alpha component of every composite blend state,
 /// and the colour component of Normal.
 const OVER: wgpu::BlendComponent = wgpu::BlendComponent {
@@ -192,6 +196,9 @@ pub struct CompositeLayer<'a> {
     /// comp's pixels, then `pre` carries it into the parent comp's pixels.
     /// Column-major 4×4 from [`place_matrix`]. None = placed directly.
     pub pre: Option<[[f32; 4]; 4]>,
+    /// The picture's colour already has its alpha in it, as anything the
+    /// compositor or an effect stack made does. Off for a source's own pixels.
+    pub premultiplied: bool,
 }
 
 /// One sub-frame placement for per-layer motion blur (docs/06 §4): the
@@ -479,437 +486,6 @@ pub fn camera_frame(
     cam_place.inverse()
 }
 
-/// One flat part of a run of 3D layers, as the order sees it: a whole layer,
-/// or a piece of one cut along the planes of the layers it crosses.
-struct Shape {
-    layer: usize,
-    /// Its corners in the layer's own 0..1 space, and in comp pixels.
-    uv: Vec<glam::Vec2>,
-    pts: Vec<glam::Vec3>,
-    /// Clip w at its middle, which is how far along the view it is.
-    depth: f32,
-    /// Where it lands on screen. None when a corner is behind the eye, which
-    /// could reach anywhere.
-    bounds: Option<[f32; 4]>,
-}
-
-impl Shape {
-    fn new(layer: usize, uv: Vec<glam::Vec2>, world: Mat4, view_proj: Mat4) -> Self {
-        let pts: Vec<glam::Vec3> = uv
-            .iter()
-            .map(|c| world.transform_point3(c.extend(0.0)))
-            .collect();
-        let middle = pts.iter().copied().sum::<glam::Vec3>() / pts.len().max(1) as f32;
-        let bounds = pts
-            .iter()
-            .try_fold([f32::MAX, f32::MAX, f32::MIN, f32::MIN], |b, p| {
-                let q = view_proj * p.extend(1.0);
-                (q.w > 0.0).then(|| {
-                    let (x, y) = (q.x / q.w, q.y / q.w);
-                    [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)]
-                })
-            });
-        Self {
-            layer,
-            uv,
-            depth: (view_proj * middle.extend(1.0)).w,
-            pts,
-            bounds,
-        }
-    }
-
-    fn overlaps(&self, other: &Self) -> bool {
-        match (self.bounds, other.bounds) {
-            (Some(p), Some(q)) => p[0] < q[2] && q[0] < p[2] && p[1] < q[3] && q[1] < p[3],
-            _ => true,
-        }
-    }
-
-    /// Where this shape crosses `plane`, as a span along `along`.
-    fn chord(
-        &self,
-        (normal, origin): (glam::Vec3, glam::Vec3),
-        along: glam::Vec3,
-    ) -> Option<(f32, f32)> {
-        let mut span: Option<(f32, f32)> = None;
-        for (k, &p) in self.pts.iter().enumerate() {
-            let q = self.pts[(k + 1) % self.pts.len()];
-            let (dp, dq) = (normal.dot(p - origin), normal.dot(q - origin));
-            if (dp >= 0.0) != (dq >= 0.0) {
-                let t = along.dot(p + (q - p) * (dp / (dp - dq)));
-                span = Some(span.map_or((t, t), |(lo, hi)| (lo.min(t), hi.max(t))));
-            }
-        }
-        span
-    }
-}
-
-/// Farther first, then lower in the stack.
-struct Far(f32, usize);
-
-impl PartialEq for Far {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other).is_eq()
-    }
-}
-
-impl Eq for Far {}
-
-impl PartialOrd for Far {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Far {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.total_cmp(&other.0).then(other.1.cmp(&self.1))
-    }
-}
-
-/// Pairs of shapes, by index.
-type Pairs = Vec<(usize, usize)>;
-
-/// The order `shapes` draw in, farthest first, with the flush and crossing
-/// pairs it found. Of two that overlap on screen, the one wholly behind the
-/// other's plane draws first. Two that only straddle each other's planes,
-/// without meeting, go by how far their middles are. `planes` is each layer's
-/// normal and a point on it, and `eye` the camera's position.
-fn arrange(
-    shapes: &[Shape],
-    planes: &[Option<(glam::Vec3, glam::Vec3)>],
-    eye: glam::Vec3,
-) -> (Vec<usize>, Pairs, Pairs) {
-    // Closer than this to a plane, in comp pixels, is on it.
-    const ON: f32 = 0.01;
-    // Which side of `b`'s plane `a` lies on. A plane seen edge on decides
-    // nothing.
-    enum Side {
-        Front,
-        Behind,
-        On,
-        Across,
-    }
-    let side = |a: &Shape, b: &Shape| {
-        let Some((normal, origin)) = planes[b.layer] else {
-            return Side::Across;
-        };
-        let toward = normal.dot(eye - origin);
-        if toward.abs() <= ON {
-            return Side::Across;
-        }
-        let (mut front, mut behind) = (false, false);
-        for p in &a.pts {
-            let d = normal.dot(*p - origin) * toward.signum();
-            front |= d > ON;
-            behind |= d < -ON;
-        }
-        match (front, behind) {
-            (false, false) => Side::On,
-            (true, false) => Side::Front,
-            (false, true) => Side::Behind,
-            (true, true) => Side::Across,
-        }
-    };
-    // Two that straddle each other's planes really cross when their chords
-    // along the line the planes share overlap.
-    let meet = |a: &Shape, b: &Shape| {
-        let (Some(pa), Some(pb)) = (planes[a.layer], planes[b.layer]) else {
-            return false;
-        };
-        let along = pa.0.cross(pb.0);
-        match (a.chord(pb, along), b.chord(pa, along)) {
-            (Some((a0, a1)), Some((b0, b1))) => a0 < b1 && b0 < a1,
-            _ => false,
-        }
-    };
-    let n = shapes.len();
-    // Each shape's list of shapes that must wait for it, and how many it
-    // waits for itself.
-    let mut then: Vec<Vec<usize>> = vec![Vec::new(); n];
-    let mut waits = vec![0usize; n];
-    let (mut flush, mut cross) = (Vec::new(), Vec::new());
-    for a in 0..n {
-        for b in a + 1..n {
-            let (sa, sb) = (&shapes[a], &shapes[b]);
-            if sa.layer == sb.layer || !sa.overlaps(sb) {
-                continue;
-            }
-            let (first, second) = match side(sa, sb) {
-                Side::On => {
-                    flush.push((a, b));
-                    (a, b)
-                }
-                Side::Behind => (a, b),
-                Side::Front => (b, a),
-                Side::Across => match side(sb, sa) {
-                    Side::Behind => (b, a),
-                    Side::Front => (a, b),
-                    Side::On | Side::Across => {
-                        if meet(sa, sb) {
-                            cross.push((a, b));
-                        }
-                        continue;
-                    }
-                },
-            };
-            then[first].push(second);
-            waits[second] += 1;
-        }
-    }
-    let mut free: std::collections::BinaryHeap<Far> = (0..n)
-        .filter(|&i| waits[i] == 0)
-        .map(|i| Far(shapes[i].depth, i))
-        .collect();
-    let mut done = vec![false; n];
-    let mut order = Vec::with_capacity(n);
-    while order.len() < n {
-        // The farthest shape free to go. When a loop leaves none free, the
-        // farthest of those waiting on the fewest, so the shapes that only
-        // follow the loop keep their place.
-        let next = free.pop().map(|Far(_, i)| i).or_else(|| {
-            (0..n)
-                .filter(|&i| !done[i])
-                .max_by_key(|&i| (std::cmp::Reverse(waits[i]), Far(shapes[i].depth, i)))
-        });
-        let Some(i) = next else {
-            break;
-        };
-        done[i] = true;
-        order.push(i);
-        for &j in &then[i] {
-            waits[j] = waits[j].saturating_sub(1);
-            if waits[j] == 0 && !done[j] {
-                free.push(Far(shapes[j].depth, j));
-            }
-        }
-    }
-    (order, flush, cross)
-}
-
-/// The part of the convex `poly` where `line.x * u + line.y * v + line.z` is
-/// not negative. A crossing point is worked out from the same end of its edge
-/// whichever side is kept, so the two halves meet without a crack, and it
-/// stays exactly on an edge of the layer it falls on, so the outline keeps no
-/// nick.
-fn keep_side(poly: &[glam::Vec2], line: glam::Vec3) -> Vec<glam::Vec2> {
-    let f = |p: glam::Vec2| line.x * p.x + line.y * p.y + line.z;
-    let mut out = Vec::with_capacity(poly.len() + 1);
-    for (k, &p) in poly.iter().enumerate() {
-        let q = poly[(k + 1) % poly.len()];
-        let (fp, fq) = (f(p), f(q));
-        if fp >= 0.0 {
-            out.push(p);
-        }
-        if (fp >= 0.0) != (fq >= 0.0) {
-            let (a, b, fa, fb) = if (p.x, p.y) < (q.x, q.y) {
-                (p, q, fp, fq)
-            } else {
-                (q, p, fq, fp)
-            };
-            let mut at = a + (b - a) * (fa / (fa - fb));
-            if a.x == b.x {
-                at.x = a.x;
-            }
-            if a.y == b.y {
-                at.y = a.y;
-            }
-            out.push(at);
-        }
-    }
-    out
-}
-
-/// Twice the area of `poly`, in the layer's own 0..1 space.
-fn area(poly: &[glam::Vec2]) -> f32 {
-    (0..poly.len())
-        .map(|k| poly[k].perp_dot(poly[(k + 1) % poly.len()]))
-        .sum::<f32>()
-        .abs()
-}
-
-/// How a run of adjacent 3D layers draws, as layers of `worlds` (each one's
-/// [`CompositeLayer::world`], bottom of the stack first) farthest first, each
-/// with how it is cut. `flat` marks a layer drawn as a flat smear (motion
-/// blur), which can't be cut itself. `view_proj` is the [`camera_matrix`] and
-/// `eye` the camera's position in comp pixels.
-///
-/// After Effects splits 3D layers where they pass through each other, so what
-/// it shows is always the true order, not a sort by some one point. So here
-/// of two layers that overlap on screen, the one wholly behind the other's
-/// plane draws first, and two on one plane keep their stack order. Of two that
-/// cross, the one that crosses fewer layers is cut into pieces along the
-/// other's plane (both, when they cross as many), and the pieces take their
-/// place the same way, which is exact at any opacity. A group of crossing
-/// layers that would need too many pieces is cut by depth instead, which is
-/// exact for what is solid.
-///
-/// ponytail: the eye-side test and the depth by clip w assume a perspective
-/// camera. An orthographic view needs its view direction here instead.
-pub fn depth_order(
-    worlds: &[Mat4],
-    flat: &[bool],
-    view_proj: Mat4,
-    eye: [f32; 3],
-) -> Vec<(usize, Option<Cut>)> {
-    // Past this many layers the pairs, and past this many pieces their pairs,
-    // cost more than a frame can spare (a millisecond at 256), so the run is
-    // cut by depth throughout.
-    const PAIRED: usize = 256;
-    const PIECES: usize = 1024;
-    // A sliver of a piece, in twice the layer's own area, is left out.
-    const SLIVER: f32 = 1e-7;
-    let eye = glam::Vec3::from(eye);
-    let flat = |i: usize| flat.get(i) == Some(&true);
-    let square: Vec<glam::Vec2> = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-        .map(|(u, v)| glam::vec2(u, v))
-        .to_vec();
-    let layers: Vec<Shape> = worlds
-        .iter()
-        .enumerate()
-        .map(|(i, m)| Shape::new(i, square.clone(), *m, view_proj))
-        .collect();
-    let n = layers.len();
-    // Cut by depth: a smear draws as a card at its middle's distance, and
-    // each layer a hair nearer per `lift`.
-    let by_depth = |i: usize, lift: u32| {
-        Cut::Depth(if flat(i) {
-            CUT_NEAR / layers[i].depth.max(CUT_NEAR)
-        } else {
-            CUT_NEAR * (1.0 + lift as f32 * CUT_LIFT)
-        })
-    };
-    if n > PAIRED {
-        // Lifted by stack order, so layers on one plane keep it.
-        let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by_key(|&i| std::cmp::Reverse(Far(layers[i].depth, i)));
-        return order
-            .into_iter()
-            .map(|i| (i, Some(by_depth(i, i as u32))))
-            .collect();
-    }
-    let planes: Vec<Option<(glam::Vec3, glam::Vec3)>> = layers
-        .iter()
-        .map(|s| {
-            let normal = (s.pts[1] - s.pts[0]).cross(s.pts[3] - s.pts[0]);
-            Some((normal.try_normalize()?, s.pts[0]))
-        })
-        .collect();
-    let (order, flush, cross) = arrange(&layers, &planes, eye);
-    if cross.is_empty() {
-        return order.into_iter().map(|i| (i, None)).collect();
-    }
-    let mut lift = vec![0u32; n];
-    for &(a, b) in &flush {
-        lift[b] = lift[b].max(lift[a] + 1);
-    }
-    // Of a crossing pair, the one that crosses fewer is cut along the other's
-    // plane, so a floor that many cards dip into stays whole and each card is
-    // cut once. A flat smear can't be cut, so its partner always is, and two
-    // smears that cross just go by the order.
-    let mut degree = vec![0usize; n];
-    for &(a, b) in &cross {
-        degree[a] += 1;
-        degree[b] += 1;
-    }
-    let mut cuts: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for &(a, b) in &cross {
-        if !flat(a) && (flat(b) || degree[a] <= degree[b]) {
-            cuts[a].push(b);
-        }
-        if !flat(b) && (flat(a) || degree[b] <= degree[a]) {
-            cuts[b].push(a);
-        }
-    }
-    // Layers that cross each other, directly or through others, are one
-    // group, and a group with a layer cut too many times is cut by depth.
-    let mut group: Vec<usize> = (0..n).collect();
-    fn root(group: &mut [usize], mut i: usize) -> usize {
-        while group[i] != i {
-            group[i] = group[group[i]];
-            i = group[i];
-        }
-        i
-    }
-    for &(a, b) in &cross {
-        let (ra, rb) = (root(&mut group, a), root(&mut group, b));
-        group[ra.max(rb)] = ra.min(rb);
-    }
-    let mut tangled = vec![false; n];
-    for (i, by) in cuts.iter().enumerate() {
-        if by.len() > CUT_PLANES {
-            let r = root(&mut group, i);
-            tangled[r] = true;
-        }
-    }
-    let tangled: Vec<bool> = (0..n).map(|i| tangled[root(&mut group, i)]).collect();
-    let mut pieces = Vec::new();
-    for (i, layer) in layers.iter().enumerate() {
-        let (origin, u, v) = (
-            layer.pts[0],
-            layer.pts[1] - layer.pts[0],
-            layer.pts[3] - layer.pts[0],
-        );
-        let mut polys = vec![square.clone()];
-        for &by in cuts[i].iter().filter(|_| !tangled[i]) {
-            let Some((normal, at)) = planes[by] else {
-                continue;
-            };
-            // That plane, as a line across this layer's own 0..1 space.
-            let line = glam::vec3(normal.dot(u), normal.dot(v), normal.dot(origin - at));
-            polys = polys
-                .into_iter()
-                .flat_map(|p| [keep_side(&p, line), keep_side(&p, -line)])
-                .filter(|p| p.len() >= 3 && area(p) > SLIVER)
-                .collect();
-        }
-        pieces.extend(
-            polys
-                .into_iter()
-                .map(|p| Shape::new(i, p, worlds[i], view_proj)),
-        );
-    }
-    if pieces.len() > PIECES {
-        return order
-            .into_iter()
-            .map(|i| (i, Some(by_depth(i, lift[i]))))
-            .collect();
-    }
-    let (pieces_order, _, _) = arrange(&pieces, &planes, eye);
-    let mut drawn = vec![false; n];
-    let mut out = Vec::with_capacity(pieces.len());
-    for k in pieces_order {
-        let piece = &pieces[k];
-        let i = piece.layer;
-        if tangled[i] {
-            // A group cut by depth draws together where its first layer
-            // comes, in its own order.
-            if !drawn[i] {
-                let r = root(&mut group, i);
-                for &j in &order {
-                    if root(&mut group, j) == r {
-                        drawn[j] = true;
-                        out.push((j, Some(by_depth(j, lift[j]))));
-                    }
-                }
-            }
-            continue;
-        }
-        let cut = (!cuts[i].is_empty()).then(|| {
-            let mut corners = [[0.0; 2]; PIECE_CORNERS];
-            for (c, p) in corners.iter_mut().zip(&piece.uv) {
-                *c = p.to_array();
-            }
-            Cut::Piece {
-                corners,
-                count: piece.uv.len().min(PIECE_CORNERS),
-            }
-        });
-        out.push((i, cut));
-    }
-    out
-}
-
 /// The geometry pipelines at ONE multisample count.
 ///
 /// A `wgpu` render pipeline carries its sample count, so a pipeline built for
@@ -988,10 +564,10 @@ pub struct Compositor {
     /// Bound at binding 4 when a layer needs no dst snapshot.
     black: wgpu::Texture,
     /// The last multisample attachment and the ledger's charge for it, kept
-    /// for the next composite of the same shape once
-    /// [`Self::keep_attachment`] has been asked for.
+    /// for the next composite of the same shape.
     kept: std::sync::Mutex<Option<(wgpu::Texture, lumit_budget::Reservation)>>,
-    keep: std::sync::atomic::AtomicBool,
+    /// How a model's picture joins a run of 3D layers, built on first use.
+    joins: join::Joins,
 }
 
 impl Compositor {
@@ -1290,17 +866,19 @@ impl Compositor {
             white,
             black,
             kept: std::sync::Mutex::new(None),
-            keep: std::sync::atomic::AtomicBool::new(false),
+            joins: Default::default(),
         }
     }
 
-    /// Keep the multisample attachment from one composite to the next
-    /// instead of making a new one each time. An export asks for this: at 4K
-    /// and 8x the attachment is half a gigabyte, and making it took longer
-    /// than drawing into it. The Viewer doesn't, so an idle project holds
-    /// none.
-    pub fn keep_attachment(&self) {
-        self.keep.store(true, std::sync::atomic::Ordering::Relaxed);
+    /// Let go of the kept multisample attachment. It is kept from one
+    /// composite to the next because making it costs more than drawing into
+    /// it, at 4K and 8x it is half a gigabyte, and a frame with an adjustment
+    /// layer composites more than once. The Viewer lets go of it when it goes
+    /// idle, so an idle project holds none.
+    pub fn drop_attachment(&self) {
+        if let Ok(mut k) = self.kept.lock() {
+            k.take();
+        }
     }
 
     /// The kept attachment when it has this shape, or a new one. Every
@@ -1320,12 +898,9 @@ impl Compositor {
         }
     }
 
-    /// Hold `texture` for the next composite, if keeping was asked for and
-    /// the ledger has room for it. Otherwise it goes, as it always did.
+    /// Hold `texture` for the next composite, if the ledger has room for it.
+    /// Otherwise it goes.
     fn give_back(&self, ctx: &GpuContext, texture: wgpu::Texture) {
-        if !self.keep.load(std::sync::atomic::Ordering::Relaxed) {
-            return;
-        }
         let size = texture.size();
         let bytes = crate::texture_bytes(texture.format(), size.width, size.height)
             .saturating_mul(u64::from(texture.sample_count()));
@@ -1483,7 +1058,7 @@ impl Compositor {
     /// so they share one matrix rather than each restating the identity layer.
     /// The texture named here is only a placeholder: [`CompositeLayer::matrix`]
     /// reads the placement, never the pixels.
-    fn full_frame_matrix(&self, width: u32, height: u32) -> [[f32; 4]; 4] {
+    fn full_frame_matrix(&self, width: u32, height: u32, region: Option<Region>) -> [[f32; 4]; 4] {
         CompositeLayer {
             texture: &self.white,
             size: (width as f32, height as f32),
@@ -1500,8 +1075,9 @@ impl Compositor {
             three_d: false,
             layer_mask: None,
             pre: None,
+            premultiplied: false,
         }
-        .matrix(width as f32, height as f32, None, None)
+        .matrix(width as f32, height as f32, None, region)
         .to_cols_array_2d()
     }
 
@@ -1535,185 +1111,6 @@ impl Compositor {
             Ok(mut map) => std::sync::Arc::clone(map.entry(key).or_insert_with(build)),
             Err(_) => build(),
         }
-    }
-
-    /// **Scene depth**: how far from the camera each pixel of the 3D layers is,
-    /// metres, so an effect can read it. Each run of 3D layers keeps its
-    /// nearest layer at each pixel, so layers that pass through each other cut
-    /// as they do in the picture, and a run higher in the stack replaces what
-    /// is below it wherever it covers, as it does in the picture. A pixel no
-    /// 3D layer covers at least half reads as far as a half float goes, or as
-    /// `under` where that is given: the depth of the layers below these.
-    /// `metres_per_w` is the camera's zoom over its pixels per metre.
-    /// Distance is counted from a clip w of `near`, so a scene far from the
-    /// eye keeps its precision.
-    ///
-    /// 2D layers draw nothing here, so a 3D layer still reads through a 2D
-    /// one in front of it. A 2D layer inside a collapsed 3D precomp lies on the
-    /// precomp's plane, so it has a distance like any 3D layer.
-    ///
-    /// ponytail: track mattes and blend modes are not read here, so a layer
-    /// a matte cuts away still has a distance. Read them if a scene needs it.
-    #[allow(clippy::too_many_arguments)]
-    pub fn composite_depth(
-        &self,
-        ctx: &GpuContext,
-        width: u32,
-        height: u32,
-        runs: &[&[CompositeLayer<'_>]],
-        camera: Mat4,
-        metres_per_w: f32,
-        near: f32,
-        render_scale: f32,
-        under: Option<&wgpu::Texture>,
-    ) -> wgpu::Texture {
-        let (tw, th) = scaled_size(width, height, render_scale);
-        let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("comp-depth"),
-            size: wgpu::Extent3d {
-                width: tw,
-                height: th,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: ctx.working(),
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let under = under.filter(|u| (u.width(), u.height()) == (tw, th));
-        let pipelines = self.pipelines(ctx, 1, None);
-        let bind = |layer: &CompositeLayer<'_>, clear: bool| {
-            let uniform = LayerUniform {
-                matrix: layer
-                    .matrix(width as f32, height as f32, Some(&camera), None)
-                    .to_cols_array_2d(),
-                params: [
-                    (layer.opacity / 100.0).clamp(0.0, 1.0),
-                    f32::from(u8::from(clear)),
-                    0.0,
-                    0.0,
-                ],
-                target: [tw as f32, th as f32, near, metres_per_w],
-                cut: [0.0; 4],
-                piece: [[0.0; 4]; PIECE_CORNERS / 2],
-            };
-            let buffer = wgpu::util::DeviceExt::create_buffer_init(
-                &ctx.device,
-                &wgpu::util::BufferInitDescriptor {
-                    label: Some("layer-depth-uniform"),
-                    contents: bytemuck::bytes_of(&uniform),
-                    usage: wgpu::BufferUsages::UNIFORM,
-                },
-            );
-            let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("composite-depth-layer"),
-                layout: &self.layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&view(layer.texture)),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::TextureView(&view(&self.white)),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&view(&self.black)),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: wgpu::BindingResource::TextureView(&view(
-                            layer.layer_mask.unwrap_or(&self.white),
-                        )),
-                    },
-                ],
-            })
-        };
-        // Each run's 3D layers, after a clear of where they cover when the run
-        // lies over something. The first run over nothing needs no clear.
-        let mut over = under.is_some();
-        let mut draws: Vec<(Vec<wgpu::BindGroup>, Vec<wgpu::BindGroup>)> = Vec::new();
-        for run in runs {
-            let solid: Vec<&CompositeLayer<'_>> = run.iter().filter(|l| l.three_d).collect();
-            if solid.is_empty() {
-                continue;
-            }
-            let clears = if over {
-                solid.iter().map(|l| bind(l, true)).collect()
-            } else {
-                Vec::new()
-            };
-            draws.push((clears, solid.iter().map(|l| bind(l, false)).collect()));
-            over = true;
-        }
-        let target_view = target.create_view(&Default::default());
-        let mut encoder = ctx.encoder("composite-depth");
-        if let Some(u) = under {
-            encoder.copy_texture_to_texture(
-                u.as_image_copy(),
-                target.as_image_copy(),
-                wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
-                },
-            );
-        }
-        {
-            let far = f64::from(half::f16::MAX.to_f32());
-            let load = match under {
-                Some(_) => wgpu::LoadOp::Load,
-                None => wgpu::LoadOp::Clear(wgpu::Color {
-                    r: far,
-                    g: far,
-                    b: far,
-                    a: 1.0,
-                }),
-            };
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("composite-depth"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &target_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            if let (Some(depth), Some(clear)) = (&pipelines.depth, &pipelines.depth_clear) {
-                for (clears, binds) in &draws {
-                    for (pipeline, list) in [(clear, clears), (depth, binds)] {
-                        if list.is_empty() {
-                            continue;
-                        }
-                        pass.set_pipeline(pipeline);
-                        for bind in list {
-                            pass.set_bind_group(0, bind, &[0]);
-                            pass.draw(0..6, 0..1);
-                        }
-                    }
-                }
-            }
-        }
-        drop(encoder);
-        target
     }
 
     /// Render layers bottom-up over a linear background colour; returns the
@@ -1804,550 +1201,6 @@ impl Compositor {
         )
     }
 
-    /// As [`Self::composite_seeded`], with `cuts` (one per layer, or empty)
-    /// from [`depth_order`]. A piece draws only that part of its layer. An
-    /// unbroken run of layers cut by depth cuts where its layers meet, and a
-    /// layer not cut that way ends the run.
-    #[allow(clippy::too_many_arguments)]
-    pub fn composite_cut(
-        &self,
-        ctx: &GpuContext,
-        width: u32,
-        height: u32,
-        background: [f64; 4],
-        layers: &[CompositeLayer<'_>],
-        camera: Option<Mat4>,
-        seed: Option<&wgpu::Texture>,
-        render_scale: f32,
-        samples: u32,
-        region: Option<Region>,
-        cuts: &[Option<Cut>],
-    ) -> wgpu::Texture {
-        let cut_of = |i: usize| cuts.get(i).copied().flatten();
-        let (tw, th) = match region {
-            Some(r) => r.target_size(render_scale),
-            None => scaled_size(width, height, render_scale),
-        };
-        let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("comp-frame"),
-            size: wgpu::Extent3d {
-                width: tw,
-                height: th,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: ctx.working(),
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let view = target.create_view(&Default::default());
-        // The multisample colour attachment, when anti-aliasing is on: one
-        // texture for the whole composite, whose contents persist between the
-        // pass segments below (docs/impl/anti-aliasing.md §3). It is never read
-        // by anything — every reader takes the resolved `target` — so it wants
-        // no TEXTURE_BINDING, and `RENDER_ATTACHMENT` alone lets a driver keep
-        // it in tiled memory on the hardware that can.
-        // A run cut by depth needs a depth texture at the same count.
-        let samples = if cuts.iter().any(|c| matches!(c, Some(Cut::Depth(_)))) {
-            ctx.cut_sample_count(samples)
-        } else {
-            samples
-        }
-        .max(1);
-        let msaa = (samples > 1).then(|| {
-            self.attachment(
-                ctx,
-                &wgpu::TextureDescriptor {
-                    label: Some("comp-frame-msaa"),
-                    size: wgpu::Extent3d {
-                        width: tw,
-                        height: th,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: samples,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: ctx.working(),
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[],
-                },
-            )
-        });
-        let msaa_view = msaa.as_ref().map(|t| t.create_view(&Default::default()));
-        let pipelines = self.pipelines(ctx, samples, None);
-        // Where a pass draws, and where its result lands. Without MSAA the two
-        // are the same texture and there is no resolve; with it, geometry goes
-        // to the multisample attachment and each pass resolves into `target` —
-        // which is what keeps the snapshot copy and the caller reading a
-        // single-sample picture (trap 3).
-        let attachment = |load: wgpu::LoadOp<wgpu::Color>| match &msaa_view {
-            Some(ms) => wgpu::RenderPassColorAttachment {
-                view: ms,
-                resolve_target: Some(&view),
-                ops: wgpu::Operations {
-                    load,
-                    store: wgpu::StoreOp::Store,
-                },
-            },
-            None => wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load,
-                    store: wgpu::StoreOp::Store,
-                },
-            },
-        };
-        // Snapshot of the accumulation for shader-computed blends: one
-        // per-frame scratch, copied into just before each such layer draws.
-        let needs_snapshot = layers.iter().any(|l| l.blend.uses_snapshot());
-        let snapshot = needs_snapshot.then(|| {
-            ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("comp-dst-snapshot"),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: ctx.working(),
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            })
-        });
-
-        // Every draw's uniform in one buffer, each at its own offset.
-        let size = std::mem::size_of::<LayerUniform>() as u64;
-        let stride = wgpu::util::align_to(
-            size,
-            u64::from(ctx.device.limits().min_uniform_buffer_offset_alignment),
-        );
-        let mut bytes = vec![0u8; (stride * layers.len().max(1) as u64) as usize];
-        for (i, layer) in layers.iter().enumerate() {
-            let uniform = LayerUniform {
-                matrix: layer
-                    .matrix(width as f32, height as f32, camera.as_ref(), region)
-                    .to_cols_array_2d(),
-                params: [
-                    (layer.opacity / 100.0).clamp(0.0, 1.0),
-                    f32::from(layer.matte.is_some()),
-                    f32::from(layer.matte.as_ref().is_some_and(|m| m.luma)),
-                    f32::from(layer.matte.as_ref().is_some_and(|m| m.inverted)),
-                ],
-                target: [tw as f32, th as f32, layer.blend.snapshot_mode(), 0.0],
-                cut: match cut_of(i) {
-                    Some(Cut::Depth(z)) => [z, 0.0, 0.0, 0.0],
-                    Some(Cut::Piece { count, .. }) => [0.0, count as f32, 0.0, 0.0],
-                    None => [0.0; 4],
-                },
-                piece: match cut_of(i) {
-                    Some(Cut::Piece { corners, .. }) => std::array::from_fn(|k| {
-                        let (a, b) = (corners[2 * k], corners[2 * k + 1]);
-                        [a[0], a[1], b[0], b[1]]
-                    }),
-                    _ => [[0.0; 4]; PIECE_CORNERS / 2],
-                },
-            };
-            bytes[i * stride as usize..][..size as usize]
-                .copy_from_slice(bytemuck::bytes_of(&uniform));
-        }
-        let uniforms = wgpu::util::DeviceExt::create_buffer_init(
-            &ctx.device,
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("layer-uniforms"),
-                contents: &bytes,
-                usage: wgpu::BufferUsages::UNIFORM,
-            },
-        );
-        // The draws of one picture, the pieces of a split layer, share one
-        // bind group.
-        type Picture = (
-            wgpu::Texture,
-            Option<wgpu::Texture>,
-            Option<wgpu::Texture>,
-            bool,
-        );
-        // A texture hashes by its id, which never changes.
-        #[allow(clippy::mutable_key_type)]
-        let mut pictures: std::collections::HashMap<Picture, usize> =
-            std::collections::HashMap::new();
-        let mut groups: Vec<wgpu::BindGroup> = Vec::new();
-        let picture_of: Vec<usize> = layers
-            .iter()
-            .map(|layer| {
-                let key = (
-                    layer.texture.clone(),
-                    layer.matte.as_ref().map(|m| m.texture.clone()),
-                    layer.layer_mask.cloned(),
-                    layer.blend.uses_snapshot(),
-                );
-                *pictures.entry(key).or_insert_with(|| {
-                    groups.push(
-                        ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("composite-layer"),
-                            layout: &self.layout,
-                            entries: &[
-                                wgpu::BindGroupEntry {
-                                    binding: 0,
-                                    resource: wgpu::BindingResource::TextureView(
-                                        &layer.texture.create_view(&Default::default()),
-                                    ),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 1,
-                                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 2,
-                                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                                        buffer: &uniforms,
-                                        offset: 0,
-                                        size: wgpu::BufferSize::new(size),
-                                    }),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 3,
-                                    resource: wgpu::BindingResource::TextureView(
-                                        &layer
-                                            .matte
-                                            .as_ref()
-                                            .map(|m| m.texture)
-                                            .unwrap_or(&self.white)
-                                            .create_view(&Default::default()),
-                                    ),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 5,
-                                    resource: wgpu::BindingResource::TextureView(
-                                        &layer
-                                            .layer_mask
-                                            .unwrap_or(&self.white)
-                                            .create_view(&Default::default()),
-                                    ),
-                                },
-                                wgpu::BindGroupEntry {
-                                    binding: 4,
-                                    resource: wgpu::BindingResource::TextureView(
-                                        &if layer.blend.uses_snapshot() {
-                                            snapshot.as_ref().unwrap_or(&self.black)
-                                        } else {
-                                            &self.black
-                                        }
-                                        .create_view(&Default::default()),
-                                    ),
-                                },
-                            ],
-                        }),
-                    );
-                    groups.len() - 1
-                })
-            })
-            .collect();
-
-        let mut encoder = ctx.encoder("composite");
-
-        // Draw in pass segments: shader-computed blends need the accumulated
-        // target copied out first (a copy cannot happen inside a pass).
-        let clear = wgpu::LoadOp::Clear(wgpu::Color {
-            r: background[0],
-            g: background[1],
-            b: background[2],
-            a: background[3],
-        });
-        // A seed replaces the clear: the target starts as the previous
-        // stage's pixels, and every pass loads instead of clearing.
-        //
-        // Without MSAA that is a straight texture copy, as it always was. With
-        // it the copy is invalid — `copy_texture_to_texture` cannot cross sample
-        // counts (trap 1) — so the seed is *drawn* full-frame into the
-        // multisample attachment instead, by `fs_seed`, which reads its own
-        // pixel with `textureLoad` and so reproduces the seed exactly.
-        // `seed_keep` holds the uniform buffer and bind group alive until submit.
-        let mut seed_keep: Option<(wgpu::Buffer, wgpu::BindGroup)> = None;
-        if let Some(s) = seed {
-            match &msaa_view {
-                None => encoder.copy_texture_to_texture(
-                    s.as_image_copy(),
-                    target.as_image_copy(),
-                    wgpu::Extent3d {
-                        width: tw,
-                        height: th,
-                        depth_or_array_layers: 1,
-                    },
-                ),
-                Some(ms) => {
-                    let uniform = LayerUniform {
-                        matrix: self.full_frame_matrix(width, height),
-                        params: [1.0, 0.0, 0.0, 0.0],
-                        target: [tw as f32, th as f32, -1.0, 0.0],
-                        cut: [0.0; 4],
-                        piece: [[0.0; 4]; PIECE_CORNERS / 2],
-                    };
-                    let buffer = wgpu::util::DeviceExt::create_buffer_init(
-                        &ctx.device,
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("composite-seed-uniform"),
-                            contents: bytemuck::bytes_of(&uniform),
-                            usage: wgpu::BufferUsages::UNIFORM,
-                        },
-                    );
-                    let white_view = self.white.create_view(&Default::default());
-                    let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("composite-seed"),
-                        layout: &self.layout,
-                        entries: &[
-                            wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &s.create_view(&Default::default()),
-                                ),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 1,
-                                resource: wgpu::BindingResource::Sampler(&self.sampler),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 2,
-                                resource: buffer.as_entire_binding(),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 3,
-                                resource: wgpu::BindingResource::TextureView(&white_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 5,
-                                resource: wgpu::BindingResource::TextureView(&white_view),
-                            },
-                            wgpu::BindGroupEntry {
-                                binding: 4,
-                                resource: wgpu::BindingResource::TextureView(
-                                    &self.black.create_view(&Default::default()),
-                                ),
-                            },
-                        ],
-                    });
-                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("composite-seed"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: ms,
-                            resolve_target: Some(&view),
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        ..Default::default()
-                    });
-                    if let Some(seed) = &pipelines.seed {
-                        rpass.set_pipeline(seed);
-                    }
-                    rpass.set_bind_group(0, &bind, &[0]);
-                    rpass.draw(0..6, 0..1);
-                    drop(rpass);
-                    seed_keep = Some((buffer, bind));
-                }
-            }
-        }
-        // A run cut by depth draws in three goes. Each layer lays its depth
-        // down, so the nearest one at every pixel is known. Then all that
-        // lies behind that nearest one draws, farthest first, and then the
-        // nearest one over it. What is solid comes out right whatever the
-        // order, and where see-through layers meet, all but the front one go
-        // by the sort.
-        #[derive(Clone, Copy, PartialEq)]
-        enum Go {
-            Plain,
-            Depth,
-            Behind,
-            Front,
-        }
-        let by_depth = |j: usize| matches!(cut_of(j), Some(Cut::Depth(_)));
-        let mut draws: Vec<(usize, Go, Option<usize>)> = Vec::with_capacity(layers.len());
-        let mut i = 0usize;
-        while i < layers.len() {
-            let end = (i..layers.len())
-                .find(|&j| !by_depth(j))
-                .unwrap_or(layers.len());
-            if end == i {
-                draws.push((i, Go::Plain, None));
-                i += 1;
-                continue;
-            }
-            for go in [Go::Depth, Go::Behind, Go::Front] {
-                draws.extend((i..end).map(|j| (j, go, Some(i))));
-            }
-            i = end;
-        }
-        // The depth they test against, made only when a layer is cut.
-        let cut_depth = (draws.len() > layers.len()).then(|| {
-            let depth = ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("comp-cut-depth"),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: samples,
-                dimension: wgpu::TextureDimension::D2,
-                format: CUT_DEPTH,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-            ctx.charge_vram(
-                crate::texture_bytes(CUT_DEPTH, tw, th).saturating_mul(u64::from(samples)),
-            );
-            (
-                self.pipelines(ctx, samples, Some(wgpu::CompareFunction::Less)),
-                self.pipelines(ctx, samples, Some(wgpu::CompareFunction::Equal)),
-                depth.create_view(&Default::default()),
-            )
-        });
-        // A draw that reads the snapshot, which has to be taken first, unless
-        // it is the next piece of the picture just drawn: pieces of a layer
-        // never overlap, so they read the same one.
-        let piece = |idx: usize| matches!(cut_of(idx), Some(Cut::Piece { .. }));
-        let snaps = |k: usize| {
-            let (idx, go, _) = draws[k];
-            go != Go::Depth
-                && layers[idx].blend.uses_snapshot()
-                && !(k > 0 && piece(idx) && piece(draws[k - 1].0) && {
-                    let before = draws[k - 1].0;
-                    picture_of[before] == picture_of[idx] && before != idx
-                })
-        };
-        let mut cleared: Option<usize> = None;
-        let mut first_pass = seed.is_none();
-        let mut k = 0usize;
-        while k < draws.len() {
-            let run = draws[k].2;
-            if snaps(k) {
-                if let Some(snap) = &snapshot {
-                    if first_pass {
-                        // Materialise the background before snapshotting. With
-                        // MSAA this pass resolves too, so the snapshot copy
-                        // below reads a real single-sample background.
-                        let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: Some("composite-clear"),
-                            color_attachments: &[Some(attachment(clear))],
-                            ..Default::default()
-                        });
-                        first_pass = false;
-                    }
-                    encoder.copy_texture_to_texture(
-                        target.as_image_copy(),
-                        snap.as_image_copy(),
-                        wgpu::Extent3d {
-                            width: tw,
-                            height: th,
-                            depth_or_array_layers: 1,
-                        },
-                    );
-                }
-            }
-            // One pass: this draw plus any following fixed-function draws,
-            // and only those of the same run, if it has one.
-            let mut end = k + 1;
-            while end < draws.len() && !snaps(end) && draws[end].2 == run {
-                end += 1;
-            }
-            let depth = match (run, &cut_depth) {
-                (Some(run), Some((_, _, view))) => {
-                    // A run starts with nothing in the way.
-                    let load = if cleared == Some(run) {
-                        wgpu::LoadOp::Load
-                    } else {
-                        wgpu::LoadOp::Clear(0.0)
-                    };
-                    cleared = Some(run);
-                    Some(wgpu::RenderPassDepthStencilAttachment {
-                        view,
-                        depth_ops: Some(wgpu::Operations {
-                            load,
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    })
-                }
-                _ => None,
-            };
-            {
-                // `LoadOp::Load` loads the MULTISAMPLE attachment, whose
-                // contents persist between passes — not the resolve target,
-                // which the API offers no way to load from and which is not
-                // what is wanted anyway (docs/impl/anti-aliasing.md §3).
-                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("composite"),
-                    color_attachments: &[Some(attachment(if first_pass {
-                        clear
-                    } else {
-                        wgpu::LoadOp::Load
-                    }))],
-                    depth_stencil_attachment: depth,
-                    ..Default::default()
-                });
-                first_pass = false;
-                for &(idx, go, _) in &draws[k..end] {
-                    let set = match (go, &cut_depth) {
-                        (Go::Behind, Some((behind, _, _))) => behind,
-                        (Go::Depth | Go::Front, Some((_, front, _))) => front,
-                        _ => &pipelines,
-                    };
-                    let pipeline = match (go, layers[idx].blend) {
-                        (Go::Depth, _) => set.depth.as_ref(),
-                        (_, Blend::Normal) => Some(&set.normal),
-                        (_, Blend::Add) => Some(&set.add),
-                        (_, Blend::Multiply) => Some(&set.multiply),
-                        (_, Blend::Plus) => Some(&set.plus),
-                        _ => Some(&set.snapshot),
-                    };
-                    let Some(pipeline) = pipeline else {
-                        continue;
-                    };
-                    // A piece draws as a fan of triangles over its corners.
-                    let vertices = match cut_of(idx) {
-                        Some(Cut::Piece { count, .. }) => count.saturating_sub(2) as u32 * 3,
-                        _ => 6,
-                    };
-                    rpass.set_pipeline(pipeline);
-                    rpass.set_bind_group(
-                        0,
-                        &groups[picture_of[idx]],
-                        &[(idx as u64 * stride) as u32],
-                    );
-                    rpass.draw(0..vertices, 0..1);
-                }
-            }
-            k = end;
-        }
-        if first_pass {
-            // No layers at all: still clear to the background.
-            let _ = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("composite-clear"),
-                color_attachments: &[Some(attachment(clear))],
-                ..Default::default()
-            });
-        }
-        // Recording ends here; whether the buffer goes to the driver now or at
-        // the end of the frame's batch is the encoder guard's business.
-        // The seed's buffer and bind group are released after it either way —
-        // the recorded commands hold their own references to what they use, so
-        // the deferred submission still has them.
-        drop(encoder);
-        drop(seed_keep);
-        if let Some(msaa) = msaa {
-            self.give_back(ctx, msaa);
-        }
-        target
-    }
-
     /// The premultiplied average of one layer drawn at N sub-frame placements —
     /// the per-layer motion-blur smear (docs/06 §4).
     ///
@@ -2390,6 +1243,7 @@ impl Compositor {
         width: u32,
         height: u32,
         texture: &wgpu::Texture,
+        premultiplied: bool,
         size: (f32, f32),
         samples: &[MbSample],
         three_d: bool,
@@ -2447,6 +1301,7 @@ impl Compositor {
                     three_d,
                     layer_mask: None,
                     pre: s.pre.or(pre),
+                    premultiplied,
                 };
                 let uniform = LayerUniform {
                     matrix: layer
@@ -2459,7 +1314,7 @@ impl Compositor {
                     // averaged result at the caller's 1:1 composite. Full alpha —
                     // the 1/N weight is applied later, in f32, by the add pass.
                     params: [1.0, 0.0, 0.0, 0.0],
-                    target: [tw as f32, th as f32, -1.0, 0.0],
+                    target: [tw as f32, th as f32, -1.0, f32::from(premultiplied)],
                     cut: [0.0; 4],
                     piece: [[0.0; 4]; PIECE_CORNERS / 2],
                 };
@@ -2546,21 +1401,26 @@ impl Compositor {
         // multisample treatment the composite does, resolving into `temp` —
         // which is what the fp32 add pass then reads, single-sample as ever.
         let aa_samples = aa_samples.max(1);
+        // The composite's kept attachment when the shapes agree: every
+        // placement clears it before drawing.
         let temp_msaa = (aa_samples > 1).then(|| {
-            ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("mb-temp-msaa"),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
+            self.attachment(
+                ctx,
+                &wgpu::TextureDescriptor {
+                    label: Some("mb-temp-msaa"),
+                    size: wgpu::Extent3d {
+                        width: tw,
+                        height: th,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: aa_samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: ctx.working(),
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
                 },
-                mip_level_count: 1,
-                sample_count: aa_samples,
-                dimension: wgpu::TextureDimension::D2,
-                format: ctx.working(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            })
+            )
         });
         let temp_msaa_view = temp_msaa
             .as_ref()
@@ -2572,7 +1432,7 @@ impl Compositor {
         let b_view = accum_b.create_view(&Default::default());
 
         // Identity full-frame placement for the add and resolve passes.
-        let ident_matrix = self.full_frame_matrix(width, height);
+        let ident_matrix = self.full_frame_matrix(width, height, None);
         // Full-frame uniform for the add/resolve passes; `px` is the add weight
         // (1/N), applied in f32 by fs_add_f32 (fs_copy_f32 ignores it).
         let full_uniform = |px: f32| {
@@ -2737,6 +1597,9 @@ impl Compositor {
         }
         drop(encoder);
         drop((keep, add_binds));
+        if let Some(msaa) = temp_msaa {
+            self.give_back(ctx, msaa);
+        }
         target
     }
 
@@ -3003,7 +1866,7 @@ impl Compositor {
         weight: f32,
     ) -> wgpu::Buffer {
         let uniform = LayerUniform {
-            matrix: self.full_frame_matrix(width, height),
+            matrix: self.full_frame_matrix(width, height, None),
             params: [weight, 0.0, 0.0, 0.0],
             target: [width as f32, height as f32, -1.0, 0.0],
             cut: [0.0; 4],
@@ -3035,7 +1898,7 @@ impl Compositor {
     ) -> wgpu::Texture {
         // Identity full-frame placement, shared by every pass: the matrix maps
         // the unit quad across the whole target; the weight rides in params.x.
-        let ident_matrix = self.full_frame_matrix(width, height);
+        let ident_matrix = self.full_frame_matrix(width, height, None);
         let uniform_for = |weight: f32| {
             let uniform = LayerUniform {
                 matrix: ident_matrix,
@@ -3274,6 +2137,28 @@ mod tests {
         assert!((q.x - 120.0).abs() < 1e-4 && (q.y - 90.0).abs() < 1e-4);
     }
 
+    /// A layer at the comp's corner with nothing set but its picture.
+    fn bare(texture: &wgpu::Texture, size: (f32, f32)) -> CompositeLayer<'_> {
+        CompositeLayer {
+            texture,
+            size,
+            position: (0.0, 0.0),
+            anchor: (0.0, 0.0),
+            scale: (100.0, 100.0),
+            rotation_deg: 0.0,
+            opacity: 100.0,
+            matte: None,
+            blend: Blend::Normal,
+            z: 0.0,
+            rotation_x_deg: 0.0,
+            rotation_y_deg: 0.0,
+            three_d: false,
+            layer_mask: None,
+            pre: None,
+            premultiplied: false,
+        }
+    }
+
     fn solid_linear(
         ctx: &GpuContext,
         colour: &ColourEngine,
@@ -3317,21 +2202,8 @@ mod tests {
 
         let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 4, 4);
         let layer = CompositeLayer {
-            texture: &red,
-            size: (4.0, 4.0),
-            position: (0.0, 0.0),
-            anchor: (0.0, 0.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
             opacity: 50.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&red, (4.0, 4.0))
         };
         // Background: linear green = sRGB 0,255,0 decoded.
         let g_lin = srgb_decode(1.0);
@@ -3377,47 +2249,18 @@ mod tests {
             8,
             8,
             [0.0, 0.0, 0.0, 0.0],
-            &[CompositeLayer {
-                texture: &white,
-                size: (4.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
-            }],
+            &[bare(&white, (4.0, 8.0))],
         );
 
         // The consumer: full-comp red, gated by the matte's alpha.
         let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
         let consumer = |inverted: bool| CompositeLayer {
-            texture: &red,
-            size: (8.0, 8.0),
-            position: (0.0, 0.0),
-            anchor: (0.0, 0.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
             matte: Some(MatteInput {
                 texture: &matte_tex,
                 luma: false,
                 inverted,
             }),
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&red, (8.0, 8.0))
         };
 
         let shown = render_for_display(
@@ -3467,29 +2310,8 @@ mod tests {
         let compositor = ctx.compositor();
         // sRGB 188 ≈ linear 0.5; a solid, fully-opaque grey fills the comp.
         let grey = solid_linear(&ctx, colour, [188, 188, 188, 255], 8, 8);
-        let matte_tex = compositor.composite(
-            &ctx,
-            8,
-            8,
-            [0.0, 0.0, 0.0, 0.0],
-            &[CompositeLayer {
-                texture: &grey,
-                size: (8.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
-            }],
-        );
+        let matte_tex =
+            compositor.composite(&ctx, 8, 8, [0.0, 0.0, 0.0, 0.0], &[bare(&grey, (8.0, 8.0))]);
         let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 8, 8);
         let out = compositor.composite(
             &ctx,
@@ -3497,25 +2319,12 @@ mod tests {
             8,
             [0.0, 0.0, 0.0, 0.0],
             &[CompositeLayer {
-                texture: &red,
-                size: (8.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
                 matte: Some(MatteInput {
                     texture: &matte_tex,
                     luma: true,
                     inverted: false,
                 }),
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(&red, (8.0, 8.0))
             }],
         );
         let px = crate::fx::common::readback_linear_f32(&ctx, &out, 8, 8).unwrap();
@@ -3547,21 +2356,12 @@ mod tests {
         let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
         let count_white = |z: f32, rotation_x_deg: f32, three_d: bool, camera: Option<Mat4>| {
             let layer = CompositeLayer {
-                texture: &white,
-                size: (8.0, 8.0),
                 position: (16.0, 16.0),
                 anchor: (4.0, 4.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
                 z,
                 rotation_x_deg,
-                rotation_y_deg: 0.0,
                 three_d,
-                layer_mask: None,
-                pre: None,
+                ..bare(&white, (8.0, 8.0))
             };
             let linear = compositor.composite_with_camera(
                 &ctx,
@@ -3601,21 +2401,11 @@ mod tests {
         let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
         let layer = |z: f32| CompositeLayer {
-            texture: &white,
-            size: (8.0, 8.0),
             position: (16.0, 16.0),
             anchor: (4.0, 4.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
             z,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
             three_d: true,
-            layer_mask: None,
-            pre: None,
+            ..bare(&white, (8.0, 8.0))
         };
         let count_white = |z: f32| {
             let linear = compositor.composite_with_camera(
@@ -3657,21 +2447,11 @@ mod tests {
         let blue = solid_linear(&ctx, colour, [0, 0, 255, 255], 16, 16);
         let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
         let card = |deg: f32| CompositeLayer {
-            texture: if deg > 0.0 { &red } else { &blue },
-            size: (16.0, 16.0),
             position: (16.0, 16.0),
             anchor: (8.0, 8.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
             rotation_y_deg: deg,
             three_d: true,
-            layer_mask: None,
-            pre: None,
+            ..bare(if deg > 0.0 { &red } else { &blue }, (16.0, 16.0))
         };
         let depth = compositor.composite_depth(
             &ctx,
@@ -3771,7 +2551,7 @@ mod tests {
             (960.0, 540.0, -1500.0),
             (0.0, 0.0, 0.0),
         );
-        let order: Vec<usize> = depth_order(
+        let order: Vec<usize> = order::depth_order(
             &[card, floor],
             &[false, false],
             cam,
@@ -3946,21 +2726,8 @@ mod tests {
 
         fn plain(texture: &wgpu::Texture, blend: Blend) -> CompositeLayer<'_> {
             CompositeLayer {
-                texture,
-                size: (4.0, 4.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
                 blend,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(texture, (4.0, 4.0))
             }
         }
 
@@ -4032,21 +2799,8 @@ mod tests {
             8,
             [0.0, 0.0, 0.0, 1.0],
             &[CompositeLayer {
-                texture: &white,
-                size: (8.0, 8.0),
-                position: (0.0, 0.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
                 layer_mask: Some(&mask),
-                pre: None,
+                ..bare(&white, (8.0, 8.0))
             }],
         );
         let shown = colour.display(&ctx, &linear, crate::DisplayParams::NEUTRAL);
@@ -4080,21 +2834,8 @@ mod tests {
                 4,
                 [d_lin, d_lin, d_lin, 1.0],
                 &[CompositeLayer {
-                    texture: &src_tex,
-                    size: (4.0, 4.0),
-                    position: (0.0, 0.0),
-                    anchor: (0.0, 0.0),
-                    scale: (100.0, 100.0),
-                    rotation_deg: 0.0,
-                    opacity: 100.0,
-                    matte: None,
                     blend,
-                    z: 0.0,
-                    rotation_x_deg: 0.0,
-                    rotation_y_deg: 0.0,
-                    three_d: false,
-                    layer_mask: None,
-                    pre: None,
+                    ..bare(&src_tex, (4.0, 4.0))
                 }],
             );
             colour.readback8(&ctx, &shown).unwrap()[0]
@@ -4154,21 +2895,8 @@ mod tests {
         let compositor = ctx.compositor();
         let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 4, 4);
         let layer = |blend: Blend| CompositeLayer {
-            texture: &grey,
-            size: (4.0, 4.0),
-            position: (0.0, 0.0),
-            anchor: (0.0, 0.0),
-            scale: (100.0, 100.0),
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
             blend,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&grey, (4.0, 4.0))
         };
         let g_lin = srgb_decode(128.0 / 255.0);
         let bg = [g_lin, g_lin, g_lin, 1.0];
@@ -4205,21 +2933,10 @@ mod tests {
         let grey = solid_linear(&ctx, colour, [128, 128, 128, 255], 8, 8);
         fn layer(tex: &wgpu::Texture, x: f32, blend: Blend) -> CompositeLayer<'_> {
             CompositeLayer {
-                texture: tex,
-                size: (8.0, 8.0),
                 position: (x, 4.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
                 opacity: 60.0,
-                matte: None,
                 blend,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(tex, (8.0, 8.0))
             }
         }
         let bg = [0.1, 0.2, 0.3, 1.0];
@@ -4272,23 +2989,10 @@ mod tests {
             16,
             [0.0, 0.0, 0.0, 1.0],
             &[CompositeLayer {
-                texture: &red,
-                size: (8.0, 8.0),
                 // Comp pixels: the quad covers x 8..16 × y 8..16, the comp's
                 // bottom-right quarter.
                 position: (8.0, 8.0),
-                anchor: (0.0, 0.0),
-                scale: (100.0, 100.0),
-                rotation_deg: 0.0,
-                opacity: 100.0,
-                matte: None,
-                blend: Blend::Normal,
-                z: 0.0,
-                rotation_x_deg: 0.0,
-                rotation_y_deg: 0.0,
-                three_d: false,
-                layer_mask: None,
-                pre: None,
+                ..bare(&red, (8.0, 8.0))
             }],
             None,
             None,
@@ -4342,6 +3046,7 @@ mod tests {
                 w,
                 h,
                 &white,
+                false,
                 (4.0, 4.0),
                 samples,
                 false,
@@ -4472,21 +3177,10 @@ mod tests {
         let compositor = ctx.compositor();
         let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
         let layer = CompositeLayer {
-            texture: &white,
-            size: (8.0, 8.0),
             position: (8.0, 8.0), // centre of a 16×16 comp
             anchor: (4.0, 4.0),   // layer centre
             scale: (50.0, 50.0),  // 8px quad → 4px
-            rotation_deg: 0.0,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(&white, (8.0, 8.0))
         };
         let shown = render_for_display(
             &ctx,
@@ -4513,21 +3207,11 @@ mod tests {
     /// pixels diagonally, which is the artefact anti-aliasing exists to fix.
     fn rotated_quad<'a>(tex: &'a wgpu::Texture, size: f32, deg: f32) -> CompositeLayer<'a> {
         CompositeLayer {
-            texture: tex,
-            size: (size, size),
             position: (size * 0.5, size * 0.5),
             anchor: (size * 0.5, size * 0.5),
             scale: (60.0, 60.0),
             rotation_deg: deg,
-            opacity: 100.0,
-            matte: None,
-            blend: Blend::Normal,
-            z: 0.0,
-            rotation_x_deg: 0.0,
-            rotation_y_deg: 0.0,
-            three_d: false,
-            layer_mask: None,
-            pre: None,
+            ..bare(tex, (size, size))
         }
     }
 

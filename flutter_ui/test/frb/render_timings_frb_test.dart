@@ -74,7 +74,7 @@ void main() {
       // the column used to die in — and must be measured all the same.
       for (var i = 0; i < 2; i++) {
         f.comp.renderFrame(
-          frame: BigInt.zero,
+          frame: 0,
           scale: 1.0,
           mode: BridgePlaybackMode.everyFrame,
         view: 0,

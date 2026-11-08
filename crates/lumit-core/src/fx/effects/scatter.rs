@@ -81,7 +81,7 @@ mod attr {
     match_name = "scatter",
     label = "Scatter",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,

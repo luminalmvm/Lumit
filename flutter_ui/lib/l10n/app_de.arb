@@ -3567,25 +3567,9 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage kommt als Ebene an. Retime-Graphen zeigen die Quellzeit.",
-  "@firstRunAfterEffects": {
-    "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAfterEffectsShortcuts": "After Effects-Tastenkürzel verwenden",
-  "@firstRunAfterEffectsShortcuts": {
-    "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
   "firstRunContinue": "Weiter",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
-  },
-  "firstRunCut": "Footage kommt auf Sequenzebenen an, in der Arbeitsumgebung Cut.",
-  "@firstRunCut": {
-    "description": "First run: what choosing Premiere Pro or Resolve habits does. Sequence layer and Cut (the workspace) are Lumit product terms."
-  },
-  "firstRunCutName": "Premiere Pro oder Resolve",
-  "@firstRunCutName": {
-    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
   },
   "firstRunSetup": "Lumit einrichten",
   "@firstRunSetup": {
@@ -3595,25 +3579,9 @@
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
   },
-  "firstRunTitle": "How do you edit?",
-  "@firstRunTitle": {
-    "description": "Title of the one screen shown the first time Lumit opens."
-  },
-  "firstRunVegas": "Video kommt als Sequenzebene an. Retime-Graphen zeigen die Geschwindigkeit.",
-  "@firstRunVegas": {
-    "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
-  },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
     "description": "First run: the name of the other editor offered. A product name — leave it as it is."
-  },
-  "firstRunVegasRetimeOnly": "Nur den Standard-Retime-Graphen ändern",
-  "@firstRunVegasRetimeOnly": {
-    "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
-  },
-  "firstRunVegasShortcuts": "Vegas-Tastenkürzel verwenden",
-  "@firstRunVegasShortcuts": {
-    "description": "First-run screen: a tick on the Vegas card that loads the Vegas keyboard shortcuts as well. Off by default."
   },
   "flowAlwaysOn": "Immer an",
   "@flowAlwaysOn": {
@@ -11670,10 +11638,6 @@
   "popOutPanel": "Herauslösen",
   "@popOutPanel": {
     "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
-  "popOutPanelBlocked": "Nicht verfügbar",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
   },
   "precompose": "Vorkomponieren",
   "@precompose": {

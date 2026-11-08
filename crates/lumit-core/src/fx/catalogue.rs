@@ -33,8 +33,8 @@ use super::drivers::{
     remap::{Remap, RemapDef},
     ring_wave::{RingWave, RingWaveDef},
     siceliot::{
-        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, ValueNoise,
-        ValueNoiseDef,
+        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, TimeNode, TimeNodeDef,
+        ValueNode, ValueNodeDef, ValueNoise, ValueNoiseDef,
     },
     smooth::{Smooth, SmoothDef},
     split::{Split, SplitDef},
@@ -69,6 +69,7 @@ use super::effects::{
             reverb::{AudioReverb, AudioReverbDef},
         },
     },
+    audio_spectrum::{AudioSpectrum, AudioSpectrumDef},
     bake_points::{BakePoints, BakePointsDef},
     beam::{Beam, BeamDef},
     bezier_warp::{BezierWarp, BezierWarpDef},
@@ -82,11 +83,13 @@ use super::effects::{
     channel_blur::{ChannelBlur, ChannelBlurDef},
     checkbox_control::{CheckboxControl, CheckboxControlDef},
     chromatic_aberration::{ChromaticAberration, ChromaticAberrationDef},
+    clone_deformer::{CloneDeformer, CloneDeformerDef},
     clone_to_points::{CloneToPoints, CloneToPointsDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
     colour_control::{ColourControl, ColourControlDef},
     combine_channels::{CombineChannels, CombineChannelsDef},
     connect_points::{ConnectPoints, ConnectPointsDef},
+    contour_points::{ContourPoints, ContourPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
     crop::{Crop, CropDef},
@@ -95,6 +98,7 @@ use super::effects::{
     custom_shader::{CustomShader, CustomShaderDef},
     datamosh::{Datamosh, DatamoshDef},
     depth::{Depth, DepthDef},
+    depth_points::{DepthPoints, DepthPointsDef},
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
     displacement_map::{DisplacementMap, DisplacementMapDef},
     dof::{Dof, DofDef},
@@ -103,9 +107,11 @@ use super::effects::{
     echo::{Echo, EchoDef},
     emboss::{Emboss, EmbossDef},
     emit_from_image::{EmitFromImage, EmitFromImageDef},
+    energy_line::{EnergyLine, EnergyLineDef},
     exposure::{Exposure, ExposureDef},
     extract_channels::{ExtractChannels, ExtractChannelsDef},
     fill::{Fill, FillDef},
+    film::{Film, FilmDef},
     find_edges::{FindEdges, FindEdgesDef},
     flash::{Flash, FlashDef},
     flow_points::{FlowPoints, FlowPointsDef},
@@ -116,8 +122,10 @@ use super::effects::{
     grid::{Grid, GridDef},
     hue_saturation::{HueSaturation, HueSaturationDef},
     hue_shift::{HueShift, HueShiftDef},
+    intersection_points::{IntersectionPoints, IntersectionPointsDef},
     invert::{Invert, InvertDef},
     iris_wipe::{IrisWipe, IrisWipeDef},
+    jolt::{Jolt, JoltDef},
     label_points::{LabelPoints, LabelPointsDef},
     lens_dirt::{LensDirt, LensDirtDef},
     lens_distort::{LensDistort, LensDistortDef},
@@ -126,7 +134,9 @@ use super::effects::{
     light_wrap::{LightWrap, LightWrapDef},
     lightning::{Lightning, LightningDef},
     linear_wipe::{LinearWipe, LinearWipeDef},
+    luma_fade::{LumaFade, LumaFadeDef},
     lut::{Lut, LutDef},
+    math_points::{MathPoints, MathPointsDef},
     matte_key::{MatteKey, MatteKeyDef},
     median::{Median, MedianDef},
     merge::{Merge, MergeDef},
@@ -166,6 +176,7 @@ use super::effects::{
     saturation::{Saturation, SaturationDef},
     scanlines::{Scanlines, ScanlinesDef},
     scatter::{Scatter, ScatterDef},
+    scene_pass::{PartMatte, PartMatteDef, ScenePass, ScenePassDef},
     scribble::{Scribble, ScribbleDef},
     set_channels::{SetChannels, SetChannelsDef},
     set_matte::{SetMatte, SetMatteDef},
@@ -174,9 +185,12 @@ use super::effects::{
     sharpen::{Sharpen, SharpenDef},
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
     slider_control::{SliderControl, SliderControlDef},
+    smoke::{Smoke, SmokeDef},
+    sort_points::{SortPoints, SortPointsDef},
     spherize::{Spherize, SpherizeDef},
     split_channels::{SplitChannels, SplitChannelsDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
+    srgb_curve::{SrgbCurve, SrgbCurveDef},
     stroke::{Stroke, StrokeDef},
     switch::{Switch, SwitchDef},
     temperature::{Temperature, TemperatureDef},
@@ -184,7 +198,9 @@ use super::effects::{
     texturize::{Texturize, TexturizeDef},
     threshold::{Threshold, ThresholdDef},
     tile::{Tile, TileDef},
+    time_loop::{TimeLoop, TimeLoopDef},
     time_offset::{TimeOffset, TimeOffsetDef},
+    timewarp::{Timewarp, TimewarpDef},
     tint::{Tint, TintDef},
     track_points::{TrackPoints, TrackPointsDef},
     trail::{Trail, TrailDef},
@@ -223,6 +239,7 @@ crate::catalogue![
     HueShiftDef => HueShift,
     ContrastDef => Contrast,
     GammaDef => Gamma,
+    SrgbCurveDef => SrgbCurve,
     TemperatureDef => Temperature,
     LutDef => Lut,
     OcioColourSpaceDef => OcioColourSpace,
@@ -239,6 +256,7 @@ crate::catalogue![
     CropDef => Crop,
     GlowDef => Glow,
     ShakeDef => Shake,
+    JoltDef => Jolt,
     BlockGlitchDef => BlockGlitch,
     ScanlinesDef => Scanlines,
     DatamoshDef => Datamosh,
@@ -281,6 +299,9 @@ crate::catalogue![
     // in the picture.
     ScribbleDef => Scribble,
     StrokeDef => Stroke,
+    // Draws its own light along a line, a mask, a shape or text.
+    AudioSpectrumDef => AudioSpectrum,
+    EnergyLineDef => EnergyLine,
     // Particulate, at the Generate family's end: it makes its own pixels
     // rather than changing the ones that arrived, which is what the Generate
     // family is for, and it is the first entry to declare a data output
@@ -292,11 +313,18 @@ crate::catalogue![
     ScatterDef => Scatter,
     EmitFromImageDef => EmitFromImage,
     PointsAlongPathDef => PointsAlongPath,
+    // Points laid out by a formula, on the pieces of a path, and where
+    // paths cross.
+    MathPointsDef => MathPoints,
+    ContourPointsDef => ContourPoints,
+    IntersectionPointsDef => IntersectionPoints,
     TextToPointsDef => TextToPoints,
     TrackPointsDef => TrackPoints,
     // The consumers, after the producers they read: the
     // stack effects that take a points wire rather than hand one out.
     CloneToPointsDef => CloneToPoints,
+    // What Clone to points drew, changed as one group.
+    CloneDeformerDef => CloneDeformer,
     TrailDef => Trail,
     ConnectPointsDef => ConnectPoints,
     PointsFieldDef => PointsField,
@@ -311,13 +339,20 @@ crate::catalogue![
     RelaxPointsDef => RelaxPoints,
     FlowPointsDef => FlowPoints,
     BakePointsDef => BakePoints,
+    SortPointsDef => SortPoints,
     EchoDef => Echo,
+    // Another layer, a stretch of it played over and over.
+    TimeLoopDef => TimeLoop,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,
     MotionBlurDef => MotionBlur,
+    TimewarpDef => Timewarp,
     MatteKeyDef => MatteKey,
     // Set matte, at the Utility family's end.
     SetMatteDef => SetMatte,
+    // What a 3D precomp knows about its pixels, and a matte from it.
+    ScenePassDef => ScenePass,
+    PartMatteDef => PartMatte,
     // Set channels, beside it: the same question asked of all four channels
     // rather than only of the alpha.
     SetChannelsDef => SetChannels,
@@ -345,6 +380,10 @@ crate::catalogue![
     // Depth of field that reads it, because what it holds is a reading of the
     // shot rather than a look laid over one.
     DepthDef => Depth,
+    // The same analysis, drawn as points through a camera.
+    DepthPointsDef => DepthPoints,
+    // Gas in a box, which the comp's volumetric walk draws.
+    SmokeDef => Smoke,
     // Remove background (docs/08 §3.105), beside Depth: the same tier, the
     // same shape and the other thing a model reads out of a shot. A matte
     // rather than a reading, so it draws its answer into the layer's own alpha
@@ -367,6 +406,7 @@ crate::catalogue![
     ShadowHighlightDef => ShadowHighlight,
     LensFlareDef => LensFlare,
     LensDirtDef => LensDirt,
+    FilmDef => Film,
     // Drop shadow, at the Stylise family's end.
     DropShadowDef => DropShadow,
     // Roughen edges (docs/08 §3.57), at the Stylise family's end after it.
@@ -396,6 +436,7 @@ crate::catalogue![
     VenetianBlindsDef => VenetianBlinds,
     IrisWipeDef => IrisWipe,
     CardWipeDef => CardWipe,
+    LumaFadeDef => LumaFade,
     // The one effect whose program the user writes, appended at the
     // Utility family's end: it is a picture operation like any other, and the
     // only thing unusual about it is where its arithmetic came from.
@@ -501,4 +542,8 @@ crate::catalogue![
     OscillatorDef => Oscillator,
     ValueNoiseDef => ValueNoise,
     RingWaveDef => RingWave,
+    // One number to wire into many parameters, and the clock itself: the
+    // two convenience drivers, the same for every copy.
+    ValueNodeDef => ValueNode,
+    TimeNodeDef => TimeNode,
 ];

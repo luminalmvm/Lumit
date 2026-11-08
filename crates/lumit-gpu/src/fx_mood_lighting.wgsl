@@ -18,7 +18,7 @@
 struct Params {
     light: vec4<f32>,           // scene-linear rgb in the pools; w unused
     shade: vec4<f32>,           // scene-linear rgb between them; w unused
-    inv_scale_z_int_con: vec4<f32>, // x = 1 ÷ pool size, y = depth, z = Intensity ÷ 100, w = Contrast's factor
+    inv_scale_z_int_con: vec4<f32>, // x = 1 ÷ pool size across, y = depth, z = Intensity ÷ 100, w = Contrast's factor
     mix_amt: f32,               // 0..1, blended against the unprocessed input
     matte_on: f32,              // 1 = the matte scales Intensity and Contrast per pixel
     gain: f32,                  // each octave's amplitude, as a share of the last
@@ -27,6 +27,10 @@ struct Params {
     octaves: u32,
     cycle: i32,                 // depth loop length in cells; 0 = no loop
     flags: u32,                 // bit 0 Perlin, bit 1 Turbulent
+    inv_scale_y: f32,           // 1 ÷ pool size down
+    block: u32,                 // pixels a side of the square the field is read once for
+    _pad0: f32,
+    _pad1: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -79,9 +83,13 @@ fn mood_lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         contrast = matte_toward(contrast, 1.0, k);
     }
     let field = FractalField(p.seed, p.octaves, p.gain, p.lacunarity, p.flags, p.cycle);
+    // Each pixel reads the field at the centre of its block. A block of one is
+    // the pixel's own centre.
+    let cell = gid.xy / p.block * p.block;
+    let half = f32(p.block) * 0.5;
     let n = nc_fractal(field,
-                       (f32(xy.x) + 0.5) * p.inv_scale_z_int_con.x,
-                       (f32(xy.y) + 0.5) * p.inv_scale_z_int_con.x,
+                       (f32(cell.x) + half) * p.inv_scale_z_int_con.x,
+                       (f32(cell.y) + half) * p.inv_scale_y,
                        p.inv_scale_z_int_con.y);
     // The field, spread to fill 0..1: a Perlin sum rarely reaches its own ends,
     // and a light that never arrives is not a light.

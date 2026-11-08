@@ -3,8 +3,11 @@
 
 use crate::sequence::MediaSource;
 use crate::MediaError;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::avformat::AVFormatContextInput;
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::ffi;
+#[cfg(not(target_arch = "wasm32"))]
 use std::ffi::CString;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -124,6 +127,7 @@ pub struct FileFacts {
 }
 
 /// The `timecode` tag of a container or one of its streams.
+#[cfg(not(target_arch = "wasm32"))]
 fn timecode_tag(tags: Option<rsmpeg::avutil::AVDictionaryRef>) -> Option<String> {
     let tags = tags?;
     let entry = tags.get(c"timecode", None, 0)?;
@@ -141,6 +145,7 @@ pub const STAND_IN_TAG: &str = "lumit stand-in";
 /// The file came from someone else's machine, so the size is only believed
 /// when it has the file's own shape and is no more than four times as big
 /// each way, which is all a stand-in is ever made smaller by.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn stand_in_size(
     tags: Option<rsmpeg::avutil::AVDictionaryRef>,
     coded: (u32, u32),
@@ -163,6 +168,7 @@ pub(crate) fn stand_in_size(
 ///
 /// ponytail: a mirrored picture, as some front cameras write, is read for its
 /// turn alone. Read the flip as well if mirrored footage ever turns up.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(unsafe_code)]
 pub(crate) fn quarter_turns(par: &ffi::AVCodecParameters) -> u8 {
     // SAFETY: the side data array and its count are the stream's own, read
@@ -198,6 +204,21 @@ pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
             ..FileFacts::default()
         });
     }
+    file_facts(src)
+}
+
+/// The page reads a picture as the browser shows it, in square pixels.
+#[cfg(target_arch = "wasm32")]
+fn file_facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
+    crate::web::probe(src.on_disk()).ok_or_else(crate::no_ffmpeg)?;
+    Ok(FileFacts {
+        pixel_aspect: (1, 1),
+        ..FileFacts::default()
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn file_facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
     let input = open_input(src)?;
     let mut out = FileFacts {
         pixel_aspect: (1, 1),
@@ -230,6 +251,7 @@ pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
 }
 
 /// Whether libav's description of a pixel format carries `flag`.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn pix_fmt_flag(format: i32, flag: u32) -> bool {
     // SAFETY: `av_pix_fmt_desc_get` takes a format value and returns either a
     // pointer to a static descriptor libav owns for the lifetime of the
@@ -246,6 +268,7 @@ pub(crate) fn pix_fmt_flag(format: i32, flag: u32) -> bool {
 /// whatever the file says, and HD video is BT.709. A file that states none is
 /// read as players read it: BT.709 from 720 lines up, BT.601 below. Only the
 /// matrix changes; the ranges swscale worked out stay as they were.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn use_yuv_matrix(
     sws: &mut rsmpeg::swscale::SwsContext,
     colorspace: ffi::AVColorSpace,
@@ -295,6 +318,7 @@ pub(crate) fn use_yuv_matrix(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn codec_name(id: ffi::AVCodecID) -> String {
     rsmpeg::avcodec::AVCodec::find_decoder(id)
         .map(|c| c.name().to_string_lossy().into_owned())
@@ -305,6 +329,7 @@ fn codec_name(id: ffi::AVCodecID) -> String {
 /// file belongs to (`crate::sequence`). A sequence is handed to FFmpeg's
 /// `image2` demuxer as a pattern, so from here down the two are the same thing
 /// — a container with a video stream.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn open_input(src: &MediaSource) -> Result<AVFormatContextInput, MediaError> {
     if let Some((run, fps)) = src.run() {
         return crate::sequence::open_run(&run, fps);
@@ -338,6 +363,42 @@ fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
     if crate::ai::is_ai(src.on_disk()) {
         return crate::ai::probe(src.on_disk());
     }
+    probe_container(src)
+}
+
+/// The page reads a still itself, as a picture of its own size. Nothing else
+/// opens without FFmpeg.
+///
+/// ponytail: the whole picture is read for its size. Read the header alone if
+/// big stills are slow to import.
+#[cfg(target_arch = "wasm32")]
+fn probe_container(src: &MediaSource) -> Result<MediaProbe, MediaError> {
+    if let Some(probe) = crate::web::probe(src.on_disk()) {
+        return Ok(probe);
+    }
+    if !crate::web::reads_still(src.on_disk()) {
+        return Err(crate::no_ffmpeg());
+    }
+    let still = crate::web::read_still(src.on_disk())?;
+    Ok(MediaProbe {
+        duration_seconds: 0.0,
+        container: "still".into(),
+        video: Some(VideoInfo {
+            width: still.width,
+            height: still.height,
+            // What ffmpeg says of any other still.
+            fps_num: 25,
+            fps_den: 1,
+            codec: "still".into(),
+        }),
+        audio: None,
+        more_audio: Vec::new(),
+        timecode: None,
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn probe_container(src: &MediaSource) -> Result<MediaProbe, MediaError> {
     let input = open_input(src)?;
 
     let duration_seconds = if input.duration > 0 {

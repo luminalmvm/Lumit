@@ -79,11 +79,11 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
               ),
             );
 
-        return Container(
+        return paragraphMenu(ui, target, Container(
           color: t.surface0,
           child: ListView(
             children: [
-              textTargetHeading(t, target.name ?? l10n.textNewText),
+              textTargetHeading(t, target.name),
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
                 child: Wrap(
@@ -165,7 +165,7 @@ class _ParagraphPanelFrbState extends State<ParagraphPanelFrb>
               ]),
             ],
           ),
-        );
+        ));
       },
     );
   }

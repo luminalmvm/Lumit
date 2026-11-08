@@ -30,7 +30,8 @@ import 'timeline_extras_frb.dart'
         clipFillAlpha,
         clipFillSelectedAlpha,
         clipWaveColours;
-import 'audio_timeline_clips_frb.dart' show audioClipGainY, audioClipHeader;
+import 'audio_timeline_clips_frb.dart'
+    show audioClipGainY, audioClipHeader, clipGainWords, clipHolds;
 import 'waveform_frb.dart';
 
 /// The room a box leaves at the top and foot of its track.
@@ -61,7 +62,7 @@ typedef CutLaneColours = ({
 
 /// The composition glyph as a picture the painters can draw, made once by
 /// the panel in the name colour, for the clips that play a composition.
-typedef CutGlyph = ({ui.Picture picture, Size size});
+typedef CutGlyph = ({ui.Picture picture, Size size, Color? tint});
 
 /// The edges the pointer is over: the hovered clip's own and, while Linked is
 /// on, the same edge of the clips linked to it, so it is plain both will
@@ -90,6 +91,10 @@ class CutTrackPainter extends CustomPainter {
   final Set<String> selected;
   final ValueListenable<CutDrag?> drag;
   final ValueListenable<CutHover?> hover;
+
+  /// The clip under the pointer, by id: its buttons show while it is, and on
+  /// a picked clip. Null over no clip.
+  final ValueListenable<String?> overClip;
   final Map<String, ui.Image?> thumbs;
   final Map<String, BridgeAudioPeaks> peaks;
 
@@ -102,6 +107,9 @@ class CutTrackPainter extends CustomPainter {
 
   /// A laid-out name, cached by the panel across every track.
   final TextPainter Function(String name) nameOf;
+
+  /// What each Transition effect is called, by its match name.
+  final Map<String, String> transitionNames;
 
   /// Whether the fade handles are drawn: with the Select tool, which is the
   /// one that drags them.
@@ -132,11 +140,13 @@ class CutTrackPainter extends CustomPainter {
     required this.selected,
     required this.drag,
     required this.hover,
+    required this.overClip,
     required this.thumbs,
     required this.peaks,
     required this.soundOnPicture,
     required this.compGlyph,
     required this.nameOf,
+    required this.transitionNames,
     required this.handles,
     required this.dropOn,
     required this.gain,
@@ -228,6 +238,30 @@ class CutTrackPainter extends CustomPainter {
         final b = axis.xOf(end);
         final out = track.clips[i].fadeOut.shape;
         final into = track.clips[i + 1].fadeIn.shape;
+        // A Transition effect is one edge sweeping across, so it draws as the
+        // one line, the part already gone shaded, and its name where it fits.
+        final kind = track.clips[i + 1].transition;
+        if (kind != null && !track.sound) {
+          final swept = Path()..moveTo(a, foot);
+          const steps = 16;
+          for (var k = 1; k <= steps; k++) {
+            final u = k / steps;
+            final gain = clipFadeGain(into, u);
+            swept.lineTo(a + (b - a) * u, foot - gain * (foot - top));
+          }
+          canvas.drawPath(
+              Path.from(swept)
+                ..lineTo(a, top)
+                ..close(),
+              Paint()..color = colours.cross.withValues(alpha: 0.18));
+          canvas.drawPath(swept, paint);
+          final name = nameOf(transitionNames[kind] ?? kind);
+          if (name.width + 8 < b - a && foot - top > name.height + 4) {
+            name.paint(canvas,
+                Offset(a + (b - a - name.width) / 2, foot - name.height - 2));
+          }
+          continue;
+        }
         final falling = Path()..moveTo(a, top);
         final rising = Path()..moveTo(a, foot);
         const steps = 16;
@@ -415,7 +449,7 @@ class CutTrackPainter extends CustomPainter {
     }
     final header = own ? _soundHeader(box) : 0.0;
     _name(canvas, info.name, box,
-        from: clipEdgeWidth + 4, band: header > 0 ? header : null);
+        gainDb: 0, from: clipEdgeWidth + 4, band: header > 0 ? header : null);
   }
 
   /// The outline of the clip's whole source behind its box while an edge is
@@ -471,18 +505,28 @@ class CutTrackPainter extends CustomPainter {
   /// [band] is how much of the box's height the name line has, from its top:
   /// all of it for a picture clip, and the header a sound clip keeps above its
   /// wave.
+  /// The clip's name, and after it its own level while that is off 0 dB, as
+  /// the Audio timeline has it. A long name gives way to the level.
   void _name(Canvas canvas, String name, Rect box,
       {required double from,
+      required double gainDb,
       double? band,
       double room = 0,
       bool ground = false}) {
-    if (name.isEmpty || box.width - from - room < 12) return;
+    final end = box.right - 1 - room;
+    if (name.isEmpty || end - box.left - from < 12) return;
     final text = nameOf(name);
-    canvas.save();
-    canvas.clipRect(Rect.fromLTRB(
-        box.left + 1, box.top + 1, box.right - 1 - room, box.bottom - 1));
+    final level =
+        gainDb.abs() >= 0.05 ? nameOf(clipGainWords(gainDb)) : null;
+    const pad = 4.0;
+    final chipWide = level == null ? 0.0 : level.width + pad * 2;
+    final shows = level != null && end - box.left - from >= chipWide + 16;
     final at = Offset(
         box.left + from, box.top + ((band ?? box.height) - text.height) / 2);
+    final nameEnd = shows ? end - chipWide - 3 : end;
+    canvas.save();
+    canvas.clipRect(
+        Rect.fromLTRB(box.left + 1, box.top + 1, nameEnd, box.bottom - 1));
     // A sound clip on a track too short for a header has its name over its
     // wave, so the name stands on a ground of its own.
     if (ground) {
@@ -494,6 +538,15 @@ class CutTrackPainter extends CustomPainter {
     }
     text.paint(canvas, at);
     canvas.restore();
+    if (!shows) return;
+    final left = min(at.dx + text.width + 4, end - chipWide);
+    final high = min(level.height + 2, (band ?? box.height) - 2);
+    final chip = Rect.fromLTWH(left,
+        box.top + ((band ?? box.height) - high) / 2, chipWide, high);
+    canvas.drawRRect(RRect.fromRectAndRadius(chip, Radius.circular(radius)),
+        Paint()..color = colours.handleFill.withValues(alpha: 0.9));
+    level.paint(
+        canvas, Offset(chip.left + pad, chip.top + (high - level.height) / 2));
   }
 
   /// The header a sound clip keeps for its name above its wave, the Audio
@@ -523,7 +576,11 @@ class CutTrackPainter extends CustomPainter {
             ..strokeWidth = 2
             ..color = colours.drop);
     }
-    final badges = cutBadges(box, picture: !sound);
+    // The buttons on the clip in hand or under the pointer only. A clip with
+    // effects keeps its lit fx in the chips at rest.
+    final badges = overClip.value == id || selected.contains(id)
+        ? cutBadgesOf(track, clip, box, axis, picture: !sound)
+        : const <(CutBadge, Rect)>[];
     if (sound) {
       // The wave has the whole box, as Vegas draws it, and the name stands
       // over it on a ground of its own.
@@ -533,11 +590,14 @@ class CutTrackPainter extends CustomPainter {
       final chips = _chips(canvas, clip, box,
           band: header > 0 ? header : null, badges: badges);
       _name(canvas, clip.sourceName, box,
+          gainDb: clip.gainDb,
           band: header > 0 ? header : null,
           ground: true,
           room: chips,
           from: _glyph(canvas, clip, box,
-              from: clipEdgeWidth + 4, band: header > 0 ? header : null));
+              from: clipEdgeWidth + 4,
+              band: header > 0 ? header : null,
+              ground: true));
       _badges(canvas, clip, badges);
       return;
     }
@@ -608,14 +668,17 @@ class CutTrackPainter extends CustomPainter {
       canvas.restore();
       if (!strip) from += wide + 2;
     }
-    final nameBand =
-        badges.isEmpty && !strip ? above.height : min(above.height, 20.0);
+    // The name keeps to the top band whether the buttons show or not, so it
+    // stays put as the pointer comes and goes.
+    final nameBand = min(above.height, 20.0);
     final chips = _chips(canvas, clip, box, band: nameBand, badges: badges);
     _name(canvas, clip.sourceName, box,
+        gainDb: clip.gainDb,
         band: nameBand,
         room: chips,
         ground: strip,
-        from: _glyph(canvas, clip, box, from: from, band: nameBand));
+        from: _glyph(canvas, clip, box,
+            from: from, band: nameBand, ground: strip));
     _badges(canvas, clip, badges);
     _opacityLine(canvas, clip, box);
   }
@@ -760,7 +823,10 @@ class CutTrackPainter extends CustomPainter {
   /// head of the name line of a clip that plays one. Answers where the name
   /// then starts.
   double _glyph(Canvas canvas, BridgeClip clip, Rect box,
-      {required double from, double? band}) {
+      {required double from, double? band, bool ground = false}) {
+    if (clipHolds(clip)) {
+      return _holdMark(canvas, clip, box, from, band, ground: ground);
+    }
     final glyph = compGlyph;
     if (!clip.sourceIsComp || glyph == null || glyph.size.isEmpty) return from;
     final tall = band ?? box.height;
@@ -770,8 +836,47 @@ class CutTrackPainter extends CustomPainter {
     canvas.clipRect(box.deflate(1));
     canvas.translate(box.left + from, box.top + (tall - side) / 2);
     canvas.scale(side / glyph.size.width, side / glyph.size.height);
+    if (glyph.tint case final tint?) {
+      canvas.saveLayer(Offset.zero & glyph.size,
+          Paint()..colorFilter = ColorFilter.mode(tint, BlendMode.srcIn));
+    }
     canvas.drawPicture(glyph.picture);
+    if (glyph.tint != null) canvas.restore();
     canvas.restore();
+    return from + side + 3;
+  }
+
+  /// A hold says so before its name: the pause mark, two bars in the name's
+  /// colour, on the name's ground where it has one.
+  double _holdMark(
+      Canvas canvas, BridgeClip clip, Rect box, double from, double? band,
+      {required bool ground}) {
+    final tall = band ?? box.height;
+    final side = min(iconSize, tall - 4);
+    if (box.width - from < side + 12) return from;
+    final name = nameOf(clip.sourceName);
+    final colour = name.text?.style?.color;
+    if (colour == null) return from;
+    final top = box.top + (tall - side) / 2;
+    if (ground) {
+      final y = box.top + (tall - name.height) / 2;
+      canvas.drawRRect(
+          // Square on the right, where the name's own ground carries on.
+          RRect.fromRectAndCorners(
+              Rect.fromLTWH(box.left + from - 3, y, side + 3, name.height),
+              topLeft: Radius.circular(radius),
+              bottomLeft: Radius.circular(radius)),
+          Paint()..color = colours.handleFill.withValues(alpha: 0.75));
+    }
+    final paint = Paint()
+      ..color = colour
+      ..strokeWidth = side * 1.5 / 16
+      ..strokeCap = StrokeCap.round;
+    for (final x in [5.0, 11.0]) {
+      final at = box.left + from + side * x / 16;
+      canvas.drawLine(Offset(at, top + side * 3 / 16),
+          Offset(at, top + side * 13 / 16), paint);
+    }
     return from + side + 3;
   }
 
@@ -781,6 +886,8 @@ class CutTrackPainter extends CustomPainter {
   void _wave(
       Canvas canvas, BridgeClip clip, Rect box, CutDrag? held, Color label,
       {bool header = true}) {
+    // A hold plays silence.
+    if (clipHolds(clip)) return;
     final summary = peaks[clip.id.toString()];
     if (summary == null || axis.perFrame <= 0 || fps <= 0) return;
     // A head being trimmed moves the box over a wave that stays put, and a

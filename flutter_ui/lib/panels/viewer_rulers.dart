@@ -119,6 +119,21 @@ class ViewerRulers extends StatefulWidget {
   final Color label;
   final Color guideColour;
 
+  /// A locked guide stays put. It still catches a dragged layer, and its menu
+  /// still answers, which is how it's unlocked.
+  final bool locked;
+
+  /// Whether the rulers count percent of the frame rather than pixels.
+  final bool percent;
+
+  /// The right clicks: on a strip, with whether it's the left one, and on a
+  /// guide, by its place in the list.
+  final void Function(bool vertical, TapUpDetails details)? onRulerMenu;
+  final void Function(int index, TapUpDetails details)? onGuideMenu;
+
+  /// The numbers' type: mono, as every number in the application is.
+  final TextStyle? labelStyle;
+
   const ViewerRulers({
     super.key,
     required this.rulers,
@@ -130,6 +145,11 @@ class ViewerRulers extends StatefulWidget {
     required this.line,
     required this.label,
     required this.guideColour,
+    this.locked = false,
+    this.percent = false,
+    this.onRulerMenu,
+    this.onGuideMenu,
+    this.labelStyle,
   });
 
   @override
@@ -166,6 +186,8 @@ class _ViewerRulersState extends State<ViewerRulers> {
                     picture: widget.picture,
                     compSize: widget.compSize,
                     guides: _drawnGuides(),
+                    percent: widget.percent,
+                    labelStyle: widget.labelStyle,
                     band: widget.band,
                     line: widget.line,
                     label: widget.label,
@@ -214,16 +236,27 @@ class _ViewerRulersState extends State<ViewerRulers> {
       right: guide.vertical ? null : 0,
       bottom: guide.vertical ? 0 : null,
       child: MouseRegion(
-        cursor: guide.vertical
-            ? SystemMouseCursors.resizeLeftRight
-            : SystemMouseCursors.resizeUpDown,
+        cursor: widget.locked
+            ? MouseCursor.defer
+            : guide.vertical
+                ? SystemMouseCursors.resizeLeftRight
+                : SystemMouseCursors.resizeUpDown,
         child: GestureDetector(
           key: ValueKey<String>('viewer-guide-$index'),
-          behavior: HitTestBehavior.opaque,
-          onPanStart: (d) => _start(index, guide.vertical, d.globalPosition),
-          onPanUpdate: (d) => _move(d.globalPosition),
-          onPanEnd: (_) => _end(),
-          onPanCancel: () => setState(() => _drag = null),
+          // Locked, a press goes through to the picture under the line, and
+          // only its menu is left.
+          behavior:
+              widget.locked ? HitTestBehavior.translucent : HitTestBehavior.opaque,
+          onSecondaryTapUp: widget.onGuideMenu == null
+              ? null
+              : (d) => widget.onGuideMenu!(index, d),
+          onPanStart: widget.locked
+              ? null
+              : (d) => _start(index, guide.vertical, d.globalPosition),
+          onPanUpdate: widget.locked ? null : (d) => _move(d.globalPosition),
+          onPanEnd: widget.locked ? null : (_) => _end(),
+          onPanCancel:
+              widget.locked ? null : () => setState(() => _drag = null),
         ),
       ),
     );
@@ -255,6 +288,9 @@ class _ViewerRulersState extends State<ViewerRulers> {
         child: GestureDetector(
           key: ValueKey<String>(key),
           behavior: HitTestBehavior.opaque,
+          onSecondaryTapUp: widget.onRulerMenu == null
+              ? null
+              : (d) => widget.onRulerMenu!(vertical, d),
           onPanStart: (d) => _start(null, vertical, d.globalPosition),
           onPanUpdate: (d) => _move(d.globalPosition),
           onPanEnd: (_) => _end(),
@@ -341,6 +377,8 @@ class ViewerRulerPainter extends CustomPainter {
   final Color line;
   final Color label;
   final Color guideColour;
+  final bool percent;
+  final TextStyle? labelStyle;
 
   const ViewerRulerPainter({
     required this.rulers,
@@ -351,6 +389,8 @@ class ViewerRulerPainter extends CustomPainter {
     required this.line,
     required this.label,
     required this.guideColour,
+    this.percent = false,
+    this.labelStyle,
   });
 
   @override
@@ -404,7 +444,10 @@ class ViewerRulerPainter extends CustomPainter {
     final drawn = vertical ? picture.width : picture.height;
     if (span <= 0 || drawn <= 0) return;
     final scale = drawn / span;
-    final step = viewerRulerStep(scale);
+    // In percent the ruler counts a hundred across the frame, so the ladder is
+    // asked for a round number of those, and it's turned back into pixels.
+    final perUnit = percent ? span / 100 : 1.0;
+    final step = viewerRulerStep(scale * perUnit) * perUnit;
     final hairline = Paint()
       ..color = line
       ..strokeWidth = 1;
@@ -429,7 +472,7 @@ class ViewerRulerPainter extends CustomPainter {
       }
       _tick(canvas, screen,
           vertical: vertical, depth: viewerRulerBand, paint: hairline);
-      _label(canvas, screen, at, vertical: vertical);
+      _label(canvas, screen, at / perUnit, vertical: vertical);
     }
   }
 
@@ -448,27 +491,29 @@ class ViewerRulerPainter extends CustomPainter {
     }
   }
 
-  /// The number beside a major tick, in comp pixels.
-  ///
-  /// The horizontal ruler writes it beside the tick; the vertical one writes it
-  /// the same way up rather than turned on its side — a rotated numeral is a
-  /// number nobody reads at a glance, and the strip is deep enough for two
-  /// digits, which is what a rounded step gives it.
+  /// The number beside a major tick. The left strip's numbers are turned on
+  /// their sides: four digits don't fit across its width, and turned they read
+  /// along the line they count.
   void _label(Canvas canvas, double screen, double value,
       {required bool vertical}) {
     final text = TextPainter(
       text: TextSpan(
         text: value.abs() < 1e-6 ? '0' : value.toStringAsFixed(0),
-        style: TextStyle(color: label, fontSize: 9),
+        style: (labelStyle ?? const TextStyle())
+            .copyWith(color: label, fontSize: 9),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    text.paint(
-      canvas,
-      vertical
-          ? Offset(screen + 2, (viewerRulerBand - text.height) / 2)
-          : Offset(1, screen + 2),
-    );
+    if (vertical) {
+      text.paint(canvas, Offset(screen + 2, 1));
+    } else {
+      canvas
+        ..save()
+        ..translate(1, screen + 2 + text.width)
+        ..rotate(-math.pi / 2);
+      text.paint(canvas, Offset.zero);
+      canvas.restore();
+    }
     text.dispose();
   }
 
@@ -481,5 +526,7 @@ class ViewerRulerPainter extends CustomPainter {
       old.band != band ||
       old.line != line ||
       old.label != label ||
-      old.guideColour != guideColour;
+      old.guideColour != guideColour ||
+      old.percent != percent ||
+      old.labelStyle != labelStyle;
 }

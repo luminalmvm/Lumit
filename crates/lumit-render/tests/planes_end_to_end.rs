@@ -93,6 +93,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -463,8 +464,10 @@ fn graph_cutting(size: u32) -> (Arc<Document>, Uuid, Uuid) {
 
     let mut comp = comp_of(Vec::new());
     comp.graph = Some(CompGraph {
+        widths: Vec::new(),
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes: vec![
             GraphNode::Read {
                 id: read,

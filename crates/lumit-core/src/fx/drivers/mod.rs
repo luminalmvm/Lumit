@@ -70,6 +70,7 @@ pub mod ring_wave;
 pub mod siceliot;
 pub mod smooth;
 pub mod split;
+pub mod walk;
 pub mod wiggle;
 
 /// How many driver nodes one frame's evaluation may visit.
@@ -741,79 +742,6 @@ impl Eval<'_> {
         }
     }
 
-    /// Particulate's particles at layer time `t` on `layer`, walked from the
-    /// in point against `target`, if any ([`points::stepped`]). Each step is
-    /// a fresh walk of the wires at that step's own time, so nothing this walk
-    /// has kept for `t` is read at another.
-    #[allow(clippy::too_many_arguments)]
-    fn stepped(
-        &self,
-        effect: Uuid,
-        inst: &EffectInstance,
-        def: &'static dyn super::registry::EffectDef,
-        layer: &crate::model::Layer,
-        target: Option<&crate::model::Layer>,
-        t: f64,
-        depth: u32,
-    ) -> Option<PointsStream> {
-        use points::stepped::{definition, stream_at, Collider, Inputs};
-        let doc = &self.context.document;
-        let comp = doc.comp(self.context.comp?)?;
-        let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-        let at = |lt: f64| -> Option<Inputs> {
-            let tc = lt + layer.start_offset.0.to_f64();
-            let context = Arc::new(ExpressionContext {
-                comp_time: tc,
-                ..(*self.context).clone()
-            });
-            let ev = Eval {
-                graph: self.graph,
-                context: Arc::clone(&context),
-                audio: self.audio,
-                projection: points::Projection::FLAT,
-                budget: Cell::new(EVAL_BUDGET),
-                streams: RefCell::new(Vec::new()),
-                arenas: RefCell::new(ArenaPool::default()),
-                cross: self.cross,
-                stack: self.stack,
-                clone: self.clone,
-                point: self.point,
-                cloud: self.cloud,
-            };
-            let wired = ev.wires_into(effect, lt, depth);
-            let rows = ev.with_arena(|bag| {
-                resolve_into_arena(
-                    def,
-                    inst,
-                    NodeRef::Effect(effect),
-                    lt,
-                    0.0,
-                    1.0,
-                    &MarkerContext::NONE,
-                    bag,
-                    Arc::clone(&context),
-                    &wired,
-                );
-                bag.get(0)
-                    .map(|b| super::effects::particulate::Particulate::read(b.params))
-            })?;
-            let path = match def.schema().mask_path() {
-                Some((param, self_default)) => {
-                    crate::mask::effect_path_at(inst, param, self_default, Some(layer), lt)
-                }
-                None => crate::mask::MaskPolyline::default(),
-            };
-            let frame = measure::layer_rect(doc, comp, layer, tc, &context)
-                .map_or([comp.width as f32, comp.height as f32], |r| {
-                    [(r[2] - r[0]) as f32, (r[3] - r[1]) as f32]
-                });
-            let collider =
-                target.map(|target| Collider::of(doc, comp, layer, target, tc, &context));
-            Some(Inputs::new(rows, frame, path, collider))
-        };
-        stream_at(definition(doc, comp, layer, inst, target), t, dt, &at)
-    }
-
     /// What driver `node` puts out of `port` at time `t`.
     fn output(&self, node: Uuid, port: &str, t: f64, depth: u32) -> Option<Value> {
         if depth >= MAX_DEPTH || self.budget.get() == 0 {
@@ -1268,6 +1196,8 @@ impl Eval<'_> {
         enum Producer {
             Grid(Box<PointsStream>),
             AlongPath(super::effects::points_along_path::PointsAlongPath),
+            Contours(super::effects::contour_points::ContourPoints),
+            Crossings(super::effects::intersection_points::IntersectionPoints),
             Particulate {
                 points: Box<points::PointsParams>,
                 window_frames: i64,
@@ -1295,6 +1225,25 @@ impl Eval<'_> {
                 "points_along_path" => Some(Producer::AlongPath(
                     super::effects::points_along_path::PointsAlongPath::read(params),
                 )),
+                "math_points" => Some(Producer::Grid(Box::new(
+                    super::effects::math_points::MathPoints::read(params).stream(self.projection),
+                ))),
+                "contour_points" => Some(Producer::Contours(
+                    super::effects::contour_points::ContourPoints::read(params),
+                )),
+                "intersection_points" => Some(Producer::Crossings(
+                    super::effects::intersection_points::IntersectionPoints::read(params),
+                )),
+                "audio_spectrum" => Some(Producer::Grid(Box::new(
+                    super::effects::audio_spectrum::stream(
+                        params,
+                        inst,
+                        layer,
+                        t,
+                        (1.0 / dt, &self.context, self.audio),
+                        self.projection,
+                    ),
+                ))),
                 // Read back from the analysis, so it is finished here as a
                 // lattice is.
                 "track_points" => Some(Producer::Grid(Box::new(
@@ -1305,6 +1254,10 @@ impl Eval<'_> {
                     ),
                 ))),
                 "particulate" => {
+                    // A simulation's particles are only ever on the card.
+                    if points::stepped::sim::wanted(inst) {
+                        return None;
+                    }
                     let particulate = super::effects::particulate::Particulate::read(params);
                     // Births that follow a Density layer depend on a
                     // picture, so they fall out with Scatter's below. Trails
@@ -1357,6 +1310,16 @@ impl Eval<'_> {
             } => (points, window_frames),
             Producer::AlongPath(along) => {
                 let stream = Rc::new(along.stream(&path, self.projection));
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+            Producer::Contours(contours) => {
+                let stream = Rc::new(contours.stream(&path, self.projection));
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+            Producer::Crossings(crossings) => {
+                let stream = Rc::new(crossings.stream(&path, self.projection));
                 self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
                 return Some(stream);
             }
@@ -2241,6 +2204,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -2753,6 +2717,7 @@ mod tests {
                 audio_streams: Default::default(),
                 adjustment: false,
                 pitch_follows_speed: false,
+                audio_routes: Default::default(),
                 retime: None,
                 blend: Default::default(),
                 masks: Vec::new(),

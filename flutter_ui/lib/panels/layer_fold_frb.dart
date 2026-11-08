@@ -22,19 +22,23 @@ import 'package:flutter/services.dart';
 
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/layer_bounds.dart' show isGeometryOptions, meshKindOf;
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+import 'package:lumit_flutter/src/rust/api/routes.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:uuid/uuid.dart';
 
+import 'audio_routes_frb.dart' show writeSend;
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'graph_panel.dart' show DrivenParam;
 import 'light_rows_frb.dart';
+import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
@@ -49,6 +53,10 @@ sealed class LayerFoldRow {
 
 /// A section heading with its own twirl: Transform, Effects, an effect, Audio.
 final class FoldGroupRow extends LayerFoldRow {
+  /// Whether the part of a 3D model this heading names shows, the tick it
+  /// wears beside its twirl. Null on every other heading.
+  final bool? shown;
+
   /// Identifies this group in the open set. Built from ids, not labels, so two
   /// effects of the same kind on one layer open independently.
   final String path;
@@ -64,6 +72,10 @@ final class FoldGroupRow extends LayerFoldRow {
   /// True when [label] is a name somebody typed (a clip's source, a renamed
   /// effect), which is drawn as typed whatever the label case.
   final bool named;
+
+  /// Whether the Audio heading's waveform lane is open, for the tick on its
+  /// menu. Null on every other heading.
+  final bool? waveform;
   const FoldGroupRow({
     required this.path,
     required this.label,
@@ -71,6 +83,8 @@ final class FoldGroupRow extends LayerFoldRow {
     required int depth,
     this.enabled,
     this.named = false,
+    this.shown,
+    this.waveform,
   }) : super(depth);
 }
 
@@ -132,12 +146,36 @@ final class FoldEffectParamRow extends LayerFoldRow {
   /// (`LayerReference.getClipEffects`), and that its keys are in clip time, so
   /// the lane draws them a clip's start along.
   final UuidValue? clip;
+
+  /// This row is one of a placed graph's **Inputs**
+  /// (docs/impl/node-graph-comp.md §5.3), the styles bit again: its own path
+  /// ([inputsPath]) and the layer's Inputs as the list a write reads.
+  final bool inputs;
+
+  /// A Model layer's material row: the style bit's pattern again, read from
+  /// and written to the layer's material rows.
+  final bool material;
+
+  /// A Model layer's Animation or part's row: the style bit's pattern again,
+  /// read from and written to the layer's model rows.
+  final bool model;
+
+  /// Whether this row is one of the layer's **drivers** (the Node graph's
+  /// boxes) rather than an effect: the styles bit's pattern again. What
+  /// differs is the path prefix ([driversPath]) and that a write reads the
+  /// layer's graph nodes; the commit routes to the graph by the engine's
+  /// shared instance lookup.
+  final bool driver;
   const FoldEffectParamRow(this.info, this.param, this.value,
       {required int depth,
       this.driven,
       this.style = false,
       this.group,
-      this.clip})
+      this.clip,
+      this.inputs = false,
+      this.material = false,
+      this.model = false,
+      this.driver = false})
       : super(depth);
 }
 
@@ -148,6 +186,17 @@ final class FoldVolumeRow extends LayerFoldRow {
   /// for a caller that supplied none, which the panel never is.
   final BridgeScalar? scalar;
   const FoldVolumeRow({this.scalar, required int depth}) : super(depth);
+}
+
+/// One send of the layer's sound to a bus: its level, keyed like Volume, and
+/// whether it is taken before the layer's Volume and Pan.
+final class FoldSendRow extends LayerFoldRow {
+  final BridgeSend send;
+
+  /// The bus's name, read off the comp's layers when the rows are built.
+  final String bus;
+  const FoldSendRow(this.send, {required this.bus, required int depth})
+      : super(depth);
 }
 
 /// The layer's Retime: source time in seconds, keyframable like any
@@ -809,11 +858,24 @@ enum FlowRowKind {
       };
 }
 
+/// Whether a layer of [kind] has a Flow switch: footage, and a Precomp, which
+/// is built at the frames either side and flowed between.
+bool hasFlow(BridgeLayerKind kind) =>
+    kind == BridgeLayerKind.footage || kind == BridgeLayerKind.precomp;
+
 /// The waveform lane: the outline names it, the lane side draws the
 /// layer's source peaks through its live in/out/offset.
 final class FoldWaveformRow extends LayerFoldRow {
   const FoldWaveformRow({required int depth}) : super(depth);
 }
+
+/// The channel a multi-channel effect value is read by: the first keyed one,
+/// else the first with an expression, else the first.
+BridgeScalar leadScalar(List<BridgeScalar> channels) =>
+    channels.firstWhere((c) => c is BridgeScalar_Keyframed,
+        orElse: () => channels.firstWhere(
+            (c) => c is BridgeScalar_Expression,
+            orElse: () => channels.first));
 
 /// The keyframes a fold row shows as diamonds on its lane (docs/07 §4.3), or
 /// empty for rows with nothing keyed. A multi-axis transform row has one key
@@ -833,6 +895,10 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
         },
+      FoldSendRow(:final send) => switch (send.level) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
       FoldFlowRow(:final rate) => switch (rate) {
           BridgeScalar_Keyframed(:final field0) => field0,
           _ => const [],
@@ -842,6 +908,12 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
             field0: BridgeScalar_Keyframed(:final field0)
           ) =>
             field0,
+          // A Colour's and a Point's channels key together, from one
+          // stopwatch, so the first keyed channel's times are the row's.
+          BridgeEffectValue_Colour(:final field0) =>
+            rowKeysOf([field0.r, field0.g, field0.b, field0.a]),
+          BridgeEffectValue_Point(:final field0) =>
+            rowKeysOf([field0.x, field0.y]),
           _ => const [],
         },
       // A mask's numbers key like any other scalar; its **shape** keys as whole
@@ -922,6 +994,9 @@ enum RevealFilter {
 
   /// Anything that differs from what a freshly made layer carries.
   modified,
+
+  /// The property rows picked in the Timeline, and nothing else.
+  picked,
 }
 
 /// The rows of [rows] that [filter] admits, and the headings that lead down to
@@ -941,11 +1016,14 @@ enum RevealFilter {
 /// on its own is treated as a possible container, so the mask row above a keyed
 /// feather survives on the same rule the Effects heading does — one rule, not
 /// one per kind of heading.
+/// [picked] and [layerId] say which rows [RevealFilter.picked] keeps.
 List<LayerFoldRow> revealFoldRows(
   List<LayerFoldRow> rows,
   RevealFilter filter, {
   double compWidth = 0,
   double compHeight = 0,
+  String layerId = '',
+  Set<String> picked = const {},
 }) {
   final keep = List<bool>.filled(rows.length, false);
   // The depth of the shallowest row kept since here, or null while nothing has
@@ -960,8 +1038,10 @@ List<LayerFoldRow> revealFoldRows(
     final row = rows[i];
     final container = need != null && row.depth < need;
     if (!container &&
-        !foldRowRevealed(row, filter,
-            compWidth: compWidth, compHeight: compHeight)) {
+        !(filter == RevealFilter.picked
+            ? picked.contains(foldRowPath(layerId, row))
+            : foldRowRevealed(row, filter,
+                compWidth: compWidth, compHeight: compHeight))) {
       continue;
     }
     keep[i] = true;
@@ -1049,9 +1129,14 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
         read(transform, group.axes.first.prop),
       FoldRetimeRow(:final scalar) => scalar,
       FoldVolumeRow(:final scalar) => scalar,
+      FoldSendRow(:final send) => send.level,
       FoldFlowRow(:final rate) => rate,
       FoldEffectParamRow(value: BridgeEffectValue_Float(:final field0)) =>
         field0,
+      FoldEffectParamRow(value: BridgeEffectValue_Colour(:final field0)) =>
+        leadScalar([field0.r, field0.g, field0.b, field0.a]),
+      FoldEffectParamRow(value: BridgeEffectValue_Point(:final field0)) =>
+        leadScalar([field0.x, field0.y]),
       FoldMaskValueRow(:final mask, :final value, :final vertex) =>
         value == MaskValue.path ? null : maskScalarOf(mask, value, vertex),
       FoldStrokeValueRow(:final stroke, :final value) =>
@@ -1071,13 +1156,14 @@ BridgeScalar? foldRowScalar(LayerFoldRow row) => switch (row) {
 /// parameter, the Volume — and those are compared with it. The rest exist only
 /// because somebody made them: an effect applied, a mask drawn, a stroke
 /// painted, a Retime switched on, a shape drawn, a text animator added. A row
-/// like that *is* the modification, whatever its numbers say, which is the
-/// same call the engine makes for the groups (`reveal_groups`).
+/// like that *is* the modification, which is the same call the engine makes
+/// for the groups (`reveal_groups`). The numbers under it are compared with
+/// what it was made with.
 bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
     switch (row) {
       FoldTransformRow(:final group, :final transform) => group.axes.any((a) {
           final scalar = read(transform, a.prop);
-          final fresh = _transformDefault(a.prop, compWidth, compHeight);
+          final fresh = transformDefault(a.prop, compWidth, compHeight);
           // No default to compare against — the Anchor, whose seeded value is
           // the source's own half-size, and Position with no comp size to
           // hand. Only its animation can say anything, and that has been asked
@@ -1093,6 +1179,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
           BridgeScalar_Static(:final field0) => field0 != 0,
           _ => true,
         },
+      FoldSendRow() => true,
       FoldEffectParamRow(:final param, :final value) =>
         value != null && value != defaultEffectValue(param.kind),
       // A heading is a container, save for an effect's or a style's own: one
@@ -1100,22 +1187,92 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
       // alone, so its name shows and the untouched parameters under it do not.
       FoldGroupRow(:final path) =>
         effectIdOfPath(path) != null || styleIdOfPath(path) != null,
+      // The shape is the mask itself, and a point's own width is there only
+      // because somebody switched it on. The rest have a fresh value.
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        switch (value) {
+          MaskValue.path || MaskValue.vertexFeather => true,
+          MaskValue.opacity => _differs(mask.opacity, 100),
+          _ => _differs(maskScalarOf(mask, value, vertex), 0),
+        },
+      FoldStrokeValueRow(:final stroke, :final value) => _differs(
+          strokeScalarOf(stroke, value), value == StrokeValue.end ? 100 : 0),
+      FoldPuppetValueRow(:final pin, :final value) => _differs(
+          puppetScalarOf(pin, value),
+          switch (value) {
+            PuppetValue.rotation => 0,
+            PuppetValue.scale => 100,
+            _ => null,
+          }),
+      FoldAnimatorValueRow(:final animator, :final value) => _differs(
+          textAnimatorScalarOf(animator, value), textAnimatorDefault(value)),
+      FoldShapeValueRow(:final value) => value == ShapeValue.path ||
+          _differs(row.scalar, shapeValueDefault(value)),
       FoldRetimeRow() ||
       FoldFlowRow() ||
       FoldMaskRow() ||
-      FoldMaskValueRow() ||
       FoldStrokeRow() ||
-      FoldStrokeValueRow() ||
       FoldPuppetPinRow() ||
-      FoldPuppetValueRow() ||
       FoldShapeRow() ||
       FoldShapeModifierRow() ||
       FoldShapeGroupRow() ||
-      FoldShapeValueRow() ||
-      FoldShapePaintRow() ||
-      FoldAnimatorValueRow() =>
+      FoldShapePaintRow() =>
         true,
       FoldWaveformRow() || FoldSettingRow() => false,
+    };
+
+/// Whether [scalar] reads other than [fresh], the value it is made with. A
+/// value with no fresh one to compare, a pin's place or a shape's size, says
+/// nothing, as the Anchor does.
+bool _differs(BridgeScalar scalar, double? fresh) => switch (scalar) {
+      _ when fresh == null => false,
+      BridgeScalar_Static(:final field0) => (field0 - fresh).abs() > 1e-6,
+      _ => true,
+    };
+
+/// What a shape's number is made with: an item's own, and a modifier's as the
+/// Add menu puts one down. Null where that depends on the art, a size or a
+/// centre, or where nothing is put down until somebody picks one.
+double? shapeValueDefault(ShapeValue value) => switch (value) {
+      ShapeValue.opacity ||
+      ShapeValue.gradientStartOpacity ||
+      ShapeValue.gradientEndOpacity ||
+      ShapeValue.gradientStopOpacity ||
+      ShapeValue.trimEnd ||
+      ShapeValue.repeatScale ||
+      ShapeValue.repeatStartOpacity ||
+      ShapeValue.repeatEndOpacity ||
+      ShapeValue.deformScale ||
+      ShapeValue.taperStart ||
+      ShapeValue.taperEnd =>
+        100,
+      ShapeValue.roundness ||
+      ShapeValue.shapeRotation ||
+      ShapeValue.outerRoundness ||
+      ShapeValue.innerRoundness ||
+      ShapeValue.trimStart ||
+      ShapeValue.trimOffset ||
+      ShapeValue.dashOffset ||
+      ShapeValue.repeatOffset ||
+      ShapeValue.repeatAnchorX ||
+      ShapeValue.repeatAnchorY ||
+      ShapeValue.repeatPositionY ||
+      ShapeValue.repeatRotation ||
+      ShapeValue.twistRotation ||
+      ShapeValue.twistAxis ||
+      ShapeValue.deformEvolution ||
+      ShapeValue.deformSeed ||
+      ShapeValue.taperEase =>
+        0,
+      ShapeValue.taperStartLength || ShapeValue.taperEndLength => 50,
+      ShapeValue.repeatCopies => 3,
+      ShapeValue.deformDetail => 4,
+      ShapeValue.offsetPath ||
+      ShapeValue.twistAngle ||
+      ShapeValue.deformAmount ||
+      ShapeValue.smoothAmount =>
+        10,
+      _ => null,
     };
 
 /// What a transform axis reads on a layer nobody has touched, or null for an
@@ -1125,7 +1282,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
 /// (`centred_transform`). The Anchor is the source's own middle, and the source
 /// is not this file's to know — so it is exempt, exactly as the engine exempts
 /// it when it answers the same question for the groups.
-double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
+double? transformDefault(BridgeTransformProp prop, double w, double h) =>
     switch (prop) {
       BridgeTransformProp.anchorX || BridgeTransformProp.anchorY => null,
       BridgeTransformProp.positionX => w > 0 ? w / 2 : null,
@@ -1160,8 +1317,22 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
       // Seeded from the comp, as a camera's are.
       BridgeTransformProp.lightWidth || BridgeTransformProp.lightHeight => null,
       BridgeTransformProp.shadowDarkness => 100,
+      // A fresh light's haze.
+      BridgeTransformProp.hazeAmount => 0,
+      BridgeTransformProp.hazeDensity || BridgeTransformProp.hazeScatter => 30,
+      BridgeTransformProp.hazeNoise => 40,
+      BridgeTransformProp.hazeNoiseSize => 300,
+      BridgeTransformProp.hazeColourR ||
+      BridgeTransformProp.hazeColourG ||
+      BridgeTransformProp.hazeColourB =>
+        1,
+      BridgeTransformProp.hazeFalloff ||
+      BridgeTransformProp.hazeNoiseSpeed ||
+      BridgeTransformProp.backgroundBlur =>
+        0,
       BridgeTransformProp.shadowDiffusion ||
-      BridgeTransformProp.lightTransmission =>
+      BridgeTransformProp.lightTransmission ||
+      BridgeTransformProp.reflection =>
         0,
       // After Effects' Material options defaults.
       BridgeTransformProp.ambient || BridgeTransformProp.metal => 100,
@@ -1566,6 +1737,9 @@ BridgeShapeItem shapeItemWith(
   bool removeTaper = false,
   bool removeFill = false,
   bool removeStroke = false,
+  bool? hidden,
+  bool? fillHidden,
+  bool? strokeHidden,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
@@ -1628,6 +1802,9 @@ BridgeShapeItem shapeItemWith(
           _ => item.gradientStops,
         },
     combine: combine ?? item.combine,
+    hidden: hidden ?? item.hidden,
+    fillHidden: fillHidden ?? item.fillHidden,
+    strokeHidden: strokeHidden ?? item.strokeHidden,
     pathKeys: item.pathKeys,
     // Writing a dash or a gap into an item that has neither makes the pair:
     // there is no separate "add dashes" gesture, and a list of one would only
@@ -1764,7 +1941,7 @@ BridgeScalar modifierScalarOf(BridgeShapeModifier modifier, ShapeValue value) =>
 /// [modifier] with the one number [value] names replaced by [to], or with
 /// its deform reading set to [deformMode].
 BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
-    {ShapeValue? value, BridgeScalar? to, int? deformMode}) {
+    {ShapeValue? value, BridgeScalar? to, int? deformMode, bool? hidden}) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
   final kind = switch (modifier.kind) {
@@ -1809,7 +1986,12 @@ BridgeShapeModifier modifierWith(BridgeShapeModifier modifier,
         endOpacity: at(ShapeValue.repeatEndOpacity, field0.endOpacity),
       )),
   };
-  return BridgeShapeModifier(id: modifier.id, name: modifier.name, kind: kind);
+  return BridgeShapeModifier(
+      id: modifier.id,
+      name: modifier.name,
+      kind: kind,
+      hidden: hidden ?? modifier.hidden,
+      own: modifier.own);
 }
 
 /// The whole list with the one number [row] names replaced by [to]: on its
@@ -1860,12 +2042,15 @@ BridgeRational timeOfSubframe(double frame, int fpsNum, int fpsDen) {
 /// so an exception part-way through a gesture must not cost the session its
 /// history as well. A null [project] — a widget test with no project open —
 /// simply runs [body], which is what leaves this safe to call unconditionally.
-void asOneUndoStep(ProjectReference? project, void Function() body) {
+void asOneUndoStep(ProjectReference? project, void Function() body,
+    {String? name}) {
   if (project == null) {
     body();
     return;
   }
   project.beginUndoGroup();
+  // The step's name in the History list, where the command has its own.
+  if (name != null) project.nameUndoGroup(name: name);
   try {
     body();
   } finally {
@@ -1958,7 +2143,11 @@ bool moveLaneKeys({
         :final param,
         :final style,
         :final group,
-        clip: final clipId
+        clip: final clipId,
+        :final inputs,
+        :final material,
+        :final model,
+        :final driver,
       ):
       // Whichever list holds it — a style's keys move exactly as an effect's
       // do, and a group header's and a clip's the same way. The row
@@ -1970,12 +2159,55 @@ bool moveLaneKeys({
       } else if (group != null) {
         if (comp == null) return false;
         stack = comp.getGroupEffects(group: group);
+      } else if (inputs) {
+        stack = graphInputsOf(entry.layer);
+      } else if (material) {
+        stack = entry.layer.getMaterials();
+      } else if (model) {
+        stack = entry.layer.getModelRows();
+      } else if (driver) {
+        stack = entry.layer.getGraphDrivers();
       } else {
         stack = style ? entry.layer.getStyles() : entry.layer.getEffects();
       }
+      // Every keyed channel of a Colour or a Point moves, or none, each finding
+      // its own key by time: the Graph can key one channel alone.
+      final rowKeys = laneKeysOf(row);
+      BridgeScalar? movedChannel(BridgeScalar s) {
+        if (s is! BridgeScalar_Keyframed) return s;
+        final own = {
+          for (final MapEntry(key: i, value: time) in times.entries)
+            if (axisKeyIndex(rowKeys, i, s.field0) case final j?) j: time,
+        };
+        if (own.isEmpty) return s;
+        final next = movedBy(own, s.field0);
+        return next == null ? null : BridgeScalar.keyframed(next);
+      }
+
       for (final instance in stack) {
         if (instance.id() != info.id) continue;
         final value = instance.getValue(id: param.id);
+        if (value case BridgeEffectValue_Colour(field0: final c)) {
+          final ch = [c.r, c.g, c.b, c.a].map(movedChannel).toList();
+          if (ch.any((s) => s == null)) return false;
+          instance.setValue(
+            id: param.id,
+            value: BridgeEffectValue.colour(
+                BridgeColour(r: ch[0]!, g: ch[1]!, b: ch[2]!, a: ch[3]!)),
+          );
+          entry.layer.setEffects(effects: stack);
+          return true;
+        }
+        if (value case BridgeEffectValue_Point(field0: final p)) {
+          final ch = [p.x, p.y].map(movedChannel).toList();
+          if (ch.any((s) => s == null)) return false;
+          instance.setValue(
+            id: param.id,
+            value: BridgeEffectValue.point(BridgePoint(x: ch[0]!, y: ch[1]!)),
+          );
+          entry.layer.setEffects(effects: stack);
+          return true;
+        }
         if (value is! BridgeEffectValue_Float) return false;
         final scalar = value.field0;
         if (scalar is! BridgeScalar_Keyframed) return false;
@@ -2002,6 +2234,13 @@ bool moveLaneKeys({
       final next = moved(scalar.field0);
       if (next == null) return false;
       entry.layer.setVolumeDb(value: BridgeScalar.keyframed(next));
+      return true;
+
+    case FoldSendRow(:final send):
+      if (send.level is! BridgeScalar_Keyframed) return false;
+      final next = moved((send.level as BridgeScalar_Keyframed).field0);
+      if (next == null) return false;
+      writeSend(entry.layer, send.bus, level: BridgeScalar.keyframed(next));
       return true;
 
     case FoldMaskValueRow(:final mask, :final value, :final vertex):
@@ -2141,10 +2380,19 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${effectPath(clipFoldPrefix(c), info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, group: final g?) =>
         '${effectPath(groupFoldPrefix(g), info.id.toString())}/${param.id}',
+      FoldEffectParamRow(:final param, inputs: true) =>
+        '${inputsPath(layerId)}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, material: true) =>
+        '${modelMaterialPath(layerId, info.id.toString())}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, model: true) =>
+        '${info.name == 'model_part' ? modelPartPath(layerId, info.id.toString()) : modelAnimationPath(layerId)}/${param.id}',
+      FoldEffectParamRow(:final info, :final param, driver: true) =>
+        '${driverPath(layerId, info.id.toString())}/${param.id}',
       FoldEffectParamRow(:final info, :final param, :final style) =>
         '${style ? stylePath(layerId, info.id.toString()) : effectPath(layerId, info.id.toString())}'
             '/${param.id}',
       FoldVolumeRow() => '${audioPath(layerId)}/volume',
+      FoldSendRow(:final send) => '${sendsPath(layerId)}/${send.bus}',
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
@@ -2253,8 +2501,7 @@ List<LayerFoldRow> groupHeaderFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...cachedListParameters(fx.name),
-        ...fx.derivedParams,
+        ...instanceParameters(fx),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 2, group: group.id));
@@ -2305,8 +2552,7 @@ List<LayerFoldRow> clipFoldRows({
     if (fxOpen) {
       final values = {for (final v in fx.values) v.id: v.value};
       for (final param in [
-        ...cachedListParameters(fx.name),
-        ...fx.derivedParams,
+        ...instanceParameters(fx),
       ]) {
         rows.add(FoldEffectParamRow(fx, param, values[param.id],
             depth: 3, clip: clip.id));
@@ -2315,6 +2561,16 @@ List<LayerFoldRow> clipFoldRows({
   }
   return rows;
 }
+
+/// The path of a placed graph's **Inputs** group, and with a parameter's id
+/// after it, of each of its rows: there is only ever one instance.
+String inputsPath(String layerId) => '$layerId/inputs';
+
+/// The path of a Model layer's **Materials** group, and of one material in
+/// it.
+String materialsPath(String layerId) => '$layerId/materials';
+String modelMaterialPath(String layerId, String materialId) =>
+    '${materialsPath(layerId)}/$materialId';
 
 /// The path of a layer's **Styles** group.
 String stylesPath(String layerId) => '$layerId/styles';
@@ -2325,6 +2581,14 @@ String stylesPath(String layerId) => '$layerId/styles';
 /// else.
 String stylePath(String layerId, String styleId) =>
     '${stylesPath(layerId)}/$styleId';
+
+/// The path of a layer's **Drivers** group: the Node graph's driver boxes,
+/// whose rows key and drag as an effect's do.
+String driversPath(String layerId) => '$layerId/drivers';
+
+/// The path of one driver within it.
+String driverPath(String layerId, String driverId) =>
+    '${driversPath(layerId)}/$driverId';
 
 /// The effect instance a fold path names, or null when the path is not one
 /// effect's heading (it is the Effects group itself, one parameter under an
@@ -2374,6 +2638,9 @@ String masksPath(String layerId) => '$layerId/masks';
 /// The path of a shape layer's Contents group.
 String contentsPath(String layerId) => '$layerId/contents';
 
+/// The path of the heading over a shape layer's global modifiers.
+String globalModifiersPath(String layerId) => '${contentsPath(layerId)}/global';
+
 /// The path of a layer's Paint group.
 String paintPath(String layerId) => '$layerId/paint';
 
@@ -2382,6 +2649,9 @@ String puppetPath(String layerId) => '$layerId/puppet';
 
 /// The path of a layer's Audio group.
 String audioPath(String layerId) => '$layerId/audio';
+
+/// The path of the Sends heading on an Audio timeline track.
+String sendsPath(String layerId) => '$layerId/sends';
 
 /// The path of the Waveform twirl inside the Audio group.
 String waveformPath(String layerId) => '$layerId/audio/waveform';
@@ -2415,7 +2685,7 @@ List<LayerFoldRow> layerFoldRows({
   final groups = transformGroups(
     threeD: info.switches.threeD,
     modes: info.axisModes,
-    kind: info.kind,
+    kind: meshKindOf(info),
     twoNode: info.camera?.twoNode ?? false,
     light: info.light,
     material: info.material,
@@ -2445,7 +2715,10 @@ List<LayerFoldRow> layerFoldRows({
       depth: 1,
     ));
     if (flowOpen) {
+      final footage = info.kind == BridgeLayerKind.footage;
       for (final kind in FlowRowKind.values) {
+        // A Precomp's in-between is made by the built-in engine alone.
+        if (!footage && kind == FlowRowKind.engine) continue;
         rows.add(FoldFlowRow(
           kind,
           rate: kind == FlowRowKind.inputRate ? info.flowInputRate : null,
@@ -2462,6 +2735,15 @@ List<LayerFoldRow> layerFoldRows({
     open: transformOpen,
     depth: 1,
   ));
+  if (transformOpen &&
+      layerSettings(
+              kind: meshKindOf(info),
+              light: info.light,
+              threeD: info.switches.threeD,
+              twoNode: info.camera?.twoNode ?? false)
+          .contains(LayerSetting.orient)) {
+    rows.add(FoldSettingRow(LayerSetting.orient, info, depth: 2));
+  }
   for (final group in groups) {
     if (group.section != TransformSection.transform) continue;
     if (transformOpen || open.contains(transformGroupPath(id, group))) {
@@ -2474,7 +2756,7 @@ List<LayerFoldRow> layerFoldRows({
   // about the lens or the light rather than about where the layer stands. A
   // light's choice rows head its list.
   final settings = layerSettings(
-      kind: info.kind, light: info.light, threeD: info.switches.threeD);
+      kind: meshKindOf(info), light: info.light, threeD: info.switches.threeD);
   for (final (section, path, label) in [
     (TransformSection.camera, cameraOptionsPath(id), l10n.cameraOptions),
     (TransformSection.light, lightOptionsPath(id), l10n.lightOptions),
@@ -2504,12 +2786,15 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
-  // Material options, beside Transform rather than inside it.
+  // Material options, beside Transform rather than inside it. A Model layer
+  // has the switches and none of the numbers.
   final material = [
     for (final g in groups)
       if (g.section == TransformSection.material) g
   ];
-  if (material.isNotEmpty && !soloed) {
+  final materialSwitches =
+      settings.any((s) => s.section == TransformSection.material);
+  if ((material.isNotEmpty || materialSwitches) && !soloed) {
     final materialOpen = open.contains(materialPath(id));
     rows.add(FoldGroupRow(
       path: materialPath(id),
@@ -2531,6 +2816,33 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
+  addModelFoldRows(rows: rows, info: info, id: id, open: open, driven: driven);
+
+  // A placed node graph's Inputs, where Contents would be: they make the
+  // layer's picture, which the masks then gate and the effects process. The
+  // rows are the ordinary effect rows, so they key, drag and ease as any do.
+  if (info.graphInputs case final inputs?
+      when inputs.derivedParams.isNotEmpty) {
+    final inputsOpen = open.contains(inputsPath(id));
+    rows.add(FoldGroupRow(
+      path: inputsPath(id),
+      label: l10n.foldInputs,
+      open: inputsOpen,
+      depth: 1,
+    ));
+    if (inputsOpen) {
+      // The graph's own rows only: the declared Mix and Matte do nothing on a
+      // layer that places it.
+      final values = {for (final v in inputs.values) v.id: v.value};
+      for (final param in inputs.derivedParams) {
+        rows.add(FoldEffectParamRow(inputs, param, values[param.id],
+            depth: 2,
+            inputs: true,
+            driven: driven['${inputs.id}/${param.id}']));
+      }
+    }
+  }
+
   // Contents first of the three: a shape layer's art *is* its picture, so it
   // comes before the masks that gate that picture and the effects that process
   // it (docs/06 render order).
@@ -2544,9 +2856,27 @@ List<LayerFoldRow> layerFoldRows({
     ));
     if (contentsOpen) {
       final entries = info.shapeContents;
+      // The modifiers at the end that act on every shape go under a heading
+      // of their own, below all the art.
+      final globalFrom = entries.globalStart;
+      // A modifier's row and, open, its numbers under it.
+      void modifierRows(BridgeShapeModifier modifier, int depth, bool open) {
+        rows.add(FoldShapeModifierRow(modifier, open: open, depth: depth));
+        if (!open) return;
+        for (final value in modifierValues(modifier)) {
+          // Displace or Scale heads the deform's numbers, which it
+          // decides the meaning of.
+          if (value == ShapeValue.deformAmount) {
+            rows.add(FoldShapePaintRow(null, ShapePaint.deformMode,
+                modifier: modifier, depth: depth + 1));
+          }
+          rows.add(FoldShapeValueRow(null, value,
+              modifier: modifier, depth: depth + 1));
+        }
+      }
       // The depth of a shut group whose entries are being passed over.
       int? shutUnder;
-      for (final (index, entry) in entries.indexed) {
+      for (final (index, entry) in entries.indexed.take(globalFrom)) {
         if (shutUnder != null && entry.depth > shutUnder) continue;
         shutUnder = null;
         // Each entry has its own twirl, shut until opened, like an animator:
@@ -2560,19 +2890,8 @@ List<LayerFoldRow> layerFoldRows({
             rows.add(FoldShapeGroupRow(field0, open: entryOpen, depth: depth));
             if (!entryOpen) shutUnder = entry.depth;
           case BridgeShapeEntryKind_Modifier(:final field0):
-            rows.add(
-                FoldShapeModifierRow(field0, open: entryOpen, depth: depth));
-            if (!entryOpen) continue;
-            for (final value in modifierValues(field0)) {
-              // Displace or Scale heads the deform's numbers, which it
-              // decides the meaning of.
-              if (value == ShapeValue.deformAmount) {
-                rows.add(FoldShapePaintRow(null, ShapePaint.deformMode,
-                    modifier: field0, depth: depth + 1));
-              }
-              rows.add(FoldShapeValueRow(null, value,
-                  modifier: field0, depth: depth + 1));
-            }
+            // One that is its shape's own sits a little in, under it.
+            modifierRows(field0, field0.own ? depth + 1 : depth, entryOpen);
           case BridgeShapeEntryKind_Item(field0: final item):
             rows.add(FoldShapeRow(item, open: entryOpen, depth: depth));
             if (!entryOpen) continue;
@@ -2664,6 +2983,24 @@ List<LayerFoldRow> layerFoldRows({
             }
         }
       }
+      if (globalFrom < entries.length) {
+        final path = globalModifiersPath(id);
+        final globalOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          label: l10n.shapeGlobalModifiers,
+          open: globalOpen,
+          depth: 2,
+        ));
+        if (globalOpen) {
+          for (final entry in entries.sublist(globalFrom)) {
+            if (entry.kind case BridgeShapeEntryKind_Modifier(:final field0)) {
+              modifierRows(field0, 3,
+                  open.contains('${contentsPath(id)}/${field0.id}'));
+            }
+          }
+        }
+      }
     }
   }
 
@@ -2695,7 +3032,9 @@ List<LayerFoldRow> layerFoldRows({
           named: true,
         ));
         if (!animatorOpen) continue;
+        final solid = meshKindOf(info) == BridgeLayerKind.model;
         for (final value in TextAnimatorValue.values) {
+          if (!solid && solidAnimatorValues.contains(value)) continue;
           rows.add(FoldAnimatorValueRow(i, animator, value, depth: 3));
         }
       }
@@ -2784,6 +3123,54 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
+  // A Model layer's materials, a group of rows for each in its file, before
+  // the effects that run on the picture they make. A Text or Shape layer's
+  // Geometry options read the same, with their own rows first.
+  if (info.materials case final materials? when materials.isNotEmpty) {
+    final geometry = isGeometryOptions(materials.first);
+    final materialsOpen = open.contains(materialsPath(id));
+    rows.add(FoldGroupRow(
+      path: materialsPath(id),
+      label: geometry ? l10n.fxGeometryOptions : l10n.foldMaterials,
+      open: materialsOpen,
+      depth: 1,
+    ));
+    if (materialsOpen) {
+      for (final (i, material) in materials.indexed) {
+        if (geometry && i == 0) {
+          final values = {for (final v in material.values) v.id: v.value};
+          for (final param in cachedListParameters(material.name)) {
+            rows.add(FoldEffectParamRow(material, param, values[param.id],
+                depth: 2,
+                material: true,
+                driven: driven['${material.id}/${param.id}']));
+          }
+          continue;
+        }
+        final path = modelMaterialPath(id, material.id.toString());
+        final materialOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          // A material its file gives no name is numbered.
+          label: geometry
+              ? engineLabel(material.customName ?? '')
+              : material.customName ?? l10n.modelMaterialNumbered(i + 1),
+          open: materialOpen,
+          depth: 2,
+        ));
+        if (materialOpen) {
+          final values = {for (final v in material.values) v.id: v.value};
+          for (final param in cachedListParameters(material.name)) {
+            rows.add(FoldEffectParamRow(material, param, values[param.id],
+                depth: 3,
+                material: true,
+                driven: driven['${material.id}/${param.id}']));
+          }
+        }
+      }
+    }
+  }
+
   // Effects appear only once there are some: an empty heading is a promise the
   // row cannot keep.
   if (info.effects.isNotEmpty) {
@@ -2810,8 +3197,7 @@ List<LayerFoldRow> layerFoldRows({
         if (effectOpen) {
           final values = {for (final v in fx.values) v.id: v.value};
           for (final param in [
-            ...cachedListParameters(fx.name),
-            ...fx.derivedParams,
+            ...instanceParameters(fx),
           ]) {
             rows.add(FoldEffectParamRow(fx, param, values[param.id],
                 depth: 3, driven: driven['${fx.id}/${param.id}']));
@@ -2866,6 +3252,43 @@ List<LayerFoldRow> layerFoldRows({
     }
   }
 
+  // The drivers on the layer's Node graph, after Styles and only once there
+  // are some, so a Stagger's keyed Maximum has diamonds to see and drag.
+  // Off the entry, read with the rest of the layer: a redraw that changes
+  // nothing (a column seam dragged) asks the engine nothing.
+  final drivers = info.drivers;
+  if (drivers.isNotEmpty) {
+    final driversOpen = open.contains(driversPath(id));
+    rows.add(FoldGroupRow(
+      path: driversPath(id),
+      label: l10n.fxDrivers,
+      open: driversOpen,
+      depth: 1,
+    ));
+    if (driversOpen) {
+      for (final d in drivers) {
+        final path = driverPath(id, d.id.toString());
+        final driverOpen = open.contains(path);
+        rows.add(FoldGroupRow(
+          path: path,
+          label: d.customName ?? effectLabelOf(d.name),
+          open: driverOpen,
+          depth: 2,
+          named: d.customName != null,
+        ));
+        if (driverOpen) {
+          final values = {for (final v in d.values) v.id: v.value};
+          for (final param in cachedListParameters(d.name)) {
+            rows.add(FoldEffectParamRow(d, param, values[param.id],
+                depth: 3,
+                driver: true,
+                driven: driven['${d.id}/${param.id}']));
+          }
+        }
+      }
+    }
+  }
+
   if (hasAudio) {
     final audioOpen = open.contains(audioPath(id));
     rows.add(FoldGroupRow(
@@ -2873,6 +3296,7 @@ List<LayerFoldRow> layerFoldRows({
       label: l10n.workspaceAudio,
       open: audioOpen,
       depth: 1,
+      waveform: audioOpen && open.contains(waveformPath(id)),
     ));
     if (audioOpen) {
       rows.add(FoldVolumeRow(scalar: volumeDb, depth: 2));

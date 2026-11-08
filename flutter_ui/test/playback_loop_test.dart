@@ -3,6 +3,7 @@ import 'package:lumit_flutter/state/playback_loop.dart';
 
 void main() {
   clockFrameTests();
+  workAreaPastTheEndTests();
 
   test('parked past the work area previews the tail instead of snapping back',
       () {
@@ -57,6 +58,22 @@ void clockFrameTests() {
     expect(
       clockFrame(anchorFrame: 10, sinceAnchorMicros: 39000, fps: 25, end: 100),
       10,
+    );
+  });
+}
+
+void workAreaPastTheEndTests() {
+  test('a work area ending on the comp end loops at the last frame', () {
+    // The regression: a 14 s comp at 30 fps ends on frame 419, and a work
+    // area out at 14 s names frame 420, which the playhead never reaches, so
+    // playback stopped at the end instead of starting again.
+    expect(
+      playbackLoop(workStart: 0, workEnd: 420, playhead: 0, lastFrame: 419),
+      (start: 0, end: 419),
+    );
+    expect(
+      playbackLoop(workStart: 10, workEnd: 200, playhead: 0, lastFrame: 419),
+      (start: 10, end: 200),
     );
   });
 }

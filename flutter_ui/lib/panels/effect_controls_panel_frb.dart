@@ -6,9 +6,9 @@
 // from the next by a hairline. Every row is two columns — the parameter's name
 // left-aligned in a fixed-width name column, its control left-aligned in the
 // rest — with nothing drawn between them; they read as columns because they line
-// up, which is all a column is (`fx_section.dart`). The heading's Reset sits at
-// the top of the value column because that is what it acts on; the close mark
-// stays hard right, away from it.
+// up, which is all a column is (`fx_section.dart`). What acts on a whole effect,
+// Reset and the close mark, comes up on the heading under the pointer, and the
+// rest of it is in the heading's menu.
 //
 // Add effect offers every built-in, grouped by category. Above the stack sit the
 // Transform rows — anchor, position, scale, rotation, opacity, plus the z and
@@ -23,11 +23,10 @@
 // five declared parameters folded into one tabbed editor, the way an `_x`/`_y`
 // pair folds into one point row.
 //
-// Every animatable row carries the stopwatch and the ◄ ◆ ► navigator
-// (keyframe_controls_frb.dart). An animated row shows "animated" in place of its
-// number field: the value there is a curve, and the graph editor is where a
-// curve is shaped. The stopwatch turns animation off again, keeping the value
-// the curve reads at the playhead — so the row is never a dead end.
+// Every animatable row carries the stopwatch, quiet until the pointer is on the
+// row or the row is keyed, and a keyed row the ◄ ◆ ► navigator at its far end
+// (keyframe_controls_frb.dart). The stopwatch turns animation off again, keeping
+// the value the curve reads at the playhead, so the row is never a dead end.
 //
 // **How an edit reaches the document.** `getEffects` hands back a *staged* copy
 // of the stack, `setValue` edits that copy, and `LayerReference.setEffects`
@@ -38,7 +37,6 @@
 // shape exists.
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:lumit_flutter/state/share.dart';
@@ -59,11 +57,14 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
+import '../state/layer_bounds.dart' show isGeometryOptions, meshKindOf;
+import '../shell/menu_bar_frb.dart' show removeAllEffects;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
+import 'cut_kinds.dart';
 import 'effect_param_row_frb.dart';
 import 'viewer_effect_points.dart' show pickForPoint;
 import 'graph_panel.dart' show DrivenParam, drivenParamsIn, graphCompById;
@@ -81,20 +82,27 @@ import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'layer_fold_frb.dart'
     show
+        asOneUndoStep,
         clipFoldPrefix,
         effectPath,
         groupFoldPrefix,
+        inputsPath,
+        modelMaterialPath,
         stylePath,
         transformGroupPath,
         transformPath;
 import '../widgets/share_marks.dart';
-import 'timeline_extras_frb.dart' show DoubleTap, clipRadius;
+import 'timeline_extras_frb.dart' show DoubleTap, clipRadius, showMenuAt;
 import 'timeline_metrics_frb.dart' show dimmedIf;
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
+import 'effect_commands.dart';
+import 'param_row_menu.dart' show menuGroups;
 import 'placeholder.dart';
+import 'preset_save.dart';
+import 'row_filter.dart';
 import 'flow_rows_frb.dart';
 import 'source_rows_frb.dart';
 import 'text_animator_rows_frb.dart';
@@ -117,6 +125,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// moment after applying one.
   late final Set<String> _shut =
       Provider.of<LumitUiState>(context, listen: false).folds.effectsShut;
+
+  /// The cards that start closed and have been opened since, which keep their
+  /// rows from then on.
+  final Set<UuidValue> _everOpen = {};
 
   /// The last layer this panel drew. Deselecting does not empty the panel: the
   /// stack you were just editing stays up, because clicking away in the
@@ -176,6 +188,160 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       }
     });
   }
+
+  /// Twirl every effect on the stack open or shut.
+  void _foldAll(List<BridgeEffectInstanceInfo> effects, bool open) =>
+      setState(() {
+        _folds += 1;
+        for (final fx in effects) {
+          if (open) {
+            _shut.remove('fx-${fx.id}');
+          } else {
+            _shut.add('fx-${fx.id}');
+          }
+        }
+      });
+
+  /// The stack's own menu, for the panel's empty ground and its header.
+  ///
+  /// [layer] is null on a clip's or a group's stack, which takes an add and a
+  /// fold and has no clipboard or preset road of its own.
+  void _showStackMenu(
+    BuildContext context,
+    Offset at, {
+    required List<BridgeEffectInstanceInfo> effects,
+    required ValueChanged<String> onAdd,
+    LayerReference? layer,
+  }) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ws = ui.workspace;
+    final pastable = ui.clipboard.kind == ClipboardKind.effects;
+    void changed() {
+      app.notifyDocumentChanged();
+      ui.model.refresh();
+    }
+
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) {
+        void done() => close(null);
+        MenuRow row(String key, Widget label, VoidCallback run,
+                {bool enabled = true}) =>
+            MenuRow(
+              key: ValueKey<String>('fx-ground-$key'),
+              enabled: enabled,
+              onPressed: () {
+                done();
+                run();
+              },
+              child: label,
+            );
+        return FloatSurface(
+          width: 210,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: menuGroups([
+              [
+                SubmenuRow(
+                  key: const ValueKey('fx-ground-add'),
+                  closeParent: done,
+                  submenu: (dismiss) => FloatSurface(
+                    width: 200,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: _addEffectRows(done, onAdd),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.only(start: 16),
+                    child: Text(l10n.addEffect),
+                  ),
+                ),
+                if (layer != null)
+                  row(
+                    'paste',
+                    MenuLabel(l10n.menuPaste,
+                        action: 'edit.paste', ticked: false, enabled: pastable),
+                    () => _pastePickedEffects(ui),
+                    enabled: pastable,
+                  ),
+                if (layer != null && effects.isNotEmpty)
+                  row(
+                    'select-all',
+                    MenuLabel(l10n.fxMenuSelectAll,
+                        action: 'edit.select.all', ticked: false),
+                    () => ui.setEffectSelection(
+                        layer, [for (final e in effects) e.id]),
+                  ),
+              ],
+              [
+                if (effects.isNotEmpty) ...[
+                  row('expand', MenuLabel(l10n.fxMenuExpandAll, ticked: false),
+                      () => _foldAll(effects, true)),
+                  row('collapse', MenuLabel(l10n.fxMenuCollapseAll, ticked: false),
+                      () => _foldAll(effects, false)),
+                ],
+                // The filter reaches Transform too, so it is there with no
+                // effects on the layer.
+                if (layer != null)
+                  row(
+                    'filter',
+                    MenuLabel(l10n.filterRows,
+                        action: 'panel.search.focus', ticked: false),
+                    _filter.show,
+                  ),
+                row(
+                  'strip',
+                  MenuLabel(l10n.fxMenuKeyStrip, ticked: ws.fxKeyStrip),
+                  () => ws.setFxKeyStrip(!ws.fxKeyStrip),
+                ),
+              ],
+              [
+                if (layer != null && effects.isNotEmpty)
+                  row('save', MenuLabel(l10n.savePresetEllipsis, ticked: false),
+                      () => _saveStackPreset(ui, layer)),
+                if (layer != null)
+                  row('load', MenuLabel(l10n.loadPresetEllipsis, ticked: false),
+                      () async {
+                    final path = await pickPresetToOpen();
+                    if (path == null) return;
+                    try {
+                      layer.pasteEffects(
+                          text: await readEffectPreset(path: path),
+                          atFrame: ui.playheadFrame.value);
+                    } catch (_) {
+                      // Not a preset: the picker will take any file.
+                      app.postNotice(l10n.presetFileNotPreset, error: true);
+                      return;
+                    }
+                    changed();
+                  }),
+              ],
+              [
+                if (layer != null && effects.isNotEmpty)
+                  row(
+                      'remove-all',
+                      MenuLabel(l10n.fxMenuRemoveAll,
+                          action: 'effect.remove.all', ticked: false), () {
+                    removeAllEffects(app, [layer]);
+                    ui.clearEffectSelection();
+                    changed();
+                  }),
+              ],
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Save the layer's whole stack as a preset in the library.
+  Future<void> _saveStackPreset(LumitUiState ui, LayerReference layer) =>
+      saveLayerPreset(context, ui, layer);
 
   /// The effect whose heading is an inline rename editor, or null.
   UuidValue? _renamingEffect;
@@ -241,7 +407,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       draw: comp == null
           ? null
           : (staged) => comp.renderFrameWithPreview(
-                frame: BigInt.from(ui.playheadFrame.value),
+                frame: ui.playheadFrame.value,
                 scale: ui.viewerScale,
                 layer: layer,
                 effects: staged,
@@ -274,9 +440,25 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   Map<String, ({String label, BridgeOutputRef? from})> _points = const {};
   LumitUiState? _boundUi;
 
+  /// The row filter Ctrl+F opens in the header. Its text narrows every card
+  /// to the rows whose names hold it.
+  final RowFilter _filter = RowFilter();
+
+  /// `Ctrl+F` over this panel: the filter well comes up with the cursor in it.
+  void _onSearchRequested() {
+    if (_boundUi?.searchRequestIsFor(Panel.effectControls) ?? false) {
+      _filter.show();
+    }
+  }
+
+  void _onFilter() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    _filter.addListener(_onFilter);
     // `Enter` renames the selected effect — registered on the
     // hardware keyboard like every panel command; stands down for modals,
     // focused fields, and whenever this panel is not the active one.
@@ -325,6 +507,34 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// selection of its own.
   void _onRowTouched(String name) => _boundUi?.touchProperty(name);
 
+  /// Reveal in Effect controls, from a box on the node graph: the effect's
+  /// card is scrolled into view once the selection has drawn it.
+  void _onReveal() {
+    final ui = _boundUi;
+    final id = ui?.revealEffect.value;
+    if (ui == null || id == null || !mounted) return;
+    ui.revealEffect.value = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final wanted = ValueKey<String>('fx-twirl-$id');
+      BuildContext? found;
+      void visit(Element el) {
+        if (found != null) return;
+        if (el.widget.key == wanted) {
+          found = el;
+          return;
+        }
+        el.visitChildren(visit);
+      }
+
+      context.visitChildElements(visit);
+      if (found case final card?) {
+        Scrollable.ensureVisible(card,
+            alignment: 0.1, duration: const Duration(milliseconds: 160));
+      }
+    });
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -336,6 +546,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     _boundUi = ui;
     ui.selectedLayer.addListener(_readDriven);
     ui.model.addListener(_readDriven);
+    ui.revealEffect.addListener(_onReveal);
+    ui.panelSearchRequest.addListener(_onSearchRequested);
     // `Ctrl+A` here means every effect on the layer, not every layer
     // in the composition — the shell routes the chord to the focused panel.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
@@ -377,6 +589,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   void _unbindDriven() {
     _boundUi?.selectedLayer.removeListener(_readDriven);
     _boundUi?.model.removeListener(_readDriven);
+    _boundUi?.revealEffect.removeListener(_onReveal);
+    _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
     if (_boundUi?.deleteClaim == _deleteClaim) {
       _boundUi!.deleteClaim = _priorDeleteClaim;
@@ -415,11 +629,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
 
   /// Remove every picked effect from the layer this panel is showing.
   ///
-  /// Each removal is one `SetLayerEffects` — the stack written whole, which is
-  /// the only shape an effect edit has — so a run of three comes back in three
-  /// undo steps rather than leaving half a stack behind on the first one. The
-  /// handles are read together and are safe to hold: the seam matches them by
-  /// id, so removing one does not stale the next.
+  /// The whole run is one undo step. The handles are read together and are safe
+  /// to hold: the seam matches them by id, so removing one does not stale the
+  /// next.
   ///
   /// Answers whether it took the key. Nothing picked is not this panel's
   /// Delete, and the layer selection is what the shell falls back to.
@@ -428,12 +640,20 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         ui.selectedEffectsLayer ?? ui.selectedLayer.value ?? _lastLayer;
     final picked = ui.selectedEffects.value.toSet();
     if (layer == null || picked.isEmpty) return false;
+    final names = [
+      for (final fx in ui.model.byId(layer.internallayerId)?.info.effects ??
+          const <BridgeEffectInstanceInfo>[])
+        if (picked.contains(fx.id)) fx.customName ?? effectLabelOf(fx.name),
+    ];
     try {
-      for (final instance in layer.getEffects()) {
-        if (picked.contains(instance.getInfo().id)) {
-          layer.removeEffect(effect: instance);
+      asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
+          () {
+        for (final instance in layer.getEffects()) {
+          if (picked.contains(instance.getInfo().id)) {
+            layer.removeEffect(effect: instance);
+          }
         }
-      }
+      }, name: deleteStepName(names));
     } catch (_) {
       // The effects went away under the selection; there is nothing here to
       // report and nothing left to remove.
@@ -498,6 +718,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   @override
   void dispose() {
     _share?.roster.removeListener(_onRoster);
+    _filter.dispose();
     _unbindDriven();
     HardwareKeyboard.instance.removeHandler(_onKey);
     super.dispose();
@@ -654,7 +875,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           }
           // One clip picked in the Cut timeline is the subject the way a
           // picked group header is: its own stack, its own Add effect.
-          return ValueListenableBuilder<
+          return _orOverlap(context, comp, ValueListenableBuilder<
               ({LayerReference layer, UuidValue clip})?>(
             valueListenable: ui.cutClip,
             builder: (context, pick, _) {
@@ -691,16 +912,126 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 ),
               );
             },
-          );
+          ));
         },
       ),
+    );
+  }
+
+  /// [child], or the rows of the overlap the Cut timeline has fronted.
+  Widget _orOverlap(
+      BuildContext context, CompositionReference comp, Widget child) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    return ValueListenableBuilder<({LayerReference layer, UuidValue clip})?>(
+      valueListenable: ui.cutOverlap,
+      builder: (context, overlap, _) =>
+          overlap == null || overlap.layer.internalcompId != comp.internalid
+              ? child
+              : _overlapBody(context, comp, overlap.layer, overlap.clip),
+    );
+  }
+
+  /// The Transition effect at a clip's start, read once per document revision.
+  ({int? revision, UuidValue clip, BridgeEffectInstanceInfo? info})? _overlapRead;
+
+  BridgeEffectInstanceInfo? _overlapInfo(
+      LumitUiState ui, LayerReference layer, UuidValue clip) {
+    final revision = ui.model.revision;
+    final held = _overlapRead;
+    if (held != null && held.revision == revision && held.clip == clip) {
+      return held.info;
+    }
+    BridgeEffectInstanceInfo? info;
+    try {
+      info = layer.getClipTransition(clip: clip)?.getInfo();
+    } catch (_) {
+      // The clip went under the panel.
+    }
+    _overlapRead = (revision: revision, clip: clip, info: info);
+    return info;
+  }
+
+  /// The panel with an **overlap** as its subject: its one effect's rows, less
+  /// what the overlap decides for it, marked as a transition. When the clip goes
+  /// or the overlap stops being one of the kinds, the panel goes back to what it
+  /// showed.
+  Widget _overlapBody(
+    BuildContext context,
+    CompositionReference comp,
+    LayerReference layer,
+    UuidValue clipId,
+  ) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    return ListenableBuilder(
+      listenable: ui.model,
+      builder: (context, _) {
+        final entry = ui.model.byId(layer.internallayerId);
+        BridgeClip? clip;
+        for (final c in entry?.info.clips ?? const <BridgeClip>[]) {
+          if (c.id == clipId) clip = c;
+        }
+        final fx = clip?.transition == null
+            ? null
+            : _overlapInfo(ui, layer, clipId);
+        if (entry == null || clip == null || fx == null) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => ui.cutOverlap.value = null);
+          return const SizedBox.shrink();
+        }
+        _effects.groupStack = null;
+        _effects.clipStack = () => [
+              if (layer.getClipTransition(clip: clipId) case final t?) t,
+            ];
+        var swept = const <String>{};
+        var name = fx.name;
+        for (final kind in transitionKinds) {
+          if (kind.matchName == clip.transition) {
+            swept = kind.sweptRows.toSet();
+            name = engineLabel(kind.label);
+          }
+        }
+        void changed() {
+          Provider.of<LumitState>(context, listen: false)
+              .notifyDocumentChanged();
+          ui.model.refresh();
+        }
+
+        final first = clip.startFrame.toInt();
+        final length = clip.endFrame.toInt() - first;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(
+              layerName: name,
+              clipOn: entry.info.name,
+              mark: l10n.effectControlsTransition,
+              onMenu: (_) {},
+            ),
+            Expanded(
+              child: FxKeyStripHost(
+                spanStart: first,
+                spanFrames: length < 1 ? 1 : length,
+                child: ListView(
+                  key: const ValueKey('fx-overlap-ground'),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    _clipEffectCard(
+                        context, ui, comp, layer, clipId, fx, 0, changed,
+                        stack: [fx], hideRows: swept),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
   /// A clip's effects as the cards draw them, read once per document
   /// revision and kept: on the comp's clock, so a card keys at the playhead
   /// as a layer's does.
-  ({BigInt? revision, UuidValue clip, List<BridgeEffectInstanceInfo> stack})?
+  ({int? revision, UuidValue clip, List<BridgeEffectInstanceInfo> stack})?
       _clipRead;
 
   List<BridgeEffectInstanceInfo> _clipInfos(
@@ -738,7 +1069,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     return ListenableBuilder(
       listenable: ui.model,
       builder: (context, _) {
-        final t = ThemeScope.of(context).theme;
         final entry = ui.model.byId(layer.internallayerId);
         BridgeClip? clip;
         for (final c in entry?.info.clips ?? const <BridgeClip>[]) {
@@ -759,21 +1089,25 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           ui.model.refresh();
         }
 
+        void addToClip(String name) {
+          try {
+            layer.addClipEffect(clip: clipId, name: name);
+          } catch (_) {
+            // A driver, which a clip has no graph for: the engine refused
+            // calmly and the menu simply did nothing.
+          }
+          changed();
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(
               layerName: clip.sourceName,
               clipOn: entry.info.name,
-              onAdd: (name) {
-                try {
-                  layer.addClipEffect(clip: clipId, name: name);
-                } catch (_) {
-                  // A driver, which a clip has no graph for: the engine
-                  // refused calmly and the menu simply did nothing.
-                }
-                changed();
-              },
+              onAdd: addToClip,
+              onMenu: (at) => _showStackMenu(context, at,
+                  effects: stack, onAdd: addToClip),
             ),
             // A picture clip's blend mode, beside the effects it carries.
             if (entry.info.kind != BridgeLayerKind.audio)
@@ -796,30 +1130,28 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 spanFrames: span.$2,
                 child: DragTarget<EffectDragData>(
                 onAcceptWithDetails: (details) async {
-                  await details.data.landOn(layer, clip: clipId);
+                  await details.data.landOn(layer,
+                      clip: clipId, atFrame: ui.playheadFrame.value);
                   if (mounted) changed();
                 },
                 builder: (context, candidate, _) => _DropGround(
                   lit: candidate.isNotEmpty,
-                  child: ListView(
-                    key: const ValueKey('fx-clip-ground'),
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    children: [
-                      if (stack.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          child: Text(
-                            l10n.noEffectsOnClipYet,
-                            style: t.small,
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      else
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onSecondaryTapUp: (d) => _showStackMenu(
+                        context, d.globalPosition,
+                        effects: stack, onAdd: addToClip),
+                    child: ListView(
+                      key: const ValueKey('fx-clip-ground'),
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      children: [
+                        if (stack.isEmpty) _EmptyStack(onAdd: addToClip),
                         for (var i = 0; i < stack.length; i++)
                           _clipEffectCard(
                               context, ui, comp, layer, clipId, stack[i], i,
                               changed),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -842,15 +1174,20 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     UuidValue clip,
     BridgeEffectInstanceInfo fx,
     int index,
-    VoidCallback changed,
-  ) {
+    VoidCallback changed, {
+    List<BridgeEffectInstanceInfo>? stack,
+    Set<String> hideRows = const {},
+  }) {
     return _EffectSection(
       key: ValueKey<String>('fx-card-clip-$index'),
+      hideRows: hideRows,
       info: fx,
       graphName: _graphNameOf(context, fx),
       clip: clip,
       open: _isOpen('fx-${fx.id}'),
       onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
+      onFoldAll: (open) =>
+          _foldAll(stack ?? _clipInfos(ui, layer, clip), open),
       driven: const {},
       stagedValue: _effects.stagedValue,
       onStackChanged: changed,
@@ -884,7 +1221,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               layer: layer,
               effect: effect,
               param: param,
-              frame: BigInt.from(ui.playheadFrame.value));
+              frame: ui.playheadFrame.value);
         } catch (_) {
           // Refused; the effect's own status line says why.
         }
@@ -907,7 +1244,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     return ListenableBuilder(
       listenable: ui.model,
       builder: (context, _) {
-        final t = ThemeScope.of(context).theme;
         BridgeLayerGroup? group;
         for (final g in ui.model.groups) {
           if (g.id == groupId) group = g;
@@ -935,20 +1271,24 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         final gid = g.id;
         _effects.groupStack = () => comp.getGroupEffects(group: gid);
         _effects.clipStack = null;
+        void addToGroup(String name) {
+          try {
+            comp.addGroupEffect(group: gid, name: name);
+          } catch (_) {
+            // A driver, or a name this build does not know: the engine refused
+            // calmly and the menu simply did nothing.
+          }
+          ui.model.refresh();
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(
               layerName: g.name,
-              onAdd: (name) {
-                try {
-                  comp.addGroupEffect(group: gid, name: name);
-                } catch (_) {
-                  // A driver, or a name this build does not know: the engine
-                  // refused calmly and the menu simply did nothing.
-                }
-                ui.model.refresh();
-              },
+              onAdd: addToGroup,
+              onMenu: (at) => _showStackMenu(context, at,
+                  effects: g.effects, onAdd: addToGroup),
             ),
             Expanded(
               child: DragTarget<EffectDragData>(
@@ -964,21 +1304,15 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     key: const ValueKey('fx-group-ground'),
                     behavior: HitTestBehavior.translucent,
                     onTap: ui.clearEffectSelection,
+                    onSecondaryTapUp: (d) => _showStackMenu(
+                        context, d.globalPosition,
+                        effects: g.effects, onAdd: addToGroup),
                     child: ListView(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       children: [
-                        if (g.effects.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            child: Text(
-                              l10n.noEffectsYet,
-                              style: t.small,
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        else
-                          for (var i = 0; i < g.effects.length; i++)
-                            _groupEffectCard(context, ui, comp, layer, g, i),
+                        if (g.effects.isEmpty) _EmptyStack(onAdd: addToGroup),
+                        for (var i = 0; i < g.effects.length; i++)
+                          _groupEffectCard(context, ui, comp, layer, g, i),
                       ],
                     ),
                   ),
@@ -1010,6 +1344,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       group: group.id,
       open: _isOpen('fx-${fx.id}'),
       onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
+      onFoldAll: (open) => _foldAll(group.effects, open),
       driven: const {},
       stagedValue: _effects.stagedValue,
       onStackChanged: ui.model.refresh,
@@ -1043,7 +1378,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               layer: layer,
               effect: effect,
               param: param,
-              frame: BigInt.from(ui.playheadFrame.value));
+              frame: ui.playheadFrame.value);
         } catch (_) {
           // Refused; the effect's own status line says why.
         }
@@ -1089,7 +1424,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     LayerReference layer,
     int playhead,
   ) {
-    final t = ThemeScope.of(context).theme;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     var entry = ui.model.byId(layer.internallayerId);
     if (entry == null) {
@@ -1115,14 +1449,22 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final info = entry.info;
     // One reading of the comp's other layers for every card on the panel.
     final layersRead = _layersRead(ui.model.layers);
+    // An add lands on the layer these rows are for, and no other.
+    void addToLayer(String name) => ui.addEffect(layer, name);
+    void stackMenu(Offset at) => _showStackMenu(context, at,
+        effects: info.effects, onAdd: addToLayer, layer: layer);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Header(
           layerName: info.name,
-          // An add lands on the layer these rows are for, and no other.
-          onAdd: (name) => ui.addEffect(layer, name),
+          onAdd: addToLayer,
+          onMenu: stackMenu,
+          onFilter: _filter.show,
+          filter: _filter.open
+              ? rowFilterWell(context, _filter, key: const ValueKey('fx-filter'))
+              : null,
         ),
         Expanded(
           // The keyframe strip beside the rows, spanning the layer's own in
@@ -1137,7 +1479,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           // rows and the graph panels are the other places that take one.
           child: DragTarget<EffectDragData>(
             onAcceptWithDetails: (details) async {
-              await details.data.landOn(layer);
+              await details.data.landOn(layer, atFrame: ui.playheadFrame.value);
               ui.model.refresh();
             },
             builder: (context, candidate, _) => _DropGround(
@@ -1158,17 +1500,24 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 key: const ValueKey('fx-ground'),
                 behavior: HitTestBehavior.translucent,
                 onTap: ui.clearEffectSelection,
+                onSecondaryTapUp: (d) => stackMenu(d.globalPosition),
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   children: [
                     // Source (a text layer's words, a solid's colour) and Retime
                     // ride with Transform behind the same choice: all three are
                     // the *layer*, and this panel is about the effects on it.
-                    // Settings → Interface brings them back together.
-                    if (ui.workspace.interface.transformInEffectControls) ...[
+                    // Settings → Interface brings them back together. The
+                    // filter reaches Transform's rows either way.
+                    if (ui.workspace.interface.transformInEffectControls ||
+                        _filter.needle.isNotEmpty) ...[
                       // What the layer is made of comes before where it sits: a
                       // text layer's words are the first thing you want when
                       // you select one.
+                      // The filter names rows, and Source, Flow and the
+                      // Animators have none to name: they step aside while
+                      // it holds text.
+                      if (_filter.needle.isEmpty)
                       SourceRowsFrb(
                         key: ValueKey<String>(
                             'src-card-${layer.internallayerId}'),
@@ -1181,6 +1530,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       // sits, because that is what it is: how the source is
                       // *sampled*. It shows itself only when the layer's
                       // flow switch is on.
+                      if (_filter.needle.isEmpty)
                       _AtPlayhead(
                         builder: (context, at) => FlowRowsFrb(
                           key: ValueKey<String>(
@@ -1207,7 +1557,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         // holds, not by asking the engine per rebuild.
                         threeD: info.switches.threeD ||
                             info.kind == BridgeLayerKind.camera,
-                        kind: info.kind,
+                        kind: meshKindOf(info),
                         twoNode: info.camera?.twoNode ?? false,
                         light: info.light,
                         acceptsLights: info.switches.acceptsLights,
@@ -1218,6 +1568,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         onChanged: ui.model.refresh,
                         open: _isOpen('transform'),
                         onToggle: () => _toggle('transform'),
+                        filter: _filter.needle,
                       ),
                     ],
                     // **The letters, one at a time**, and outside the
@@ -1230,10 +1581,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // layer that is not a Text layer has no letters to animate.
                     // Its rows listen to the playhead one at a time, so the card
                     // itself does not have to.
+                    if (_filter.needle.isEmpty)
                     TextAnimatorRowsFrb(
                       key: ValueKey<String>(
                           'anim-card-${layer.internallayerId}'),
                       layer: layer,
+                      solid: meshKindOf(info) == BridgeLayerKind.model,
                       onChanged: ui.model.refresh,
                       comp: comp,
                       playheadFrame: playhead,
@@ -1241,15 +1594,28 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       open: _isOpen('animators'),
                       onToggle: () => _toggle('animators'),
                     ),
+                    // A placed node graph's Inputs, above the stack because
+                    // they make the picture the effects then process.
+                    if (info.graphInputs?.derivedParams.isNotEmpty ?? false)
+                      _effectCard(context, ui, comp, layer, info, 0,
+                          layersRead: layersRead, inputs: true),
+                    // A Model layer's materials, before the effects that run
+                    // on the picture they make.
+                    if (info.materials case final materials?
+                        when materials.isNotEmpty) ...[
+                      if (!isGeometryOptions(materials.first))
+                        _groupHeading(
+                            context, 'materials-group', l10n.foldMaterials),
+                      if (isGeometryOptions(materials.first) ||
+                          _isOpen('materials-group'))
+                        for (var i = 0; i < materials.length; i++)
+                          _effectCard(context, ui, comp, layer, info, i,
+                              layersRead: layersRead,
+                              style: true,
+                              material: true),
+                    ],
                     if (info.effects.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        child: Text(
-                          l10n.noEffectsYet,
-                          style: t.small,
-                          textAlign: TextAlign.center,
-                        ),
-                      )
+                      _EmptyStack(onAdd: addToLayer)
                     else ...[
                       // The rack sits under its own Audio heading at the foot
                       // of the stack (AP5, "the stack is the rack"): an audio
@@ -1324,7 +1690,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           behavior: HitTestBehavior.opaque,
           onTap: () => _toggle(storageKey),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 10, 2),
+            padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 10, 2),
             child: Row(
               children: [
                 TwirlTurn(
@@ -1392,7 +1758,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The add-a-style popup: the seven, in §2's order, greyed where worn.
+  /// The add-a-style popup: the ones a menu may offer, in §2's order.
   void _addStyleMenu(BuildContext context, LumitUiState ui,
       LayerReference layer, Set<String> worn) {
     final box = context.findRenderObject() as RenderBox?;
@@ -1446,6 +1812,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// selection — Copy, Paste, Delete and the reorder all act on the stack, and
   /// nine fixed slots can do none of the four — so it is drawn unpicked and its
   /// heading only twirls.
+  ///
+  /// With `inputs` set it draws a placed graph's **Inputs** the same way, and
+  /// `index` is not read: there is only one.
   Widget _effectCard(
     BuildContext context,
     LumitUiState ui,
@@ -1455,20 +1824,70 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     int index, {
     required List<Object?> layersRead,
     bool style = false,
+    bool inputs = false,
+    bool material = false,
   }) {
     final playhead = ui.playheadFrame.value;
-    final fx = style ? info.styles[index] : info.effects[index];
-    final graphName = _graphNameOf(context, fx);
-    final open = _isOpen('fx-${fx.id}');
+    final fx = inputs
+        ? info.graphInputs!
+        : material
+            ? info.materials![index]
+            : style
+                ? info.styles[index]
+                : info.effects[index];
+    // The Inputs card is headed Inputs: the graph's own name is the layer's.
+    // A material its file gives no name is numbered.
+    final graphName = inputs
+        ? l10n.foldInputs
+        : material
+            ? l10n.modelMaterialNumbered(index + 1)
+            : _graphNameOf(context, fx);
+    // Neither a style nor the Inputs takes part in the effect selection.
+    final fixed = style || inputs;
+    // A model with many materials starts with each closed, so its first
+    // look is a list of names rather than a wall of rows. Geometry options
+    // start closed on every Text and Shape layer, so selecting a layer never
+    // asks the engine for their rows. A card closed from the start draws none
+    // until it's first opened, then keeps them for the twirl to close over.
+    // A 3D shape's are what it is, so they start open.
+    final startsClosed = material &&
+        (info.materials!.length > 3 || fx.name == 'geometry_options');
+    // A Clone deformer reads the Clone to points above it, which is in the
+    // stack rather than on its card.
+    final vectorReason =
+        !style && !inputs && !material && fx.name == 'clone_deformer'
+            ? cloneVectorReason(info.effects, index, ui.model.layers)
+            : null;
+    final open =
+        startsClosed ? _shut.contains('fx-${fx.id}') : _isOpen('fx-${fx.id}');
+    if (open) _everOpen.add(fx.id);
+    final drawsRows = !startsClosed || _everOpen.contains(fx.id);
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
-    final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
+    final params = instanceParameters(fx);
+    // The row filter: a heading that holds the text keeps every row, a card
+    // with no row that does is left out altogether.
+    final needle = _filter.needle;
+    var filter = '';
+    if (needle.isNotEmpty) {
+      // The heading's name is looked up only while filtering: this runs for
+      // every card on every selection, and the catalogue walk is not free.
+      final heading = (fx.customName ?? graphName ?? effectLabelOf(fx.name))
+          .toLowerCase();
+      filter = heading.contains(needle) ? '' : needle;
+      if (filter.isNotEmpty &&
+          !params.any(
+              (p) => engineLabel(p.label).toLowerCase().contains(filter))) {
+        return const SizedBox.shrink();
+      }
+    }
     // An LFX effect with a page of its own, which the heading opens.
     final interface =
-        !style && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
+        !fixed && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
     return _SameCard(
-      key: ValueKey<String>('fx-card-${style ? 'style-' : ''}${fx.id}'),
+      key: ValueKey<String>(
+          'fx-card-${material ? 'material-' : style ? 'style-' : ''}${fx.id}'),
       // Everything the card draws from. Read [_SameCard] before adding to the
       // card below: a fact that is not in here is one the card may not hold.
       reading: [
@@ -1489,16 +1908,21 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         ],
         fx.nodeGraphComp,
         info.trackCorrected,
+        vectorReason,
         graphName,
         open,
+        drawsRows,
         renaming,
         style,
+        inputs,
+        material,
         interface,
         playhead,
         _actionPressed,
         _folds,
         _driven,
         _points,
+        filter,
         layer.internallayerId,
         comp.internalid,
         ui.workspace.themedEffectGraphs,
@@ -1515,15 +1939,24 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       ],
       card: () => _EffectSection(
         info: fx,
+        vectorReason: vectorReason,
         graphName: graphName,
         style: style,
-        open: open,
+        inputs: inputs,
+        material: material,
+        // A card narrowed to the rows that match shows them, shut or not.
+        open: open || filter.isNotEmpty,
+        filter: filter,
+        drawsRows: drawsRows,
         onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
+        onFoldAll: (open) => _foldAll(
+            ui.model.byId(layer.internallayerId)?.info.effects ?? info.effects,
+            open),
         // The selection this heading follows, rather than an answer read here
         // and handed down: a pick recolours the heading and rebuilds nothing
         // above it. A style takes no part in the effect selection, so its
         // heading only twirls.
-        pick: style
+        pick: fixed
             ? null
             : FxPick(
                 selection: ui.pickedEffects,
@@ -1534,28 +1967,23 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         points: _points,
         renaming: renaming,
         onRenamed: (name) {
-          // Stage the name on a fresh handle and commit the list — one op,
-          // one undo step, the same shape every stack edit has.
-          final stack = style ? layer.getStyles() : layer.getEffects();
-          for (final instance in stack) {
-            if (instance.id() == fx.id) {
-              instance.setCustomName(name: name);
-              try {
-                layer.setEffects(effects: stack);
-              } catch (_) {
-                // The stack changed under us; re-reading is the recovery.
-              }
-              break;
-            }
-          }
           setState(() => _renamingEffect = null);
-          ui.model.refresh();
+          EffectCommands(
+            info: fx,
+            layer: layer,
+            comp: comp,
+            style: style,
+            onStackChanged: ui.model.refresh,
+          ).rename(name);
         },
         // Escape: close the editor, write nothing.
         onRenameCancelled: () => setState(() => _renamingEffect = null),
-        onStartRename: () => setState(() => _renamingEffect = fx.id),
+        onStartRename:
+            inputs || material
+                ? null
+                : () => setState(() => _renamingEffect = fx.id),
         onSelect: () {
-          if (style) return;
+          if (fixed) return;
           // The run a Shift-click reaches over is read at the click. A card is
           // not rebuilt when a neighbour is removed, so an order held from the
           // last build could name an effect that has gone.
@@ -1590,15 +2018,15 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         onWrite: (id, param, value) {
           _effects.write(layer, id, param, value);
           ui.model.refresh();
-          if (!style) pickForPoint(ui, layer, fx, param);
+          if (!fixed) pickForPoint(ui, layer, fx, param);
         },
         onWritePair: (id, values) {
           _effects.writeAll(layer, id, values);
           ui.model.refresh();
-          if (!style) pickForPoint(ui, layer, fx, values.keys.first);
+          if (!fixed) pickForPoint(ui, layer, fx, values.keys.first);
         },
         onLive: (id, param, value) {
-          if (!style) pickForPoint(ui, layer, fx, param);
+          if (!fixed) pickForPoint(ui, layer, fx, param);
           setState(() {
             _effects.live(comp, layer, id, param, value,
                 frame: ui.playheadFrame.value, scale: ui.viewerScale);
@@ -1650,7 +2078,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
             param: param,
             onApplied: ui.model.refresh,
             comp: ui.selectedComp,
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
           )) {
             return;
           }
@@ -1665,7 +2093,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 layer: layer,
                 effect: effect,
                 param: param,
-                frame: BigInt.from(ui.playheadFrame.value));
+                frame: ui.playheadFrame.value);
           } catch (_) {
             // Refused — another analysis is already running, or the media
             // cannot be read. The effect's own status line says which; a thrown
@@ -1872,65 +2300,136 @@ class _Header extends StatelessWidget {
   /// The layer a clip subject is on. Set, the header says the rows are a
   /// clip's and not the layer's own.
   final String? clipOn;
-  final ValueChanged<String> onAdd;
-  const _Header({required this.layerName, this.clipOn, required this.onAdd});
+
+  /// What the mark says for [clipOn]: the clip's, unless it says otherwise.
+  final String? mark;
+
+  /// Where the add button adds to. An overlap has no stack to add to.
+  final ValueChanged<String>? onAdd;
+
+  /// A right-click anywhere on the header, the add button included.
+  final ValueChanged<Offset> onMenu;
+
+  /// The row filter's well, in the name's place while it is up.
+  final Widget? filter;
+
+  /// Puts the filter up, from the search mark shown while it is down.
+  final VoidCallback? onFilter;
+  const _Header({
+    required this.layerName,
+    this.clipOn,
+    this.mark,
+    this.onAdd,
+    required this.onMenu,
+    this.filter,
+    this.onFilter,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      color: t.surface1,
-      child: _row(context, t),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (d) => onMenu(d.globalPosition),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        color: t.surface1,
+        child: _row(context, t),
+      ),
     );
   }
 
   Widget _row(BuildContext context, LumitTheme t) {
     return Row(
       children: [
-        lumitIcon(LumitIcon.fx, size: iconSize, color: t.textMuted),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(layerName,
-              style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
+        // The same column the switches and stopwatches stand in below.
+        SizedBox(
+          width: fxStopwatchColumn,
+          child: lumitIcon(LumitIcon.fx, size: iconSize, color: t.textMuted),
         ),
-        if (clipOn case final layer?) ...[
-          const SizedBox(width: 8),
-          // The mark that these are a clip's own effects, with the layer
-          // it is on in the tooltip.
-          LumitTooltip(
-            message: layer,
-            child: Container(
-              key: const ValueKey('fx-clip-mark'),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                border: Border.all(color: t.accent),
-                borderRadius: BorderRadius.circular(clipRadius(t)),
+        const SizedBox(width: 6),
+        if (filter case final well?)
+          Expanded(child: well)
+        else
+        Expanded(
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(layerName,
+                    style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
               ),
-              child: Text(t.kickerCase(l10n.effectControlsClip),
-                  style: t.kicker.copyWith(color: t.accent)),
-            ),
+              if (clipOn case final layer?) ...[
+                const SizedBox(width: 8),
+                // The mark that these are a clip's own effects, with the layer
+                // it is on in the tooltip.
+                LumitTooltip(
+                  message: layer,
+                  child: Container(
+                    key: const ValueKey('fx-clip-mark'),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: t.accent),
+                      borderRadius: BorderRadius.circular(clipRadius(t)),
+                    ),
+                    child: Text(t.kickerCase(mark ?? l10n.effectControlsClip),
+                        style: t.kicker.copyWith(color: t.accent)),
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
-        const Spacer(),
+        ),
+        if (onFilter case final show? when filter == null)
+          rowFilterMark(context, show, key: const ValueKey('fx-filter-mark')),
         // The keyframe strip's switch.
         const FxKeyStripToggle(),
         const SizedBox(width: 4),
         // Its own context, so the menu drops from the *button* rather than
         // from the header row's left edge — which is where it used to land.
-        Builder(
-          builder: (buttonContext) => HouseButton(
-            key: const ValueKey('fx-add'),
+        if (onAdd case final add?)
+          Builder(
+            builder: (buttonContext) => LumitTooltip(
+              message: l10n.addEffect,
+              child: HouseButton(
+                key: const ValueKey('fx-add'),
+                small: true,
+                frameless: true,
+                padding: const EdgeInsets.all(1),
+                onPressed: () => showAddEffectMenu(buttonContext, add),
+                child: glyph.LumitIcon(LumitIcons.addEffect,
+                    size: iconSize, colour: t.textSecondary),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// What a stack with nothing on it shows: the one thing it can do, on the
+/// value column's edge, where Add animator stands.
+class _EmptyStack extends StatelessWidget {
+  final ValueChanged<String> onAdd;
+  const _EmptyStack({required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+      child: fxTwoColumnRow(
+        context: context,
+        name: const SizedBox.shrink(),
+        control: Builder(
+          builder: (button) => HouseButton(
+            key: const ValueKey('fx-empty-add'),
             small: true,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            onPressed: () => showAddEffectMenu(buttonContext, onAdd),
-            // Add effect is a container label like every other kicker, so the
-            // capitals live here rather than in the arb file.
-            child: Text(t.kickerCase(l10n.addEffect),
-                style: t.kicker.copyWith(color: t.textSecondary)),
+            onPressed: () => showAddEffectMenu(button, onAdd),
+            child: Text(t.propertyCase(l10n.addEffect)),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -1955,7 +2454,23 @@ Future<void> showAddEffectMenu(BuildContext context, ValueChanged<String> onAdd,
   // Dropped from the button's left edge so a wide menu opens back across the
   // panel rather than off its right side.
   final origin = box.localToGlobal(Offset(0, box.size.height + 4));
+  await showLumitPopup<void>(
+    context: context,
+    position: origin,
+    builder: (close) => FloatSurface(
+      width: 200,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _addEffectRows(() => close(null), onAdd, category: category),
+      ),
+    ),
+  );
+}
 
+/// One flyout row per effect category, each opening onto its effects.
+List<Widget> _addEffectRows(VoidCallback close, ValueChanged<String> onAdd,
+    {String? category}) {
   // Grouped in schema order, so the headings come out in the order the engine
   // declares. Within a heading the effects are sorted by name below.
   final grouped = <String, List<BridgeEffectInfo>>{};
@@ -1982,42 +2497,31 @@ Future<void> showAddEffectMenu(BuildContext context, ValueChanged<String> onAdd,
     effects.sort(byEffectLabel);
   }
 
-  await showLumitPopup<void>(
-    context: context,
-    position: origin,
-    builder: (close) => FloatSurface(
-      width: 200,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final entry in grouped.entries)
-            SubmenuRow(
-              key: ValueKey<String>('fx-category-${entry.key}'),
-              closeParent: () => close(null),
-              submenu: (dismiss) => FloatSurface(
-                width: 200,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final effect in entry.value)
-                      MenuRow(
-                        onPressed: () {
-                          dismiss();
-                          onAdd(effect.name);
-                        },
-                        child: Text(engineLabel(effect.label)),
-                      ),
-                  ],
+  return [
+    for (final entry in grouped.entries)
+      SubmenuRow(
+        key: ValueKey<String>('fx-category-${entry.key}'),
+        closeParent: close,
+        submenu: (dismiss) => FloatSurface(
+          width: 200,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final effect in entry.value)
+                MenuRow(
+                  onPressed: () {
+                    dismiss();
+                    onAdd(effect.name);
+                  },
+                  child: Text(engineLabel(effect.label)),
                 ),
-              ),
-              child: Text(headings[entry.key] ?? entry.key),
-            ),
-        ],
+            ],
+          ),
+        ),
+        child: Text(headings[entry.key] ?? entry.key),
       ),
-    ),
-  );
+  ];
 }
 
 /// One effect: its heading row and a row per declared parameter.
@@ -2035,6 +2539,9 @@ class _EffectSection extends StatelessWidget {
   final String? graphName;
   final bool open;
   final VoidCallback onToggle;
+
+  /// Twirl every effect on this stack open or shut.
+  final ValueChanged<bool>? onFoldAll;
 
   /// Picked out of the stack, and the click that picks it. The same
   /// selection the Timeline's fold-out shows, so an effect chosen in one place
@@ -2071,6 +2578,19 @@ class _EffectSection extends StatelessWidget {
   /// paste, none of which nine fixed slots in a pinned order can perform.
   final bool style;
 
+  /// This card is a placed graph's **Inputs** (docs/impl/node-graph-comp.md
+  /// §5.3). The layer carries exactly one and the graph reads it whatever its
+  /// switch says, so the card is its rows, Reset and nothing else.
+  final bool inputs;
+
+  /// Whether its rows are built at all, which a closed card that has never
+  /// been opened skips.
+  final bool drawsRows;
+
+  /// This card is one of a Model layer's materials, which also sets [style]:
+  /// fixed in place and taking no part in the selection.
+  final bool material;
+
   /// This card sits on a **group header's** stack
   /// (docs/impl/group-effects.md §6) — the styles bit's pattern, grown its
   /// third arm. Every command still goes through [layer] (the group's first
@@ -2084,6 +2604,14 @@ class _EffectSection extends StatelessWidget {
   /// and the engine routes the instance to the clip that holds it.
   final UuidValue? clip;
   final LayerReference layer;
+
+  /// For a Clone deformer, why its Vector mode cannot be picked here, or null
+  /// where it can ([cloneVectorReason]). Read by the panel, which holds the
+  /// stack.
+  final ({String tip, String why})? vectorReason;
+
+  /// Rows this subject doesn't show, on top of what the instance itself hides.
+  final Set<String> hideRows;
 
   /// Every layer in the comp, from the read model — what a layer-valued
   /// parameter picks from.
@@ -2155,22 +2683,33 @@ class _EffectSection extends StatelessWidget {
   final double curvePlotSize;
   final ValueChanged<double>? onCurvePlotSize;
 
+  /// The panel's row filter, lowercase: only the rows whose names hold it are
+  /// drawn, and a group with none is left out. Empty draws every row.
+  final String filter;
+
   const _EffectSection({
     super.key,
     required this.info,
     this.graphName,
+    this.filter = '',
     required this.open,
+    this.drawsRows = true,
     required this.onToggle,
+    this.onFoldAll,
     this.pick,
     required this.onSelect,
     this.driven = const {},
     this.points = const {},
     required this.stagedValue,
     this.style = false,
+    this.inputs = false,
+    this.material = false,
     this.group,
     this.clip,
+    this.hideRows = const {},
     required this.layer,
     required this.allLayers,
+    this.vectorReason,
     required this.comp,
     required this.playheadFrame,
     required this.onSeek,
@@ -2194,64 +2733,26 @@ class _EffectSection extends StatelessWidget {
     this.onCurvePlotSize,
   });
 
-  /// Freshly read handles for **everything a command on this card acts on**:
-  /// the picked run when this effect is part of one, and this effect
-  /// alone when it is not.
-  ///
-  /// Which is exactly the question `effectsToCopy` already answers for Copy —
-  /// so the card's other commands ask it too, rather than each holding a
-  /// handle to its own row. Returned in stack order, and the handles are safe
-  /// to hold together: the seam matches them by id, so removing one does not
-  /// stale the next.
-  List<BridgeEffectInstance> _handles(BuildContext context) {
-    // A style is never part of a picked *run*: the effect selection is the
-    // stack's, and a style has no place in it. So this card's own instance is
-    // the whole answer — and a group header's card takes the same
-    // road for the same reason.
-    if (style || group != null || clip != null) {
-      return [
-        for (final candidate in _instances())
-          if (candidate.id() == info.id) candidate,
-      ];
-    }
-    final ids = Provider.of<LumitUiState>(context, listen: false)
-        .effectsToCopy(layer, info.id)
-        .toSet();
-    return [
-      for (final candidate in layer.getEffects())
-        if (ids.contains(candidate.getInfo().id)) candidate,
-    ];
-  }
+  /// What can be done to this effect, shared with its heading in the Timeline.
+  EffectCommands get _commands => EffectCommands(
+        info: info,
+        layer: layer,
+        comp: comp,
+        onStackChanged: onStackChanged,
+        style: style,
+        inputs: inputs,
+        material: material,
+        group: group,
+        clip: clip,
+      );
 
-  /// The list this card's instance is on — a group header's stack,
-  /// the layer's style list, or its effect stack. Written back
-  /// through `setEffects` either way: the engine routes a staged list to the
-  /// list its ids name.
-  List<BridgeEffectInstance> _instances() {
-    if (clip case final c?) {
-      return layer.getClipEffects(clip: c, onCompClock: true);
-    }
-    return switch (group) {
-      final g? => comp.getGroupEffects(group: g),
-      null => style ? layer.getStyles() : layer.getEffects(),
-    };
-  }
+  List<BridgeEffectInstance> _instances() => _commands.instances();
 
-  /// Where this instance sits in the list it is on, and how long that list
-  /// is — read now, never held.
-  ///
-  /// A card is not rebuilt when a neighbour is removed (see [_SameCard]), so a
-  /// position from the last build could name the wrong gap. Null for an
-  /// instance that has gone, which is a command with nothing to act on.
-  (int, int)? _place() {
-    final stack = _instances();
-    final at = stack.indexWhere((e) => e.id() == info.id);
-    return at < 0 ? null : (at, stack.length);
-  }
+  List<BridgeParamInfo> get _rows => _commands.rows;
 
   /// Whether an effect dragged from [from] lands **below** this heading, which
   /// it does when it is travelling down the stack. Read as the pointer arrives
-  /// over this heading, for the same reason [_place] is.
+  /// over this heading, as a card is not rebuilt when a neighbour goes.
   bool _landsBelow(String from) {
     final stack = _instances();
     final it = stack.indexWhere((e) => '${e.id()}' == from);
@@ -2259,22 +2760,37 @@ class _EffectSection extends StatelessWidget {
     return it >= 0 && me >= 0 && it < me;
   }
 
-  /// Run [op] on each of them, in stack order.
-  void _withHandle(BuildContext context, void Function(BridgeEffectInstance) op,
-      {bool reversed = false}) {
-    final handles = _handles(context);
-    for (final handle in reversed ? handles.reversed : handles) {
-      op(handle);
-    }
+  /// The Mix and Matte rows nearly every effect ends with: what the Compositing
+  /// fold holds. One the schema keeps in a group of its own (the Lens flare's
+  /// source matte) stays where it is.
+  List<BridgeParamInfo> get _compositingRows {
+    final grouped = {
+      for (final g in cachedListParameterGroups(info.name)) ...g.params,
+    };
+    final hidden = info.hiddenRows.toSet();
+    return [
+      for (final p in _rows)
+        if (!hidden.contains(p.id) &&
+            !grouped.contains(p.id) &&
+            ((p.id == 'mix' && p.kind is BridgeParamKind_Float) ||
+                (p.id == 'matte' && p.kind is BridgeParamKind_Layer)))
+          p,
+    ];
   }
 
-  /// Switch this effect on or off. One implementation, because the heading's
-  /// enlarged hit area and the checkbox mark inside it are two ways at the same
-  /// switch and must not drift into two.
-  void _setEnabled(BuildContext context, bool on) {
-    // All of them take *this* card's new state rather than each flipping its
-    // own, so a run of mixed ticks comes out even.
-    _withHandle(context, (e) => layer.setEffectEnabled(effect: e, enabled: on));
+  /// Where the Compositing fold's open state is kept.
+  String get _compositingPath => 'fx-compositing-${info.id}';
+
+  /// Put one of this material's rows back to its file's value.
+  void _resetMaterialRow(String param) {
+    for (final instance in _instances()) {
+      if (instance.id() != info.id) continue;
+      try {
+        layer.resetMaterialRow(material: instance, param: param);
+      } catch (_) {
+        // The material went away under the press; nothing to put back.
+      }
+    }
     onStackChanged();
   }
 
@@ -2305,45 +2821,6 @@ class _EffectSection extends StatelessWidget {
     onStackChanged();
   }
 
-  /// **Every row this instance draws**, in order: the ones its effect declares,
-  /// then the ones its own state derives (docs/impl/custom-shader.md §1.5).
-  ///
-  /// One road, so nothing below here can tell a derived row from a declared one
-  /// — same widgets, same keyframes, same reset. The declared half is memoised
-  /// under the match name because it never changes; the derived half rides the
-  /// read model beside the values, because it is a fact about the instance and
-  /// a fetch per card per rebuild is the traffic the budget test forbids.
-  List<BridgeParamInfo> get _rows => relistedRows(
-        [...cachedListParameters(info.name), ...info.derivedParams],
-        info.rowOptions,
-      );
-
-  /// Put every parameter back to the value its schema declares, and drop any
-  /// curve on it — one op, so one undo step for the whole reset.
-  ///
-  /// Written straight through the stack rather than through [EffectStackEditor],
-  /// which stages exactly one parameter: a reset is every parameter at once, and
-  /// staging them one at a time would be one undo entry each.
-  void _reset() {
-    final stack = _instances();
-    for (final instance in stack) {
-      if (instance.id() != info.id) continue;
-      for (final param in _rows) {
-        // A button has no value to put back.
-        if (defaultEffectValue(param.kind) case final value?) {
-          instance.setValue(id: param.id, value: value);
-        }
-      }
-      try {
-        layer.setEffects(effects: stack);
-      } catch (_) {
-        // The stack changed under us; re-reading is the recovery.
-      }
-      break;
-    }
-    onStackChanged();
-  }
-
   @override
   Widget build(BuildContext context) {
     final id = info.id;
@@ -2356,13 +2833,17 @@ class _EffectSection extends StatelessWidget {
     final owner = layer.internallayerId.toString();
     final base = named == null
         ? ''
-        : style
-            ? stylePath(owner, '$id')
-            : group != null
-                ? effectPath(groupFoldPrefix(group!), '$id')
-                : clip != null
-                    ? effectPath(clipFoldPrefix(clip!), '$id')
-                    : effectPath(owner, '$id');
+        : inputs
+            ? inputsPath(owner)
+            : material
+                ? modelMaterialPath(owner, '$id')
+                : style
+                    ? stylePath(owner, '$id')
+                    : group != null
+                        ? effectPath(groupFoldPrefix(group!), '$id')
+                        : clip != null
+                            ? effectPath(clipFoldPrefix(clip!), '$id')
+                            : effectPath(owner, '$id');
 
     // The effect's own display, read at `at` — the Levels histogram traces the
     // frame under the playhead, so this one *is* rebuilt on a scrub, alone.
@@ -2388,7 +2869,11 @@ class _EffectSection extends StatelessWidget {
     return FxSection(
       // The user's own name where one is set, then the graph a Node graph
       // effect applies, then the effect's label.
-      title: info.customName ?? graphName ?? effectLabelOf(info.name),
+      title: (material && info.customName != null
+              ? engineLabel(info.customName!)
+              : info.customName) ??
+          graphName ??
+          effectLabelOf(info.name),
       open: open,
       onToggle: onToggle,
       pick: pick,
@@ -2408,21 +2893,22 @@ class _EffectSection extends StatelessWidget {
               field0: BridgeScalar_Keyframed(:final field0)))
             ...field0,
       ],
-      leading: LumitTooltip(
-        message: info.enabled ? l10n.tipDisable : l10n.tipEnable,
-        // **A target you can hit** (owner, desk test). The checkbox's own 14px
-        // box is what a settings page wants; here it is the control reached
-        // for most, and it was being missed. The whole stopwatch column, for
-        // the whole height of the heading, switches the effect — and the mark
-        // inside is drawn a step larger so it holds its own beside the
-        // heading's capitals (see `fxEnableHitWidth`), and a drag off it sets
-        // every switch it crosses to what this one just became (item 6.2).
-        child: fxEnableSwitch(
-          id: '$id',
-          on: info.enabled,
-          onChanged: (on) => _setEnabled(context, on),
-        ),
-      ),
+      // **A target you can hit** (owner, desk test). The checkbox's own 14px
+      // box is what a settings page wants; here it is the control reached
+      // for most, and it was being missed. The whole stopwatch column, for
+      // the whole height of the heading, switches the effect, and the mark
+      // inside is drawn a step larger so it holds its own beside the
+      // heading's capitals (see `fxEnableHitWidth`), and a drag off it sets
+      // every switch it crosses to what this one just became (item 6.2).
+      // No tooltip, as on the node box: the tick is the state, and the menu
+      // names it Bypass.
+      leading: inputs
+          ? null
+          : fxEnableSwitch(
+              id: '$id',
+              on: info.enabled,
+              onChanged: (on) => _commands.setEnabled(context, on),
+            ),
       actions: [
         if (onOpenInterface case final open?)
           fxTextAction(
@@ -2436,29 +2922,36 @@ class _EffectSection extends StatelessWidget {
               open();
             },
           ),
-        fxTextAction(
-          context,
-          label: l10n.reset,
-          tip: l10n.tipResetParameters,
-          keyName: 'fx-reset-$id',
-          onPressed: _reset,
-        ),
-        // What this effect cost in the last measured frame — the same number
-        // its row in the Timeline shows, from the same measurement (docs/13
-        // §7.1). Blank unless the Timeline's render-time column is measuring,
-        // so this panel neither turns the cost on nor shows a stale figure.
-        // Expanded rather than a fixed box after a Spacer: the value column is
-        // as wide as the panel leaves it, and a readout that insisted on its
-        // own width overflowed the heading in a narrow panel. It right-aligns
-        // itself and clips rather than pushing anything.
-        Expanded(child: TimingsCell(effectId: '$id')),
+      ],
+      // What this effect cost in the last measured frame, the same number
+      // its row in the Timeline shows, from the same measurement (docs/13
+      // §7.1). Blank unless the Timeline's render-time column is measuring,
+      // so this panel neither turns the cost on nor shows a stale figure.
+      status: inputs ? null : TimingsCell(effectId: '$id'),
+      hoverActions: [
+        if (material || !_commands.atDefault)
+          _headingButton(
+            context,
+            mark: LumitIcons.reset,
+            tip: l10n.tipResetParameters,
+            key: 'fx-reset-$id',
+            onPressed: () => _commands.reset(context),
+          ),
+        if (!inputs && !material)
+          _headingButton(
+            context,
+            mark: LumitIcons.close,
+            tip: l10n.tipRemove,
+            key: 'fx-remove-$id',
+            onPressed: () => _commands.remove(context),
+          ),
       ],
       // Drag the heading to move the effect (docs/07 §6): the gesture the rest
       // of the application already uses to reorder a list, and the one the
       // owner asked for.
       // A style is not draggable: its place in the list is Photoshop's, not
       // the user's (docs/impl/layer-styles.md §2).
-      dragKey: style ? null : '$id',
+      dragKey: style || inputs ? null : '$id',
       landsBelow: _landsBelow,
       onDropped: (from) {
         final stack = _instances();
@@ -2472,22 +2965,18 @@ class _EffectSection extends StatelessWidget {
         }
         onStackChanged();
       },
-      // Right-click is where the rest of the reordering lives: the two arrows that
-      // used to sit here spent permanent space on a rare act, and the render
-      // time — read constantly while a comp is being made faster — earns that
-      // space instead. Nothing is lost: the menu moves an effect a step, and
-      // to either end.
-      onContextMenu: (at) => _stackMenu(context, at),
-      trailing: _markButton(
+      // Right-click is where everything else an effect can do lives.
+      onContextMenu: (at) => _commands.showMenu(
         context,
-        mark: '×',
-        tip: l10n.tipRemove,
-        enabled: true,
-        key: 'fx-remove-$id',
-        onPressed: () {
-          _withHandle(context, (e) => layer.removeEffect(effect: e));
-          onStackChanged();
-        },
+        at,
+        onStartRename: onStartRename,
+        onFoldAll: onFoldAll,
+        compositing: inputs || _compositingRows.isEmpty
+            ? null
+            : (
+                open: isGroupOpen(_compositingPath, true),
+                toggle: () => onToggleGroup(_compositingPath, true),
+              ),
       ),
       // An effect with its own display (Levels' histogram) draws it
       // above its rows; the rows themselves are unchanged.
@@ -2496,7 +2985,17 @@ class _EffectSection extends StatelessWidget {
         // not doing anything (docs/12 §1, §2.3). An effect that is behaving
         // draws none of this.
         if (effectBadgeRow(context,
-                id: '$id', reason: info.badgeReason, detail: info.badgeDetail)
+                id: '$id',
+                // A Clone deformer set to Vector that cannot read outlines here
+                // says so, and why, as the effects that cannot run do.
+                reason: info.badgeReason ??
+                    (vectorReason != null &&
+                            info.values.any((v) =>
+                                v.id == 'mode' &&
+                                v.value == const BridgeEffectValue.choice(1))
+                        ? 'clone_vector_reads_picture'
+                        : null),
+                detail: info.badgeDetail ?? vectorReason?.why)
             case final badge?)
           badge,
         if (displayAt(playheadFrame) != null)
@@ -2522,7 +3021,7 @@ class _EffectSection extends StatelessWidget {
           if (input.key.startsWith('$id/'))
             _pointsRow(context, input.key.substring('$id/'.length),
                 input.value.label, input.value.from),
-        ..._paramRows(named, base, id, values),
+        if (drawsRows) ..._paramRows(named, base, id, values),
       ],
     );
   }
@@ -2592,6 +3091,38 @@ class _EffectSection extends StatelessWidget {
     );
   }
 
+  /// Put [rows] back to what the schema declares, as one write, or null when
+  /// they are there already.
+  VoidCallback? _resetRows(UuidValue id, List<BridgeParamInfo> rows) {
+    final held = {for (final v in info.values) v.id: v.value};
+    final values = <String, BridgeEffectValue>{
+      for (final p in rows)
+        if (defaultEffectValue(p.kind) case final fallback?)
+          if (!isDefaultEffectValue(held[p.id], fallback,
+              owner: layer.internallayerId))
+            p.id: fallback,
+    };
+    final write = onWritePair;
+    if (values.isEmpty || write == null) return null;
+    return () => write(id, values);
+  }
+
+  /// Where this card's rows sit in the Timeline's selection.
+  String? _rowPathBase(UuidValue id) {
+    final owner = layer.internallayerId.toString();
+    return inputs
+        ? inputsPath(owner)
+        : material
+            ? modelMaterialPath(owner, '$id')
+            : style
+                ? stylePath(owner, '$id')
+                : group != null
+                    ? effectPath(groupFoldPrefix(group!), '$id')
+                    : clip != null
+                        ? effectPath(clipFoldPrefix(clip!), '$id')
+                        : null;
+  }
+
   /// The parameter rows, folded through the schema's groups (docs/08 §1.2)
   /// and the `_x`/`_y` point-pair convention (docs/07 §6.1):
   ///
@@ -2614,10 +3145,13 @@ class _EffectSection extends StatelessWidget {
 
     // A plugin hides and shows its own rows, and the instance says which
     // are hidden right now. A group with nothing left to show is not drawn.
-    final hidden = info.hiddenRows.toSet();
+    final hidden = {...info.hiddenRows, ...hideRows};
     final params = [
       for (final p in _rows)
-        if (!hidden.contains(p.id)) p,
+        if (!hidden.contains(p.id) &&
+            (filter.isEmpty ||
+                engineLabel(p.label).toLowerCase().contains(filter)))
+          p,
     ];
     final groups = cachedListParameterGroups(info.name);
     final byFirstMember = <String, BridgeParamGroup>{};
@@ -2647,6 +3181,7 @@ class _EffectSection extends StatelessWidget {
       ...disabledParams(info.name, shown),
       ...info.disabledRows,
     };
+    final whyDisabled = disabledReasons(info.name, shown);
 
     // The uniform Matte row and the Mix row: a Layer picker carries its Channel
     // and Invert beside it, a Mix slider its Blend, and no rider gets a row of
@@ -2655,16 +3190,7 @@ class _EffectSection extends StatelessWidget {
     List<BridgeParamInfo> ridersFor(BridgeParamInfo p) =>
         paramRidersFor(params, p);
 
-    // The Mix and Matte rows nearly every effect ends with fold away under
-    // one Compositing twirl at its foot. One the schema already keeps in a
-    // group of its own (the Lens flare's source matte) stays where it is.
-    final compositing = [
-      for (final p in params)
-        if (!memberOf.containsKey(p.id) &&
-            ((p.id == 'mix' && p.kind is BridgeParamKind_Float) ||
-                (p.id == 'matte' && p.kind is BridgeParamKind_Layer)))
-          p,
-    ];
+    final compositing = _compositingRows;
 
     final folded = <String>{
       for (final p in params)
@@ -2688,8 +3214,17 @@ class _EffectSection extends StatelessWidget {
         onSeek: onSeek,
         onWrite: onWrite,
         onLive: onLive,
+        onWritePair: onWritePair,
         twoColumn: true,
         enabled: !disabled.contains(param.id),
+        disabledReason: whyDisabled[param.id],
+        optionNote: (i) => optionNoteOf(info.name, param.id, i),
+        optionReason: info.name == 'clone_deformer' && param.id == 'mode'
+            ? (i) => i == 1 ? vectorReason?.tip : null
+            : null,
+        offBecause: waitsForSimulate(info.name, param.id, shown)
+            ? l10n.fxNeedsSimulate
+            : null,
         // The effect's other values, for a control whose behaviour
         // depends on a sibling (the depth-of-field dropper reads the
         // effect's own `depth` layer).
@@ -2700,6 +3235,8 @@ class _EffectSection extends StatelessWidget {
         ],
         onAction: onAction,
         driven: driven['$id/${param.id}'],
+        onReset: material ? () => _resetMaterialRow(param.id) : null,
+        rowPath: base.isEmpty ? _rowPathBase(id) == null ? null : '${_rowPathBase(id)}/${param.id}' : '$base/${param.id}',
       ));
     }
 
@@ -2728,7 +3265,6 @@ class _EffectSection extends StatelessWidget {
                 _ => curveIdentity,
               },
           ],
-          resetLabel: l10n.reset,
           resetTip: l10n.tipResetCurve,
           plotSize: curvePlotSize,
           onPlotSize: onCurvePlotSize,
@@ -2776,6 +3312,7 @@ class _EffectSection extends StatelessWidget {
               next.id,
               EffectPointRowFrb(
             key: ValueKey<String>('fx-row-$id-${param.id}-pair'),
+            ownerLayerId: layer.internallayerId,
             effectId: id,
             xParam: param,
             yParam: next,
@@ -2810,6 +3347,9 @@ class _EffectSection extends StatelessWidget {
     }
 
     final rows = <Widget>[];
+    // The folds that start shut go after the loose rows, shut or open, so what
+    // follows one never reads as what's inside it and its twirl stays put.
+    final tucked = <Widget>[];
     var i = 0;
     while (i < params.length) {
       final param = params[i];
@@ -2839,11 +3379,12 @@ class _EffectSection extends StatelessWidget {
           rows.addAll(foldRows(run));
         } else {
           final path = 'fx-group-$id-${group.label}';
-          rows.add(_ParamGroupSection(
+          (group.collapsed ? tucked : rows).add(_ParamGroupSection(
             key: ValueKey<String>(path),
             label: group.label,
-            open: isGroupOpen(path, group.collapsed),
+            open: filter.isNotEmpty || isGroupOpen(path, group.collapsed),
             onToggle: () => onToggleGroup(path, group.collapsed),
+            onReset: _resetRows(id, run),
             rows: foldRows(run),
           ));
         }
@@ -2869,20 +3410,28 @@ class _EffectSection extends StatelessWidget {
         rows.addAll(foldRows(flat));
       }
     }
+    rows.addAll(tucked);
     if (compositing.isNotEmpty) {
-      final path = 'fx-compositing-$id';
+      final path = _compositingPath;
       final open = isGroupOpen(path, true);
-      rows.add(_ParamGroupSection(
-        headerKey: ValueKey<String>(path),
-        label: l10n.fxFoldCompositing,
-        open: open,
-        onToggle: () => onToggleGroup(path, true),
-        // Shut, the heading still says what is off its default, so a mix or
-        // a matte is never hidden.
-        summary:
-            open ? null : _compositingSummary(compositing, ridersFor, shown),
-        rows: [for (final p in compositing) rowFor(p)],
-      ));
+      // Shut, what is off its default still shows, so a mix or a matte is never
+      // hidden. At its defaults, shut, the fold takes no room at all: the
+      // heading's menu opens it.
+      final summary =
+          open ? null : _compositingSummary(compositing, ridersFor, shown);
+      if (open || summary != null) {
+        rows.add(_ParamGroupSection(
+          headerKey: ValueKey<String>(path),
+          label: l10n.fxFoldCompositing,
+          open: open,
+          onToggle: () => onToggleGroup(path, true),
+          onReset: _resetRows(id, [
+            for (final p in compositing) ...[p, ...ridersFor(p)],
+          ]),
+          summary: summary,
+          rows: [for (final p in compositing) rowFor(p)],
+        ));
+      }
     }
     return rows;
   }
@@ -2933,189 +3482,11 @@ class _EffectSection extends StatelessWidget {
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
-  /// A small text mark rather than an icon, matching v0's × for Remove — the
-  /// icon set has no caret or close glyph, and three marks do not earn three
-  /// new ones.
-  /// The effect heading's right-click menu: where it sits in the stack, and
-  /// removing it. Reordering is a handful of acts in a session, so it lives
-  /// here rather than in two buttons on every heading — and unlike the arrows
-  /// it can send an effect to the top or the bottom in one go.
-  /// Put this effect on the clipboard — with the rest of the picked run
-  /// when it is part of one.
-  ///
-  /// A failure is swallowed the way the neighbouring effect commands' are: the
-  /// effect went away between the menu opening and the row being chosen, and an
-  /// error about a thing that is no longer there helps nobody.
-  void _copyEffect(BuildContext context) {
-    final ui = Provider.of<LumitUiState>(context, listen: false);
-    try {
-      ui.copyEffectsToClipboard(
-        layer.copyEffects(effects: ui.effectsToCopy(layer, info.id)),
-      );
-    } catch (_) {
-      // The effect is gone; the clipboard keeps whatever it had.
-    }
-  }
-
-  /// Save this effect alone as a `.lumfx` in the preset library, where the
-  /// Effects & presets panel lists it. Named after the effect to begin with.
-  Future<void> _savePreset(BuildContext context) async {
-    final ui = Provider.of<LumitUiState>(context, listen: false);
-    final suggested = '${info.customName ?? effectLabelOf(info.name)}.lumfx';
-    final path = await pickPresetSaveLocation(suggested,
-        initialDirectory: presetsDirPath());
-    if (path == null) return;
-    final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
-    try {
-      File(path)
-          .writeAsStringSync(layer.savePreset(name: name, only: info.id));
-    } catch (_) {
-      // A folder that will not take the file, or an effect that went away
-      // under the open dialogue. The document is untouched either way.
-      return;
-    }
-    ui.presetsChanged.value++;
-    if (context.mounted) {
-      Provider.of<LumitState>(context, listen: false)
-          .postNotice(l10n.presetSavedNotice);
-    }
-  }
-
-  void _stackMenu(BuildContext context, Offset at) {
-    // Where the moves below start from, read at the press. An instance that
-    // has gone has no menu.
-    if (_place() case (final index, final count)) {
-      _showStackMenu(context, at, index, count);
-    }
-  }
-
-  void _showStackMenu(BuildContext context, Offset at, int index, int count) {
-    final id = info.id;
-    void move(int to) {
-      // **The order several picked effects land in**. Each one is
-      // taken out of the stack and put back *at* `to`, so the last one moved
-      // ends up in front of the others: an upward move therefore takes the
-      // bottom-most first and a downward one the topmost, and either way the
-      // run arrives together with its own order intact.
-      _withHandle(context, (e) => layer.reorderEffect(effect: e, newIndex: to),
-          reversed: to <= index);
-      onStackChanged();
-    }
-
-    showLumitPopup<void>(
-      context: context,
-      position: at,
-      builder: (close) => FloatSurface(
-        width: 190,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          // Only the moves this effect can actually make are listed: a menu of
-          // dead rows tells you what you cannot do, which is not what a menu
-          // is for (docs/15 §no punishment UI).
-          children: [
-            // **Rename, first** (owner, desk test): the heading had no mouse
-            // path to its own editor at all — `Enter` on the selection was the
-            // only way in, and a keyboard-only act is one nobody finds. It is
-            // the menu's entry rather than a double-click on the name because
-            // that is the pattern the application already settled on: renaming
-            // came off a list row's second click precisely because a slow
-            // double-click and a deliberate click were the same gesture, and it
-            // went on the row menu instead. An effect heading is a list row.
-            if (onStartRename case final start?)
-              MenuRow(
-                key: ValueKey<String>('fx-menu-rename-$id'),
-                onPressed: () {
-                  close(null);
-                  start();
-                },
-                child: Text(l10n.rename),
-              ),
-            // The move rows and Copy are the *stack*'s: nine named slots in a
-            // pinned order have nowhere to move to and no clipboard to go on,
-            // so a style's menu is Rename and Remove.
-            if (!style && index > 0) ...[
-              MenuRow(
-                key: ValueKey<String>('fx-menu-up-$id'),
-                onPressed: () {
-                  close(null);
-                  move(index - 1);
-                },
-                child: Text(l10n.moveUp),
-              ),
-              MenuRow(
-                key: ValueKey<String>('fx-menu-top-$id'),
-                onPressed: () {
-                  close(null);
-                  move(0);
-                },
-                child: Text(l10n.moveToTop),
-              ),
-            ],
-            if (!style && index < count - 1) ...[
-              MenuRow(
-                key: ValueKey<String>('fx-menu-down-$id'),
-                onPressed: () {
-                  close(null);
-                  move(index + 1);
-                },
-                child: Text(l10n.moveDown),
-              ),
-              MenuRow(
-                key: ValueKey<String>('fx-menu-bottom-$id'),
-                onPressed: () {
-                  close(null);
-                  move(count - 1);
-                },
-                child: Text(l10n.moveToBottom),
-              ),
-            ],
-            // **Copy this one effect**. The engine has taken one or a
-            // whole stack since copy/paste landed — `copy_effects(Some(id))` —
-            // and the Edit menu's Copy takes the *layer*, so until now there
-            // was no way to pick a single effect and no way to reach the call.
-            // It goes on the same clipboard a stack does: both are `.lumfx`, so
-            // both paste the same way, and Paste needs no idea which it holds.
-            if (!style)
-              MenuRow(
-                key: ValueKey<String>('fx-menu-copy-$id'),
-                onPressed: () {
-                  close(null);
-                  _copyEffect(context);
-                },
-                child: Text(l10n.copyEffect),
-              ),
-            // This one effect as a preset, settings and keyframes and all.
-            // A group header's stack is not a layer's to save from.
-            if (!style && group == null)
-              MenuRow(
-                key: ValueKey<String>('fx-menu-save-preset-$id'),
-                onPressed: () {
-                  close(null);
-                  _savePreset(context);
-                },
-                child: Text(l10n.savePresetEllipsis),
-              ),
-            MenuRow(
-              key: ValueKey<String>('fx-menu-remove-$id'),
-              onPressed: () {
-                close(null);
-                _withHandle(context, (e) => layer.removeEffect(effect: e));
-                onStackChanged();
-              },
-              child: Text(l10n.removeEffect),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _markButton(
+  /// One of the marks that come up on the heading under the pointer.
+  Widget _headingButton(
     BuildContext context, {
     required String mark,
     required String tip,
-    required bool enabled,
     required String key,
     required VoidCallback onPressed,
   }) {
@@ -3126,13 +3497,9 @@ class _EffectSection extends StatelessWidget {
         key: ValueKey<String>(key),
         frameless: true,
         small: true,
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        onPressed: enabled ? onPressed : null,
-        child: Text(
-          mark,
-          style:
-              t.small.copyWith(color: enabled ? t.textMuted : t.textDisabled),
-        ),
+        padding: const EdgeInsets.all(1),
+        onPressed: onPressed,
+        child: glyph.LumitIcon(mark, size: 14, colour: t.textMuted),
       ),
     );
   }
@@ -3151,6 +3518,9 @@ class _ParamGroupSection extends StatelessWidget {
   /// twirl row is found by. Both are the Compositing fold's.
   final String? summary;
   final Key? headerKey;
+
+  /// Puts every row inside back to its default, or null when they all are.
+  final VoidCallback? onReset;
   const _ParamGroupSection({
     super.key,
     required this.label,
@@ -3159,6 +3529,7 @@ class _ParamGroupSection extends StatelessWidget {
     required this.rows,
     this.summary,
     this.headerKey,
+    this.onReset,
   });
 
   @override
@@ -3176,6 +3547,28 @@ class _ParamGroupSection extends StatelessWidget {
             onToggle: onToggle,
             summary: summary,
             key: headerKey,
+            onContextMenu: (at) => showMenuAt<void>(
+              context: context,
+              position: at,
+              rows: (close) => [
+                MenuRow(
+                  onPressed: () {
+                    close(null);
+                    onToggle();
+                  },
+                  child: MenuLabel(open ? l10n.fxMenuCollapse : l10n.fxMenuExpand),
+                ),
+                const MenuDivider(),
+                MenuRow(
+                  enabled: onReset != null,
+                  onPressed: () {
+                    close(null);
+                    onReset?.call();
+                  },
+                  child: MenuLabel(l10n.reset, enabled: onReset != null),
+                ),
+              ],
+            ),
           ),
           if (open)
             Column(
@@ -3240,13 +3633,20 @@ class _TransformSection extends StatelessWidget {
     required this.onChanged,
     required this.open,
     required this.onToggle,
+    this.filter = '',
   });
+
+  /// The panel's row filter, handed to the rows.
+  final String filter;
 
   @override
   Widget build(BuildContext context) {
     final share = ShareRows.maybeOf(context);
     final named = share != null && share.active ? share : null;
     final owner = layer.internallayerId.toString();
+    // A filter the heading's name holds keeps every row, as an effect's does.
+    final title = engineLabel('Transform');
+    final needle = title.toLowerCase().contains(filter) ? '' : filter;
     final rows = TransformRowsFrb(
       comp: comp,
       layer: layer,
@@ -3262,11 +3662,15 @@ class _TransformSection extends StatelessWidget {
       onSeek: onSeek,
       onChanged: onChanged,
       twoColumn: true,
+      filter: needle,
     ).rows(context);
+    if (rows.isEmpty) return const SizedBox.shrink();
     return FxSection(
-        title: engineLabel('Transform'),
-        open: open,
+        title: title,
+        open: open || needle.isNotEmpty,
         onToggle: onToggle,
+        onContextMenu: (at) =>
+            showTransformMenu(context, at, layer, onChanged: onChanged),
         // A solve-linked camera says so where its numbers are, because that is
         // where the surprise would otherwise be: the rows below are still
         // editable, but what they hold is a correction on top of the solve
@@ -3321,6 +3725,13 @@ Color? curveChannelColour(String paramId) => switch (paramId) {
       'blue' => ScopeColours.standard.blue,
       _ => null,
     };
+
+bool _simulating(Map<String, BridgeEffectValue> values) {
+  final on = values['simulate'];
+  return on is BridgeEffectValue_Bool && on.field0;
+}
+bool _namesALayer(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Layer && value.field0 != null;
 
 /// The display an effect draws *above* its rows, or null for the effects that
 /// draw none — which is nearly all of them.
@@ -3385,8 +3796,17 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
         ),
-      // Bake points' bake is filed and reported the same way, in its own words.
+      // Bake points' bake is filed and reported the same way, in its own words,
+      // and so is a simulation's.
       'bake_points' => PlanarTrackDisplayFrb(
+          key: ValueKey<String>('fx-planar-track-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+          bake: true,
+        ),
+      'particulate' || 'smoke' when _simulating(values) => PlanarTrackDisplayFrb(
           key: ValueKey<String>('fx-planar-track-display-$effectId'),
           layer: layer,
           effectId: effectId,
@@ -3412,6 +3832,16 @@ Widget? customEffectDisplay(
       // models are two answers, not one.
       'depth' => PlaneDisplayFrb(
           key: ValueKey<String>('fx-depth-display-$effectId'),
+          card: PlaneCard.depth,
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
+        ),
+      // Depth points asks for the same reading, unless a Depth layer has taken
+      // over from it.
+      'depth_points' when !_namesALayer(values['depth_layer']) => PlaneDisplayFrb(
+          key: ValueKey<String>('fx-depth-points-display-$effectId'),
           card: PlaneCard.depth,
           layer: layer,
           effectId: effectId,

@@ -118,21 +118,25 @@ struct ExposureParams {
 }
 
 /// One resolved temperature (docs/08 §3.20): a warm/cool white-balance shift as
-/// a per-channel gain in scene-linear light. `gain_r`/`gain_b` are computed
-/// host-side (`gain_r = max(0, 1 + 0.75·k)`, `gain_b = max(0, 1 − 0.75·k)` for
-/// `k = temperature / 100`), so the CPU reference and the kernel multiply
-/// by byte-identical numbers; green and alpha are untouched. Gains `(1.0, 1.0)`
-/// (temperature 0)
-/// are the bit-exact neutral point. Premultiplied, exactly like [`ExposureOp`]:
+/// a per-channel gain in scene-linear light, with the green/magenta tint on
+/// the green channel. The gains are computed host-side (`gain_r = max(0, 1 +
+/// 0.75·k)`, `gain_b = max(0, 1 − 0.75·k)` for `k = temperature / 100`, and
+/// `gain_g = max(0, 1 − 0.75·tint)`), so the CPU reference and the kernel
+/// multiply by byte-identical numbers; alpha is untouched. Gains of 1.0 all
+/// round (temperature and tint 0) are the bit-exact neutral point. Premultiplied, exactly like [`ExposureOp`]:
 /// a per-channel scalar scales premultiplied colour consistently, so no
 /// unpremultiply round trip.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TemperatureOp {
     /// Temperature / 100 clamped to +-2, for the matted branch.
     pub t: f32,
-    /// The scene-linear red gain. 1.0 (with `gain_b` 1.0) is the neutral point.
+    /// Tint / 100 clamped to +-2, for the matted branch.
+    pub tint: f32,
+    /// The scene-linear red gain. 1.0 (with the other two) is the neutral point.
     pub gain_r: f32,
-    /// The scene-linear blue gain. 1.0 (with `gain_r` 1.0) is the neutral point.
+    /// The scene-linear green gain, the tint.
+    pub gain_g: f32,
+    /// The scene-linear blue gain.
     pub gain_b: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
@@ -147,9 +151,12 @@ struct TemperatureParams {
     /// Temperature / 100, read only under a matte: the gains there are
     /// rebuilt from `t * k`.
     t: f32,
-    /// 1 = scale Temperature toward 0 by the matte.
+    /// 1 = scale Temperature and Tint toward 0 by the matte.
     matte_on: f32,
-    _pad: [f32; 3],
+    gain_g: f32,
+    /// Tint / 100, read only under a matte, as `t` is.
+    tint: f32,
+    _pad: f32,
 }
 
 /// One resolved invert (docs/08 §3.23): the colour inverse `out.rgb = 1 − u`
@@ -541,8 +548,8 @@ impl FxEngine {
 
     /// Apply one temperature (docs/08 §3.20) to a linear working texture,
     /// returning a new texture of the same size. One pointwise pass: R × the
-    /// host-computed `gain_r` and B × `gain_b`, green and alpha untouched;
-    /// `gain_r == 1.0 && gain_b == 1.0` (temperature 0) short-circuits to the
+    /// host-computed `gain_r`, G × `gain_g` and B × `gain_b`, alpha untouched;
+    /// gains of 1.0 all round (temperature and tint 0) short-circuit to the
     /// input inside the kernel. Premultiplied, exactly like [`Self::exposure`].
     pub fn temperature(
         &self,
@@ -569,7 +576,9 @@ impl FxEngine {
                 mix_amt: op.mix,
                 t: op.t,
                 matte_on: f32::from(matte.is_some()),
-                _pad: [0.0; 3],
+                gain_g: op.gain_g,
+                tint: op.tint,
+                _pad: 0.0,
             }),
         );
         out

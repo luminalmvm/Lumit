@@ -8,6 +8,8 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
+mod clip_edit_tests;
+
 use crate::api::{
     composition::{BridgeCompSettings, CompositionReference},
     effect::{
@@ -26,6 +28,9 @@ use crate::api::{
 use lumit_core::model::{Folder, FootageItem, MediaRef, ProjectItem};
 use lumit_core::ops::Op;
 use uuid::Uuid;
+
+mod animator_tests;
+mod effect_duplicate_tests;
 
 /// A project holding a folder that lists one footage item, plus a second
 /// footage item at the root. Returns the project and the three references.
@@ -332,7 +337,7 @@ fn a_packed_project_keeps_its_footage_when_the_original_goes() {
     assert_eq!(project.pack_state().expect("state").packed, 1);
 
     // The original goes, and an ordinary save still carries the footage.
-    std::fs::remove_file(&clip).expect("deleted");
+    crate::test_files::remove_when_free(&clip);
     project.new_composition("Later".into(), None).expect("comp");
     project.save(String::new()).expect("saved");
 
@@ -1009,7 +1014,7 @@ fn every_effect_value_kind_round_trips_through_the_document() {
             .set_value(id.clone(), value)
             .unwrap_or_else(|e| panic!("every kind writes: {id} answered {e}"));
     }
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
 
     assert_eq!(stack_of(&layer), vec![original]);
 }
@@ -1039,7 +1044,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
     // One staged write, one commit, one undo step.
     let mut staged = layer.get_effects().expect("stack");
     staged[0].set_shader_graph(graph).expect("a graph document");
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
 
     let held = stack_of(&layer);
     let block = held[0].extra.get("shader").expect("the block");
@@ -1057,7 +1062,7 @@ fn a_shader_graph_commits_detaches_one_way_and_undoes_whole() {
     assert!(staged[0].shader_graph().is_some());
     staged[0].detach_shader_graph();
     assert!(staged[0].shader_graph().is_none());
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
     let held = stack_of(&layer);
     let block = held[0].extra.get("shader").expect("the block");
     assert!(
@@ -1154,7 +1159,7 @@ fn an_old_instance_reaches_a_parameter_its_schema_grew_later() {
             BridgeEffectValue::Float(BridgeScalar::Static(30.0)),
         )
         .expect("a grown parameter must be writable");
-    layer.set_effects(staged, None).expect("committed");
+    layer.set_effects(staged, None, None).expect("committed");
 
     let after = stack_of(&layer);
     let stored = after[0]
@@ -1439,7 +1444,7 @@ fn committing_a_staged_stack_that_no_longer_matches_the_document_is_refused() {
         .expect("removed behind the panel's back");
 
     assert!(matches!(
-        layer.set_effects(staged, None),
+        layer.set_effects(staged, None, None),
         Err(BridgeError::StaleEffectStack)
     ));
     assert_eq!(
@@ -1463,7 +1468,7 @@ fn a_layer_edit_scopes_to_its_layer_and_not_the_item_list() {
     let (comp, layer) = (Uuid::now_v7(), Uuid::now_v7());
 
     assert_eq!(
-        crate::api::state::op_scope(&Op::SetLayerVisible {
+        crate::api::state::scope::op_scope(&Op::SetLayerVisible {
             comp,
             layer,
             visible: false,
@@ -1474,7 +1479,7 @@ fn a_layer_edit_scopes_to_its_layer_and_not_the_item_list() {
     // Adding or removing a layer changes the comp's layer list, not one layer's
     // contents, so it reports the comp alone.
     assert_eq!(
-        crate::api::state::op_scope(&Op::RemoveLayer { comp, layer }),
+        crate::api::state::scope::op_scope(&Op::RemoveLayer { comp, layer }),
         (Some(comp), None, false)
     );
 }
@@ -2070,7 +2075,7 @@ fn a_copied_layer_pastes_whole_and_lands_at_the_playhead() {
             BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(0, 0.0), key(2, 40.0)])),
         )
         .expect("animated");
-    source.set_effects(staged, None).expect("committed");
+    source.set_effects(staged, None, None).expect("committed");
 
     let text = source.copy_layer().expect("copied");
 
@@ -2137,7 +2142,7 @@ fn a_pasted_effect_starts_its_animation_at_the_playhead() {
             BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![key(4, 0.0), key(5, 40.0)])),
         )
         .expect("animated");
-    source.set_effects(staged, None).expect("committed");
+    source.set_effects(staged, None, None).expect("committed");
 
     let text = source.copy_effects(Vec::new()).expect("copied");
     let target = comp.add_solid_layer(None).expect("somewhere to paste");
@@ -3200,6 +3205,9 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         gradient_end_opacity: BridgeScalar::Static(100.0),
         gradient_stops: Vec::new(),
         combine: 0,
+        hidden: false,
+        fill_hidden: false,
+        stroke_hidden: false,
         path_keys: Vec::new(),
         taper: None,
         primitive: None,
@@ -3291,6 +3299,8 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
         kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
             id: Uuid::now_v7(),
             name: "Trim paths".into(),
+            hidden: false,
+            own: false,
             kind: BridgeShapeModifierKind::Trim(BridgeShapeTrim {
                 start: BridgeScalar::Static(-40.0),
                 offset: BridgeScalar::Static(180.0),
@@ -3523,6 +3533,8 @@ fn expanding_a_repeater_makes_its_copies_real() {
         kind: BridgeShapeEntryKind::Modifier(BridgeShapeModifier {
             id: repeater,
             name: "Repeater".into(),
+            hidden: false,
+            own: false,
             kind: BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
                 copies: BridgeScalar::Static(3.0),
                 offset: BridgeScalar::Static(0.0),
@@ -3846,127 +3858,6 @@ fn a_stroke_is_added_read_back_and_undone_in_one_step() {
 }
 
 // --- Assets: what a layer is made of --------------------------------------
-
-/// **Adding the first animator moves the anchor with it, in one undo step**.
-/// An animated line is drawn into a box one text size larger a side with the
-/// words that far in, so without the compensating shift the words would jump
-/// the moment the first animator arrived — and the shift has to
-/// ride in the same `Op` as the document, or `Ctrl+Z` puts the pivot back
-/// before it takes the animator away.
-#[test]
-fn adding_the_first_animator_moves_the_anchor_and_undoes_in_one_step() {
-    use crate::api::assets::{
-        BridgeColourRgba, BridgeRangeSelector, BridgeSelectorBasis, BridgeSelectorShape,
-        BridgeTextAnimator, BridgeTextDocument,
-    };
-    use crate::api::effect::BridgeScalar;
-
-    let (project, layer) = project_with_layer();
-    let comp = CompositionReference::new(project.id, layer.comp_id());
-    let text = comp.add_text_layer(None).expect("a text layer");
-    let zero = || BridgeScalar::Static(0.0);
-    let plain = BridgeTextDocument {
-        text: "Lumit".into(),
-        expression: None,
-        size: 72.0,
-        fill: BridgeColourRgba {
-            r: 1.0,
-            g: 1.0,
-            b: 1.0,
-            a: 1.0,
-        },
-        path: None,
-        path_offset: zero(),
-        animators: Vec::new(),
-        style: crate::api::assets::default_text_style(),
-        paragraph: crate::api::assets::default_paragraph_style(),
-    };
-    text.set_text(plain.clone()).expect("set");
-    let anchor = |t: &crate::api::layer::LayerReference| match t
-        .get_transform()
-        .expect("transform")
-        .anchor_x
-    {
-        BridgeScalar::Static(v) => v,
-        other => panic!("the anchor is not still: {other:?}"),
-    };
-    let before = anchor(&text);
-
-    let animator = BridgeTextAnimator {
-        name: "Cascade".into(),
-        selector: BridgeRangeSelector {
-            start: zero(),
-            end: BridgeScalar::Static(25.0),
-            offset: zero(),
-            basis: BridgeSelectorBasis::Characters,
-            shape: BridgeSelectorShape::Square,
-        },
-        position_x: zero(),
-        position_y: BridgeScalar::Static(-40.0),
-        rotation: zero(),
-        scale_x: BridgeScalar::Static(100.0),
-        scale_y: BridgeScalar::Static(100.0),
-        opacity: BridgeScalar::Static(100.0),
-        fill_r: zero(),
-        fill_g: zero(),
-        fill_b: zero(),
-    };
-    let animated = BridgeTextDocument {
-        animators: vec![animator.clone()],
-        ..plain.clone()
-    };
-    text.set_text(animated).expect("set");
-    assert!(
-        (anchor(&text) - before - 72.0).abs() < 1e-6,
-        "the anchor did not follow the margin ({} → {})",
-        before,
-        anchor(&text)
-    );
-    let back = text.get_text().expect("text").expect("still text");
-    assert_eq!(
-        back.animators,
-        vec![animator],
-        "the animator did not survive"
-    );
-
-    // One undo step takes the animator and the pivot away together.
-    project.undo().expect("undone");
-    assert!(
-        text.get_text()
-            .expect("text")
-            .expect("still text")
-            .animators
-            .is_empty(),
-        "the animator outlived its undo"
-    );
-    assert!(
-        (anchor(&text) - before).abs() < 1e-6,
-        "the pivot was left where the animator put it"
-    );
-
-    // And editing an animator that is already there moves nothing.
-    let with = BridgeTextDocument {
-        animators: vec![BridgeTextAnimator {
-            name: "Cascade".into(),
-            ..back.animators[0].clone()
-        }],
-        ..plain
-    };
-    text.set_text(with.clone()).expect("set");
-    let settled = anchor(&text);
-    text.set_text(BridgeTextDocument {
-        animators: vec![BridgeTextAnimator {
-            rotation: BridgeScalar::Static(30.0),
-            ..with.animators[0].clone()
-        }],
-        ..with
-    })
-    .expect("set");
-    assert!(
-        (anchor(&text) - settled).abs() < 1e-6,
-        "editing an animator moved the layer"
-    );
-}
 
 /// **Text to shapes and Text to points**: each makes a copy beside the
 /// original, and the original is kept — the layer is still a Type layer
@@ -4873,10 +4764,10 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     let (a, b) = (ids[0], ids[1]);
     let cut = [(0, join), (join, 2 * join), (2 * join, 3 * join)];
 
-    let over = comp.cut_trim(a, 0, join + 4, false, false, false);
+    let over = comp.cut_trim(a, 0, join + 4, false, false, false, None);
     assert_eq!(over.expect("answered"), BridgeCutResult::Overlap);
     // With overlap on, the same edge makes a dissolve.
-    let over = comp.cut_trim(a, 0, join + 4, false, false, true);
+    let over = comp.cut_trim(a, 0, join + 4, false, false, true, None);
     assert_eq!(over.expect("answered"), BridgeCutResult::Done);
     assert_eq!(row_frames(&top)[..2], [(0, join + 4), cut[1]]);
     project.undo().expect("undo");
@@ -4898,12 +4789,12 @@ fn a_transition_overlaps_two_clips_and_its_edge_drags() {
     // Its edge drags, within the neighbour and within the clip's own media:
     // the incoming clip has a second of source before it, less the six
     // frames the dissolve took.
-    let done = comp.cut_trim(a, 0, join + 8, false, false, false);
+    let done = comp.cut_trim(a, 0, join + 8, false, false, false, None);
     assert_eq!(done.expect("dragged"), BridgeCutResult::Done);
     assert_eq!(row_frames(&top)[0], (0, join + 8));
-    let past = comp.cut_trim(a, 0, 2 * join + 1, false, false, false);
+    let past = comp.cut_trim(a, 0, 2 * join + 1, false, false, false, None);
     assert_eq!(past.expect("answered"), BridgeCutResult::Overlap);
-    let dry = comp.cut_trim(b, join - 6 - 60, 2 * join, false, false, false);
+    let dry = comp.cut_trim(b, join - 6 - 60, 2 * join, false, false, false, None);
     assert_eq!(dry.expect("answered"), BridgeCutResult::Limit);
 
     // An edge nothing meets fades on its own.
@@ -4977,6 +4868,7 @@ fn a_move_follows_the_timelines_switches() {
         overlap: false,
         ripple: false,
         nudge_ticks: 0,
+        transition: None,
     };
     let (project, comp, top, length) = cut_row(3);
     let ids: Vec<Uuid> = row_clips(&top).iter().map(|c| c.id).collect();
@@ -4985,9 +4877,9 @@ fn a_move_follows_the_timelines_switches() {
     // Overlap: the last clip pulled back across the end of the middle one.
     let over = BridgeCutMove {
         overlap: true,
-        ..plain
+        ..plain.clone()
     };
-    let done = comp.cut_move(vec![], ids[2], -10, None, false, over);
+    let done = comp.cut_move(vec![], ids[2], -10, None, false, over.clone());
     assert_eq!(done.expect("moved"), BridgeCutResult::Done);
     assert_eq!(
         row_frames(&top),
@@ -5009,7 +4901,7 @@ fn a_move_follows_the_timelines_switches() {
     // Ripple: the first clip moves later and the two after it go with it.
     let ripple = BridgeCutMove {
         ripple: true,
-        ..plain
+        ..plain.clone()
     };
     let done = comp.cut_move(vec![], ids[0], 12, None, false, ripple);
     assert_eq!(done.expect("moved"), BridgeCutResult::Done);
@@ -5026,9 +4918,9 @@ fn a_move_follows_the_timelines_switches() {
     // A part of a frame: a picture clip does not take it, a sound clip does.
     let nudge = BridgeCutMove {
         nudge_ticks: 480,
-        ..plain
+        ..plain.clone()
     };
-    let done = comp.cut_move(vec![], ids[2], 0, None, false, nudge);
+    let done = comp.cut_move(vec![], ids[2], 0, None, false, nudge.clone());
     assert_eq!(done.expect("answered"), BridgeCutResult::Done);
     assert_eq!(
         row_clips(&top)[2].place_start,
@@ -5081,7 +4973,7 @@ fn a_cut_through_a_group_leaves_two_groups() {
     let below = comp.get_layers().expect("layers").remove(0);
     below.convert_to_sequenced().expect("a row of clips");
     let sound = row_clips(&below)[0].id;
-    let done = comp.cut_trim(sound, 0, length, false, false, false);
+    let done = comp.cut_trim(sound, 0, length, false, false, false, None);
     assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
     let group = Uuid::now_v7();
     for row in [top, below] {
@@ -5118,7 +5010,7 @@ fn a_paste_links_the_copies_to_each_other_and_answers_where_they_end() {
     let below = comp.get_layers().expect("layers").remove(0);
     below.convert_to_sequenced().expect("a row of clips");
     let sound = row_clips(&below)[0].id;
-    let done = comp.cut_trim(sound, 0, length, false, false, false);
+    let done = comp.cut_trim(sound, 0, length, false, false, false, None);
     assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
     let link = Uuid::now_v7();
     for row in [top, below] {
@@ -5247,7 +5139,7 @@ fn a_clips_effects_round_trip_through_the_instance_lookup() {
     // held against the layer's own stack instead.
     layer.add_effect("glow".into()).expect("on the layer");
     layer
-        .set_effects(Vec::new(), Some(clip.id))
+        .set_effects(Vec::new(), Some(clip.id), None)
         .expect("the clip's empty stack commits to the clip");
     assert_eq!(
         layer.get_effects().expect("stack").len(),
@@ -5255,7 +5147,7 @@ fn a_clips_effects_round_trip_through_the_instance_lookup() {
         "and the layer's stack is untouched"
     );
     assert!(matches!(
-        layer.set_effects(Vec::new(), None),
+        layer.set_effects(Vec::new(), None, None),
         Err(BridgeError::StaleEffectStack)
     ));
 }
@@ -5467,7 +5359,9 @@ fn a_freeze_holds_the_frame_and_keeps_the_length() {
     let before = layer.get_info().expect("info");
     let at = (before.in_frame + before.out_frame) / 2;
 
-    layer.freeze_at_playhead(at).expect("frozen");
+    layer
+        .freeze_at_playhead(at, fps.round() as i64)
+        .expect("frozen");
 
     let after = layer.get_info().expect("info");
     assert_eq!(after.in_frame, before.in_frame);
@@ -6860,7 +6754,8 @@ fn an_export_refuses_a_model_engine_with_no_pack_installed() {
         })
         .expect("the layer asks for the model");
 
-    let target = std::env::temp_dir().join("lumit-addon-export-probe.mp4");
+    let out = tempfile::tempdir().expect("a folder");
+    let target = out.path().join("probe.mp4");
     let path = target.to_string_lossy().into_owned();
     let _serial = addons_serially();
     let empty = tempfile::tempdir().expect("a folder");
@@ -6908,7 +6803,6 @@ fn an_export_refuses_a_model_engine_with_no_pack_installed() {
         "an export either starts or explains itself: {started:?}"
     );
     export_cancel();
-    std::fs::remove_file(&target).ok();
 }
 
 // --- Camera track: the effect's surface across the seam -------------------
@@ -7204,7 +7098,7 @@ fn a_prompt_lands_in_the_document_and_the_status_counts_it() {
         brush.roto_add_prompt(vec![1.0], vec![1], 18),
         Err(BridgeError::InvalidParam)
     ));
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
 
     let after = roto_status(layer, effect).expect("a status");
     assert_eq!(after.prompts, 2, "both taps are in the document");
@@ -7229,7 +7123,7 @@ fn a_prompt_lands_in_the_document_and_the_status_counts_it() {
     // And moving the base takes the taps the new one can never read with it, in
     // this same staged edit, so one undo brings both back.
     brush.roto_set_base_frame(Some(40)).expect("the base moves");
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     let moved = roto_status(layer, effect).expect("a status");
     assert_eq!(moved.base_frame, Some(40));
     assert_eq!(
@@ -7457,6 +7351,7 @@ fn wiggle_into_blur(layer: &LayerReference) -> (Uuid, Uuid) {
                     },
                 }],
                 layout: vec![BridgeNodePosition {
+                    width: None,
                     node: BridgeNodeRef::Driver(wiggle_id),
                     x: -120.0,
                     y: 40.0,
@@ -8192,7 +8087,7 @@ fn a_planar_tracked_layer() -> (
             crate::api::effect::BridgeEffectValue::Layer(Some(target.layer_id)),
         )
         .expect("the Pin layer row takes a layer");
-    shot.set_effects(staged, None).expect("committed");
+    shot.set_effects(staged, None, None).expect("committed");
 
     let frames: Vec<lumit_track::planar::PlanarFrame> = (0..50)
         .map(|frame| {
@@ -8328,7 +8223,7 @@ fn transform_keys_move_the_target_layer_and_obey_the_transform_row() {
             BridgeEffectValue::Choice(lumit_core::fx::effects::planar_track::FOLLOW_ONE_POINT),
         )
         .expect("the Follow row takes a choice");
-    shot.set_effects(staged, None).expect("committed");
+    shot.set_effects(staged, None, None).expect("committed");
 
     fire_effect_action(shot, effect, "transform_keys".into(), None)
         .expect("position alone still writes");
@@ -8957,7 +8852,7 @@ fn an_audio_plugin_lists_under_the_audio_group_and_switches_off() {
             BridgeEffectValue::Float(BridgeScalar::Static(2.5)),
         )
         .expect("a plugin row takes a write like any other");
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     assert_eq!(
         layer.get_effects().expect("stack")[0]
             .get_value("p1".to_owned())
@@ -9203,7 +9098,7 @@ fn set_shader(layer: &LayerReference, source: &str, origin: Option<&str>) {
     let stack = layer.get_effects().expect("stack");
     let mut stack = stack;
     stack[0].set_shader_source(source.to_owned(), origin.map(str::to_owned));
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
 }
 
 fn only_effect(layer: &LayerReference) -> BridgeEffectInstance {
@@ -9302,7 +9197,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
         stack[0].sync_parameters().is_empty(),
         "a second press has nothing left to adopt"
     );
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     assert!(
         only_effect(&layer).parameter_sync().adds.is_empty(),
         "the document holds them now"
@@ -9331,7 +9226,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
             )),
         )
         .expect("driven");
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
 
     // The edit that stops naming them: rule 1, and the cost of removal.
     set_shader(&layer, NEXT_ROWS, None);
@@ -9361,7 +9256,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
     // Remove: says what it took, one commit, and undo is the way back.
     let mut stack = layer.get_effects().expect("stack");
     assert_eq!(stack[0].remove_unused_parameters(), ["radius", "wobble"]);
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     let trimmed = only_effect(&layer);
     assert!(trimmed.parameter_sync().removes.is_empty());
     assert!(
@@ -9392,7 +9287,7 @@ fn sync_adopts_the_offered_rows_and_remove_takes_the_unused_ones() {
         "the new text does not name it, and it was never the document's"
     );
     assert!(stack[0].parameter_sync().adds.is_empty());
-    layer.set_effects(stack, None).expect("committed");
+    layer.set_effects(stack, None, None).expect("committed");
     assert!(only_effect(&layer).get_value("steps".into()).is_err());
 }
 
@@ -9553,6 +9448,7 @@ fn a_read_is_added_wired_and_undone_in_one_step() {
         to_port: "input".into(),
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: read,
         x: -240.0,
         y: 20.0,
@@ -9730,7 +9626,9 @@ fn a_layer_with_no_inputs_is_offered_a_fresh_one_and_adopts_it_on_commit() {
             BridgeEffectValue::Float(BridgeScalar::Static(0.75)),
         )
         .expect("the derived row takes a value");
-    layer.set_effects(vec![offered], None).expect("committed");
+    layer
+        .set_effects(vec![offered], None, None)
+        .expect("committed");
 
     let landed = layer
         .get_info()
@@ -9796,11 +9694,13 @@ fn a_graph_group_saves_its_boxes_and_inserts_them_fresh() {
         to_port: "input".into(),
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: blur_id,
         x: -400.0,
         y: 0.0,
     });
     wiring.layout.push(BridgeCompNodePosition {
+        width: None,
         node: glow_id,
         x: -200.0,
         y: 0.0,
@@ -10426,7 +10326,7 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
             vec!["colour_balance"],
             vec!["vibrancy", "saturation"],
             vec!["black_and_white"],
-            vec!["curves"],
+            vec!["srgb_curve", "curves", "srgb_curve"],
             vec!["photo_filter"],
             vec![],
             vec![]
@@ -10445,11 +10345,11 @@ fn a_photoshop_document_imports_as_a_comp_of_its_layers_in_one_undo_step() {
         }
     };
     assert_eq!(
-        row(3, 0, "green"),
+        row(3, 1, "green"),
         [0.0, 1.0, 1.0, 0.0],
         "input, then output"
     );
-    assert_eq!(row(3, 0, "master"), [0.0, 0.0, 1.0, 1.0]);
+    assert_eq!(row(3, 1, "master"), [0.0, 0.0, 1.0, 1.0]);
     assert_eq!(
         (row(2, 0, "reds"), row(2, 0, "tint")),
         (vec![-10.0], vec![1.0])

@@ -17,6 +17,7 @@ use super::Slot;
 use crate::anim::{Animation, Property};
 use crate::expression::space::{self, Way};
 use crate::expression::ExpressionContext;
+use crate::fx::names::name_of as effect_name;
 use crate::fx::noise;
 use crate::model::{Composition, EffectInstance, EffectValue, Layer, LayerKind, ProjectItem};
 
@@ -273,10 +274,7 @@ impl<'a> Ae<'a> {
     }
 
     fn effect(&self, comp: Uuid, layer: Uuid, effect: Uuid) -> Option<&'a EffectInstance> {
-        self.layer(comp, layer)?
-            .effects
-            .iter()
-            .find(|e| e.id == effect)
+        crate::model_material::instance(self.layer(comp, layer)?, effect)
     }
 
     /// One property of `layer` at comp time `t`.
@@ -386,7 +384,7 @@ impl<'a> Ae<'a> {
                 partner,
             } => {
                 let found = self.layer(*comp, *layer)?;
-                let inst = found.effects.iter().find(|e| e.id == *effect)?;
+                let inst = crate::model_material::instance(found, *effect)?;
                 let float = |i: usize| match inst.params.get(i).map(|p| &p.value) {
                     Some(EffectValue::Float(p)) => Some(p),
                     _ => None,
@@ -521,14 +519,6 @@ fn transform_name(layer: &Layer, name: &str) -> Option<Tr> {
         "pointOfInterest" if camera => Tr::PointOfInterest,
         "zoom" if camera => Tr::Zoom,
         _ => return None,
-    })
-}
-
-/// The name an effect goes by: the user's own for it, or the effect's.
-fn effect_name(inst: &EffectInstance) -> &str {
-    inst.custom_name.as_deref().unwrap_or_else(|| {
-        crate::fx::builtins::schema(&inst.effect.match_name)
-            .map_or(&inst.effect.match_name, |s| s.label)
     })
 }
 
@@ -879,16 +869,13 @@ impl<'a> Interp<'a> {
                     Value::Num(n) if *n >= 1.0 => found.effects.get(*n as usize - 1),
                     other => {
                         let wanted = self.text(other);
-                        found
-                            .effects
-                            .iter()
-                            .find(|e| effect_name(e) == wanted)
-                            .or_else(|| {
-                                found.effects.iter().find(|e| {
-                                    effect_name(e).eq_ignore_ascii_case(&wanted)
-                                        || e.effect.match_name == wanted
-                                })
+                        let mut all = crate::model_material::and_effects(found);
+                        all.find(|e| effect_name(e) == wanted).or_else(|| {
+                            crate::model_material::and_effects(found).find(|e| {
+                                effect_name(e).eq_ignore_ascii_case(&wanted)
+                                    || e.effect.match_name == wanted
                             })
+                        })
                     }
                 };
                 match effect {

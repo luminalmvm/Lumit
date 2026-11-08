@@ -76,16 +76,26 @@ The drawing, painting, Roto, Puppet and Zoom tools keep `Alt` for themselves.
 | Command | Keys | What it does |
 | --- | --- | --- |
 | 3D view shortcuts | `F10`, `F11`, `F12` | Switch to Front, Custom view 1 and Active camera, until reassigned. |
-| **Assign shortcut to** | `Shift+F10`, `Shift+F11`, `Shift+F12` | Put the current 3D view on that key. |
+| **Assign shortcut to**, in the **Switch 3D view** submenu | `Shift+F10`, `Shift+F11`, `Shift+F12` | Put the current 3D view on that key. |
 | **Switch to last 3D view** | `Esc` | Go back to the view before, and again to return. Taken only when nothing else on screen uses `Esc`. |
-| **Back to active camera** | | Look through the composition's camera again. |
-| **Look at selected layers** | `Ctrl+Alt+Shift+\`, or `F` with a camera tool | Move the view, or the active camera, so the selected 3D layers fill the picture. Locked layers count, hidden ones do not. |
+| **Back to active camera** | `Numpad 0` | Look through the composition's camera again. |
+| **Front**, **Right**, **Top** | `Numpad 1`, `Numpad 3`, `Numpad 7`, with `Ctrl` for **Back**, **Left** and **Bottom** | Switch to that view. |
+| **Look at selected layers** | `Ctrl+Alt+Shift+\`, or `F` with a camera tool or in a fixed or custom view | Move the view, or the active camera, so the selected 3D layers fill the picture, or all of them with none selected. Locked layers count, hidden ones do not. |
 | **Look at all layers** | `Ctrl+Shift+\`, or `Ctrl+Shift+F` with a camera tool | The same for every 3D layer. |
-| **Reset 3D view** | | Put a view back where it starts, or the active camera where a new camera stands. |
+| **Reset 3D view** | `Numpad 5` | Put a view back where it starts, or the active camera where a new camera stands. |
 | **Create camera from 3D view** | | Add a camera where a custom view looks from. |
 
 `Ctrl` is `Cmd` on macOS, where `F10` to `F12` need `Fn` and `F11` shows the desktop unless
 that is turned off.
+
+In a composition with a Model layer, the Viewer bar's 3D view menu also sets how each view
+shows models: **Final**, lit by the composition's lights, **Shaded**, in a studio light of
+the view's own, **Wireframe**, **Shaded with wire**, or **Normals**, each point's direction
+as colour. **Face orientation** tints fronts blue and backs red. A fixed or custom view starts
+on **Shaded** and the active camera on **Final**. `Shift+Z` switches **Wireframe** on and off,
+and each look has a command in Settings ▸ Keymap. Export always draws **Final**. Models cast
+and take shadows in **Final** only. The other looks draw every model whole, **Holdout** and
+**Only** included.
 
 A camera moved by these takes a key at the playhead where it is keyed, Reset included, as one
 undo step.
@@ -105,17 +115,18 @@ time it shows a composition, and keeps its free view of each with the session.
 | Two fingers on a trackpad | Orbit, or track with `Shift`. A pinch dollies. |
 | Hold the right button, `W` `A` `S` `D` | Fly forward, left, back and right. The mouse looks about. |
 | Hold the right button, `E` `Q` | Fly up and down. `Shift` flies four times as fast, the wheel sets the pace. |
-| `F` | Frame the selected layers. |
+| `F` | Frame the selected layers, or every layer with none selected. |
 | `Shift+F` | Frame every layer and camera. |
 | Click an axis in the corner | Look along it, orthographically, until the next orbit. Drag the axes to orbit. |
 | **Persp** / **Ortho** under the axes | Switch between perspective and orthographic. |
-| **Lines only** under the axes | Draw the outlines on the ground with no picture. |
+| **Lines only** under the axes | Switch **Wireframe** on and off. |
 
 Moving it while it looks through the active camera or a fixed view switches it to its free
 view from there. The ground is drawn into its picture, under any 2D layer stacked above the
 3D ones and hidden wherever a layer stands in front of it. It follows the playhead at its
 own resolution, **Half** until given another, and plays along only while the Viewer has time
-to spare. It draws without motion blur or depth of field.
+to spare. It draws without motion blur or depth of field. A view whose pictures come slowly
+draws at half its resolution while it is moved.
 
 On Wayland the pointer is not held still during a drag. Some Linux window managers take
 `Alt` and a drag to move windows.
@@ -136,6 +147,8 @@ A selected 3D layer, light or camera has three arrows at its anchor: x red, y gr
 - **Drag the ring** at the centre, or **Alt-drag** the selected layer, to move it across the
   view at its depth.
 - **Shift** keeps an arrow or square drag to steps of 10.
+- **Drag a small square** past an arrow's tip to scale along the layer's own axis.
+  **Shift** scales all three alike. Lights and cameras have none.
 - With the **Rotation** tool, **drag a ring** to turn about that axis, or drag off the rings
   to turn freely. `Shift` turns in 45° steps. Cameras and lights have rings too.
 
@@ -155,6 +168,10 @@ A lens effect's **Depth** row pointed at a Precomp of the composition reads how 
 pixel of its 3D layers is from the camera, in metres. On an adjustment layer, pointed at
 the adjustment layer itself, it reads the 3D layers below. 2D layers have no distance, and
 a group of 3D layers covers the groups below it.
+
+[Scene pass](/effects/utility/scene-pass/) shows a Model layer's or a Precomp's normals,
+positions and parts, and [Part matte](/effects/utility/part-matte/) keeps the parts picked in
+the Viewer.
 
 ## Depth of field
 

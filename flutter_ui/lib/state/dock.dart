@@ -18,6 +18,10 @@ enum Panel {
   effectControls,
   effectsAndPresets,
   scopes,
+
+  /// The selected layer's grade as wheels, primaries, curves and a look,
+  /// over the Colour effects that do the work. The Colour workspace's own.
+  grade,
   debug,
   hierarchy,
   easing,
@@ -82,7 +86,11 @@ enum Panel {
   /// An installed extension's own page. One pane for each extension, told
   /// apart by the pane's instance number, which `ExtensionService` gives
   /// each extension once and keeps.
-  extension;
+  extension,
+
+  /// How fast the selected layer plays and the commands that change it: the
+  /// Retiming workspace's right-hand column heads with it.
+  retime;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -91,6 +99,7 @@ enum Panel {
         Panel.effectControls => l10n.effectControls,
         Panel.effectsAndPresets => l10n.panelEffectsAndPresets,
         Panel.scopes => l10n.panelScopes,
+        Panel.grade => l10n.panelGrade,
         Panel.hierarchy => l10n.panelHierarchy,
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,
@@ -103,6 +112,7 @@ enum Panel {
         Panel.paragraph => l10n.panelParagraph,
         Panel.expressions => l10n.panelExpressions,
         Panel.stagger => l10n.panelStagger,
+        Panel.retime => l10n.retime,
         Panel.notes => l10n.panelNotes,
         Panel.align => l10n.panelAlign,
         Panel.debug => l10n.panelDebug,
@@ -516,9 +526,10 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.76, 0.24],
         ),
-      // Project and Effect controls (fronted) tabbed on the left; Viewer
-      // centre-dominant; a wide right-hand column with Scopes open and
-      // Effects & presets shut under it; the Timeline at the one height.
+      // Project and Effects & presets tabbed on the left; the Viewer in the
+      // centre with Scopes under it, wide, the way a waveform wants to be
+      // read; the Grade panel full height on the right with Effect controls
+      // one tab behind it; the Timeline at the one height.
       WorkspacePreset.colour => DockSplit(
           DockAxis.vertical,
           [
@@ -527,19 +538,22 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
               [
                 DockTabs([
                   DockPane(Panel.project),
-                  DockPane(Panel.effectControls),
-                ], active: 1),
-                DockPane(Panel.viewer),
-                DockTabs(
+                  DockPane(Panel.effectsAndPresets),
+                ]),
+                DockSplit(
+                  DockAxis.vertical,
                   [
+                    DockPane(Panel.viewer),
                     DockPane(Panel.scopes),
-                    DockPane(Panel.effectsAndPresets),
                   ],
-                  stacked: true,
-                  open: {Panel.scopes.pane()},
+                  [0.62, 0.38],
                 ),
+                DockTabs([
+                  DockPane(Panel.grade),
+                  DockPane(Panel.effectControls),
+                ]),
               ],
-              [0.18, 0.52, 0.30],
+              [0.16, 0.56, 0.28],
             ),
             DockPane(Panel.timeline),
           ],
@@ -580,14 +594,12 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.53, 0.47],
         ),
-      // Retiming: the arrangement for shaping movement. The **Easing**
-      // panel stays open at the top of the right-hand column rather than
-      // behind a tab — the whole point of the panel over the popup is that it
-      // stays on screen while the selection changes underneath it. Stagger
-      // and Expressions sit shut under it: the curve and a key's fields want
-      // the column's whole height. The Timeline is as tall as Audio's,
-      // because retiming is timeline work: the graph editor is where the eye
-      // is, and the shape is drawn beside it.
+      // Retiming: the arrangement for shaping movement. The Retime panel has
+      // the right-hand column, with Easing, Stagger and Expressions shut under
+      // it. Easing has nothing to do on the speed graph, so it opens when it is
+      // wanted. The Timeline is as tall as Audio's and comes up on the speed
+      // graph, because that is where the eye is (the Timeline does that part,
+      // see `presetApplied`).
       WorkspacePreset.retiming => DockSplit(
           DockAxis.vertical,
           [
@@ -602,12 +614,14 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                 DockPane(Panel.viewer),
                 DockTabs(
                   [
+                    DockPane(Panel.retime),
                     DockPane(Panel.easing),
                     DockPane(Panel.stagger),
                     DockPane(Panel.expressions),
                   ],
                   stacked: true,
-                  open: {Panel.easing.pane()},
+                  open: {Panel.retime.pane()},
+                  shares: {Panel.retime.pane(): 1.4},
                 ),
               ],
               [0.20, 0.58, 0.22],
@@ -643,7 +657,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
             DockSplit(
               DockAxis.horizontal,
               [DockPane(Panel.cutTimeline), DockPane(Panel.mixer)],
-              [0.86, 0.14],
+              [0.82, 0.18],
             ),
           ],
           [0.53, 0.47],

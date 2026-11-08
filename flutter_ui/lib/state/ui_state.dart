@@ -8,24 +8,27 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
-import 'package:flutter/foundation.dart' show listEquals, mapEquals;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals, mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/panels/easing_curve.dart'
     show ApplyEasing, EasingCurve;
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show effectLabelOf;
 import 'package:lumit_flutter/panels/fx_section.dart' show FxSelection;
 import 'package:lumit_flutter/panels/key_ease_fields.dart' show KeyEaseClaim;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart'
-    show RevealFilter, effectPath;
+    show RevealFilter, asOneUndoStep, effectPath;
 import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart'
     show orthographic, perspective, poseOfView, viewOfPose;
+import 'package:lumit_flutter/panels/viewer_picture.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/panels/viewer_picture_web.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
@@ -34,6 +37,7 @@ import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
     show audioSetMuted, audioSetOffsetMs, setAudioDevice;
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -44,6 +48,8 @@ import 'package:lumit_flutter/src/rust/api/footage.dart'
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/model.dart'
+    show BridgeModelDisplay, BridgeModelLook;
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart'
@@ -54,6 +60,8 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setHardwareDecode,
         setLargestPicture;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/src/rust/api/state/prefix.dart';
+import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
@@ -101,6 +109,8 @@ import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/share_marks.dart'
     show valuesHeld, valuesInHand;
 import 'package:uuid/uuid.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// What [LumitUiState.colourSummary] reads before anything has been asked, and
 /// whenever the project names no OCIO config: the built-in colour family, which
@@ -124,12 +134,15 @@ const BridgeColourSummary noColourConfig = BridgeColourSummary(
 /// sits, which the canvas reads and commits through, and the words the
 /// breadcrumb reads, captured on the double-click so drawing them costs no
 /// call. [layerName] is null for a shader in a node graph, which has no layer.
+/// [layer] or [comp] says where the Viewer finds the shader for View here.
 typedef ShaderGraphEntry = ({
   InstanceHome home,
   UuidValue effect,
   String compName,
   String? layerName,
   String effectName,
+  LayerReference? layer,
+  CompositionReference? comp,
 });
 
 /// A project the account keeps online, as Lumit's server lists it: what the
@@ -557,6 +570,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Where a selected camera is and which way it faces, for its 3D handles.
   final CameraPoses cameraPoses = CameraPoses();
+  final OrientTurns orientTurns = OrientTurns();
 
   /// Which tool the toolbar has armed (docs/07 §1.7).
   ///
@@ -635,13 +649,16 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<int> panelSearchRequest = ValueNotifier(0);
 
   /// Ask the focused panel for its search box, and say whether there is one to
-  /// ask for. Only three panels have one (docs/07 §15); anywhere else the chord
-  /// is left alone rather than swallowed.
+  /// ask for. Three panels have one (docs/07 §15) and two more open a row
+  /// filter on the chord; anywhere else it is left alone rather than
+  /// swallowed.
   bool requestPanelSearch() {
     final panel = activePanel;
     if (panel != Panel.project &&
         panel != Panel.effectsAndPresets &&
-        panel != Panel.expressions) {
+        panel != Panel.expressions &&
+        panel != Panel.effectControls &&
+        panel != Panel.node) {
       return false;
     }
     panelSearchRequest.value++;
@@ -789,6 +806,9 @@ class LumitUiState extends ChangeNotifier {
   /// a machine with no network has not done anything wrong, and an editor that
   /// opened with a complaint about the internet would be insufferable.
   Future<void> maybeCheckForUpdates() async {
+    // The browser build is the page, always the newest, and a look would ask
+    // GitHub about the person using it.
+    if (kIsWeb) return;
     if (!workspace.autoUpdate) return;
     // Never under `flutter test`: a suite that mounts the shell would otherwise
     // reach the network, which is slow, flaky, and none of a test's business.
@@ -867,6 +887,18 @@ class LumitUiState extends ChangeNotifier {
     revealFilterRequest.value++;
   }
 
+  /// Layer ▸ Reveal ▸ Expand all and Collapse all: the Timeline runs its own
+  /// rows over the selection. The same counter shape as the reveal above.
+  final ValueNotifier<int> foldAllRequest = ValueNotifier(0);
+
+  /// Whether the last [requestFoldAll] opens or shuts.
+  bool foldAllExpand = true;
+
+  void requestFoldAll({required bool expand}) {
+    foldAllExpand = expand;
+    foldAllRequest.value++;
+  }
+
   /// **Which property rows the Timeline has picked**, as their paths, published
   /// so the Viewer can answer the same question.
   ///
@@ -884,6 +916,15 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<String?> selectPropertyRequest = ValueNotifier(null);
 
   void requestSelectProperty(String path) => selectPropertyRequest.value = path;
+
+  /// Whether the next [selectPropertyRequest] also puts the graph up.
+  bool selectPropertyShowsGraph = false;
+
+  /// Pick the property row at [path] in the Timeline and show its curve.
+  void requestRevealInGraph(String path) {
+    selectPropertyShowsGraph = true;
+    selectPropertyRequest.value = path;
+  }
 
   /// The id of the shape item `Enter` has asked to rename, for its row to
   /// open its own editor and clear.
@@ -1141,7 +1182,7 @@ class LumitUiState extends ChangeNotifier {
   /// (docs/impl/multi-viewer.md §2.5): the view named by "always preview this
   /// view" when there is one, otherwise the active view.
   void _playFrom(CompositionReference comp, int frame) => comp.play(
-        from: BigInt.from(frame),
+        from: frame,
         scale: viewerScale,
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
@@ -1151,7 +1192,7 @@ class LumitUiState extends ChangeNotifier {
         speed: _speed,
         slow: _slow,
         // Where the leg ends, so nothing past it is made.
-        until: BigInt.from(_clockEnd),
+        until: _clockEnd,
       );
 
   /// Stop the transport, and — unless the user is taking hold of the playhead
@@ -1251,9 +1292,13 @@ class LumitUiState extends ChangeNotifier {
       return;
     }
     // Drawn as lines only: nothing to ask the engine for.
-    if (viewport && view.wireframeOnly) return;
-    // One picture in flight at a time beside the view being worked in.
-    final beside = view.id != views.activeId && _followsPlayhead(view);
+    if (linesOnly(view.engineId)) return;
+    // One picture in flight at a time beside the view being worked in, and in
+    // a view being moved: a newer picture stops the one being made, so moves
+    // that come faster than a picture is drawn would land almost none.
+    final beside = (view.id != views.activeId && _followsPlayhead(view)) ||
+        cameraDragging ||
+        cameraFlying;
     if (beside) {
       final asked = _viewportAsked[view.engineId];
       if (asked != null &&
@@ -1263,10 +1308,12 @@ class LumitUiState extends ChangeNotifier {
       }
     }
     final frame = frameFor(view);
-    // A viewport draws at its own tier, every other view at the comp's.
-    final scale = viewport
-        ? view.resolution.scaleFor(_panelScale) * view.canvasShare
-        : _compResolution.scaleFor(_panelScale);
+    // A viewport draws at its own tier, every other view at the comp's, and
+    // half that while a slow one is being moved.
+    final scale = (viewport
+            ? view.resolution.scaleFor(_panelScale) * view.canvasShare
+            : _compResolution.scaleFor(_panelScale)) *
+        (_drafting(view) ? 0.5 : 1);
     final stamp = '${comp.internalid}/$frame/$scale/${model.heldRevision}/'
         '${view.look.stops}/${view.look.toneMap}/${view.region}/'
         '${view.colourView}/$viewerPrefixStamp';
@@ -1277,7 +1324,7 @@ class LumitUiState extends ChangeNotifier {
     _pushCameraView(view, comp);
     try {
       comp.renderFrame(
-        frame: BigInt.from(frame),
+        frame: frame,
         scale: scale,
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
@@ -1291,6 +1338,9 @@ class LumitUiState extends ChangeNotifier {
         active: view.id == views.activeId,
       );
       if (beside) _viewportAsked[view.engineId] = DateTime.now();
+      if (cameraDragging || cameraFlying) {
+        _askedAt[view.engineId] = DateTime.now();
+      }
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
       // move or edit asks again; there is nothing to recover here.
@@ -1320,13 +1370,13 @@ class LumitUiState extends ChangeNotifier {
     _askedFor[view.engineId] = stamp;
     try {
       footage.renderView(
-        frame: BigInt.from(frame),
+        frame: frame,
         scale: scale,
         width: facts.width,
         height: facts.height,
         rateNum: facts.fpsNum,
         rateDen: facts.fpsDen,
-        frames: BigInt.from(frames),
+        frames: frames,
         view: view.engineId,
       );
     } catch (_) {
@@ -1514,12 +1564,8 @@ class LumitUiState extends ChangeNotifier {
     final pane = currentViewerPane;
     if (pane == null) return false;
     final now = views.compareOf(pane);
-    views.setCompare(
-      pane,
-      now == CompareMode.none ? CompareMode.wipe : CompareMode.none,
-    );
-    saveLayout();
-    requestFrame();
+    setCompareMode(
+        now == CompareMode.none ? CompareMode.wipe : CompareMode.none);
     return true;
   }
 
@@ -1527,6 +1573,66 @@ class LumitUiState extends ChangeNotifier {
     final pane = currentViewerPane;
     if (pane == null) return;
     views.setCompare(pane, mode);
+    // Ending a compare leaves the app on the picture that stays.
+    if (mode == CompareMode.none) {
+      final lead = views.byId(views.paneViews[pane]?.firstOrNull);
+      if (lead != null) {
+        frontView(lead.id);
+        final comp = lead.mode == ViewMode.composition ? compFor(lead) : null;
+        if (comp != null && comp.internalid != _selectedComp?.internalid) {
+          setSelectedComp(comp);
+        }
+      }
+    }
+    saveLayout();
+    requestFrame();
+  }
+
+  /// The compositions a compare's second side can show: every one but the
+  /// first side's.
+  List<(CompositionReference, String)> get compareChoices {
+    final pane = currentViewerPane;
+    final ids = pane == null ? null : views.paneViews[pane];
+    final first = ids == null || ids.isEmpty ? null : views.byId(ids.first);
+    return [
+      for (final c in _app.comps())
+        if (c.$1.internalid.toString() != first?.compId) c,
+    ];
+  }
+
+  /// The composition a two-view compare's second side shows, or null.
+  String? get compareSideB {
+    final pane = currentViewerPane;
+    if (pane == null || !views.compareOf(pane).pairsViews) return null;
+    final ids = views.paneViews[pane];
+    return ids == null || ids.length < 2 ? null : views.byId(ids[1])?.compId;
+  }
+
+  /// Put [comp] on the compare's second side, wiping against it unless a
+  /// split is up. Locked, so opening another composition leaves it there.
+  void compareWith(CompositionReference comp) {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    if (!views.compareOf(pane).pairsViews) {
+      views.setCompare(pane, CompareMode.wipe);
+    }
+    final side = views.forPane(pane).elementAtOrNull(1);
+    if (side == null) return;
+    side
+      ..mode = ViewMode.composition
+      ..compId = comp.internalid.toString()
+      ..itemId = null
+      ..locked = true;
+    views.touch();
+    saveLayout();
+    requestFrame();
+  }
+
+  /// The compare's two sides the other way round.
+  void swapCompare() {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    views.swapCompare(pane);
     saveLayout();
     requestFrame();
   }
@@ -1777,6 +1883,9 @@ class LumitUiState extends ChangeNotifier {
       _pushedCamera.remove(engineId);
       _viewportAsked.remove(engineId);
       _viewportWaiting.remove(engineId);
+      _askedAt.remove(engineId);
+      _pictureTook.remove(engineId);
+      _slowMove.remove(engineId);
       viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
@@ -1820,6 +1929,64 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({UuidValue id, String label, bool picture})?>
       compGraphNode = ValueNotifier(null);
 
+  /// A pick asked for from the Node panel's index on a node graph
+  /// composition: the box to pick, or none to clear the pick. Its own
+  /// notifier rather than [compGraphNode], which every canvas publishes to:
+  /// the Graph panel's canvas answers an ask, and the Timeline's canvas keeps
+  /// its own pick. Cleared once answered.
+  final ValueNotifier<({UuidValue? id})?> compGraphPickAsk =
+      ValueNotifier(null);
+
+  /// A box's menu asked for from the Node panel's heading: the box's key on
+  /// its canvas and the point to open at. The canvas owns every row of that
+  /// menu, so it is opened there and cleared once answered.
+  final ValueNotifier<({String key, Offset at})?> graphBoxMenuAsk =
+      ValueNotifier(null);
+
+  /// An effect the Effect controls panel is asked to scroll into view, by a
+  /// box's Reveal in Effect controls. The panel clears it once it has.
+  final ValueNotifier<UuidValue?> revealEffect = ValueNotifier(null);
+
+  /// Reveal in Effect controls: the panel is opened where the layout has it
+  /// shut, fronted, and handed the effect to pick and scroll to.
+  void revealEffectCard(LayerReference layer, UuidValue effect) {
+    if (!panelVisible(split, Panel.effectControls)) {
+      setPanelVisible(split, Panel.effectControls, true);
+      workspace.touch();
+    }
+    frontPanel(Panel.effectControls);
+    setEffectSelection(layer, [effect]);
+    revealEffect.value = effect;
+  }
+
+  /// A box the Graph panel is asked to bring into view, by an effect's Reveal
+  /// in node graph. The panel clears it once it has.
+  final ValueNotifier<BridgeNodeRef?> frameBoxRequest = ValueNotifier(null);
+
+  /// Reveal in node graph: the Graph panel is opened where the layout has it
+  /// shut, fronted on [layer], and the box is picked and brought into view.
+  void revealBox(LayerReference layer, BridgeNodeRef node) {
+    showNodeIn(Panel.graph, layer, node);
+    frameBoxRequest.value = null;
+    frameBoxRequest.value = node;
+  }
+
+  /// Front [panel] on [layer] with [node] picked: the Node panel for a driven
+  /// row's driver, the Graph panel for a box.
+  void showNodeIn(Panel panel, LayerReference layer, BridgeNodeRef node) {
+    if (!panelVisible(split, panel)) {
+      setPanelVisible(split, panel, true);
+      workspace.touch();
+    }
+    frontPanel(panel);
+    if (selectedLayer.value?.internallayerId != layer.internallayerId) {
+      setSelection([layer]);
+    }
+    // Set twice so a listener hears it even when the same box is asked for.
+    graphNode.value = null;
+    graphNode.value = node;
+  }
+
   /// The Custom shader whose **inner graph** the Graph panel is showing
   /// (docs/impl/custom-shader.md §4.2), or null when it shows the
   /// layer's own graph.
@@ -1830,6 +1997,16 @@ class LumitUiState extends ChangeNotifier {
   /// be mounted for the other to work. The names ride along so the breadcrumb
   /// costs no call in a rebuild.
   final ValueNotifier<ShaderGraphEntry?> shaderGraphEntry = ValueNotifier(null);
+
+  /// The one box picked inside that graph, by its id, which the Node panel
+  /// draws. Either side may set it: the canvas on a pick, the Node panel's
+  /// list of boxes on a click.
+  final ValueNotifier<int?> shaderGraphNode = ValueNotifier(null);
+
+  /// The word each box of the open inner graph goes by, for the boxes that
+  /// make a value and so can be looked at. Handed over by the canvas on
+  /// each read, so the Viewer's chip names a box without a call.
+  Map<int, String> shaderGraphWords = const {};
 
   /// Where each inner graph's canvas was left **this session**, by effect
   /// instance id: the pan and the zoom come back on re-entry (§4.2 — standing
@@ -1855,12 +2032,15 @@ class LumitUiState extends ChangeNotifier {
       // The comp or layer has gone under the gesture; the crumbs read blank
       // and the canvas's own reload decides whether there is anything to show.
     }
+    shaderGraphNode.value = null;
     shaderGraphEntry.value = (
       home: InstanceHome.layer(layer),
       effect: effect,
       compName: compName,
       layerName: layerName,
       effectName: effectName,
+      layer: layer,
+      comp: null,
     );
   }
 
@@ -1874,17 +2054,23 @@ class LumitUiState extends ChangeNotifier {
     } catch (_) {
       // The comp has gone under the gesture; the crumb reads blank.
     }
+    shaderGraphNode.value = null;
     shaderGraphEntry.value = (
       home: InstanceHome.graph(comp),
       effect: effect,
       compName: compName,
       layerName: null,
       effectName: effectName,
+      layer: null,
+      comp: comp,
     );
   }
 
   /// The breadcrumb's way back, and Escape's.
-  void exitShaderGraph() => shaderGraphEntry.value = null;
+  void exitShaderGraph() {
+    shaderGraphNode.value = null;
+    shaderGraphEntry.value = null;
+  }
 
   /// What Copy put down, for Paste to pick up. One tray for the
   /// session, shared by the Edit menu and the panels.
@@ -1913,15 +2099,22 @@ class LumitUiState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Copy masks, same repaint, same mirror.
+  void copyMasksToClipboard(String text) {
+    clipboard.putMasks(text);
+    Clipboard.setData(ClipboardData(text: text));
+    notifyListeners();
+  }
+
   /// Take a Lumit document off the **system** clipboard into the tray, if
   /// there is one there and the tray has nothing of its own.
   ///
   /// This is how a copy made in another Lumit window arrives, and how a paste
-  /// still works after something else on the machine has been copied in
-  /// between. Ordinary text is left alone — [lumitDocumentKind] only answers
-  /// for the two shapes the engine's paste calls accept.
+  /// still works after something else was copied in between. Ordinary text is
+  /// left alone ([lumitDocumentKind]), and so is a clipboard a browser refuses.
   Future<bool> adoptSystemClipboard() async {
-    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final text = await Clipboard.getData(Clipboard.kTextPlain)
+        .then((data) => data?.text, onError: (Object _) => null);
     if (text == null) return false;
     if (text == clipboard.text) return !clipboard.isEmpty;
     switch (lumitDocumentKind(text)) {
@@ -1929,12 +2122,19 @@ class LumitUiState extends ChangeNotifier {
         clipboard.putLayer(text);
       case ClipboardKind.effects:
         clipboard.putEffects(text);
+      case ClipboardKind.masks:
+        clipboard.putMasks(text);
       case null:
         return false;
     }
     notifyListeners();
     return true;
   }
+
+  /// The part of a 3D model the Timeline has picked, by its layer and its rows'
+  /// id, which the Viewer draws handles on.
+  final ValueNotifier<({UuidValue layer, String part})?> pickedPart =
+      ValueNotifier(null);
 
   /// The whole selection, primary first.
   ///
@@ -2107,8 +2307,22 @@ class LumitUiState extends ChangeNotifier {
     return BridgeGraphPoint(comp: comp.internalid, node: box.id);
   }
 
+  /// The box inside the open Custom shader the picture is read at, with the
+  /// shader it is in. Null unless a box that makes a value is picked there;
+  /// the Result is the shader's own picture.
+  ({ShaderGraphEntry entry, int node})? get viewerShaderPoint {
+    final entry = shaderGraphEntry.value;
+    final node = shaderGraphNode.value;
+    if (entry == null || node == null) return null;
+    if (!shaderGraphWords.containsKey(node)) return null;
+    return (entry: entry, node: node);
+  }
+
   /// How [_atNodes] remembers one point.
   String? get _chipNodeKey {
+    if (viewerShaderPoint case final shader?) {
+      return 'shader:${shader.entry.effect}/${shader.node}';
+    }
     if (viewerGraphPoint case final graph?) {
       return 'graph:${graph.comp}/${graph.node}';
     }
@@ -2126,6 +2340,19 @@ class LumitUiState extends ChangeNotifier {
   /// point and so cuts nothing.
   BridgePrefixPoint? get viewerPrefix {
     if (!atSelectedEffect.value) return null;
+    // A box inside a Custom shader: the shader's point, and the box its
+    // Result reads instead.
+    if (viewerShaderPoint case (:final entry, :final node)) {
+      if (entry.comp case final comp?) {
+        return BridgePrefixPoint(
+            graph: BridgeGraphPoint(comp: comp.internalid, node: entry.effect),
+            shaderNode: node);
+      }
+      if (entry.layer case final layer?) {
+        return BridgePrefixPoint(
+            layer: layer, effect: entry.effect, shaderNode: node);
+      }
+    }
     // A node graph has no layers to cut, so its point names a comp and a box.
     if (viewerGraphPoint case final graph?) {
       return BridgePrefixPoint(graph: graph);
@@ -2248,10 +2475,12 @@ class LumitUiState extends ChangeNotifier {
         fx.id
     };
     try {
-      layer.addEffect(name: name);
+      asOneUndoStep(_app.project, () => layer.addEffect(name: name),
+          name: l10n.histAddNamed(effectLabelOf(name)));
     } catch (_) {
       return false;
     }
+    EffectDragData.last = name;
     model.refresh();
     final added = model
         .byId(layer.internallayerId)
@@ -2358,10 +2587,13 @@ class LumitUiState extends ChangeNotifier {
     // put back there, and the Project panel is what an opened project fronts
     // (item 6.35).
     // Except over the Mixer: picking a track there is mixing, and taking the
-    // faders away for its effects is the one thing nobody asked for.
+    // faders away for its effects is the one thing nobody asked for. The
+    // Grade panel is the same: it is the layer's controls in the Colour
+    // workspace, and Effect controls sit one tab behind it on purpose.
     if (primary != null &&
         !_restoring &&
-        !frontedOver(split, Panel.mixer, Panel.effectControls)) {
+        !frontedOver(split, Panel.mixer, Panel.effectControls) &&
+        !frontedOver(split, Panel.grade, Panel.effectControls)) {
       frontPanel(Panel.effectControls);
     }
     if (primary == null) {
@@ -2514,6 +2746,42 @@ class LumitUiState extends ChangeNotifier {
   void requestAlign(Offset at, {required bool anchor}) =>
       alignRequest.value = (++_alignRequests, anchor: anchor, at: at);
 
+  /// Ctrl+Shift+T in the Viewer: put a box round the picked path points to
+  /// turn them, or take it away. The Viewer answers, since the points are
+  /// its own.
+  final ValueNotifier<int> pointsTurnRequest = ValueNotifier(0);
+
+  void requestPointsTurn() => pointsTurnRequest.value++;
+
+  /// The selection lined up with itself or spaced out, for the Align panel.
+  /// [x] and [y] are the point of each box to bring together, 0 to 1, null for
+  /// an axis left alone; [distribute] the axis to space them along, by the
+  /// point [by] of each box, or with equal [gaps] between them.
+  final ValueNotifier<
+      (
+        int, {
+        double? x,
+        double? y,
+        Axis? distribute,
+        double by,
+        bool gaps,
+      })?> arrangeRequest = ValueNotifier(null);
+
+  void requestArrange(
+          {double? x,
+          double? y,
+          Axis? distribute,
+          double by = 0.5,
+          bool gaps = false}) =>
+      arrangeRequest.value = (
+        ++_alignRequests,
+        x: x,
+        y: y,
+        distribute: distribute,
+        by: by,
+        gaps: gaps,
+      );
+
   /// The armed dropper, or null when the tool is not armed (docs/07 §7).
   ///
   /// One at a time, and held at the session level rather than inside the Viewer:
@@ -2560,12 +2828,13 @@ class LumitUiState extends ChangeNotifier {
     if (comp == null || arm == null) return;
     try {
       comp.samplePixels(
-        frame: BigInt.from(playheadFrame.value),
+        frame: playheadFrame.value,
         u: u,
         v: v,
         window: dropperWindow,
         scale: viewerScale,
         layer: arm.sampleLayer,
+        partIds: arm.reads == DropperReads.part,
         view: activeViewId,
       );
     } catch (_) {
@@ -2616,6 +2885,12 @@ class LumitUiState extends ChangeNotifier {
     // engine's to keep to.
     this.workspace.onShareFootage = _applyShareFootage;
     _applyShareFootage();
+    // The Blender picked in Settings, which the engine converts with.
+    try {
+      chooseBlender(path: this.workspace.blenderPath);
+    } catch (_) {
+      // No engine to tell, as in a widget test.
+    }
     // Floating windows read and write where they were left through this;
     // the controls file has no other way to reach the store.
     modalPlacementStore = this.workspace;
@@ -2634,6 +2909,8 @@ class LumitUiState extends ChangeNotifier {
     graphNode.addListener(_followSelectionWithChip);
     // And the node graph's own pick, which names a point the same way.
     compGraphNode.addListener(_followSelectionWithChip);
+    // And a box picked inside a Custom shader.
+    shaderGraphNode.addListener(_followSelectionWithChip);
     // And the same for the comp the model itself is bound to: it can be undone
     // out of existence while it is the one being looked at.
     model.addListener(_frontLiveCompIfFrontedOneHasGone);
@@ -2710,6 +2987,7 @@ class LumitUiState extends ChangeNotifier {
         // The endpoint's file goes with it, so nothing names a Lumit that
         // has gone.
         if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
+        stopBlenders();
         return AppExitResponse.exit;
       },
     );
@@ -2726,11 +3004,11 @@ class LumitUiState extends ChangeNotifier {
     // into the file forever.
     final perf = this.workspace.performance;
     final ramBudget = perf.cacheBudgetBytes;
-    if (ramBudget != null) setCacheBudget(bytes: BigInt.from(ramBudget));
+    if (ramBudget != null) setCacheBudget(bytes: ramBudget);
     final vramBudget = perf.vramBudgetBytes;
-    if (vramBudget != null) setVramCacheBudget(bytes: BigInt.from(vramBudget));
+    if (vramBudget != null) setVramCacheBudget(bytes: vramBudget);
     final diskBudget = perf.diskBudgetBytes;
-    if (diskBudget != null) setDiskCacheBudget(bytes: BigInt.from(diskBudget));
+    if (diskBudget != null) setDiskCacheBudget(bytes: diskBudget);
     // Whether a drag renders at full resolution. Handed over
     // unconditionally rather than only when on: it is the engine's live state
     // with no store behind it, so "off" has to be said as plainly as "on".
@@ -2783,6 +3061,10 @@ class LumitUiState extends ChangeNotifier {
       // up, and the card goes on it.
       if (msg case WorkerResponse_RenderProgress(:final field0)
           when field0.done) {
+        final asked = _askedAt.remove(field0.view);
+        if (asked != null) {
+          _pictureTook[field0.view] = DateTime.now().difference(asked);
+        }
         _viewportLanded(field0.view);
       }
       if (msg case WorkerResponse_RenderProgress(:final field0)
@@ -2888,6 +3170,13 @@ class LumitUiState extends ChangeNotifier {
   /// here. One case for both, because the payload is the same shape.
   /// Leaving `fd` null is what selects the handle argument set.
   void _showSharedTexture(BridgeSharedFrameInfo f) {
+    // The browser build: the picture is on the page, and a view's texture is
+    // named by the view.
+    if (kIsWeb) {
+      takeViewerPicture(f.view).then((_) => _adoptTexture(f.view, f.view));
+      _followFrame(f.frame.toInt(), f.view, f.tier);
+      return;
+    }
     controllerFor(f.view)
         .ensureRegistered(f.handle.toInt(), f.width, f.height)
         .then((id) => _adoptTexture(id, f.view));
@@ -2937,7 +3226,6 @@ class LumitUiState extends ChangeNotifier {
   /// letting one drive the transport would make a locked view's first frame
   /// drag the playhead somewhere nobody asked for.
   void _followFrame(int frame, int engineId, int tier) {
-    _viewportLanded(engineId);
     if (engineId != activeViewId) return;
     _arrived(frame);
     _playAlong(tier);
@@ -3004,7 +3292,7 @@ class LumitUiState extends ChangeNotifier {
   /// changed, point that view at it.
   void _adoptTexture(int? id, int engineId) {
     if (id == null) return;
-    controllerFor(engineId).frameReady();
+    if (!kIsWeb) controllerFor(engineId).frameReady();
     final slot = textureOf(engineId);
     if (slot.value != id) slot.value = id;
     // The one-Viewer notifier still names the active view's texture, so
@@ -3090,6 +3378,8 @@ class LumitUiState extends ChangeNotifier {
     workspace.presetApplied.removeListener(_onPresetApplied);
     cutLinked.dispose();
     cutClip.dispose();
+    cutClips.dispose();
+    cutOverlap.dispose();
     presetsChanged.dispose();
     _lifecycle.dispose();
     _clock.dispose();
@@ -3128,6 +3418,7 @@ class LumitUiState extends ChangeNotifier {
     selectedLayers.dispose();
     graphNode.dispose();
     shaderGraphEntry.dispose();
+    shaderGraphNode.dispose();
     atSelectedEffect.dispose();
     activePane.dispose();
     maximisedPane.dispose();
@@ -3198,7 +3489,13 @@ class LumitUiState extends ChangeNotifier {
     // the active view when it is unlocked, in the most recently active
     // unlocked view otherwise, and in a new view when every one of them is
     // locked — which is the only answer that still shows what was opened.
-    if (reference != null && !_restoring) {
+    // Nothing moves when the active view is already showing it, which is
+    // what fronting a view does: a locked one must not pull another along.
+    final shown = views.active;
+    if (reference != null &&
+        !_restoring &&
+        !(shown?.mode == ViewMode.composition &&
+            shown?.compId == reference.internalid.toString())) {
       final into = _viewForOpening(prefer: ViewMode.composition);
       if (into != null) {
         into.mode = ViewMode.composition;
@@ -3501,6 +3798,30 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
+  /// Whether [view] shares its pane, so letting its clip go leaves a picture.
+  bool sourceBesideComposition(ViewerSurface view) => views.paneViews.values
+      .any((ids) => ids.length > 1 && ids.contains(view.id));
+
+  /// Let a source view's clip go. An empty source takes no room, so the
+  /// composition beside it has the pane again.
+  void clearSourceView(ViewerSurface view) {
+    view.itemId = null;
+    view.sourceFrame = 0;
+    view.sourceIn = null;
+    view.sourceOut = null;
+    if (views.activeId == view.id) {
+      for (final other in views.views) {
+        if (other.mode == ViewMode.composition) {
+          views.front(other.id);
+          break;
+        }
+      }
+    }
+    views.touch();
+    rememberSession();
+    requestFrame();
+  }
+
   /// Set a footage view's In or Out mark to the frame it stands on. A mark
   /// that would cross the other one moves it out of the way, so In is never
   /// after Out.
@@ -3600,9 +3921,30 @@ class LumitUiState extends ChangeNotifier {
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutClip =
       ValueNotifier(null);
 
+  /// Every picture clip picked in the Cut timeline, the pressed one first: what
+  /// the Retime panel works on.
+  final ValueNotifier<List<({LayerReference layer, UuidValue clip})>> cutClips =
+      ValueNotifier(const []);
+
+  /// The overlap Effect controls is showing the rows of, by its incoming clip.
+  /// Null for any other subject.
+  final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutOverlap =
+      ValueNotifier(null);
+
   /// Bumped when a preset file has been written, so the Effects & presets
   /// panel reads its folder again.
   final ValueNotifier<int> presetsChanged = ValueNotifier(0);
+
+  /// The Sequence layers whose view is open in the Timeline, by layer id:
+  /// double-clicking one opens its clips and their speed envelope inside its
+  /// own row.
+  final Set<String> sequenceOpen = {};
+
+  /// How tall each open view's **graph** half is, by layer id, once its
+  /// divider has been dragged. Absent means the default three rows. Only the
+  /// graph resizes: the clip strip is sized for cutting, while the room a
+  /// speed curve wants depends on how far the ramps go.
+  final Map<String, double> sequenceGraph = {};
 
   /// How tall each row of the Cut timeline stands where it has been dragged
   /// off the usual height, by composition id and then row id. Kept in the
@@ -3654,16 +3996,89 @@ class LumitUiState extends ChangeNotifier {
   /// playhead moves to the end of what was placed, ready for the next.
   void placeSource(ViewerSurface view, {required bool insert}) {
     final comp = _selectedComp;
+    final marked = _marked(view);
+    if (comp == null || marked == null) return;
+    final at = playheadFrame.value;
+    final done = _sourceEdit(() => comp.cutPlace(
+          target: _sourceTarget(),
+          footage: marked.footage,
+          sourceIn: marked.from,
+          sourceOut: marked.to,
+          atFrame: at,
+          insert: insert,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+    if (!done) return;
+    final placed = (marked.seconds * model.fps).round();
+    final end = model.durationFrames - 1;
+    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+  }
+
+  /// The source side's Replace: the source from its In over the clip picked
+  /// in the Cut timeline, which keeps its place and its length.
+  void replaceSource(ViewerSurface view) {
+    final comp = _selectedComp;
+    final picked = cutClip.value;
+    final marked = _marked(view);
+    if (comp == null || picked == null || marked == null) return;
+    _sourceEdit(name: 'Replace', () => comp.cutReplace(
+          clip: picked.clip,
+          footage: marked.footage,
+          sourceIn: marked.from,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+  }
+
+  /// The source side's Fit to fill: the marked stretch over the work area, at
+  /// whatever speed fills it. The playhead moves to the end of it.
+  void fitSource(ViewerSurface view) {
+    final comp = _selectedComp;
+    final marked = _marked(view);
+    if (comp == null || marked == null) return;
+    final done = _sourceEdit(name: 'Fit to fill', () => comp.cutFitToFill(
+          target: _sourceTarget(),
+          footage: marked.footage,
+          sourceIn: marked.from,
+          sourceOut: marked.to,
+          linked: cutLinked.value,
+          withPicture: workspace.interface.cutSoundWithPicture,
+          arrival: streamsArrival,
+        ));
+    final work = done ? comp.getWorkArea() : null;
+    if (work == null) return;
+    final end = model.durationFrames - 1;
+    playheadFrame.value =
+        comp.frameAtTime(time: work.outPoint).clamp(0, end < 0 ? 0 : end);
+  }
+
+  /// A footage view's marked stretch as source times, unmarked ends reading
+  /// as the item's own, and how many seconds it runs.
+  ({FootageReference footage, BridgeRational from, BridgeRational to,
+      double seconds})? _marked(ViewerSurface view) {
     final footage = footageOf(view);
     final facts = footage == null ? null : itemFacts(footage);
-    if (comp == null || footage == null || facts == null) return;
-    if (facts.fpsNum <= 0) return;
+    if (footage == null || facts == null || facts.fpsNum <= 0) return null;
     final frames = framesOf(facts);
     final first = (view.sourceIn ?? 0).clamp(0, frames - 1);
     final last = (view.sourceOut ?? frames - 1).clamp(first, frames - 1);
     // A frame count over the item's rate is its time in seconds, exactly.
     BridgeRational seconds(int frame) =>
         BridgeRational(num: frame * facts.fpsDen, den: facts.fpsNum);
+    return (
+      footage: footage,
+      from: seconds(first),
+      to: seconds(last + 1),
+      seconds: (last + 1 - first) * facts.fpsDen / facts.fpsNum,
+    );
+  }
+
+  /// Where the source side puts a clip: the selected layer when it is a
+  /// Sequence layer, else the lowest one, else none, for a new one.
+  LayerReference? _sourceTarget() {
     // Top of the stack first, so the last one found is the lowest.
     LayerReference? target;
     final selected = selectedLayer.value?.internallayerId;
@@ -3672,31 +4087,29 @@ class LumitUiState extends ChangeNotifier {
       target = entry.layer;
       if (entry.layer.internallayerId == selected) break;
     }
-    final at = playheadFrame.value;
+    return target;
+  }
+
+  /// Run a source-side edit, say why when it is refused, and whether it went
+  /// through.
+  bool _sourceEdit(BridgeCutResult Function() edit, {String? name}) {
     final BridgeCutResult result;
+    // Named in the History list where the edit has a name of its own.
+    final project = name == null ? null : _app.project;
+    project?.beginUndoGroup();
+    if (name != null) project?.nameUndoGroup(name: name);
     try {
-      result = comp.cutPlace(
-        target: target,
-        footage: footage,
-        sourceIn: seconds(first),
-        sourceOut: seconds(last + 1),
-        atFrame: at,
-        insert: insert,
-        linked: cutLinked.value,
-        withPicture: workspace.interface.cutSoundWithPicture,
-        arrival: streamsArrival,
-      );
+      result = edit();
     } catch (_) {
       // The item or the composition went away under the press.
-      return;
+      return false;
+    } finally {
+      project?.endUndoGroup();
     }
     reportCut(result);
-    if (result != BridgeCutResult.done) return;
+    if (result != BridgeCutResult.done) return false;
     _app.notifyDocumentChanged();
-    final placed =
-        ((last + 1 - first) * facts.fpsDen / facts.fpsNum * model.fps).round();
-    final end = model.durationFrames - 1;
-    playheadFrame.value = end <= 0 ? at : (at + placed).clamp(0, end);
+    return true;
   }
 
   /// Open the composition a Precomp layer draws, landing on the frame that
@@ -3786,7 +4199,7 @@ class LumitUiState extends ChangeNotifier {
   /// built-in transform (null). The push and the re-render are
   /// [pushViewerLook]'s — the view is part of the one look message.
   void setColourView(List<String>? view) {
-    if (_colourView?.join(' ') == view?.join(' ')) return;
+    if (_colourView?.join('\x00') == view?.join('\x00')) return;
     _colourView = view == null ? null : List.of(view);
     notifyListeners();
     pushViewerLook();
@@ -4045,7 +4458,7 @@ class LumitUiState extends ChangeNotifier {
       // engine is told the look *whole*, so a message that left the view out
       // would not leave it alone — it would say "no view" and the picture
       // would quietly fall back to the built-in transform.
-      view: _colourView?.join(' ') ?? '',
+      view: _colourView?.join('\x00') ?? '',
     );
     if (target == _pushedView) return;
     try {
@@ -4116,13 +4529,80 @@ class LumitUiState extends ChangeNotifier {
 
   /// Whether a camera tool's drag is running, which holds the 3D view still
   /// until it ends.
-  bool cameraDragging = false;
+  bool get cameraDragging => _cameraDragging;
+  set cameraDragging(bool on) {
+    _cameraDragging = on;
+    _moved();
+  }
+
+  bool _cameraDragging = false;
 
   /// Whether a 3D viewport is flying, which keeps the keys from everything
   /// else until it lands, and whether the right button is down in one, which
   /// keeps the fly keys for it.
-  bool cameraFlying = false;
+  bool get cameraFlying => _cameraFlying;
+  set cameraFlying(bool on) {
+    _cameraFlying = on;
+    _moved();
+  }
+
+  bool _cameraFlying = false;
   bool flyKeysArmed = false;
+
+  /// The view drawn at half its scale while it moves, because a picture
+  /// asked during this move came slower than [_slowPicture], and how long
+  /// each picture asked during the move took from the ask to the engine
+  /// finishing it. The Viewer draws a draft smooth at any zoom.
+  final ValueNotifier<int?> draftView = ValueNotifier(null);
+  final Map<int, DateTime> _askedAt = {};
+  final Map<int, Duration> _pictureTook = {};
+  static const _slowPicture = Duration(milliseconds: 50);
+
+  /// What each view was showing when a picture of a move last came out slow,
+  /// so moving the same thing again starts as a draft.
+  final Map<int, (String?, int?, BridgeModelDisplay)> _slowMove = {};
+
+  /// Why a 3D model isn't drawing, as the Project panel's badge says it, so a
+  /// view with no model to draw can say it too. Null when nothing's wrong.
+  final ValueNotifier<String?> modelTrouble = ValueNotifier(null);
+
+  /// A drag or a flight started or ended. Each move is timed afresh, and
+  /// ending one puts a view drawn as a draft back to its full scale.
+  void _moved() {
+    final draft = draftView.value;
+    if (cameraDragging || cameraFlying) {
+      if (draft == null) _pictureTook.clear();
+      return;
+    }
+    _askedAt.clear();
+    if (draft == null) return;
+    draftView.value = null;
+    _askedFor.remove(draft);
+    requestFrame();
+  }
+
+  /// Whether [view] is drawn as a draft: it is being moved, and a picture
+  /// of this move was slow. Never lines, which halved go thick and soft.
+  bool _drafting(ViewerSurface view) {
+    if (!(cameraDragging || cameraFlying) || view.id != views.activeId) {
+      return false;
+    }
+    final lines = switch (displayOf(view.engineId)) {
+      BridgeModelDisplay.wireframe || BridgeModelDisplay.shadedWire => true,
+      _ => false,
+    };
+    final took = _pictureTook[view.engineId] ?? Duration.zero;
+    final showing = (
+      compFor(view)?.internalid.toString(),
+      model.heldRevision,
+      displayOf(view.engineId),
+    );
+    if (took > _slowPicture) _slowMove[view.engineId] = showing;
+    if (draftView.value == null && !lines && _slowMove[view.engineId] == showing) {
+      draftView.value = view.engineId;
+    }
+    return draftView.value == view.engineId;
+  }
 
   /// The 3D views view [viewId] can be switched to: a 3D viewport's free
   /// view only in a viewport.
@@ -4155,18 +4635,88 @@ class LumitUiState extends ChangeNotifier {
 
   final Map<int, ((int, int), double)> _canvasDue = {};
 
-  /// Whether view [viewId], a 3D viewport, is drawn as lines only.
-  bool viewportWireframe(int viewId) =>
-      _surfaceOf(viewId)?.wireframeOnly ?? false;
+  /// How view [viewId] shows models: its own pick, else shaded in a fixed or
+  /// custom view and as they export through the comp's own camera.
+  BridgeModelDisplay displayOf(int viewId) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return BridgeModelDisplay.final_;
+    return _displayIn(view, viewPoseOf(viewId));
+  }
 
-  /// Draw view [viewId], a 3D viewport, as lines only, or as the picture.
-  void setViewportWireframe(int viewId, bool on) {
+  BridgeModelDisplay _displayIn(ViewerSurface view, BridgeCameraPose? pose) =>
+      pose == null
+          ? view.cameraDisplay ?? BridgeModelDisplay.final_
+          : view.viewDisplay ?? BridgeModelDisplay.shaded;
+
+  /// Whether view [viewId] tints models' faces by which way they face.
+  bool facesShown(int viewId) => _surfaceOf(viewId)?.faces ?? false;
+
+  /// Show models in view [viewId] the [display] way, kept for the kind of
+  /// view it is looking through, and tint their faces or not.
+  void setModelDisplay(int viewId, {BridgeModelDisplay? display, bool? faces}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
-    if (view == null || comp == null || view.wireframeOnly == on) return;
-    view.wireframeOnly = on;
+    if (view == null || comp == null) return;
+    if (display != null && viewPoseOf(viewId) == null) {
+      view.cameraDisplay = display;
+    } else if (display != null) {
+      view.viewDisplay = display;
+    }
+    view.faces = faces ?? view.faces;
     rememberSession();
     _cameraMoved(view, comp);
+  }
+
+  /// The cube's Lines only: Wireframe, and back to the look before.
+  void toggleLines(int viewId) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return;
+    final now = displayOf(viewId);
+    if (now == BridgeModelDisplay.wireframe) {
+      setModelDisplay(viewId,
+          display: view.beforeLines ?? BridgeModelDisplay.shaded);
+    } else {
+      view.beforeLines = now;
+      setModelDisplay(viewId, display: BridgeModelDisplay.wireframe);
+    }
+  }
+
+  /// Whether view [viewId]'s comp draws a model, its own or inside a
+  /// precomp. Asked of the engine once per comp and document revision.
+  bool holdsModels(int viewId) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    return comp != null && _holdsModels(comp);
+  }
+
+  bool _holdsModels(CompositionReference comp) {
+    final id = comp.internalid.toString();
+    final revision = model.heldRevision;
+    final was = _modelsIn[id];
+    if (was != null && was.$1 == revision) return was.$2;
+    var holds = true;
+    try {
+      holds = comp.holdsModels();
+    } catch (_) {
+      // No worker yet. Taken as holding one, which only asks the engine.
+    }
+    _modelsIn[id] = (revision, holds);
+    return holds;
+  }
+
+  /// What [_holdsModels] last said for each comp, by id.
+  final Map<String, (int?, bool)> _modelsIn = {};
+
+  /// Whether view [viewId] is a fixed or custom view drawn as lines only with
+  /// no model in its comp, which leaves the engine nothing to draw: the
+  /// layers are all outlined over the picture. Read from what the engine last
+  /// said, so a build never asks it.
+  bool linesOnly(int viewId) {
+    final view = _surfaceOf(viewId);
+    return view != null &&
+        viewPoseOf(viewId) != null &&
+        displayOf(viewId) == BridgeModelDisplay.wireframe &&
+        _modelsIn[view.compId]?.$2 == false;
   }
 
   /// A 3D viewport's view ended a drag or a flight: the Viewer's own menu
@@ -4427,7 +4977,8 @@ class LumitUiState extends ChangeNotifier {
 
   /// What each view was last told it looks through, by engine id. A worker is
   /// born knowing no view, which reads here as null.
-  final Map<int, (String, BridgeCameraPose?, int?, (int, int))?>
+  final Map<int,
+          (String, BridgeCameraPose?, int?, (int, int), BridgeModelLook)?>
       _pushedCamera = {};
 
   /// Tell the engine which pose [view] draws [comp] through, when that has
@@ -4442,8 +4993,17 @@ class LumitUiState extends ChangeNotifier {
         ? theme.textMuted.toARGB32()
         : null;
     final canvas = viewport ? view.canvas : (0, 0);
-    final target =
-        pose == null && !viewport ? null : (id, pose, ground, canvas);
+    // A comp with no model keeps the names its frames have always had.
+    final models = _holdsModels(comp);
+    final look = BridgeModelLook(
+      display: models ? _displayIn(view, pose) : BridgeModelDisplay.final_,
+      faces: models && view.faces,
+    );
+    final plain = pose == null &&
+        !viewport &&
+        look.display == BridgeModelDisplay.final_ &&
+        !look.faces;
+    final target = plain ? null : (id, pose, ground, canvas, look);
     if (_pushedCamera[view.engineId] == target) return;
     try {
       comp.setCameraView(
@@ -4451,8 +5011,8 @@ class LumitUiState extends ChangeNotifier {
         view: view.engineId,
         draft: viewport,
         ground: ground,
-        canvasWidth: canvas.$1,
-        canvasHeight: canvas.$2,
+        canvas: canvas,
+        look: look,
       );
     } catch (_) {
       // No worker yet, or a comp that has gone.

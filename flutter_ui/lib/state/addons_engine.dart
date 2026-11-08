@@ -17,7 +17,6 @@ AddonService createAddonService() => AddonService(
       install: _install,
       remove: _remove,
       runtime: _runtime,
-      loadRuntime: _load,
       folder: addonsDir,
     );
 
@@ -29,8 +28,6 @@ Future<void> _install(String manifest, List<String> files) =>
 void _remove(String id) => addonRemove(id: id);
 
 RuntimeStatus _runtime() => _status(addonRuntime());
-
-Future<RuntimeStatus> _load() async => _status(await addonRuntimeLoad());
 
 Addon _addon(BridgeAddon addon) => Addon(
       id: addon.id,

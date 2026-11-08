@@ -24,11 +24,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 /// obvious macOS choice and is the wrong one: it omits the compressed pages and
 /// the IOSurface and Metal allocations a graphics application lives on, which
 /// is most of what we would be hunting.
-BigInt residentMemoryBytes() =>
+int residentMemoryBytes() =>
     BridgeLib.instance.api.crateApiSystemResidentMemoryBytes();
 
 /// The machine's installed memory in bytes, or 0 where it cannot be asked.
-BigInt systemMemoryBytes() =>
+int systemMemoryBytes() =>
     BridgeLib.instance.api.crateApiSystemSystemMemoryBytes();
 
 /// The graphics card's memory in bytes, or 0 where it cannot be asked.
@@ -45,7 +45,7 @@ BigInt systemMemoryBytes() =>
 /// for what returns 0. Linux's answer needs an adapter, which only the renderer
 /// opens, so it is 0 until one exists; the frontend's fallback covers that
 /// exactly as it covers a platform with no implementation at all.
-BigInt videoMemoryBytes() =>
+int videoMemoryBytes() =>
     BridgeLib.instance.api.crateApiSystemVideoMemoryBytes();
 
 /// Remember where the pointer is, and say whether it could be — a platform
@@ -60,3 +60,13 @@ void restoreFrozenCursor() =>
 
 /// Let the pointer go again, at the end of the drag.
 void thawCursor() => BridgeLib.instance.api.crateApiSystemThawCursor();
+
+/// Open the browser's graphics card, before the first project opens. False
+/// when the browser has none to give, which is the page's cue to say so.
+///
+/// Only the browser build has anything to do here. WebGPU hands the card over
+/// as a promise, and the page's one thread can't wait for that in the middle
+/// of opening a project, so it is awaited once, up front. Everywhere else the
+/// card is opened when it is first needed.
+Future<bool> prepareGraphics() =>
+    BridgeLib.instance.api.crateApiSystemPrepareGraphics();

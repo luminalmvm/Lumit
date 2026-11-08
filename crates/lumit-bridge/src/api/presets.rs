@@ -21,8 +21,36 @@ pub fn list_preset_groups() -> Vec<String> {
         .filter_map(|folder| group_of(&library, folder))
         .filter(|group| !group.is_empty())
         .collect();
+    if shipped_dir().is_some() && !groups.iter().any(|g| g == SHIPPED_GROUP) {
+        groups.push(SHIPPED_GROUP.to_owned());
+    }
     groups.sort_by_key(|group| group.to_lowercase());
     groups
+}
+
+/// The group the presets that come with Lumit are listed under.
+const SHIPPED_GROUP: &str = "Film";
+
+/// The presets that come with Lumit, written as files into the cache so the
+/// panel lists, drags and applies them as it does the user's own. Kept out of
+/// the library so they never mix with what the user saved, and written again
+/// whenever one is missing or out of date. The folder holds one folder per
+/// group, as the library does.
+pub(crate) fn shipped_dir() -> Option<PathBuf> {
+    let root = lumit_project::cache_dir()?.join("presets");
+    let folder = root.join(SHIPPED_GROUP);
+    std::fs::create_dir_all(&folder).ok()?;
+    for (name, inst) in lumit_core::fx::film::presets::presets() {
+        let Ok(text) = lumit_core::preset::to_json(name, std::slice::from_ref(&inst)) else {
+            continue;
+        };
+        let path = folder.join(format!("{name}.{}", lumit_core::preset::PRESET_EXTENSION));
+        // The ids are fresh each time, so compare what the preset does.
+        if !same_effects(&path, &text) {
+            let _ = std::fs::write(&path, text);
+        }
+    }
+    Some(root)
 }
 
 /// Make a group, and any group it sits in.

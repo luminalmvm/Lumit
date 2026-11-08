@@ -34,6 +34,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// Give [clip] a Crop and a Transform where it has none, as one undo step,
 /// then open the window on it.
@@ -83,11 +84,8 @@ Future<void> showCutPanCrop(
 }
 
 /// How big the clip's picture is in its own pixels, which is the raster its
-/// effects run on. Found by the clip's source name, and the comp's size when
+/// effects run on. Found by the clip's source item, and the comp's size when
 /// nothing answers.
-///
-/// ponytail: a name lookup, so two items of one name give the first. The
-/// upgrade is the clip's source item on BridgeClip.
 Future<Size> _pictureSize(ProjectReference? project, CompositionReference comp,
     BridgeClip clip) async {
   final own = comp.getSize();
@@ -102,15 +100,20 @@ Future<Size> _pictureSize(ProjectReference? project, CompositionReference comp,
 
   try {
     for (final item in walk(project.getItems())) {
-      if (item.name() != clip.sourceName) continue;
       switch (item) {
-        case ItemReference_Footage(:final field0) when !clip.sourceIsComp:
+        case ItemReference_Footage(:final field0)
+            when field0.internalid == clip.source:
           final info = await field0.mediaInfo();
           if (info != null && info.width > 0 && info.height > 0) {
             return Size(info.width.toDouble(), info.height.toDouble());
           }
-        case ItemReference_Composition(:final field0) when clip.sourceIsComp:
+        case ItemReference_Composition(:final field0)
+            when field0.internalid == clip.source:
           final s = field0.getSize();
+          return Size(s.width.toDouble(), s.height.toDouble());
+        case ItemReference_Solid(:final field0)
+            when field0.internalid == clip.source:
+          final s = field0.getDefinition();
           return Size(s.width.toDouble(), s.height.toDouble());
         default:
       }
@@ -473,7 +476,7 @@ class _PanCropState extends State<_PanCrop> {
           {num min = -100000, int decimals = 1}) =>
       Expanded(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsetsDirectional.only(end: 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -494,6 +497,59 @@ class _PanCropState extends State<_PanCrop> {
         ),
       );
 
+  /// A right click on the picture: the box's own commands, by name.
+  void _menu(Offset at) {
+    final f = _fit;
+    final centred = f.cx == _w / 2 && f.cy == _h / 2;
+    MenuRow row(void Function(void) close, String key, String label,
+            VoidCallback run, {bool enabled = true, bool? ticked}) =>
+        MenuRow(
+          key: ValueKey<String>(key),
+          enabled: enabled,
+          onPressed: () {
+            close(null);
+            run();
+          },
+          child: MenuLabel(label, enabled: enabled, ticked: ticked),
+        );
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 180,
+      rows: (close) => [
+        row(close, 'ctl-crop-fill', l10n.cutPanCropFill, _fill, ticked: false),
+        row(
+            close,
+            'ctl-crop-centre',
+            l10n.cutPanCropCentre,
+            () => _set((
+                  cx: _w / 2,
+                  cy: _h / 2,
+                  sx: f.sx,
+                  sy: f.sy,
+                  rot: f.rot,
+                ), write: true),
+            enabled: !centred,
+            ticked: false),
+        row(
+            close,
+            'ctl-crop-unturn',
+            l10n.cutPanCropResetRotation,
+            () => _set(
+                (cx: f.cx, cy: f.cy, sx: f.sx, sy: f.sy, rot: 0), write: true),
+            enabled: f.rot != 0,
+            ticked: false),
+        const MenuDivider(),
+        row(close, 'ctl-crop-lock', l10n.cutPanCropLockAspect,
+            () => setState(() => _lock = !_lock),
+            ticked: _lock),
+      ],
+    );
+  }
+
+  void _fill() =>
+      _set((cx: _w / 2, cy: _h / 2, sx: 1, sy: 1, rot: 0), write: true);
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -504,6 +560,7 @@ class _PanCropState extends State<_PanCrop> {
       onHover: (e) => _hover(e.localPosition),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onSecondaryTapDown: _live ? (d) => _menu(d.globalPosition) : null,
         onPanStart: (d) => _start(d.localPosition),
         onPanUpdate: (d) => _move(d.localPosition),
         onPanEnd: (_) => _end(),
@@ -552,15 +609,20 @@ class _PanCropState extends State<_PanCrop> {
       _field(
           t,
           l10n.cutPanCropRotation,
-          -f.rot,
+          // Never a minus nought.
+          f.rot == 0 ? 0 : -f.rot,
           l10n.unitSymbolDegrees,
           (v, w) => _set(
               (cx: f.cx, cy: f.cy, sx: f.sx, sy: f.sy, rot: -v.toDouble()),
               write: w)),
     ]);
+    // Wide enough that the title, the picture, the fields and the foot all
+    // stand on one left edge.
     return FloatSurface(
-      width: _view.width + 32,
-      child: Column(
+      width: _view.width + 2 * (menuInset + 1) + 12,
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -592,10 +654,7 @@ class _PanCropState extends State<_PanCrop> {
               ),
               const Spacer(),
               HouseButton(
-                onPressed: _live
-                    ? () => _set((cx: _w / 2, cy: _h / 2, sx: 1, sy: 1, rot: 0),
-                        write: true)
-                    : null,
+                onPressed: _live ? _fill : null,
                 child: Text(l10n.cutPanCropFill),
               ),
               const SizedBox(width: 8),
@@ -608,6 +667,7 @@ class _PanCropState extends State<_PanCrop> {
             ],
           ),
         ],
+        ),
       ),
     );
   }

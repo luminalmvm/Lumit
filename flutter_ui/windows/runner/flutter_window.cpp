@@ -7,12 +7,14 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <thread>
 #include <variant>
 
+#include "backdrop.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
 #include "utils.h"
@@ -87,6 +89,29 @@ std::wstring Utf16FromUtf8(const std::string& text) {
 // by its own safety net.
 constexpr UINT_PTR kShowAnywayTimer = 1;
 constexpr UINT kShowAnywayAfterMs = 10000;
+
+// A panel popped out into a window of its own is in one of the engine's
+// windows (lib/shell/pop_out.dart).
+constexpr wchar_t kPopOutClass[] = L"FLUTTER_HOST_WINDOW";
+constexpr UINT_PTR kCloseAgainTimer = 2;
+
+// Ask every popped-out panel's window to close, and say whether there was one.
+bool ClosePopOuts() {
+  bool any = false;
+  ::EnumThreadWindows(
+      ::GetCurrentThreadId(),
+      [](HWND window, LPARAM found) -> BOOL {
+        wchar_t name[32];
+        if (::GetClassName(window, name, 32) &&
+            wcscmp(name, kPopOutClass) == 0) {
+          ::PostMessage(window, WM_CLOSE, 0, 0);
+          *reinterpret_cast<bool*>(found) = true;
+        }
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&any));
+  return any;
+}
 
 // The Start menu and a pinned taskbar button draw a shortcut's icon, not the
 // window's. So every shortcut that starts this executable is given |icon| as
@@ -179,12 +204,18 @@ int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
 
 bool ForwardToOpenLumit() {
   const std::vector<std::string> arguments = GetCommandLineArguments();
-  // An extension package goes to any Lumit that is open. Anything else only
-  // to one kept running in the background.
+  // An extension package, a style, a preset or a theme goes to any Lumit
+  // that is open. Anything else only to one kept running in the background.
   const bool package = std::any_of(
       arguments.begin(), arguments.end(), [](const std::string& argument) {
-        return argument.size() > 4 &&
-               _stricmp(argument.c_str() + argument.size() - 4, ".lfx") == 0;
+        auto ends = [&argument](const char* ending) {
+          const size_t size = std::strlen(ending);
+          return argument.size() > size &&
+                 _stricmp(argument.c_str() + argument.size() - size, ending) ==
+                     0;
+        };
+        return ends(".lfx") || ends(".lumstyle") || ends(".lumfx") ||
+               ends(".lumtheme");
       });
   // A window carrying the mark, in a process started from this same file.
   // Another copy of Lumit elsewhere, a nightly beside a release for instance,
@@ -403,6 +434,16 @@ bool FlutterWindow::OnCreate() {
           ::ShowWindow(hwnd, SW_MINIMIZE);
         } else if (method == "maximise") {
           ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        } else if (method == "maximiseButton") {
+          // Where the button is, sent each time it moves.
+          if (const auto* args =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            maximise_button_ = {
+                static_cast<LONG>(IntArgument(*args, "left")),
+                static_cast<LONG>(IntArgument(*args, "top")),
+                static_cast<LONG>(IntArgument(*args, "right")),
+                static_cast<LONG>(IntArgument(*args, "bottom"))};
+          }
         } else if (method == "close") {
           ::PostMessage(hwnd, WM_CLOSE, 0, 0);
         } else if (method == "background") {
@@ -447,6 +488,32 @@ bool FlutterWindow::OnCreate() {
           }
         } else if (method == "show") {
           Reveal();
+        } else if (method == "backdrop") {
+          // The style's see-through window (backdrop.cpp).
+          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+          std::string kind;
+          bool dark = true;
+          if (args) {
+            auto found = args->find(flutter::EncodableValue("kind"));
+            if (found != args->end()) {
+              if (const auto* value = std::get_if<std::string>(&found->second)) {
+                kind = *value;
+              }
+            }
+            found = args->find(flutter::EncodableValue("dark"));
+            if (found != args->end()) {
+              if (const auto* value = std::get_if<bool>(&found->second)) {
+                dark = *value;
+              }
+            }
+          }
+          backdrop_ = kind;
+          backdrop_dark_ = dark;
+          const bool showing = SetBackdrop(hwnd, kind, dark);
+          // The window's own surface is cleared under Flutter (WM_ERASEBKGND).
+          ::InvalidateRect(hwnd, nullptr, TRUE);
+          result->Success(flutter::EncodableValue(showing));
+          return;
         }
         result->Success(flutter::EncodableValue(::IsZoomed(hwnd) != 0));
       });
@@ -517,6 +584,15 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     return 0;
   }
 
+  // Flutter asks Dart before quitting only when this is the last window, so a
+  // popped-out panel's window would let Lumit quit without asking about
+  // unsaved work. Those close first, which docks their panels, and the close
+  // is tried again once they have gone.
+  if (message == WM_CLOSE && ClosePopOuts()) {
+    ::SetTimer(hwnd, kCloseAgainTimer, 50, nullptr);
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -529,6 +605,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   switch (message) {
     case WM_TIMER:
+      if (wparam == kCloseAgainTimer) {
+        ::KillTimer(hwnd, kCloseAgainTimer);
+        ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+        return 0;
+      }
       if (wparam == kShowAnywayTimer) {
         ::KillTimer(hwnd, kShowAnywayTimer);
         // Already up is the ordinary case: the first frame arrived and showed
@@ -543,6 +624,69 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    // Over the maximise button the frame answers the hit test
+    // (win32_window.cpp), so the mouse comes here and not to Flutter. Flutter
+    // still draws the button and is told when to light it. The press is kept
+    // from Windows, which would draw a button of its own.
+    case WM_NCMOUSEMOVE:
+      if ((wparam == HTMAXBUTTON) != maximise_hover_) {
+        maximise_hover_ = !maximise_hover_;
+        maximise_pressed_ = false;
+        if (maximise_hover_) {
+          TRACKMOUSEEVENT track = {sizeof(track), TME_LEAVE | TME_NONCLIENT,
+                                   hwnd};
+          ::TrackMouseEvent(&track);
+        }
+        Tell("lumit/window",
+             maximise_hover_ ? "maximiseHover" : "maximiseLeave");
+      }
+      break;
+    case WM_NCMOUSELEAVE:
+      if (maximise_hover_) {
+        maximise_hover_ = maximise_pressed_ = false;
+        Tell("lumit/window", "maximiseLeave");
+      }
+      break;
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONDBLCLK:
+      if (wparam == HTMAXBUTTON) {
+        maximise_pressed_ = true;
+        return 0;
+      }
+      break;
+    case WM_NCLBUTTONUP:
+      if (wparam == HTMAXBUTTON) {
+        if (maximise_pressed_) {
+          maximise_pressed_ = false;
+          ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        }
+        return 0;
+      }
+      break;
+    // The window's own surface shows wherever Flutter's room is clear, so
+    // under a see-through window it is painted clear: black, over a stretched
+    // frame. It starts white, never painted, which is fine under a solid one.
+    case WM_ERASEBKGND:
+      if (backdrop_ == "tint" || backdrop_ == "blur") {
+        RECT client;
+        ::GetClientRect(hwnd, &client);
+        ::FillRect(reinterpret_cast<HDC>(wparam), &client,
+                   static_cast<HBRUSH>(::GetStockObject(BLACK_BRUSH)));
+        return 1;
+      }
+      break;
+    // Transparency effects switched in Windows' settings, or the colours
+    // changed, which puts the frame's own dark or light back. Flutter asks
+    // for the backdrop again and learns whether it is showing.
+    case WM_SETTINGCHANGE:
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+      if (backdrop_ == "tint" || backdrop_ == "blur") {
+        Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+        SetBackdrop(hwnd, backdrop_, backdrop_dark_);
+        Tell("lumit/window", "backdrop");
+        return 0;
+      }
       break;
     case kTrayMessage:
       if (lparam == WM_LBUTTONUP) {

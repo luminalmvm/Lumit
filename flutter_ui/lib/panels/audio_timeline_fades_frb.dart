@@ -34,7 +34,9 @@ import 'timeline_snap.dart';
 
 /// How big a corner handle's target is, and the mark drawn inside it.
 const double _handleWidth = 12;
-const double _handleHeight = 14;
+/// How tall the strip along a box's top is that the fade handles take.
+const double audioFadeHandleHeight = 14;
+const double _handleHeight = audioFadeHandleHeight;
 const double _handleMark = 5;
 
 /// How strongly the room under a ramp is filled. Light: it says which part of

@@ -30,6 +30,8 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/flowchart_frb.dart' show openFlowchartFrb;
+import '../shell/menu_bar_frb.dart' show stepToMarkerFrb, trimCompAction;
 import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
@@ -111,7 +113,17 @@ class CompTabsFrb extends StatelessWidget {
                   style: t.kickerOn),
             ),
           ),
-          Expanded(child: _strip(context, t, comps, selected)),
+          // The strip's empty end lifts the pane and has its menu, as the word
+          // ahead of it does.
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const DockPaneHandle(child: SizedBox.expand()),
+                _strip(context, t, comps, selected),
+              ],
+            ),
+          ),
           // The single filled action this surface is allowed (§3.1, §12A.1):
           // the same Export the File menu and the command palette run, one
           // click from the composition it would write.
@@ -274,8 +286,24 @@ class CompTabsFrb extends StatelessWidget {
   ) {
     return ListView(
       scrollDirection: Axis.horizontal,
+      hitTestBehavior: HitTestBehavior.deferToChild,
       children: _tabs(context, t, comps, selected),
     );
+  }
+
+  /// Close the tab at [i]. The nearest remaining neighbour fronts: the one to
+  /// the left, or the next one when the first tab closes.
+  void _closeTab(List<(CompositionReference, String)> comps, int i) =>
+      uiState.closeComp(
+        comps[i].$1.internalid,
+        fallback: comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
+      );
+
+  /// Close every tab but the one at [i], which fronts.
+  void _closeOtherTabs(List<(CompositionReference, String)> comps, int i) {
+    for (final (j, (comp, _)) in comps.indexed) {
+      if (j != i) uiState.closeComp(comp.internalid, fallback: comps[i].$1);
+    }
   }
 
   /// One draggable tab per open comp, in strip order.
@@ -311,16 +339,14 @@ class CompTabsFrb extends StatelessWidget {
                   comp: comps[i].$1,
                   position: position,
                   onChanged: uiState.model.refresh,
+                  onClose: () => _closeTab(comps, i),
+                  onCloseOthers: comps.length < 2
+                      ? null
+                      : () => _closeOtherTabs(comps, i),
                 ),
                 closeKey:
                     ValueKey<String>('tl-tab-close-${comps[i].$1.internalid}'),
-                onClose: () => uiState.closeComp(
-                  comps[i].$1.internalid,
-                  // The nearest remaining neighbour fronts: the one to the
-                  // left, or the next one when the first tab closes.
-                  fallback:
-                      comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
-                ),
+                onClose: () => _closeTab(comps, i),
               ),
             ),
           ),
@@ -482,10 +508,12 @@ Future<int?> showLabelPicker(
 
 /// The label picker's row of chips, [onPick] told which was tapped. The
 /// colour submenus on the Cut and Audio timelines wear the same row.
+/// [selected], where given, is ringed: the colour already in use.
 Widget labelChips(
   LumitTheme t, {
   required String keyPrefix,
   required void Function(int) onPick,
+  int? selected,
 }) =>
     Padding(
       padding: const EdgeInsets.all(6),
@@ -507,7 +535,13 @@ Widget labelChips(
                     borderRadius:
                         BorderRadius.circular(t.tokens.controlRadius),
                   ),
-                  foregroundDecoration: chipRing(t, lit),
+                  // The colour in use wears the ring at full strength.
+                  foregroundDecoration: i == selected
+                      ? BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(t.tokens.controlRadius),
+                          border: Border.all(color: t.textPrimary))
+                      : chipRing(t, lit),
                 ),
               ),
             ),
@@ -561,6 +595,8 @@ Future<void> showMarkerMenuFrb({
   int? regionRoom,
   int regionFrames = 1,
   String keyPrefix = 'marker-menu',
+  VoidCallback? onGoTo,
+  ValueChanged<bool>? onStep,
 }) async {
   final isRegion = (marker.durationFrames ?? 0) > 0;
   // A region as long as was asked for, or as long as there is room for.
@@ -573,6 +609,14 @@ Future<void> showMarkerMenuFrb({
     context: context,
     position: position,
     rows: (close) => [
+      if (onGoTo != null)
+        MenuRow(
+          key: ValueKey<String>('$keyPrefix-go-to'),
+          onPressed: () => close('go-to'),
+          child: Text(l10n.markerGoTo),
+        ),
+      if (onStep != null) ..._markerStepRows(keyPrefix, close),
+      if (onGoTo != null || onStep != null) const MenuDivider(),
       MenuRow(
         key: ValueKey<String>('$keyPrefix-edit'),
         onPressed: () => close('edit'),
@@ -585,7 +629,8 @@ Future<void> showMarkerMenuFrb({
           child: Text(
               isRegion ? l10n.markerRemoveRegion : l10n.markerMakeRegion),
         ),
-      if (dressable)
+      if (dressable) ...[
+        const MenuDivider(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: MarkerColourChips(
@@ -594,6 +639,8 @@ Future<void> showMarkerMenuFrb({
             onPicked: (colour) => close('colour:${colour ?? ''}'),
           ),
         ),
+      ],
+      const MenuDivider(),
       MenuRow(
         key: ValueKey<String>('$keyPrefix-delete'),
         onPressed: () => close('delete'),
@@ -614,6 +661,10 @@ Future<void> showMarkerMenuFrb({
           if (m.id == marker.id) edit(m) else m,
       ]);
   switch (picked) {
+    case 'go-to':
+      onGoTo?.call();
+    case 'prev' || 'next':
+      onStep?.call(picked == 'prev');
     case 'edit':
       final edited = await showMarkerSettingsFrb(
           context: context, marker: marker, spans: regionRoom != null);
@@ -637,7 +688,8 @@ Future<void> showMarkerMenuFrb({
       // A colour chip: the palette index after the colon, or nothing for the
       // plain marker grey.
       final colour = int.tryParse(picked.substring(picked.indexOf(':') + 1));
-      change((m) => m.withColour(colour));
+      // The colour it already has makes no undo step.
+      if (colour != marker.colour) change((m) => m.withColour(colour));
   }
 }
 
@@ -714,21 +766,64 @@ Future<void> showCompTabMenuFrb({
   required CompositionReference comp,
   required Offset position,
   required VoidCallback onChanged,
+  VoidCallback? onClose,
+  VoidCallback? onCloseOthers,
 }) async {
-  final open = await showMenuAt<bool>(
+  final app = Provider.of<LumitState>(context, listen: false);
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final trim = trimCompAction(app, comp);
+  final picked = await showMenuAt<String>(
     context: context,
     position: position,
-    width: 210,
+    width: 230,
     rows: (close) => [
       MenuRow(
         key: const ValueKey('tl-tab-menu-settings'),
-        onPressed: () => close(true),
-        child: Text(l10n.compositionSettingsEllipsis),
+        onPressed: () => close('settings'),
+        child: MenuLabel(l10n.compositionSettingsEllipsis,
+            action: 'comp.settings'),
       ),
+      MenuRow(
+        key: const ValueKey('tl-tab-menu-trim'),
+        enabled: trim != null,
+        onPressed: () => close('trim'),
+        child: MenuLabel(l10n.menuTrimCompToWorkArea,
+            action: 'comp.trim.workarea', enabled: trim != null),
+      ),
+      MenuRow(
+        key: const ValueKey('tl-tab-menu-flowchart'),
+        onPressed: () => close('flowchart'),
+        child: MenuLabel(l10n.menuFlowchart, action: 'comp.flowchart'),
+      ),
+      if (onClose != null) ...[
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('tl-tab-menu-close'),
+          onPressed: () => close('close'),
+          child: Text(l10n.close),
+        ),
+        MenuRow(
+          key: const ValueKey('tl-tab-menu-close-others'),
+          enabled: onCloseOthers != null,
+          onPressed: () => close('close-others'),
+          child: MenuLabel(l10n.closeOtherTabs, enabled: onCloseOthers != null),
+        ),
+      ],
     ],
   );
-  if (open != true || !context.mounted) return;
-  if (await showCompSettingsFrb(context: context, comp: comp)) onChanged();
+  if (picked == null || !context.mounted) return;
+  switch (picked) {
+    case 'settings':
+      if (await showCompSettingsFrb(context: context, comp: comp)) onChanged();
+    case 'trim':
+      trim?.call();
+    case 'flowchart':
+      openFlowchartFrb(context, ui);
+    case 'close':
+      onClose?.call();
+    case 'close-others':
+      onCloseOthers?.call();
+  }
 }
 
 class _CompTab extends StatefulWidget {
@@ -963,39 +1058,10 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
 ///
 /// [trailing] is room at the cell's end that is not the picker's face: the
 /// matte cell's two toggles.
-Widget restingPicker(LumitTheme t,
-        {required bool resting,
-        required String label,
-        required Widget picker,
-        double trailing = 0}) =>
-    Stack(
-      children: [
-        Opacity(opacity: resting ? 0 : 1, child: picker),
-        if (resting)
-          Positioned.fill(
-            right: trailing,
-            child: IgnorePointer(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: dropdownTextInset),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(label,
-                            style: t.small, overflow: TextOverflow.ellipsis),
-                      ),
-                      // The caret and its gap, left empty.
-                      const SizedBox(width: 13),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+Widget restingPicker({required bool resting, required Widget picker}) =>
+    // Still laid out and still clickable, so the cell keeps its width and a
+    // click on the empty cell opens the picker.
+    Opacity(opacity: resting ? 0 : 1, child: picker);
 
 /// The parent picker: every *other* layer in the comp, plus None.
 ///
@@ -1063,10 +1129,8 @@ class ParentPickerFrb extends StatelessWidget {
         },
       ),
     );
-    return restingPicker(ThemeScope.of(context).theme,
-        resting: resting && info.parent == null,
-        label: l10n.none,
-        picker: picker);
+    return restingPicker(
+        resting: resting && info.parent == null, picker: picker);
   }
 }
 
@@ -1189,11 +1253,7 @@ class MattePickerFrb extends StatelessWidget {
         ],
       ),
     );
-    return restingPicker(t,
-        resting: resting && matte == null,
-        label: l10n.noMatte,
-        picker: cell,
-        trailing: width - faceWidth);
+    return restingPicker(resting: resting && matte == null, picker: cell);
   }
 
   Widget _toggle(
@@ -1463,6 +1523,9 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // An Audio layer wears the speaker the audible switch wears, so
       // a row that only makes sound says so in the same glyph twice.
       BridgeLayerKind.audio => LumitIcon.audio,
+      // A bus is where the sound of several rows meets, as wires meet at a
+      // node.
+      BridgeLayerKind.bus => LumitIcon.nodes,
       BridgeLayerKind.solid => LumitIcon.solid,
       // An adjustment layer is a comp-sized effect container, and the set has
       // its own mark for one — a half-filled circle. It used to borrow the
@@ -1470,6 +1533,7 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // that has no colour of its own at all.
       BridgeLayerKind.adjustment => LumitIcon.adjustment,
       BridgeLayerKind.nullLayer => LumitIcon.nullLayer,
+      BridgeLayerKind.model || BridgeLayerKind.mesh => LumitIcon.cube3d,
     };
 
 /// The cache bar: a thin stripe under the time ruler showing which frames are
@@ -1596,7 +1660,7 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
       _tiers = frames <= 0
           ? Uint8List(0)
           : widget.comp.cachedFrames(
-              frames: BigInt.from(frames),
+              frames: frames,
               scale: scale,
             );
       _readFrames = frames;
@@ -1769,6 +1833,9 @@ class TimelineRuler extends StatefulWidget {
   /// row. Null for a ruler with no cache to show.
   final Widget? cache;
 
+  /// Rows a view adds under the ground's menu, for edits of its own.
+  final List<Widget> Function(VoidCallback close)? groundRows;
+
   const TimelineRuler({
     super.key,
     required this.comp,
@@ -1782,6 +1849,7 @@ class TimelineRuler extends StatefulWidget {
     this.onMarkersChanged,
     this.onMarkerPreview,
     this.cache,
+    this.groundRows,
     this.snapTargets = const [],
     this.magnet = true,
   });
@@ -1905,7 +1973,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
     _heard = at;
     // After the seek, which stops playback first: the engine only sounds a
     // scrub while the transport is stopped.
-    widget.comp.audioScrub(frame: BigInt.from(at));
+    widget.comp.audioScrub(frame: at);
   }
 
   /// Where a drag on the ruler lands: the pointer's own frame, taken to the
@@ -2176,58 +2244,30 @@ class _TimelineRulerState extends State<TimelineRuler> {
       // A new region starts a second long, which is long enough to see and to
       // take hold of at any zoom the whole comp fits in.
       regionFrames: max(1, widget.fps.round()),
+      onGoTo: () => widget.onSeek(frameAtTime(widget.comp, marker.time)),
+      onStep: _step,
     );
   }
+
+  /// To the comp marker before or after the playhead, as the Composition
+  /// menu goes.
+  void _step(bool back) => stepToMarkerFrb(
+      Provider.of<LumitUiState>(context, listen: false), widget.comp,
+      back: back);
 
   /// The right-click menu on the ruler's own ground: a marker or a work-area
   /// edge at [frame], the one under the pointer. A ruler with nothing to
   /// commit to offers nothing.
-  Future<void> _groundMenu(Offset at, int frame) async {
-    final setWork = widget.onWorkArea;
-    if (setWork == null && widget.onMarkersChanged == null) return;
-    final picked = await showMenuAt<String>(
-      context: context,
-      position: at,
-      rows: (close) => [
-        if (widget.onMarkersChanged != null)
-          MenuRow(
-              key: const ValueKey('tl-ruler-add-marker'),
-              onPressed: () => close('marker'),
-              child: Text(l10n.menuAddMarkerHere)),
-        if (setWork != null) ...[
-          MenuRow(
-              key: const ValueKey('tl-ruler-work-in'),
-              onPressed: () => close('work-in'),
-              child: Text(l10n.workAreaStart)),
-          MenuRow(
-              key: const ValueKey('tl-ruler-work-out'),
-              onPressed: () => close('work-out'),
-              child: Text(l10n.workAreaEnd)),
-          MenuRow(
-              key: const ValueKey('tl-ruler-work-clear'),
-              onPressed: () => close('work-clear'),
-              child: Text(l10n.workAreaClear)),
-        ],
-      ],
-    );
-    if (picked == null || !mounted) return;
-    switch (picked) {
-      case 'marker':
-        await _createMarkerAt(frame);
-      case 'work-clear':
-        setWork?.call(null);
-      case _:
-        // A comp with no frames has no valid span: it keeps the one it has.
-        try {
-          setWork?.call(workAreaWith(
-            comp: widget.comp,
-            current: widget.comp.getWorkArea(),
-            wanted: frame,
-            isStart: picked == 'work-in',
-          ));
-        } catch (_) {}
-    }
-  }
+  Future<void> _groundMenu(Offset at, int frame) => showRulerMenu(
+        context,
+        comp: widget.comp,
+        at: at,
+        frame: frame,
+        addMarker: widget.onMarkersChanged == null ? null : _createMarkerAt,
+        setWork: widget.onWorkArea,
+        extra: widget.groundRows,
+        onStep: _step,
+      );
 
   /// Whether [x], in the ruler's own pixels, lands in either work-area
   /// handle's reach — the same [_workHandleWidth] the handles claim.
@@ -3610,6 +3650,104 @@ void addMarkerFrb(
   String label = '',
 }) =>
     writeMarkers(comp, markersWithFrb(comp, frame: frame, label: label));
+
+/// Previous marker and Next marker, with the Composition menu's chords.
+List<Widget> _markerStepRows(
+        String keyPrefix, void Function(String?) close,
+        {bool enabled = true}) =>
+    [
+      MenuRow(
+          key: ValueKey<String>('$keyPrefix-prev'),
+          enabled: enabled,
+          onPressed: () => close('prev'),
+          child: MenuLabel(l10n.menuPreviousMarker,
+              action: 'marker.prev', enabled: enabled)),
+      MenuRow(
+          key: ValueKey<String>('$keyPrefix-next'),
+          enabled: enabled,
+          onPressed: () => close('next'),
+          child: MenuLabel(l10n.menuNextMarker,
+              action: 'marker.next', enabled: enabled)),
+    ];
+
+/// The menu on a ruler's ground, with [frame] as its "here": a marker there,
+/// and the work area's ends. Either half stays out where its callback is null.
+/// [extra] is a view's own rows, under them. [onStep] goes to the marker
+/// before or after the playhead.
+Future<void> showRulerMenu(
+  BuildContext context, {
+  required CompositionReference comp,
+  required Offset at,
+  required int frame,
+  Future<void> Function(int frame)? addMarker,
+  ValueChanged<BridgeSpan?>? setWork,
+  List<Widget> Function(VoidCallback close)? extra,
+  ValueChanged<bool>? onStep,
+}) async {
+  if (setWork == null && addMarker == null) return;
+  // The Composition menu's Trim comp to work area, here too, beside the
+  // work area it trims to; greyed when the comp has none.
+  final trim = setWork == null
+      ? null
+      : trimCompAction(Provider.of<LumitState>(context, listen: false), comp);
+  final picked = await showMenuAt<String>(
+    context: context,
+    position: at,
+    rows: (close) => [
+      if (addMarker != null)
+        MenuRow(
+            key: const ValueKey('tl-ruler-add-marker'),
+            onPressed: () => close('marker'),
+            child: MenuLabel(l10n.menuAddMarkerHere, action: 'marker.add')),
+      if (onStep != null)
+        ..._markerStepRows('tl-ruler', close,
+            enabled: markersOf(comp).isNotEmpty),
+      if (setWork != null) ...[
+        if (addMarker != null) const MenuDivider(),
+        MenuRow(
+            key: const ValueKey('tl-ruler-work-in'),
+            onPressed: () => close('work-in'),
+            child: Text(l10n.workAreaStart)),
+        MenuRow(
+            key: const ValueKey('tl-ruler-work-out'),
+            onPressed: () => close('work-out'),
+            child: Text(l10n.workAreaEnd)),
+        MenuRow(
+            key: const ValueKey('tl-ruler-work-clear'),
+            enabled: comp.getWorkArea() != null,
+            onPressed: () => close('work-clear'),
+            child: Text(l10n.workAreaClear)),
+        MenuRow(
+            key: const ValueKey('tl-ruler-trim-comp'),
+            enabled: trim != null,
+            onPressed: () => close('trim-comp'),
+            child: Text(l10n.menuTrimCompToWorkArea)),
+      ],
+      if (extra != null) ...extra(() => close(null)),
+    ],
+  );
+  if (picked == null || !context.mounted) return;
+  switch (picked) {
+    case 'marker':
+      await addMarker?.call(frame);
+    case 'prev' || 'next':
+      onStep?.call(picked == 'prev');
+    case 'work-clear':
+      setWork?.call(null);
+    case 'trim-comp':
+      trim?.call();
+    case _:
+      // A comp with no frames has no valid span: it keeps the one it has.
+      try {
+        setWork?.call(workAreaWith(
+          comp: comp,
+          current: comp.getWorkArea(),
+          wanted: frame,
+          isStart: picked == 'work-in',
+        ));
+      } catch (_) {}
+  }
+}
 
 /// [comp]'s marker list with one marker placed at [frame] — the shared
 /// placement rule, used both when a marker is added and when one is dragged

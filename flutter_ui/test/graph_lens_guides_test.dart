@@ -1,0 +1,233 @@
+// The turning points the stacked graphs ring: where the speed peaks (the
+// value's steepest point), and none on a straight run.
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/panels/graph_channels.dart';
+import 'package:lumit_flutter/panels/graph_lens_guides.dart';
+import 'package:lumit_flutter/panels/graph_maths.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+
+BridgeKeyframe key(int seconds, double v, BridgeSideInterp side) =>
+    BridgeKeyframe(
+        time: BridgeRational(num: seconds, den: 1),
+        value: v,
+        interpIn: side,
+        interpOut: side);
+
+void main() {
+  accelerationTests();
+  constantAccelerationTests();
+  startSpeedTests();
+  speedProfileTests();
+  const ease =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
+  const linear = BridgeSideInterp.linear();
+
+  test('an easy ease turns once, half way: the fastest moment', () {
+    final keys = [key(0, 0, ease), key(2, 100, ease)];
+    final speed = turningPointsOf(keys, GraphLens.speed);
+    expect(speed, hasLength(1));
+    expect(speed.single, closeTo(1, 0.05));
+  });
+
+  test('a straight run has no turning point', () {
+    final keys = [key(0, 0, linear), key(2, 100, linear)];
+    for (final lens in [GraphLens.speed, GraphLens.acceleration]) {
+      expect(turningPointsOf(keys, lens), isEmpty, reason: '$lens');
+    }
+  });
+
+  // A baked curve is thousands of keys, and sampling them all on every repaint
+  // hung the graph.
+  test('a span out of view or too narrow for a ring is not sampled', () {
+    final keys = [key(0, 0, ease), key(2, 100, ease), key(4, 0, ease)];
+    expect(turningPointsOf(keys, GraphLens.speed), hasLength(2));
+    final later = turningPointsOf(keys, GraphLens.speed, from: 2.5, to: 3.5);
+    expect(later.single, closeTo(3, 0.05));
+    expect(turningPointsOf(keys, GraphLens.speed, shortest: 3), isEmpty);
+  });
+}
+
+/// A typed acceleration is met at the key, whichever way it points: by the
+/// influence where that can reach it, by the side's speed where it cannot.
+void accelerationTests() {
+  const ease =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
+
+  BridgeKeyframe withSide(BridgeKeyframe k, BridgeSideInterp side,
+          {required bool isOut}) =>
+      BridgeKeyframe(
+          time: k.time,
+          value: k.value,
+          interpIn: isOut ? k.interpIn : side,
+          interpOut: isOut ? side : k.interpOut);
+
+  for (final isOut in [true, false]) {
+    for (final target in [3.0, 40.0, 500.0, -3.0, -200.0]) {
+      test('${isOut ? 'out' : 'in'} side, $target /s²', () {
+        final keys = [key(0, 0, ease), key(1, 100, ease), key(2, 0, ease)];
+        final side =
+            sideForAcceleration(keys, 1, isOut: isOut, target: target);
+        expect(side, isNotNull);
+        final shaped = [
+          keys[0],
+          withSide(keys[1], side!, isOut: isOut),
+          keys[2],
+        ];
+        expect(sideAccelerationAtKey(shaped, 1, isOut: isOut),
+            closeTo(target, 1e-6 * (target.abs() + 1)));
+      });
+    }
+  }
+
+  test('no neighbour, no side', () {
+    final keys = [key(0, 0, ease), key(1, 100, ease)];
+    expect(sideForAcceleration(keys, 1, isOut: true, target: 3), isNull);
+  });
+}
+
+/// A stretch of constant acceleration from rest: the parabola, held exactly.
+void constantAccelerationTests() {
+  const ease =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
+
+  test('an end value gives the time, a time gives the end value', () {
+    final a = constantAcceleration(0, acceleration: 20, endValue: 100)!;
+    expect(a.seconds, closeTo(3.1623, 1e-4));
+    final b = constantAcceleration(0, acceleration: 20, seconds: 2)!;
+    expect(b.endValue, closeTo(40, 1e-9));
+    expect(constantAcceleration(0, acceleration: -20, endValue: 100), isNull,
+        reason: 'slowing down never reaches a higher value from rest');
+    expect(constantAcceleration(0, acceleration: 20, seconds: 0), isNull);
+  });
+
+  test('one key grows a second, and the acceleration is the same throughout',
+      () {
+    final keys = [key(0, 0, ease)];
+    final shaped = keysWithConstantAcceleration(keys, 0,
+        acceleration: 20,
+        endTime: BridgeRational(num: 3, den: 1),
+        endValue: 90)!;
+    expect(shaped, hasLength(2));
+    for (var t = 0.1; t < 3; t += 0.29) {
+      expect(evaluateKeysAcceleration(shaped, t), closeTo(20, 1e-6));
+      expect(evaluateKeys(shaped, t), closeTo(10 * t * t, 1e-6));
+    }
+    expect(evaluateKeysSpeed(shaped, 1e-6), closeTo(0, 1e-3),
+        reason: 'it starts at rest');
+  });
+
+  test('the next key is moved, the one after it kept', () {
+    final keys = [key(0, 0, ease), key(1, 50, ease), key(5, 0, ease)];
+    final shaped = keysWithConstantAcceleration(keys, 0,
+        acceleration: 20,
+        endTime: BridgeRational(num: 2, den: 1),
+        endValue: 40)!;
+    expect(shaped, hasLength(3));
+    expect(shaped[1].value, 40);
+    expect(shaped[2].value, 0);
+    expect(
+        keysWithConstantAcceleration(keys, 0,
+            acceleration: 20,
+            endTime: BridgeRational(num: 6, den: 1),
+            endValue: 360),
+        isNull,
+        reason: 'it may not jump the key after the next');
+  });
+}
+
+/// A start speed: the stretch slows down (or speeds up) evenly.
+void startSpeedTests() {
+  const ease =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
+
+  test('start speed, acceleration and end value: the first moment it is there',
+      () {
+    final k = constantAcceleration(0,
+        startSpeed: 10, acceleration: -2, endValue: 16)!;
+    expect(k.seconds, closeTo(2, 1e-9));
+    expect(
+        constantAcceleration(0,
+            startSpeed: 10, acceleration: -2, endValue: 30),
+        isNull,
+        reason: 'slowing from 10 at 2 a second squared stops short at 25');
+  });
+
+  test('the keys hold the start speed and the acceleration',
+      () {
+    final keys = [key(0, 0, ease)];
+    final shaped = keysWithConstantAcceleration(keys, 0,
+        startSpeed: 10,
+        acceleration: -2,
+        endTime: BridgeRational(num: 5, den: 1),
+        endValue: 25)!;
+    for (var t = 0.2; t < 5; t += 0.4) {
+      expect(evaluateKeysAcceleration(shaped, t), closeTo(-2, 1e-6));
+      expect(evaluateKeys(shaped, t), closeTo(10 * t - t * t, 1e-6));
+      expect(evaluateKeysSpeed(shaped, t), closeTo(10 - 2 * t, 1e-6));
+    }
+  });
+}
+
+/// Speed up, hold, slow down: the profile's times and the keys that hold it.
+void speedProfileTests() {
+  const ease =
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 1 / 3));
+
+  test('over a distance: up, cruise, down', () {
+    final p = speedProfile(
+        acceleration: 100, cruiseSpeed: 200, deceleration: 50, distance: 1000)!;
+    expect(p.accelSeconds, closeTo(2, 1e-9));
+    expect(p.decelSeconds, closeTo(4, 1e-9));
+    // 200 + 400 on the ramps, 400 at 200 a second.
+    expect(p.cruiseSeconds, closeTo(2, 1e-9));
+    expect(p.peakSpeed, 200);
+  });
+
+  test('too short for the cruise speed: a triangle', () {
+    final p = speedProfile(
+        acceleration: 100, cruiseSpeed: 200, deceleration: 100, distance: 100)!;
+    expect(p.cruiseSeconds, 0);
+    expect(p.peakSpeed, closeTo(100, 1e-9));
+    expect(p.accelSeconds + p.decelSeconds, closeTo(2, 1e-9));
+  });
+
+  test('in a time: the distance it covers', () {
+    final p = speedProfile(
+        acceleration: 100, cruiseSpeed: 200, deceleration: 50, seconds: 8)!;
+    expect(p.cruiseSeconds, closeTo(2, 1e-9));
+    expect(p.distance, closeTo(1000, 1e-9));
+    expect(
+        speedProfile(acceleration: 0, cruiseSpeed: 200, deceleration: 50,
+            seconds: 8),
+        isNull);
+  });
+
+  test('the keys: speed rising, flat, falling, at rest both ends', () {
+    final keys = [key(0, 0, ease)];
+    final shaped = keysWithSpeedProfile(keys, 0,
+        peakSpeed: 200,
+        accelEnd: BridgeRational(num: 2, den: 1),
+        cruiseEnd: BridgeRational(num: 4, den: 1),
+        end: BridgeRational(num: 8, den: 1))!;
+    expect(shaped, hasLength(4));
+    expect(shaped.last.value, closeTo(1000, 1e-9));
+    expect(evaluateKeysAcceleration(shaped, 1), closeTo(100, 1e-6));
+    expect(evaluateKeysSpeed(shaped, 3), closeTo(200, 1e-6));
+    expect(evaluateKeysAcceleration(shaped, 3), closeTo(0, 1e-6));
+    expect(evaluateKeysAcceleration(shaped, 6), closeTo(-50, 1e-6));
+    expect(evaluateKeysSpeed(shaped, 7.9999), closeTo(0, 1e-2));
+    expect(evaluateKeys(shaped, 1), closeTo(50, 1e-6));
+  });
+
+  test('a triangle adds one key, and a falling value goes down', () {
+    final keys = [key(0, 500, ease)];
+    final shaped = keysWithSpeedProfile(keys, 0,
+        peakSpeed: -100,
+        accelEnd: BridgeRational(num: 1, den: 1),
+        cruiseEnd: BridgeRational(num: 1, den: 1),
+        end: BridgeRational(num: 2, den: 1))!;
+    expect(shaped, hasLength(3));
+    expect(shaped.last.value, closeTo(400, 1e-9));
+  });
+}

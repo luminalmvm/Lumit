@@ -365,17 +365,6 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
-/// wgpu's guaranteed limits, with the widest 2D texture the adapter takes and
-/// a buffer big enough to read one back.
-pub(crate) fn widest_texture(adapter: &wgpu::Adapter) -> wgpu::Limits {
-    let card = adapter.limits();
-    wgpu::Limits {
-        max_texture_dimension_2d: card.max_texture_dimension_2d,
-        max_buffer_size: card.max_buffer_size,
-        ..Default::default()
-    }
-}
-
 /// Which adapter was picked, as one line, published the first time a context
 /// opens one.
 ///
@@ -1174,13 +1163,30 @@ impl GpuContext {
             backends: wgpu::Backends::METAL,
             ..wgpu::InstanceDescriptor::from_env_or_default()
         });
-        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(
+            windows,
+            target_os = "linux",
+            target_os = "macos",
+            target_arch = "wasm32"
+        )))]
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
+        // `WGPU_POWER_PREF=low` puts the engine on the integrated card of a
+        // two-card machine, so it can be timed as a laptop without one.
+        #[cfg(not(target_arch = "wasm32"))]
+        let power = wgpu::PowerPreference::from_env();
+        #[cfg(not(target_arch = "wasm32"))]
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
+            power_preference: power.unwrap_or(wgpu::PowerPreference::HighPerformance),
             ..Default::default()
         }))
         .ok_or(GpuError::NoAdapter)?;
+        // The browser's, asked for once before anything was drawn
+        // ([`prepare_web`]), because the page can't wait for a promise in place.
+        #[cfg(target_arch = "wasm32")]
+        let (adapter, (device, queue)) = {
+            let (adapter, device, queue) = device::web_device()?;
+            (adapter, (device, queue))
+        };
         // The one moment an adapter is in hand, which is the only place Vulkan
         // will say how big the card is (see [`video_memory_bytes`]).
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -1216,19 +1222,17 @@ impl GpuContext {
         //
         // The widest texture is the card's own, so the largest picture setting
         // can reach it. Every other limit stays what every card guarantees.
-        let descriptor = wgpu::DeviceDescriptor {
-            required_features: adapter.features()
-                & (wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
-                    | wgpu::Features::FLOAT32_FILTERABLE),
-            required_limits: widest_texture(&adapter),
-            ..Default::default()
-        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let descriptor = device::descriptor(&adapter);
         #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
         let (device, queue) = match shared_linux::open_device(&adapter, &descriptor) {
             Ok(dq) => dq,
             Err(why) => shared_linux::plain_device(&adapter, &descriptor, why)?,
         };
-        #[cfg(not(all(target_os = "linux", feature = "shared-texture-linux")))]
+        #[cfg(not(any(
+            all(target_os = "linux", feature = "shared-texture-linux"),
+            target_arch = "wasm32"
+        )))]
         let (device, queue) = pollster::block_on(adapter.request_device(&descriptor, None))
             .map_err(|e| GpuError::Device(e.to_string()))?;
 
@@ -1825,6 +1829,7 @@ impl PendingReadback {
 
     /// The bytes, waiting for the copy but not for anything queued after it.
     pub fn wait(&mut self, ctx: &GpuContext) -> Result<Vec<u8>, GpuError> {
+        crate::device::wait_here()?;
         ctx.device.poll(wgpu::Maintain::WaitForSubmissionIndex(
             self.submitted.clone(),
         ));
@@ -1973,7 +1978,7 @@ impl ColourEngine {
                          label: &'static str,
                          entry: &'static str| {
             let (device, pl, shader) = (ctx.device.clone(), pl.clone(), shader.clone());
-            Compiling::start(move || {
+            compiling::Compiling::start(move || {
                 device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some(label),
                     layout: Some(&pl),
@@ -2746,6 +2751,7 @@ impl ColourEngine {
     /// The texture holds half floats, so this quantises: one rounding, here,
     /// rather than one on the card and another later.
     pub fn readback16(&self, ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u16>, GpuError> {
+        crate::device::wait_here()?;
         let size = tex.size();
         let row = size.width * 8;
         let padded =
@@ -2816,6 +2822,7 @@ impl ColourEngine {
         ctx: &GpuContext,
         tex: &wgpu::Texture,
     ) -> Result<Vec<f32>, GpuError> {
+        crate::device::wait_here()?;
         let size = tex.size();
         let bytes_per_px = match tex.format() {
             wgpu::TextureFormat::Rgba32Float => 16,
@@ -3084,6 +3091,7 @@ impl ColourEngine {
 
     /// Read a display texture back as tight RGBA8 bytes (tests, export).
     pub fn readback8(&self, ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u8>, GpuError> {
+        crate::device::wait_here()?;
         let size = tex.size();
         let row = size.width * 4;
         let padded =
@@ -3135,35 +3143,6 @@ impl ColourEngine {
     }
 }
 
-/// A pipeline compiling on the thread pool.
-///
-/// Compiling shaders is nearly all of what building an engine costs and no
-/// pipeline waits on another, so an engine starts all of its own first and
-/// collects them as it is put together.
-pub(crate) struct Compiling<T> {
-    done: std::sync::mpsc::Receiver<T>,
-    compile: std::sync::Arc<dyn Fn() -> T + Send + Sync>,
-}
-
-impl<T: Send + 'static> Compiling<T> {
-    pub(crate) fn start(compile: impl Fn() -> T + Send + Sync + 'static) -> Self {
-        let compile: std::sync::Arc<dyn Fn() -> T + Send + Sync> = std::sync::Arc::new(compile);
-        let (send, done) = std::sync::mpsc::channel();
-        let job = std::sync::Arc::clone(&compile);
-        rayon::spawn(move || {
-            let _ = send.send(job());
-        });
-        Self { done, compile }
-    }
-
-    /// The pipeline, compiled here if the pool never answered.
-    // ponytail: this blocks, so an engine built from inside the pool on a
-    // one-core machine would wait on itself. Nothing builds one there.
-    pub(crate) fn wait(self) -> T {
-        self.done.recv().unwrap_or_else(|_| (self.compile)())
-    }
-}
-
 /// The device and every engine compiled on it, which is the slow part of a
 /// renderer and has nothing to do with the project being drawn.
 ///
@@ -3204,6 +3183,7 @@ impl SharedGpu {
         // one a card the ledger believes is already half full, which is a
         // failure that moves about as tests are added.
         self.ctx.release_frame_memory();
+        self.compositor.drop_attachment();
         // `release_frame_memory` latches the abandoned frame's overdraft as
         // "the last frame's"; the next test did not draw that frame.
         self.ctx.last_overdrawn.set(0);
@@ -3425,9 +3405,12 @@ mod tests {
     }
 }
 
+mod compiling;
 pub mod composite;
+pub mod device;
 pub mod drm;
 pub mod fx;
+pub mod mesh;
 pub mod scope;
 /// The Windows-only zero-copy Viewer target. Present only in the opt-in
 /// `shared-texture` build on Windows; every other build has no shared texture at

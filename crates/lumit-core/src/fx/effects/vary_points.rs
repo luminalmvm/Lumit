@@ -384,7 +384,7 @@ pub const VARY_ENABLED_WHEN: &[EnabledWhen] = &[
     match_name = "vary_points",
     label = "Vary points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be anywhere, and may be moved anywhere.
     roi = FullFrame,

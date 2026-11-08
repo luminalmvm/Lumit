@@ -7,6 +7,7 @@
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 
 /// The rows that draw a 3D layer flat, for while the engine can't say.
 const List<double> flatView = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
@@ -23,7 +24,7 @@ class ViewProjections {
     required CompositionReference comp,
     required int viewId,
     required int frame,
-    required BigInt? revision,
+    required int? revision,
     required int generation,
     required BridgeCameraPose? view,
   }) {
@@ -32,7 +33,7 @@ class ViewProjections {
     if (held != null && held.key == key) return held.rows;
     var rows = flatView;
     try {
-      rows = comp.viewProjection(frame: BigInt.from(frame), view: view);
+      rows = comp.viewProjection(frame: frame, view: view);
     } catch (_) {
       // No worker yet, or a comp that has gone. Asked again once the frame,
       // the document or the view moves.
@@ -51,6 +52,33 @@ class _Held {
   const _Held(this.key, this.rows);
 }
 
+/// What each layer's Orient adds, asked again only when the frame, the document
+/// or a solve has moved. A layer with Orient off costs nothing.
+class OrientTurns {
+  final Map<Object, (Object, BridgeOrientTurn?)> _byLayer = {};
+
+  BridgeOrientTurn? of(
+    BridgeLayerEntry entry, {
+    required int frame,
+    required int? revision,
+    required int generation,
+  }) {
+    if (entry.info.transform.orient == BridgeOrient.off) return null;
+    final id = entry.layer.internallayerId;
+    final key = (frame, revision, generation);
+    final held = _byLayer[id];
+    if (held != null && held.$1 == key) return held.$2;
+    BridgeOrientTurn? turn;
+    try {
+      turn = entry.layer.orientTurnAt(frame: frame);
+    } catch (_) {
+      // A layer that has gone. Asked again once the document moves.
+    }
+    _byLayer[id] = (key, turn);
+    return turn;
+  }
+}
+
 /// The engine's pose of each camera layer, aim and solve included, asked
 /// again only when the frame, the document or a solve has moved. Only a
 /// selected camera's handles ask, so a comp with cameras costs nothing until
@@ -62,7 +90,7 @@ class CameraPoses {
     LayerReference layer, {
     required Object id,
     required int frame,
-    required BigInt? revision,
+    required int? revision,
     required int generation,
   }) {
     final key = (frame, revision, generation);
@@ -70,7 +98,7 @@ class CameraPoses {
     if (held != null && held.$1 == key) return held.$2;
     BridgeCameraPose? pose;
     try {
-      pose = layer.cameraAimAt(frame: BigInt.from(frame))?.pose;
+      pose = layer.cameraAimAt(frame: frame)?.pose;
     } catch (_) {
       // A camera that has gone. Asked again once the document moves.
     }
@@ -86,7 +114,7 @@ class CameraPoses {
     LayerReference layer, {
     required Object id,
     required int frame,
-    required BigInt? revision,
+    required int? revision,
     required int generation,
   }) {
     final key = (frame, revision, generation);
@@ -94,7 +122,7 @@ class CameraPoses {
     if (held != null && held.$1 == key) return held.$2;
     BridgeCameraPose? pose;
     try {
-      pose = layer.cameraOwnPoseAt(frame: BigInt.from(frame));
+      pose = layer.cameraOwnPoseAt(frame: frame);
     } catch (_) {
       // A camera that has gone. Asked again once the document moves.
     }

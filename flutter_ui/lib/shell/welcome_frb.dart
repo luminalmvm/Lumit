@@ -21,16 +21,21 @@
 // start work, in the two places somebody can be standing when they have not
 // started yet.
 
-import 'dart:io';
+import 'dart:async';
+import 'dart:io' hide Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
 import '../panels/placeholder.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../state/account.dart' show CloudError;
 import '../state/backup.dart';
 import '../state/external_links.dart';
@@ -46,6 +51,8 @@ import 'menu_bar_frb.dart';
 import 'project_history_window.dart'
     show BackupStill, backupErrorText, noticeMissingFootage;
 import 'wordmark.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 // --- The drawing's measurements -------------------------------------------
 //
@@ -335,6 +342,8 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // No heading over nothing.
+          if (paths.isNotEmpty)
           SizedBox(
             key: const ValueKey('welcome-recent-header'),
             height: welcomeRecentHeaderHeight,
@@ -348,11 +357,13 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                   // is the disk cache, because that one throws away a night's
                   // rendering with nothing to undo (shell/cache_confirm_frb);
                   // a list of paths costs a trip to File ▸ Open to rebuild.
-                  _Quiet(
-                    id: 'welcome-clear-recent',
-                    label: l10n.welcomeClearRecent,
-                    onTap: paths.isEmpty ? null : workspace.clearRecentProjects,
-                  ),
+                  // Not drawn with nothing to clear.
+                  if (paths.isNotEmpty)
+                    _Quiet(
+                      id: 'welcome-clear-recent',
+                      label: l10n.welcomeClearRecent,
+                      onTap: workspace.clearRecentProjects,
+                    ),
                 ],
               ),
             ),
@@ -360,6 +371,8 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
           // A Container, not a DecoratedBox: a decoration's border has to
           // *inset* the rows, or the well measures its content and paints its
           // hairline over the first and last row rather than around them.
+          // No well with nothing in it: the heading alone says so.
+          if (paths.isNotEmpty)
           Container(
             key: const ValueKey('welcome-recent-well'),
             decoration: BoxDecoration(
@@ -370,19 +383,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (paths.isEmpty)
-                  SizedBox(
-                    key: const ValueKey('welcome-recent-empty'),
-                    height: welcomeRecentRowHeight,
-                    child: Padding(
-                      padding: welcomeRecentRowPadding,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(l10n.welcomeNoRecent, style: t.body),
-                      ),
-                    ),
-                  )
-                else
                   for (var i = 0; i < paths.length; i++)
                     _RecentRow(
                       key: ValueKey<String>('welcome-recent-row-$i'),
@@ -395,6 +395,8 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                         widget.onDone();
                       },
                       onForget: () => workspace.forgetProject(paths[i]),
+                      onMenu: (at) => _recentMenu(
+                          app, workspace, paths[i], at),
                     ),
               ],
             ),
@@ -402,6 +404,52 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
         ],
       ),
     );
+  }
+
+  /// A recent project's menu.
+  void _recentMenu(
+      LumitState app, Workspace workspace, String path, Offset at) {
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('welcome-menu-open'),
+          onPressed: () {
+            close(null);
+            app.openProject(path);
+            widget.onDone();
+          },
+          child: Text(l10n.welcomeOpenProject),
+        ),
+        if (!kIsWeb)
+          MenuRow(
+            key: const ValueKey('welcome-menu-reveal'),
+            onPressed: () {
+              close(null);
+              revealInFolder(path: path);
+            },
+            child: Text(l10n.projectShowInFolder),
+          ),
+        MenuRow(
+          key: const ValueKey('welcome-menu-copy-path'),
+          onPressed: () {
+            close(null);
+            Clipboard.setData(ClipboardData(text: path));
+          },
+          child: Text(l10n.welcomeCopyPath),
+        ),
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('welcome-menu-forget'),
+          onPressed: () {
+            close(null);
+            workspace.forgetProject(path);
+          },
+          child: Text(l10n.welcomeForgetProject),
+        ),
+      ],
+    ));
   }
 
   /// Backed-up projects that are not among the recents, in the recents' own
@@ -670,7 +718,7 @@ class _WelcomeCardState extends State<_WelcomeCard> {
             borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
             border: Border.all(color: _hover ? t.hairlineStrong : t.hairline),
           ),
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           child: Text(
             widget.title,
             style: t.bodyPrimary.copyWith(fontSize: 13),
@@ -696,6 +744,9 @@ class _RecentRow extends StatefulWidget {
   /// Null for a row there is nothing to forget about.
   final VoidCallback? onForget;
 
+  /// A right press on the row, at where it landed. Null for a row with no menu.
+  final ValueChanged<Offset>? onMenu;
+
   /// For a row that is not a file on this machine, a backed-up project: what
   /// it is called, the line under that, and its picture.
   final String? name, detail;
@@ -709,6 +760,7 @@ class _RecentRow extends StatefulWidget {
     required this.last,
     required this.onOpen,
     this.onForget,
+    this.onMenu,
     this.name,
     this.detail,
     this.picture,
@@ -736,6 +788,9 @@ class _RecentRowState extends State<_RecentRow> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onOpen,
+        onSecondaryTapDown: widget.onMenu == null
+            ? null
+            : (press) => widget.onMenu!(press.globalPosition),
         child: Container(
           height:
               widget.last ? welcomeRecentRowHeight : welcomeRecentRowHeight + 1,
@@ -771,15 +826,18 @@ class _RecentRowState extends State<_RecentRow> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 2),
-                    MiddleEllipsis(
-                      widget.detail ?? shortenHomePath(widget.path),
-                      style: t.mono.copyWith(
-                        fontSize: 9,
-                        color: t.textDisabled,
+                    // In the browser the path is a made-up folder.
+                    if (widget.detail != null || !kIsWeb) ...[
+                      const SizedBox(height: 2),
+                      MiddleEllipsis(
+                        widget.detail ?? shortenHomePath(widget.path),
+                        style: t.mono.copyWith(
+                          fontSize: 9,
+                          color: t.textDisabled,
+                        ),
+                        tip: widget.detail ?? widget.path,
                       ),
-                      tip: widget.detail ?? widget.path,
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -795,9 +853,18 @@ class _RecentRowState extends State<_RecentRow> {
               ),
               const SizedBox(width: welcomeForgetGap),
               if (widget.onForget case final forget?)
-                _Forget(
-                  id: 'welcome-recent-close-${widget.index}',
-                  onTap: forget,
+                // Comes up with the pointer, and takes no click until it has.
+                // Every row wearing one at rest read as a list of things to
+                // get rid of.
+                IgnorePointer(
+                  ignoring: !_hover,
+                  child: Opacity(
+                    opacity: _hover ? 1 : 0,
+                    child: _Forget(
+                      id: 'welcome-recent-close-${widget.index}',
+                      onTap: forget,
+                    ),
+                  ),
                 )
               else
                 const SizedBox(width: welcomeForgetColumnWidth),

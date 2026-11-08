@@ -30,6 +30,7 @@
 //   kept its own seconds — which looked exactly like the layers speeding up or
 //   slowing down.
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -41,6 +42,7 @@ import 'package:lumit_flutter/src/rust/api/streams.dart'
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 
 import '../icons/icons.dart';
@@ -51,6 +53,7 @@ import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'model_settings_dialog.dart';
 
 /// The frame the drawing gives this dialog, and its row — a 110px label column
 /// with 12 after it, in rows of 30. Not the Export dialog's: each drawing
@@ -59,11 +62,6 @@ const double compDialogWidth = 520;
 const double compLabelColumn = 110;
 const double compRowGap = 12;
 const double compRowHeight = 30;
-
-/// A section: the rule above it, the 4 of air the drawing leaves under that,
-/// and the kicker band over the rows.
-const double compSectionKicker = 24;
-const double compSectionTop = 4;
 
 /// The widths the drawing gives this dialog's wells and its rate list.
 const double compSizeWell = 80;
@@ -114,7 +112,6 @@ Future<CompositionReference?> duplicateCompositionFrb(
       final pick = await askLumitChoice<bool>(
         context: context,
         title: l10n.duplicateNestedTitle,
-        question: l10n.duplicateNestedQuestion,
         answers: [
           (l10n.duplicateNestedSeparate, true),
           (l10n.duplicateNestedShare, false),
@@ -139,6 +136,7 @@ Future<bool> showCompSettingsFrb({
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
   final was = comp.lightingLikeAfterEffects();
+  BridgeRational? start;
   final applied = await showLumitModal<bool>(
     context: context,
     id: 'comp-settings',
@@ -147,6 +145,8 @@ Future<bool> showCompSettingsFrb({
       confirm: l10n.save,
       initial: comp.getSettings(),
       lightsLikeAfterEffects: was,
+      initialStart: comp.getStartTimecode(),
+      onStart: (s) => start = s,
       onConfirm: (settings, likeAfterEffects) {
         // **The playhead keeps its moment, not its number.** A frame count
         // means nothing without the rate it was counted at, so the time under
@@ -168,6 +168,7 @@ Future<bool> showCompSettingsFrb({
             comp.setLightingLikeAfterEffects(on_: likeAfterEffects ?? false);
           }
           comp.setSettings(settings: settings);
+          if (start case final s?) comp.setStartTimecode(start: s);
         });
         if (at != null) {
           ui.playheadFrame.value = comp.nearestFrameAtTime(time: at);
@@ -240,7 +241,8 @@ Future<CompositionReference?> showNewCompositionFrb({
   // hand falls back to it, which is the same name either way.
   final name =
       nodeGraph ? project.nextNodeGraphName() : project.nextCompName();
-  return showLumitModal<CompositionReference>(
+  var placed = const <LayerReference>[];
+  final made = await showLumitModal<CompositionReference>(
     context: context,
     id: 'new-comp',
     builder: (close) => _CompSettingsBody(
@@ -271,17 +273,24 @@ Future<CompositionReference?> showNewCompositionFrb({
             comp.setLightingLikeAfterEffects(on_: true);
           }
           // A node graph has no layers, so nothing is dropped on this door.
-          comp.addFootageLayers(
+          placed = comp.addFootageLayers(
               footage: footage,
               asSequence: asSequence,
               arrival: arrival,
-              endToEnd: endToEnd);
+              endToEnd: endToEnd,
+              lightNames: modelLightNames());
         });
         close(comp);
       },
       onCancel: () => close(null),
     ),
   );
+  // A 3D model asks how it sits as it lands, as on a comp's Timeline. Not
+  // waited for, so the new comp is shown behind it.
+  if (made != null && context.mounted) {
+    unawaited(showDroppedModelSettingsFrb(context, placed));
+  }
+  return made;
 }
 
 /// The longer of two exact durations, compared by cross-multiplication so no
@@ -298,6 +307,11 @@ class _CompSettingsBody extends StatefulWidget {
   final void Function(BridgeCompSettings, bool?) onConfirm;
   final VoidCallback onCancel;
 
+  /// The comp's Start timecode, and where the one typed goes before
+  /// [onConfirm]. Null hides the row, for a comp not made yet.
+  final BridgeRational? initialStart;
+  final void Function(BridgeRational)? onStart;
+
   /// Whether the comp lights its layers as After Effects does. Null hides the
   /// row, for a node graph, which has no layers to light.
   final bool? lightsLikeAfterEffects;
@@ -309,6 +323,8 @@ class _CompSettingsBody extends StatefulWidget {
     required this.onConfirm,
     required this.onCancel,
     this.lightsLikeAfterEffects,
+    this.initialStart,
+    this.onStart,
   });
 
   @override
@@ -319,6 +335,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
   late final TextEditingController _name;
   late final TextEditingController _fps;
   late final TextEditingController _duration;
+  late final TextEditingController _start;
   late int _width;
   late int _height;
   late List<double> _background;
@@ -343,6 +360,11 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       ..addListener(() => setState(() {}));
     _duration = TextEditingController(
         text: timecodeOfDuration(s.duration, s.fpsNum, s.fpsDen));
+    _start = TextEditingController(
+        text: timecodeOfDuration(
+            widget.initialStart ?? const BridgeRational(num: 0, den: 1),
+            s.fpsNum,
+            s.fpsDen));
     _width = s.width;
     _height = s.height;
     _background = List<double>.from(s.background);
@@ -356,6 +378,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     _name.dispose();
     _fps.dispose();
     _duration.dispose();
+    _start.dispose();
     super.dispose();
   }
 
@@ -396,6 +419,16 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     final duration = frames != null
         ? secondsOfFrames(frames, rate.$1, rate.$2)
         : parseDurationHms(_duration.text) ?? widget.initial.duration;
+    // The Start timecode reads the same way; one that cannot be read keeps
+    // the one there was.
+    if (widget.onStart case final onStart?) {
+      final at = framesOfTimecode(_start.text, rate.$1, rate.$2);
+      onStart(at != null
+          ? secondsOfFrames(at, rate.$1, rate.$2)
+          : parseDurationHms(_start.text) ??
+              widget.initialStart ??
+              const BridgeRational(num: 0, den: 1));
+    }
     widget.onConfirm(BridgeCompSettings(
       name: _name.text.trim().isEmpty ? widget.initial.name : _name.text.trim(),
       width: _width,
@@ -464,22 +497,24 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
             ],
           ),
         ),
-        _section(t, l10n.compGroupFrame, [
+        dialogSection(t, l10n.compGroupFrame, [
           _row(t, l10n.size, _sizeRow(t)),
           _row(t, l10n.frameRate, _rateRow(t)),
+          if (widget.initialStart != null)
+            _row(t, l10n.compStartTimecode, _startRow(t)),
           _row(t, l10n.duration, _durationRow(t)),
           _row(t, l10n.compBackground, _backgroundRow(t)),
         ]),
-        _section(t, l10n.compGroupMotionBlur, [
+        dialogSection(t, l10n.compGroupMotionBlur, [
           _row(t, l10n.compShutterAngle, _shutterRow(t)),
         ]),
         if (_likeAfterEffects case final on?)
-          _section(t, l10n.compGroupLights, [
+          dialogSection(t, l10n.compGroupLights, [
             _row(
                 t,
                 l10n.compLightsLikeAfterEffects,
                 Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: HouseCheckbox(
                     key: const ValueKey('comp-lights-ae'),
                     value: on,
@@ -600,6 +635,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
           Text(
             aspectRatioLabel(_width, _height),
             key: const ValueKey('comp-aspect'),
+            textDirection: TextDirection.ltr,
             style: dialogMono(t),
           ),
         ],
@@ -637,6 +673,25 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
             label: (s) => s,
             onChanged: (picked) => setState(() => _fps.text = picked),
             width: compRateList,
+          ),
+        ],
+      );
+
+  /// The Start timecode: the time the comp's first frame reads, typed as
+  /// `HH:MM:SS:FF` at the rate above, like the duration.
+  Widget _startRow(LumitTheme t) => Row(
+        children: [
+          SizedBox(
+            width: compDurationWell,
+            height: dialogControlHeight,
+            child: HouseTextField(
+              key: const ValueKey('comp-start-timecode'),
+              controller: _start,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              fill: t.surface0,
+              onSubmitted: (_) => _confirm(),
+            ),
           ),
         ],
       );
@@ -685,6 +740,14 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
               key: const ValueKey('comp-background'),
               behavior: HitTestBehavior.opaque,
               onTapDown: (details) => _pickBackground(details.globalPosition),
+              onSecondaryTapUp: (details) => showColourWellMenu(
+                context,
+                details.globalPosition,
+                current: PickedColour(
+                    _background[0], _background[1], _background[2]),
+                onPicked: (picked) => setState(() =>
+                    _background = [picked.r, picked.g, picked.b, 1.0]),
+              ),
               child: Container(
                 width: compSwatch.width,
                 height: compSwatch.height,
@@ -761,38 +824,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         labelColumn: compLabelColumn,
         gap: compRowGap,
         minHeight: compRowHeight,
-      );
-
-  /// A named group of rows: a rule, the drawing's 4 of air, a kicker band, and
-  /// the rows under it. The Settings pages' shape rather than the Export
-  /// dialog's box — this drawing separates its sections with a line.
-  Widget _section(LumitTheme t, String title, List<Widget> rows) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(height: 1, color: t.hairline),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                dialogPadding, compSectionTop, dialogPadding, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: compSectionKicker,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 4),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(t.kickerCase(title), style: t.kicker),
-                    ),
-                  ),
-                ),
-                ...rows,
-              ],
-            ),
-          ),
-        ],
       );
 
   Color get _backgroundColour => Color.fromARGB(

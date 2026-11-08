@@ -13,7 +13,7 @@ with the ability to wire a **driver** into parameters.
 
 <Shot file="graph-panel.png" caption="The Node graph: a layer's image chain wired left to right, with a driver feeding one of its parameters." eager/>
 
-Open it from **Window ▸ Node graph**, or switch to the **Nodes** workspace. The panel
+Open it from **Window ▸ Panels ▸ Node graph**, or switch to the **Nodes** workspace. The panel
 follows the layer selected in the Timeline.
 
 ## The image chain
@@ -36,14 +36,17 @@ hand as it lands. **Heal** reconnects the neighbours of a deleted box.
 ## Getting about the canvas
 
 - **Middle-drag** pans. The wheel zooms about the pointer.
-- **Frame all** fits every box on screen.
+- **Frame selected** (`F`) fits the picked boxes on screen, and **Frame all** (`Shift+F`)
+  every box. `Ctrl+D` duplicates the picked boxes.
 - A **primary drag on empty canvas** sweeps a selection box. Click replaces the selection,
   `Ctrl`-click toggles one, `Shift`-click adds, and `Ctrl+A` selects everything.
 - **Dragging an effect** from [Effects & presets](/panels/effects-presets/) onto the canvas
   adds it: an effect joins the stack, a driver lands where it is let go.
-- A **right-click on empty canvas**, or **`Tab`** or **`Shift+A`** with the canvas focused,
-  opens the node search at the pointer, as `ctrl+space` does. Each of the three can be turned
-  off in [Settings ▸ Timeline](/use/settings/#timeline).
+- A **right-click on empty canvas** opens the canvas menu: Add node, Paste, Select all, Frame
+  selected, Frame all, Add note and Group. A right-click on the toolbar lists its switches and
+  the framing. **`Tab`** or **`Shift+A`** with the canvas focused opens the node
+  search at the pointer, as `ctrl+space` does. [Settings ▸ Timeline](/use/settings/#timeline)
+  can turn either key off, and can make the right-click open the search instead of the menu.
 - **`ctrl+space`** opens the node search. With a wire in hand the results are filtered to the
   kinds that wire can join, and picking one connects it.
 
@@ -56,6 +59,13 @@ The checkbox and the wires say the same thing. A bypassed effect is drawn unwire
 hollow sockets and the chain running from the box before it to the box after. Switching one
 off in [Effect controls](/panels/effect-controls/) unplugs it here, and unplugging it here
 switches it off there.
+
+An effect's box has the menu its heading has in [Effect controls](/panels/effect-controls/),
+with the box's own rows added.
+
+On a box's right-click menu, **Collapse** folds it down to its header, its wires meeting at
+either end, and **Colour** tints the header with one of the Timeline's label colours. Both
+act on every picked box and are saved with the project.
 
 ## Groups
 
@@ -109,13 +119,21 @@ A **note** is a few words left on the canvas. It is not a box and is wired to no
 - **The twirl** folds it down to its first line.
 - **Right-click** it for **Edit**, **Collapse**, **Colour** and **Delete**.
 
-## Ties
+## Ties and reroute points
 
-A **tie** gathers wires at one spot, and they run side by side through it.
+A **tie** gathers wires at one spot, and they run side by side through it. A **reroute
+point** takes wires through a single spot, and wires from one socket fan out after it.
 
 - **Drag with the right button** across wires to tie them.
-- **Drag** a tie to move it.
-- **Right-click** a tie, or drag across it with the right button, to let its wires go.
+- `Shift` and a **drag with the right button** puts a reroute point on each wire it crosses,
+  one point for the wires from each socket.
+- **Drag** a tie or a point to move it. Several can sit along one wire.
+- `Ctrl` and a **drag** out of a point draws a new wire from its socket, through the point.
+- **Right-click** a tie or a point, drag across it with the right button, or click it and
+  press `Delete`, to let its wires go.
+
+Ties and points work on the layer graph, the node graph and a Custom shader's graph. They
+come with boxes that are copied, pasted or saved as a group.
 
 ## Drivers
 
@@ -148,6 +166,8 @@ an ordinary layer picker: Audio level's and Beat trigger's **Audio** row, Layer 
 
 A driven parameter's row in Effect Controls names the driver in place of a value. Its
 keyframes are overridden while the wire is there, and come back when it is pulled.
+**Drive with** on a parameter's right-click menu wires one from the row, see
+[Effects](/use/effects/#edit-the-parameters).
 
 ## Wires and their colours
 
@@ -183,7 +203,8 @@ different producer above it on each.
 
 Selecting exactly one effect, a box here or a heading in Effect Controls, puts an **at
 &lt;effect&gt;** chip over the Viewer's picture. Turn it on and the Viewer renders the
-composition with that layer's stack stopping there.
+composition with that layer's stack stopping there. **View here** on a box's right-click
+menu and the eye at the right of the Node panel's header do the same.
 
 ## The Nodes workspace
 
@@ -196,7 +217,9 @@ picked box's parameter rows.
 
 The Node panel's header shows the picked box's name and, when wires drive any of its rows,
 how many: **2 driven**. With no box picked it reads **Pick a node on the graph.**, and on a
-box with no rows **This box has nothing to set.**
+box with no rows **This box has nothing to set.** A double-click on a row of its index
+opens the effect in Effect Controls. **Ctrl+F**, or the search mark in the header, opens a
+filter that keeps the rows whose names match.
 
 :::note[What the graph does not draw]
 A layer's graph draws no branch and no merge: it is the layer's effect stack, seen as boxes.

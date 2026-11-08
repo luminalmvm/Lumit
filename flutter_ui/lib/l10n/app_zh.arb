@@ -3577,21 +3577,9 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "素材以图层加入。Retime 图表显示源时间。",
-  "@firstRunAfterEffects": {
-    "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAfterEffectsShortcuts": "使用 After Effects 快捷键",
-  "@firstRunAfterEffectsShortcuts": {
-    "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
   "firstRunContinue": "继续",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
-  },
-  "firstRunCutName": "Premiere Pro 或 Resolve",
-  "@firstRunCutName": {
-    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
   },
   "firstRunSetup": "设置 Lumit",
   "@firstRunSetup": {
@@ -3601,25 +3589,9 @@
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
   },
-  "firstRunTitle": "剪辑风格",
-  "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
-  },
-  "firstRunVegas": "Video arrives as a Sequence layer you can cut into clips, and the Retime graph shows playback speed you drag up to ramp and below zero to reverse.",
-  "@firstRunVegas": {
-    "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
-  },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
     "description": "First run: the name of the other editor offered. A product name — leave it as it is."
-  },
-  "firstRunVegasRetimeOnly": "仅更改默认 Retime 图表",
-  "@firstRunVegasRetimeOnly": {
-    "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
-  },
-  "firstRunVegasShortcuts": "使用 Vegas 快捷键",
-  "@firstRunVegasShortcuts": {
-    "description": "First-run screen: a tick on the Vegas card that loads the Vegas keyboard shortcuts as well. Off by default."
   },
   "flowAlwaysOn": "始终开启",
   "@flowAlwaysOn": {
@@ -12267,10 +12239,6 @@
   "popOutPanel": "弹出",
   "@popOutPanel": {
     "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
-  "popOutPanelBlocked": "不可用",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
   },
   "precompose": "预合成",
   "@precompose": {

@@ -11,6 +11,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show readEffectPreset;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/solid.dart';
 import 'package:uuid/uuid.dart' show UuidValue;
 
 /// Footage dragged from the Project panel onto the Timeline, or onto the New
@@ -44,9 +45,23 @@ class CompDragData {
   const CompDragData(this.comp, this.label);
 }
 
+/// A solid dragged from the Project panel onto either timeline, where it
+/// lands as a Solid layer or as a clip.
+class SolidDragData {
+  final SolidReference solid;
+
+  /// What the floating label under the pointer reads.
+  final String label;
+  const SolidDragData(this.solid, this.label);
+}
+
 /// An effect, or a saved preset, dragged from the Effects & presets panel
 /// onto a layer or a clip.
 class EffectDragData {
+  /// The effect last put on a layer by name, by a drop, a menu or a panel:
+  /// what Effect ▸ Apply last effect puts on next. Not written down.
+  static String? last;
+
   /// The stable match name `addEffect` takes. Empty for a preset.
   final String name;
   final String label;
@@ -59,16 +74,24 @@ class EffectDragData {
         presetPath = path;
 
   /// Put what was dragged onto [layer]'s stack, or with [clip] onto that
-  /// clip's own. Quiet when the engine refuses or the file has gone: the
-  /// drop then simply did nothing.
-  Future<void> landOn(LayerReference layer, {UuidValue? clip}) async {
+  /// clip's own. A preset's keys start at the comp frame [atFrame]. Quiet when
+  /// the engine refuses or the file has gone: the drop then simply did nothing.
+  Future<void> landOn(LayerReference layer,
+      {UuidValue? clip, required int atFrame}) async {
     try {
       if (presetPath case final path?) {
-        layer.loadPreset(text: await readEffectPreset(path: path), clip: clip);
+        final text = await readEffectPreset(path: path);
+        if (clip != null) {
+          layer.loadPreset(text: text, clip: clip);
+        } else {
+          layer.pasteEffects(text: text, atFrame: atFrame);
+        }
       } else if (clip != null) {
         layer.addClipEffect(clip: clip, name: name);
+        last = name;
       } else {
         layer.addEffect(name: name);
+        last = name;
       }
     } catch (_) {}
   }

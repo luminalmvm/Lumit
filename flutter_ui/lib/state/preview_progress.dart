@@ -36,6 +36,7 @@ String previewStageLabel(int stage) => switch (stage) {
       2 => l10n.previewReadingComposition,
       3 => l10n.previewCompositing,
       4 => l10n.previewShowing,
+      5 => l10n.previewSimulating,
       _ => l10n.previewRendering,
     };
 
@@ -88,9 +89,13 @@ class PreviewProgressTracker extends ChangeNotifier {
       _timer?.cancel();
       _timer = Timer(appearsAfter, _appear);
     }
-    _frame = p.frame.toInt();
+    // Within one frame the bar only goes on: a walk inside compositing reports
+    // past where the next layer's report starts.
+    final frame = p.frame.toInt();
+    final fraction = p.fraction.clamp(0.0, 1.0);
+    _fraction = frame == _frame && fraction < _fraction ? _fraction : fraction;
+    _frame = frame;
     _stage = p.stage;
-    _fraction = p.fraction.clamp(0.0, 1.0);
     // While nothing is on screen there is nothing to repaint: the reports are
     // still followed, they simply cost a field each until the bar appears.
     if (_visible) notifyListeners();

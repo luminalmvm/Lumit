@@ -59,13 +59,17 @@ class BridgeShapeGroup {
   final UuidValue id;
   final String name;
 
+  /// Its eye is off: nothing in it is drawn.
+  final bool hidden;
+
   const BridgeShapeGroup({
     required this.id,
     required this.name,
+    required this.hidden,
   });
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode ^ hidden.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -73,7 +77,8 @@ class BridgeShapeGroup {
       other is BridgeShapeGroup &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          name == other.name;
+          name == other.name &&
+          hidden == other.hidden;
 }
 
 /// A modifier entry: it acts on every item above it in its group, in list
@@ -83,14 +88,27 @@ class BridgeShapeModifier {
   final String name;
   final BridgeShapeModifierKind kind;
 
+  /// Its eye is off: the art is drawn as if it were not there.
+  final bool hidden;
+
+  /// Acts on the item right above it alone, not on everything above it.
+  final bool own;
+
   const BridgeShapeModifier({
     required this.id,
     required this.name,
     required this.kind,
+    required this.hidden,
+    required this.own,
   });
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ kind.hashCode;
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      kind.hashCode ^
+      hidden.hashCode ^
+      own.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -99,7 +117,9 @@ class BridgeShapeModifier {
           runtimeType == other.runtimeType &&
           id == other.id &&
           name == other.name &&
-          kind == other.kind;
+          kind == other.kind &&
+          hidden == other.hidden &&
+          own == other.own;
 }
 
 @freezed

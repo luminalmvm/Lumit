@@ -77,7 +77,7 @@ mod attr {
     match_name = "emit_from_image",
     label = "Emit from image",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     roi = FullFrame,
     premultiplied = true,

@@ -4,7 +4,7 @@
 // built the preset *listing* at all. What is asserted is that each reaches the
 // document — an effect list nothing can apply from is a picture of a panel.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -18,6 +18,8 @@ import 'package:lumit_flutter/panels/scopes_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 void main() {
   setUpAll(initEngineForTests);
@@ -132,7 +134,10 @@ void main() {
 
       await mount(tester, p,
           presetsLister: () =>
-              [BridgePresetInfo(name: 'Soft glow', path: path, group: '')]);
+              [
+                BridgePresetInfo(
+                    name: 'Soft glow', path: path, group: '', keyed: false)
+              ]);
 
       expect(find.text('Saved presets'), findsOneWidget);
       final row = find.byKey(const ValueKey('preset-item-Soft glow'));
@@ -229,9 +234,10 @@ void main() {
       ));
       await tester.pump();
 
-      // No GPU trace arrives in a widget test, so the panel says what it is
-      // doing rather than showing an empty box.
-      expect(find.text('Waiting for a trace'), findsOneWidget);
+      // No GPU trace arrives in a widget test: the scale is drawn over an
+      // empty plot, with nothing said about it.
+      expect(find.byKey(const ValueKey('scope-graticule')), findsOneWidget);
+      expect(find.byKey(const ValueKey('scope-trace')), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('scope-kind')));
       await tester.pumpAndSettle();

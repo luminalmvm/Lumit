@@ -20,8 +20,8 @@
 use lumit_core::time::CompTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 /// The longest two of a person's edits can be apart, in seconds, and still be
 /// one sitting.

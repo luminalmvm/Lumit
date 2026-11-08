@@ -20,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:provider/provider.dart';
@@ -40,6 +41,8 @@ import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays, ViewerReach;
 import '../theme/theme.dart';
 import 'viewer_texture_controller.dart';
+import 'viewer_picture.dart'
+    if (dart.library.js_interop) 'viewer_picture_web.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith;
 import 'shape_entries.dart';
@@ -48,6 +51,7 @@ import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_follow.dart';
+import 'viewer_part_gizmo.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_gizmo_3d.dart'
     show
@@ -59,6 +63,7 @@ import 'viewer_gizmo_3d.dart'
         turnOf,
         turnOfAe;
 import 'viewer_layer_map.dart';
+import 'viewer_menus.dart';
 import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
 import 'viewer_prefix_chip.dart';
@@ -67,6 +72,7 @@ import 'viewer_region.dart';
 import 'viewer_rotate.dart';
 import 'viewer_roto.dart';
 import 'viewer_rulers.dart';
+import 'viewer_shape3d.dart';
 import 'viewer_shape_layer.dart';
 import 'viewer_shapes.dart';
 import 'viewer_tool_cursor.dart';
@@ -124,6 +130,11 @@ class ViewerStage extends StatelessWidget {
   /// where it is the part that was on screen. Null when nothing is stored.
   final Rect? snapshotArea;
 
+  /// In a compare against the snapshot, how far across the stage the live
+  /// picture reaches, as a fraction; the snapshot shows after it. Null draws
+  /// the whole snapshot.
+  final double? snapshotFrom;
+
   /// Whether the layer controls are drawn (the bar's wireframe switch).
   final bool wireframes;
   final ViewerChannel channel;
@@ -142,8 +153,8 @@ class ViewerStage extends StatelessWidget {
   final void Function(Offset at, {required bool out}) onZoomAt;
   final void Function(Rect box, {required bool out}) onZoomBox;
 
-  /// A named magnification, null for fit, for the picture's right-click menu.
-  final ValueChanged<double?>? onZoom;
+  /// What the picture's right-click menu asks of the panel.
+  final ViewerMenuHost menus;
 
   const ViewerStage({
     super.key,
@@ -158,6 +169,7 @@ class ViewerStage extends StatelessWidget {
     required this.pictureKey,
     required this.snapshot,
     required this.snapshotArea,
+    this.snapshotFrom,
     required this.wireframes,
     required this.channel,
     required this.compSize,
@@ -166,7 +178,7 @@ class ViewerStage extends StatelessWidget {
     required this.onChanged,
     required this.onZoomAt,
     required this.onZoomBox,
-    this.onZoom,
+    required this.menus,
   });
 
   /// The tracked layer whose solved point cloud is drawn, and whether it is
@@ -314,8 +326,16 @@ class ViewerStage extends StatelessWidget {
         uiState.liveTransforms.value[a.layer.internallayerId] ??
         a.info.transform;
     final out = <LayerBox>[];
+    // An environment light is nowhere, and the picture it reads is never
+    // drawn, so neither has a box to pick or move.
+    final surround = [
+      for (final e in model.heldLayers)
+        if (e.info.light?.kind == BridgeLightKind.environment) e.info.light?.source
+    ];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
+      if (entry.info.light?.kind == BridgeLightKind.environment) continue;
+      if (surround.contains(entry.layer.internallayerId)) continue;
       // Nor does a layer that only makes a sound: a box the size of the comp
       // round nothing, and a click on the picture that picked it.
       if (!_drawsPicture(entry)) continue;
@@ -330,11 +350,20 @@ class ViewerStage extends StatelessWidget {
       final tf = transformOf(entry);
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
       final light = entry.info.kind == BridgeLayerKind.light;
+      final cube = uiState.layerBounds.modelBoxOf(entry,
+          revision: revision,
+          frame: uiState.playheadFrame.value,
+          outlined: outlined.contains(entry.layer.internallayerId.toString()));
+      BridgeOrientTurn? turnOf(BridgeLayerEntry e) => uiState.orientTurns.of(e,
+          frame: uiState.playheadFrame.value,
+          revision: revision,
+          generation: uiState.solveLanded.value);
       final map = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft,
           viewScale: viewScale,
           view: rows,
           time: () => at,
+          orientTurn: turnOf,
           cameraPose: (camera) => uiState.cameraPoses.ownOf(camera.layer,
               id: camera.layer.internallayerId,
               frame: uiState.playheadFrame.value,
@@ -383,13 +412,18 @@ class ViewerStage extends StatelessWidget {
             (map.projected &&
                 tf.positionX is! BridgeScalar_Expression &&
                 tf.positionY is! BridgeScalar_Expression),
-        // A light is a place, with nothing to scale or turn on the picture.
+        // A light is a place, with nothing to scale or turn on the picture,
+        // and a model's box has no flat side for the handles.
         scalable: !light &&
+            cube == null &&
             isStill(tf.scaleX) &&
             isStill(tf.scaleY) &&
             isStill(tf.rotation),
         rotationDegrees: rotation,
+        orientDegrees: turnOf(entry)?.degrees ?? 0,
         marker: light,
+        cube: cube,
+        cubeFrame: uiState.playheadFrame.value,
         transform: tf,
         // The path a keyed position follows, for the layers whose outline is
         // drawn: asked once per layer per document revision and held. A 3D
@@ -620,6 +654,11 @@ class ViewerStage extends StatelessWidget {
       // Panning the picture, not the layer: the overlay's own handle takes
       // the gesture first when it is hit, so this only fires on empty space.
       onPanUpdate: picking ? null : (d) => onPan(d.delta),
+      // Whatever tool is in hand, a right click on the picture opens its menu,
+      // unless the tool has taken it first. Not while picking a colour.
+      onSecondaryTapUp: uiState.dropper.value != null
+          ? null
+          : (d) => menus.openPicture?.call(d),
       // **Nothing the stage draws may leave the stage.** Every mark over the
       // picture — the wireframes, the handles, the mask outlines, the tool
       // layers — is a [CustomPaint] filling the stack, and a painter is free
@@ -790,7 +829,7 @@ class ViewerStage extends StatelessWidget {
                       view: view,
                       ask: ask,
                       ground: aids.ground,
-                      grid: !viewport || uiState.viewportWireframe(viewId),
+                      grid: !viewport || uiState.linesOnly(viewId),
                       axes: axes,
                       only: only,
                       frame: uiState.playheadFrame.value,
@@ -851,6 +890,7 @@ class ViewerStage extends StatelessWidget {
                   // The box picked on a node graph's canvas is what the Roto
                   // tools stroke on there.
                   uiState.compGraphNode,
+                  uiState.pickedPart,
                 ]),
                 builder: (context, _) {
                   final boxes = _boxes();
@@ -881,14 +921,19 @@ class ViewerStage extends StatelessWidget {
                         ),
                         onChanged: onChanged,
                         viewId: viewId,
-                        onZoom: onZoom,
+                        menus: menus,
                       ),
                       // The shape tools and the Pen: a drag draws a mask on
                       // the selected layer, and the Pen builds one point by
                       // point.
                       ViewerShapeLayer(
+                        // With a Path row picked the Pen edits that path, in
+                        // the gizmo, rather than drawing a new one.
                         active: uiState.tools.tool.group == ToolGroup.shape ||
-                            uiState.tools.tool == ToolMode.pen,
+                            (uiState.tools.tool == ToolMode.pen &&
+                                pathBeingEdited(
+                                        uiState.selectedProperties.value) ==
+                                    null),
                         tool: uiState.tools.tool,
                         state: state,
                         uiState: uiState,
@@ -900,6 +945,20 @@ class ViewerStage extends StatelessWidget {
                           compSize.height.toDouble(),
                         ),
                         accent: t.accent,
+                        onChanged: onChanged,
+                        onPictureMenu: (d) => menus.openPicture?.call(d),
+                      ),
+                      // The 3D shape tools: a click puts the shape there.
+                      ViewerShape3dLayer(
+                        active: uiState.tools.tool.group == ToolGroup.shape3d,
+                        tool: uiState.tools.tool,
+                        comp: comp,
+                        uiState: uiState,
+                        fitted: fitted,
+                        compSize: Size(
+                          compSize.width.toDouble(),
+                          compSize.height.toDouble(),
+                        ),
                         onChanged: onChanged,
                       ),
                       // The Type tool: a click makes or edits a text layer,
@@ -979,6 +1038,7 @@ class ViewerStage extends StatelessWidget {
                         comp: comp,
                         boxes: boxes,
                         onChanged: onChanged,
+                        menus: menus,
                       ),
                       // The Anchor point tool: its own pointer, and a drag
                       // that slides the pivot while the picture stays still.
@@ -1004,6 +1064,16 @@ class ViewerStage extends StatelessWidget {
                         outline: t.surface0,
                         onChanged: onChanged,
                       ),
+                      // A picked part of a 3D model, over everything else that
+                      // takes the pointer, on its handles alone.
+                      if (uiState.pickedPart.value != null)
+                        ViewerPartGizmo(
+                          comp: comp,
+                          uiState: uiState,
+                          boxes: boxes,
+                          revision: uiState.model.heldRevision,
+                          onChanged: onChanged,
+                        ),
                     ],
                   );
                 },
@@ -1080,6 +1150,7 @@ class ViewerStage extends StatelessWidget {
                       accent: t.accent,
                       mark: t.textPrimary,
                       onChanged: onChanged,
+                      onPictureMenu: (d) => menus.openPicture?.call(d),
                     ),
                   );
                 },
@@ -1154,6 +1225,13 @@ class ViewerStage extends StatelessWidget {
                 ),
                 guides: uiState.guides,
                 onGuides: uiState.setGuides,
+                locked: uiState.workspace.interface.viewerGuidesLocked,
+                percent: uiState.workspace.interface.viewerRulerPercent,
+                onRulerMenu: (vertical, details) => showViewerRulerMenu(
+                    context, uiState, menus, vertical, details),
+                onGuideMenu: (index, details) => showViewerGuideMenu(
+                    context, uiState, menus, index, details),
+                labelStyle: t.mono,
                 band: t.surface2,
                 line: t.hairlineStrong,
                 label: t.textMuted,
@@ -1188,25 +1266,36 @@ class ViewerStage extends StatelessWidget {
             // to the picture's rectangle as it is *now*, so a zoom taken since
             // the snapshot compares like with like.
             if (snapshot case final shot?)
-              Positioned.fromRect(
-                rect: _snapshotRect(),
-                child: IgnorePointer(
-                  child: RawImage(
-                    key: const ValueKey('viewer-snapshot-overlay'),
-                    image: shot,
-                    fit: BoxFit.fill,
+              Positioned.fill(
+                child: ClipRect(
+                  clipper: _From(snapshotFrom ?? 0),
+                  child: Stack(
+                    children: [
+                      Positioned.fromRect(
+                        rect: _snapshotRect(),
+                        child: IgnorePointer(
+                          child: RawImage(
+                            key: const ValueKey('viewer-snapshot-overlay'),
+                            image: shot,
+                            fit: BoxFit.fill,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             // The selection's name, over the stage's own corner. Last
             // in the stack because it is chrome: it names what is selected
             // whatever is being drawn underneath, including a held snapshot.
-            ViewerTag(uiState: uiState),
+            ViewerTag(
+                uiState: uiState, band: overlays.rulers ? viewerRulerBand : 0),
             // And what is being *looked at*, when that is not the finished
             // composition. Its own file, so this is one line: the chip
             // is the Viewer's, but it follows the effect selection rather than
             // anything this panel knows.
-            ViewerPrefixChip(uiState: uiState),
+            ViewerPrefixChip(
+                uiState: uiState, top: overlays.rulers ? viewerRulerBand : 0),
             // Whose composition and playhead this machine is following, on
             // the view that shows the composition in front.
             if (comp.internalid == uiState.selectedComp?.internalid)
@@ -1272,11 +1361,13 @@ ViewerLayerMap layerMapOf(
   required List<double> Function() view,
   BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
   BridgeRational Function()? time,
+  BridgeOrientTurn? Function(BridgeLayerEntry)? orientTurn,
 }) {
   final tf = transformOf(entry);
   double at(BridgeScalar s, BridgeTransformProp p) => read(s, entry.layer, p);
   final parent = parentMatrix(entry, byId, transformOf, read,
-      cameraPose: cameraPose, time: time);
+      cameraPose: cameraPose, time: time, orientTurn: orientTurn);
+  final turn = orientTurn?.call(entry);
   final m = parent?.storage;
   return ViewerLayerMap.of(
     positionX: at(tf.positionX, BridgeTransformProp.positionX),
@@ -1285,7 +1376,8 @@ ViewerLayerMap layerMapOf(
     anchorY: at(tf.anchorY, BridgeTransformProp.anchorY),
     scaleXPercent: at(tf.scaleX, BridgeTransformProp.scaleX),
     scaleYPercent: at(tf.scaleY, BridgeTransformProp.scaleY),
-    rotationDegrees: at(tf.rotation, BridgeTransformProp.rotation),
+    rotationDegrees:
+        at(tf.rotation, BridgeTransformProp.rotation) + (turn?.degrees ?? 0),
     origin: origin,
     viewScale: viewScale,
     parent: m == null
@@ -1298,8 +1390,10 @@ ViewerLayerMap layerMapOf(
             z: at(tf.positionZ, BridgeTransformProp.positionZ),
             rotationX: at(tf.rotationX, BridgeTransformProp.rotationX),
             rotationY: at(tf.rotationY, BridgeTransformProp.rotationY),
-            outside: _outsideOf(
-                entry, tf, at, outsideOf(orientationOf(tf, at, time))),
+            outside: _withTurn(
+                turn,
+                _outsideOf(
+                    entry, tf, at, outsideOf(orientationOf(tf, at, time)))),
             anchorZ: _depthAt(tf, at, BridgeTransformProp.anchorZ, 0),
             scaleZ: _depthAt(tf, at, BridgeTransformProp.scaleZ, 100),
             aeOrder: tf.depth?.afterEffectsOrder ?? false,
@@ -1358,6 +1452,13 @@ List<double>? _outsideOf(
   return outside == null ? look : mul3(look, outside);
 }
 
+/// [outside] with an Orient's turn outside it.
+List<double>? _withTurn(BridgeOrientTurn? turn, List<double>? outside) {
+  final rows = turn?.rows;
+  if (rows == null) return outside;
+  return outside == null ? rows : mul3(rows, outside);
+}
+
 /// [rows]' turn, row by row, in the order [tf]'s layer turns in.
 List<double> rowsTurnOf(BridgeTransform tf, Vec3 rows) =>
     rowsTurn(rows, ae: tf.depth?.afterEffectsOrder ?? false);
@@ -1391,6 +1492,7 @@ Matrix4? parentMatrix(
   double Function(BridgeScalar, LayerReference, BridgeTransformProp) read, {
   BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
   BridgeRational Function()? time,
+  BridgeOrientTurn? Function(BridgeLayerEntry)? orientTurn,
 }) {
   Matrix4? world;
   final seen = {entry.layer.internallayerId};
@@ -1423,14 +1525,18 @@ Matrix4? parentMatrix(
       at(tf.positionY, BridgeTransformProp.positionY),
       flat ? 0.0 : at(tf.positionZ, BridgeTransformProp.positionZ),
     );
+    final turn = orientTurn?.call(up);
     final Vec3 rows = (
       flat ? 0.0 : at(tf.rotationX, BridgeTransformProp.rotationX),
       flat ? 0.0 : at(tf.rotationY, BridgeTransformProp.rotationY),
-      at(tf.rotation, BridgeTransformProp.rotation),
+      at(tf.rotation, BridgeTransformProp.rotation) + (turn?.degrees ?? 0),
     );
-    // An aimed light's aim, then the Orientation, outside the rotations.
-    final outside =
-        flat ? null : _outsideOf(up, tf, at, outsideOf(orientationOf(tf, at, time)));
+    // An Orient's turn, an aimed light's aim, then the Orientation, outside
+    // the rotations.
+    final outside = flat
+        ? null
+        : _withTurn(
+            turn, _outsideOf(up, tf, at, outsideOf(orientationOf(tf, at, time))));
     final r = rowsTurnOf(tf, rows);
     final m = outside == null ? r : mul3(outside, r);
     final own = Matrix4.translationValues(position.$1, position.$2, position.$3)
@@ -1464,7 +1570,7 @@ final Map<UuidValue, bool> _pictured = {};
 /// and only once a layer: the engine answers from the probe it made at import,
 /// so the first ask is the one crossing and the rest are a lookup.
 bool _drawsPicture(BridgeLayerEntry entry) => switch (entry.info.kind) {
-      BridgeLayerKind.audio => false,
+      BridgeLayerKind.audio || BridgeLayerKind.bus => false,
       BridgeLayerKind.footage =>
         _pictured[entry.layer.internallayerId] ??= () {
           try {
@@ -1510,6 +1616,7 @@ BridgeLayerEntry? layerAtCompPoint(
     BridgeLayerKind.nullLayer,
     BridgeLayerKind.light,
     BridgeLayerKind.audio,
+    BridgeLayerKind.bus,
   };
   final byId = {
     for (final entry in model.layers) entry.layer.internallayerId: entry
@@ -1517,7 +1624,7 @@ BridgeLayerEntry? layerAtCompPoint(
   // What a pin points at was seen through the comp's own camera.
   late final List<double> rows = () {
     try {
-      return comp.viewProjection(frame: BigInt.from(frame), view: null);
+      return comp.viewProjection(frame: frame, view: null);
     } catch (_) {
       return flatView;
     }
@@ -1539,9 +1646,13 @@ BridgeLayerEntry? layerAtCompPoint(
           viewScale: 1,
           view: () => rows,
           time: () => time,
+          orientTurn: (e) => uiState.orientTurns.of(e,
+              frame: frame,
+              revision: revision,
+              generation: uiState.solveLanded.value),
           cameraPose: (camera) {
             try {
-              return camera.layer.cameraOwnPoseAt(frame: BigInt.from(frame));
+              return camera.layer.cameraOwnPoseAt(frame: frame);
             } catch (_) {
               return null;
             }
@@ -1555,6 +1666,19 @@ BridgeLayerEntry? layerAtCompPoint(
     ));
   }
   return entries[layerAtPoint(boxes, at)?.id];
+}
+
+/// Everything right of [fraction] of the way across.
+class _From extends CustomClipper<Rect> {
+  final double fraction;
+  const _From(this.fraction);
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(
+      size.width * fraction.clamp(0.0, 1.0), 0, size.width, size.height);
+
+  @override
+  bool shouldReclip(_From old) => old.fraction != fraction;
 }
 
 /// The badge that appears only once a probe has actually found a file gone.
@@ -1752,20 +1876,25 @@ class _Picture extends StatelessWidget {
       valueListenable: uiState.textureOf(viewId),
       builder: (context, textureId, _) => ValueListenableBuilder<int>(
         valueListenable: uiState.previewTier,
-        builder: (context, tier, _) {
-          final picture = textureId != null
-              ? Texture(
-                  textureId: textureId,
-                  filterQuality: viewerPictureFilter(
-                    shownScale: shownScale,
-                    tier: tier,
-                    devicePixelRatio: dpr,
-                    smooth: uiState.workspace.smoothZoomedViewer,
-                  ),
-                )
-              : const SizedBox.expand();
-          return pictureChannelFilter(channel, picture);
-        },
+        builder: (context, tier, _) => ValueListenableBuilder<int?>(
+          valueListenable: uiState.draftView,
+          builder: (context, draft, _) {
+            final picture = textureId != null
+                ? viewerPicture(
+                    textureId,
+                    filterQuality: viewerPictureFilter(
+                      shownScale: shownScale,
+                      tier: tier,
+                      devicePixelRatio: dpr,
+                      // A draft reads as soft, never as blocks.
+                      smooth: uiState.workspace.smoothZoomedViewer ||
+                          draft == viewId,
+                    ),
+                  )
+                : const SizedBox.expand();
+            return pictureChannelFilter(channel, picture);
+          },
+        ),
       ),
     );
   }
@@ -1876,7 +2005,7 @@ class ViewerWireframeLayer extends StatefulWidget {
   final List<UuidValue>? only;
 
   final int frame;
-  final BigInt? revision;
+  final int? revision;
 
   /// The footage sizes the frontend has already probed. The engine's own probe
   /// lives on the worker and this call does not, so what is known travels with
@@ -1960,7 +2089,7 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
     }
     try {
       _wires = widget.comp.wireframes(
-        frame: BigInt.from(widget.frame),
+        frame: widget.frame,
         view: widget.view,
         ground: widget.ground,
         grid: widget.grid,
@@ -2286,7 +2415,11 @@ const double viewerTagTop = 8;
 /// the colour of the box it names.
 class ViewerTag extends StatelessWidget {
   final LumitUiState uiState;
-  const ViewerTag({super.key, required this.uiState});
+
+  /// How far the rulers come in from the stage's corner.
+  final double band;
+
+  const ViewerTag({super.key, required this.uiState, this.band = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -2306,26 +2439,41 @@ class ViewerTag extends StatelessWidget {
           }
         }
         if (name == null || name.isEmpty) return const SizedBox.shrink();
+        // Several selected: the first, and how many more.
+        final more = picked.length - 1;
         return Positioned(
-          left: viewerTagLeft,
-          top: viewerTagTop,
+          // Clear of the rulers when they're up.
+          left: viewerTagLeft + band,
+          top: viewerTagTop + band,
           child: IgnorePointer(
             child: Container(
               key: const ValueKey('viewer-tag'),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(maxWidth: viewerTagMaxWidth),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              // A plate of its own, so the name reads over any picture.
               decoration: BoxDecoration(
-                border: Border.all(color: t.animated),
+                color: t.surface0.withValues(alpha: viewerChipPlate),
                 borderRadius: BorderRadius.circular(t.tokens.controlRadius),
               ),
-              child: Text(
-                t.kickerCase(name),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.kicker.copyWith(
-                  color: t.animated,
-                  letterSpacing: viewerTagTracking,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(
+                  // Spelled as the layer is: a name isn't a heading.
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.small.copyWith(color: t.animated),
+                  ),
                 ),
-              ),
+                if (more > 0) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '+$more',
+                    style: t.mono.copyWith(
+                        fontSize: barValueTextSize, color: t.textMuted),
+                  ),
+                ],
+              ]),
             ),
           ),
         );
@@ -2334,7 +2482,7 @@ class ViewerTag extends StatelessWidget {
   }
 }
 
-/// The chip's tracking: 0.08em at 9px, the drawing's own — a shade tighter than
-/// the 0.12em a kicker carries, because it names a layer rather than a
-/// container.
-const double viewerTagTracking = 0.72;
+/// How solid a chip's plate is over the picture, and how long the selection's
+/// name may run before it's cut.
+const double viewerChipPlate = 0.85;
+const double viewerTagMaxWidth = 220;

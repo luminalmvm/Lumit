@@ -60,8 +60,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, OnceLock};
 use std::thread;
-use std::time::{Duration, Instant};
 use uuid::Uuid;
+use web_time::{Duration, Instant};
 
 /// Raised whenever a frame, or what is sealed in one, changes shape.
 const PROTOCOL: u32 = 1;

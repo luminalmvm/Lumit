@@ -209,6 +209,8 @@ pub enum Reason {
     /// Casts Shadows or Accepts Shadows keyframed. Lumit keeps one setting,
     /// the first key's.
     ShadowSwitchKeyed,
+    /// A Text or Shape layer's depth and bevel came across as Geometry options.
+    GeometryOptionsCarried,
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -330,7 +332,7 @@ impl std::fmt::Display for Reason {
             }
             Self::MediaMissing { path } => write!(f, "The file at {path} was missing"),
             Self::MediaNotFound => write!(f, "The file was not found"),
-            Self::MediaPlaceholder => write!(f, "An After Effects placeholder"),
+            Self::MediaPlaceholder => write!(f, "A placeholder in the imported project"),
             Self::ColourProfileIgnored { profile } => {
                 write!(f, "The {profile} colour profile was not carried")
             }
@@ -377,6 +379,7 @@ impl std::fmt::Display for Reason {
                 write!(f, "{ae_kind} light imported as the nearest kind")
             }
             Self::ShadowSwitchKeyed => write!(f, "The shadow setting kept its first key"),
+            Self::GeometryOptionsCarried => write!(f, "The geometry options were imported"),
             Self::SpatialTangentsFlattened => {
                 write!(f, "The motion path's curves were not carried")
             }

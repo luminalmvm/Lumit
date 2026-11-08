@@ -11,7 +11,7 @@ struct Params {
     centre: vec2<f32>, // raster px (px@comp, already scaled)
     amount: f32,        // peak tap spread, raster px, at the farthest corner
     taps: i32,          // == cpu::radial_blur_taps(amount)
-    spin: u32,          // 1 = Spin (tangent direction), 0 = Zoom (radial)
+    kind: u32,          // 1 = Spin (tangent), 0 = Zoom (radial), 2 = Rays
     edge: u32,          // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,       // 0..1, blended against the unprocessed input
     matte_on: f32,     // 1 = the matte drives the control below
@@ -109,11 +109,25 @@ fn radial_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Zoom steps along d itself (a ray through Centre); Spin steps along
     // its perpendicular (the tangent to the arc).
     var step = d;
-    if (p.spin == 1u) {
+    if (p.kind == 1u) {
         step = vec2<f32>(-d.y, d.x);
     }
     let nf = f32(p.taps);
     var acc = vec4<f32>(0.0);
+    // Rays read back towards Centre, the nearer the more, and stop there
+    // (== effects::radial_blur::rays).
+    if (p.kind == 2u) {
+        let reach = min(k, 1.0);
+        var total = 0.0;
+        for (var t = 0; t < p.taps; t++) {
+            let u = (f32(t) + 0.5) / nf;
+            let weight = (1.0 - u) * (1.0 - u);
+            acc += bilinear_edge(pos.x - u * reach * d.x, pos.y - u * reach * d.y, size) * weight;
+            total += weight;
+        }
+        textureStore(dst, xy, mix(textureLoad(src, xy, 0), acc / total, p.mix_amt));
+        return;
+    }
     for (var t = 0; t < p.taps; t++) {
         let tt = (f32(t) + 0.5) / nf - 0.5;
         acc += bilinear_edge(pos.x + tt * k * step.x, pos.y + tt * k * step.y, size);

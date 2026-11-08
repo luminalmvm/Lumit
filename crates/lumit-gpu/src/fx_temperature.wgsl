@@ -1,12 +1,13 @@
 // Temperature (docs/08-EFFECTS.md §3.20). Mirrors lumit_core::fx::cpu::temperature
 // op-for-op (§1.6: the CPU is the oracle): a warm/cool white-balance shift as a
-// per-channel gain in scene-linear light — red × gain_r, blue × gain_b, green
-// and alpha untouched. The two gains are computed host-side (in the resolve
-// step) so the CPU and this kernel multiply by the identical numbers.
+// per-channel gain in scene-linear light: red × gain_r, green × gain_g (the
+// tint), blue × gain_b, alpha untouched. The gains are computed host-side (in
+// the resolve step) so the CPU and this kernel multiply by the identical numbers.
 // Premultiplied throughout, exactly like Exposure: a per-channel scalar scales
 // premultiplied colour consistently, so there is no unpremultiply round trip
-// (unlike the affine Contrast/Saturation grades). gain_r == 1.0 && gain_b == 1.0
-// (Temperature 0) short-circuits to the input, the bit-exact neutral point.
+// (unlike the affine Contrast/Saturation grades). Gains of 1.0 all round
+// (Temperature and Tint 0) short-circuit to the input, the bit-exact neutral
+// point.
 
 struct Params {
     gain_r: f32,   // scene-linear red gain, max(0, 1 + 0.75·k)
@@ -14,9 +15,9 @@ struct Params {
     mix_amt: f32,  // 0..1, blended against the unprocessed input
     t: f32,        // Temperature / 100 clamped, read only under a matte
     matte_on: f32,     // 1 = the matte drives the control below
+    gain_g: f32,   // scene-linear green gain, max(0, 1 − 0.75·tint)
+    tint: f32,     // Tint / 100 clamped, read only under a matte
     _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -46,23 +47,29 @@ fn temperature(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = textureLoad(src, xy, 0);
     // Neutral short-circuit (== the CPU reference's early return).
-    if (p.gain_r == 1.0 && p.gain_b == 1.0) {
+    if (p.gain_r == 1.0 && p.gain_g == 1.0 && p.gain_b == 1.0) {
         textureStore(dst, xy, o);
         return;
     }
-    // The matte scales Temperature toward 0 per pixel, and the gains are
-    // rebuilt from t * k (== cpu::temperature_gains) — the blue gain
-    // floors at 0, so a lerp of the gains would not be a smaller Temperature.
+    // The matte scales Temperature and Tint toward 0 per pixel, and the gains
+    // are rebuilt from t * k and tint * k (== cpu::temperature_gains and
+    // cpu::tint_gain), as a gain floors at 0, so a lerp of the gains would not
+    // be a smaller Temperature.
     var gain_r = p.gain_r;
+    var gain_g = p.gain_g;
     var gain_b = p.gain_b;
     if (p.matte_on != 0.0) {
-        let tk = p.t * matte_k(xy);
+        let k = matte_k(xy);
+        let tk = p.t * k;
         gain_r = max(1.0 + 0.75 * tk, 0.0);
+        gain_g = max(1.0 - 0.75 * p.tint * k, 0.0);
         gain_b = max(1.0 - 0.75 * tk, 0.0);
     }
     let sr = o.r * gain_r;
+    let sg = o.g * gain_g;
     let sb = o.b * gain_b;
     let out_r = o.r * (1.0 - p.mix_amt) + sr * p.mix_amt;
+    let out_g = o.g * (1.0 - p.mix_amt) + sg * p.mix_amt;
     let out_b = o.b * (1.0 - p.mix_amt) + sb * p.mix_amt;
-    textureStore(dst, xy, vec4<f32>(out_r, o.g, out_b, o.a));
+    textureStore(dst, xy, vec4<f32>(out_r, out_g, out_b, o.a));
 }

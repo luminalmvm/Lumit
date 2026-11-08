@@ -22,6 +22,7 @@
 //! cheaper than one decoded at 4K and thrown away.
 
 use crate::decode::{CompJob, Cut};
+use crate::overlap::under_incoming;
 use crate::source::SourceProbes;
 use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
@@ -289,6 +290,13 @@ fn clone_moments_of(
     lt: f64,
 ) -> Vec<(Uuid, f64)> {
     use lumit_core::fx::effects::clone_to_points::CloneToPoints;
+    // Time loop's Source layer, at the moments the loop shows.
+    if e.effect.match_name == "time_loop" {
+        return lumit_core::fx::effects::time_loop::TimeLoop::planned(e, comp, t, lt)
+            .into_iter()
+            .filter(|(_, at)| at.to_bits() != t.to_bits())
+            .collect();
+    }
     if e.effect.match_name != "clone_to_points" {
         return Vec::new();
     }
@@ -391,7 +399,7 @@ pub fn collect_comp_jobs(
     // dozens of simultaneous 4K decodes feeding a composite that draws one
     // layer, which is the shape of a session that ends without a message.
     let any_solo = lumit_core::model::any_picture_solo(comp);
-    let mut wanted: Vec<Uuid> = Vec::new();
+    let mut wanted: Vec<Uuid> = comp.environment_source(t).into_iter().collect();
     // Whether a layer is drawn, which is the walk below's own gate.
     let drawn = |idx: usize, l: &lumit_core::model::Layer| {
         !occluder.is_some_and(|o| idx > o)
@@ -400,11 +408,10 @@ pub fn collect_comp_jobs(
             && in_span(l)
             && !(any_solo && !l.switches.solo)
     };
-    // The other moments a Clone to points shows its clone layers at, as the
-    // layer and the comp time. Empty unless one has a time offset on. It is
-    // the list the builder renders, asked of the same code, so a clone
-    // layer's footage is fetched at every moment a stamp shows. Gathered
-    // before the walk, which plans the graphs a layer applies at them too.
+    // The other moments a Clone to points or a held projection shows a layer
+    // at, as the layer and the comp time. It is the list the builder renders,
+    // asked of the same code, so its footage is fetched at every one of them.
+    // Gathered before the walk, which plans the graphs a layer applies too.
     let clone_moments: Vec<(Uuid, f64)> = comp
         .layers
         .iter()
@@ -416,6 +423,7 @@ pub fn collect_comp_jobs(
                 .iter()
                 .filter(|e| e.enabled)
                 .flat_map(move |e| clone_moments_of(e, doc, comp, t, lt))
+                .chain(lumit_core::model_material::held_moments(l, comp, lt))
         })
         .collect();
     let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -427,15 +435,31 @@ pub fn collect_comp_jobs(
     let mut rebuilt = moments.to_vec();
     let mut layer_moments = Vec::with_capacity(comp.layers.len());
     for (idx, l) in comp.layers.iter().enumerate() {
-        // And the moments a Clone to points shows this layer at.
+        // And the moments a Clone to points shows this layer at, and the ones
+        // an effect on it shows its own input at, which on an adjustment
+        // layer are the layers' below.
         let cloned = clone_moments.iter().filter(|(id, _)| *id == l.id);
+        // At the frame and at each moment an adjustment above builds this
+        // layer again at, as that rebuild draws the layer's own moments too.
+        let own: Vec<f64> = if l.switches.visible && !l.audio_only {
+            std::iter::once(t)
+                .chain(rebuilt.iter().copied())
+                .flat_map(|tau| lumit_core::fx::moments::own_moment_comp_times(comp, l, tau))
+                .collect()
+        } else {
+            Vec::new()
+        };
         layer_moments.push(
             rebuilt
                 .iter()
                 .copied()
                 .chain(cloned.map(|(_, tau)| *tau))
+                .chain(own.iter().copied().filter(|_| !l.is_adjustment()))
                 .collect::<Vec<f64>>(),
         );
+        if l.is_adjustment() {
+            rebuilt.extend(own);
+        }
         if l.is_adjustment()
             && l.switches.visible
             && !l.graph.out_unwired
@@ -514,8 +538,8 @@ pub fn collect_comp_jobs(
             // Layer-input references (e.g. a DoF depth pass) decode
             // exactly like matte sources: the referenced layer is usually
             // hidden (you don't want the depth map rendering), but its
-            // pixels still feed the effect.
-            for e in l.effects.iter().filter(|e| e.enabled) {
+            // pixels still feed the effect, or a model's material.
+            for e in lumit_core::model_material::and_effects(l).filter(|e| e.enabled) {
                 for p in &e.params {
                     if let lumit_core::model::EffectValue::Layer(Some(id)) = p.value {
                         if !wanted.contains(&id) {
@@ -574,12 +598,12 @@ pub fn collect_comp_jobs(
         }
     }
     // Posterize Time (docs/08 §3.25, FX-1): a layer covered by a live
-    // Posterize decodes its source at the held grid time, not the live
-    // playhead, so footage playback visibly steps — the decode twin of the
-    // held re-render the draw builder performs. `sample_times[idx]` is the
-    // held comp time for `comp.layers[idx]`; equal to `t` for every layer
-    // when no Posterize is live, so an ordinary comp is unchanged.
+    // Posterize decodes its source at the held grid time, the decode twin of
+    // the held re-render the draw builder performs, and one only a held
+    // projection reads at the frame it holds. `sample_times[idx]` is the comp
+    // time for `comp.layers[idx]`, `t` for every layer in an ordinary comp.
     let sample_times = lumit_core::fx::temporal::posterize_sample_times(&comp.layers, t);
+    let sample_times = lumit_core::model_material::with_held_frames(comp, sample_times, t);
     // Accumulation motion blur (docs/08 §3.26): the sub-frame moments each
     // layer's footage is wanted at by the adjustments above it, in comp
     // frames. Empty everywhere in an ordinary comp.
@@ -601,6 +625,8 @@ pub fn collect_comp_jobs(
             | LayerKind::Shape { .. }
             | LayerKind::Camera { .. }
             | LayerKind::Light { .. }
+            | LayerKind::Model { .. }
+            | LayerKind::Mesh { .. }
             | LayerKind::Adjustment
             | LayerKind::Null => {}
             LayerKind::Sequence { clips } => {
@@ -652,6 +678,7 @@ pub fn collect_comp_jobs(
                         lumit_core::pixels::frame_pick(st, fps, src_frames, blend_on, sample_fps);
                     Some(CompJob {
                         layer: layer.id,
+                        at: t,
                         item,
                         source: media_source(doc, item, media),
                         source_frame,
@@ -712,7 +739,7 @@ pub fn collect_comp_jobs(
                             let Some(mut job) = footage_job(incoming, lt, whole) else {
                                 return under;
                             };
-                            job.cuts.push(Cut::Under(gain, under));
+                            job.cuts.push(under_incoming(incoming, whole, gain, under));
                             Some(job)
                         }
                     }
@@ -834,13 +861,23 @@ pub fn collect_comp_jobs(
                     // moment of the nested comp this layer shows, which is the
                     // moment the builder evaluates and names. Equal to `lt`
                     // for a layer with no map.
-                    let st = lumit_core::model::nested_source_time(layer, nested, lt);
+                    let mut st = lumit_core::model::nested_source_time(layer, nested, lt);
                     // A held nested frame wants no decodes. Asked only
                     // where the builder will ask by the same name: at the live
                     // time (a Posterize-held layer is built at another time,
                     // by a walk with no keyer) and for a Precomp that is not
                     // collapsed (a collapsed one is spliced in, never named).
                     let live = sample_times[idx] == t;
+                    // On Flow between two frames, the frame before is built
+                    // and the frame after is one more moment of it.
+                    let pair = live
+                        .then(|| {
+                            lumit_core::precomp_flow::pair(layer, nested, lt, comp.frame_rate.fps())
+                        })
+                        .flatten();
+                    if let Some((a, _, _)) = pair {
+                        st = a;
+                    }
                     let collapsed = matches!(
                         lumit_core::model::collapse_state(doc, comp, layer, lt),
                         lumit_core::model::CollapseState::Active
@@ -875,6 +912,7 @@ pub fn collect_comp_jobs(
                             );
                         }
                     }
+                    nested_moments.extend(pair.map(|(_, b, _)| b));
                     // A rebuild at another moment is made from pixels, so a
                     // held frame only saves the decodes when there is none.
                     if live
@@ -904,6 +942,7 @@ pub fn collect_comp_jobs(
                 if probe.slates() {
                     jobs.push(CompJob {
                         layer: layer.id,
+                        at: t,
                         item: *item,
                         source: media_source(doc, *item, media),
                         source_frame: 0,
@@ -1055,6 +1094,7 @@ pub fn collect_comp_jobs(
                 };
                 jobs.push(CompJob {
                     layer: layer.id,
+                    at: t,
                     item: *item,
                     source: media_source(doc, *item, media),
                     source_frame,
@@ -1205,6 +1245,7 @@ fn collect_graph_jobs(
                     jobs.push(CompJob {
                         channels: None,
                         layer: *id,
+                        at: t,
                         item: *item,
                         source: media_source(doc, *item, media),
                         source_frame: 0,
@@ -1238,6 +1279,7 @@ fn collect_graph_jobs(
                 jobs.push(CompJob {
                     channels: None,
                     layer: *id,
+                    at: t,
                     item: *item,
                     source: media_source(doc, *item, media),
                     source_frame,
@@ -1337,7 +1379,7 @@ pub fn plan_comp_frame_held(
     let mut jobs = Vec::new();
     let mut visited = vec![comp.id];
     collect_comp_jobs(&ctx, comp, t, &[], &mut jobs, &mut visited, false);
-    jobs
+    crate::placed::merged(jobs)
 }
 
 /// Whether two decode plans ask for exactly the same pixels — the test a live
@@ -1353,6 +1395,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
     a.len() == b.len()
         && a.iter().zip(b).all(|(x, y)| {
             x.layer == y.layer
+                && x.at.to_bits() == y.at.to_bits()
                 && x.item == y.item
                 && x.source_frame == y.source_frame
                 && x.target_width == y.target_width
@@ -1374,7 +1417,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
 impl Cut {
     /// What this asks for, as numbers that compare and hash: which kind, the
     /// offset or the gain, and the other clip's own content name.
-    fn name(&self) -> (u8, u64, Option<u128>) {
+    pub(crate) fn name(&self) -> (u8, u64, Option<u128>) {
         match self {
             Cut::Neighbour(o, job) => (0, f64::from(*o).to_bits(), Some(job.source_key())),
             Cut::Moment(o, job) => (1, o.to_bits(), job.as_ref().map(CompJob::source_key)),
@@ -1638,6 +1681,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -1775,6 +1819,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -1918,6 +1963,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -2106,6 +2152,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -2181,8 +2228,10 @@ mod tests {
         let graph = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -2217,8 +2266,10 @@ mod tests {
         let reader = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read_comp,
@@ -2286,8 +2337,10 @@ mod tests {
         let outer = comp_of(
             Vec::new(),
             Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
                 edges: vec![wire(box_id, "output", out3, "input")],
                 layout: Vec::new(),
@@ -2361,8 +2414,10 @@ mod tests {
             let comp = comp_of(
                 Vec::new(),
                 Some(CompGraph {
+                    widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
+                    looks: Default::default(),
                     nodes,
                     edges,
                     layout: Vec::new(),

@@ -15,10 +15,15 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show MenuEntry, menuEntriesFlyout;
 import '../state/preview_throttle.dart';
 import '../state/text_documents.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
+import '../widgets/controls.dart';
+import 'text_animation_presets.dart' show textPresetRows;
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// One change to a text document: the document in, the changed one out.
 typedef TextChange = BridgeTextDocument Function(BridgeTextDocument document);
@@ -51,6 +56,39 @@ class TextTarget {
 /// The reading and writing both panels share.
 mixin TextTargetState<T extends StatefulWidget> on State<T> {
   final PreviewThrottle _throttle = PreviewThrottle();
+
+  /// The style Copy style last took, shared by both panels.
+  static BridgeTextStyle? _copiedStyle;
+  static BridgeParagraphStyle? _copiedParagraph;
+
+  /// The text panel's menu, around [child].
+  Widget styleMenu(LumitUiState ui, TextTarget target, Widget child) =>
+      textPanelMenu(
+        context,
+        animate: textPresetRows(
+            Provider.of<LumitState>(context, listen: false), ui),
+        onCopy: () => _copiedStyle = target.document.style,
+        onPaste: _copiedStyle == null
+            ? null
+            : () => commitText(
+                ui, target, restyle((_) => _copiedStyle!)),
+        onReset: () => commitText(ui, target, restyle((_) => plainTextStyle)),
+        child: child,
+      );
+
+  /// The paragraph panel's menu, around [child].
+  Widget paragraphMenu(LumitUiState ui, TextTarget target, Widget child) =>
+      textPanelMenu(
+        context,
+        onCopy: () => _copiedParagraph = target.document.paragraph,
+        onPaste: _copiedParagraph == null
+            ? null
+            : () => commitText(
+                ui, target, reflow((_) => _copiedParagraph!)),
+        onReset: () =>
+            commitText(ui, target, reflow((_) => plainParagraphStyle)),
+        child: child,
+      );
 
   /// Where a drag has got to, between its first tick and its end.
   BridgeTextDocument? _staged;
@@ -117,7 +155,7 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
       try {
         ui.liveText.value = {layer.internallayerId: document};
         comp.renderFrameWithTextPreview(
-          frame: BigInt.from(ui.playheadFrame.value),
+          frame: ui.playheadFrame.value,
           scale: ui.viewerScale,
           layer: layer,
           document: document,
@@ -138,7 +176,7 @@ mixin TextTargetState<T extends StatefulWidget> on State<T> {
     if (target.layers.isEmpty || comp == null) return;
     try {
       comp.renderFrameWithTextPreview(
-        frame: BigInt.from(ui.playheadFrame.value),
+        frame: ui.playheadFrame.value,
         scale: ui.viewerScale,
         layer: target.layers.first,
         document: target.held,
@@ -191,16 +229,74 @@ TextChange reflow(
         BridgeParagraphStyle Function(BridgeParagraphStyle paragraph) change) =>
     (document) => document.copyWith(paragraph: change(document.paragraph));
 
-/// The heading both panels open with: the layer being edited, or that it is
-/// new text.
-Widget textTargetHeading(LumitTheme t, String label) => Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-      child: Text(
-        label,
-        style: t.mono.copyWith(fontSize: 10, color: t.textPrimary),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+/// The heading both panels open with when a layer is being edited: its name.
+/// With none selected they edit what new text will be set in, and there is
+/// nothing to name, so only the gap is left.
+Widget textTargetHeading(LumitTheme t, String? label) => Padding(
+      padding: EdgeInsets.fromLTRB(10, 8, 10, label == null ? 0 : 4),
+      child: label == null
+          ? null
+          : Text(
+              label,
+              style: t.bodyPrimary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+    );
+
+/// What a right press on either panel's ground offers: take this style, put
+/// one on, or go back to plain.
+Widget textPanelMenu(
+  BuildContext context, {
+  required VoidCallback onCopy,
+  required VoidCallback? onPaste,
+  required VoidCallback onReset,
+  required Widget child,
+  List<MenuEntry>? animate,
+}) =>
+    GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (d) => showMenuAt<void>(
+        context: context,
+        position: d.globalPosition,
+        rows: (close) {
+          void run(VoidCallback? act) {
+            close(null);
+            act?.call();
+          }
+
+          // Reset leads, as on every value field and well.
+          return [
+            MenuRow(
+              key: const ValueKey('text-menu-reset'),
+              onPressed: () => run(onReset),
+              child: Text(l10n.reset),
+            ),
+            const MenuDivider(),
+            MenuRow(
+              key: const ValueKey('text-menu-copy-style'),
+              onPressed: () => run(onCopy),
+              child: Text(l10n.textCopyStyle),
+            ),
+            MenuRow(
+              key: const ValueKey('text-menu-paste-style'),
+              enabled: onPaste != null,
+              onPressed: () => run(onPaste),
+              child: MenuLabel(l10n.textPasteStyle, enabled: onPaste != null),
+            ),
+            if (animate != null) ...[
+              const MenuDivider(),
+              SubmenuRow(
+                key: const ValueKey('text-menu-animate'),
+                closeParent: () => close(null),
+                submenu: (dismiss) => menuEntriesFlyout(animate, dismiss),
+                child: Text(l10n.menuAnimateText),
+              ),
+            ],
+          ];
+        },
       ),
+      child: child,
     );
 
 /// A label and its control, as one cell of a panel's grid.
@@ -218,20 +314,34 @@ Widget textCell(LumitTheme t, String label, Widget control) => SizedBox(
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          Expanded(child: Align(alignment: Alignment.centerLeft, child: control)),
+          Expanded(child: Align(alignment: AlignmentDirectional.centerStart, child: control)),
           const SizedBox(width: 10),
         ],
       ),
     );
 
+/// How wide a column of cells gets. Past this a value is only further from its
+/// label.
+const double _textColumn = 210;
+
 /// The panels' cells laid out in two columns where there is room for two, and
-/// one where there isn't.
+/// one where there isn't, and held to the panel's left however wide it gets.
 Widget textGrid(List<Widget> cells) => LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 380 ? 2 : 1;
-        final width = constraints.maxWidth / columns;
-        return Wrap(
-          children: [for (final cell in cells) SizedBox(width: width, child: cell)],
+        final columns = constraints.maxWidth >= 2 * _textColumn ? 2 : 1;
+        final width = columns == 2
+            ? _textColumn
+            : constraints.maxWidth.clamp(0.0, _textColumn * 1.4);
+        return Align(
+          alignment: AlignmentDirectional.topStart,
+          child: SizedBox(
+            width: columns * width,
+            child: Wrap(
+              children: [
+                for (final cell in cells) SizedBox(width: width, child: cell)
+              ],
+            ),
+          ),
         );
       },
     );

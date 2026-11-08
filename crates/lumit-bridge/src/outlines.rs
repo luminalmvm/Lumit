@@ -100,11 +100,10 @@ fn parts(contents: &[ShapeEntry]) -> Vec<Vec<ShapeEntry>> {
     }
     runs.into_iter()
         .map(|(mut run, last)| {
-            let after = contents[last + 1..].iter();
             run.extend(
-                after
-                    .filter(|e| matches!(e, ShapeEntry::Modifier(_)))
-                    .cloned(),
+                lumit_core::shape::modifier::acting_after(&contents[last + 1..])
+                    .into_iter()
+                    .map(|m| ShapeEntry::Modifier(m.clone())),
             );
             run
         })

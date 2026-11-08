@@ -25,6 +25,8 @@
 #   assets/brand/lumit-theme.ico                       <- lumit-theme.svg (.lumtheme)
 #   packaging/macos/lumit-project.icns, lumit-preset.icns, lumit-theme.icns
 #                                                      <- the same three SVGs
+#   flutter_ui/web/favicon.png, icons/Icon-*.png       <- lumit-icon.svg (the
+#       browser version's tab and install icons)
 #
 # The Windows installer (packaging/windows/lumit.iss) registers the .ico files
 # with the .lum/.lumfx/.lumtheme associations. The .icns files are resources of
@@ -47,6 +49,9 @@ ROOT = Path(__file__).resolve().parent.parent
 BRAND = ROOT / "assets" / "brand"
 
 ICO_SIZES = [256, 128, 64, 48, 32, 24, 16]
+
+# The foot of the icon tile's gradient (lumit-icon.svg, tile-bg).
+TILE = (13, 15, 19, 255)
 
 
 def render(svg_path: Path, size: int) -> Image.Image:
@@ -94,6 +99,21 @@ def write_dock_png(icon: Path, out: Path, size: int = 512) -> None:
     print(f"{out.relative_to(ROOT)}: {size}")
 
 
+def write_web_icons() -> None:
+    web = ROOT / "flutter_ui" / "web"
+    tile = BRAND / "lumit-icon.svg"
+    render(tile, 32).save(web / "favicon.png", optimize=True)
+    for size in [192, 512]:
+        render(tile, size).save(web / "icons" / f"Icon-{size}.png", optimize=True)
+        # A maskable icon is cropped to a circle or a squircle by the system,
+        # so the tile sits inside the safe zone on a field of its own colour.
+        canvas = Image.new("RGBA", (size, size), TILE)
+        inner = round(size * 0.8)
+        canvas.alpha_composite(render(tile, inner), ((size - inner) // 2,) * 2)
+        canvas.save(web / "icons" / f"Icon-maskable-{size}.png", optimize=True)
+    print("flutter_ui/web: favicon and icons")
+
+
 def main() -> None:
     write_ico(
         BRAND / "lumit-mark.svg",
@@ -105,6 +125,8 @@ def main() -> None:
     write_ico(BRAND / "lumit-project.svg", BRAND / "lumit-project.ico")
     write_ico(BRAND / "lumit-preset.svg", BRAND / "lumit-preset.ico")
     write_ico(BRAND / "lumit-theme.svg", BRAND / "lumit-theme.ico")
+
+    write_web_icons()
 
     for name in ["lumit-project", "lumit-preset", "lumit-theme"]:
         out = ROOT / "packaging" / "macos" / f"{name}.icns"

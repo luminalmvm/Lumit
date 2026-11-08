@@ -12,15 +12,25 @@
 // It dresses and never lays out: where things sit stays Lumit's. Reading
 // never throws, a line it can't use is skipped and counted, so a typo costs a
 // line rather than the whole style.
+//
+// A style can carry its own typefaces, as CSS does:
+//
+//   @font-face { font-family: "Fraunces"; src: url("fonts/Fraunces.ttf"); }
+//   :root { --sans: "Fraunces"; }
 
-import 'dart:io';
+import 'dart:io' hide Platform;
+import 'dart:typed_data';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/state/window_backdrop.dart';
 
 import 'theme.dart';
 import 'theme_tokens.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// The extension a style file is written under.
 const String styleFileExtension = 'lumstyle';
@@ -152,8 +162,15 @@ class StyleSheet {
   final Map<String, PartStyle> _resolved = {};
   LumitTheme? _resolvedFor;
 
+  /// The font files each `@font-face` names, by family in lower case, with the
+  /// line that named each.
+  final Map<String, List<({String path, int line})>> _fonts;
+
+  /// The name each of its own families was loaded under, once loaded.
+  final Map<String, String> _families = {};
+
   StyleSheet._(this.name, this.base, this.baseName, this.title, this.folder,
-      this.problems, this.source, this._vars, this._rules);
+      this.problems, this.source, this._vars, this._rules, this._fonts);
 
   /// The style in force, or null for one of the three built in. Set by the
   /// workspace as it builds the theme, the way the icon weight is.
@@ -172,17 +189,96 @@ class StyleSheet {
 
   /// A `url(...)` variable as a path, relative to the style's own folder.
   String? _url(String variable) {
-    final m = RegExp(r'''url\(\s*["']?([^"')]+)["']?\s*\)''')
-        .firstMatch(_vars[variable] ?? '');
-    if (m == null) return null;
-    final path = m[1]!.trim();
+    final m = _urlPattern.firstMatch(_vars[variable] ?? '');
+    return m == null ? null : _inFolder(folder, m[1]!.trim());
+  }
+
+  static final _urlPattern =
+      RegExp(r'''url\(\s*["']?([^"')]+)["']?\s*\)''');
+
+  static String _inFolder(String folder, String path) {
     final absolute =
         path.startsWith('/') || RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path);
     return absolute ? path : '$folder${Platform.pathSeparator}$path';
   }
 
+  /// Families loaded so far this run, by their files and the files' sizes,
+  /// so the same files unpacked again are not loaded twice. Flutter can't let
+  /// a font go, so a font saved over loads under a new name once its size
+  /// changes, and the old one is only no longer used.
+  static final Map<String, String> _loaded = {};
+
+  /// Load the style's own fonts, and answer whether any is newly loaded. A
+  /// family loaded before is taken at once, before this first waits. A file
+  /// that can't be read is one of [problems].
+  Future<bool> loadFonts() async {
+    var fresh = false;
+    for (final MapEntry(key: family, value: faces) in _fonts.entries) {
+      final found = <({File file, String stamp, int line})>[];
+      for (final face in faces) {
+        final file = File(face.path);
+        final stat = file.statSync();
+        if (stat.type != FileSystemEntityType.file) {
+          problems.add(l10n.styleProblem(
+              face.line, l10n.styleFontMissing(file.uri.pathSegments.last)));
+          continue;
+        }
+        found.add((
+          file: file,
+          stamp: '${face.path}|${stat.size}',
+          line: face.line,
+        ));
+      }
+      if (found.isEmpty) continue;
+      final key = [for (final f in found) f.stamp].join('\n');
+      if (_loaded[key] case final name?) {
+        _families[family] = name;
+        continue;
+      }
+      final loader = FontLoader('$family ${_loaded.length + 1}');
+      var any = false;
+      for (final f in found) {
+        final Uint8List data;
+        try {
+          data = await f.file.readAsBytes();
+        } on FileSystemException {
+          continue;
+        }
+        if (!_isFont(data)) {
+          problems.add(l10n.styleProblem(
+              f.line, l10n.styleFontKind(f.file.uri.pathSegments.last)));
+          continue;
+        }
+        loader.addFont(Future.value(ByteData.sublistView(data)));
+        any = true;
+      }
+      if (!any) continue;
+      await loader.load();
+      _loaded[key] = loader.family;
+      _families[family] = loader.family;
+      fresh = true;
+    }
+    return fresh;
+  }
+
+  /// TrueType, OpenType or a collection of either. WOFF is left out, as the
+  /// font readers on the three systems don't all take it.
+  static bool _isFont(Uint8List data) {
+    if (data.length < 12) return false;
+    final tag = ByteData.sublistView(data).getUint32(0);
+    return tag == 0x00010000 || // TrueType
+        tag == 0x4f54544f || // OTTO
+        tag == 0x74727565 || // true
+        tag == 0x74746366; // ttcf
+  }
+
   /// How far the room picture is blurred, from `--room-blur`.
   double get roomBlur => _number(_vars['roomblur'], null) ?? 0;
+
+  /// What shows through the window where the room is clear, from
+  /// `--backdrop: tint` or `blur`.
+  Backdrop get backdrop =>
+      Backdrop.values.asNameMap()[_vars['backdrop']?.trim()] ?? Backdrop.none;
 
   /// Read a style file's text.
   factory StyleSheet.parse(String text,
@@ -215,6 +311,7 @@ class StyleSheet {
 
     final vars = <String, String>{};
     final rules = <_Rule>[];
+    final fonts = <String, List<({String path, int line})>>{};
     for (final block in RegExp(r'([^{}]*)\{([^{}]*)\}').allMatches(text)) {
       final at =
           line(block.start + block[1]!.length - block[1]!.trimLeft().length);
@@ -228,6 +325,20 @@ class StyleSheet {
         }
         props[decl.substring(0, colon).trim()] =
             decl.substring(colon + 1).trim();
+      }
+      if (block[1]!.trim() == '@font-face') {
+        final family =
+            props['font-family']?.replaceAll(RegExp('["\']'), '').trim() ?? '';
+        final files = [
+          for (final m in _urlPattern.allMatches(props['src'] ?? ''))
+            (path: _inFolder(folder, m[1]!.trim()), line: at),
+        ];
+        if (family.isEmpty || files.isEmpty) {
+          problems.add(l10n.styleProblem(at, l10n.styleFontNeeds));
+        } else {
+          (fonts[family.toLowerCase()] ??= []).addAll(files);
+        }
+        continue;
       }
       for (final raw in block[1]!.split(',')) {
         final sel = raw.trim();
@@ -260,8 +371,8 @@ class StyleSheet {
     // The strongest rule last, so applying them in order lets it win.
     rules.sort((a, b) =>
         a.weight != b.weight ? a.weight - b.weight : a.order - b.order);
-    return StyleSheet._(
-        name, base, baseName, title, folder, problems, source, vars, rules);
+    return StyleSheet._(name, base, baseName, title, folder, problems, source,
+        vars, rules, fonts);
   }
 
   static List<_Compound>? _readSelector(String sel) {
@@ -300,11 +411,13 @@ class StyleSheet {
           'false' || 'no' => false,
           _ => fallback,
         };
+    // A family of the style's own is used once it has loaded, and the base's
+    // stands in until then.
     String face(String k, String fallback) {
-      final v = _vars[k]?.trim();
-      return v == null || v.isEmpty
-          ? fallback
-          : v.replaceAll(RegExp('["\']'), '');
+      final v = _vars[k]?.trim().replaceAll(RegExp('["\']'), '');
+      if (v == null || v.isEmpty) return fallback;
+      final own = v.toLowerCase();
+      return _fonts.containsKey(own) ? _families[own] ?? fallback : v;
     }
 
     return ShapeTokens(
@@ -326,12 +439,17 @@ class StyleSheet {
       actionRadius: num('actionradius', b.actionRadius),
       wellRadius: num('wellradius', b.wellRadius),
       contentRadius: num('contentradius', b.contentRadius),
-      roomed: flag('roomed', b.roomed),
+      // A see-through window shows through the room, so it has one unless
+      // the style says otherwise.
+      roomed: flag('roomed', b.roomed || backdrop != Backdrop.none),
       pillInset: num('pillinset', b.pillInset),
       sansFamily: face('sans', b.sansFamily),
       monoFamily: face('mono', b.monoFamily),
       tabularNumbers: flag('tabularnumbers', b.tabularNumbers),
       kickerTracking: num('kickertracking', b.kickerTracking),
+      kickerMono: flag('kickermono', b.kickerMono),
+      kickerSize: num('kickersize', b.kickerSize),
+      kickerWeight: b.kickerWeight,
     );
   }
 
@@ -506,10 +624,18 @@ class StyleSheet {
     }
 
     for (final e in dir.listSync()) {
+      // Not `.staging`, where a style being taken in is put together.
+      if (e.uri.pathSegments.where((s) => s.isNotEmpty).last.startsWith('.')) {
+        continue;
+      }
       if (e is File) take(e);
       if (e is Directory) {
-        for (final inner in e.listSync()) {
-          if (inner is File) take(inner);
+        try {
+          for (final inner in e.listSync()) {
+            if (inner is File) take(inner);
+          }
+        } on FileSystemException {
+          // Moved or gone mid-read: the next change reads it again.
         }
       }
     }

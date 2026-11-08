@@ -25,6 +25,11 @@
 # and the restore matches on the prefix, which is what lets a rebuilt keg
 # replace a stale one without anyone bumping cache-bump.
 #
+# Intel is the exception. Homebrew no longer builds bottles for it, so most of
+# those dependencies come from source as well, which makes the first run far
+# longer and rules out reinstalling them on every run. There the dependency kegs
+# are saved inside the FFmpeg keg, in its deps folder, and put back from there.
+#
 # The one thing this must never do is succeed quietly with the wrong FFmpeg.
 # rsmpeg's `ffmpeg8` feature generates bindings for avcodec 62 / avutil 60, and
 # linking those against another major is a struct-layout mismatch that compiles
@@ -150,7 +155,17 @@ runs:
         fi
         command -v jq >/dev/null || brew install jq
         deps="$(jq -r '.runtime_dependencies[]?.full_name' "$receipt" | tr '\n' ' ')"
-        if [ -z "${deps// /}" ]; then
+        if [ "${{ runner.arch }}" = X64 ]; then
+          for saved in "$keg"/deps/*/*/; do
+            [ -d "$saved" ] || continue
+            saved="${saved%/}"
+            version="$(basename "$saved")"
+            name="$(basename "$(dirname "$saved")")"
+            mkdir -p "$(brew --cellar)/$name"
+            cp -a "$saved" "$(brew --cellar)/$name/"
+            ln -sfn "../Cellar/$name/$version" "$(brew --prefix)/opt/$name"
+          done
+        elif [ -z "${deps// /}" ]; then
           echo "::warning::The cached keg records no runtime dependencies. If the build then fails to link or load FFmpeg, bump cache-bump to force a rebuild."
         else
           echo "Reinstalling: $deps"
@@ -239,6 +254,21 @@ runs:
         fi
 
         brew install --build-from-source --formula "$tap/ffmpeg@8.1.2"
+
+    # On Intel, what the keg links travels inside it. Every dependency's own keg,
+    # by the version its opt link points at, which is the one this build used.
+    - name: Keep the dependencies with the keg on Intel
+      if: steps.build.outcome == 'success' && runner.arch == 'X64'
+      shell: bash
+      run: |
+        set -euo pipefail
+        keg="$(ls -d "${{ steps.paths.outputs.cellar }}"/*/ | sort -V | tail -1)"
+        keg="${keg%/}"
+        command -v jq >/dev/null || brew install jq
+        for dep in $(jq -r '.runtime_dependencies[]?.full_name' "$keg/INSTALL_RECEIPT.json"); do
+          mkdir -p "$keg/deps/$dep"
+          cp -a "$(cd "$(brew --prefix)/opt/$dep" && pwd -P)" "$keg/deps/$dep/"
+        done
 
     # Only a keg built in this run is saved, under this run's key, so the next
     # run's prefix restore finds it first.

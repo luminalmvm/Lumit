@@ -209,13 +209,12 @@ void main() {
     expect(at.dy, greaterThanOrEqualTo(8));
   });
 
-  testWidgets('a comp on its own says so', (tester) async {
+  testWidgets('a comp on its own shows its pill alone', (tester) async {
     await open(tester, solo);
     expect(find.text('Solo'), findsOneWidget);
     final t = LumitTheme.dark();
     expect(find.text(t.kickerCase('Used in')), findsNothing);
-    expect(
-        find.text('Not nested, and nothing is nested in it'), findsOneWidget);
+    expect(find.text(t.kickerCase('Contains')), findsNothing);
   });
 
   testWidgets('a comp that has gone opens no chart', (tester) async {

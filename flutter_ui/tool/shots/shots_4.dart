@@ -244,6 +244,9 @@ Future<void> main() async {
   // for.
   final badge = comp.addShapeLayer(name: 'Badge', contents: [
     BridgeShapeItem(
+      hidden: false,
+      fillHidden: false,
+      strokeHidden: false,
       id: _id(),
       name: 'Star',
       vertices: shapePath(
@@ -279,6 +282,9 @@ Future<void> main() async {
       pathKeys: const [],
     ),
     BridgeShapeItem(
+      hidden: false,
+      fillHidden: false,
+      strokeHidden: false,
       id: _id(),
       name: 'Underline',
       vertices: shapePath(

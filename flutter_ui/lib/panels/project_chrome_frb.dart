@@ -1,6 +1,6 @@
 // The Project panel's chrome — everything above and below the tree of items:
-// the preview card, the search well and its colour chips, the column headings,
-// the sideways scrollbar, and the bottom bar.
+// the search well and its colour chips, the column headings, the sideways
+// scrollbar, the preview card and the bottom bar.
 //
 // **In plain terms**: the panel's furniture. None of it holds state of its
 // own — each piece is handed what it draws and a callback for what a click
@@ -13,6 +13,7 @@
 
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -28,20 +29,20 @@ import '../widgets/controls.dart';
 import 'project_columns_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
 
-/// The preview card: 10px of padding round a 96×54 poster frame, with the
-/// hairline under it counted in — 10 + 54 + 10 + 1.
-const double projectPreviewHeight = 75;
+/// The preview card: 10px of padding round a 16:9 picture, with the hairline
+/// over it counted in: 10 + 72 + 10 + 1.
+const double projectPreviewHeight = 93;
 const double _previewPad = 10;
-const double _thumbWidth = 96;
-const double _thumbHeight = 54;
+const double _thumbWidth = 128;
+const double _thumbHeight = 72;
 
 /// The gap between the card's three text lines.
-const double _previewLineGap = 3;
+const double _previewLineGap = 2;
 
 /// How many moments a hover across the poster frame can land on (docs/07
 /// §3.1).
 ///
-/// The frame is 96 px wide, so this is a step every four pixels: close enough
+/// The frame is 128 px wide, so this is a step every five pixels: close enough
 /// that a pass of the mouse reads as movement, coarse enough that no file is
 /// asked to decode a hundred separate frames for one pass. Each step is one
 /// small scaled decode, cached, so going back over ground already covered
@@ -67,12 +68,9 @@ const double _scrollTrackInset = 8;
 const double projectFooterHeight = 20;
 const double _footerPad = 10;
 const double _footerGap = 12;
-const double _footerIconGap = 5;
 
-/// The bottom bar's two label trackings, in logical pixels at 9px type: the
-/// new-item words sit at 0.08em, the count at 0.06em — both quieter than the
-/// 0.12em a kicker carries, because neither is naming a container.
-const double _footerLabelTracking = 0.72;
+/// The count's tracking, in logical pixels at 9px type: 0.06em, quieter than
+/// the 0.12em a kicker carries, because it isn't naming a container.
 const double _footerCountTracking = 0.54;
 
 /// The bottom bar's glyphs, drawn at the size its own mockup computed.
@@ -91,19 +89,11 @@ const double projectFilterSquare = 10;
 /// claiming any one of them.
 const List<int> _hueSquareLabels = [1, 4, 2, 3];
 
-/// Where the preview card gives way (§12A.6's ladder, step 3). The two mockups
-/// are the two ends of this ladder — the 360-wide artboard shows the card, the
-/// 260-wide docked panel has already dropped it.
-const double projectWidthForPreview = 340;
-
-/// Where the bottom bar's words go (§12A.6's ladder, step 4: a toolbar sheds
-/// rather than shrinks). **Two steps, because this bar carries three controls
-/// where the mockup drew two.** Import's word goes first — it is the one the
-/// mockup gives no place at all, so it is the one with least claim on the room
-/// — and Folder's and Composition's go together below that, since those two
-/// are the mockup's own and should read as a pair for as long as they fit.
-const double _widthForImportLabel = 420;
-const double _widthForFooterLabels = 380;
+/// Where the preview card gives way (§12A.6's ladder, step 3): too narrow for
+/// the picture and some words beside it, or so short that the card would leave
+/// the tree a row or two.
+const double projectWidthForPreview = 300;
+const double projectHeightForPreview = 260;
 
 /// The handle between two column headings: it resizes the column to its left,
 /// and everything else keeps its width (docs/07 §4.2's rule for the Timeline
@@ -143,7 +133,12 @@ class _ColumnSeam extends StatelessWidget {
       cursor: SystemMouseCursors.resizeColumn,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (d) => resize(d.delta.dx),
+        // The seam is on the column's trailing side, its left in a right to
+        // left language.
+        onHorizontalDragUpdate: (d) => resize(
+            Directionality.of(context) == TextDirection.rtl
+                ? -d.delta.dx
+                : d.delta.dx),
         child: SizedBox(
           width: projectRowGap,
           child: Center(
@@ -174,15 +169,19 @@ Widget projectColumnHeader(
   required ProjectColumn? sort,
   required bool ascending,
   required ValueChanged<ProjectColumn> onSort,
+  required ValueChanged<Offset> onMenu,
 }) =>
-    Container(
+    GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (d) => onMenu(d.globalPosition),
+      child: Container(
       key: const ValueKey('project-column-header'),
       height: projectColumnHeaderHeight(t),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: t.hairline)),
       ),
-      padding: const EdgeInsets.only(
-          left: projectHeaderPadLeft, right: projectRowPadding),
+      padding: const EdgeInsetsDirectional.only(
+          start: projectHeaderPadLeft, end: projectRowPadding),
       child: Row(
         children: [
           // Name is the flexible slot, and what it is left with is
@@ -217,6 +216,7 @@ Widget projectColumnHeader(
           ),
         ],
       ),
+    ),
     );
 
 /// One heading as something to click, and the caret it wears while the list
@@ -455,21 +455,34 @@ Widget projectScrollStrip(LumitTheme t, ScrollController hScroll) => SizedBox(
       ),
     );
 
+/// How wide [text] draws in [style], so the count goes whole or not at all.
+double _footerTextWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 /// The bottom bar: the new-item controls at the left, the count at the right.
+/// Marks with tooltips, never words: the marks are the same at every width.
 ///
-/// **Import lives here** although the mockup draws only Folder and
-/// Composition — it is a command the panel has always carried and the mockup
-/// gave it no other home, so it takes the mockup's own icon-and-kicker shape
-/// rather than being dropped. The count's `n missing ·` half is the
-/// "show only missing" filter, which the mockup likewise has no row for.
+/// The count's `n missing ·` half is the "show only missing" filter. With more
+/// than one row picked, the count says how many of the whole. The tooltip on it
+/// says what the project holds.
 ///
-/// [hasProject] is what decides whether the proxies switch is drawn at all —
-/// with no document open there is nothing project-wide to govern.
+/// With nothing in the project there is no proxy to switch to and nothing to
+/// count, so neither is drawn.
 Widget projectFooter(
   LumitTheme t, {
   required int items,
   required int missing,
-  required double width,
+  required String summary,
+  required ValueListenable<Set<String>> picks,
   required bool hasProject,
   required bool useProxies,
   required bool missingOnly,
@@ -480,7 +493,6 @@ Widget projectFooter(
   required VoidCallback onToggleProxies,
 }) {
   final active = missingOnly && missing > 0;
-  final labels = width >= _widthForFooterLabels;
   final count = t.kicker.copyWith(letterSpacing: _footerCountTracking);
   return Container(
     key: const ValueKey('project-footer'),
@@ -494,9 +506,7 @@ Widget projectFooter(
           child: _footerAction(
             t,
             key: const ValueKey('project-import'),
-            icon: LumitIcon.import,
-            label:
-                width >= _widthForImportLabel ? l10n.projectFooterImport : null,
+            icon: LumitIcons.import,
             onPressed: onImport,
           ),
         ),
@@ -506,8 +516,7 @@ Widget projectFooter(
           child: _footerAction(
             t,
             key: const ValueKey('project-new-folder'),
-            icon: LumitIcon.folder,
-            label: labels ? l10n.projectFooterFolder : null,
+            icon: LumitIcons.newFolder,
             onPressed: onNewFolder,
           ),
         ),
@@ -527,8 +536,7 @@ Widget projectFooter(
               child: _footerAction(
                 t,
                 key: const ValueKey('project-new-comp'),
-                icon: LumitIcon.newComposition,
-                label: labels ? l10n.projectFooterComposition : null,
+                icon: LumitIcons.newComposition,
                 onPressed: () => onNewComposition(const []),
               ),
             ),
@@ -538,20 +546,15 @@ Widget projectFooter(
         // on the bottom bar after a divider, apart from the new-item
         // controls, for the reason the Timeline's own comp-wide toggles do
         // (§12A.1): a switch that governs the whole document reads apart
-        // from the commands that make things.
-        //
-        // Drawn like the controls beside it — the set's own mark with a
-        // kicker word after it — so it sheds the word and keeps the mark as
-        // the panel narrows (§12A.6's step 4), rather than vanishing at the
-        // width where a word-only control would have to. Its two strengths
-        // are the switch conventions': `text_primary` on, `text_muted` off,
-        // and never the accent (§3.1's list is closed).
-        if (hasProject) ...[
+        // from the commands that make things. Its two strengths are the
+        // switch conventions': `text_primary` on, `text_muted` off, and never
+        // the accent (§3.1's list is closed).
+        if (hasProject && items > 0) ...[
           Container(
               width: 1,
               height: 10,
               color: t.hairline,
-              margin: const EdgeInsets.symmetric(horizontal: _footerIconGap)),
+              margin: const EdgeInsets.symmetric(horizontal: _footerGap)),
           HoverMark(builder: (context, lit) {
             final ink = useProxies
                 ? t.textPrimary
@@ -563,26 +566,13 @@ Widget projectFooter(
                 key: const ValueKey('project-use-proxies'),
                 behavior: HitTestBehavior.opaque,
                 onTap: onToggleProxies,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    glyph.LumitIcon(LumitIcons.proxy,
-                        size: projectFooterIconSize, colour: ink),
-                    if (labels) ...[
-                      const SizedBox(width: _footerIconGap),
-                      Text(
-                        t.kickerCase(l10n.projectFooterProxies),
-                        style: t.kicker.copyWith(
-                            letterSpacing: _footerLabelTracking, color: ink),
-                      ),
-                    ],
-                  ],
-                ),
+                child: glyph.LumitIcon(LumitIcons.proxy,
+                    size: projectFooterIconSize, colour: ink),
               ),
             );
           }),
         ],
-        const Spacer(),
+        const SizedBox(width: _footerGap),
         // The missing half reads *before* the total, so the bar ends on the
         // item count (the owner's order). The two stay separate strings: a
         // translator sees each phrase whole, and the order is the layout's
@@ -591,6 +581,14 @@ Widget projectFooter(
         // truncating text (§12A.6's step 1), and the missing half used to be
         // fixed — which meant a narrow bar carrying a broken item overflowed
         // rather than shortening.
+        Expanded(
+            // Too narrow for a short count, it goes rather than being cut.
+            child: LayoutBuilder(
+                builder: (context, box) => box.maxWidth <
+                        _footerTextWidth(
+                            context, l10n.projectItemCount(items), count)
+                    ? const SizedBox.shrink()
+                    : Row(mainAxisAlignment: MainAxisAlignment.end, children: [
         if (missing > 0)
           Flexible(
               child: LumitTooltip(
@@ -614,10 +612,24 @@ Widget projectFooter(
           )),
         // The count never pushes the bar wider than the panel: it is the
         // flexible text the width ladder's first step truncates (§12A.6).
-        Flexible(
-          child: Text(l10n.projectItemCount(items),
-              style: count, maxLines: 1, overflow: TextOverflow.ellipsis),
+        if (items > 0)
+          Flexible(
+          child: LumitTooltip(
+            message: summary,
+            child: ValueListenableBuilder<Set<String>>(
+              valueListenable: picks,
+              builder: (context, picked, _) => Text(
+                  picked.length > 1
+                      ? l10n.projectPickedCount(picked.length, items)
+                      : l10n.projectItemCount(items),
+                  key: const ValueKey('project-count'),
+                  style: count,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ),
         ),
+        ]))),
       ],
     ),
   );
@@ -626,33 +638,15 @@ Widget projectFooter(
 Widget _footerAction(
   LumitTheme t, {
   required Key key,
-  required LumitIcon icon,
-  // Null once the bar is too narrow to spell the word out: §12A.6's ladder
-  // step 4 says a toolbar sheds rather than shrinks, and an icon that is
-  // already the mockup's own is what a shed word leaves behind.
-  required String? label,
+  required String icon,
   required VoidCallback onPressed,
 }) {
-  Widget body(double lit) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          lumitIcon(icon,
-              size: projectFooterIconSize,
-              color: Color.lerp(t.textMuted, t.textPrimary, lit)!),
-          if (label != null) ...[
-            const SizedBox(width: _footerIconGap),
-            Text(
-              t.kickerCase(label),
-              style: t.kicker.copyWith(
-                  letterSpacing: _footerLabelTracking,
-                  color: Color.lerp(t.kicker.color, t.textPrimary, lit)),
-            ),
-          ],
-        ],
-      );
-  // Studio and Desk draw the bare glyph and word on the bar; Lantern's
-  // bottom line carries them as ghost pills, which is the house button's
-  // resting face under that shape.
+  Widget body(double lit) => glyph.LumitIcon(icon,
+      size: projectFooterIconSize,
+      colour: Color.lerp(t.textMuted, t.textPrimary, lit)!);
+  // Studio and Desk draw the bare glyph on the bar; Lantern's bottom line
+  // carries it as a ghost pill, which is the house button's resting face
+  // under that shape.
   return switch (t.shape) {
     ThemeShape.studio || ThemeShape.desk => HoverMark(
         builder: (context, lit) => GestureDetector(
@@ -667,16 +661,13 @@ Widget _footerAction(
   };
 }
 
-/// The picked item's readout (docs/07 §3.1): poster frame, name, and the
-/// item's own vital statistics. Always present at a fixed height, so the tree
-/// below never jumps when the selection changes; with nothing picked it says
-/// what the project holds.
+/// The picked item's readout (docs/07 §3.1): its picture, its name, and the
+/// item's own vital statistics. Only with one thing picked, and under the tree,
+/// so what appears takes room from the bottom of the list and the rows under
+/// the pointer stay where they are.
 Widget projectPreviewCard(
   LumitTheme t, {
-  required ItemReference? item,
-
-  /// The line shown while nothing is picked: how many of each kind there are.
-  required String summary,
+  required ItemReference item,
 
   /// The item's name, read by the panel's own walk — which is where the
   /// calm-on-a-deleted-item guard lives, so the card never reads it again.
@@ -684,6 +675,15 @@ Widget projectPreviewCard(
   required bool missing,
   required ui.Image? thumb,
   required BridgeMediaInfo? info,
+
+  /// The colour its row's mark wears, and that mark.
+  required Color tint,
+  required LumitIcon icon,
+
+  /// How many places use it, null where that says nothing, and the folder its
+  /// file is in, or empty.
+  int? uses,
+  String path = '',
 
   /// Called as the pointer crosses the poster frame, with the frame of the
   /// **file** under it, and with null when the pointer leaves or the item has
@@ -697,30 +697,39 @@ Widget projectPreviewCard(
 
   /// Whether that button is showing sound already running.
   bool soundPlaying = false,
+
   /// Whether a picked composition is a node graph, which is the one thing the
   /// card's type word cannot read off the item itself. From the panel's cache,
   /// for the reason the name is.
   bool nodeGraph = false,
+
+  /// A right press on the card, which is the item's own menu.
+  ValueChanged<Offset>? onMenu,
+
+  /// A press on the uses line, which reveals them, at where it landed.
+  ValueChanged<Offset>? onUses,
 }) =>
-    Container(
-      key: const ValueKey('project-preview-card'),
-      height: projectPreviewHeight,
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: t.hairline)),
+    GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown:
+          onMenu == null ? null : (d) => onMenu(d.globalPosition),
+      child: Container(
+        key: const ValueKey('project-preview-card'),
+        height: projectPreviewHeight,
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: t.hairline)),
+        ),
+        padding: const EdgeInsets.all(_previewPad),
+        child: _previewContent(t, item, name, missing, thumb, info, nodeGraph,
+            tint: tint,
+            icon: icon,
+            uses: uses,
+            path: path,
+            onScrub: onScrub,
+            onPlaySound: onPlaySound,
+            soundPlaying: soundPlaying,
+            onUses: onUses),
       ),
-      padding: const EdgeInsets.all(_previewPad),
-      child: item == null
-          ? Align(
-              alignment: Alignment.topLeft,
-              child: Text(summary,
-                  key: const ValueKey('project-summary'),
-                  style: projectMetaStyle(t),
-                  overflow: TextOverflow.ellipsis),
-            )
-          : _previewContent(t, item, name, missing, thumb, info, nodeGraph,
-              onScrub: onScrub,
-              onPlaySound: onPlaySound,
-              soundPlaying: soundPlaying),
     );
 
 Widget _previewContent(
@@ -731,9 +740,14 @@ Widget _previewContent(
   ui.Image? image,
   BridgeMediaInfo? info,
   bool nodeGraph, {
+  required Color tint,
+  required LumitIcon icon,
+  int? uses,
+  String path = '',
   ValueChanged<int?>? onScrub,
   VoidCallback? onPlaySound,
   bool soundPlaying = false,
+  ValueChanged<Offset>? onUses,
 }) {
   final type = switch (item) {
     ItemReference_Footage() => l10n.projectTypeFootage,
@@ -744,69 +758,84 @@ Widget _previewContent(
     ItemReference_Solid() => l10n.projectTypeSolid,
   };
 
-  Widget? thumb;
-  if (item case ItemReference_Footage() when !missing) {
-    // The picture comes straight from the RAM cache the walk prefilled, so
-    // switching the selection redraws it in the same frame.
-    Widget face = image == null
-        ? Center(
-            child: lumitIcon(LumitIcon.footage,
-                size: iconSize, color: t.textMuted))
-        : ClipRRect(
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            child: Container(
-              color: t.surface0,
-              child: RawImage(image: image, fit: BoxFit.contain),
-            ),
-          );
-    // A sound file has no picture to show or to scrub, so the same square
-    // carries the one thing there is to do with it: hear it.
-    if (onPlaySound != null) {
-      face = _previewSoundButton(t, soundPlaying, onPlaySound);
-    }
-    thumb = SizedBox(width: _thumbWidth, height: _thumbHeight, child: face);
-    // Only where there is something to scrub: a still, a sound file and a
-    // clip that has not probed all answer the same frame wherever the pointer
-    // is, so they get no hover at all rather than one that does nothing.
-    if (onScrub != null && projectScrubFrame(info, 0) != null) {
-      thumb = MouseRegion(
-        key: const ValueKey('project-preview-scrub'),
-        // Hover only: nothing is pressed, nothing is dragged, and the poster
-        // frame comes back the moment the pointer goes elsewhere.
-        onHover: (event) =>
-            onScrub(projectScrubFrame(info, event.localPosition.dx)),
-        onExit: (_) => onScrub(null),
-        child: thumb,
-      );
-    }
+  // The picture comes straight from the RAM cache the walk prefilled, so
+  // switching the selection redraws it in the same frame. Anything with no
+  // picture to give wears its row's mark instead, so the card keeps its shape.
+  Widget face = ClipRRect(
+    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+    child: Container(
+      color: t.surface0,
+      alignment: Alignment.center,
+      child: image != null && !missing
+          ? RawImage(image: image, fit: BoxFit.contain)
+          : lumitIcon(missing ? LumitIcon.unlink : icon,
+              size: iconSizeTransport, color: missing ? t.warning : tint),
+    ),
+  );
+  // A sound file has no picture to show or to scrub, so the same square
+  // carries the one thing there is to do with it: hear it.
+  if (onPlaySound != null) {
+    face = _previewSoundButton(t, soundPlaying, onPlaySound);
+  }
+  Widget thumb = SizedBox(width: _thumbWidth, height: _thumbHeight, child: face);
+  // Only where there is something to scrub: a still, a sound file and a clip
+  // that has not probed all answer the same frame wherever the pointer is, so
+  // they get no hover at all rather than one that does nothing.
+  if (!missing && onScrub != null && projectScrubFrame(info, 0) != null) {
+    thumb = MouseRegion(
+      key: const ValueKey('project-preview-scrub'),
+      // Hover only: nothing is pressed, nothing is dragged, and the poster
+      // frame comes back the moment the pointer goes elsewhere.
+      onHover: (event) =>
+          onScrub(projectScrubFrame(info, event.localPosition.dx)),
+      onExit: (_) => onScrub(null),
+      child: thumb,
+    );
   }
 
   return Row(
     key: const ValueKey('project-info-header'),
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      if (thumb != null) ...[thumb, const SizedBox(width: _previewPad)],
+      thumb,
+      const SizedBox(width: _previewPad),
       Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(name, style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
+            Text(name,
+                style: t.bodyPrimary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
             const SizedBox(height: _previewLineGap),
             _previewFacts(t, item, missing, info),
             const SizedBox(height: _previewLineGap),
-            // The card's second fact line: the mockup's `H.264 · 48 kHz
-            // stereo`. Codec names are the file's own words, not ours, so
-            // they are printed as the container declares them. With nothing
-            // to say — a folder, a solid, a file that will not probe — it
-            // falls back to the kind of thing this is, which is what the
-            // card said before the codec crossed.
+            // The card's second fact line: `H.264 · 48 kHz stereo`. Codec
+            // names are the file's own words, not ours, so they are printed as
+            // the container declares them. With nothing to say, for a folder,
+            // a solid or a file that will not probe, it falls back to the kind
+            // of thing this is.
             Text(
               _previewCodecs(item, missing, info) ?? type,
               key: const ValueKey('project-info-codec'),
               style: projectMetaStyle(t),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            if (uses != null) ...[
+              const SizedBox(height: _previewLineGap),
+              _usesLine(t, uses, uses > 0 ? onUses : null),
+            ],
+            if (path.isNotEmpty) ...[
+              const SizedBox(height: _previewLineGap),
+              Text(path,
+                  key: const ValueKey('project-info-path'),
+                  style: projectMetaStyle(t).copyWith(color: t.textDisabled),
+                  textDirection: TextDirection.ltr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ],
           ],
         ),
       ),
@@ -935,4 +964,25 @@ String? _previewCodecs(
     if (info.audioStreams > 1) l10n.projectAudioStreamCount(info.audioStreams),
   ];
   return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// "Used twice", which takes you to those uses when there are any.
+Widget _usesLine(LumitTheme t, int uses, ValueChanged<Offset>? onUses) {
+  Widget line(double lit) => Text(l10n.projectUsedCount(uses),
+      key: const ValueKey('project-info-uses'),
+      style: projectMetaStyle(t).copyWith(
+          color: Color.lerp(projectMetaStyle(t).color, t.textPrimary, lit)),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis);
+  if (onUses == null) return line(0);
+  return LumitTooltip(
+    message: l10n.projectRevealInComposition,
+    child: HoverMark(
+      builder: (context, lit) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapUp: (d) => onUses(d.globalPosition),
+        child: line(lit),
+      ),
+    ),
+  );
 }

@@ -45,7 +45,7 @@ import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
-import 'fx_section.dart';
+import 'fx_section.dart' show FxQuiet, fxStopwatchColumn;
 import 'graph_maths.dart' show keyframeAmong, rowKeysOf;
 
 /// The zone value [editPickedKeys] sets: the picked keys' indices, and
@@ -343,7 +343,19 @@ String stopwatchGlyph(LumitTheme t) => t.shape == ThemeShape.desk
     ? LumitIcons.stopwatch
     : LumitIcons.stopwatchRound;
 
-class KeyframeControlsFrb extends StatelessWidget {
+/// What a row's menu asks of its keys, whatever they hold: a number or a
+/// whole shape.
+abstract interface class RowKeys {
+  bool get animated;
+  bool hasKeyAt(int frame);
+  void toggleKeyAt(int frame);
+  void toggleAnimatedAt(int frame);
+
+  /// The navigator for the end of a fold row's name, while the row is keyed.
+  Widget? get trailingNavigator;
+}
+
+class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   /// The animations this control covers — one for a single value, several for a
   /// row that spans axes (Position's x and y).
   ///
@@ -367,19 +379,29 @@ class KeyframeControlsFrb extends StatelessWidget {
   final String rowKey;
 
   /// Lay the controls out on the Effect controls panel's **fixed columns**:
-  /// the stopwatch in a column of [fxStopwatchColumn], the navigator
-  /// in a slot of [fxKeyNavColumn] that keeps its width whether or not there is
-  /// anything in it. That is what stops a label moving sideways the moment its
-  /// stopwatch is switched on.
+  /// the stopwatch alone in a column of [fxStopwatchColumn], with the row asking
+  /// for its navigator separately ([navigator]), so that switching the stopwatch
+  /// on moves nothing.
   ///
   /// The Timeline's fold-out passes false, the default: its lanes answer to the
-  /// render-switch column group and have no room to reserve a navigator on
-  /// every row.
+  /// render-switch column group, and it draws the two side by side.
   final bool fixedColumns;
+
+  /// Draw only the navigator, for the far end of a fixed-column row.
+  final bool navigatorOnly;
+
+  /// The Timeline's fold: the stopwatch alone, and the navigator from
+  /// [trailingNavigator] at the end of the name, so a keyed row's name starts
+  /// where every other row's does.
+  final bool navigatorApart;
 
   /// What the row shows at a time, when that is not each axis read off its own
   /// curve: an Orientation's angles turn as one. Null for no answer.
   final List<double>? Function(BridgeRational time)? valuesAt;
+
+  /// The navigator's steps either side of the diamond. A row short of room
+  /// keeps the diamond alone.
+  final bool steps;
 
   const KeyframeControlsFrb({
     super.key,
@@ -389,8 +411,54 @@ class KeyframeControlsFrb extends StatelessWidget {
     required this.onSeek,
     required this.rowKey,
     this.fixedColumns = false,
+    this.navigatorOnly = false,
+    this.navigatorApart = false,
     this.valuesAt,
+    this.steps = true,
   });
+
+  /// This row's navigator as a widget of its own. [fold] keeps the fold's
+  /// button size.
+  KeyframeControlsFrb navigator({bool fold = false, bool steps = true}) =>
+      KeyframeControlsFrb(
+        scalars: scalars,
+        onWrite: onWrite,
+        comp: comp,
+        onSeek: onSeek,
+        rowKey: rowKey,
+        fixedColumns: !fold,
+        navigatorOnly: true,
+        valuesAt: valuesAt,
+        steps: steps,
+      );
+
+  @override
+  Widget? get trailingNavigator => _animated ? navigator(fold: true) : null;
+
+  /// Whether the row is keyed at all.
+  @override
+  bool get animated => _animated;
+
+  /// Whether a key sits on [frame].
+  @override
+  bool hasKeyAt(int frame) => _keyAt(frame) != null;
+
+  /// Add a key at [frame], or take away the one there.
+  @override
+  void toggleKeyAt(int frame) => _toggleKeyHere(frame);
+
+  /// Start animating, or stop and keep the value read at [frame].
+  @override
+  void toggleAnimatedAt(int frame) => _toggleAnimated(frame);
+
+  /// What each axis reads at [frame].
+  List<double> valuesAtFrame(int frame) => _valuesNow(frame);
+
+  /// [values] written at [frame], as typing them into the row's wells does.
+  void writeValuesAt(List<double> values, int frame) => onWrite([
+        for (final (i, scalar) in scalars.indexed)
+          scalarWithValueAt(scalar, values[i], comp, frame),
+      ]);
 
   List<BridgeKeyframe> _keysOf(BridgeScalar scalar) => switch (scalar) {
         BridgeScalar_Keyframed(:final field0) => field0,
@@ -501,27 +569,32 @@ class KeyframeControlsFrb extends StatelessWidget {
       ),
     ];
 
-    if (!fixedColumns) {
+    if (navigatorOnly) {
+      if (!steps) return navigator[1];
       return Row(
         mainAxisSize: MainAxisSize.min,
-        children: [stopwatch, if (_animated) ...navigator],
+        children: [
+          // The steps either side come up with the pointer, and the diamond
+          // stays to say whether the playhead is on a key.
+          FxQuiet(child: navigator[0]),
+          navigator[1],
+          FxQuiet(child: navigator[2]),
+        ],
       );
     }
 
-    // The two reserved columns. The navigator's slot keeps its width while the
-    // property is static, so switching the stopwatch on adds three buttons
-    // without moving the label a pixel.
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(width: fxStopwatchColumn, child: stopwatch),
-        SizedBox(
-          width: fxKeyNavColumn,
-          child: _animated
-              ? Row(mainAxisSize: MainAxisSize.min, children: navigator)
-              : const SizedBox.shrink(),
-        ),
-      ],
+    if (!fixedColumns) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [stopwatch, if (_animated && !navigatorApart) ...navigator],
+      );
+    }
+
+    // A stopwatch nothing has been keyed with rests quiet, and comes up with
+    // the pointer. A lit one is a statement about the row, and stays.
+    return SizedBox(
+      width: fxStopwatchColumn,
+      child: _animated ? stopwatch : FxQuiet(rest: 0.3, child: stopwatch),
     );
   }
 
@@ -634,7 +707,7 @@ class KeyframeControlsFrb extends StatelessWidget {
 /// which is why this one writes through the engine's own path-key ops instead
 /// of sending an animation. There is no value to plot, so the lane shows
 /// diamonds and no curve, and the row has no field.
-class PathKeyframesFrb extends StatelessWidget {
+class PathKeyframesFrb extends StatelessWidget implements RowKeys {
   /// This row's shape keys, as they came across with the mask or the
   /// shape item they belong to.
   final List<BridgeKeyframe> keys;
@@ -654,6 +727,10 @@ class PathKeyframesFrb extends StatelessWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
+  /// As [KeyframeControlsFrb.navigatorApart] and its navigator alone.
+  final bool navigatorApart;
+  final bool navigatorOnly;
+
   const PathKeyframesFrb({
     super.key,
     required this.keys,
@@ -663,9 +740,37 @@ class PathKeyframesFrb extends StatelessWidget {
     required this.comp,
     required this.onSeek,
     required this.onChanged,
+    this.navigatorApart = false,
+    this.navigatorOnly = false,
   });
 
+  @override
+  Widget? get trailingNavigator => !_animated
+      ? null
+      : PathKeyframesFrb(
+          keys: keys,
+          onToggleKey: onToggleKey,
+          onClear: onClear,
+          rowKey: rowKey,
+          comp: comp,
+          onSeek: onSeek,
+          onChanged: onChanged,
+          navigatorOnly: true,
+        );
+
   bool get _animated => keys.isNotEmpty;
+
+  @override
+  bool get animated => _animated;
+
+  @override
+  bool hasKeyAt(int frame) => _frames.contains(frame);
+
+  @override
+  void toggleKeyAt(int frame) => _toggleKeyHere(frame);
+
+  @override
+  void toggleAnimatedAt(int frame) => _toggleAnimated(frame);
 
   /// The frames the shape is keyed on.
   ///
@@ -747,16 +852,18 @@ class PathKeyframesFrb extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        LumitTooltip(
-          message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
-          child: button(
-            keyName: 'kf-stopwatch-$rowKey',
-            child: LumitIcon(stopwatchGlyph(t),
-                size: iconSize, colour: _animated ? t.animated : t.textMuted),
-            onPressed: () => _toggleAnimated(playhead.value),
+        if (!navigatorOnly)
+          LumitTooltip(
+            message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
+            child: button(
+              keyName: 'kf-stopwatch-$rowKey',
+              child: LumitIcon(stopwatchGlyph(t),
+                  size: iconSize,
+                  colour: _animated ? t.animated : t.textMuted),
+              onPressed: () => _toggleAnimated(playhead.value),
+            ),
           ),
-        ),
-        if (_animated) ...[
+        if (_animated && (navigatorOnly || !navigatorApart)) ...[
           LumitTooltip(
             message: l10n.keyPreviousKeyframe,
             child: button(

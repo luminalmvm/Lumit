@@ -9,6 +9,7 @@
 
 export 'controls/base.dart';
 export 'controls/buttons.dart';
+export 'controls/caret.dart';
 export 'controls/dropdowns.dart';
 export 'controls/indicators.dart';
 export 'controls/menus.dart';

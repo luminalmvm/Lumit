@@ -141,33 +141,34 @@ void reviewRowMenu(BuildContext row, Offset at, List<ReviewMenuItem?> items) {
       : press.dx >= _menuWidth
           ? press.dx - _menuWidth
           : room.clamp(0.0, press.dx);
-  final t = ThemeScope.of(row).theme;
+  // No rule at either end, and never two together: a row's list leaves a
+  // rule wherever a run of items might have been.
+  final kept = <ReviewMenuItem?>[];
+  for (final item in items) {
+    if (item == null && (kept.isEmpty || kept.last == null)) continue;
+    kept.add(item);
+  }
+  while (kept.isNotEmpty && kept.last == null) {
+    kept.removeLast();
+  }
   unawaited(showMenuAt<void>(
     context: row,
     position: box.localToGlobal(Offset(left, press.dy)),
     width: _menuWidth,
     rows: (close) => [
-      for (final item in items)
+      for (final item in kept)
         if (item case (final id, final words, final run)?)
           MenuRow(
             key: ValueKey<String>('review-menu-$id'),
+            enabled: run != null,
             onPressed: () {
               close(null);
               run?.call();
             },
-            child: Text(words,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: run == null
-                    ? t.body.copyWith(color: t.textDisabled)
-                    : null),
+            child: MenuLabel(words, enabled: run != null),
           )
         else
-          Container(
-            height: 1,
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            color: t.hairline,
-          ),
+          const MenuDivider(),
     ],
   ));
 }
@@ -437,9 +438,8 @@ class ReviewLinkRow extends StatelessWidget {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     final newest = link.versions.last;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+    return HoverMark(
+      builder: (context, lit) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onPick,
         onSecondaryTapDown: (press) => onMenu(press.globalPosition),
@@ -449,9 +449,9 @@ class ReviewLinkRow extends StatelessWidget {
           duration: scope.motion.mark.duration,
           curve: scope.motion.mark.curve,
           height: reviewLinkRowHeight,
-          padding: EdgeInsets.only(left: chosen ? 10 : 12, right: 12),
+          padding: EdgeInsetsDirectional.only(start: chosen ? 10 : 12, end: 12),
           decoration: BoxDecoration(
-            color: chosen ? t.surface2 : null,
+            color: chosen ? t.surface2 : t.surface2.withValues(alpha: lit),
             border: chosen
                 ? Border(left: BorderSide(color: t.accent, width: 2))
                 : null,
@@ -481,7 +481,7 @@ class ReviewLinkRow extends StatelessWidget {
                             key: ValueKey<String>('review-unseen-${link.id}'),
                             width: 6,
                             height: 6,
-                            margin: const EdgeInsets.only(left: 8),
+                            margin: const EdgeInsetsDirectional.only(start: 8),
                             decoration: BoxDecoration(
                                 shape: BoxShape.circle, color: t.textPrimary),
                           ),
@@ -670,7 +670,7 @@ class _ReviewAddressState extends State<ReviewAddress> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     Widget action(String id, VoidCallback onPressed, Widget child) => Padding(
-          padding: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsetsDirectional.only(start: 8),
           child: SizedBox(
             height: 26,
             child: HouseButton(
@@ -790,6 +790,7 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
         ),
       if (c.picture != null && widget.onPicture != null)
         ('picture', l10n.reviewShowPicture, widget.onPicture),
+      if (widget.timecode != null) null,
       if (widget.onResolve case final resolve?)
         (
           'resolve',
@@ -797,9 +798,16 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
           resolve,
         ),
       if (widget.onReply case final reply?) ('reply', l10n.reviewReply, reply),
+      if (widget.timecode != null) null,
+      if (c.text.isNotEmpty)
+        (
+          'copy-text',
+          l10n.copyText,
+          () => unawaited(Clipboard.setData(ClipboardData(text: c.text))),
+        ),
       if (widget.onCopyLink case final copy?)
         ('copy', l10n.reviewCopyCommentLink, copy),
-      if (widget.timecode != null) null,
+      null,
       ('delete', l10n.delete, widget.onDelete),
     ]);
   }
@@ -893,7 +901,7 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
               ),
               if (c.text.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(left: 14, top: 2),
+                  padding: const EdgeInsetsDirectional.only(start: 14, top: 2),
                   child: Text.rich(_words(t),
                       style: t.body.copyWith(
                           color: c.resolved ? t.textMuted : t.textSecondary,
@@ -901,13 +909,13 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
                 ),
               if (c.picture != null)
                 Padding(
-                  padding: const EdgeInsets.only(left: 14, top: 6, bottom: 2),
+                  padding: const EdgeInsetsDirectional.only(start: 14, top: 6, bottom: 2),
                   child: ReviewPicture(widget.review, c,
                       onPressed: widget.onPicture),
                 ),
               if (widget.drawing case final drawing?)
                 Padding(
-                  padding: const EdgeInsets.only(left: 14, top: 8, bottom: 2),
+                  padding: const EdgeInsetsDirectional.only(start: 14, top: 8, bottom: 2),
                   child: drawing,
                 ),
             ],
@@ -1152,7 +1160,7 @@ class _ReviewApprovedRowState extends State<ReviewApprovedRow> {
               SizedBox(
                 width: 14,
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: AlignmentDirectional.centerStart,
                   child: glyph.LumitIcon(LumitIcons.tick,
                       size: 11, colour: t.success),
                 ),

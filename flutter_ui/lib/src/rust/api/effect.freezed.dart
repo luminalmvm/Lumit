@@ -1249,6 +1249,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult Function(BridgeEnabledCond_LayerSet value)? layerSet,
     TResult Function(BridgeEnabledCond_LayerUnset value)? layerUnset,
     TResult Function(BridgeEnabledCond_Nought value)? nought,
+    TResult Function(BridgeEnabledCond_Or value)? or,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1265,6 +1266,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerUnset(_that);
       case BridgeEnabledCond_Nought() when nought != null:
         return nought(_that);
+      case BridgeEnabledCond_Or() when or != null:
+        return or(_that);
       case _:
         return orElse();
     }
@@ -1291,6 +1294,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     required TResult Function(BridgeEnabledCond_LayerSet value) layerSet,
     required TResult Function(BridgeEnabledCond_LayerUnset value) layerUnset,
     required TResult Function(BridgeEnabledCond_Nought value) nought,
+    required TResult Function(BridgeEnabledCond_Or value) or,
   }) {
     final _that = this;
     switch (_that) {
@@ -1306,6 +1310,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerUnset(_that);
       case BridgeEnabledCond_Nought():
         return nought(_that);
+      case BridgeEnabledCond_Or():
+        return or(_that);
     }
   }
 
@@ -1329,6 +1335,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult? Function(BridgeEnabledCond_LayerSet value)? layerSet,
     TResult? Function(BridgeEnabledCond_LayerUnset value)? layerUnset,
     TResult? Function(BridgeEnabledCond_Nought value)? nought,
+    TResult? Function(BridgeEnabledCond_Or value)? or,
   }) {
     final _that = this;
     switch (_that) {
@@ -1344,6 +1351,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerUnset(_that);
       case BridgeEnabledCond_Nought() when nought != null:
         return nought(_that);
+      case BridgeEnabledCond_Or() when or != null:
+        return or(_that);
       case _:
         return null;
     }
@@ -1369,6 +1378,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult Function()? layerSet,
     TResult Function()? layerUnset,
     TResult Function()? nought,
+    TResult Function(String field0, BridgeEnabledCond field1)? or,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -1385,6 +1395,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerUnset();
       case BridgeEnabledCond_Nought() when nought != null:
         return nought();
+      case BridgeEnabledCond_Or() when or != null:
+        return or(_that.field0, _that.field1);
       case _:
         return orElse();
     }
@@ -1411,6 +1423,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     required TResult Function() layerSet,
     required TResult Function() layerUnset,
     required TResult Function() nought,
+    required TResult Function(String field0, BridgeEnabledCond field1) or,
   }) {
     final _that = this;
     switch (_that) {
@@ -1426,6 +1439,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerUnset();
       case BridgeEnabledCond_Nought():
         return nought();
+      case BridgeEnabledCond_Or():
+        return or(_that.field0, _that.field1);
     }
   }
 
@@ -1449,6 +1464,7 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
     TResult? Function()? layerSet,
     TResult? Function()? layerUnset,
     TResult? Function()? nought,
+    TResult? Function(String field0, BridgeEnabledCond field1)? or,
   }) {
     final _that = this;
     switch (_that) {
@@ -1464,6 +1480,8 @@ extension BridgeEnabledCondPatterns on BridgeEnabledCond {
         return layerUnset();
       case BridgeEnabledCond_Nought() when nought != null:
         return nought();
+      case BridgeEnabledCond_Or() when or != null:
+        return or(_that.field0, _that.field1);
       case _:
         return null;
     }
@@ -1726,6 +1744,90 @@ class BridgeEnabledCond_Nought extends BridgeEnabledCond {
   @override
   String toString() {
     return 'BridgeEnabledCond.nought()';
+  }
+}
+
+/// @nodoc
+
+class BridgeEnabledCond_Or extends BridgeEnabledCond {
+  const BridgeEnabledCond_Or(this.field0, this.field1) : super._();
+
+  final String field0;
+  final BridgeEnabledCond field1;
+
+  /// Create a copy of BridgeEnabledCond
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeEnabledCond_OrCopyWith<BridgeEnabledCond_Or> get copyWith =>
+      _$BridgeEnabledCond_OrCopyWithImpl<BridgeEnabledCond_Or>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeEnabledCond_Or &&
+            (identical(other.field0, field0) || other.field0 == field0) &&
+            (identical(other.field1, field1) || other.field1 == field1));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0, field1);
+
+  @override
+  String toString() {
+    return 'BridgeEnabledCond.or(field0: $field0, field1: $field1)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeEnabledCond_OrCopyWith<$Res>
+    implements $BridgeEnabledCondCopyWith<$Res> {
+  factory $BridgeEnabledCond_OrCopyWith(BridgeEnabledCond_Or value,
+          $Res Function(BridgeEnabledCond_Or) _then) =
+      _$BridgeEnabledCond_OrCopyWithImpl;
+  @useResult
+  $Res call({String field0, BridgeEnabledCond field1});
+
+  $BridgeEnabledCondCopyWith<$Res> get field1;
+}
+
+/// @nodoc
+class _$BridgeEnabledCond_OrCopyWithImpl<$Res>
+    implements $BridgeEnabledCond_OrCopyWith<$Res> {
+  _$BridgeEnabledCond_OrCopyWithImpl(this._self, this._then);
+
+  final BridgeEnabledCond_Or _self;
+  final $Res Function(BridgeEnabledCond_Or) _then;
+
+  /// Create a copy of BridgeEnabledCond
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? field0 = null,
+    Object? field1 = null,
+  }) {
+    return _then(BridgeEnabledCond_Or(
+      null == field0
+          ? _self.field0
+          : field0 // ignore: cast_nullable_to_non_nullable
+              as String,
+      null == field1
+          ? _self.field1
+          : field1 // ignore: cast_nullable_to_non_nullable
+              as BridgeEnabledCond,
+    ));
+  }
+
+  /// Create a copy of BridgeEnabledCond
+  /// with the given fields replaced by the non-null parameter values.
+  @override
+  @pragma('vm:prefer-inline')
+  $BridgeEnabledCondCopyWith<$Res> get field1 {
+    return $BridgeEnabledCondCopyWith<$Res>(_self.field1, (value) {
+      return _then(_self.copyWith(field1: value));
+    });
   }
 }
 
@@ -2315,12 +2417,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(double default_, double sliderMin, double sliderMax,
             double? hardMin, double? hardMax)?
         float,
-    TResult Function(
-            PlatformInt64 default_,
-            PlatformInt64 sliderMin,
-            PlatformInt64 sliderMax,
-            PlatformInt64? hardMin,
-            PlatformInt64? hardMax)?
+    TResult Function(int default_, int sliderMin, int sliderMax, int? hardMin,
+            int? hardMax)?
         int,
     TResult Function(double default_, double dialStep)? angle,
     TResult Function(
@@ -2399,12 +2497,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(double default_, double sliderMin,
             double sliderMax, double? hardMin, double? hardMax)
         float,
-    required TResult Function(
-            PlatformInt64 default_,
-            PlatformInt64 sliderMin,
-            PlatformInt64 sliderMax,
-            PlatformInt64? hardMin,
-            PlatformInt64? hardMax)
+    required TResult Function(int default_, int sliderMin, int sliderMax,
+            int? hardMin, int? hardMax)
         int,
     required TResult Function(double default_, double dialStep) angle,
     required TResult Function(
@@ -2481,12 +2575,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(double default_, double sliderMin, double sliderMax,
             double? hardMin, double? hardMax)?
         float,
-    TResult? Function(
-            PlatformInt64 default_,
-            PlatformInt64 sliderMin,
-            PlatformInt64 sliderMax,
-            PlatformInt64? hardMin,
-            PlatformInt64? hardMax)?
+    TResult? Function(int default_, int sliderMin, int sliderMax, int? hardMin,
+            int? hardMax)?
         int,
     TResult? Function(double default_, double dialStep)? angle,
     TResult? Function(
@@ -2673,11 +2763,11 @@ class BridgeParamKind_Int extends BridgeParamKind {
       this.hardMax})
       : super._();
 
-  final PlatformInt64 default_;
-  final PlatformInt64 sliderMin;
-  final PlatformInt64 sliderMax;
-  final PlatformInt64? hardMin;
-  final PlatformInt64? hardMax;
+  final int default_;
+  final int sliderMin;
+  final int sliderMax;
+  final int? hardMin;
+  final int? hardMax;
 
   /// Create a copy of BridgeParamKind
   /// with the given fields replaced by the non-null parameter values.
@@ -2719,11 +2809,7 @@ abstract mixin class $BridgeParamKind_IntCopyWith<$Res>
       _$BridgeParamKind_IntCopyWithImpl;
   @useResult
   $Res call(
-      {PlatformInt64 default_,
-      PlatformInt64 sliderMin,
-      PlatformInt64 sliderMax,
-      PlatformInt64? hardMin,
-      PlatformInt64? hardMax});
+      {int default_, int sliderMin, int sliderMax, int? hardMin, int? hardMax});
 }
 
 /// @nodoc
@@ -2748,23 +2834,23 @@ class _$BridgeParamKind_IntCopyWithImpl<$Res>
       default_: null == default_
           ? _self.default_
           : default_ // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64,
+              as int,
       sliderMin: null == sliderMin
           ? _self.sliderMin
           : sliderMin // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64,
+              as int,
       sliderMax: null == sliderMax
           ? _self.sliderMax
           : sliderMax // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64,
+              as int,
       hardMin: freezed == hardMin
           ? _self.hardMin
           : hardMin // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64?,
+              as int?,
       hardMax: freezed == hardMax
           ? _self.hardMax
           : hardMax // ignore: cast_nullable_to_non_nullable
-              as PlatformInt64?,
+              as int?,
     ));
   }
 }

@@ -1,3 +1,4 @@
+use super::colour_name::ColourNameRole;
 use super::params::Unit;
 
 /// Cost class (docs/08 §1.3) — consumed by degradation ordering and budgets.
@@ -509,19 +510,6 @@ impl ParamKind {
     }
 }
 
-/// Which of a config's lists a [`ParamKind::ColourName`] row offers. A view
-/// row lists the views of the display its sibling `display` row names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ColourNameRole {
-    Space,
-    Display,
-    View,
-    Look,
-    /// The Information row: read-only, showing what the loaded config calls
-    /// itself. Its value stays empty and nothing reads it.
-    Config,
-}
-
 /// How a transform- or displacement-domain effect treats the border pixels
 /// its warp reveals (P3): the one reusable Edges control, shared by
 /// the blur family (docs/08 §3.8) and Shake (§3.4). The `u32` codes are the
@@ -666,6 +654,8 @@ pub enum EnabledCond {
     /// Editable while the named number is a still nought. A keyed or an
     /// expression track greys the dependent row, as any other number does.
     Nought,
+    /// Editable while this other Bool is on, or while the condition holds.
+    Or(&'static str, &'static EnabledCond),
 }
 
 /// The Add-effect menu's grouping: every schema declares one.
@@ -678,6 +668,12 @@ pub enum FxCategory {
     /// Gradient, Noise, Fractal noise. Three of the four never read the incoming
     /// picture at all, which is why none of the other six describes them.
     Generate,
+    /// The effects that make, change or use a **stream of points**: Grid,
+    /// Scatter, Pick points, Sort distribution, Clone to points, Label points
+    /// and their kin. Filed under Generate they were most of that heading;
+    /// here they are found together, as Cavalry keeps its distributions and
+    /// duplicators together.
+    Points,
     Stylise,
     Temporal,
     /// The effects that **remove** the picture progressively, so a cut can be
@@ -744,6 +740,7 @@ impl FxCategory {
             FxCategory::Colour => "Colour",
             FxCategory::Distortion => "Distortion",
             FxCategory::Generate => "Generate",
+            FxCategory::Points => "Points",
             FxCategory::Stylise => "Stylise",
             FxCategory::Temporal => "Temporal",
             FxCategory::Transition => "Transition",
@@ -781,11 +778,12 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 13] = [
+    pub const ALL: [FxCategory; 14] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
         FxCategory::Generate,
+        FxCategory::Points,
         FxCategory::Stylise,
         FxCategory::Temporal,
         FxCategory::Transition,
@@ -877,6 +875,10 @@ pub const BLEND_PARAM: &str = "blend";
 
 /// [`BLEND_PARAM`]'s resolved id.
 pub const BLEND_ID: super::params::ParamId = super::params::ParamId::new(BLEND_PARAM);
+
+/// How much of an effect's result its Blend keeps, 0..1, on top of its Mix.
+/// Absent is all of it. Shake's, as its Amplitude reaches 0.
+pub const BLEND_FADE: super::params::ParamId = super::params::ParamId::new("derived.blend_fade");
 
 /// What an effect's Matte row *means*, and therefore who consumes it.
 ///

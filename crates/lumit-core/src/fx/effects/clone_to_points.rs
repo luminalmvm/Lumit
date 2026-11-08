@@ -49,6 +49,7 @@
 //! for what gives way, and [`CloneToPoints::picture_of`] chooses a stamp's
 //! picture. The planner, the builder and the draw all go through them.
 
+use crate::expression::ExpressionContext;
 use crate::fx::drivers::{clone_index, per_copy};
 use crate::fx::effects::vary_points::{APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN};
 use crate::fx::points::{self, Column, PointsStream, SpriteFit};
@@ -57,9 +58,12 @@ use crate::fx::{
     registry::EffectMetadata, registry::ResolveCx, registry::Signature, schema::EffectSchema,
     schema::EnabledCond, schema::EnabledWhen, schema::ParamGroup, schema::Port, schema::PortType,
 };
-use crate::model::{Composition, Document, EffectInstance, EffectValue};
+use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer};
 use lumit_fx_macros::Effect;
+use std::sync::Arc;
 use uuid::Uuid;
+
+mod stamps;
 
 /// The dice a Random choice of layer rolls, kept off the numbers the
 /// producers and Vary points use for theirs.
@@ -74,6 +78,19 @@ pub const MAX_PICTURES: usize = 32;
 
 /// Choose by's Every layer, by its place in the dropdown.
 const CHOOSE_EVERY: u32 = 3;
+
+/// Choose by's Layer index, which reads the Layer index row (or the copy's
+/// own value, where a driver is wired into it).
+const CHOOSE_INDEX: u32 = 4;
+
+/// Distribution's options, by their place in the dropdown.
+pub const DIST_INPUT: u32 = 0;
+pub const DIST_GRID: u32 = 1;
+pub const DIST_PATH: u32 = 2;
+pub const DIST_LAYOUT: u32 = 3;
+
+/// The layer row Path reads its path from, which is not a layer to stamp.
+pub const PATH_LAYER: &str = "path_layer";
 
 /// Time offset's options, by their place in the dropdown.
 const TIME_OFF: u32 = 0;
@@ -161,14 +178,66 @@ pub struct Planned {
 /// index rows behind two more, and the cell rows that only the two cell sizes
 /// read.
 pub const CLONE_GROUPS: &[ParamGroup] = &[
+    // Each Distribution's own rows, shown only under it.
+    ParamGroup {
+        label: "",
+        params: &["dist_count"],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_PATH, DIST_LAYOUT])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &[
+            "dist_columns",
+            "dist_rows",
+            "dist_spacing_x",
+            "dist_spacing_y",
+        ],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_GRID])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &[
+            "path_layer",
+            "dist_align",
+            "dist_length",
+            "dist_travel",
+            "dist_offset",
+        ],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_PATH])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["dist_direction", "dist_spacing"],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_LAYOUT])),
+        visible_when_lens_elements: None,
+    },
+    ParamGroup {
+        label: "",
+        params: &["dist_position_x", "dist_position_y"],
+        collapsed: false,
+        visible_when: Some(("distribution", &[DIST_GRID, DIST_LAYOUT])),
+        visible_when_lens_elements: None,
+    },
     ParamGroup {
         label: "More layers",
         params: &[
             "clone_layer_2",
             "clone_layer_3",
             "clone_layer_4",
+            "clone_layer_5",
+            "clone_layer_6",
+            "clone_layer_7",
+            "clone_layer_8",
             "choose_by",
             "choose_name",
+            "layer_index",
         ],
         collapsed: true,
         visible_when: None,
@@ -249,7 +318,7 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
     match_name = "clone_to_points",
     label = "Clone to points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be anywhere, and a stamp reaches half its own size past it.
     roi = FullFrame,
@@ -261,6 +330,123 @@ const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)]
     enabled_when = CLONE_ENABLED_WHEN,
 )]
 pub struct CloneToPoints {
+    /// Where the copies go. Points input stamps the wired stream. Grid, Path
+    /// and Layout make the points here, so no producer has to be wired:
+    /// Grid in rows and columns, Path spread along a layer's path, Layout in
+    /// a line where each copy starts where the one before ends.
+    #[choice(
+        label = "Distribution",
+        options = ["Points input", "Grid", "Path", "Layout"],
+        default = 0
+    )]
+    pub distribution: u32,
+
+    /// How many copies Path and Layout make.
+    #[counter(
+        label = "Count",
+        min = 1,
+        max = 200,
+        default = 10,
+        hard_min = 1,
+        hard_max = points::CAP_HARD,
+        unit = Raw
+    )]
+    pub dist_count: i32,
+
+    /// Grid's columns.
+    #[counter(
+        label = "Columns",
+        min = 1,
+        max = 100,
+        default = 5,
+        hard_min = 1,
+        hard_max = 10_000,
+        unit = Raw
+    )]
+    pub dist_columns: i32,
+
+    /// Grid's rows.
+    #[counter(
+        label = "Rows",
+        min = 1,
+        max = 100,
+        default = 5,
+        hard_min = 1,
+        hard_max = 10_000,
+        unit = Raw
+    )]
+    pub dist_rows: i32,
+
+    /// The gap between Grid's columns, px@comp.
+    #[slider(
+        label = "Spacing x",
+        min = 0.0,
+        max = 1000.0,
+        default = 120.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub dist_spacing_x: f32,
+
+    /// The gap between Grid's rows, px@comp.
+    #[slider(
+        label = "Spacing y",
+        min = 0.0,
+        max = 1000.0,
+        default = 120.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub dist_spacing_y: f32,
+
+    /// The layer whose path Path follows: a Shape layer's outlines, or
+    /// another layer's first mask. Unset is this layer's own.
+    #[layer(label = "Path layer")]
+    pub path_layer: bool,
+
+    /// Turns each copy to face the way the path runs.
+    #[toggle(label = "Align to path", default = true)]
+    pub dist_align: bool,
+
+    /// How much of the path the copies spread over, per cent of its length.
+    #[slider(label = "Length", min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
+    pub dist_length: f32,
+
+    /// Slides the copies along the path, per cent of its length. Past an end
+    /// they come back in at the other.
+    #[slider(label = "Travel", min = -100.0, max = 100.0, default = 0.0, unit = Percent)]
+    pub dist_travel: f32,
+
+    /// Moves each copy off the path, along the normal where it stands,
+    /// px@comp: to the left of the way the path runs, and the other way
+    /// below nought. Round a closed path it rings the copies closer in or
+    /// further out, as Cavalry's Offset does.
+    #[slider(label = "Offset", min = -500.0, max = 500.0, default = 0.0, unit = Px)]
+    pub dist_offset: f32,
+
+    /// Which way Layout lines the copies up.
+    #[choice(label = "Direction", options = ["Horizontal", "Vertical"], default = 0)]
+    pub dist_direction: u32,
+
+    /// The gap Layout leaves between one copy and the next, px@comp.
+    /// Below nought they overlap.
+    #[slider(
+        label = "Spacing",
+        min = -500.0,
+        max = 1000.0,
+        default = 20.0,
+        unit = Px
+    )]
+    pub dist_spacing: f32,
+
+    /// The centre of Grid and Layout, px@comp.
+    #[slider(label = "Position x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
+    pub dist_position_x: f32,
+
+    /// px@comp; see [`dist_position_x`](Self::dist_position_x).
+    #[slider(label = "Position y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
+    pub dist_position_y: f32,
+
     /// Which points get a stamp.
     #[choice(
         label = "Apply to",
@@ -300,12 +486,29 @@ pub struct CloneToPoints {
     #[layer(label = "Clone layer 4")]
     pub clone_layer_4: bool,
 
+    /// A fifth. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 5")]
+    pub clone_layer_5: bool,
+
+    /// A sixth. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 6")]
+    pub clone_layer_6: bool,
+
+    /// A seventh. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 7")]
+    pub clone_layer_7: bool,
+
+    /// An eighth. See [`clone_layer_2`](Self::clone_layer_2).
+    #[layer(label = "Clone layer 8")]
+    pub clone_layer_8: bool,
+
     /// How a point picks its layer when more than one is set: each in turn
-    /// down the stream, by its own dice, or by the number it carries. Every
-    /// layer stamps them all at every point, the first row at the bottom.
+    /// down the stream, by its own dice, by the number it carries, or by Layer
+    /// index. Every layer stamps them all at every point, the first row at
+    /// the bottom.
     #[choice(
         label = "Choose by",
-        options = ["In order", "Random", "Number", "Every layer"],
+        options = ["In order", "Random", "Number", "Every layer", "Layer index"],
         default = 0
     )]
     pub choose_by: u32,
@@ -314,6 +517,12 @@ pub struct CloneToPoints {
     /// or one of the `@` names. Empty is the number it carries.
     #[text(label = "Name", default = "")]
     pub choose_name: ShortText,
+
+    /// Which layer every point takes when Choose by is Layer index, counted
+    /// from 0 and wrapped round the layers that are set. Wire a Random, a
+    /// Stagger or Clone index in to pick a layer for each copy.
+    #[slider(label = "Layer index", min = 0.0, max = 7.0, default = 0.0, unit = Raw)]
+    pub layer_index: f32,
 
     /// Shows each stamp its layer at another moment, so one animated layer
     /// becomes a cascade. In order steps back once a stamp, Random shuffles
@@ -333,12 +542,14 @@ pub struct CloneToPoints {
     pub time_name: ShortText,
 
     /// How far apart two steps are, seconds. The default is about two frames.
+    /// Below nought each step is that much later rather than earlier, as
+    /// Cavalry's Stagger runs the copies ahead; Point age reads it as nought.
     #[slider(
         label = "Time step",
         min = 0.0,
         max = 1.0,
         default = 0.067,
-        hard_min = 0.0,
+        hard_min = -10.0,
         unit = Seconds
     )]
     pub time_step: f32,
@@ -417,9 +628,42 @@ pub struct CloneToPoints {
     #[slider(min = 0.0, max = 1000.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub scale: f32,
 
+    /// Multiplies each stamp's width, per cent, on top of Scale and the
+    /// point's own stretch. Wire a Stagger in to give every copy its own.
+    #[slider(
+        label = "Scale x",
+        min = 0.0,
+        max = 1000.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub scale_x: f32,
+
+    /// Multiplies each stamp's height, per cent. See
+    /// [`scale_x`](Self::scale_x).
+    #[slider(
+        label = "Scale y",
+        min = 0.0,
+        max = 1000.0,
+        default = 100.0,
+        hard_min = 0.0,
+        unit = Percent
+    )]
+    pub scale_y: f32,
+
     /// Added to each point's own rotation, degrees.
     #[dial(label = "Rotation", default = 0.0)]
     pub rotation: f32,
+
+    /// Moves each stamp across from its point, px@comp. Wire a driver in to
+    /// move every copy by its own amount.
+    #[slider(label = "Offset x", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub offset_x: f32,
+
+    /// Moves each stamp down from its point, px@comp.
+    #[slider(label = "Offset y", min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
+    pub offset_y: f32,
 
     /// Which place on the stamp sits on the point, per cent across it. 0 is
     /// its left edge. The stamp turns about this place.
@@ -464,6 +708,18 @@ pub struct CloneToPoints {
     #[slider(min = 0.0, max = 100.0, default = 100.0, hard_min = 0.0, hard_max = 100.0, unit = Percent)]
     pub tint: f32,
 
+    /// How the stamps combine with each other where they overlap, by the
+    /// layer blend modes verbatim, as Particulate's Particle blend. They then
+    /// go over the picture together. An index into
+    /// [`BlendMode::ALL`](crate::model::BlendMode::ALL).
+    #[choice(
+        label = "Copy blend",
+        options = *crate::model::BlendMode::NAMES,
+        default = 0,
+        dividers_after = crate::fx::builtins::CHOICE_UNGROUPED
+    )]
+    pub copy_blend: u32,
+
     /// Lay the stamps down furthest from the camera first, so a near one
     /// covers a far one. Off lays them in the stream's own order. Only shows
     /// on a 3D layer with a camera.
@@ -502,453 +758,94 @@ pub struct CloneToPoints {
     pub mix: f32,
 }
 
-impl CloneToPoints {
-    /// The raster factor, for the one input the declaration cannot scale: a
-    /// stream read off a wire is in px@comp, like a mask path, and has to be
-    /// rearranged into the pixels the frame is drawn at.
-    pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
-
-    /// How many layer rows are set, which the bag does not otherwise say.
-    pub const DERIVED_LAYERS: ParamId = ParamId::new("derived.layers");
-
-    /// Whether the copies are rendered one per clone.
-    pub const DERIVED_PER_CLONE: ParamId = ParamId::new("derived.per_clone");
-
-    /// Time step as the builder read it, off its own keyframes.
-    pub const DERIVED_TIME_STEP: ParamId = ParamId::new("derived.time_step");
-
-    /// This instance's raster factor, read back out of a resolved bag.
-    #[must_use]
-    pub fn px_scale_of(p: Params<'_>) -> f32 {
-        p.float(Self::DERIVED_PX_SCALE, 1.0)
+/// Points along path's End for `count` copies over `length` per cent of a
+/// path. Round a closed path the copies are a Length / Count apart however
+/// much of it is used, as Cavalry spaces them, where Points along path counts
+/// one gap fewer short of the whole path.
+#[must_use]
+pub fn spread_end(length: f32, count: i32, closed: bool) -> f32 {
+    if closed && length < 100.0 && count > 0 {
+        length * (count - 1) as f32 / count as f32
+    } else {
+        length
     }
+}
 
-    /// The stream this effect actually stamps: the wired one, with the two
-    /// dials and the cap applied.
-    ///
-    /// **Every decision is here**, in one expression both render paths read, so
-    /// the CPU oracle and the instanced draw cannot come to stamp different
-    /// squares. `in_stream` is in the units the caller wants out — px@comp for
-    /// a reader, raster pixels for a draw ([`PointsStream::rescaled`]).
-    ///
-    /// `pictures` is how the pictures to choose from are laid out. Which one
-    /// each stamp takes is left in the answer's `index` column, as
-    /// [`picture_of`](Self::picture_of) chose it.
-    #[must_use]
-    pub fn stamps(self, in_stream: &PointsStream, pictures: Pictures) -> PointsStream {
-        let mut out = in_stream.clone();
-        // Chosen before anything is dropped or reordered, so a point keeps
-        // its picture when the camera moves or a neighbour is left out.
-        let numbers = self.numbers(in_stream);
-        out.index = (0..in_stream.len())
-            .map(|i| self.picture_at(in_stream, i, pictures, numbers).first as f32)
-            .collect();
-        // How many pictures deep every point is stamped, and how far apart
-        // they sit in the list. The same for every point.
-        let Stamped { step, count, .. } = self.picture_of(in_stream, 0, pictures);
-        if self.apply_to != 0 {
-            let group = in_stream.group(self.apply_group.as_str());
-            out.retain(|i| in_stream.applies(self.apply_to, group, self.apply_threshold, i));
-        }
-        // The newest by birth index, which is the cap rule the whole family
-        // applies — deterministic, and the same from any scrub direction.
-        // Max clones counts stamps, so a point stamped several deep counts
-        // that many times and keeps all its stamps or none.
-        let most = self.max_clones.clamp(0, points::CAP_HARD as i32) as usize;
-        out.keep_newest(most / count);
-        let tint = (self.tint / 100.0).clamp(0.0, 1.0);
-        // Scale, Rotation and Opacity, per stamp where a driver that reads
-        // the copy is wired into the row, and the row's one value elsewhere.
-        let scales = per_copy::column_or(&out, per_copy::COPY_SCALE, self.scale);
-        let turns = per_copy::column_or(&out, per_copy::COPY_ROTATION, self.rotation);
-        let opacities = per_copy::column_or(&out, per_copy::COPY_OPACITY, self.opacity);
-        for (s, scale) in out.size.iter_mut().zip(&scales) {
-            *s *= (scale / 100.0).max(0.0);
-        }
-        for (r, turn) in out.rotation.iter_mut().zip(&turns) {
-            *r += turn.to_radians();
-        }
-        for (c, opacity) in out.colour.iter_mut().zip(&opacities) {
-            let opacity = (opacity / 100.0).clamp(0.0, 1.0);
-            // Towards opaque white, which is the identity of a premultiplied
-            // tint: at Tint 0 a stamp is the layer's own picture, at 100 it is
-            // the picture times the point's colour and alpha.
-            for ch in c.iter_mut() {
-                *ch = (1.0 + (*ch - 1.0) * tint) * opacity;
-            }
-        }
-        if self.depth_sort {
-            out.sort_far_to_near();
-        }
-        // Every layer: each point becomes `count` stamps, one after the
-        // other, after the sort so the order stays one order. Made with the
-        // stream's own append and sort, so no column can be left behind:
-        // each copy is numbered by its point's place, and the sort by that
-        // number keeps the copies in layer order.
-        if count > 1 {
-            let places = out.len();
-            let ids = std::mem::replace(&mut out.id, (0..places as u64).collect());
-            let one = out.clone();
-            for j in 1..count {
-                let mut next = one.clone();
-                for picture in &mut next.index {
-                    *picture += (j * step) as f32;
-                }
-                out.append(&next);
-            }
-            out.sort_by_id();
-            out.id = (0..places * count)
-                .filter_map(|k| ids.get(k / count).copied())
-                .collect();
-        }
-        out
+/// The way `path` runs `s` px along it, eased from the way it runs at one
+/// vertex to the way it runs at the next. At a vertex where the flattening
+/// bent the path by less than 30° it runs between its two chords, so a copy
+/// on a curve leans as the curve does, not as the chord it sits on; at a
+/// sharper corner each edge keeps its own way.
+#[must_use]
+pub fn smooth_tangent(path: &crate::mask::MaskPolyline, s: f32) -> [f32; 2] {
+    let n = path.points.len();
+    if n < 2 {
+        return path.tangent_at(s);
     }
-
-    /// The pictures point `i` of the wired stream is stamped with, as places
-    /// in the list the render hands this effect.
-    ///
-    /// The one place a point's pictures are chosen. Choose by picks the
-    /// layer, or the clone where the copies are rendered one per clone, and
-    /// Time offset picks the moment. Every layer takes them all, bottom
-    /// first, each at the point's own moment.
-    #[must_use]
-    pub fn picture_of(self, s: &PointsStream, i: usize, of: Pictures) -> Stamped {
-        self.picture_at(s, i, of, self.numbers(s))
-    }
-
-    /// The numbers Choose by and Time offset read under Number, found on
-    /// `s` once for a walk over its points.
-    fn numbers(self, s: &PointsStream) -> [Column; 2] {
-        [
-            s.column(self.choose_name.as_str()),
-            s.column(self.time_name.as_str()),
-        ]
-    }
-
-    /// [`picture_of`](Self::picture_of), with the two numbers found already.
-    fn picture_at(self, s: &PointsStream, i: usize, of: Pictures, numbers: [Column; 2]) -> Stamped {
-        let [choose, time] = numbers;
-        let one = |first: usize| Stamped {
-            first,
-            step: 1,
-            count: 1,
-        };
-        let every = self.choose_by == CHOOSE_EVERY;
-        let id = s.id.get(i).copied().unwrap_or(0);
-        // Which of `n` the point takes, as Choose by says.
-        let chosen = |n: usize| -> usize {
-            if n < 2 {
-                return 0;
-            }
-            match self.choose_by {
-                // Its own dice, from its id, so the same picture every frame.
-                1 => {
-                    let roll = points::draw(self.seed, id, PICTURE_ATTR);
-                    ((roll * n as f32) as usize).min(n - 1)
-                }
-                // The number it carries, wrapped round the list. A NaN reads 0.
-                2 => {
-                    let number = s.read(choose, i).unwrap_or(0.0);
-                    (number.floor() as i64).rem_euclid(n as i64) as usize
-                }
-                _ => i % n,
-            }
-        };
-        if of.renders > 0 {
-            if every {
-                // The renders come in groups of one a layer, and the points
-                // take the groups in turn.
-                let deep = of.every_deep();
-                return Stamped {
-                    first: (i % (of.renders / deep).max(1)) * deep,
-                    step: 1,
-                    count: deep,
-                };
-            }
-            return one(chosen(of.renders));
-        }
-        let age = s.age.get(i).copied().unwrap_or(0.0);
-        let number = s.read(time, i).unwrap_or(0.0);
-        let moment = self.moment_of(i, id, number, age, of.moments);
-        if every {
-            return Stamped {
-                first: moment,
-                step: of.moments.max(1),
-                count: of.layers.max(1),
-            };
-        }
-        one(chosen(of.layers) * of.moments + moment)
-    }
-
-    /// Which of `moments` moments a stamp shows, as Time offset says. `place`
-    /// is where it comes in the stream, `number` the number it carries.
-    fn moment_of(self, place: usize, id: u64, number: f32, age: f32, moments: usize) -> usize {
-        if moments < 2 {
-            return 0;
-        }
-        match self.time_offset {
-            // Wrapped round the moments, so the builder need not know how
-            // many points there are.
-            TIME_IN_ORDER => place % moments,
-            TIME_RANDOM => {
-                let roll = points::draw(self.seed, id, MOMENT_ATTR);
-                ((roll * moments as f32) as usize).min(moments - 1)
-            }
-            TIME_NUMBER => (number.floor() as i64).rem_euclid(moments as i64) as usize,
-            // A point older than every moment holds the last. A NaN reads 0.
-            TIME_POINT_AGE if self.time_step > 0.0 => {
-                ((age.max(0.0) / self.time_step) as usize).min(moments - 1)
-            }
-            _ => 0,
-        }
-    }
-
-    /// The pictures the render makes for this effect. **The cap rule**, in
-    /// one place: never more than [`MAX_PICTURES`].
-    ///
-    /// `layers` is how many layer rows are set, `per_clone` what
-    /// [`per_clone_in`](Self::per_clone_in) answered, and `points` how many
-    /// points the wire brings where that is known before the render.
-    ///
-    /// Layers come first. Every set layer keeps a picture and Time samples
-    /// gives way, so four layers get eight moments each. Rendered one per
-    /// clone there is a render a point up to Max renders, each at its own
-    /// clone's moment, and layers past the number of renders are not shown.
-    #[must_use]
-    pub fn pictures(self, layers: usize, per_clone: bool, points: Option<usize>) -> Pictures {
-        let layers = layers.min(MAX_PICTURES);
-        if layers == 0 {
-            return Pictures::plain(0);
-        }
-        let most = MAX_PICTURES as i32;
-        let samples = match self.time_offset {
-            TIME_OFF => 1,
-            _ => self.time_samples.clamp(1, most) as usize,
-        };
-        if per_clone {
-            let cap = self.max_renders.clamp(1, most) as usize;
-            // Every layer wants a render for each layer of each point.
-            let each = match self.choose_by {
-                CHOOSE_EVERY => layers,
-                _ => 1,
-            };
-            // A stream that cannot be counted yet gets the whole cap.
-            let mut renders = points.map_or(cap, |n| n.saturating_mul(each).clamp(1, cap));
-            // Whole points only, so no render is made that no stamp shows.
-            if each > 1 && renders > each {
-                renders -= renders % each;
-            }
-            Pictures {
-                layers,
-                moments: samples,
-                renders,
-            }
+    let s = s.clamp(0.0, path.length());
+    let e = path
+        .arc
+        .partition_point(|&a| a <= s)
+        .saturating_sub(1)
+        .min(n - 2);
+    let span = path.arc[e + 1] - path.arc[e];
+    let u = if span > 0.0 {
+        ((s - path.arc[e]) / span).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let own = path.edge_tangent(e);
+    // The edge on the far side of vertex `v` from edge `e`, round the join
+    // of a closed path.
+    let beyond = |v: usize| -> Option<[f32; 2]> {
+        let other = if v == e {
+            e.checked_sub(1).or(path.closed.then_some(n - 2))?
+        } else if e + 2 < n {
+            e + 1
         } else {
-            Pictures {
-                layers,
-                moments: samples.min(MAX_PICTURES / layers).max(1),
-                renders: 0,
-            }
-        }
-    }
-
-    /// What picture `k` of the list is.
-    #[must_use]
-    pub fn picture(self, of: Pictures, k: usize) -> Picture {
-        if of.renders == 0 {
-            let moments = of.moments.max(1);
-            return Picture {
-                layer: k / moments,
-                moment: k % moments,
-                clone: None,
-            };
-        }
-        // A clone's moment is its own number's, so each has both. Every
-        // layer stamps one point with a whole group of renders, and they
-        // share that point's moment.
-        let place = match self.choose_by {
-            CHOOSE_EVERY => k / of.every_deep(),
-            _ => k,
+            path.closed.then_some(0)?
         };
-        Picture {
-            layer: k % of.layers.max(1),
-            moment: self.moment_of(place, place as u64, place as f32, 0.0, of.moments),
-            clone: Some((k as u32, of.renders as u32)),
+        Some(path.edge_tangent(other))
+    };
+    let at = |v: usize| match beyond(v) {
+        Some(t) if t[0] * own[0] + t[1] * own[1] > 30f32.to_radians().cos() => {
+            [t[0] + own[0], t[1] + own[1]]
         }
+        _ => own,
+    };
+    let (a, b) = (at(e), at(e + 1));
+    let [x, y] = [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+    let l = x.hypot(y);
+    if l > 0.0 {
+        [x / l, y / l]
+    } else {
+        own
     }
+}
 
-    /// The composition time a layer is rendered at for moment `m`. `t` is the
-    /// frame's own time and `start` the layer's in point.
-    #[must_use]
-    pub fn moment_time(self, m: usize, t: f64, start: f64) -> f64 {
-        let step = m as f64 * f64::from(self.time_step.max(0.0));
-        match self.time_offset {
-            TIME_POINT_AGE => start + step,
-            // The frame's own time to the bit, which needs no second render.
-            _ if m == 0 => t,
-            _ => t - step,
+/// Offset: every point `px` off `path`, along the normal where it stands, to
+/// the left of the way the path runs, as Points along path's Deform moves one.
+/// A point that faces the way the path runs faces the eased way of
+/// [`smooth_tangent`] instead of its chord's.
+pub fn push_off_path(
+    stream: &mut PointsStream,
+    path: &crate::mask::MaskPolyline,
+    px: f32,
+    align: bool,
+) {
+    let length = path.length();
+    for ((p, r), far) in stream
+        .position
+        .iter_mut()
+        .zip(&mut stream.rotation)
+        .zip(&stream.index)
+    {
+        let [x, y] = smooth_tangent(path, far * length);
+        if align {
+            *r = y.atan2(x);
         }
-    }
-
-    /// The rows that decide which pictures are rendered, read off the stored
-    /// instance at layer time `lt`. Every other row is at its default.
-    ///
-    /// The planner, the builder and the draw all read them through here, so
-    /// they agree. A wire into Time step, Time samples or Max renders is not
-    /// followed: they keep to their own keyframes, as Trail's Samples does.
-    #[must_use]
-    pub fn stored(e: &EffectInstance, lt: f64) -> Self {
-        let mut c = Self::read(Params::EMPTY);
-        let choice = |id: &str, or: u32| match e.param(id) {
-            Some(EffectValue::Choice(v)) => *v,
-            _ => or,
-        };
-        let number = |id: &str| e.float_at(id, lt).filter(|v| v.is_finite());
-        c.choose_by = choice("choose_by", c.choose_by);
-        c.time_offset = choice("time_offset", c.time_offset);
-        c.per_clone = choice("per_clone", c.per_clone);
-        if let Some(EffectValue::Seed(seed)) = e.param("seed") {
-            c.seed = *seed;
-        }
-        c.time_step = number("time_step").map_or(c.time_step, |v| v as f32);
-        c.time_samples = number("time_samples").map_or(c.time_samples, |v| v as i32);
-        c.max_renders = number("max_renders").map_or(c.max_renders, |v| v as i32);
-        c
-    }
-
-    /// The clone layer rows that name a layer, in row order, each with the
-    /// layer it names.
-    #[must_use]
-    pub fn rows(e: &EffectInstance) -> Vec<(&'static str, Uuid)> {
-        let schema: &'static EffectSchema = &<Self as EffectMetadata>::SCHEMA;
-        schema
-            .layer_inputs()
-            .filter_map(|row| Some((row, e.layer_ref(row)?)))
-            .collect()
-    }
-
-    /// Whether the copies are rendered one per clone: Per clone is on Auto
-    /// and a Clone index driver is somewhere a render of a layer being cloned
-    /// reads it, inside a precomp or a node graph included
-    /// ([`clone_index::reaches`]).
-    ///
-    /// Point age needs every stamp free to take any moment, so it wins and
-    /// the copies are rendered alike.
-    #[must_use]
-    pub fn per_clone_in(self, e: &EffectInstance, doc: &Document, comp: &Composition) -> bool {
-        self.per_clone == 0
-            && self.time_offset != TIME_POINT_AGE
-            && Self::rows(e).iter().any(|(_, id)| {
-                comp.layers
-                    .iter()
-                    .any(|l| l.id == *id && clone_index::reaches(doc, l))
-            })
-    }
-
-    /// Every picture this effect asks the render for at composition time `t`,
-    /// in list order. `None` is a hole: a row naming a layer that is gone.
-    ///
-    /// The planner and the builder both ask here, so the footage one fetches
-    /// is the footage the other draws. `lt` is the time of the layer the
-    /// effect is on. `points` is as [`pictures`](Self::pictures) takes it,
-    /// and the planner, which has no stream, passes `None` and so fetches for
-    /// every render there could be.
-    #[must_use]
-    pub fn planned(
-        e: &EffectInstance,
-        doc: &Document,
-        comp: &Composition,
-        t: f64,
-        lt: f64,
-        points: Option<usize>,
-    ) -> Vec<Option<Planned>> {
-        let stored = Self::stored(e, lt);
-        let rows = Self::rows(e);
-        let of = stored.pictures(rows.len(), stored.per_clone_in(e, doc, comp), points);
-        (0..of.len())
-            .map(|k| {
-                let picture = stored.picture(of, k);
-                let (row, layer) = *rows.get(picture.layer)?;
-                let start = comp.layers.iter().find(|l| l.id == layer)?.in_point;
-                Some(Planned {
-                    row,
-                    layer,
-                    time: stored.moment_time(picture.moment, t, start.0.to_f64()),
-                    clone: picture.clone,
-                })
-            })
-            .collect()
-    }
-
-    /// How the list the render handed over is laid out, read back from the
-    /// resolved bag and the list's own length. What the builder decided is
-    /// what the draw reads, so a stamp's picture is the one made for it.
-    #[must_use]
-    pub fn handed(p: Params<'_>, handed: usize) -> Pictures {
-        // A bag nobody resolved has no layer count, and the list is then one
-        // picture a layer.
-        let layers = usize::try_from(p.int(Self::DERIVED_LAYERS, handed as i32)).unwrap_or(0);
-        if layers == 0 || handed == 0 {
-            return Pictures::plain(0);
-        }
-        if p.bool(Self::DERIVED_PER_CLONE, false) {
-            Pictures {
-                layers,
-                moments: 1,
-                renders: handed,
-            }
-        } else {
-            Pictures {
-                layers,
-                moments: (handed / layers).max(1),
-                renders: 0,
-            }
-        }
-    }
-
-    /// How a stamp of a picture `picture` px@comp across and down sits on its
-    /// point: the Size, Anchor and Corner radius rows as the draw reads them.
-    ///
-    /// `px_scale` is the raster factor the bag's px rows were scaled by. A
-    /// stamp's shape is worked out at composition size, since a point's size
-    /// carries the raster factor already.
-    #[must_use]
-    pub fn fit(self, picture: [f32; 2], px_scale: f32) -> SpriteFit {
-        let k = px_scale.max(1e-6);
-        let layer = [picture[0].max(1.0), picture[1].max(1.0)];
-        let cell = [
-            (self.cell_width / k).max(1e-3),
-            (self.cell_height / k).max(1e-3),
-        ];
-        // How many times the layer's width and height the cell is.
-        let (across, down) = (cell[0] / layer[0], cell[1] / layer[1]);
-        // The stamp's own size at a point size of 100, and how much of it the
-        // picture spans.
-        let (own, uv) = match self.fit {
-            1 => (layer, [1.0; 2]),
-            // One scale for both axes: the smaller fits the layer inside the
-            // cell, the larger covers it.
-            2 => (cell, [across / across.min(down), down / across.min(down)]),
-            3 => (cell, [across / across.max(down), down / across.max(down)]),
-            _ => ([100.0; 2], [1.0; 2]),
-        };
-        SpriteFit {
-            unit: [own[0] / 100.0, own[1] / 100.0],
-            anchor: [self.anchor_x / 100.0, self.anchor_y / 100.0],
-            uv,
-            corner: (self.corner_radius / k).max(0.0),
-        }
-    }
-
-    /// How the stamps are drawn — Sprite mode, and the host Mix.
-    #[must_use]
-    pub fn draw_style(self) -> points::DrawStyle {
-        points::DrawStyle {
-            mode: points::RenderMode::Sprite,
-            feather: 0.0,
-            streak_seconds: 0.0,
-            mix: (self.mix / 100.0).clamp(0.0, 1.0),
-        }
+        p[0] += y * px;
+        p[1] -= x * px;
     }
 }
 

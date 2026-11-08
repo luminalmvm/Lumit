@@ -3478,17 +3478,9 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffectsShortcuts": "Usa le scelte rapide di After Effects",
-  "@firstRunAfterEffectsShortcuts": {
-    "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
   "firstRunContinue": "Continua",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
-  },
-  "firstRunCutName": "Premiere Pro o Resolve",
-  "@firstRunCutName": {
-    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
   },
   "firstRunSetup": "Configura Lumit",
   "@firstRunSetup": {
@@ -3498,17 +3490,9 @@
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
   },
-  "firstRunTitle": "Stile di montaggio",
-  "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
-  },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
     "description": "First run: the name of the other editor offered. A product name — leave it as it is."
-  },
-  "firstRunVegasShortcuts": "Usa le scelte rapide di Vegas",
-  "@firstRunVegasShortcuts": {
-    "description": "First-run screen: a tick on the Vegas card that loads the Vegas keyboard shortcuts as well. Off by default."
   },
   "flowAlwaysOn": "Sempre attivo",
   "@flowAlwaysOn": {
@@ -4308,6 +4292,13 @@
     "description": "Effect controls — a Wipe option on Radial wipe."
   },
   "fxCloneLayer": "Livello da clonare",
+  "fxCloneLayer5": "Livello da clonare 5",
+  "fxCloneLayer6": "Livello da clonare 6",
+  "fxCloneLayer7": "Livello da clonare 7",
+  "fxCloneLayer8": "Livello da clonare 8",
+  "fxLayerIndex": "Indice livello",
+  "fxScaleX": "Scala x",
+  "fxScaleY": "Scala y",
   "@fxCloneLayer": {
     "description": "Effect controls — a control on Clone to points: which layer's picture is stamped at every point of the wired stream."
   },
@@ -4331,6 +4322,43 @@
   "@fxColour2": {
     "description": "Effect controls — a control on RGB split."
   },
+  "fxColour2Position": "Posizione colore 2",
+  "fxColour3Position": "Posizione colore 3",
+  "fxCopyBlend": "Fusione copie",
+  "fxPointsInput": "Ingresso punti",
+  "fxPathLayer": "Layer del tracciato",
+  "fxDeform": "Deforma",
+  "fxCloneDeformer": "Deformatore cloni",
+  "fxDeformer": "Deformatore",
+  "fxAlign": "Allinea",
+  "fxBoolean": "Booleana",
+  "fxBooleanLayer": "Layer booleano",
+  "fxUnion": "Unione",
+  "fxIntersect": "Intersezione",
+  "fxRaster": "Raster",
+  "fxVector": "Vettoriale",
+  "fxRoundCorners": "Arrotonda angoli",
+  "fxSubtractFromLayer": "Sottrai dal layer",
+  "fxTravel": "Scorrimento",
+  "tipCloneModeRaster": "Ogni layer",
+  "tipCloneModeVector": "Shape layer",
+  "tipVectorNeedsClones": "Servono cloni",
+  "tipVectorNeedsShapes": "Servono shape",
+  "badgeCloneVectorReadsPicture": "Qui Vector legge l'immagine, come Raster.",
+  "whyVectorNoClone": "Serve un Clone to points subito sopra, con solo Clone deformer in mezzo",
+  "whyVectorNotShapes": "I layer clonati devono essere Shape layer",
+  "tipGreyedWhenIs": "Serve {option}",
+  "tipGreyedUnlessIs": "Cambia {control}",
+  "tipGreyedWhenOn": "Serve {control}",
+  "tipGreyedWhenOff": "Senza {control}",
+  "tipGreyedLayerSet": "Scegli {control}",
+  "tipGreyedLayerUnset": "Svuota {control}",
+  "tipGreyedNought": "Azzera {control}",
+  "fxColour4Position": "Posizione colore 4",
+  "fxTwo": "Due",
+  "fxThree": "Tre",
+  "fxFour": "Quattro",
+  "fxFive": "Cinque",
   "fxColour3": "Colore 3",
   "@fxColour3": {
     "description": "Effect controls — a control on RGB split."
@@ -6984,6 +7012,8 @@
   "@fxTileWidth": {
     "description": "Effect controls — a control on Tile."
   },
+  "fxUnits": "Unità",
+  "fxSeconds": "Secondi",
   "fxTime": "Tempo",
   "@fxTime": {
     "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock. Also how far behind the sound Delay's first repeat lands."
@@ -10803,10 +10833,6 @@
   "popOutPanel": "Sgancia",
   "@popOutPanel": {
     "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
-  "popOutPanelBlocked": "Non disponibile",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
   },
   "precompose": "Pre-componi",
   "@precompose": {
@@ -17096,6 +17122,8 @@
     "description": "Toolbar options strip — label beside the brush size field."
   },
   "toolStroke": "Traccia",
+  "toolSolidColour": "Colore pieno",
+  "tipSwatchKind": "Tipo {label}",
   "@toolStroke": {
     "description": "Toolbar options strip — label beside the shape outline colour swatch."
   },
@@ -18349,5 +18377,28 @@
         "example": "3"
       }
     }
-  }
+  },
+  "fxSortDistribution": "Distribuzione ordinata",
+  "fxMathPoints": "Punti matematici",
+  "fxRose": "Rosa",
+  "fxWaveX": "Onda x",
+  "fxWaveY": "Onda y",
+  "fxAmplitudeX": "Ampiezza x",
+  "fxAmplitudeY": "Ampiezza y",
+  "fxFrequencyX": "Frequenza x",
+  "fxFrequencyY": "Frequenza y",
+  "fxPhaseX": "Fase x",
+  "fxPhaseY": "Fase y",
+  "fxPetals": "Petali",
+  "fxDenominator": "Denominatore",
+  "fxTurns": "Giri",
+  "fxCosine": "Coseno",
+  "fxContourPoints": "Punti sui contorni",
+  "fxSizeFromArea": "Dimensione dall'area",
+  "fxIntersectionPoints": "Punti di intersezione",
+  "fxShuffle": "Rimescola",
+  "fxTimeLoop": "Loop temporale",
+  "fxCrossfadeBastiuni": "Crossfade Bastiuni",
+  "fxFadeLength": "Durata dissolvenza",
+  "fxFadeCurve": "Curva dissolvenza"
 }

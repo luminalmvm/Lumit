@@ -12,7 +12,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -33,6 +33,8 @@ import 'app_state.dart';
 import 'reviews.dart';
 import 'updates.dart' show versionFromBootLine;
 import 'workspace.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A computer or phone signed in to the account. [me] is this computer.
 typedef AccountDevice = ({String id, String name, bool phone, bool me});

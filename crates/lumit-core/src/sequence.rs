@@ -27,13 +27,26 @@ use uuid::Uuid;
 
 mod clip_opacity;
 pub mod takes;
+pub mod transition;
 
-/// What a clip plays: one footage item or one nested composition
+/// What a clip plays: one footage item, one nested composition or one solid
 /// (docs/03-DATA-MODEL.md §5.3 ClipSource).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClipSource {
     Footage(Uuid),
     Comp(Uuid),
+    /// A flat colour at the solid's own size, the same at every time.
+    Solid(Uuid),
+}
+
+impl ClipSource {
+    /// The project item it plays.
+    #[must_use]
+    pub fn id(self) -> Uuid {
+        match self {
+            Self::Footage(id) | Self::Comp(id) | Self::Solid(id) => id,
+        }
+    }
 }
 
 /// How far a Custom handle may reach past the box in y, in box heights, and
@@ -242,6 +255,11 @@ pub struct Clip {
     /// in `source` and `source_in`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub takes: Vec<takes::Take>,
+    /// What the overlap at this clip's start draws as, when another clip runs
+    /// into it on a picture row ([`transition`]). Unset is the dissolve, and is
+    /// left out of the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition: Option<EffectInstance>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -279,8 +297,15 @@ impl Clip {
             group: None,
             opacity: 1.0,
             takes: Vec::new(),
+            transition: None,
             extra: serde_json::Map::new(),
         }
+    }
+
+    /// The effect the overlap at this clip's start draws as, or `None` for the
+    /// dissolve, which is also what a bypassed one draws as.
+    pub fn drawn_transition(&self) -> Option<&EffectInstance> {
+        self.transition.as_ref().filter(|t| t.enabled)
     }
 
     /// Where the clip ends on the layer timeline (exclusive).
@@ -653,6 +678,10 @@ impl Clip {
         Clip {
             id: Uuid::now_v7(),
             effects: respawn(&self.effects),
+            transition: self
+                .transition
+                .as_ref()
+                .and_then(|t| respawn(std::slice::from_ref(t)).pop()),
             // A copy is out of the original's group.
             group: None,
             ..self.clone()
@@ -761,6 +790,8 @@ impl Clip {
             group: self.group,
             opacity: self.opacity,
             takes: self.takes.clone(),
+            // What the clip's start draws as, which is the left piece's start.
+            transition: self.transition.clone(),
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -793,6 +824,7 @@ impl Clip {
             group: self.group,
             opacity: self.opacity,
             takes: self.takes.clone(),
+            transition: None,
             extra: self.extra.clone(),
         };
         Some((left, right))
@@ -1304,90 +1336,6 @@ pub fn roll(clips: &[Clip], left: Uuid, right: Uuid, to: Rational) -> Option<Vec
     Some(with(clips, &[l, r]))
 }
 
-/// Make the two clips at an edit point overlap by `frames` steps of `frame`,
-/// centred on it. On a layer that draws, the overlap is a dissolve, and on an
-/// audio-only one a crossfade.
-///
-/// `outgoing` ends where `incoming` starts, or the two already overlap and
-/// the edit point is the middle of that. Each is carried on by half the
-/// length into its own source, the outgoing clip's end later and the incoming
-/// clip's start earlier, and the odd step goes to the incoming clip. `room`
-/// is how far each edge may be carried from where it stands, the outgoing
-/// clip's first, with None for no limit ([`Clip::spare`]). A clip with less
-/// than its half gives what it has, in whole steps, so the overlap is the
-/// longest the two allow. Neither edge passes the far end of the other clip
-/// or reaches a third, so two clips at most cover any moment.
-///
-/// No `frames` trims an overlap back to its middle, and the clips abut again.
-///
-/// None when the two neither meet nor overlap, when a length was asked for
-/// and neither clip has any to give, or when a map cannot be trimmed or
-/// carried on.
-pub fn dissolve(
-    clips: &[Clip],
-    outgoing: Uuid,
-    incoming: Uuid,
-    frames: i64,
-    frame: Rational,
-    room: (Option<Rational>, Option<Rational>),
-) -> Option<Vec<Clip>> {
-    let out = clips.iter().find(|c| c.id == outgoing)?;
-    let inc = clips.iter().find(|c| c.id == incoming)?;
-    let (start, end) = (inc.place_start, out.place_end());
-    if frames < 0
-        || frame <= Rational::ZERO
-        || out.place_start > start
-        || start > end
-        || end > inc.place_end()
-    {
-        return None;
-    }
-    // The whole steps in a length, and the length of that many steps.
-    let steps = |length: Rational| {
-        let count = length.checked_div(frame).ok()?;
-        Some(count.num().div_euclid(count.den()))
-    };
-    let span = |steps: i64| frame.checked_mul(Rational::new(steps, 1).ok()?).ok();
-    let overlap = steps(end.checked_sub(start).ok()?)?;
-    let point = end.checked_sub(span(overlap / 2)?).ok()?;
-
-    // How far each edge may go: to the other clip's far end, to a third
-    // clip, and as far as its own source runs.
-    let others = || {
-        clips
-            .iter()
-            .filter(|c| c.id != outgoing && c.id != incoming)
-    };
-    let later = others().map(|c| c.place_start).filter(|s| *s >= point);
-    let mut latest = later.chain([inc.place_end()]).min()?;
-    let earlier = others().map(Clip::place_end).filter(|e| *e <= point);
-    let mut earliest = earlier.chain([out.place_start]).max()?;
-    if let Some(room) = room.0 {
-        latest = latest.min(end.checked_add(room).ok()?);
-    }
-    if let Some(room) = room.1 {
-        earliest = earliest.max(start.checked_sub(room).ok()?);
-    }
-    let after = (frames / 2).min(steps(latest.checked_sub(point).ok()?)?);
-    let before = (frames - frames / 2).min(steps(point.checked_sub(earliest).ok()?)?);
-    if frames > 0 && after + before == 0 {
-        return None;
-    }
-    let new_end = point.checked_add(span(after)?).ok()?;
-    let new_start = point.checked_sub(span(before)?).ok()?;
-    let out = match new_end.cmp(&end) {
-        std::cmp::Ordering::Less => out.trim_end(new_end)?,
-        std::cmp::Ordering::Greater => out.extend_end(new_end)?,
-        std::cmp::Ordering::Equal => out.clone(),
-    };
-    let inc = match new_start.cmp(&start) {
-        std::cmp::Ordering::Less => inc.extend_start(new_start)?,
-        std::cmp::Ordering::Greater => inc.trim_start(new_start)?,
-        std::cmp::Ordering::Equal => inc.clone(),
-    };
-    Some(with(clips, &[out, inc]))
-}
-
 /// Slide a clip between its neighbours by `delta`, the editor's slide: the
 /// clip keeps its length and its frames, the clip that ends where it starts
 /// follows its head and the clip that starts where it ends follows its tail,
@@ -1591,7 +1539,12 @@ pub fn worn_at(layer: &Layer, lt: f64) -> Option<Layer> {
             gain,
             ..
         } => (
-            vec![(outgoing, 1.0 - gain), (incoming, gain)],
+            // A transition draws each clip on its own, each with its own stack.
+            if incoming.drawn_transition().is_some() {
+                Vec::new()
+            } else {
+                vec![(outgoing, 1.0 - gain), (incoming, gain)]
+            },
             if gain >= 0.5 { incoming } else { outgoing },
         ),
     };
@@ -1674,6 +1627,7 @@ fn lone_gain(clips: &[Clip], clip: &Clip, lt: f64) -> f64 {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    use super::transition::dissolve;
     use super::*;
 
     fn rat(n: i64, d: i64) -> Rational {

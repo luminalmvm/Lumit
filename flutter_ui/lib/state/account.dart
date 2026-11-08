@@ -17,7 +17,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:isolate';
 import 'dart:math';
 
@@ -26,6 +26,8 @@ import 'package:flutter/foundation.dart';
 
 import 'external_links.dart';
 import 'secret_store.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Where Lumit's own servers are. Read from the environment first so a
 /// development build can be pointed at a server on this machine.
@@ -278,7 +280,7 @@ class AccountState extends ChangeNotifier {
     return name.length > 60 ? name.substring(0, 60) : name;
   }
 
-  final HttpClient _http = HttpClient()
+  late final HttpClient _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 10)
     ..userAgent = 'Lumit';
 

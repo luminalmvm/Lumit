@@ -5,12 +5,12 @@
 // row-height maths.
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/timeline_snap.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
@@ -29,6 +29,7 @@ void main() {
         ),
         info: BridgeLayerInfo(
           pitchFollowsSpeed: false,
+          sends: const [],
           collapseForced: false,
           volumeDb: const BridgeScalar.static_(0),
           pan: const BridgeScalar.static_(0),
@@ -56,7 +57,7 @@ void main() {
           ),
           inFrame: 60,
           outFrame: 180,
-          clipFrames: Int64List.fromList([90]),
+          clipFrames: [90],
           clips: [
             BridgeClip(
               id: id,
@@ -80,12 +81,14 @@ void main() {
               sourceIn: const BridgeRational(num: 0, den: 1),
               sourceOut: const BridgeRational(num: 1, den: 1),
               sourceIsComp: false,
+              sourceIsSolid: false,
               source: id,
               opacity: 1,
               takes: const [],
             ),
           ],
           transform: BridgeTransform(
+            orient: BridgeOrient.off,
             anchorX: const BridgeScalar.static_(0),
             anchorY: const BridgeScalar.static_(0),
             positionX: const BridgeScalar.static_(0),
@@ -105,6 +108,7 @@ void main() {
           ),
           effects: const [],
           styles: const [],
+          drivers: const [],
           label: 0,
           masks: const [],
           paint: const [],

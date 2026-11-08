@@ -12,6 +12,7 @@ import '../l10n/strings.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart';
 import 'shape_entries.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
@@ -75,6 +76,11 @@ class RowValueDrag {
     return retime && channel.retime;
   }
 }
+
+/// The curves put away in the graph's list, by channel id. Lasts as long as
+/// Lumit is open, and the document never hears about it. Held here so it outlives
+/// the pane when the Timeline goes back to its layers.
+final ValueNotifier<Set<String>> hiddenCurves = ValueNotifier(const {});
 
 /// Which reading of the curve is on screen (docs/07 §5.1): the value, how
 /// fast it changes, or how fast that changes.
@@ -158,6 +164,10 @@ class GraphChannel {
   final ShapeValue? shapeValue;
   final int shapeStop;
 
+  /// Which channel of a Colour (r, g, b, a) or a Point (x, y) effect value
+  /// this is; `-1` for a value that is one number.
+  final int component;
+
   /// True for a mask's **shape**. A path has no value to plot, so what
   /// this channel carries is the interpolation parameter — counted up, one per
   /// key — and both lenses draw its *slope*: the rate the shape is changing
@@ -205,6 +215,7 @@ class GraphChannel {
     this.shapeModifier,
     this.shapeValue,
     this.shapeStop = 0,
+    this.component = -1,
   });
 
   /// The hard bounds the engine will clamp a written value to, where this
@@ -356,19 +367,63 @@ List<GraphChannel> graphChannels({
     // An effect's parameters, and a **layer style's** on the same road:
     // a style is an effect instance in a second list, so its curve is drawn,
     // edited and coloured by this branch rather than by a copy of it.
+    // A Node graph driver too: an instance in the layer's graph, read off
+    // the graph since the entry does not carry it, and written back through
+    // the same staged list ([commitChannelEdits]).
+    // A placed graph's Inputs too, whose one instance has no id in the path,
+    // a Model layer's materials, and its Animation and parts, the Animation's
+    // one instance having no id in the path either.
     final styles = path.startsWith('${stylesPath(layerId)}/');
-    if (styles || path.startsWith('${effectsPath(layerId)}/')) {
-      final head = styles ? stylesPath(layerId) : effectsPath(layerId);
+    final animation = path.startsWith('${modelAnimationPath(layerId)}/');
+    final parts = path.startsWith('${modelPartsPath(layerId)}/');
+    final inputs = path.startsWith('${inputsPath(layerId)}/');
+    final materials = path.startsWith('${materialsPath(layerId)}/');
+    final driver = path.startsWith('${driversPath(layerId)}/');
+    if (inputs ||
+        animation ||
+        parts ||
+        styles ||
+        materials ||
+        driver ||
+        path.startsWith('${effectsPath(layerId)}/')) {
+      final head = inputs
+          ? inputsPath(layerId)
+          : animation
+              ? modelAnimationPath(layerId)
+              : parts
+                  ? modelPartsPath(layerId)
+                  : materials
+                      ? materialsPath(layerId)
+                      : driver
+                          ? driversPath(layerId)
+                          : styles
+                              ? stylesPath(layerId)
+                              : effectsPath(layerId);
+      final single = inputs || animation;
       final rest = path.substring(head.length + 1);
-      final slash = rest.indexOf('/');
-      if (slash <= 0) continue;
-      final effectId = rest.substring(0, slash);
+      final slash = single ? -1 : rest.indexOf('/');
+      if (!single && slash <= 0) continue;
+      final model = entry.info.modelRows;
+      final graphInputs = animation ? model?.playback : entry.info.graphInputs;
+      final effectId =
+          single ? '${graphInputs?.id}' : rest.substring(0, slash);
       final paramId = rest.substring(slash + 1);
-      for (final fx in styles ? entry.info.styles : entry.info.effects) {
+      final part = parts && model != null ? modelRowsById(model, effectId) : null;
+      for (final fx in single
+          ? [if (graphInputs != null) graphInputs]
+          : parts
+              ? [if (part != null) part]
+              : materials
+                  ? entry.info.materials ?? const <BridgeEffectInstanceInfo>[]
+              : driver
+                  ? entry.info.drivers
+              : styles
+                  ? entry.info.styles
+                  : entry.info.effects) {
         if (fx.id.toString() != effectId) continue;
         // The rows an instance derives are rows like any other: a Custom
         // controls slider is keyed and eased as a declared one is.
-        final rows = [...cachedListParameters(fx.name), ...fx.derivedParams];
+        final rows = instanceParameters(fx);
         // A chained pair is one curve, as a layer's linked Scale is. Either
         // half's row resolves to the x half, which is drawn and edited, and
         // the y half follows every write ([withLinkedPartners]).
@@ -382,7 +437,11 @@ List<GraphChannel> graphChannels({
             if (row.id == pair.y) linkedParam = row;
           }
         }
-        final channelId = leadId == paramId ? path : '$head/$effectId/$leadId';
+        final channelId = leadId == paramId
+            ? path
+            : single
+                ? '$head/$leadId'
+                : '$head/$effectId/$leadId';
         if (out.any((c) => c.id == channelId)) continue;
         for (final param in rows) {
           if (param.id != leadId) continue;
@@ -391,17 +450,50 @@ List<GraphChannel> graphChannels({
           // keyed is a curve (docs/08 §1.2). So the test is on the value, not
           // the kind. Naming kinds here dropped Slider once and Angle after it.
           BridgeScalar? scalar;
+          List<BridgeScalar>? parts;
           for (final v in fx.values) {
-            if (v.id == param.id && v.value is BridgeEffectValue_Float) {
-              scalar = (v.value as BridgeEffectValue_Float).field0;
+            if (v.id != param.id) continue;
+            switch (v.value) {
+              case BridgeEffectValue_Float(:final field0):
+                scalar = field0;
+              case BridgeEffectValue_Colour(:final field0):
+                parts = [field0.r, field0.g, field0.b, field0.a];
+              case BridgeEffectValue_Point(:final field0):
+                parts = [field0.x, field0.y];
+              default:
+                break;
             }
+          }
+          // A Colour or a Point: one curve per channel, as a two-axis
+          // transform row has one per axis.
+          if (parts != null) {
+            final names = parts.length == 4
+                ? const ['R', 'G', 'B', 'A']
+                : const ['X', 'Y'];
+            for (var i = 0; i < parts.length; i++) {
+              out.add(GraphChannel(
+                path: path,
+                id: '$channelId#$i',
+                label: '${entry.info.name} · ${effectLabelOf(fx.name)} · '
+                    '${param.label} ${names[i]}',
+                colourIndex: out.length,
+                scalar: parts[i],
+                entry: entry,
+                rowKeys: rowKeysOf(parts),
+                effect: fx,
+                param: param,
+                component: i,
+              ));
+            }
+            continue;
           }
           if (scalar == null) continue;
           out.add(GraphChannel(
             path: path,
             id: channelId,
-            label:
-                '${entry.info.name} · ${effectLabelOf(fx.name)} · ${param.label}',
+            label: '${entry.info.name} · '
+                '${inputs ? l10n.foldInputs : effectLabelOf(fx.name)} · '
+                '${param.label}',
             colourIndex: out.length,
             scalar: scalar,
             entry: entry,

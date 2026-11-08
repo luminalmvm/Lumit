@@ -3,13 +3,26 @@
 // cannot open in a widget test, so tests supply their own stubs and never touch
 // a plugin channel; this file is only ever exercised in the running app.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 
 import '../theme/theme_file.dart' show themeFileExtension;
+import '../theme/style_sheet.dart' show styleFileExtension;
+import 'app_state.dart' show LumitState;
 import 'workspace.dart' show workspaceFileExtension;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
+import 'files.dart' if (dart.library.js_interop) 'files_web.dart';
+
+// A picked file is reached through these: in the browser build it is put
+// where the engine can open it, and a saved project is handed to the person.
+export 'files.dart' if (dart.library.js_interop) 'files_web.dart'
+    show handOver, importsHere;
 
 /// The `.lum` project type group (docs/10 §1). The egui open filter also lists
 /// the pre-rename `kir` leftover; a fresh frontend only ever offers `.lum`.
@@ -38,10 +51,15 @@ const List<String> footageExtensions = [
   // Stills, mirroring the engine's STILL_EXTENSIONS
   'png', 'jpg', 'jpeg', 'tif', 'tiff', 'exr', 'tga', 'targa', 'dpx', 'bmp',
   'webp', 'ppm', 'pgm', 'pnm', 'pbm',
+  // FFmpeg reads HDR panoramas, and the browser has none.
+  if (!kIsWeb) 'hdr',
   // Layered documents, which import as a composition of their layers
   'psd', 'ai',
   // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
+  // 3D models, and the ones the user's Blender converts
+  'gltf', 'glb', 'fbx', 'obj', 'vdb', 'blend', 'usd', 'usdz', 'usdc', 'usda', 'abc',
+  'ply', 'stl', 'dae',
 ];
 /// The footage type group.
 XTypeGroup _footageGroup() =>
@@ -55,13 +73,51 @@ XTypeGroup _anyGroup() => XTypeGroup(label: l10n.fileTypeAllFiles);
 /// Pick one project file to open, or null when the dialogue was cancelled.
 Future<String?> pickProjectToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_projectGroup()]);
-  return file?.path;
+  return file == null ? null : keepPicked(file);
+}
+
+/// [path] as it is, or picked again where the browser build no longer has
+/// it. Null when that was cancelled. The video and sound it uses are opened
+/// again where the browser allows, and [app] offers to ask for the rest.
+Future<String?> pickIfGone(String path, LumitState app) async {
+  final picked = File(path).existsSync() ? path : await pickProjectToOpen();
+  final asking = picked == null ? 0 : await reopenFootage(picked);
+  if (asking > 0) {
+    app.postNotice(l10n.webFilesAskAgain(asking),
+        action: l10n.webAllowAccess, onTap: () => _allowFootage(app));
+  }
+  return picked;
+}
+
+/// Ask for the files [reopenFootage] couldn't open, and point the footage
+/// that came back at itself again, so the engine reads it.
+Future<void> _allowFootage(LumitState app) async {
+  final back = (await allowFootage()).toSet();
+  for (final footage in _footageIn(app.project?.getItems() ?? const [])) {
+    try {
+      final path = footage.filePath();
+      if (back.contains(path)) footage.relink(path: path);
+    } catch (_) {
+      // Gone with its project. Nothing to point.
+    }
+  }
+  app.notifyDocumentChanged();
+}
+
+Iterable<FootageReference> _footageIn(List<ItemReference> items) sync* {
+  for (final item in items) {
+    if (item case ItemReference_Footage(:final field0)) yield field0;
+    if (item case ItemReference_Folder(:final field0)) {
+      yield* _footageIn(field0.getChildren());
+    }
+  }
 }
 
 /// Choose where to save a project, defaulting the name to `untitled.lum` (as
 /// the egui Save dialogue does), or null when cancelled.
 Future<String?> pickProjectSaveLocation(
     {String suggestedName = 'untitled.lum', String? initialDirectory}) async {
+  if (kIsWeb) return pickSaveTarget(suggestedName);
   final location = await getSaveLocation(
     acceptedTypeGroups: [_projectGroup()],
     suggestedName: suggestedName,
@@ -74,6 +130,9 @@ Future<String?> pickProjectSaveLocation(
 /// [projects] a Lumit project is offered too, which an import brings one
 /// composition in from.
 Future<List<String>> pickFootage({bool projects = false}) async {
+  final here = await pickFilesHere(
+      l10n.fileTypeFootage, [...footageExtensions, if (projects) 'lum']);
+  if (here != null) return here;
   final files = await openFiles(
     acceptedTypeGroups: [
       _footageGroup(),
@@ -81,7 +140,16 @@ Future<List<String>> pickFootage({bool projects = false}) async {
       _anyGroup(),
     ],
   );
-  return [for (final f in files) f.path];
+  return droppedPaths(files);
+}
+
+/// Where each of [files] is, picked or dropped, for the engine to open.
+Future<List<String>> droppedPaths(List<XFile> files) async {
+  final paths = <String>[];
+  for (final file in files) {
+    paths.add(await keepPicked(file));
+  }
+  return paths;
 }
 
 /// Choose where to save an exported video, defaulting the name to the
@@ -140,6 +208,19 @@ Future<String?> pickFlareSaveLocation(String suggestedName) async {
   return '$path.flare';
 }
 
+/// Where to write a frame as a picture, or null when cancelled.
+Future<String?> pickFrameSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: 'PNG', extensions: const ['png']),
+    ],
+    suggestedName: '$suggestedName.png',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.png')) return path;
+  return '$path.png';
+}
+
 /// Pick a file of easing shapes to import, or null when cancelled.
 Future<String?> pickEasingsToOpen() async =>
     (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;
@@ -188,6 +269,9 @@ Future<String?> pickScript() async {
   return file?.path;
 }
 
+/// Pick a program, or null when cancelled.
+Future<String?> pickProgram() async => (await openFile())?.path;
+
 /// Pick one `.wgsl` shader to load, or null when cancelled.
 Future<String?> pickShaderToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_shaderGroup()]);
@@ -198,9 +282,14 @@ Future<String?> pickShaderToOpen() async {
 /// [suggestedName] and the folder to [initialDirectory] (the preset library,
 /// so a plain save lands where the browser lists), or null when cancelled.
 Future<String?> pickPresetSaveLocation(String suggestedName,
-    {String? initialDirectory}) async {
+    {String? initialDirectory, bool material = false}) async {
   final location = await getSaveLocation(
-    acceptedTypeGroups: [_presetGroup()],
+    acceptedTypeGroups: [
+      material
+          ? XTypeGroup(
+              label: l10n.fileTypeMaterialPreset, extensions: const ['lummat'])
+          : _presetGroup()
+    ],
     suggestedName: suggestedName,
     initialDirectory: initialDirectory,
   );
@@ -359,6 +448,35 @@ XTypeGroup _addonGroup() =>
 Future<String?> pickAddonManifest() async {
   final file = await openFile(acceptedTypeGroups: [_addonGroup()]);
   return file?.path;
+}
+
+/// A style, as a file or its folder packed into one. A zip is offered too,
+/// since that is how a folder is often sent.
+XTypeGroup _styleGroup() => XTypeGroup(
+    label: l10n.fileTypeStyle, extensions: const [styleFileExtension, 'zip']);
+
+/// Pick a style to take in, or null when cancelled.
+Future<String?> pickStyleToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_styleGroup()]);
+  return file?.path;
+}
+
+/// Choose where to save a style's package, named [suggestedName] to begin
+/// with, or null when cancelled.
+Future<String?> pickStylePackageSaveLocation(String suggestedName) async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(
+          label: l10n.fileTypeStyle, extensions: const [styleFileExtension]),
+    ],
+    suggestedName: suggestedName,
+  );
+  final path = location?.path;
+  if (path == null) return null;
+  // The Windows dialogue hands back a typed name as it is.
+  return path.toLowerCase().endsWith('.$styleFileExtension')
+      ? path
+      : '$path.$styleFileExtension';
 }
 
 /// An extension packed as one file.

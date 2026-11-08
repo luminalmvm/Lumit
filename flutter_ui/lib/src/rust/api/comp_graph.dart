@@ -26,7 +26,7 @@ class BridgeBoxSource {
   /// `None` where the file will not read: it is offline, or carries no
   /// video. Footage is wired in either way, which is what the caller needs
   /// to tell that from a box with nothing behind it.
-  final PlatformInt64? frame;
+  final int? frame;
 
   /// The file's own picture size, in pixels. Nought where it will not read.
   final int width;
@@ -241,14 +241,18 @@ class BridgeCompNodePosition {
   final double x;
   final double y;
 
+  /// The width an edge drag gave the box; none keeps the panel's own.
+  final double? width;
+
   const BridgeCompNodePosition({
     required this.node,
     required this.x,
     required this.y,
+    this.width,
   });
 
   @override
-  int get hashCode => node.hashCode ^ x.hashCode ^ y.hashCode;
+  int get hashCode => node.hashCode ^ x.hashCode ^ y.hashCode ^ width.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -257,7 +261,8 @@ class BridgeCompNodePosition {
           runtimeType == other.runtimeType &&
           node == other.node &&
           x == other.x &&
-          y == other.y;
+          y == other.y &&
+          width == other.width;
 }
 
 /// A Repeat start, the end it pairs with, and the boxes between them.

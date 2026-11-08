@@ -300,7 +300,7 @@ void main() {
       final edges = p.graph.getNodeGraph().wiring.edges;
       expect(edges, hasLength(1));
       expect(edges.single.toPort, 'radius');
-      expect(p.graph.documentRevision(), twirled + BigInt.one,
+      expect(p.graph.documentRevision(), twirled + 1,
           reason: 'one gesture, one op');
     });
 
@@ -409,6 +409,13 @@ void main() {
       return Offset(p.x, p.y);
     }
 
+    /// How far the canvas moved its boxes to centre them as it opened: where
+    /// [box]'s card is drawn against where the document has it.
+    Offset panOf(WidgetTester tester, CompositionReference graph, UuidValue box) =>
+        tester.getTopLeft(card(box)) -
+        tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas'))) -
+        placeOf(graph, box);
+
     bool picked(WidgetTester tester, UuidValue id, {int at = 0}) => tester
         .widgetList<GraphNodeCard>(find.byWidgetPredicate(
             (w) => w is GraphNodeCard && w.box.key == compNodeKey(id)))
@@ -417,105 +424,83 @@ void main() {
 
     Finder twirl(UuidValue node) =>
         find.byKey(ValueKey<String>('graph-twirl-node:$node'));
-    Finder rowOn(UuidValue node, String param) =>
-        find.byKey(ValueKey<String>('graph-row-node:$node-$param'));
-    Finder fieldOn(UuidValue node, String param) => find.descendant(
-        of: card(node),
-        matching: find.byKey(ValueKey<String>('fx-float-$node-$param')));
-    double radiusOf(CompositionReference graph, UuidValue blur) {
-      final values = graph
-          .getNodeGraphInstances()
-          .firstWhere((i) => i.id() == blur)
-          .getInfo()
-          .values;
-      final value =
-          values.where((v) => v.id == 'radius').map((v) => v.value).single;
-      return stillValue((value as BridgeEffectValue_Float).field0);
-    }
-
-    testWidgets("a row's control edits the parameter in one op, undone in one",
+    /// The rows on a box only read, so the picked box is edited in the Node
+    /// panel. Backspace typed into its well is the well's, not the canvas's
+    /// Delete, which would take the box with it.
+    testWidgets("a Node panel row edits its box in one op, undone in one",
         (tester) async {
       final p = withGraph();
       final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
       p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(blur));
+      await mount(
+        tester,
+        p,
+        child: const Row(children: [
+          SizedBox(width: 600, child: GraphPanelFrb()),
+          Expanded(child: NodePanelFrb()),
+        ]),
+      );
+      await tester.tapAt(tester.getCenter(card(blur)));
       await tester.pump();
 
+      double radius() {
+        final values = p.graph
+            .getNodeGraphInstances()
+            .firstWhere((i) => i.id() == blur)
+            .getInfo()
+            .values;
+        final value =
+            values.where((v) => v.id == 'radius').map((v) => v.value).single;
+        return stillValue((value as BridgeEffectValue_Float).field0);
+      }
+
       final was = p.graph.documentRevision();
-      final field = fieldOn(blur, 'radius');
+      final field = find.byKey(ValueKey<String>('fx-float-$blur-radius'));
+      final typing =
+          find.descendant(of: field, matching: find.byType(EditableText));
       await tester.tap(field);
       await tester.pump();
-      await tester.enterText(
-          find.descendant(of: field, matching: find.byType(EditableText)),
-          '12');
+      await tester.enterText(typing, '12');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
-      expect(radiusOf(p.graph, blur), closeTo(12, 0.001));
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(radius(), closeTo(12, 0.001));
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
 
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pump();
-      expect(radiusOf(p.graph, blur), closeTo(30, 0.001),
-          reason: 'one undo step');
+      expect(radius(), closeTo(30, 0.001), reason: 'one undo step');
 
-      // Backspace typed into the well is the well's, not the canvas's Delete.
-      await tester.tap(fieldOn(blur, 'radius'));
+      await tester.tap(field);
       await tester.pump();
+      expect(typing, findsOneWidget, reason: 'the key goes to the well');
       await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
       await tester.pump();
       expect(card(blur), findsOneWidget);
     });
 
-    testWidgets('a drag on a box control commits once and moves the box nowhere',
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(blur));
-      await tester.pump();
-
-      final was = p.graph.documentRevision();
-      final drag =
-          await tester.startGesture(tester.getCenter(fieldOn(blur, 'radius')));
-      for (var i = 0; i < 8; i++) {
-        await drag.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await drag.up();
-      await tester.pump();
-
-      expect(p.graph.documentRevision(), was + BigInt.one,
-          reason: 'one drag, one op');
-      expect(radiusOf(p.graph, blur), isNot(closeTo(30, 0.001)));
-      expect(placeOf(p.graph, blur), const Offset(60, 40),
-          reason: 'the value moved, the box did not');
-    });
-
     // --- A box lists what the Effect controls panel lists. The rows are
     // derived by that panel's own rules, so a box and the panel can never
-    // disagree about what an effect is showing.
+    // disagree about what an effect is showing. The rows read; the Node
+    // panel's rows edit.
 
-    /// The Node graph box's one Action. It drew a button that did nothing;
-    /// it is the canvas's own way in (§4.2).
-    testWidgets("a Node graph box's Open graph action goes in", (tester) async {
+    /// The Node graph box's way in, on its menu, where a double-click also
+    /// goes (§4.2).
+    testWidgets("a Node graph box's Open graph row goes in", (tester) async {
       final p = withGraph();
       final inner = p.state.project!.newNodeGraph(name: 'Inner');
       final nested =
           seedFx(p.graph, 'node_graph', const Offset(60, 40), bound: inner);
       p.uiState.model.refresh();
       await mount(tester, p);
-      await tester.tap(twirl(nested));
-      await tester.pump();
 
-      await tester.tap(find.descendant(
-          of: rowOn(nested, 'open'),
-          matching: find.byKey(ValueKey<String>('fx-action-$nested-open'))));
-      await tester.pump();
+      await tester.tapAt(tester.getCenter(card(nested)),
+          buttons: kSecondaryMouseButton, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('graph-menu-enter')));
+      await tester.pumpAndSettle();
       expect(p.uiState.selectedComp?.internalid, inner.internalid,
-          reason: 'the button opens the graph the box applies');
+          reason: 'the row opens the graph the box applies');
     });
 
     /// Type [source] into the shader editor that [edit] opens, and apply it.
@@ -540,26 +525,29 @@ void main() {
         '    return lumit_sample(uv);\n'
         '}\n';
 
-    /// A Custom shader box drew Edit shader and did nothing when it was
-    /// pressed. It opens the editor, and Apply is one op on the graph.
+    /// A picked Custom shader box's Edit shader, on the Node panel's row,
+    /// opens the editor, and Apply is one op on the graph.
     testWidgets("a Custom shader box's Edit shader applies to the graph",
         (tester) async {
       final p = withGraph();
       final box = seedFx(p.graph, 'custom_shader', const Offset(60, 40));
       p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(box));
+      await mount(
+        tester,
+        p,
+        child: const Row(children: [
+          SizedBox(width: 600, child: GraphPanelFrb()),
+          Expanded(child: NodePanelFrb()),
+        ]),
+      );
+      await tester.tapAt(tester.getCenter(card(box)));
       await tester.pump();
 
       final was = p.graph.documentRevision();
-      await editShader(
-          tester,
-          find.descendant(
-              of: rowOn(box, 'edit'),
-              matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))),
-          shader);
+      await editShader(tester,
+          find.byKey(ValueKey<String>('fx-action-$box-edit')), shader);
       expect(shaderOn(p.graph, box), shader);
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
     });
 
     testWidgets("a double-click opens a Custom shader box's inner graph",
@@ -598,7 +586,7 @@ void main() {
           .tap(find.byKey(const ValueKey<String>('fx-console-item-UV')));
       await tester.pump();
       expect(inner(), contains('"uv"'));
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
 
       p.state.project!.undo();
       p.uiState.model.refresh();
@@ -893,7 +881,9 @@ void main() {
           .id;
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
-      expect(placeOf(p.graph, added), from + const Offset(400, 300) - canvas,
+      expect(
+          placeOf(p.graph, added),
+          from + const Offset(400, 300) - canvas - panOf(tester, p.graph, read),
           reason: 'the box sits where it was let go');
       expect(
           p.graph
@@ -903,7 +893,7 @@ void main() {
               .where((e) => e.from == read && e.to == added),
           hasLength(1),
           reason: 'Auto-wire put it after the picked box, as the console does');
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
     });
 
     testWidgets('a right-click, Tab and Shift+A each open the console',
@@ -914,14 +904,18 @@ void main() {
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
       final boxes = p.graph.getNodeGraph().nodes.length;
+      final pan = panOf(tester, p.graph, p.graph.getNodeGraph().wiring.output);
 
-      // A right-click on empty ground, the box landing under it.
+      // A right-click on empty ground opens the canvas menu, whose first
+      // row is the search, and the box lands under the click.
       const click = Offset(300, 200);
       await tester.tapAt(canvas + click, buttons: kSecondaryMouseButton);
       await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('graph-menu-add-node')));
+      await tester.pump();
       await pickExposure(tester);
       expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 1));
-      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), click);
+      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), click - pan);
 
       // Tab with the canvas focused, the box landing at the pointer.
       await tester.tapAt(canvas + const Offset(600, 450));
@@ -932,7 +926,8 @@ void main() {
       await tester.pump();
       await pickExposure(tester);
       expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 2));
-      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), pointer);
+      expect(
+          placeOf(p.graph, p.uiState.compGraphNode.value!.id), pointer - pan);
 
       // Shift+A, Blender's add key.
       await tester.tapAt(canvas + const Offset(600, 450));
@@ -979,6 +974,7 @@ void main() {
 
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
+      final pan = panOf(tester, p.graph, blur);
       lastKnownPointerPosition = canvas + const Offset(100, 300);
       final was = p.graph.documentRevision();
       expect(await pasteSelectionFrb(p.state, p.uiState, p.graph, null), isTrue);
@@ -987,7 +983,7 @@ void main() {
       final after = p.graph.getNodeGraph();
       expect(after.nodes, hasLength(before.nodes.length + 2),
           reason: 'two boxes, and no second Output');
-      expect(p.graph.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
       final fresh = [
         for (final n in after.nodes)
           if (!before.nodes.any((b) => b.id == n.id)) n.id,
@@ -999,7 +995,7 @@ void main() {
           hasLength(1),
           reason: 'the wire between them came along');
       expect(after.wiring.groups, isEmpty, reason: 'a paste is not a group');
-      expect(placeOf(p.graph, fresh.first), const Offset(100, 300),
+      expect(placeOf(p.graph, fresh.first), const Offset(100, 300) - pan,
           reason: 'the copied corner lands at the pointer');
       expect(placeOf(p.graph, blur), const Offset(40, 40),
           reason: 'the originals are untouched');

@@ -13,6 +13,8 @@ publish = false
 lumit-budget = { path = "../lumit-budget" }
 # The checked size of a texture before it is charged.
 lumit-ingress = { path = "../lumit-ingress" }
+# A 3D model as plain data, which the mesh pass draws.
+lumit-scene = { path = "../lumit-scene" }
 # `min_const_generics` is what makes Pod/Zeroable reach an array of any length -
 # the curve uniform is 325 vec4s. Another crate's feature union was providing it
 # on Windows and Linux and not on macOS, where the build stopped; it is asked
@@ -63,6 +65,7 @@ naga = { version = "24", features = ["wgsl-in"] }
 # selector metal-rs does not wrap and `core-foundation` for the IOSurface
 # property dictionary. The Metal interop is additionally
 # `cfg(target_os = "macos")`-gated, so enabling the feature off macOS is inert.
+web-time = "1"
 [features]
 # The shared test device and engines (src/test_support.rs), for downstream
 # crates' tests. Test-only by construction: no shipped path enables it.
@@ -104,11 +107,21 @@ metal = { version = "0.31", optional = true }
 objc = { version = "0.2", optional = true }
 core-foundation = { version = "0.9", optional = true }
 
+# The browser build runs on the page's one thread, where wgpu's types are
+# only Send and Sync with this switched on.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wgpu = { version = "24", features = ["fragile-send-sync-non-atomic-wasm"] }
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["ImageBitmap", "OffscreenCanvas"] }
+
 [dev-dependencies]
 # The crate itself, with the shared-device fixture on, so the integration
 # tests under tests/ borrow one device and one set of compiled engines the
 # way the unit tests do (src/test_support.rs).
 lumit-gpu = { path = ".", features = ["test-fixtures"] }
+# The models the mesh pass is tried on.
+lumit-scene = { path = "../lumit-scene", features = ["test-fixtures"] }
 # The CPU oracle the WGSL kernels are held to (docs/08 §1.6).
 lumit-core = { path = "../lumit-core" }
 # The walking-skeleton proof that the eval executor drives these kernels

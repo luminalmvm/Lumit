@@ -288,6 +288,26 @@ impl DocumentStore {
         self.revision.load(std::sync::atomic::Ordering::Acquire)
     }
 
+    /// The current snapshot with the [`revision`](Self::revision) it is
+    /// filed under, never an older document than that number.
+    ///
+    /// A snapshot is stored before its number moves on, so reading the
+    /// snapshot and then the number could pair the document before an edit
+    /// with the number after it: whatever was named from that pair (the
+    /// frame names the bridge keeps per revision) then stood for the new
+    /// revision, and the Viewer kept an old picture until the next edit.
+    /// Read the number first and take the snapshot after it; if the number
+    /// moved meanwhile, take both again.
+    pub fn snapshot_and_revision(&self) -> (Arc<Document>, u64) {
+        loop {
+            let before = self.revision();
+            let doc = self.snapshot();
+            if self.revision() == before {
+                return (doc, before);
+            }
+        }
+    }
+
     /// A snapshot is about to be published: move the number on.
     fn bump_revision(&self) {
         self.revision
@@ -1090,113 +1110,9 @@ impl DocumentStore {
         self.bump_revision();
         (merge.conflicts, merge.refused, before)
     }
-
-    /// The retained undo ops, oldest first (at most [`MAX_UNDO_DEPTH`] after
-    /// compaction). Crash recovery does not read this — lumit-project appends
-    /// each op to an on-disk journal as it is committed — so the cap dropping
-    /// old entries here never loses a recoverable edit.
-    pub fn journal_ops(&self) -> Vec<Op> {
-        self.journal
-            .lock()
-            .undo
-            .iter()
-            .map(|e| e.op.clone())
-            .collect()
-    }
-
-    /// The whole road, oldest first: every step that has been applied, then
-    /// every step that has been undone and is waiting to be redone.
-    ///
-    /// # In plain terms
-    ///
-    /// Undo and redo walk this list one step at a time; this is the list
-    /// itself, so the History panel can show it and jump to a point on it. The
-    /// steps still applied come first, in the order they happened; the ones
-    /// undone follow, in the order redoing would put them back. Where those two
-    /// halves meet is where the document currently stands, which is exactly
-    /// [`Self::applied_steps`].
-    ///
-    /// The redo stack is walked backwards because it is a stack: its last entry
-    /// is the one an immediate redo would take.
-    #[must_use]
-    pub fn history(&self) -> Vec<HistoryEntry> {
-        let journal = self.journal.lock();
-        journal
-            .undo
-            .iter()
-            .map(|e| HistoryEntry {
-                name: e.name.clone(),
-                undone: false,
-            })
-            .chain(journal.redo.iter().rev().map(|e| HistoryEntry {
-                name: e.name.clone(),
-                undone: true,
-            }))
-            .collect()
-    }
-
-    /// How many of [`Self::history`]'s steps are applied — where the document
-    /// stands on the road.
-    #[must_use]
-    pub fn applied_steps(&self) -> usize {
-        self.journal.lock().undo.len()
-    }
-
-    /// Move the document to the point on [`Self::history`] where exactly
-    /// `applied` steps have been applied: 0 is as far back as the history
-    /// reaches, and `history().len()` is everything redone.
-    ///
-    /// One press of Ctrl-Z at a time, in a loop — a jump *is* undoing or
-    /// redoing several times, and going through the same two methods means a
-    /// jump cannot reach a state a run of key presses could not. An `applied`
-    /// past either end simply stops at that end.
-    ///
-    /// Each step publishes its own snapshot and tells the observer, so a panel
-    /// watching the document sees the same run of changes it would have seen
-    /// from the keyboard. That is deliberate; if a leap across hundreds of
-    /// steps ever costs too much, the fix is to hold the notification back
-    /// until the last one rather than to stop going through undo/redo.
-    pub fn jump_to(&self, applied: usize) -> Result<(), OpError> {
-        while self.applied_steps() > applied {
-            if self.undo()?.is_none() {
-                break;
-            }
-        }
-        while self.applied_steps() < applied {
-            if self.redo()?.is_none() {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    /// Call the step the open undo group folds into `name` in the History
-    /// list, as a script's run is called after the script rather than after
-    /// the first thing it did. Does nothing when no group is open.
-    pub fn name_undo_group(&self, name: impl Into<Cow<'static, str>>) {
-        let mut journal = self.journal.lock();
-        if journal.group.is_some() {
-            journal.group_name = Some(name.into());
-        }
-    }
-
-    /// What the open undo group will be called in the History list: the name
-    /// it was given, or else the first thing done in it. `None` when no group
-    /// is open or nothing has been done in it yet.
-    pub fn undo_group_name(&self) -> Option<Cow<'static, str>> {
-        let journal = self.journal.lock();
-        let first = journal.group.as_ref()?.first().map(|e| e.name.clone());
-        journal.group_name.clone().or(first)
-    }
-
-    pub fn can_undo(&self) -> bool {
-        !self.journal.lock().undo.is_empty()
-    }
-
-    pub fn can_redo(&self) -> bool {
-        !self.journal.lock().redo.is_empty()
-    }
 }
+
+mod history;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -1550,6 +1466,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -1781,6 +1698,27 @@ mod tests {
         assert_eq!(store.snapshot().items.len(), 2);
     }
 
+    /// The paired read gives the published snapshot with its number, edit
+    /// after edit, and never a document from before the number it carries:
+    /// a reader racing a commit sees at worst the newer document with the
+    /// older number, which the next number clears. Guards a frame named from
+    /// the document before an edit and kept for the revision after it.
+    #[test]
+    fn snapshot_and_revision_pairs_the_snapshot_with_its_number() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, _) = scripted_ops(&store.snapshot());
+        for op in ops {
+            store.commit(op).unwrap();
+            let (doc, revision) = store.snapshot_and_revision();
+            assert_eq!(revision, store.revision());
+            assert!(std::sync::Arc::ptr_eq(&doc, &store.snapshot()));
+        }
+        store.undo().unwrap();
+        let (doc, revision) = store.snapshot_and_revision();
+        assert_eq!(revision, store.revision());
+        assert!(std::sync::Arc::ptr_eq(&doc, &store.snapshot()));
+    }
+
     #[test]
     fn commit_clears_redo() {
         let store = DocumentStore::new(Document::new());
@@ -1957,6 +1895,7 @@ mod tests {
                     audio_streams: Default::default(),
                     adjustment: false,
                     pitch_follows_speed: false,
+                    audio_routes: Default::default(),
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
@@ -2098,6 +2037,7 @@ mod tests {
                     audio_streams: Default::default(),
                     adjustment: false,
                     pitch_follows_speed: false,
+                    audio_routes: Default::default(),
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
@@ -2362,6 +2302,33 @@ mod tests {
         assert_eq!(vol(&store), -12.0);
         store.undo().unwrap();
         assert_eq!(vol(&store), 0.0, "default volume is unity (0 dB)");
+
+        // Routing is one value, so undo puts the whole of it back.
+        let routes = |s: &DocumentStore| {
+            s.snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer_id)
+                .unwrap()
+                .audio_routes
+                .clone()
+        };
+        let routed = crate::routes::AudioRoutes {
+            output: Some(Uuid::now_v7()),
+            sends: Vec::new(),
+        };
+        store
+            .commit(Op::SetLayerRoutes {
+                comp: comp_id,
+                layer: layer_id,
+                routes: routed.clone(),
+            })
+            .unwrap();
+        assert_eq!(routes(&store), routed);
+        store.undo().unwrap();
+        assert!(routes(&store).is_master());
 
         // The master fader (docs/09 §3.1) is comp state and round-trips
         // the same way — one op, one undo step, back to unity.
@@ -2637,8 +2604,10 @@ mod tests {
         let wiggle = crate::fx::builtins::instantiate("wiggle").expect("the catalogue knows it");
         let wiggle_id = wiggle.id;
         let wired = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![Edge {
@@ -3065,6 +3034,11 @@ mod tests {
             c.markers[0].time,
             t(2, 1),
             "markers travel with the picture"
+        );
+        assert_eq!(
+            c.start_timecode(),
+            t(2, 1),
+            "the clock still reads what it read: the first frame is 2 s"
         );
 
         store.undo().unwrap();

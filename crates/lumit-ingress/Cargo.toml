@@ -14,5 +14,9 @@ publish = false
 # here is a dependency added to all of them.
 thiserror = "2"
 
+# The browser build's clock, for when a file in its store was written.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"
+
 [lints]
 workspace = true

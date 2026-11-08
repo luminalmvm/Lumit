@@ -1,10 +1,9 @@
 // The Project panel, built to the approved redesign mockup.
 //
 // **In plain terms**: this is the shelf the project's things live on. Top to
-// bottom the mockup lays it out as a preview card for whatever is picked, a
-// search well, a row of column headings, the tree of items, a thin horizontal
-// scrollbar, and a bottom bar carrying the new-item controls at the left and a
-// factual count at the right.
+// bottom: a search well, a row of column headings, the tree of items, a preview
+// card while one thing is picked, and a bottom bar carrying the new-item controls
+// at the left and a factual count at the right.
 //
 // **Where the panel's parts live.** This file is the panel itself — the walk
 // of the document, the caches that walk fills, the selection, and the
@@ -24,7 +23,8 @@
 // rows drag onto the Timeline (a comp lands as a Precomp layer);
 // double-clicking empty space imports, and files dragged in from the OS file
 // manager import the same way — the panel lights up while they hover.
-// Missing footage wears the mockup's
+// A right-click anywhere brings up what can be done there: on a row, on the
+// blank ground and on the headings. Missing footage wears the mockup's
 // `missing` badge, and that badge *is* the relink control — clicking it opens
 // the file picker, which is where the old inline "Relink…" button's job went.
 // The "show only missing" filter moved onto the bottom bar's count, which
@@ -43,14 +43,20 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/styles.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -58,27 +64,30 @@ import 'package:lumit_flutter/src/rust/api/share.dart' show BridgeFootageHere;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../shell/interpret_footage_frb.dart';
 import '../shell/menu_bar_frb.dart' show importFootageFrb;
 import '../shell/run_script_frb.dart' show isScriptFile, runDroppedScripts;
 import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
+import '../state/workspace.dart' show Workspace;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'project_chrome_frb.dart';
 import 'project_columns_frb.dart';
-import 'project_menu_frb.dart'
-    show deleteProjectItems, duplicateProjectItems, eachInOneUndo;
+import 'project_menu_frb.dart';
 import 'project_row_frb.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 export 'project_chrome_frb.dart';
 export 'project_columns_frb.dart';
 export 'project_row_frb.dart';
 
 /// The longer edge the preview card's thumbnail is decoded at: the card draws
-/// it 96 logical px wide, so ~2× for crispness on a high-DPI display.
-const int _thumbMaxEdge = 224;
+/// it 128 logical px wide, so 2× for crispness on a high-DPI display.
+const int _thumbMaxEdge = 256;
 
 /// Put what the OS file manager dropped on the Project panel down the road it
 /// belongs on, and say whether anything was imported.
@@ -143,11 +152,16 @@ Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
     switch (_extensionOf(path)) {
       case 'lum':
         isProject = true;
+      // A zipped style folder is the window's to take in.
+      case 'zip' when styleReadPackage(path: path) is BridgeStyleOutcome_Ready:
+        break;
       case 'aep':
       case 'zip':
         isAe = true;
-      // An extension package, which the window offers to install.
+      // An extension package, which the window offers to install, and a
+      // style, which it takes in.
       case 'lfx':
+      case 'lumstyle':
         break;
       default:
         media.add(path);
@@ -180,7 +194,8 @@ class ProjectPanelFrb extends StatefulWidget {
   State<ProjectPanelFrb> createState() => _ProjectPanelFrbState();
 }
 
-class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
+class _ProjectPanelFrbState extends State<ProjectPanelFrb>
+    with WidgetsBindingObserver {
   bool _missingOnly = false;
 
   /// The live search needle (docs/07 §3.1): lowercase, empty means "show all".
@@ -223,6 +238,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _changes = state.onChange.listen((event) {
       if (event.items) _documentChanged();
     });
+    WidgetsBinding.instance.addObserver(this);
     _searchController.addListener(() {
       final needle = _searchController.text.trim().toLowerCase();
       if (needle != _search) setState(() => _search = needle);
@@ -305,9 +321,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return true;
   }
 
-  Future<void> _duplicate(List<ItemReference> items) async {
-    final copies = await duplicateProjectItems(context, items);
-    if (copies.isNotEmpty && mounted) _pick(copies);
+  /// Copies of [items], picked, and filed in [folder] when one is given.
+  Future<void> _duplicate(List<ItemReference> items,
+      {ItemReference_Folder? folder}) async {
+    // Pasting into a folder is one thing to undo, the copy and the filing both.
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final group = folder != null && project != null;
+    if (group) project.beginUndoGroup();
+    final List<ItemReference> copies;
+    try {
+      copies = await duplicateProjectItems(context, items);
+      if (copies.isEmpty || !mounted) return;
+      if (folder != null) _fileInto(folder, copies);
+    } finally {
+      if (group) project.endUndoGroup();
+    }
+    _pick(copies);
   }
 
   void _onPickRequested() {
@@ -382,12 +411,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (ui.cutClaim == _cutClaim) ui.cutClaim = _priorCut;
       if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _priorPaste;
     }
+    WidgetsBinding.instance.removeObserver(this);
     _changes?.cancel();
+    _blenderPoll?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
     _rowPicks.dispose();
     _hScroll.dispose();
     _vScroll.dispose();
+    _cardTimer?.cancel();
+    _cardItem.dispose();
+    _compStill?.dispose();
     _dropThumbs();
     _dropScrub();
     _stopSound();
@@ -481,17 +515,20 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         ? (by > 0 ? 0 : _visibleIds.length - 1)
         : (at + by).clamp(0, _visibleIds.length - 1);
     _select(_visibleIds[next], extend ? SelectMode.range : SelectMode.replace);
-    if (_vScroll.hasClients) {
-      final top = next * projectRowHeight;
-      final view = _vScroll.position;
-      if (top < view.pixels) {
-        _vScroll.jumpTo(top);
-      } else if (top + projectRowHeight >
-          view.pixels + view.viewportDimension) {
-        _vScroll.jumpTo(top + projectRowHeight - view.viewportDimension);
-      }
-    }
+    _revealRow(next);
     return true;
+  }
+
+  /// Scroll row [at] of the list into view, if it isn't.
+  void _revealRow(int at) {
+    if (!_vScroll.hasClients) return;
+    final top = at * projectRowHeight;
+    final view = _vScroll.position;
+    if (top < view.pixels) {
+      _vScroll.jumpTo(top);
+    } else if (top + projectRowHeight > view.pixels + view.viewportDimension) {
+      _vScroll.jumpTo(top + projectRowHeight - view.viewportDimension);
+    }
   }
 
   /// The items currently selected, by id, in the order the panel lists them.
@@ -596,6 +633,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// in a rebuild: the budget test expects a hover to cost nothing.
   final Map<String, BridgeProxy?> _proxies = {};
 
+  /// Which footage items are 3D models, asked once per document change.
+  final Map<String, bool> _models = {};
+
   /// The project-wide *use proxies* switch, cached with the rest: it is
   /// a document read, so a rebuild must never ask for it again.
   bool? _useProxies;
@@ -691,9 +731,78 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// has tells nobody anything.
   void _publishPicks() {
     _rowPicks.value = Set<String>.unmodifiable(_selectedIds);
+    _followCard();
     // And the others in a shared project, who see these rows marked.
     Provider.of<LumitUiState>(context, listen: false)
         .setProjectPicks(_selectedIds);
+  }
+
+  /// What the preview card is about: the one thing picked, or nothing.
+  final ValueNotifier<String?> _cardItem = ValueNotifier(null);
+  Timer? _cardTimer;
+
+  /// The card goes at once. It comes up after a double-click would have
+  /// landed, so a row near the bottom isn't covered between the two presses.
+  /// Once it is up it moves between items at once.
+  void _followCard() {
+    _cardTimer?.cancel();
+    final lone = _selectedIds.length == 1 ? _selectedIds.first : null;
+    if (lone == null || _cardItem.value != null) {
+      _showCard(lone);
+      return;
+    }
+    _cardTimer = Timer(kDoubleTapTimeout, () => _showCard(lone));
+  }
+
+  void _showCard(String? id) {
+    if (!mounted) return;
+    final arriving = _cardItem.value == null && id != null;
+    _cardItem.value = id;
+    if (_itemById[id] case ItemReference_Composition(:final field0)) {
+      _askCompStill(field0, id!);
+    }
+    // The list has just got shorter, and may have lost the picked row.
+    if (arriving) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final at = _visibleIds.indexOf(id);
+        if (mounted && at >= 0) _revealRow(at);
+      });
+    }
+  }
+
+  /// The card's picture of a composition, drawn when it is picked. Asked again
+  /// each time, as editing a comp is not something the panel hears about. The
+  /// frame under the playhead if it's the open comp, its middle otherwise,
+  /// since many start on black.
+  String? _compStillId;
+  ui.Image? _compStill;
+
+  void _askCompStill(CompositionReference comp, String id) {
+    if (_compStillId != id) {
+      _compStill?.dispose();
+      _compStill = null;
+      _compStillId = id;
+    }
+    final ui_ = Provider.of<LumitUiState>(context, listen: false);
+    final int frame;
+    try {
+      frame = ui_.selectedComp == comp
+          ? ui_.playheadFrame.value
+          : comp.durationFrames() ~/ 2;
+    } catch (_) {
+      // Deleted a moment ago. The card's still pointing at it until the rebuild.
+      return;
+    }
+    Workspace.compStill(comp, frame, maxEdge: _thumbMaxEdge).then((image) {
+      if (image == null) return;
+      if (!mounted || _compStillId != id) {
+        image.dispose();
+        return;
+      }
+      _compStill?.dispose();
+      _compStill = image;
+      _bookRebuild();
+    }, onError: (_) {});
   }
 
   /// Mirror the anchor item to the shell, where the FX console reads
@@ -732,8 +841,36 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   ProjectColumn? _sortColumn;
   bool _sortAscending = true;
 
-  /// What the walk last counted, for the card while nothing is picked.
+  /// What the walk last counted, for the count's tooltip.
   String _summary = '';
+
+  /// The columns switched off from the headings' menu. Kept as the widths are.
+  Set<ProjectColumn> _hiddenColumns = const {};
+
+  void _columnMenu(Offset at) => showProjectColumnMenu(
+        context: context,
+        position: at,
+        hidden: _hiddenColumns,
+        onToggle: (column) => setState(() {
+          _hiddenColumns = _hiddenColumns.contains(column)
+              ? _hiddenColumns.difference({column})
+              : _hiddenColumns.union({column});
+        }),
+        sort: _sortColumn,
+        onSort: _sortTo,
+        onReset: () => setState(() {
+          _hiddenColumns = const {};
+          _columnWidths = {...defaultProjectColumnWidths};
+          _sortColumn = null;
+          _sortAscending = true;
+        }),
+      );
+
+  /// From a menu: sort by this, smallest first, or the project's own order.
+  void _sortTo(ProjectColumn? column) => setState(() {
+        _sortColumn = column;
+        _sortAscending = true;
+      });
 
   /// A click on a heading: sort by it, or turn the sort round if it already is.
   void _sortBy(ProjectColumn column) => setState(() {
@@ -746,7 +883,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           onResize: _resizeColumn,
           sort: _sortColumn,
           ascending: _sortAscending,
-          onSort: _sortBy);
+          onSort: _sortBy,
+          onMenu: _columnMenu);
 
   /// The rows in the order the sorted column asks for. A row keeps the rows
   /// under it, so a folder still holds its own items and only siblings swap.
@@ -825,6 +963,95 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// Footage the engine found on disk but cannot decode, by id.
   final Set<String> _undecodable = {};
 
+  /// The pictures each 3D model names that are missing or won't read.
+  final Map<String, List<String>> _pictures = {};
+
+  /// Where each 3D model's trip through Blender stands, while it isn't done.
+  final Map<String, BridgeBlenderState> _blender = {};
+
+  /// The 3D models asked after on a timer: read and still being read, or
+  /// waiting on Blender.
+  final Map<String, FootageReference> _watched = {};
+  final Set<String> _reading = {};
+  Timer? _blenderPoll;
+
+  /// Back in front, a 3D model may have been saved over elsewhere, so each is
+  /// checked again, and one being converted shows it.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    _missing.removeWhere((id, _) => _models[id] ?? false);
+    _bookRebuild();
+  }
+
+  /// Look at each watched model's Blender state, and stop watching the ones
+  /// with nothing left to happen.
+  void _pollBlender() {
+    for (final MapEntry(key: id, value: footage) in _watched.entries.toList()) {
+      BridgeBlenderState? state;
+      try {
+        state = footage.blenderState();
+      } catch (_) {
+        state = null;
+      }
+      if (state != _blender[id]) {
+        if (state == null) {
+          _blender.remove(id);
+        } else {
+          _blender[id] = state;
+        }
+        // A timer tick, so nothing else is drawing a frame to wait for.
+        if (mounted) setState(() {});
+      }
+      // No Blender stays watched, so picking one in Settings shows here.
+      final settled = state == null ||
+          state is BridgeBlenderState_Failed ||
+          state is BridgeBlenderState_NoImporter ||
+          state is BridgeBlenderState_Stopped;
+      if (settled && !_reading.contains(id)) _watched.remove(id);
+    }
+    if (_watched.isEmpty) {
+      _blenderPoll?.cancel();
+      _blenderPoll = null;
+    }
+    if (mounted) {
+      Provider.of<LumitUiState>(context, listen: false).modelTrouble.value =
+          switch (_blender.values.firstOrNull) {
+        BridgeBlenderState_Converting() => l10n.projectItemConverting,
+        BridgeBlenderState_NoBlender() => l10n.projectItemNoBlender,
+        BridgeBlenderState_Stopped() => l10n.projectItemStopped,
+        null => null,
+        _ => l10n.projectItemUndecodable,
+      };
+    }
+  }
+
+  void _stopBlender(ItemReference item) {
+    if (item is! ItemReference_Footage) return;
+    try {
+      item.field0.stopBlender();
+    } catch (_) {
+      // The item has gone, and the conversion was stopped with it.
+    }
+    _pollBlender();
+  }
+
+  /// Stopped, it converts again: the row is asked after as if it were new, and
+  /// the Viewer asks for its frame, which starts it there too.
+  void _convertAgain(ItemReference item) {
+    if (item is! ItemReference_Footage) return;
+    try {
+      item.field0.convertAgain();
+    } catch (_) {
+      return;
+    }
+    final id = projectItemId(item);
+    _blender.remove(id);
+    _missing.remove(id);
+    _bookRebuild();
+    Provider.of<LumitUiState>(context, listen: false).requestFrame();
+  }
+
   /// Bumped whenever the document changes, to key the thumbnail futures so a
   /// relink re-decodes rather than showing the stale picture. The frb equivalent
   /// of v0's `documentEpoch`.
@@ -840,9 +1067,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return DropTarget(
       onDragEntered: (_) => setState(() => _dropHover = true),
       onDragExited: (_) => setState(() => _dropHover = false),
-      onDragDone: (details) {
+      onDragDone: (details) async {
         setState(() => _dropHover = false);
-        _dropped([for (final f in details.files) f.path]);
+        _dropped(await droppedPaths(details.files));
       },
       // Painted over the panel rather than behind it, for the reason the row
       // target gives: the panel draws its own fill, and a drop with no
@@ -855,7 +1082,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                 color: t.accent.withValues(alpha: 0.1),
               ),
         child: LayoutBuilder(
-          builder: (context, box) => _build(context, box.maxWidth),
+          builder: (context, box) => _build(context, box.maxWidth, box.maxHeight),
         ),
       ),
     );
@@ -868,11 +1095,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     if (mounted) await runDroppedScripts(context, paths);
   }
 
-  Widget _build(BuildContext context, double width) {
+  Widget _build(BuildContext context, double width, double height) {
     final t = ThemeScope.of(context).theme;
     final state = Provider.of<LumitState>(context);
     final roots = state.project?.getItems() ?? const <ItemReference>[];
-    final cols = ProjectColumns.forWidth(width, widths: _columnWidths);
+    final cols = ProjectColumns.forWidth(width,
+        widths: _columnWidths, hidden: _hiddenColumns);
     // Listened to, so flipping the switch in Settings redraws the rows.
     _thumbnails = Provider.of<LumitUiState>(context)
         .workspace
@@ -883,8 +1111,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _searchRow(t),
-          _columnHeader(t, cols),
           Expanded(
             child: _importOnDoubleTap(
               child: Center(
@@ -896,7 +1122,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                     HouseButton(
                       key: const ValueKey('project-empty-import'),
                       onPressed: _import,
-                      child: Text(l10n.projectFooterImport),
+                      child: Text(l10n.menuImport),
                     ),
                     HouseButton(
                       key: const ValueKey('project-empty-new-comp'),
@@ -908,8 +1134,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               ),
             ),
           ),
-          _footer(t,
-              items: 0, missing: 0, width: width, project: state.project),
+          _footer(t, items: 0, missing: 0, project: state.project),
         ],
       );
     }
@@ -922,6 +1147,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final missingOnly = _missingOnly && missingCount > 0;
 
     final rows = <_TreeRow>[];
+    _rowById.clear();
     _visibleIds.clear();
     var itemCount = 0;
     // How many compositions, footage items, solids and folders the walk
@@ -993,7 +1219,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (item is ItemReference_Folder) _childCounts[id] = children.length;
       if (show) {
         _visibleIds.add(id);
-        rows.add(_TreeRow(item, depth, inherited));
+        final row = _TreeRow(item, depth, inherited);
+        rows.add(row);
+        _rowById[id] = row;
       }
       if (item case ItemReference_Footage(:final field0)) {
         _footageById[id] = field0;
@@ -1041,14 +1269,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // The card describes whatever is picked, so it is the one thing above
-        // the tree that a click has to change, and it listens for the
-        // selection rather than waiting to be rebuilt with the panel.
-        if (width >= projectWidthForPreview)
-          ValueListenableBuilder<Set<String>>(
-            valueListenable: _rowPicks,
-            builder: (context, _, __) => _previewCard(t),
-          ),
         _searchRow(t),
         _columnHeader(t, cols),
         Expanded(
@@ -1062,7 +1282,19 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           // Nothing is lost by a list that no longer takes the whole panel:
           // dragging blank space to scroll only means something when there is
           // no blank space to drag.
-          child: Stack(
+          //
+          // The scrollbar stands outside all of this. Left to the list, as the
+          // app's scroll behaviour would, it covers the list's whole height and
+          // takes the pointer before anything behind it hears about it.
+          child: SmoothWheel(
+            controller: _vScroll,
+            child: HouseScrollbar(
+              controller: _vScroll,
+              notificationPredicate: (n) => n.metrics.axis == Axis.vertical,
+              child: ScrollConfiguration(
+                behavior:
+                    ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                child: Stack(
             children: [
               Positioned.fill(
                 child: _importOnDoubleTap(child: const SizedBox.expand()),
@@ -1089,9 +1321,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                   // row becomes a widget when the list reaches it. Every row is
                   // the same height, so the list never has to measure one it
                   // has not built.
-                  child: ListView.builder(
+                  child: EdgeFade(
+                    axis: Axis.vertical,
+                    reach: 16,
+                    child: ListView.builder(
                     controller: _vScroll,
                     hitTestBehavior: HitTestBehavior.deferToChild,
+                    // A little ground under the last row, so a full list still
+                    // has somewhere to right-click.
+                    padding: const EdgeInsets.only(bottom: projectRowHeight * 2),
                     itemExtent: projectRowHeight,
                     itemCount: rows.length,
                     // Every other row on screen is shaded, whatever is open,
@@ -1099,17 +1337,26 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                     itemBuilder: (context, i) =>
                         _treeRow(rows[i], cols, shaded: i.isOdd),
                   ),
+                  ),
                 ),
               ),
             ],
           ),
+              ),
+            ),
+          ),
         ),
-        projectScrollStrip(t, _hScroll),
+        if (width < projectMinWidth) projectScrollStrip(t, _hScroll),
+        // The card describes the one thing picked, so it listens for the
+        // selection rather than waiting to be rebuilt with the panel.
+        if (width >= projectWidthForPreview &&
+            height >= projectHeightForPreview)
+          ValueListenableBuilder<String?>(
+            valueListenable: _cardItem,
+            builder: (context, id, _) => _previewCard(t, id),
+          ),
         _footer(t,
-            items: itemCount,
-            missing: missingCount,
-            width: width,
-            project: state.project),
+            items: itemCount, missing: missingCount, project: state.project),
       ],
     );
   }
@@ -1136,10 +1383,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         depth: row.depth,
         missing: missing,
         undecodable: _undecodable.contains(id),
+        missingPictures: [for (final n in _pictures[id] ?? const <String>[]) engineLabel(n)],
+        blender: _blender[id],
+        onStopBlender: () => _stopBlender(item),
+        onConvertAgain: () => _convertAgain(item),
         audio: audio,
         label: _labels[id] ??= _labelOf(item),
         inherited: row.inherited,
         nodeGraph: _nodeGraphs[id] ??= _isNodeGraph(item),
+        model: _models[id] ??= _isModel(item),
         inUse: _used[id] ??= _isUsed(item),
         proxy: _proxies.putIfAbsent(
             id,
@@ -1163,9 +1415,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         thumb: _thumbnails ? _thumbs[id] : null,
         selectedFootage: () => _selectedFootage,
         onSelect: (modifier) => _select(id, modifier),
-        onStartRename: () => setState(() => _renamingId = id),
         onEndRename: () => setState(() => _renamingId = null),
-        onFindMissing: () => setState(() => _missingOnly = true),
+        onMenu: (at) => _itemMenu(item, at),
         onNewComposition: _newComposition,
         folderOpen: _filtering || !_closedFolders.contains(id),
         onToggleFolder: () => setState(() {
@@ -1173,10 +1424,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         }),
         onLocalEdit: _documentChanged,
         onSetLabel: (picked) => _setLabel(item, picked),
-        onMoveToFolder: (folder) => _fileInto(folder, _targets(item)),
-        onPick: _pick,
-        menuTargets: () => _targets(item),
-        folderChoices: () => _folderChoices(item),
         onDropItems: item is ItemReference_Folder
             ? (dropped) => _fileInto(item, dropped)
             : null,
@@ -1208,13 +1455,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   Widget _footer(LumitTheme t,
           {required int items,
           required int missing,
-          required double width,
           ProjectReference? project}) =>
-      projectFooter(
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapDown: (d) => _groundMenu(d.globalPosition),
+        child: projectFooter(
         t,
         items: items,
         missing: missing,
-        width: width,
+        summary: _summary,
+        picks: _rowPicks,
         hasProject: project != null,
         useProxies: project != null && (_useProxies ??= project.useProxies()),
         missingOnly: _missingOnly,
@@ -1222,45 +1472,244 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         onImport: _import,
         onNewFolder: _newFolder,
         onNewComposition: _newComposition,
-        onToggleProxies: () {
-          if (project == null) return;
-          project.setUseProxies(useProxies: !(_useProxies ?? false));
-          _documentChanged();
-        },
+        onToggleProxies: () => _toggleProxies(project),
+      ),
       );
 
-  /// The preview card, fed from the caches the walk fills: the anchor item,
-  /// its poster frame and its media facts, all already in RAM.
-  Widget _previewCard(LumitTheme t) {
-    final id = _anchorId;
-    final item = id != null && _selectedIds.contains(id) ? _itemById[id] : null;
-    final info = id == null ? null : _mediaInfo[id];
+  void _toggleProxies(ProjectReference? project) {
+    if (project == null) return;
+    project.setUseProxies(useProxies: !(_useProxies ?? false));
+    _documentChanged();
+  }
+
+  /// What is on the clipboard's mind, for a paste from a menu: into [folder]
+  /// when one is given, beside the originals otherwise. Null with nothing to
+  /// paste, which greys the row.
+  VoidCallback? _pasteAction({ItemReference_Folder? folder}) =>
+      _copied.isEmpty ? null : () => _duplicate(_copied, folder: folder);
+
+  /// The menu for [item], from its row or from the card.
+  void _itemMenu(ItemReference item, Offset at) {
+    final id = projectItemId(item);
+    final row = _rowById[id];
+    final targets = _targets(item);
+    final anyMissing = _missing.values.any((m) => m);
+    final folder = item is ItemReference_Folder ? item : null;
+    final info = _mediaInfo[id];
+    showProjectMenuFrb(
+      context: context,
+      item: item,
+      missing: item is ItemReference_Footage && (_missing[id] ?? false),
+      position: at,
+      onFindMissing:
+          anyMissing ? () => setState(() => _missingOnly = true) : null,
+      onLocalEdit: _documentChanged,
+      onStartRename: () => setState(() => _renamingId = id),
+      onSetLabel: (picked) => _setLabel(item, picked),
+      label: _labels[id] ?? 0,
+      inherited: row?.inherited ?? 0,
+      onRelink: switch (item) {
+        ItemReference_Footage(:final field0) => () async {
+            if (await relinkFootage(field0, picker: widget.relinkPicker) &&
+                mounted) {
+              _documentChanged();
+            }
+          },
+        _ => null,
+      },
+      proxy: _proxies[id],
+      // The same picker seam the relink uses: picking a proxy file and
+      // picking a replacement are the same gesture over the same dialogue,
+      // and tests inject one stub for both.
+      proxyPicker: widget.relinkPicker,
+      // Read here, not in build: raising the menu is a gesture.
+      folders: _folderChoices(item),
+      onMoveToFolder: (target) => _fileInto(target, _targets(item)),
+      onPick: _pick,
+      targets: targets,
+      atRoot: targets
+          .every((t) => (_rowById[projectItemId(t)]?.depth ?? 0) == 0),
+      // Until it is probed, a file might have sound.
+      hasAudio: info == null || info.audioCodec != null,
+      onCopy: () => _copied = targets,
+      onPaste: _pasteAction(folder: folder),
+      folderOpen: _filtering || !_closedFolders.contains(id),
+      onToggleFolder: folder == null
+          ? null
+          : () => setState(() {
+                if (!_closedFolders.remove(id)) _closedFolders.add(id);
+              }),
+      onNewFolder: _newFolder,
+      onNewComposition: _newComposition,
+    );
+  }
+
+  /// The menu on the blank ground under the rows, and on the bottom bar.
+  void _groundMenu(Offset at) {
+    final state = Provider.of<LumitState>(context, listen: false);
+    final project = state.project;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final folders = {
+      for (final id in _visibleIds)
+        if (_itemById[id] is ItemReference_Folder) id,
+    };
+    final hasProject = project != null;
+    showProjectGroundMenu(
+      context: context,
+      position: at,
+      onNewComposition: hasProject ? _newComposition : null,
+      onNewNodeGraph: hasProject
+          ? () async {
+              // The one funnel every route to a node graph goes through: it
+              // asks for the settings, makes the comp and fronts it.
+              await state.newNodeGraph(context);
+              if (mounted) _documentChanged();
+            }
+          : null,
+      onNewFolder: hasProject
+          ? () {
+              project.newFolder(name: '', parent: null);
+              _documentChanged();
+            }
+          : null,
+      onImport: hasProject ? _import : null,
+      onImportFolder: hasProject ? _importFolder : null,
+      onPaste: _pasteAction(),
+      onSelectAll: _visibleIds.isEmpty ? null : _selectAll,
+      sort: _sortColumn,
+      onSort: _sortTo,
+      onExpandAll: _closedFolders.isEmpty
+          ? null
+          : () => setState(_closedFolders.clear),
+      onCollapseAll: folders.isEmpty || _closedFolders.containsAll(folders)
+          ? null
+          : () => setState(() => _closedFolders.addAll(folders)),
+      onFindMissing: _missing.values.any((m) => m)
+          ? () => setState(() => _missingOnly = true)
+          : null,
+      useProxies: _useProxies ?? false,
+      onToggleProxies: hasProject ? () => _toggleProxies(project) : null,
+      thumbnails: _thumbnails,
+      onToggleThumbnails: () {
+        ui.workspace.interface.projectThumbnails = !_thumbnails;
+        ui.workspace.settingsChanged();
+      },
+    );
+  }
+
+  /// The preview card for [id], off the caches the walk fills: the item, its
+  /// picture and its media facts, all already in RAM. Nothing with no item.
+  Widget _previewCard(LumitTheme t, String? id) {
+    final item = id == null ? null : _itemById[id];
+    if (item == null) return const SizedBox.shrink();
+    final info = _mediaInfo[id];
+    final missing = item is ItemReference_Footage && (_missing[id] ?? false);
+    final audio = info != null && info.videoCodec == null;
     // The scrubbed frame if the pointer is holding one, the poster frame
     // otherwise. Both come out of RAM, so the card never waits.
-    final scrubbed = id != null && id == _scrubId && _scrubAt != null
-        ? _scrubFrames[_scrubAt]
-        : null;
+    final scrubbed =
+        id == _scrubId && _scrubAt != null ? _scrubFrames[_scrubAt] : null;
+    final picture = item is ItemReference_Composition
+        ? (_compStillId == id ? _compStill : null)
+        : scrubbed ?? _thumbs[id];
     // A file with sound and no picture: the square carries a play button
     // instead of a picture, which is the one thing there is to do with it.
     final sound = item is ItemReference_Footage &&
-        !(_missing[id] ?? false) &&
+        !missing &&
         info != null &&
         info.videoCodec == null &&
         info.audioCodec != null;
+    final label = _labels[id!] ?? 0;
+    final row = _rowById[id];
+    final tag = label != 0 ? label : (row?.inherited ?? 0);
+    final fallback = projectDefaultLabel(item, audio: audio);
+    final nodeGraph = _nodeGraphs[id] ??= _isNodeGraph(item);
     return projectPreviewCard(
       t,
       item: item,
-      summary: _summary,
-      name: item == null ? '' : (_names[id!] ??= _nameOf(item)),
-      nodeGraph: item != null && (_nodeGraphs[id!] ??= _isNodeGraph(item)),
-      missing: item is ItemReference_Footage && (_missing[id] ?? false),
-      thumb: scrubbed ?? (id == null ? null : _thumbs[id]),
+      name: _names[id] ??= _nameOf(item),
+      nodeGraph: nodeGraph,
+      missing: missing,
+      thumb: picture,
       info: info,
+      tint: tag != 0
+          ? t.labelColour(tag)
+          : fallback != 0
+              ? t.labelColour(fallback)
+              : t.textMuted,
+      icon: switch (item) {
+        ItemReference_Footage() => (_models[id] ?? false)
+            ? LumitIcon.cube3d
+            : audio
+                ? LumitIcon.audioFile
+                : LumitIcon.footage,
+        ItemReference_Folder() => LumitIcon.folder,
+        ItemReference_Composition() =>
+          nodeGraph ? LumitIcon.nodes : LumitIcon.comp,
+        ItemReference_Solid() => LumitIcon.solid,
+      },
+      // A folder has no uses of its own. Read once per document change.
+      uses: item is ItemReference_Folder
+          ? null
+          : _uses[id] ??= _usesOf(item),
+      path: _paths[id] ?? '',
       onScrub:
           item is ItemReference_Footage ? (frame) => _scrub(item, frame) : null,
       onPlaySound: sound ? () => _toggleSound(item) : null,
       soundPlaying: sound && _soundId == id,
+      onMenu: (at) => _itemMenu(item, at),
+      onUses: (at) => _revealUses(item, at),
     );
+  }
+
+  /// Every row the list is showing, kept so the card and the menu can say what
+  /// sits where without walking the tree again. Rebuilt with the rows.
+  final Map<String, _TreeRow> _rowById = {};
+
+  /// How many places use each item, for the card.
+  final Map<String, int> _uses = {};
+
+  /// The card's uses line: the composition that shows [item], or a list to
+  /// pick from when there are several.
+  void _revealUses(ItemReference item, Offset at) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final comps = compsUsing(item);
+    if (comps.length < 2) {
+      revealInComposition(ui, item);
+      return;
+    }
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        for (final (comp, name) in comps)
+          MenuRow(
+            onPressed: () {
+              close(null);
+              revealInComposition(ui, item, comp: comp);
+            },
+            child: Text(name, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+    );
+  }
+
+  int _usesOf(ItemReference item) {
+    try {
+      return item.uses();
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// What `Ctrl+A` does, from the ground's menu.
+  void _selectAll() {
+    _selectedIds
+      ..clear()
+      ..addAll(_visibleIds);
+    _anchorId = _cursorId = _visibleIds.last;
+    _publishPicks();
+    _publishSelection();
   }
 
   /// The pointer moved across the card's poster frame: show `frame` of the
@@ -1385,21 +1834,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             ? 0.0
             : info.duration.num / info.duration.den;
         if (info.videoCodec == null) {
-          // A sound file's cells, as the mockup writes them: the rate where a
-          // picture would state its size, and the channel layout — shortened
-          // to fit the FPS column — where a picture would state its rate.
-          // Its length counts milliseconds, as the card's does: sound has
-          // no frames worth counting.
+          // A sound file's cells: the rate where a picture would state its
+          // size, and no frame rate, which sound has none of. The card says
+          // how many channels. Its length counts milliseconds, as the card's
+          // does: sound has no frames worth counting.
           if (info.audioCodec == null) {
             return ProjectCells(date: date, path: path);
           }
           return ProjectCells(
             size: projectSampleRateText(info.sampleRate),
-            fps: switch (info.channels) {
-              1 => l10n.audioMonoShort,
-              2 => l10n.audioStereoShort,
-              final n => l10n.audioChannels(n),
-            },
             duration: timecodeOfSecondsMs(seconds),
             date: date,
             path: path,
@@ -1440,10 +1883,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Double-clicking the panel's blank space imports, which is the gesture
   /// every editor has and the one people reach for before finding a menu.
-  /// One click there lets go of the selection.
+  /// One click there lets go of the selection, and a right-click brings up
+  /// what can be done with the list.
   Widget _importOnDoubleTap({required Widget child}) => GestureDetector(
         key: const ValueKey('project-empty-area'),
         behavior: HitTestBehavior.opaque,
+        onSecondaryTapDown: (d) => _groundMenu(d.globalPosition),
         onDoubleTap: _import,
         onTap: () {
           if (_selectedIds.isEmpty) return;
@@ -1538,6 +1983,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Whether this item is a node graph composition. False for every other
   /// kind, and for a comp that has gone from under the panel.
+  bool _isModel(ItemReference item) {
+    if (item case ItemReference_Footage(:final field0)) {
+      try {
+        return field0.isModel();
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
+
   bool _isNodeGraph(ItemReference item) {
     if (item case ItemReference_Composition(:final field0)) {
       try {
@@ -1558,7 +2014,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// Tag every selected item, or untag them with 0, as one undo step.
   void _setLabel(ItemReference item, int label) {
     eachInOneUndo(Provider.of<LumitState>(context, listen: false),
-        _targets(item), (target) => target.setLabel(label: label));
+        _targets(item), (target) {
+      // The colour it already has makes no undo step.
+      if (target.label() != label) target.setLabel(label: label);
+    });
     _documentChanged();
   }
 
@@ -1575,7 +2034,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   void _fileInto(ItemReference folder, List<ItemReference> items) {
     if (folder is! ItemReference_Folder) return;
     final id = folder.field0.internalid;
-    eachInOneUndo(Provider.of<LumitState>(context, listen: false), items,
+    // What's in there already stays where it is, rather than being shuffled.
+    final inside = {
+      for (final c in folder.field0.getChildren()) projectItemId(c),
+    };
+    final moving = [
+      for (final item in items)
+        if (!inside.contains(projectItemId(item))) item,
+    ];
+    if (moving.isEmpty) return;
+    eachInOneUndo(Provider.of<LumitState>(context, listen: false), moving,
         (item) => item.moveToFolder(folder: id));
     _documentChanged();
   }
@@ -1639,6 +2107,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _documentChanged();
   }
 
+  /// Import a folder and every folder inside it, kept as project folders, as
+  /// File ▸ Import folder does.
+  Future<void> _importFolder() async {
+    final state = Provider.of<LumitState>(context, listen: false);
+    final folder = await pickFolder();
+    if (folder != null && await importDroppedPaths(state, [folder]) && mounted) {
+      _documentChanged();
+    }
+  }
+
   /// An edit landed: re-probe and re-decode. Bumping the epoch is what makes a
   /// relink show the new picture rather than the cached one.
   /// Which footage items are read from a stand-in someone sent, by id. Read
@@ -1657,6 +2135,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   }
 
   void _documentChanged() {
+    // An item deleted, or a project closed, takes its conversion with it.
+    if (_watched.isNotEmpty) {
+      Provider.of<LumitState>(context, listen: false)
+          .project
+          ?.stopUnusedBlenders();
+    }
     setState(() {
       _epoch++;
       _missing.clear();
@@ -1671,11 +2155,18 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _names.clear();
       _nodeGraphs.clear();
       _proxies.clear();
+      _models.clear();
       _useProxies = null;
+      _uses.clear();
       _dropThumbs();
       _dropScrub();
       _stopSound();
     });
+    // Whatever the card was showing may have just changed.
+    if (_itemById[_cardItem.value]
+        case ItemReference_Composition(:final field0)) {
+      _askCompStill(field0, _cardItem.value!);
+    }
   }
 
   void _dropThumbs() {
@@ -1744,6 +2235,30 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             // throws. Nothing is missing in a document that is gone, and the
             // panel is about to be rebuilt from the new one.
           }).catchError((_) {});
+          if (_models[id] ??= _isModel(item)) {
+            // The old names stay until the new answer lands, so the badge
+            // doesn't blink on every edit.
+            // Reading a model Blender converts takes a while, so it is
+            // watched until that is done.
+            _watched[id] = item.field0;
+            _reading.add(id);
+            _blenderPoll ??= Timer.periodic(
+                const Duration(milliseconds: 500), (_) => _pollBlender());
+            item.field0.getModelMissing().whenComplete(() {
+              _reading.remove(id);
+              if (mounted) _pollBlender();
+            }).then((names) {
+              if (!mounted) return;
+              final had = _pictures[id];
+              if (names.isEmpty ? had == null : listEquals(had, names)) return;
+              if (names.isEmpty) {
+                _pictures.remove(id);
+              } else {
+                _pictures[id] = names;
+              }
+              _bookRebuild();
+            }).catchError((_) {});
+          }
         }
       }
       if (item is ItemReference_Folder) {

@@ -27,6 +27,8 @@ import '../widgets/controls.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
+import 'text_animation_presets.dart' show reversedAnimator;
 import 'layer_fold_frb.dart' show animatorsPath;
 
 /// Matches the Effect controls panel's own cell width, so the values line up
@@ -49,6 +51,9 @@ class TextAnimatorRowsFrb extends StatelessWidget {
   final bool open;
   final VoidCallback onToggle;
 
+  /// A solid layer's letters also move in depth and turn in 3D.
+  final bool solid;
+
   const TextAnimatorRowsFrb({
     super.key,
     required this.layer,
@@ -58,6 +63,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     required this.onSeek,
     required this.open,
     required this.onToggle,
+    this.solid = false,
   });
 
   @override
@@ -143,15 +149,35 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         context: context,
         name: Text(t.kickerCase(a.name),
             style: t.kickerOn, overflow: TextOverflow.ellipsis),
-        control: HouseButton(
-          key: ValueKey<String>('text-animator-remove-$index'),
-          small: true,
-          frameless: true,
-          onPressed: () => write([
-            for (var i = 0; i < animators.length; i++)
-              if (i != index) animators[i],
-          ]),
-          child: Text(l10n.textAnimatorRemove),
+        control: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (animatorHasKeys(a))
+              HouseButton(
+                key: ValueKey<String>('text-animator-reverse-$index'),
+                small: true,
+                frameless: true,
+                // Every animator of this name, as Tracking in lays two.
+                onPressed: () => write([
+                  for (final other in animators)
+                    if (other.name == a.name)
+                      reversedAnimator(other)
+                    else
+                      other,
+                ]),
+                child: Text(l10n.textAnimatorReverse),
+              ),
+            HouseButton(
+              key: ValueKey<String>('text-animator-remove-$index'),
+              small: true,
+              frameless: true,
+              onPressed: () => write([
+                for (var i = 0; i < animators.length; i++)
+                  if (i != index) animators[i],
+              ]),
+              child: Text(l10n.textAnimatorRemove),
+            ),
+          ],
         ),
       ),
       // The range: which letters this animator reaches, in per cent of the
@@ -221,6 +247,16 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           100000,
           0,
           (s) => put(animatorWith(a, positionX: s[0], positionY: s[1]))),
+      if (solid)
+        _numberRow(
+            context,
+            '${l10n.transformPosition} z',
+            'anim-position-z-$index',
+            [a.positionZ],
+            -100000,
+            100000,
+            0,
+            (s) => put(animatorWith(a, positionZ: s.first))),
       _numberRow(
           context,
           l10n.transformRotation,
@@ -230,6 +266,26 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           100000,
           0,
           (s) => put(animatorWith(a, rotation: s.first))),
+      if (solid)
+        _numberRow(
+            context,
+            '${l10n.transformRotation} x',
+            'anim-rotation-x-$index',
+            [a.rotationX],
+            -100000,
+            100000,
+            0,
+            (s) => put(animatorWith(a, rotationX: s.first))),
+      if (solid)
+        _numberRow(
+            context,
+            '${l10n.transformRotation} y',
+            'anim-rotation-y-$index',
+            [a.rotationY],
+            -100000,
+            100000,
+            0,
+            (s) => put(animatorWith(a, rotationY: s.first))),
       _numberRow(
           context,
           l10n.transformScale,
@@ -315,40 +371,48 @@ class TextAnimatorRowsFrb extends StatelessWidget {
               scalars[i],
         ]);
 
-    return fxTwoColumnRow(
-      context: context,
-      keyframeControls: KeyframeControlsFrb(
-        scalars: scalars,
-        onWrite: write,
-        comp: comp,
-        onSeek: onSeek,
-        rowKey: keyName,
-        // These rows only ever draw in the Effect controls panel, on its fixed
-        // columns.
-        fixedColumns: true,
-      ),
-      lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
-      name: Text(t.propertyCase(label),
-          style: t.body, overflow: TextOverflow.ellipsis),
-      control: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < scalars.length; i++) ...[
-            if (i > 0) const SizedBox(width: 6),
-            SizedBox(
-              width: _cellWidth,
-              child: DragValueField(
-                key: ValueKey<String>('$keyName-$i'),
-                value: shown(scalars[i]),
-                min: min,
-                max: max,
-                resetTo: resetTo,
-                decimals: 1,
-                onChanged: (v) => commit(i, v),
+    final keys = KeyframeControlsFrb(
+      scalars: scalars,
+      onWrite: write,
+      comp: comp,
+      onSeek: onSeek,
+      rowKey: keyName,
+      // These rows only ever draw in the Effect controls panel, on its fixed
+      // columns.
+      fixedColumns: true,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: List.filled(scalars.length, resetTo)),
+      child: fxTwoColumnRow(
+        context: context,
+        keyframeControls: keys,
+        lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
+        name: Text(t.propertyCase(label),
+            style: t.body, overflow: TextOverflow.ellipsis),
+        control: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < scalars.length; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              // Three values in a narrow panel give way, rather than run off it.
+              Flexible(
+                child: SizedBox(
+                  width: _cellWidth,
+                  child: DragValueField(
+                    key: ValueKey<String>('$keyName-$i'),
+                    value: shown(scalars[i]),
+                    min: min,
+                    max: max,
+                    resetTo: resetTo,
+                    decimals: 1,
+                    onChanged: (v) => commit(i, v),
+                  ),
+                ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -373,7 +437,9 @@ class TextAnimatorRowsFrb extends StatelessWidget {
 /// takes — and adding the **first** animator moves the layer's anchor in the
 /// same op, so the words do not jump. Returns whether one was added: a layer
 /// that is not Type has no document to add to, and says so by doing nothing.
-bool addTextAnimator(LayerReference layer) {
+/// [adding] is the animators to add, a blank one if there are none.
+bool addTextAnimator(LayerReference layer,
+    {List<BridgeTextAnimator> adding = const []}) {
   final document = layer.getText();
   if (document == null) return false;
   layer.setText(
@@ -388,8 +454,10 @@ bool addTextAnimator(LayerReference layer) {
       paragraph: document.paragraph,
       animators: [
         ...document.animators,
-        _freshAnimator(
-            l10n.textAnimatorDefaultName(document.animators.length + 1)),
+        ...adding,
+        if (adding.isEmpty)
+          freshTextAnimator(
+              l10n.textAnimatorDefaultName(document.animators.length + 1)),
       ],
     ),
   );
@@ -398,7 +466,7 @@ bool addTextAnimator(LayerReference layer) {
 
 /// A fresh animator: the whole set of properties, every one of them at a value
 /// that changes nothing until it is moved.
-BridgeTextAnimator _freshAnimator(String name) => BridgeTextAnimator(
+BridgeTextAnimator freshTextAnimator(String name) => BridgeTextAnimator(
       name: name,
       selector: const BridgeRangeSelector(
         start: BridgeScalar.static_(0),
@@ -410,6 +478,9 @@ BridgeTextAnimator _freshAnimator(String name) => BridgeTextAnimator(
       positionX: const BridgeScalar.static_(0),
       positionY: const BridgeScalar.static_(0),
       rotation: const BridgeScalar.static_(0),
+      positionZ: const BridgeScalar.static_(0),
+      rotationX: const BridgeScalar.static_(0),
+      rotationY: const BridgeScalar.static_(0),
       scaleX: const BridgeScalar.static_(100),
       scaleY: const BridgeScalar.static_(100),
       opacity: const BridgeScalar.static_(100),
@@ -417,6 +488,25 @@ BridgeTextAnimator _freshAnimator(String name) => BridgeTextAnimator(
       fillG: const BridgeScalar.static_(0),
       fillB: const BridgeScalar.static_(0),
     );
+
+/// Whether any of [a]'s rows are keyed.
+bool animatorHasKeys(BridgeTextAnimator a) => [
+      a.selector.start,
+      a.selector.end,
+      a.selector.offset,
+      a.positionX,
+      a.positionY,
+      a.rotation,
+      a.positionZ,
+      a.rotationX,
+      a.rotationY,
+      a.scaleX,
+      a.scaleY,
+      a.opacity,
+      a.fillR,
+      a.fillG,
+      a.fillB,
+    ].any((s) => s is BridgeScalar_Keyframed);
 
 /// [animator] with one channel replaced — the generated struct is immutable and
 /// every field required, so there is one copy helper rather than eleven
@@ -428,6 +518,9 @@ BridgeTextAnimator animatorWith(
   BridgeScalar? positionX,
   BridgeScalar? positionY,
   BridgeScalar? rotation,
+  BridgeScalar? positionZ,
+  BridgeScalar? rotationX,
+  BridgeScalar? rotationY,
   BridgeScalar? scaleX,
   BridgeScalar? scaleY,
   BridgeScalar? opacity,
@@ -441,6 +534,9 @@ BridgeTextAnimator animatorWith(
       positionX: positionX ?? a.positionX,
       positionY: positionY ?? a.positionY,
       rotation: rotation ?? a.rotation,
+      positionZ: positionZ ?? a.positionZ,
+      rotationX: rotationX ?? a.rotationX,
+      rotationY: rotationY ?? a.rotationY,
       scaleX: scaleX ?? a.scaleX,
       scaleY: scaleY ?? a.scaleY,
       opacity: opacity ?? a.opacity,
@@ -460,7 +556,10 @@ enum TextAnimatorValue {
   rangeOffset,
   positionX,
   positionY,
+  positionZ,
   rotation,
+  rotationX,
+  rotationY,
   scaleX,
   scaleY,
   opacity,
@@ -468,6 +567,13 @@ enum TextAnimatorValue {
   fillG,
   fillB,
 }
+
+/// The numbers only a solid layer's letters can use.
+const solidAnimatorValues = {
+  TextAnimatorValue.positionZ,
+  TextAnimatorValue.rotationX,
+  TextAnimatorValue.rotationY,
+};
 
 /// What one of an animator's numbers is called — shared by the Timeline row,
 /// the graph channel and anything else that has to name one.
@@ -477,7 +583,10 @@ String textAnimatorValueLabel(TextAnimatorValue value) => switch (value) {
       TextAnimatorValue.rangeOffset => l10n.textAnimatorRangeOffset,
       TextAnimatorValue.positionX => '${l10n.transformPosition} x',
       TextAnimatorValue.positionY => '${l10n.transformPosition} y',
+      TextAnimatorValue.positionZ => '${l10n.transformPosition} z',
       TextAnimatorValue.rotation => l10n.transformRotation,
+      TextAnimatorValue.rotationX => '${l10n.transformRotation} x',
+      TextAnimatorValue.rotationY => '${l10n.transformRotation} y',
       TextAnimatorValue.scaleX => '${l10n.transformScale} x',
       TextAnimatorValue.scaleY => '${l10n.transformScale} y',
       TextAnimatorValue.opacity => l10n.transformOpacity,
@@ -505,7 +614,10 @@ BridgeScalar textAnimatorScalarOf(
       TextAnimatorValue.rangeOffset => a.selector.offset,
       TextAnimatorValue.positionX => a.positionX,
       TextAnimatorValue.positionY => a.positionY,
+      TextAnimatorValue.positionZ => a.positionZ,
       TextAnimatorValue.rotation => a.rotation,
+      TextAnimatorValue.rotationX => a.rotationX,
+      TextAnimatorValue.rotationY => a.rotationY,
       TextAnimatorValue.scaleX => a.scaleX,
       TextAnimatorValue.scaleY => a.scaleY,
       TextAnimatorValue.opacity => a.opacity,
@@ -526,7 +638,10 @@ BridgeTextAnimator animatorWithScalar(
         animatorWith(a, selector: selectorWith(a.selector, offset: to)),
       TextAnimatorValue.positionX => animatorWith(a, positionX: to),
       TextAnimatorValue.positionY => animatorWith(a, positionY: to),
+      TextAnimatorValue.positionZ => animatorWith(a, positionZ: to),
       TextAnimatorValue.rotation => animatorWith(a, rotation: to),
+      TextAnimatorValue.rotationX => animatorWith(a, rotationX: to),
+      TextAnimatorValue.rotationY => animatorWith(a, rotationY: to),
       TextAnimatorValue.scaleX => animatorWith(a, scaleX: to),
       TextAnimatorValue.scaleY => animatorWith(a, scaleY: to),
       TextAnimatorValue.opacity => animatorWith(a, opacity: to),

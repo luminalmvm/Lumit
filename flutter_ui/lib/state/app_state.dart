@@ -5,6 +5,7 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, exit;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -21,11 +22,14 @@ import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share;
 import 'package:lumit_flutter/src/rust/api/share.dart'
     hide joinSharedProject, shareDefaultPort, shareLinkIn, shareRelayPort;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/file_dialogs.dart';
 import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:provider/provider.dart';
+
+export 'open_requests.dart';
 
 /// The window's title: plain 'Lumit' until the project has a home on disk,
 /// then 'Lumit - `<file name>`' without the extension — the same convention as
@@ -59,6 +63,20 @@ String? projectPathFromArgs(List<String> args) => _fileFromArgs(args, '.lum');
 /// as [projectPathFromArgs] reads a project.
 String? packagePathFromArgs(List<String> args) => _fileFromArgs(args, '.lfx');
 
+/// The style a double-click or a drop asked Lumit to take in, read as
+/// [projectPathFromArgs] reads a project.
+String? stylePathFromArgs(List<String> args) =>
+    _fileFromArgs(args, '.lumstyle');
+
+/// The effect preset a double-click asked Lumit to apply, read as
+/// [projectPathFromArgs] reads a project.
+String? presetPathFromArgs(List<String> args) => _fileFromArgs(args, '.lumfx');
+
+/// The theme a double-click asked Lumit to take in, read as
+/// [projectPathFromArgs] reads a project.
+String? themePathFromArgs(List<String> args) =>
+    _fileFromArgs(args, '.lumtheme');
+
 String? _fileFromArgs(List<String> args, String ending) {
   for (var a in args) {
     if (a.startsWith('file:')) {
@@ -89,47 +107,6 @@ String? inviteFromArgs(List<String> args) {
   return null;
 }
 
-/// The macOS runner's end of this is `OpenRequests` in AppDelegate.swift.
-/// The Windows and Linux runners answer it too, for the open Lumit a second
-/// start hands its arguments to.
-const _openRequests = MethodChannel('lumit/open');
-
-/// What macOS has asked Lumit to open and nobody has taken yet: a project
-/// double-clicked in Finder as its path, an invite link clicked in a browser
-/// as it was written. macOS hands these over as events and never as
-/// arguments, so they are read as arguments once they are here, by
-/// [projectPathFromArgs] and [inviteFromArgs]. Elsewhere it is what a second
-/// start passed on, and empty at start-up.
-Future<List<String>> takeOpenRequests() async {
-  try {
-    return await _openRequests.invokeListMethod<String>('take') ?? const [];
-  } catch (_) {
-    // No runner to ask, as in a widget test.
-    return const [];
-  }
-}
-
-/// Hand [open] whatever Lumit is asked to open from here on. A click that
-/// finds Lumit running comes to it on macOS. On the other systems a package
-/// always does, and the rest when Lumit is kept running in the background.
-void listenForOpenRequests(void Function(List<String> asked) open) {
-  Future<void> take() async {
-    final asked = await takeOpenRequests();
-    if (asked.isNotEmpty) open(asked);
-  }
-
-  // The runner says only that there is something, and it is taken.
-  _openRequests.setMethodCallHandler((_) => take());
-  // Once now as well, for a request that came after start-up took its own.
-  take();
-}
-
-/// Call [asked] when something is waiting to be opened, leaving it for
-/// whoever calls [listenForOpenRequests] next.
-void noticeOpenRequests(VoidCallback asked) {
-  _openRequests.setMethodCallHandler((_) async => asked());
-}
-
 class LumitState extends ChangeNotifier {
   ProjectReference? project;
 
@@ -151,6 +128,9 @@ class LumitState extends ChangeNotifier {
   /// The extension package Lumit was started with, until its install
   /// window has opened.
   String? launchPackage;
+
+  /// The style Lumit was started with, until it is taken in.
+  String? launchStyle;
 
   StreamSubscription? currentDocumentStream;
 
@@ -1029,12 +1009,16 @@ class LumitState extends ChangeNotifier {
   ///
   /// [launch] is the open a document on the command line asks for, by a Lumit
   /// started to do nothing else.
-  Future<void> openProject(String path,
-      {bool recover = true, bool launch = false}) async {
+  /// [ask] false opens it without asking about unsaved changes, for Revert
+  /// to saved, which has asked its own question.
+  Future<void> openProject(String asked,
+      {bool recover = true, bool launch = false, bool ask = true}) async {
+    final path = kIsWeb ? await pickIfGone(asked, this) : asked;
+    if (path == null) return;
     // One at a time: the change sink below is a single pending field, and two
     // opens in flight would have the second take the first's.
     if (opening.value) return;
-    if (unsavedNeedsAsking && !await askBeforeLeaving()) return;
+    if (ask && unsavedNeedsAsking && !await askBeforeLeaving()) return;
     // Asked again, because another open can have started while the question
     // was up.
     if (opening.value) return;
@@ -1367,6 +1351,9 @@ class LumitState extends ChangeNotifier {
   Future<bool> importFootagePaths(List<String> paths,
       {List<String> bins = const []}) async {
     final project = this.project;
+    final here = paths.where(importsHere).toList();
+    if (here.length < paths.length) postNotice(l10n.webCannotDecode);
+    paths = here;
     if (project == null || paths.isEmpty) return false;
     if (_importing || opening.value || busy.value != null) return false;
     _importing = true;

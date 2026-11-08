@@ -64,6 +64,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
@@ -77,12 +79,15 @@ import '../widgets/controls.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
-import 'placeholder.dart';
 import 'viewer_bar.dart';
 import 'viewer_camera.dart' show altNavigates;
 import 'viewer_compare.dart';
+import 'viewer_view_cube.dart' show ViewLookTag;
 import 'viewer_deck.dart';
+import 'viewer_menus.dart';
 import 'viewer_rulers.dart' show viewerRulerBand;
+import 'viewer_picture.dart'
+    if (dart.library.js_interop) 'viewer_picture_web.dart';
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
 import 'viewer_zoom.dart';
@@ -119,6 +124,13 @@ export 'viewer_strips.dart';
 /// is no Viewer up — the welcome screen's window, or a workspace with the panel
 /// closed. Set by the panel while it is mounted; see `_lendPicture`.
 GlobalKey? viewerPictureKey;
+
+/// The views holding a snapshot, by engine id, so a menu with no panel in
+/// hand knows whether Compare ▸ Snapshot can do anything.
+final Set<int> _snapshotViews = {};
+
+/// Whether the view [viewId] holds a snapshot.
+bool viewerHasSnapshot(int viewId) => _snapshotViews.contains(viewId);
 
 /// Photograph the composition on screen as a small PNG, for the welcome
 /// screen's recent rows.
@@ -214,18 +226,33 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
         final layout = ui.views.layoutOf(widget.pane);
         final compare = ui.views.compareOf(widget.pane);
         if (views.isEmpty) return const EmptyStageFrb();
-        if (views.length == 1) return _surface(ui, views.first);
-        if (compare != CompareMode.none && views.length >= 2) {
+        // A source side with nothing loaded takes no room: the composition
+        // has the pane until a clip is opened into it.
+        final shown = [
+          for (final view in views)
+            if (view.mode != ViewMode.footage || view.itemId != null) view,
+        ];
+        if (shown.length < 2) {
+          return _surface(ui, shown.isEmpty ? views.first : shown.first,
+              alone: true);
+        }
+        if (compare.pairsViews) {
+          // A wipe is one picture under one bar, so neither side wears the
+          // active edge.
+          final wipe = compare == CompareMode.wipe;
           return ViewerCompare(
             pane: widget.pane,
             mode: compare,
             at: ui.views.dividerOf(widget.pane),
             onDivider: (at) => ui.views.setDivider(widget.pane, at),
-            left: _surface(ui, views[0]),
-            right: _surface(ui, views[1]),
+            left: _surface(ui, shown[0], edge: !wipe, wipeLead: wipe),
+            right: (side) => _surface(ui, shown[1], wipe: side),
+            leftView: shown[0],
+            rightView: shown[1],
+            swapped: ui.views.paneSwapped.contains(widget.pane),
           );
         }
-        return _grid(ui, views, layout);
+        return _grid(ui, shown, layout);
       },
     );
   }
@@ -236,15 +263,27 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
   ///
   /// A press anywhere in it fronts it, before the content sees the event —
   /// the same rule the dock's own pane chrome follows, one level down.
-  Widget _surface(LumitUiState ui, ViewerSurface view) {
+  Widget _surface(LumitUiState ui, ViewerSurface view,
+      {bool alone = false,
+      bool edge = true,
+      bool wipeLead = false,
+      ViewerWipe? wipe}) {
     final surface = ViewerViewSurface(
       key: ValueKey(view.id),
       pane: widget.pane,
       view: view,
+      wipe: wipe,
+      wipeLead: wipeLead,
     );
     // One view in the pane is the pane, so it needs no edge of its own: the
     // dock already draws one round the active pane.
-    if (ui.views.forPane(widget.pane).length < 2) return surface;
+    // A wipe's second side lends its picture and takes no presses, so the
+    // first view stays the one the app is working in.
+    if (alone || wipe != null) return surface;
+    if (!edge) {
+      return Listener(
+          onPointerDown: (_) => ui.frontView(view.id), child: surface);
+    }
     final t = ThemeScope.of(context).theme;
     final active = view.id == ui.views.activeId;
     return Listener(
@@ -302,7 +341,20 @@ class ViewerViewSurface extends StatefulWidget {
   final PaneId pane;
   final ViewerSurface view;
 
-  const ViewerViewSurface({super.key, required this.pane, required this.view});
+  /// This view as a wipe's second side: its picture alone, from the line
+  /// across, at the first view's zoom and pan.
+  final ViewerWipe? wipe;
+
+  /// This view as a wipe's first side, whose zoom and pan the second takes.
+  final bool wipeLead;
+
+  const ViewerViewSurface({
+    super.key,
+    required this.pane,
+    required this.view,
+    this.wipe,
+    this.wipeLead = false,
+  });
 
   @override
   State<ViewerViewSurface> createState() => _ViewerPanelFrbState();
@@ -322,13 +374,36 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
 
   LumitUiState? get _uiOrNull => _boundUi;
 
-  double? get _zoom => _view.magnification;
-  set _zoom(double? z) => _view.magnification = z;
+  /// Where the picture sits: this view's own place, or in a wipe the first
+  /// view's, so the two pictures stay in register.
+  ViewerSurface get _place => widget.wipe?.registerTo ?? _view;
 
-  Offset get _pan => Offset(_view.panX, _view.panY);
+  double? get _zoom => _place.magnification;
+  set _zoom(double? z) => _place.magnification = z;
+
+  Offset get _pan => Offset(_place.panX, _place.panY);
   set _pan(Offset p) {
-    _view.panX = p.dx;
-    _view.panY = p.dy;
+    _place.panX = p.dx;
+    _place.panY = p.dy;
+  }
+
+  /// In a wipe the two sides share one place, so a move on either side
+  /// redraws both: once per frame, and only when the place has moved.
+  (double?, Offset)? _placeTold;
+  bool _placeQueued = false;
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    if ((widget.wipe == null && !widget.wipeLead) || _placeQueued) return;
+    _placeQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _placeQueued = false;
+      final now = (_zoom, _pan);
+      if (!mounted || now == _placeTold) return;
+      _placeTold = now;
+      _uiOrNull?.views.touch();
+    });
   }
 
   ViewerChannel get _channel => _view.channel;
@@ -424,6 +499,9 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// Whether the Show button is being held down this instant.
   bool _showingSnapshot = false;
 
+  /// What the menus opened from this view's bars and picture ask of it.
+  final ViewerMenuHost _menus = ViewerMenuHost();
+
   @override
   void dispose() {
     _returnPicture();
@@ -431,6 +509,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     _changes?.cancel();
     _zoomMotion.dispose();
     _snapshot?.dispose();
+    _snapshotViews.remove(widget.view.engineId);
     super.dispose();
   }
 
@@ -473,6 +552,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       return;
     }
     final old = _snapshot;
+    _snapshotViews.add(widget.view.engineId);
     setState(() {
       _snapshot = shot;
       _snapshotArea = Rect.fromLTRB(
@@ -494,6 +574,23 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     if (_snapshot == null && held) return;
     if (_showingSnapshot == held) return;
     setState(() => _showingSnapshot = held);
+  }
+
+  /// Forget the stored picture, after the frame for [_takeSnapshot]'s reason.
+  void _clearSnapshot() {
+    final old = _snapshot;
+    _snapshotViews.remove(widget.view.engineId);
+    // A compare against it has nothing left to compare with.
+    final ui = _uiOrNull;
+    if (ui != null && ui.views.compareOf(widget.pane) == CompareMode.snapshot) {
+      ui.views.setCompare(widget.pane, CompareMode.none);
+    }
+    setState(() {
+      _snapshot = null;
+      _snapshotArea = null;
+      _showingSnapshot = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
   }
 
   /// Take the Viewer to [scale] (null = fit) and [pan], smoothly when the shell
@@ -547,14 +644,19 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// any switch anywhere was clicked. The read model carries each layer's
   /// source now, so the list below is a walk over data already in hand
   /// (docs/impl/ui-performance.md §4.5).
-  ({BridgeCompSettings settings, BridgeCompSize size})? _facts;
+  ({BridgeCompSettings settings, BridgeCompSize size, int start})? _facts;
 
-  ({BridgeCompSettings settings, BridgeCompSize size})? _factsOf(
+  ({BridgeCompSettings settings, BridgeCompSize size, int start})? _factsOf(
       CompositionReference comp) {
     final held = _facts;
     if (held != null) return held;
     try {
-      return _facts = (settings: comp.getSettings(), size: comp.getSize());
+      return _facts = (
+        settings: comp.getSettings(),
+        size: comp.getSize(),
+        // The frame the clock reads at the first frame: the Start timecode.
+        start: comp.frameAtTime(time: comp.getStartTimecode()),
+      );
     } catch (_) {
       // Deleted a moment ago. The shell fronts another comp once the
       // engine's change arrives; until then there is nothing to show.
@@ -697,10 +799,27 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         _goToZoom(z, Offset.zero, from: _shownScale);
     // A 3D viewport says so where the panel's name goes.
     final viewport = ui.isViewport(widget.view.engineId);
+    _menus
+      ..comp = comp
+      ..viewId = widget.view.engineId
+      ..zoom = _zoom
+      ..shownScale = _shownScale
+      ..onZoom = goToNamedZoom
+      ..channel = _channel
+      ..onChannel = ((c) => setState(() => _channel = c))
+      ..background = ui.model.heldBackground
+      ..compSize = Size(facts.size.width.toDouble(), facts.size.height.toDouble())
+      ..hasSnapshot = _snapshot != null
+      ..snapshotShown = _showingSnapshot
+      ..takeSnapshot = _takeSnapshot
+      ..clearSnapshot = _clearSnapshot
+      ..showSnapshot = _holdSnapshot;
     final header = split
         ? ViewerHeader(
             viewport: viewport,
             viewId: widget.view.engineId,
+            name: settings.name,
+            host: _menus,
             zoom: _zoom,
             shownScale: _shownScale,
             look: ui.viewerLook,
@@ -729,6 +848,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           playing: playing,
           playhead: ui.playheadFrame,
           settings: settings,
+          // The clock reads from the comp's Start timecode, held with its facts.
+          startFrame: facts.start,
           comp: comp,
           compSize: facts.size,
           tier: tier,
@@ -743,6 +864,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           hasSnapshot: _snapshot != null,
           onSnapshotTake: _takeSnapshot,
           onSnapshotHold: _holdSnapshot,
+          host: _menus,
           detached: round,
           transport: !deck,
           loop: ui.workspace.performance.loop,
@@ -770,6 +892,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                     onZoom: goToNamedZoom,
                     quality: !deck,
                     viewId: widget.view.engineId,
+                    host: _menus,
                   ),
                 ],
         ),
@@ -787,6 +910,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         // every measurement in this builder is taken against what they leave.
         _band = ui.viewerOverlays.rulers ? viewerRulerBand : 0.0;
         final fitted = _fittedRect(constraints, size);
+        _menus.picture = fitted;
         _reportScale(ui, fitted, size, _fitScale(constraints, size));
         // Through the comp's own camera a viewport is the comp's picture.
         final canvas = viewport && ui.viewPoseOf(widget.view.engineId) != null
@@ -842,12 +966,18 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             uiState: ui,
             fitted: fitted,
             pictureRect: canvas,
-            showPicture: !(viewport && widget.view.wireframeOnly),
+            showPicture: !ui.linesOnly(widget.view.engineId),
             grid: ui.viewerGrid,
             overlays: ui.viewerOverlays,
             pictureKey: _pictureKey,
-            snapshot: _showingSnapshot ? _snapshot : null,
+            snapshot: _showingSnapshot || _comparingSnapshot(ui)
+                ? _snapshot
+                : null,
             snapshotArea: _snapshotArea,
+            // Held, the snapshot covers all of it again.
+            snapshotFrom: _comparingSnapshot(ui) && !_showingSnapshot
+                ? ui.views.dividerOf(widget.pane)
+                : null,
             wireframes: ui.viewerLayerControls,
             channel: _channel,
             compSize: size,
@@ -880,7 +1010,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
               compSize: Size(size.width.toDouble(), size.height.toDouble()),
               panel: _pictureArea(constraints),
             )),
-            onZoom: goToNamedZoom,
+            menus: _menus,
           ),
         );
       },
@@ -933,45 +1063,146 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         ),
     ];
 
+    // A wipe's second side: the strips keep their room, so the picture sits
+    // exactly over the first side's, and draw nothing; the first side's bars
+    // run under both.
+    final wipe = widget.wipe;
+    if (wipe != null) {
+      Widget hidden(Widget strip) => Visibility(
+          visible: false,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: strip);
+      above.setAll(0, above.map(hidden));
+      below.setAll(0, below.map(hidden));
+    }
+    final picture = wipe != null
+        ? _wiped(wipe, stage, settings.name)
+        : _comparingSnapshot(ui)
+            ? _snapshotWiped(ui, stage)
+            : stage;
+
     // Keyed either way: the picture with its strips, which is only here while
     // a composition is shown.
     if (!round) {
       return Column(
         key: const ValueKey('viewer-comp-view'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [...above, Expanded(child: stage), ...below],
+        children: [...above, Expanded(child: picture), ...below],
       );
     }
     // The room shows between the pills and the picture, the same ground that
     // shows between panels; the pane draws no card of its own under Lantern.
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final strip in above) ...[
+          strip,
+          SizedBox(height: t.tokens.tileGap)
+        ],
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+              boxShadow: wipe == null ? t.tokens.cardShadow : null,
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: picture,
+          ),
+        ),
+        for (final strip in below) ...[
+          SizedBox(height: t.tokens.tileGap),
+          strip
+        ],
+      ],
+    );
+    // A wipe's second side lets the first side's room show through.
+    if (wipe != null) {
+      return KeyedSubtree(
+          key: const ValueKey('viewer-comp-view'), child: column);
+    }
     return ColoredBox(
       key: const ValueKey('viewer-comp-view'),
       color: t.room,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final strip in above) ...[
-            strip,
-            SizedBox(height: t.tokens.tileGap)
-          ],
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(t.tokens.cardRadius),
-                boxShadow: round ? t.tokens.cardShadow : null,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: stage,
-            ),
-          ),
-          for (final strip in below) ...[
-            SizedBox(height: t.tokens.tileGap),
-            strip
-          ],
-        ],
-      ),
+      child: column,
     );
   }
+
+  /// A wipe's second side: its picture on its side of the line, the line on
+  /// it, and a quiet name on each side of the line where the two differ.
+  Widget _wiped(ViewerWipe wipe, Widget stage, String compName) =>
+      LayoutBuilder(builder: (context, box) {
+        final side = [
+          if (wipe.nameComp) compName,
+          if (wipe.sideTag.isNotEmpty) wipe.sideTag,
+        ].join(' · ');
+        final (left, right) =
+            wipe.swapped ? (side, wipe.leadTag) : (wipe.leadTag, side);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRect(
+                clipper: ViewerWipeClip(wipe.x, swapped: wipe.swapped),
+                child: IgnorePointer(child: stage)),
+            if (left.isNotEmpty)
+              Positioned(
+                right: box.maxWidth - wipe.x + _wipeTagGap,
+                bottom: _wipeTagGap,
+                child: ViewLookTag(look: left),
+              ),
+            if (right.isNotEmpty)
+              Positioned(
+                left: wipe.x + _wipeTagGap,
+                bottom: _wipeTagGap,
+                child: ViewLookTag(look: right),
+              ),
+            Positioned(
+              left: wipe.x - ViewerCompare.grab / 2,
+              top: 0,
+              bottom: 0,
+              width: ViewerCompare.grab,
+              child: wipe.seam,
+            ),
+          ],
+        );
+      });
+
+  /// Whether this view is wiped against its own snapshot.
+  bool _comparingSnapshot(LumitUiState ui) =>
+      _snapshot != null &&
+      ui.views.compareOf(widget.pane) == CompareMode.snapshot;
+
+  /// The picture wiped against its snapshot: the live picture up to the
+  /// line, then the snapshot, which the stage cuts, and the snapshot's side
+  /// named. The reference sits right of the line, as another comp's does.
+  Widget _snapshotWiped(LumitUiState ui, Widget stage) =>
+      LayoutBuilder(builder: (context, box) {
+        final t = ThemeScope.of(context).theme;
+        final x = box.maxWidth * ui.views.dividerOf(widget.pane);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            stage,
+            Positioned(
+              left: x + _wipeTagGap,
+              bottom: _wipeTagGap,
+              child: ViewLookTag(look: l10n.viewerMenuSnapshot),
+            ),
+            Positioned(
+              left: x - ViewerCompare.grab / 2,
+              top: 0,
+              bottom: 0,
+              width: ViewerCompare.grab,
+              child: viewerCompareSeam(context, t, box.maxWidth, x,
+                  (at) => ui.views.setDivider(widget.pane, at)),
+            ),
+          ],
+        );
+      });
+
+  /// How far a wipe's side names sit from the line and the picture's foot.
+  static const double _wipeTagGap = 8;
 
   /// The picture a 3D viewport fills, on screen: round the comp's middle out
   /// to the farther edge of the pane each way, in whole steps of 16 comp
@@ -1249,15 +1480,6 @@ class FootageStageFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
     final footage = ui.footageOf(view);
-    // A source side with nothing loaded yet says how to load something.
-    if (view.itemId == null) {
-      return PlaceholderPanel(
-        key: const ValueKey('footage-view-empty'),
-        icon: LumitIcon.footage,
-        title: l10n.sourceTitle,
-        hint: l10n.sourceEmptyHint,
-      );
-    }
     final facts = footage == null ? null : ui.itemFacts(footage);
     // Being probed, gone from the project, or a file with no picture in it:
     // the empty state is the honest answer to all three.
@@ -1288,6 +1510,26 @@ class FootageStageFrb extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          // Let the clip go and the composition has the pane back.
+          if (ui.sourceBesideComposition(view))
+            LumitTooltip(
+              message: l10n.close,
+              child: HouseButton(
+                key: const ValueKey('footage-view-close'),
+                small: true,
+                frameless: true,
+                padding: EdgeInsets.zero,
+                onPressed: () => ui.clearSourceView(view),
+                child: SizedBox(
+                  width: iconSize + 4,
+                  height: iconSize + 4,
+                  child: Center(
+                    child: glyph.LumitIcon(LumitIcons.close,
+                        colour: t.textSecondary),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1330,14 +1572,19 @@ class FootageStageFrb extends StatelessWidget {
       onSeek: (frame) => ui.seekFootageView(view, frame),
     );
     final bar = _SourceBar(view: view, facts: facts, detached: round);
+    // The same rows from anywhere on the source view.
+    Widget menu(Widget child) => ViewerRightClick(
+          rows: (close) => viewerSourceRows(ui, view, close),
+          child: child,
+        );
     if (!round) {
-      return Column(
+      return menu(Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [header, Expanded(child: picture), strip, bar],
-      );
+      ));
     }
     final gap = SizedBox(height: t.tokens.tileGap);
-    return ColoredBox(
+    return menu(ColoredBox(
       color: t.room,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1360,7 +1607,7 @@ class FootageStageFrb extends StatelessWidget {
           bar,
         ],
       ),
-    );
+    ));
   }
 
   /// The item at the size that fits the pane, its shape kept.
@@ -1387,7 +1634,7 @@ class _FootagePicture extends StatelessWidget {
         valueListenable: uiState.textureOf(view.engineId),
         builder: (context, textureId, _) => textureId == null
             ? const SizedBox.expand()
-            : pictureChannelFilter(view.channel, Texture(textureId: textureId)),
+            : pictureChannelFilter(view.channel, viewerPicture(textureId)),
       );
 }
 
@@ -1528,6 +1775,17 @@ class _SourceBarState extends State<_SourceBar>
   bool _sound = false;
   bool _heard = false;
 
+  /// Whether Fit to fill has a work area, asked once a document revision.
+  bool _canFit = false;
+  int? _fitAskedAt;
+
+  /// How wide the bar has to be to show Replace and Fit to fill as well, and
+  /// to show the steps and the jumps to the marks beside Play. The edits win:
+  /// the steps go first, and come back once the edits have gone too.
+  static const double _roomForEveryEdit = 560;
+  static const double _roomForStepsBesideEdits = 620;
+  static const double _roomForSteps = 420;
+
   ViewerSurface get view => widget.view;
   BridgeMediaInfo get facts => widget.facts;
   double get _rate => facts.fpsNum / (facts.fpsDen <= 0 ? 1 : facts.fpsDen);
@@ -1628,6 +1886,62 @@ class _SourceBarState extends State<_SourceBar>
     if (frame >= last) _stop();
   }
 
+  /// The In and Out marks and the length between them, beside the playhead's
+  /// time: all three where they fit, the length alone where only it does.
+  Widget _marks(LumitTheme t) {
+    final from = view.sourceIn, to = view.sourceOut;
+    if (from == null && to == null) return const SizedBox.shrink();
+    final start = facts.startFrame.toInt();
+    String at(int frame) => timecodeOfRate(
+        frame + start, facts.fpsNum, facts.fpsDen,
+        dropFrame: facts.startDropFrame);
+    final a = from ?? 0;
+    final b = to ?? LumitUiState.framesOf(facts) - 1;
+    final length = timecodeOfRate(b - a + 1, facts.fpsNum, facts.fpsDen);
+    final face = t.mono.copyWith(fontSize: viewerTimecodeSize);
+    final label = face.copyWith(color: t.textMuted);
+    final value = face.copyWith(color: t.textSecondary);
+    // The length in the marked stretch's own tint, so it reads as that
+    // stretch on the strip above.
+    final marked = face.copyWith(color: t.accent);
+    final whole = TextSpan(children: [
+      TextSpan(text: '${l10n.sourceMarkIn} ', style: label),
+      TextSpan(text: '${at(a)}   ', style: value),
+      TextSpan(text: '${l10n.sourceMarkOut} ', style: label),
+      TextSpan(text: '${at(b)}   ', style: value),
+      TextSpan(text: '$length   ', style: marked),
+    ]);
+    final short = TextSpan(text: '$length   ', style: marked);
+    return LayoutBuilder(builder: (context, box) {
+      double wide(TextSpan s) {
+        final p = TextPainter(text: s, textDirection: TextDirection.ltr)
+          ..layout();
+        final w = p.width;
+        p.dispose();
+        return w;
+      }
+
+      final shown = wide(whole) <= box.maxWidth
+          ? whole
+          : wide(short) <= box.maxWidth
+              ? short
+              : null;
+      final text = shown == null
+          ? null
+          : Text.rich(shown, key: const ValueKey('source-marks'), maxLines: 1);
+      return Align(
+        alignment: Alignment.centerRight,
+        // The length alone says the marks in full when the pointer asks.
+        child: text != null && identical(shown, short)
+            ? LumitTooltip(
+                message: '${l10n.sourceMarkIn} ${at(a)}   '
+                    '${l10n.sourceMarkOut} ${at(b)}',
+                child: text)
+            : text,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -1649,8 +1963,35 @@ class _SourceBarState extends State<_SourceBar>
       height: viewerStripHeightFor(t),
       decoration: viewerStripDecoration(t, widget.detached),
       padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
-      child: Row(
+      child: LayoutBuilder(builder: (context, box) {
+      final wide = box.maxWidth >= _roomForEveryEdit;
+      final steps = box.maxWidth >=
+          (wide ? _roomForStepsBesideEdits : _roomForSteps);
+      final last = LumitUiState.framesOf(facts) - 1;
+      // A step or a jump to a mark, the Viewer's own glyphs. A jump with no
+      // mark to go to greys.
+      Widget mark(String id, LumitIcon icon, String tip, int? frame,
+              {String? action}) =>
+          viewerBarMark(
+            key: ValueKey('source-$id'),
+            icon: icon,
+            colour: frame == null ? t.textDisabled : t.textMuted,
+            onPressed: frame == null
+                ? null
+                : () => ui.seekFootageView(view, frame.clamp(0, last)),
+            tip: tip,
+            action: action,
+          );
+      return Row(
         children: [
+          if (steps) ...[
+            mark('go-in', LumitIcon.toStart, l10n.sourceGoToIn, view.sourceIn,
+                action: 'cut.goto.in'),
+            viewerBarGapBox(viewerTransportGap),
+            mark('step-back', LumitIcon.previousFrame,
+                l10n.tipTransportPrevious, view.sourceFrame - 1),
+            viewerBarGapBox(viewerTransportGap),
+          ],
           viewerBarMark(
             key: const ValueKey('source-play'),
             icon: _ticker.isActive ? LumitIcon.pause : LumitIcon.play,
@@ -1658,6 +1999,14 @@ class _SourceBarState extends State<_SourceBar>
             onPressed: _toggle,
             tip: _ticker.isActive ? l10n.sourceStop : l10n.sourcePlay,
           ),
+          if (steps) ...[
+            viewerBarGapBox(viewerTransportGap),
+            mark('step-forward', LumitIcon.nextFrame, l10n.tipTransportNext,
+                view.sourceFrame + 1),
+            viewerBarGapBox(viewerTransportGap),
+            mark('go-out', LumitIcon.toEnd, l10n.sourceGoToOut, view.sourceOut,
+                action: 'cut.goto.out'),
+          ],
           const SizedBox(width: viewerBarGap),
           button('mark-in', l10n.sourceMarkIn, l10n.sourceMarkInTip,
               () => ui.markSource(view, markIn: true),
@@ -1674,7 +2023,30 @@ class _SourceBarState extends State<_SourceBar>
           button('overwrite', l10n.sourceOverwrite, l10n.sourceOverwriteTip,
               canPlace ? () => ui.placeSource(view, insert: false) : null,
               action: 'cut.overwrite'),
-          const Spacer(),
+          // The other two edits, while the bar has room. The menu and the
+          // keys have them at any width.
+          if (wide)
+            ListenableBuilder(
+              listenable: Listenable.merge([ui.model, ui.cutClip]),
+              builder: (context, _) {
+                final revision = ui.model.revision;
+                if (revision == null || revision != _fitAskedAt) {
+                  _fitAskedAt = revision;
+                  _canFit = canFit(ui);
+                }
+                return Row(children: [
+                  const SizedBox(width: viewerHeaderGap),
+                  button('replace', l10n.sourceReplace, l10n.sourceReplaceTip,
+                      canReplace(ui) ? () => ui.replaceSource(view) : null,
+                      action: 'cut.replace'),
+                  const SizedBox(width: viewerHeaderGap),
+                  button('fit', l10n.sourceFitToFill, l10n.sourceFitToFillTip,
+                      _canFit ? () => ui.fitSource(view) : null,
+                      action: 'cut.fit.fill'),
+                ]);
+              },
+            ),
+          Expanded(child: _marks(t)),
           Text(
             // From the footage's own start timecode, where it has one.
             timecodeOfRate(view.sourceFrame + facts.startFrame.toInt(),
@@ -1684,7 +2056,8 @@ class _SourceBarState extends State<_SourceBar>
                 fontSize: viewerTimecodeSize, color: t.textSecondary),
           ),
         ],
-      ),
+      );
+      }),
     );
   }
 }

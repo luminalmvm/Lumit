@@ -16,7 +16,7 @@
 //! Thread role: pure function over the snapshot; any thread.
 
 use crate::anim::Animation;
-use crate::model::{BlendMode, Composition, Document, EffectValue, Layer, LayerKind};
+use crate::model::{BlendMode, Composition, Document, EffectValue, Layer, LayerKind, LightKind};
 use crate::time::layer_time;
 
 /// The index (0 = top of the stack) of the topmost layer in `comp` that, at
@@ -48,6 +48,12 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
     if comp.groups.iter().any(crate::group::header_live) {
         return None;
     }
+    // An Environment light's picture is a layer that is never drawn, so a
+    // full-frame one hides nothing.
+    let environment = |l: &Layer| matches!(&l.kind, LayerKind::Light { light } if light.kind == LightKind::Environment);
+    if comp.layers.iter().any(environment) {
+        return None;
+    }
     let any_solo = crate::model::any_picture_solo(comp);
     let drawn = |l: &Layer| {
         // An Audio layer never draws, so it is never an occluder and
@@ -76,11 +82,13 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
         if l.matte.as_ref().is_some_and(|m| below(m.layer)) {
             return None;
         }
-        let refs_below = l.effects.iter().filter(|e| e.enabled).any(|e| {
-            e.params
-                .iter()
-                .any(|p| matches!(p.value, EffectValue::Layer(Some(id)) if below(id)))
-        });
+        let refs_below = crate::model_material::and_effects(l)
+            .filter(|e| e.enabled)
+            .any(|e| {
+                e.params
+                    .iter()
+                    .any(|p| matches!(p.value, EffectValue::Layer(Some(id)) if below(id)))
+            });
         if refs_below {
             return None;
         }
@@ -145,6 +153,9 @@ impl Affine {
 /// anchor, in the renderer's own order (`lumit_gpu::composite::place_matrix`).
 fn placement(layer: &Layer, lt: f64) -> Option<Affine> {
     let tr = &layer.transform;
+    if !tr.orient.is_off() {
+        return None;
+    }
     let props = [
         &tr.anchor_x,
         &tr.anchor_y,
@@ -302,6 +313,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

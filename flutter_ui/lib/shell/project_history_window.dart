@@ -17,7 +17,7 @@
 // names in one go.
 
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
@@ -45,11 +45,14 @@ import 'bring_composition_frb.dart';
 import 'dialog_frame.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'pro_window.dart';
+import 'question_window.dart';
 import 'profile_chip.dart';
 import 'settings_account.dart' show askBefore;
 import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import 'sign_in_window.dart';
 import 'welcome_frb.dart' show projectDisplayName;
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 const double projectHistoryWidth = 800;
 
@@ -323,7 +326,7 @@ class _BackupMarkState extends State<BackupMark> {
           }
           return widget.wrap(
             Padding(
-              padding: const EdgeInsets.only(left: 2),
+              padding: const EdgeInsetsDirectional.only(start: 2),
               child: LumitTooltip(
                 message: words,
                 child: HouseButton(
@@ -463,24 +466,25 @@ class _BackupStillState extends State<BackupStill> {
   }
 }
 
-/// One line in the middle of a backup window, with a way to ask again when
-/// the line is that the server was not reached.
-Widget backupLine(LumitTheme t, String words, {VoidCallback? retry}) =>
+/// One line in the middle of a backup window, with the one thing to press
+/// about it when there is one.
+Widget backupLine(LumitTheme t, String words,
+        {String? action, VoidCallback? onAction}) =>
     SizedBox(
       height: _lineHeight,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(words, style: t.body.copyWith(color: t.textSecondary)),
-          if (retry != null) ...[
+          if (action != null) ...[
             const SizedBox(height: 14),
             SizedBox(
               height: dialogFooterButton,
               child: HouseButton(
                 key: const ValueKey('backup-retry'),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                onPressed: retry,
-                child: Text(l10n.backupTryAgain),
+                onPressed: onAction,
+                child: Text(action),
               ),
             ),
           ],
@@ -723,53 +727,21 @@ Future<void> showProjectHistory(BuildContext context, {BackupProject? of}) {
   );
 }
 
-/// Ask before a version is put back. Nothing is lost by it, so this takes
-/// the form of the prompt that names a version and not of the one that
-/// deletes: the filled button is the one that goes ahead, and Enter presses
-/// it.
+/// Ask before a version is put back. Nothing is lost by it, so the filled
+/// button is the one that goes ahead, and Enter presses it.
 Future<bool> _askPutBack(BuildContext context, String question,
     {String? yes}) async {
   final sure = await showLumitModal<bool>(
     context: context,
-    builder: (close) => FloatSurface(
-      width: 320,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Builder(builder: (context) {
-          final t = ThemeScope.of(context).theme;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(question, style: t.bodyPrimary.copyWith(height: 1.4)),
-              const SizedBox(height: 6),
-              Text(l10n.backupPutBackNote, style: t.small),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  HouseButton(
-                    key: const ValueKey('put-back-no'),
-                    small: true,
-                    frameless: true,
-                    onPressed: () => close(false),
-                    child: Text(l10n.cancel),
-                  ),
-                  const SizedBox(width: 6),
-                  HouseButton(
-                    key: const ValueKey('put-back-yes'),
-                    small: true,
-                    primary: true,
-                    autofocus: true,
-                    onPressed: () => close(true),
-                    child: Text(yes ?? l10n.backupPutBack),
-                  ),
-                ],
-              ),
-            ],
-          );
-        }),
-      ),
+    builder: (close) => QuestionWindow(
+      title: question,
+      keyPrefix: 'put-back',
+      onClose: () => close(false),
+      actions: [
+        questionPlain('put-back-no', l10n.cancel, () => close(false)),
+        questionFilled(
+            'put-back-yes', yes ?? l10n.backupPutBack, () => close(true)),
+      ],
     ),
   );
   return sure ?? false;
@@ -1064,15 +1036,7 @@ class _HistoryState extends State<_History> {
     }
     final run = _runOf[_chosen];
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft && run != null) {
-      final newest = _versions?.where((v) => v.n == run).firstOrNull;
-      if (newest == null) return KeyEventResult.ignored;
-      setState(() {
-        _unfolded.remove(run);
-        _chosen = run;
-        _foldAt = run;
-      });
-      unawaited(_workOut(newest));
-      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(run));
+      _fold(run);
       return KeyEventResult.handled;
     }
     if (enter && event is KeyDownEvent && at >= 0 && _canPutBack(shown[at])) {
@@ -1211,8 +1175,7 @@ class _HistoryState extends State<_History> {
         _asked(version,
             named: l10n.backupDeleteNamedAsk,
             dated: l10n.backupDeleteVersionAsk),
-        l10n.delete,
-        note: l10n.backupDeleteVersionNote);
+        l10n.delete);
     _answered();
     if (!sure) return;
     await _run(() async {
@@ -1321,23 +1284,38 @@ class _HistoryState extends State<_History> {
     _answered();
   }
 
+  /// Fold the run of autosaves [run] belongs to, as Left does on one of its
+  /// rows.
+  void _fold(int run) {
+    final newest = _versions?.where((v) => v.n == run).firstOrNull;
+    if (newest == null) return;
+    setState(() {
+      _unfolded.remove(run);
+      _chosen = run;
+      _foldAt = run;
+    });
+    unawaited(_workOut(newest));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(run));
+  }
+
   /// Everything there is to do with [version], for its row's own menu and
   /// for a right click: what the foot of the window offers, live when that
-  /// is, and taking a name off or deleting.
-  List<Widget> _menu(LumitTheme t, BackupVersion version, VoidCallback close) {
+  /// is, its name, and deleting.
+  List<Widget> _menu(BackupVersion version, VoidCallback close) {
     Widget row(String id, String label, VoidCallback? then) {
       final live = then != null && !_busy;
       return MenuRow(
         key: ValueKey<String>('history-$id-${version.n}'),
+        enabled: live,
         onPressed: () {
           close();
-          if (live) then();
+          then?.call();
         },
-        child: Text(label,
-            style: live ? null : t.body.copyWith(color: t.textDisabled)),
+        child: MenuLabel(label, enabled: live),
       );
     }
 
+    final run = _runOf[version.n];
     return [
       if (_open)
         row('menu-put-back', l10n.backupPutBack,
@@ -1346,6 +1324,7 @@ class _HistoryState extends State<_History> {
       if (_open)
         row('menu-bring', l10n.backupBringBack,
             () => unawaited(_bring(version))),
+      const MenuDivider(),
       row(
           'menu-name',
           version.note.isEmpty ? l10n.backupNameVersion : l10n.renameEllipsis,
@@ -1353,33 +1332,57 @@ class _HistoryState extends State<_History> {
       if (version.note.isNotEmpty)
         row('menu-unname', l10n.backupRemoveName,
             () => unawaited(_removeName(version))),
-      backupMenuRule(t),
+      if (run != null)
+        row('menu-fold', l10n.backupFoldAutosaves, () => _fold(run)),
+      const MenuDivider(),
       row('delete', l10n.backupDeleteVersion,
           () => unawaited(_delete(version))),
     ];
   }
 
   void _showMenu(BackupVersion version, Offset at) {
-    final t = ThemeScope.of(context).theme;
     unawaited(showMenuAt<void>(
       context: context,
       position: at,
-      rows: (close) => _menu(t, version, () => close(null)),
+      rows: (close) => _menu(version, () => close(null)),
     ));
   }
 
-  /// The one line the window has to say when it has no list to show, with
-  /// the way to ask again when the line is that the server was not reached.
-  /// Null while there is a list, or one is on its way.
-  (String, VoidCallback?)? get _line {
+  /// The one line the window has to say when it has no list to show, and the
+  /// one thing to press about it. Null while there is a list, or one is on its
+  /// way.
+  (String, String?, VoidCallback?)? get _line {
     final versions = _versions;
     if (versions != null && versions.isNotEmpty) return null;
-    if (_open && _path == null) return (l10n.backupNotSaved, null);
+    if (_open && _path == null) {
+      return (
+        l10n.backupNoVersions,
+        l10n.save,
+        () => unawaited(_saveHere()),
+      );
+    }
     if (_error case final error?) {
-      return (backupErrorText(error), () => unawaited(_load()));
+      return (
+        backupErrorText(error),
+        l10n.backupTryAgain,
+        () => unawaited(_load()),
+      );
     }
     if (versions == null && _id != null) return null;
-    return (l10n.backupNoVersions, null);
+    return (l10n.backupNoVersions, null, null);
+  }
+
+  /// Save the project, which gives it a history to show.
+  Future<void> _saveHere() async {
+    await saveProjectFrb(widget.app, widget.ui);
+    if (!mounted) return;
+    final path = widget.app.project?.path();
+    if (path == null) return;
+    setState(() {
+      _path = path;
+      _name = projectDisplayName(path);
+    });
+    unawaited(_load());
   }
 
   @override
@@ -1432,7 +1435,7 @@ class _HistoryState extends State<_History> {
               _said != null)
             _strip(t),
           if (line != null)
-            backupLine(t, line.$1, retry: line.$2)
+            backupLine(t, line.$1, action: line.$2, onAction: line.$3)
           else if (versions.isEmpty)
             backupWaiting
           else
@@ -1442,28 +1445,12 @@ class _HistoryState extends State<_History> {
               t,
               keyPrefix: 'history',
               summary: _count(versions),
-              // Bringing one composition back is in words beside the count,
-              // and only for the project that is open, which is where it
-              // would arrive.
-              leading: !_open
-                  ? null
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(_count(versions),
-                              key: const ValueKey('history-summary'),
-                              style: dialogMono(t),
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                        const SizedBox(width: 14),
-                        _bringAction(t, chosen),
-                      ],
-                    ),
-              // The boxes are the decision: look at the version or take it.
-              // Naming it is in its row's own menu, with everything else a
-              // row has.
+              // The filled one takes the whole version over the file. The
+              // others leave the file as it is.
               actions: [
+                if (_open)
+                  _action('bring', l10n.backupBringBack,
+                      chosen == null ? null : () => _bring(chosen)),
                 _action('copy', l10n.backupOpenCopy,
                     chosen == null ? null : () => _copy(chosen)),
                 // Into the project that is open, so only from its own
@@ -1484,21 +1471,6 @@ class _HistoryState extends State<_History> {
             : l10n.backupVersions(versions.length),
         if (_project case final project?) backupSize(project.bytes),
       ].join(' · ');
-
-  /// Bring a composition back, in words: the boxes are the two ways to take
-  /// the whole version, and this takes one thing out of it.
-  Widget _bringAction(LumitTheme t, BackupVersion? chosen) {
-    final live = chosen != null && !_busy;
-    return HouseButton(
-      key: const ValueKey('history-bring'),
-      frameless: true,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      onPressed: live ? () => unawaited(_bring(chosen)) : null,
-      child: Text(l10n.backupBringBack,
-          style: t.small
-              .copyWith(color: live ? t.textSecondary : t.textDisabled)),
-    );
-  }
 
   Widget _action(String id, String label, VoidCallback? onPressed) =>
       dialogPlainAction(
@@ -1641,7 +1613,12 @@ class _HistoryState extends State<_History> {
           Expanded(
             child: chosen == null
                 ? const SizedBox.shrink()
-                : _detail(t, chosen, chosen.n == lastSave),
+                : GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onSecondaryTapDown: (press) =>
+                        _showMenu(chosen, press.globalPosition),
+                    child: _detail(t, chosen, chosen.n == lastSave),
+                  ),
           ),
         ],
       ),
@@ -1649,8 +1626,7 @@ class _HistoryState extends State<_History> {
   }
 
   /// The versions, newest first, under the day each was saved on, with the
-  /// choice of all of them or only the named ones over them, and under them
-  /// what is kept.
+  /// choice of all of them or only the named ones over them.
   Widget _list(LumitTheme t, List<BackupVersion> all, int? lastSave) {
     final versions = _listed(all);
     final rows = <Widget>[];
@@ -1698,6 +1674,23 @@ class _HistoryState extends State<_History> {
               _unfolded.add(version.n);
               _foldAt = null;
             }),
+            onMenu: (at) => unawaited(showMenuAt<void>(
+              context: context,
+              position: at,
+              rows: (close) => [
+                MenuRow(
+                  key: ValueKey<String>('history-unfold-${version.n}'),
+                  onPressed: () {
+                    close(null);
+                    setState(() {
+                      _unfolded.add(version.n);
+                      _foldAt = null;
+                    });
+                  },
+                  child: MenuLabel(l10n.backupUnfoldAutosaves),
+                ),
+              ],
+            )),
           ));
           // The keys stop here as on any row. It stands for its newest.
           rowAt[version.n] = (top, _quietRowHeight);
@@ -1748,8 +1741,8 @@ class _HistoryState extends State<_History> {
       children: [
         Container(
           height: _listHeadHeight,
-          padding: const EdgeInsets.only(left: _railAt * 2, right: 14),
-          alignment: Alignment.centerLeft,
+          padding: const EdgeInsetsDirectional.only(start: _railAt * 2, end: 14),
+          alignment: AlignmentDirectional.centerStart,
           decoration: BoxDecoration(
             border: Border(bottom: BorderSide(color: t.hairline)),
           ),
@@ -1830,7 +1823,7 @@ class _HistoryState extends State<_History> {
                       if (rows.isEmpty)
                         Padding(
                           padding:
-                              const EdgeInsets.fromLTRB(_railAt * 2, 14, 14, 6),
+                              const EdgeInsetsDirectional.fromSTEB(_railAt * 2, 14, 14, 6),
                           child: Text(l10n.backupNoNamed,
                               style: t.body.copyWith(color: t.textSecondary)),
                         ),
@@ -1841,24 +1834,6 @@ class _HistoryState extends State<_History> {
               ),
               if (dayAt.isNotEmpty) _heldDay(t),
             ],
-          ),
-        ),
-        // What is kept, in one line held under the list, whichever versions
-        // it is showing and however far it has been scrolled. The rule is
-        // there for whoever stops on it.
-        Container(
-          padding: const EdgeInsets.fromLTRB(_railAt * 2, 8, 14, 9),
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: t.hairline)),
-          ),
-          child: LumitTooltip(
-            message: l10n.backupKeptRule,
-            maxWidth: 320,
-            child: Text(l10n.backupKept,
-                key: const ValueKey('history-kept'),
-                style: t.small,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
           ),
         ),
       ],
@@ -1890,8 +1865,8 @@ class _HistoryState extends State<_History> {
             right: 0,
             height: _dayHeight + 1,
             child: Container(
-              padding: const EdgeInsets.only(left: _railAt * 2, top: 1),
-              alignment: Alignment.centerLeft,
+              padding: const EdgeInsetsDirectional.only(start: _railAt * 2, top: 1),
+              alignment: AlignmentDirectional.centerStart,
               decoration: BoxDecoration(
                 color: t.surface1,
                 // Ruled off once rows are passing under it.
@@ -2085,13 +2060,6 @@ class _HistoryState extends State<_History> {
   }
 }
 
-/// The hairline between two runs of rows in a menu.
-Widget backupMenuRule(LumitTheme t) => Container(
-      height: 1,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      color: t.hairline,
-    );
-
 /// The words that mark the version the open project's file is.
 class _LastSaveTag extends StatelessWidget {
   const _LastSaveTag();
@@ -2187,6 +2155,7 @@ class _FoldRow extends StatefulWidget {
   final bool chosen;
   final bool above, below;
   final VoidCallback onOpen;
+  final void Function(Offset at) onMenu;
 
   const _FoldRow(
       {super.key,
@@ -2195,7 +2164,8 @@ class _FoldRow extends StatefulWidget {
       required this.chosen,
       required this.above,
       required this.below,
-      required this.onOpen});
+      required this.onOpen,
+      required this.onMenu});
 
   @override
   State<_FoldRow> createState() => _FoldRowState();
@@ -2214,6 +2184,7 @@ class _FoldRowState extends State<_FoldRow> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onOpen,
+        onSecondaryTapDown: (press) => widget.onMenu(press.globalPosition),
         child: Container(
           height: _quietRowHeight,
           color: widget.chosen

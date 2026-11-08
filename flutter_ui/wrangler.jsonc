@@ -1,0 +1,12 @@
+{
+  // web.lumitlab.com - Lumit in the browser, a static Worker like the sites in
+  // web/ and web-docs/. scripts/build-web.ps1 writes ./build/web, this uploads
+  // it. The headers it needs are in web/_headers.
+  "name": "lumit-web",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./build/web",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [{ "pattern": "web.lumitlab.com", "custom_domain": true }]
+}

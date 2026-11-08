@@ -70,14 +70,14 @@ class _TextPanelFrbState extends State<TextPanelFrb>
         final target = targetOf(ui);
         final document = target.document;
         final style = document.style;
-        return Container(
+        return styleMenu(ui, target, Container(
           color: t.surface0,
           child: ListView(
             children: [
-              textTargetHeading(t, target.name ?? l10n.textNewText),
-              textCell(t, l10n.textFont, _familyPicker(ui, target)),
-              textCell(t, l10n.textFace, _facePicker(ui, target)),
+              textTargetHeading(t, target.name),
               textGrid([
+                textCell(t, l10n.textFont, _familyPicker(ui, target)),
+                textCell(t, l10n.textFace, _facePicker(ui, target)),
                 textCell(
                   t,
                   l10n.size,
@@ -90,6 +90,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                     max: 2000,
                     decimals: 1,
                     suffix: ' px',
+                    resetTo: plainTextSize,
                     change: (v) => (d) => d.copyWith(size: v),
                   ),
                 ),
@@ -100,13 +101,18 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                     ui,
                     target,
                     keyName: 'text-leading',
-                    // Auto leading shows the number it comes to.
+                    // Auto leading shows the number it comes to, and Reset
+                    // goes back to it: that number is auto.
                     value: style.leading ?? document.size * 1.2,
                     min: 0,
                     max: 8000,
                     decimals: 1,
                     suffix: ' px',
-                    change: (v) => restyle((s) => s.copyWith(leading: v)),
+                    resetTo: document.size * 1.2,
+                    change: (v) => restyle((s) =>
+                        (v - document.size * 1.2).abs() < 1e-5
+                            ? s.copyWith(autoLeading: true)
+                            : s.copyWith(leading: v)),
                   ),
                 ),
                 textCell(
@@ -154,6 +160,8 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       _swatch(
                         keyName: 'text-fill',
                         colour: document.fill,
+                        // White, as a new Text layer is set.
+                        resetTo: const PickedColour(1, 1, 1),
                         onPicked: (c) =>
                             commitText(ui, target, (d) => d.copyWith(fill: c)),
                       ),
@@ -176,48 +184,74 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       _swatch(
                         keyName: 'text-stroke',
                         colour: style.stroke,
+                        resetTo: PickedColour(plainTextStyle.stroke.r,
+                            plainTextStyle.stroke.g, plainTextStyle.stroke.b),
                         onPicked: (c) => commitText(
                             ui, target, restyle((s) => s.copyWith(stroke: c))),
                       ),
                     ],
                   ),
                 ),
-                textCell(
-                  t,
-                  l10n.textStrokeWidth,
-                  _number(
-                    ui,
-                    target,
-                    keyName: 'text-stroke-width',
-                    value: style.strokeWidth,
-                    min: 0,
-                    max: 500,
-                    decimals: 1,
-                    suffix: ' px',
-                    resetTo: plainTextStyle.strokeWidth,
-                    change: (v) => restyle((s) => s.copyWith(strokeWidth: v)),
+                // Only with a stroke to be that wide: a blank cell keeps the
+                // rows under it where they were.
+                if (style.strokeOn) ...[
+                  const SizedBox.shrink(),
+                  textCell(
+                    t,
+                    l10n.textStrokeWidth,
+                    _number(
+                      ui,
+                      target,
+                      keyName: 'text-stroke-width',
+                      value: style.strokeWidth,
+                      min: 0,
+                      max: 500,
+                      decimals: 1,
+                      suffix: ' px',
+                      resetTo: plainTextStyle.strokeWidth,
+                      change: (v) => restyle((s) => s.copyWith(strokeWidth: v)),
+                    ),
                   ),
-                ),
+                ],
               ]),
+              _moreTwirl(t),
               if (_more) ..._moreRows(t, ui, target),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: HouseButton(
-                    key: const ValueKey('text-more'),
-                    small: true,
-                    onPressed: () => setState(() => _more = !_more),
-                    child: Text(_more ? l10n.textLess : l10n.textMore),
-                  ),
-                ),
-              ),
             ],
           ),
-        );
+        ));
       },
     );
   }
+
+  /// The way to the less used controls, the same twirl every fold in the app
+  /// has, and on the same text edge as the labels above it.
+  Widget _moreTwirl(LumitTheme t) => HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: const ValueKey('text-more'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _more = !_more),
+          child: SizedBox(
+            height: t.density.propertyRow,
+            child: Row(
+              children: [
+                const SizedBox(width: 6),
+                TwirlTurn(
+                  open: _more,
+                  child: lumitIcon(
+                    _more ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                    size: iconSize,
+                    color: Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Text(l10n.textMore,
+                    style: t.body.copyWith(
+                        color: Color.lerp(t.textMuted, t.textPrimary, lit))),
+              ],
+            ),
+          ),
+        ),
+      );
 
   List<Widget> _moreRows(LumitTheme t, LumitUiState ui, TextTarget target) {
     final style = target.document.style;
@@ -315,8 +349,9 @@ class _TextPanelFrbState extends State<TextPanelFrb>
           ),
         ),
       ]),
-      // After Effects' four, in its order: stroke over, then all together.
-      textCell(
+      // Four orders: stroke over, then all together. Only with both to order.
+      if (style.fillOn && style.strokeOn)
+       textCell(
         t,
         l10n.textFillAndStroke,
         BareDropdown<(bool, bool)>(
@@ -460,10 +495,12 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     required String keyName,
     required BridgeColourRgba colour,
     required ValueChanged<BridgeColourRgba> onPicked,
+    PickedColour? resetTo,
   }) {
     int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
     return ColourSwatchButton(
       key: ValueKey<String>(keyName),
+      resetTo: resetTo,
       colour:
           documentColour(byte(colour.r), byte(colour.g), byte(colour.b), 255),
       onPicked: (picked) => onPicked(BridgeColourRgba(

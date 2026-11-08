@@ -143,7 +143,7 @@ const TINT_ATTR: u32 = 95;
     match_name = "label_points",
     label = "Label points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be anywhere, and its label reaches away from it.
     roi = FullFrame,

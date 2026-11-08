@@ -18,10 +18,15 @@
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/time_readout.dart';
+import 'dialog_frame.dart';
 
 /// Ask for a new speed, in per cent. Completes with null when dismissed.
 ///
@@ -31,13 +36,11 @@ import '../widgets/controls.dart';
 Future<double?> showStretchDialogFrb({
   required BuildContext context,
   required int? durationFrames,
-  required double fps,
 }) =>
     showLumitModal<double>(
       context: context,
       builder: (close) => _StretchBody(
         durationFrames: durationFrames,
-        fps: fps,
         onConfirm: close,
         onCancel: () => close(null),
       ),
@@ -45,13 +48,11 @@ Future<double?> showStretchDialogFrb({
 
 class _StretchBody extends StatefulWidget {
   final int? durationFrames;
-  final double fps;
   final ValueChanged<double> onConfirm;
   final VoidCallback onCancel;
 
   const _StretchBody({
     required this.durationFrames,
-    required this.fps,
     required this.onConfirm,
     required this.onCancel,
   });
@@ -85,6 +86,26 @@ class _StretchBodyState extends State<_StretchBody> {
 
   void _confirm() => widget.onConfirm(_speed);
 
+  /// The length as a timecode, as the Retime panel's well shows it.
+  Widget _duration(LumitTheme t) {
+    final (fpsNum, fpsDen) =
+        Provider.of<LumitUiState>(context, listen: false).model.fpsExact;
+    return TimeReadout(
+      key: const ValueKey('stretch-duration'),
+      frame: _frames,
+      format: (f) => timecodeOfRateSigned(f, fpsNum, fpsDen),
+      parse: (text) => framesOfTimecodeSigned(text, fpsNum, fpsDen),
+      widthChars: timecodeChars(fpsNum, fpsDen),
+      style: t.mono.copyWith(fontSize: wellTextSize),
+      well: true,
+      wellFaceHeight: wellHeight,
+      minFrame: 1,
+      maxFrame: 1000000,
+      draggable: true,
+      onCommit: _setFrames,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -102,92 +123,61 @@ class _StretchBodyState extends State<_StretchBody> {
         _confirm();
         return KeyEventResult.handled;
       },
-      child: FloatSurface(
+      child: DialogFrame(
         width: 340,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(
-                frames == null ? l10n.clipSpeedTitle : l10n.stretchTitle,
-                style: t.bodyPrimary,
-              ),
-            ),
-            _row(
-              t,
-              label: l10n.stretchNewSpeed,
-              child: DragValueField(
-                key: const ValueKey('stretch-speed'),
-                value: _speed,
-                min: 1,
-                max: 10000,
-                decimals: 2,
-                suffix: l10n.unitSymbolPercent,
-                onChanged: (v) => setState(() => _speed = v.toDouble()),
-              ),
-            ),
-            if (frames != null) ...[
-              const SizedBox(height: 8),
-              _row(
-                t,
-                label: l10n.stretchNewDuration,
-                child: DragValueField(
-                  key: const ValueKey('stretch-duration'),
-                  value: _frames,
-                  min: 1,
-                  max: 1000000,
-                  decimals: 0,
-                  onChanged: _setFrames,
-                ),
-              ),
-              const SizedBox(height: 10),
-              // The factual summary line the dialogue pattern asks for
-              // (§12A.4), and the anchoring rule said plainly beneath it: the
-              // in point holds and the end of the layer moves.
-              Text(
-                l10n.compDurationReading(
-                  '$_frames',
-                  (_frames / widget.fps).toStringAsFixed(2),
-                ),
-                key: const ValueKey('stretch-summary'),
-                style: t.mono.copyWith(color: t.textMuted),
-              ),
-              const SizedBox(height: 4),
-              Text(l10n.stretchAnchor,
-                  style: t.caption.copyWith(color: t.textMuted)),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          dialogTitleBar(
+            t,
+            title: frames == null ? l10n.clipSpeedTitle : l10n.stretchTitle,
+            onClose: widget.onCancel,
+            keyPrefix: 'stretch',
+          ),
+          Padding(
+            padding: const EdgeInsets.all(dialogPadding),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                HouseButton(
-                  key: const ValueKey('stretch-confirm'),
-                  primary: true,
-                  onPressed: _confirm,
-                  child: Text(l10n.apply),
+                dialogRow(
+                  t,
+                  l10n.stretchNewSpeed,
+                  labelColumn: 64,
+                  DragValueField(
+                    key: const ValueKey('stretch-speed'),
+                    value: _speed,
+                    min: 1,
+                    max: 10000,
+                    decimals: 2,
+                    suffix: l10n.unitSymbolPercent,
+                    onChanged: (v) => setState(() => _speed = v.toDouble()),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('stretch-cancel'),
-                  onPressed: widget.onCancel,
-                  child: Text(l10n.cancel),
-                ),
+                if (frames != null)
+                  dialogRow(
+                    t,
+                    l10n.stretchNewDuration,
+                    labelColumn: 64,
+                    _duration(t),
+                  ),
               ],
             ),
-          ],
-        ),
+          ),
+          dialogFooter(
+            t,
+            keyPrefix: 'stretch',
+            actions: [
+              dialogPlainAction(t,
+                  key: const ValueKey('stretch-cancel'),
+                  label: l10n.cancel,
+                  onPressed: widget.onCancel),
+              dialogFilledAction(t,
+                  key: const ValueKey('stretch-confirm'),
+                  label: l10n.apply,
+                  onPressed: _confirm),
+            ],
+          ),
+        ],
       ),
     );
   }
-
-  /// Label left, control right — the dialogue pattern's row.
-  Widget _row(LumitTheme t, {required String label, required Widget child}) =>
-      Row(
-        children: [
-          SizedBox(width: 110, child: Text(label, style: t.small)),
-          Expanded(child: child),
-        ],
-      );
 }

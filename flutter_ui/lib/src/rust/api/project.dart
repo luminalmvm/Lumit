@@ -47,7 +47,7 @@ class BridgeFileComp {
   final int fpsDen;
 
   /// How long it is, in frames at its own rate.
-  final PlatformInt64 durationFrames;
+  final int durationFrames;
 
   const BridgeFileComp({
     required this.id,
@@ -440,6 +440,13 @@ class ProjectReference {
         that: this,
       );
 
+  /// Drop every undo and redo step and leave the document as it is. Under
+  /// the project's lock, as undo and redo are.
+  void clearHistory() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceClearHistory(
+        that: this,
+      );
+
   void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
         that: this,
       );
@@ -647,6 +654,12 @@ class ProjectReference {
   void jumpHistory({required int applied}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceJumpHistory(that: this, applied: applied);
 
+  /// Call the step the open undo group folds into `name` in the History
+  /// list, rather than after the first thing done in it. English, translated
+  /// on arrival like every other step's name. Does nothing with no group open.
+  void nameUndoGroup({required String name}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceNameUndoGroup(that: this, name: name);
+
   /// Add a composition, filed into the Compositions auto-folder, as one undo
   /// step. A blank name gets the next "Comp N".
   ///
@@ -714,6 +727,14 @@ class ProjectReference {
   /// field and the making cannot disagree.
   String nextNodeGraphName() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceNextNodeGraphName(
+        that: this,
+      );
+
+  /// The name a solid made right now would get, "White solid 3" when the
+  /// project holds two. What New solid puts in its Name field, read off the
+  /// same call that names the solid, so the two cannot disagree.
+  String nextSolidName() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNextSolidName(
         that: this,
       );
 
@@ -1138,7 +1159,7 @@ class ProjectReference {
   bool shareNote(
           {required String text,
           CompositionReference? comp,
-          PlatformInt64? frame,
+          int? frame,
           LayerReference? layer}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceShareNote(
           that: this, text: text, comp: comp, frame: frame, layer: layer);
@@ -1300,7 +1321,7 @@ class ProjectReference {
   void sharePresence(
           {CompositionReference? comp,
           required List<LayerReference> layers,
-          PlatformInt64? playhead,
+          int? playhead,
           double? cursorX,
           double? cursorY,
           required List<String> properties,
@@ -1410,6 +1431,12 @@ class ProjectReference {
   /// it is over, and then calling this.
   void stopSharing() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceStopSharing(
+        that: this,
+      );
+
+  /// Stop Blender on any file no item of this project names any more.
+  void stopUnusedBlenders() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceStopUnusedBlenders(
         that: this,
       );
 

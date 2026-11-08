@@ -1001,6 +1001,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             blend: Default::default(),
             masks: Vec::new(),
@@ -1041,8 +1042,10 @@ mod tests {
             },
         };
         let graph = CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![
                 declared("gain", InputKind::Number, 7.0),
                 declared("tint", InputKind::Colour, 0.75),

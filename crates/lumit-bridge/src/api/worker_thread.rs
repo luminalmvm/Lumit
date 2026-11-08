@@ -9,7 +9,22 @@ use lumit_render::headless::HeadlessRenderer;
 // "what does a scale of 0.5 mean for the decode" would drift, and the two
 // frontends would then decode at different sizes for the same on-screen scale.
 use crate::render::quality_for;
+use cut::{set_prefix, viewed};
+use dropper::cut_patch;
+#[cfg(not(target_arch = "wasm32"))]
+use dropper::sample_layer_alone;
+#[cfg(target_arch = "wasm32")]
+use dropper::soloed;
 use uuid::Uuid;
+use views::{close_view, ground_of, set_view, viewed_kept, viewed_through, Viewed};
+#[cfg(target_arch = "wasm32")]
+use web::{sample_pixels, trace_scope};
+
+mod cut;
+mod dropper;
+mod views;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 // Each frame type is only constructed by its own platform's `publish_frame`, so
 // importing both unconditionally would warn on one of them in every build.
@@ -19,7 +34,8 @@ use uuid::Uuid;
 // `RenderedSharedTexture` case.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 use crate::api::state::BridgeSharedFrameInfo;
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -60,7 +76,7 @@ pub struct WorkerState {
     /// When the picture after the last one shown was due, in every-frame
     /// playback. The next run starts on it, so a loop turns on the beat
     /// instead of cutting its last frame short.
-    present_due: Option<std::time::Instant>,
+    present_due: Option<web_time::Instant>,
     /// The decode-ahead thread (docs/impl/playback-scheduler.md §5): playback
     /// posts the source decodes coming frames will need, and files the results
     /// into the renderer's cache, so decode runs alongside compositing rather
@@ -79,6 +95,9 @@ pub struct WorkerState {
     /// Where the user is looking — the view, comp, frame and scale last shown
     /// — the idle cache-fill's anchor (docs/06 §5.5).
     last_shown: Option<(u32, CompositionReference, u64, f32)>,
+    /// The same for every other view, so a picture made before a model was
+    /// read or a lens baked is made again in each of them.
+    beside_shown: Vec<(u32, CompositionReference, u64, f32)>,
     /// How each Viewer view is looking at the picture — exposure, tone map,
     /// transparency, region, OCIO view. Session state the renderer holds, kept
     /// here as well so it can be put back on a renderer built to replace one
@@ -104,7 +123,7 @@ pub struct WorkerState {
     /// see the same picture the scrub did without nine call sites each growing
     /// a parameter. Set by the render request that carries it — the chip
     /// toggling is a render — and cleared by the first request that does not.
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     /// Each Viewer view's 3D view: a camera placement that stands in for the
     /// named comp's active camera while set. Held here for the reason the
     /// prefix is: it says what the Viewer is looking through, and every render,
@@ -135,7 +154,7 @@ pub struct WorkerState {
     /// The room on the drive last sent down, and when the drive was last asked
     /// ([`crate::framecache::disk::room`]).
     applied_disk_room: u64,
-    disk_room_asked: std::time::Instant,
+    disk_room_asked: web_time::Instant,
     seen_disk_clears: u64,
     seen_disk_location: (u64, Option<std::path::PathBuf>),
     /// The VRAM budget last applied and the clear-request count last honoured
@@ -160,7 +179,7 @@ pub struct WorkerState {
     /// frontend even though the sweep itself wrote nothing new.
     bar_dirty: bool,
     /// When the strip was last published — see [`BAR_MIN_INTERVAL`].
-    bar_published_at: std::time::Instant,
+    bar_published_at: web_time::Instant,
     /// True when the idle fill has nothing left to do (everything near the
     /// playhead is held, or the budget is full). Cleared whenever the anchor,
     /// the document or the budget moves.
@@ -171,7 +190,7 @@ pub struct WorkerState {
     backup_exhausted: bool,
     /// When the last request arrived — the fill waits out a ~200 ms lull
     /// after it (docs/06 §5.5), so a scrub in progress is never contended.
-    last_request: std::time::Instant,
+    last_request: web_time::Instant,
     /// The flare-bake generation this worker has already reacted to.
     /// When the renderer's moves past it, a bake has been queued or has landed
     /// — and a landing is the moment the picture on screen stops being the
@@ -194,6 +213,11 @@ pub struct WorkerState {
     // ponytail: capped at 8 and held outside the cache's budget, about 270 MB
     // of the card at 4K; count them against it if that ever matters.
     stand_ins: Vec<(u32, Uuid, lumit_render::headless::PreparedFrame)>,
+    /// The still frame last shown, by view, comp and frame: the picture on
+    /// screen, a drag's preview included, so a trace of that frame reads it
+    /// rather than the document behind it ([`trace_scope`]). Cleared when
+    /// playback starts, which shows frames another way.
+    presented: Option<(u32, Uuid, u64, lumit_render::headless::PreparedFrame)>,
     /// Turned over by each request as it is sent ([`WorkerSender`]).
     epochs: std::sync::Arc<WorkerEpochs>,
 }
@@ -243,7 +267,7 @@ impl WorkerState {
 #[frb(ignore)]
 struct DiskWant {
     provenance: lumit_render::headless::FrameProvenance,
-    asked: std::time::Instant,
+    asked: web_time::Instant,
 }
 
 /// Name one frame through the worker's memo: computed at most once per
@@ -274,12 +298,11 @@ fn frame_name(
 /// One soloed-layer render, held for the dropper (see [`sample_layer_alone`]).
 #[frb(ignore)]
 struct LayerSample {
-    /// `(comp, frame, layer, document revision, view)`, what this render is
-    /// of. The revision is what retires it when an edit lands: the frame
-    /// cache has no generation counter any more (every frame is named by its
-    /// content), and a soloed render is of a document nobody else holds, thus
-    /// it cannot be named the same way.
-    stamp: (Uuid, u64, Uuid, u64, u32),
+    /// `(comp, frame, layer, document revision, view, whether its part ids)`,
+    /// what this render is of. The revision is what retires it when an edit
+    /// lands: every frame is named by its content, and a soloed render is of a
+    /// document nobody else holds, so it cannot be named the same way.
+    stamp: (Uuid, u64, Uuid, u64, u32, bool),
     width: u32,
     height: u32,
     rgba: Vec<u8>,
@@ -303,19 +326,23 @@ struct ViewerLook {
     /// A 3D viewport's ground, from [`WorkerState::grounds`] rather than the
     /// look message.
     ground: Option<lumit_render::realise::ViewGround>,
+    /// How the view shows models, from its [`ViewLatch`].
+    display: lumit_gpu::mesh::display::ModelDisplay,
 }
 
 /// One view's 3D view of a comp as the worker holds it: the pose it is drawn
-/// through, and for a 3D viewport the draft that leaves out motion blur and
-/// the size of the picture it fills, comp pixels round the comp's middle.
-/// A canvas of `(0, 0)` is the comp's own size.
+/// through, `None` for the comp's own camera, how it shows models, and for a
+/// 3D viewport the draft that leaves out motion blur and the size of the
+/// picture it fills, comp pixels round the comp's middle. A canvas of
+/// `(0, 0)` is the comp's own size.
 #[frb(ignore)]
 #[derive(Clone, Copy, PartialEq)]
 struct ViewLatch {
     comp: Uuid,
-    pose: lumit_core::model::CameraPose,
+    pose: Option<lumit_core::model::CameraPose>,
     draft: bool,
     canvas: (u32, u32),
+    display: lumit_gpu::mesh::display::ModelDisplay,
 }
 
 /// Make the renderer look the way `view` looks, if it does not already.
@@ -333,6 +360,10 @@ struct ViewLatch {
 fn look_at(state: &mut WorkerState, view: u32) {
     let mut want = state.looks.get(&view).cloned().unwrap_or_default();
     want.ground = state.grounds.get(&view).copied();
+    want.display = state
+        .camera_views
+        .get(&view)
+        .map_or_else(Default::default, |v| v.display);
     if state.applied_look.0 == view && state.applied_look.1 == want {
         return;
     }
@@ -351,6 +382,7 @@ fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
     renderer.set_region(look.region);
     renderer.set_colour_view(look.colour_view.clone());
     renderer.set_ground(look.ground);
+    lumit_render::model::show_models(look.display);
 }
 
 /// The device and engines between one worker's renderer and the next, and
@@ -511,6 +543,12 @@ fn sync_caches(state: &mut WorkerState) {
         state.fill_exhausted = false;
     }
     crate::framecache::publish_comp_decodes(state.renderer.decoded_frames());
+    // Decoded footage gets a quarter of the memory cache's budget, so the
+    // figure in Settings holds both, and a new renderer picks it up on its
+    // first turn. Cheap when nothing changed.
+    let (_, ram_budget, _, _, _) = crate::framecache::stats();
+    let decode_budget = (ram_budget / 4).max(lumit_render::decode::DEFAULT_DECODE_CACHE_BYTES);
+    state.renderer.set_decode_budget(decode_budget);
     // The decoded-frame pool's share of the memory report. Published on
     // the same turn as the rest, so the numbers a report adds up were all read
     // at one moment rather than across a second of drift.
@@ -590,7 +628,7 @@ fn sync_disk(state: &mut WorkerState) {
     // The drive is asked now and then rather than every turn, and the answer
     // only sent on when it has moved by more than a frame or two.
     if state.disk_room_asked.elapsed() >= DISK_ROOM_EVERY {
-        state.disk_room_asked = std::time::Instant::now();
+        state.disk_room_asked = web_time::Instant::now();
         let room = root.as_deref().map_or(u64::MAX, |r| {
             crate::framecache::disk::room(
                 r,
@@ -626,42 +664,9 @@ fn disk_root(
     state: &WorkerState,
     location: &crate::framecache::disk::Location,
 ) -> Option<std::path::PathBuf> {
-    use crate::framecache::disk::Location;
-    let (doc_id, own, path) = {
-        let project = state.project.state().ok()?;
-        let project = project.read().ok()?;
-        let document = project.store.snapshot();
-        (
-            document.id,
-            document.cache_location.clone(),
-            project.path.clone(),
-        )
-    };
-    // The project's own answer wins where it has one: a project told to cache on
-    // a scratch drive, or beside itself, should do that whatever the application
-    // is set to (docs/06 §5.4).
-    let location = match own {
-        Some(lumit_core::model::CacheLocation::AppData) => Location::AppData,
-        Some(lumit_core::model::CacheLocation::BesideProject) => Location::BesideProject,
-        Some(lumit_core::model::CacheLocation::Custom { folder }) if !folder.is_empty() => {
-            Location::Custom(std::path::PathBuf::from(folder))
-        }
-        // A custom location with no folder in it is not a location.
-        Some(lumit_core::model::CacheLocation::Custom { .. }) => Location::AppData,
-        None => location.clone(),
-    };
-    match location {
-        Location::AppData => lumit_project::frame_cache_dir(doc_id),
-        Location::BesideProject => match path.as_deref() {
-            Some(path) => lumit_cache::disk::sidecar_root(path),
-            // Nowhere to sit beside yet.
-            None => lumit_project::frame_cache_dir(doc_id),
-        },
-        Location::Custom(root) => match path.as_deref() {
-            Some(path) => lumit_cache::disk::cache_root_for(path, Some(&root)),
-            None => Some(root.join(format!("{doc_id}-cache"))),
-        },
-    }
+    let project = state.project.state().ok()?;
+    let project = project.read().ok()?;
+    crate::project_cache::root(&project, location)
 }
 
 /// Collect the frames the graphics card has finished handing back, and put them
@@ -913,7 +918,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
         let Ok(project) = project.read() else {
             return;
         };
-        (project.store.snapshot(), project.store.revision())
+        project.store.snapshot_and_revision()
     };
     // The bar shows what the active view will be served, so its frames are
     // named the way that view's are, under its look.
@@ -952,7 +957,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
             != (comp_id, view, frames, scale_q, revision)
     });
     state.published_bar = Some(fingerprint);
-    state.bar_published_at = std::time::Instant::now();
+    state.bar_published_at = web_time::Instant::now();
 
     let bgra = zero_copy_wants_bgra();
     let scale = f32::from(scale_q) / 1000.0;
@@ -1291,7 +1296,7 @@ fn line_up_frame(
         key,
         DiskWant {
             provenance,
-            asked: std::time::Instant::now(),
+            asked: web_time::Instant::now(),
         },
     );
     _ = disk
@@ -1458,7 +1463,7 @@ fn prepare_frame(
                         key,
                         DiskWant {
                             provenance,
-                            asked: std::time::Instant::now(),
+                            asked: web_time::Instant::now(),
                         },
                     );
                     _ = state
@@ -1646,8 +1651,11 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
     }
     state.bakes_seen = now;
     // The fill was stopped while the frames were unnameable; there is
-    // something to bank again.
+    // something to bank again. In the browser build a frame the page decoded
+    // may have landed, and the stand-ins held for it go.
     state.fill_exhausted = false;
+    #[cfg(target_arch = "wasm32")]
+    state.renderer.clear_decoded();
     republish_last_frame(state, stream);
 }
 
@@ -1664,10 +1672,27 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
 /// closed under us.
 #[frb(ignore)]
 fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
-    let Some((view, comp_ref, frame, scale)) = state.last_shown.clone() else {
-        return;
-    };
+    // The views beside first, so the one being worked in ends up holding the
+    // renderer's look. Not while playing, which has the worker to itself.
+    if state.playback.is_none() {
+        for shown in state.beside_shown.clone() {
+            republish(state, stream, shown);
+        }
+    }
+    if let Some(shown) = state.last_shown.clone() {
+        republish(state, stream, shown);
+    }
+}
+
+/// Make one view's last picture again, looking its way.
+#[frb(ignore)]
+fn republish(
+    state: &mut WorkerState,
+    stream: &mut WorkerResponseStream,
+    (view, comp_ref, frame, scale): (u32, CompositionReference, u64, f32),
+) {
     state.set_view_id(view);
+    look_at(state, view);
     let Ok(project) = state.project.state() else {
         return;
     };
@@ -1686,7 +1711,8 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
         &document,
         stream,
         BridgePlaybackMode::EveryFrame,
-        true,
+        // A 3D viewport's draft is never banked.
+        !state.camera_view().is_some_and(|v| v.draft),
     );
 }
 
@@ -1733,7 +1759,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             state.fill_exhausted = true;
             return;
         };
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The fill banks what the Viewer will ask for, and while the chip is on
     // that is the cut picture — a fill under the other name would be work
@@ -1888,6 +1914,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         }
         // Any request stops the fill's frame, which is made again next turn.
         let _stop = lumit_render::cancel::Scope::new(state.epochs.any.token());
+        let stood_in = lumit_gpu::device::read_stand_ins() + lumit_media::stand_ins();
         match prepare_frame(state, &document, comp_ref.id, frame, quality, bgra, true) {
             // Tell the frontend, or the fill is invisible: the cache bar only
             // redraws when it hears something, and a fill shows no frame.
@@ -1895,6 +1922,11 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             Err(e) if e == lumit_render::cancel::CANCELLED => {}
             // A comp that will not render must not be retried in a loop.
             Err(_) => state.fill_exhausted = true,
+        }
+        // In the browser build a frame drawn from an earlier frame's read-back, or
+        // in place of footage still on its way, is never kept: wait for a landing.
+        if lumit_gpu::device::read_stand_ins() + lumit_media::stand_ins() != stood_in {
+            state.fill_exhausted = true;
         }
         return;
     }
@@ -1940,6 +1972,7 @@ pub enum WorkerRequest {
         draft: bool,
         ground: Option<[f32; 4]>,
         canvas: (u32, u32),
+        display: lumit_gpu::mesh::display::ModelDisplay,
     },
     SetViewerLook {
         stops: f64,
@@ -2088,15 +2121,15 @@ struct Playback {
     /// Where playback started, and when — the wall clock's baseline for as long
     /// as no mix is loaded to be master instead.
     from: u64,
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// When the last frame was shown, which the end of a leg waits a frame
     /// from. `None` before the first present of a run.
-    last_presented: Option<std::time::Instant>,
+    last_presented: Option<web_time::Instant>,
     /// When the next every-frame present falls due — a GRID, stepped by one
     /// comp period per present ([`crate::playback::next_present_due`]), so
     /// loop overhead never compounds into a slower rate. `None` before the
     /// first present of a run; adaptive mode paces on the clock instead.
-    next_present_due: Option<std::time::Instant>,
+    next_present_due: Option<web_time::Instant>,
     /// Frames rendered ahead of the clock, oldest first, waiting to be shown.
     ring: std::collections::VecDeque<(u64, lumit_render::headless::PreparedFrame)>,
     /// The document revision the ring and the sound were made from. An edit
@@ -2135,7 +2168,7 @@ struct Playback {
     on_time_run: u32,
     /// Until when the audio clock is not to be believed, because the sound
     /// has just been moved and the move may not have landed yet.
-    audio_settles: Option<std::time::Instant>,
+    audio_settles: Option<web_time::Instant>,
     /// How many frames the last [`Self::advance`] had to jump over to catch the
     /// clock. Zero while playback is keeping up.
     ///
@@ -2152,14 +2185,14 @@ struct Playback {
     /// numbers (see [`Self::report_pace`]).
     present_costs: crate::playback::CostWindow,
     /// When the pace was last printed, so the report stays sparse.
-    pace_reported: std::time::Instant,
+    pace_reported: web_time::Instant,
 }
 
 impl Playback {
     /// The sound has just been moved: leave its clock alone for a moment.
     fn settle_audio(&mut self) {
         const SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
-        self.audio_settles = Some(std::time::Instant::now() + SETTLE);
+        self.audio_settles = Some(web_time::Instant::now() + SETTLE);
     }
 
     /// Print where a playback frame's time is going, at most every couple of
@@ -2175,7 +2208,7 @@ impl Playback {
         if self.pace_reported.elapsed() < PACE_REPORT_EVERY {
             return;
         }
-        self.pace_reported = std::time::Instant::now();
+        self.pace_reported = web_time::Instant::now();
         let ms = |cost: Option<f64>| cost.map_or(0.0, |secs| secs * 1000.0);
         note!(
             "Playback pace: present p95 {:.2} ms, render p95 {:.2} ms, ring {}, budget {:.2} ms",
@@ -2199,7 +2232,7 @@ impl Playback {
         let ours = self.pre_rolled
             && self
                 .audio_settles
-                .is_none_or(|at| std::time::Instant::now() >= at);
+                .is_none_or(|at| web_time::Instant::now() >= at);
         match clock_seconds() {
             Some(seconds) if ours => seconds * f64::from(self.slow),
             _ => self.started.elapsed().as_secs_f64() + self.from as f64 / self.fps,
@@ -2274,7 +2307,7 @@ impl Playback {
             return queued >= 1
                 && self
                     .next_present_due
-                    .is_none_or(|due| std::time::Instant::now() >= due);
+                    .is_none_or(|due| web_time::Instant::now() >= due);
         }
         queued >= PRE_ROLL_FRAMES.min(self.capacity()).max(1)
             || self.started.elapsed() >= PRE_ROLL_BUDGET
@@ -2308,7 +2341,7 @@ impl Playback {
         }
         match self.mode {
             BridgePlaybackMode::EveryFrame => match self.next_present_due {
-                Some(due) if std::time::Instant::now() < due => None,
+                Some(due) if web_time::Instant::now() < due => None,
                 _ => Some(0),
             },
             BridgePlaybackMode::Adaptive => {
@@ -2326,7 +2359,7 @@ impl Playback {
         match self.mode {
             BridgePlaybackMode::EveryFrame => {
                 let due = self.next_present_due?;
-                let now = std::time::Instant::now();
+                let now = web_time::Instant::now();
                 (due > now).then(|| due - now)
             }
             BridgePlaybackMode::Adaptive => {
@@ -2537,7 +2570,7 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
     // still reads where the sound was, which is not a thing to act on.
     let settling = playback
         .audio_settles
-        .is_some_and(|at| std::time::Instant::now() < at);
+        .is_some_and(|at| web_time::Instant::now() < at);
     let lead = sound_lead(frame, fps, playback.slow).filter(|_| !settling);
     let slack = sync_slack(period).as_secs_f64();
     match audio_chase(
@@ -2695,7 +2728,7 @@ pub struct RenderCompRequest {
     /// as the document has it. Latched onto [`WorkerState::prefix`],
     /// so it describes the Viewer from here until the next render says
     /// otherwise.
-    pub prefix: Option<crate::api::state::BridgePrefixPoint>,
+    pub prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
     /// Which of the two playback behaviours this render is for.
     pub mode: BridgePlaybackMode,
     /// The on-screen scale of the Viewer, 1.0 meaning "shown at comp
@@ -2720,8 +2753,8 @@ pub struct RenderScopeRequest {
     pub comp: CompositionReference,
     pub frame: u64,
     pub scale: f32,
-    /// Which trace: the codes `lumit_render` reads — 0 waveform, 1 parade,
-    /// 2 vectorscope, 3 histogram.
+    /// Which trace: the codes `lumit_render` reads, 0 waveform, 1 RGB
+    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram.
     pub kind: u32,
     /// Background, trace, then the R, G and B channel tints, each `[r, g, b]`.
     pub colours: [[u8; 3]; 5],
@@ -2759,6 +2792,8 @@ pub struct SamplePixelsRequest {
     /// does, so a hidden depth pass (which never shows in the composite) can
     /// still be read. `None` samples the composite.
     pub layer: Option<LayerReference>,
+    /// Read that layer's Part id pass rather than its picture.
+    pub part_ids: bool,
 }
 
 /// The largest window one read may carry: 129×129 pixels, 66 KiB.
@@ -2828,66 +2863,6 @@ pub struct RenderCompRequestWithPreview {
     pub masks: Option<Vec<crate::api::layer::BridgeMask>>,
 }
 
-/// Ask the operating system for 1 ms sleep granularity (Windows; a no-op
-/// elsewhere, where sleeps are already fine-grained).
-///
-/// The worker paces presents with short sleeps, and Windows rounds a sleep UP
-/// to the system timer's next tick — by default ~15.6 ms apart. That is twice
-/// a 120 fps frame period: every sleep-then-present overshot its due time, the
-/// present grid re-anchored, and the achieved rate fell to whatever the timer
-/// allowed (~85 of 120 in practice; at 60 fps the grid held but presents
-/// jittered by several milliseconds, which is what kept stopping the sound).
-/// One millisecond is the granularity every media application requests; the
-/// setting is process-wide and lives for the process, exactly as it does in
-/// any NLE. A refusal is harmless — pacing then leans on the spin window
-/// alone.
-#[cfg(windows)]
-#[frb(ignore)]
-fn raise_timer_resolution() {
-    // SAFETY: `timeBeginPeriod` touches no memory owned by this program; it
-    // adjusts a scheduler setting and reports acceptance or refusal in its
-    // return value, which is ignored because a refusal leaves nothing to do.
-    unsafe {
-        let _ = windows::Win32::Media::timeBeginPeriod(1);
-    }
-}
-
-#[cfg(not(windows))]
-#[frb(ignore)]
-fn raise_timer_resolution() {}
-
-/// Run this thread a step above the rest of the machine while it plays, and
-/// back at the ordinary priority when it stops (Windows).
-///
-/// A picture is due at a moment, and on a machine with every core busy the
-/// thread that sends it waited its turn like any other: with sixteen cores
-/// loaded the pictures of a cached span went out ten milliseconds late, and
-/// on time with this. Only while playing, so that an idle fill or a heavy
-/// still frame never takes a core ahead of the interface.
-// ponytail: Windows only. macOS and Linux want their own call (a QoS class,
-// a nice value) and a machine to measure it on.
-#[cfg(windows)]
-#[frb(ignore)]
-fn playback_priority(playing: bool) {
-    use windows::Win32::System::Threading::{
-        GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_NORMAL,
-    };
-    let priority = if playing {
-        THREAD_PRIORITY_ABOVE_NORMAL
-    } else {
-        THREAD_PRIORITY_NORMAL
-    };
-    // SAFETY: the pseudo-handle of the calling thread and a priority constant.
-    // A refusal leaves the thread as it was, which is all there is to do.
-    unsafe {
-        let _ = SetThreadPriority(GetCurrentThread(), priority);
-    }
-}
-
-#[cfg(not(windows))]
-#[frb(ignore)]
-fn playback_priority(_playing: bool) {}
-
 /// The way into the render worker. Each send also turns over the epochs of
 /// the work it replaces, so a render the worker is part way through can see it
 /// is no longer wanted and stop (`lumit_render::cancel`).
@@ -2940,6 +2915,8 @@ impl WorkerSender {
         };
         // Sent first, so a render that sees the turn finds the request queued.
         self.tx.send(request).map_err(|_| WorkerGone)?;
+        #[cfg(target_arch = "wasm32")]
+        crate::turns::wake();
         self.epochs.any.bump();
         if let Some(lane) = lane {
             self.epochs.lane(lane).bump();
@@ -2967,7 +2944,10 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
         state.sender = Some(send_to_worker);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     std::thread::spawn(move || worker_loop(project, receive_from_app, stream, epochs));
+    #[cfg(target_arch = "wasm32")]
+    worker_loop(project, receive_from_app, stream, epochs);
 }
 
 /// Build the Viewer's renderer, with everything a Viewer's renderer carries —
@@ -3009,10 +2989,10 @@ fn build_viewer_renderer(
     // devices inside a few seconds. Poisoning is nothing to fail over: the
     // lock guards the turn-taking and a set nobody is using.
     let mut pool = ENGINES.lock().unwrap_or_else(|e| e.into_inner());
-    // The worker of a project that has closed is on its way out with a set.
-    // It stops at the end of its turn, which is at once unless it is part
-    // way through a frame, so it is waited for as long as a build would take.
-    let give_up = std::time::Instant::now() + pool.built_in;
+    // The worker of a project that has closed is on its way out with a set,
+    // and stops at the end of its turn, so it is waited for as long as a build
+    // would take. The page can't wait for a later turn, so it builds its own.
+    let give_up = web_time::Instant::now() + pool.built_in;
     loop {
         if !worth_building_for(project) {
             // Quietly: a project closing while its worker waited its turn is
@@ -3024,8 +3004,8 @@ fn build_viewer_renderer(
                 .out
                 .iter()
                 .any(|id| !worth_building_for(&ProjectReference::new(*id)));
-        let left = give_up.saturating_duration_since(std::time::Instant::now());
-        if !coming || left.is_zero() {
+        let left = give_up.saturating_duration_since(web_time::Instant::now());
+        if !coming || left.is_zero() || cfg!(target_arch = "wasm32") {
             break;
         }
         pool = ENGINES_BACK
@@ -3038,7 +3018,7 @@ fn build_viewer_renderer(
     let mut renderer = match pool.parked.take() {
         Some(set) => HeadlessRenderer::reusing(set),
         None => {
-            let began = std::time::Instant::now();
+            let began = web_time::Instant::now();
             match HeadlessRenderer::new() {
                 Ok(renderer) => {
                     pool.built_in = began.elapsed();
@@ -3080,13 +3060,6 @@ fn build_viewer_renderer(
         );
         renderer.set_memory_budgets(vram, ram);
         crate::framecache::size_to_machine(vram, ram);
-        // Decoded footage gets an eighth of the same budget. It is counted
-        // against it, so the governor trims it when memory runs short.
-        renderer.set_decode_budget(
-            usize::try_from(ram / 8)
-                .unwrap_or(usize::MAX)
-                .max(lumit_render::decode::DEFAULT_DECODE_CACHE_BYTES),
-        );
     }
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it: picking a lens shows the lens
@@ -3223,7 +3196,7 @@ fn worker_loop(
         crate::faults::path()
     );
     let mut stream = stream;
-    raise_timer_resolution();
+    crate::turns::raise_timer_resolution();
 
     // Made before the renderer, because the two profiler sinks it installs
     // read it from inside a render.
@@ -3232,9 +3205,9 @@ fn worker_loop(
     let Some(renderer) = build_viewer_renderer(&project, &stream, &view_id) else {
         return;
     };
-    let _out = EnginesOut(project.id);
+    let out = EnginesOut(project.id);
 
-    let mut state = WorkerState {
+    let state = WorkerState {
         project,
         renderer,
         playback: None,
@@ -3246,6 +3219,7 @@ fn worker_loop(
         prioritised: false,
         prefetcher: lumit_render::prefetch::Prefetcher::default(),
         last_shown: None,
+        beside_shown: Vec::new(),
         // The first view a frontend asks for. It sends the real look as soon
         // as its Viewer is up; until then this is the renderer's own default,
         // which is what it already held.
@@ -3263,7 +3237,7 @@ fn worker_loop(
         // see the note on `applied_vram_budget` below.
         applied_disk_budget: 0,
         applied_disk_room: u64::MAX,
-        disk_room_asked: std::time::Instant::now() - DISK_ROOM_EVERY,
+        disk_room_asked: crate::turns::long_ago(DISK_ROOM_EVERY),
         seen_disk_clears: crate::framecache::disk::clears(),
         seen_disk_location: (u64::MAX, None),
         // NOT the wish's current value. A fresh renderer's cache holds the
@@ -3281,14 +3255,15 @@ fn worker_loop(
         bar_strip: Vec::new(),
         bar_refined_to: 0,
         bar_dirty: false,
-        bar_published_at: std::time::Instant::now() - BAR_MIN_INTERVAL,
+        bar_published_at: crate::turns::long_ago(BAR_MIN_INTERVAL),
         fill_exhausted: true,
         backup_exhausted: true,
-        last_request: std::time::Instant::now(),
+        last_request: web_time::Instant::now(),
         bakes_seen: 0,
         layer_sample: None,
         pending_measure: None,
         stand_ins: Vec::new(),
+        presented: None,
         epochs,
     };
 
@@ -3298,7 +3273,15 @@ fn worker_loop(
     // renderer costs seconds of driver work, and a panic that recurs on every
     // turn would spend the session doing nothing else.
     let mut faults_in_a_row = 0u32;
-    loop {
+    let mut state = Some(state);
+    // One turn, and whether to take another. A thread of its own on the
+    // desktop, which goes straight round again; turns from the page's timer in
+    // the browser build (`crate::turns`).
+    let turn = move || -> bool {
+        let _out = &out;
+        let Some(running) = state.as_mut() else {
+            return false;
+        };
         // **The crash net.** Everything a turn does is inside it, because
         // everything a turn does can panic: an effect kernel, a decoder, a
         // wgpu call, an arithmetic overflow in a parameter nobody has typed a
@@ -3307,11 +3290,16 @@ fn worker_loop(
         // for the rest of the session, and nobody told. See `rebuild_renderer`
         // for why the renderer cannot simply carry on afterwards.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            one_turn(&mut state, &receiver, &mut stream)
+            one_turn(running, &receiver, &mut stream)
         }));
         match outcome {
-            Ok(Turn::Continue) => faults_in_a_row = 0,
-            Ok(Turn::Stop) => break,
+            Ok(Turn::Continue) => {
+                faults_in_a_row = 0;
+                #[cfg(target_arch = "wasm32")]
+                crate::turns::engine_ready();
+                return true;
+            }
+            Ok(Turn::Stop) => {}
             Err(payload) => {
                 faults_in_a_row += 1;
                 // Both, and not one or the other: the console line is what a
@@ -3328,17 +3316,27 @@ fn worker_loop(
                     let stopping = "The render worker faulted on every attempt; it is stopping";
                     note!("{stopping}");
                     crate::faults::record(stopping);
-                    return;
+                    state = None;
+                    return false;
                 }
-                rebuild_renderer(&mut state, &mut stream);
+                rebuild_renderer(running, &mut stream);
+                return true;
             }
         }
+        // The device and engines outlive the project, and the next worker takes
+        // them rather than building its own.
+        if let Some(set) = state.take().and_then(|state| state.renderer.into_engines()) {
+            ENGINES.lock().unwrap_or_else(|e| e.into_inner()).parked = Some(set);
+        }
+        false
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut turn = turn;
+        while turn() {}
     }
-    // The device and engines outlive the project, and the next worker takes
-    // them rather than building its own.
-    if let Some(set) = state.renderer.into_engines() {
-        ENGINES.lock().unwrap_or_else(|e| e.into_inner()).parked = Some(set);
-    }
+    #[cfg(target_arch = "wasm32")]
+    crate::turns::start(turn);
 }
 
 /// The most consecutive faulting turns to nurse before the worker gives up.
@@ -3385,9 +3383,11 @@ fn one_turn(
     recover_lost_device(state, stream);
     if state.playback.is_some() != state.prioritised {
         state.prioritised = state.playback.is_some();
-        playback_priority(state.prioritised);
+        crate::turns::playback_priority(state.prioritised);
     }
     sync_caches(state);
+    #[cfg(target_arch = "wasm32")]
+    web::finish(state, stream);
 
     // While playing the worker has work of its own, so it must not block on
     // the channel — it takes whatever has arrived and gets on with the next
@@ -3414,7 +3414,7 @@ fn one_turn(
         } else {
             std::time::Duration::from_millis(2)
         };
-        match receiver.recv_timeout(wait) {
+        match crate::turns::take_request(receiver, wait) {
             Ok(request) => Some(request),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 // A lens finished baking: the picture on screen was drawn
@@ -3440,6 +3440,11 @@ fn one_turn(
                     if !state.backup_exhausted {
                         idle_backup(state);
                     }
+                    // Nothing left to draw, so nothing needs the compositor's
+                    // multisample attachment either.
+                    if state.fill_exhausted && state.backup_exhausted {
+                        state.renderer.drop_attachments();
+                    }
                 }
                 None
             }
@@ -3451,7 +3456,7 @@ fn one_turn(
     };
 
     if let Some(request) = request {
-        state.last_request = std::time::Instant::now();
+        state.last_request = web_time::Instant::now();
         // No second sync before serving. There used to be one, and it
         // mattered: a commit landing while the worker was parked in `recv`
         // retired every held frame, and the sync at the top of the turn had
@@ -3508,7 +3513,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // pre-roll's own milliseconds are not playback time, and counting
             // them would have adaptive skip straight over the frames just
             // banked. A silent leg needs the baseline too.
-            playback.started = std::time::Instant::now();
+            playback.started = web_time::Instant::now();
             start_audio(playback.comp.id, start, document, playback.slow);
             playback.settle_audio();
         }
@@ -3527,7 +3532,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let Some((frame, prepared)) = playback.ring.drain(..=chosen).last() else {
                 return;
             };
-            let now = std::time::Instant::now();
+            let now = web_time::Instant::now();
             playback.last_presented = Some(now);
             // How long after it was due this picture is going out. The first
             // of a run was not due at any time.
@@ -3556,7 +3561,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) && !playback.reverse {
                 chase_audio(playback, frame, late);
             }
-            let present_started = std::time::Instant::now();
+            let present_started = web_time::Instant::now();
             present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
             // What the hand-off cost, and the sparse pace line it feeds — the
             // number that says whether the present's full-queue wait is worth
@@ -3594,7 +3599,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let Ok(document) = document.read() else {
                 return;
             };
-            (document.store.snapshot(), document.store.revision())
+            document.store.snapshot_and_revision()
         };
         // An edit landed while the run was going. The frames banked ahead
         // were made from the document as it was, so all but the one about to
@@ -3699,7 +3704,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         && !playback.ring.is_empty()
                         && card_backed_up(&state.renderer)
                     {
-                        std::thread::sleep(std::time::Duration::from_micros(500));
+                        crate::turns::pause(std::time::Duration::from_micros(500));
                         return;
                     }
                     if !state.renderer.has_frame_texture(key, bgra)
@@ -3712,7 +3717,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                             // A sliver of sleep, not a spin: the copy is
                             // collected at the top of the next turn, and a
                             // stop arriving mid-wait is still seen promptly.
-                            std::thread::sleep(std::time::Duration::from_micros(500));
+                            crate::turns::pause(std::time::Duration::from_micros(500));
                             return;
                         }
                         if asked_ago.is_some() {
@@ -3887,10 +3892,14 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 // bakes inside the frame. One drawn with the lens before it is
                 // not kept, and making it again on the next lap stops the sound.
                 let exact = matches!(playback.mode, BridgePlaybackMode::EveryFrame);
+                #[cfg(target_arch = "wasm32")]
+                if web::footage_waits(state, &document, comp_id, frame, quality) {
+                    return;
+                }
                 if exact {
                     state.renderer.set_deferred_flare_bakes(false);
                 }
-                let started = std::time::Instant::now();
+                let started = web_time::Instant::now();
                 let rendered = prepare_frame(
                     state, &document, comp_id, frame, quality, bgra,
                     // Committed document: a warm span plays from the VRAM cache
@@ -3947,7 +3956,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 .last_presented
                 .is_some_and(|at| at.elapsed() < period)
             {
-                std::thread::sleep(std::time::Duration::from_micros(500));
+                crate::turns::pause(std::time::Duration::from_micros(500));
                 return;
             }
             state.playback = None;
@@ -3967,12 +3976,9 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         // the same 2 ms, so a stop arriving mid-wait is still seen promptly.
         const SPIN: std::time::Duration = std::time::Duration::from_millis(2);
         if wait > SPIN {
-            std::thread::sleep((wait - SPIN).min(std::time::Duration::from_millis(4)));
+            crate::turns::pause((wait - SPIN).min(std::time::Duration::from_millis(4)));
         } else {
-            let due = std::time::Instant::now() + wait;
-            while std::time::Instant::now() < due {
-                std::hint::spin_loop();
-            }
+            crate::turns::spin(wait);
         }
     }
 }
@@ -3990,7 +3996,8 @@ fn present_ring_frame(
 ) {
     #[cfg(any(
         all(windows, feature = "shared-texture"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     ))]
     match renderer.present_prepared(prepared, view) {
         Ok(shared) => {
@@ -4042,7 +4049,8 @@ fn present_ring_frame(
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     )))]
     {
         let _ = (renderer, frame, prepared, stream, view);
@@ -4061,11 +4069,14 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     // (docs/impl/multi-viewer.md §2.5), so the run is named and looked at
     // through the playing view from here.
     state.set_view_id(req.view);
+    // The run's frames are presented on their own path, so the still last
+    // shown says nothing about what is on screen from here.
+    state.presented = None;
     look_at(state, req.view);
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The pre-roll names the frames it is about to ask the disk for, so it has
     // to name them under the picture the run will actually play.
@@ -4158,7 +4169,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
                         scale_q: lumit_render::headless::preview_scale_q(quality),
                         quality,
                     },
-                    asked: std::time::Instant::now(),
+                    asked: web_time::Instant::now(),
                 },
             );
             _ = state
@@ -4190,7 +4201,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         scale: req.scale,
         fps: if fps > 0.0 { fps } else { 60.0 } / f64::from(slow),
         from,
-        started: std::time::Instant::now(),
+        started: web_time::Instant::now(),
         last_presented: None,
         // Where the run before left off. One long past is due at once.
         next_present_due: state.present_due.take(),
@@ -4206,7 +4217,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         audio_settles: None,
         skipped: 0,
         present_costs: crate::playback::CostWindow::default(),
-        pace_reported: std::time::Instant::now(),
+        pace_reported: web_time::Instant::now(),
     });
     // A fresh run starts optimistic at Full and walks down to whatever this
     // machine can actually hold, rather than inheriting the last run's verdict
@@ -4290,12 +4301,15 @@ fn handle_requests(
                     draft,
                     ground,
                     canvas,
+                    display,
                 } => {
-                    let latch = pose.map(|p| ViewLatch {
+                    let shown = pose.is_some() || display != Default::default();
+                    let latch = shown.then(|| ViewLatch {
                         comp,
-                        pose: p.core(),
+                        pose: pose.map(|p| p.core()),
                         draft,
                         canvas,
+                        display,
                     });
                     let ground = ground.and_then(|colour| ground_of(state, comp, colour));
                     set_view(state, view, latch, ground);
@@ -4324,7 +4338,7 @@ fn handle_requests(
                             transparent_background,
                             region,
                             colour_view,
-                            ground: None,
+                            ..Default::default()
                         },
                     );
                     look_at(state, view);
@@ -4385,7 +4399,7 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
         // whichever view was latched, and a drag fronts the view it is in
         // before it stages anything (docs/impl/multi-viewer.md §2.1). So the
         // whole preview lane collapses together, as it always did.
-        WorkerRequest::RenderCompWithPreview(_) => DrainClass::PictureNewestWins(u32::MAX),
+        WorkerRequest::RenderCompWithPreview(_) => DrainClass::PictureNewestWins(PREVIEW_LANE),
     }
 }
 
@@ -4413,6 +4427,9 @@ enum DrainClass {
     /// against a frame).
     Sample,
 }
+
+/// The lane every drag preview shares, whichever view it is in.
+const PREVIEW_LANE: u32 = u32::MAX;
 
 /// Take everything queued and keep what its class says to keep.
 ///
@@ -4449,6 +4466,17 @@ fn drain_to_newest<T>(
             }
             DrainClass::PictureKeepAll => kept.push(item),
             DrainClass::PictureNewestWins(view) => {
+                // A frame of the view being worked in, asked after a drag
+                // preview, is the frame the drag ended on: the preview is
+                // older than it, and run after it (the active view goes
+                // first) it would leave the drag's last, reduced picture on
+                // screen until the playhead moved.
+                if view == priority && view != PREVIEW_LANE {
+                    if let Some(at) = newest_wins.iter().position(|(v, _)| *v == PREVIEW_LANE) {
+                        newest_wins.remove(at);
+                        superseded += 1;
+                    }
+                }
                 match newest_wins.iter_mut().find(|(v, _)| *v == view) {
                     Some(slot) => {
                         slot.1 = item;
@@ -4549,316 +4577,6 @@ fn watched<R>(
     out
 }
 
-/// Latch the "at effect" prefix the Viewer is asking under.
-///
-/// **A prefix is a way of looking, and a way of looking renames every frame.**
-/// The name memo is keyed by `(comp, frame, quality)` against a document
-/// *revision* — it cannot see a change that does not move the revision, and
-/// turning the chip on does not. Left standing, the memo would go on serving
-/// the full stack's names for the cut picture and the Viewer would show the
-/// frame it already had: the chip would look broken in the one way nothing
-/// else would catch. So this clears it exactly as the viewer-look message
-/// does, and starts both readers of those names over with it.
-#[frb(ignore)]
-fn set_prefix(state: &mut WorkerState, prefix: Option<crate::api::state::BridgePrefixPoint>) {
-    if state.prefix == prefix {
-        return;
-    }
-    state.prefix = prefix;
-    state.names.clear();
-    state.published_bar = None;
-    state.fill_exhausted = false;
-}
-
-/// `document` as the Viewer is showing it: the committed snapshot, with the
-/// prefix layer's stack cut short after the picked effect while the chip is on.
-///
-/// **In plain terms.** The image chain a layer has *is* its effect stack, so
-/// "the picture at the third effect" is the picture the composition makes with
-/// that layer's stack stopping after the third effect. There is no second
-/// render path: a patched **copy** of the snapshot goes down the ordinary one,
-/// exactly as every drag preview already does. The frame key hashes each
-/// layer's effects, so the cut names its own frame and the cache cannot hand
-/// the Viewer the full picture by mistake.
-///
-/// Returns the snapshot untouched where the cut would change nothing — another
-/// composition's layer, a layer that has gone, an effect the layer no longer
-/// carries, or a point that keeps the whole stack. A stale chip is then
-/// harmless rather than wrong.
-#[frb(ignore)]
-fn viewed(
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
-    document: std::sync::Arc<lumit_core::model::Document>,
-) -> std::sync::Arc<lumit_core::model::Document> {
-    // Taken by value rather than off the state, so a caller that already holds
-    // a mutable borrow of another of its fields (playback does) can still ask.
-    let Some(prefix) = prefix else {
-        return document;
-    };
-    cut_to_prefix(&prefix, &document).unwrap_or(document)
-}
-
-/// The id the Viewer's view camera is inserted under: fixed, so every render
-/// through the same view builds the same document and names the same frames.
-#[frb(ignore)]
-const VIEW_CAMERA_ID: Uuid = Uuid::from_u128(0x6c75_6d69_7420_7669_6577_2063_616d_6572);
-
-/// [`viewed_through`], kept between frames.
-///
-/// A view or a prefix point makes a copy of the whole document, which for a
-/// large project is several milliseconds, and playback and the idle fill asked
-/// for one every frame. The copy made for a revision and a way of looking is
-/// the copy for the next frame too. A few are kept, so a 3D viewport playing
-/// along beside the Viewer doesn't throw away the Viewer's copy, or its own.
-#[frb(ignore)]
-fn viewed_kept(
-    kept: &mut Vec<Viewed>,
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
-    view: Option<ViewLatch>,
-    revision: u64,
-    document: std::sync::Arc<lumit_core::model::Document>,
-) -> std::sync::Arc<lumit_core::model::Document> {
-    // Nothing is copied, so there is nothing to keep.
-    if prefix.is_none() && view.is_none() {
-        return document;
-    }
-    if let Some(at) = kept
-        .iter()
-        .position(|was| (was.revision, was.prefix, was.view) == (revision, prefix, view))
-    {
-        let was = kept.remove(at);
-        let document = was.document.clone();
-        kept.insert(0, was);
-        return document;
-    }
-    let document = viewed_through(prefix, view, document);
-    // A copy of an older revision is never asked for again.
-    kept.retain(|was| was.revision == revision);
-    kept.insert(
-        0,
-        Viewed {
-            revision,
-            prefix,
-            view,
-            document: document.clone(),
-        },
-    );
-    kept.truncate(VIEWED_KEPT);
-    document
-}
-
-/// How many looks at the document [`viewed_kept`] keeps: the Viewer's, a 3D
-/// viewport's, and one more.
-#[frb(ignore)]
-const VIEWED_KEPT: usize = 3;
-
-/// What [`viewed_kept`] keeps.
-#[frb(ignore)]
-struct Viewed {
-    revision: u64,
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
-    view: Option<ViewLatch>,
-    document: std::sync::Arc<lumit_core::model::Document>,
-}
-
-/// [`viewed`], then looked through the Viewer's 3D view when one is set
-/// (docs/impl/camera.md §6): a Camera layer holding the view's pose is put at
-/// the top of the named comp, where it is the active camera for the render,
-/// the frame key and every nested reading alike. No second render path: a
-/// patched copy of the snapshot goes down the ordinary one. Another comp's
-/// view leaves the document alone. A 3D viewport's draft view also leaves out
-/// the comp's motion blur.
-#[frb(ignore)]
-fn viewed_through(
-    prefix: Option<crate::api::state::BridgePrefixPoint>,
-    view: Option<ViewLatch>,
-    document: std::sync::Arc<lumit_core::model::Document>,
-) -> std::sync::Arc<lumit_core::model::Document> {
-    let document = viewed(prefix, document);
-    let Some(ViewLatch {
-        comp: comp_id,
-        pose,
-        draft,
-        canvas,
-    }) = view
-    else {
-        return document;
-    };
-    let Some(comp) = document.comp(comp_id) else {
-        return document;
-    };
-    let mut layer = crate::edits::fresh_camera(comp, "View".into(), None);
-    layer.id = VIEW_CAMERA_ID;
-    if let lumit_core::model::LayerKind::Camera { zoom, .. } = &mut layer.kind {
-        *zoom = lumit_core::anim::Property::fixed(pose.zoom);
-    }
-    let tr = &mut layer.transform;
-    tr.position_x = lumit_core::anim::Property::fixed(pose.position.0);
-    tr.position_y = lumit_core::anim::Property::fixed(pose.position.1);
-    tr.position_z = lumit_core::anim::Property::fixed(pose.position.2);
-    tr.rotation_x = lumit_core::anim::Property::fixed(pose.rotation_deg.0);
-    tr.rotation_y = lumit_core::anim::Property::fixed(pose.rotation_deg.1);
-    tr.rotation = lumit_core::anim::Property::fixed(pose.rotation_deg.2);
-    let mut doc = (*document).clone();
-    if let Some(c) = doc.comp_mut(comp_id) {
-        c.layers.insert(0, layer);
-        c.motion_blur.enabled &= !draft;
-        // A 3D viewport fills its pane: a wider picture round the comp's
-        // middle, the 2D layers kept where they sit on the comp. The camera
-        // looks at the picture's middle, so the 3D scene needs no moving.
-        let (cw, ch) = canvas;
-        if cw > 0 && ch > 0 && (cw, ch) != (c.width, c.height) {
-            let dx = (f64::from(cw) - f64::from(c.width)) / 2.0;
-            let dy = (f64::from(ch) - f64::from(c.height)) / 2.0;
-            (c.width, c.height) = (cw, ch);
-            for l in &mut c.layers {
-                let placed_in_3d = l.switches.three_d
-                    || matches!(
-                        l.kind,
-                        lumit_core::model::LayerKind::Camera { .. }
-                            | lumit_core::model::LayerKind::Light { .. }
-                    );
-                if placed_in_3d || l.parent.is_some() {
-                    continue;
-                }
-                shift(&mut l.transform.position_x, dx);
-                shift(&mut l.transform.position_y, dy);
-            }
-        }
-    }
-    std::sync::Arc::new(doc)
-}
-
-/// Move a property's values by `by`, keys and all. An expression is left as
-/// it is, so in a 3D viewport a 2D layer placed by one sits off by the shift,
-/// and `thisComp.width` and `height` read the wider picture.
-#[frb(ignore)]
-fn shift(property: &mut lumit_core::anim::Property, by: f64) {
-    match &mut property.animation {
-        lumit_core::anim::Animation::Static(v) => *v += by,
-        lumit_core::anim::Animation::Keyframed(keys) => {
-            for key in keys {
-                key.value += by;
-            }
-        }
-        lumit_core::anim::Animation::Expression(_) => {}
-    }
-}
-
-/// A 3D viewport's ground in `colour`, on the floor through the middle of
-/// `comp` at half its height, as the Viewer's own ground sits.
-#[frb(ignore)]
-fn ground_of(
-    state: &WorkerState,
-    comp: Uuid,
-    colour: [f32; 4],
-) -> Option<lumit_render::realise::ViewGround> {
-    let project = state.project.state().ok()?;
-    let project = project.read().ok()?;
-    let document = project.store.snapshot();
-    let c = document.comp(comp)?;
-    let (w, h) = (f64::from(c.width), f64::from(c.height));
-    Some(lumit_render::realise::ViewGround {
-        colour,
-        middle: (w * 0.5) as f32,
-        floor: (h * 0.5) as f32,
-        step: lumit_core::camera::nice(w.max(h) / 8.0) as f32,
-    })
-}
-
-/// Let go of everything held for a closed view.
-#[frb(ignore)]
-fn close_view(state: &mut WorkerState, view: u32) {
-    if state
-        .last_shown
-        .as_ref()
-        .is_some_and(|shown| shown.0 == view)
-    {
-        state.last_shown = None;
-    }
-    state.looks.remove(&view);
-    state.camera_views.remove(&view);
-    state.grounds.remove(&view);
-    state.names.forget_view(view);
-    state.stand_ins.retain(|(v, ..)| *v != view);
-    state.renderer.drop_view_targets(view);
-}
-
-/// Latch one view's 3D view and its ground, the way [`set_prefix`] latches
-/// the chip: a change renames every frame of the comp in that view, so that
-/// view's names, the bar and the fill start over.
-#[frb(ignore)]
-fn set_view(
-    state: &mut WorkerState,
-    view: u32,
-    pose: Option<ViewLatch>,
-    ground: Option<lumit_render::realise::ViewGround>,
-) {
-    if state.camera_views.get(&view).copied() == pose && state.grounds.get(&view).copied() == ground
-    {
-        return;
-    }
-    match pose {
-        Some(pose) => state.camera_views.insert(view, pose),
-        None => state.camera_views.remove(&view),
-    };
-    match ground {
-        Some(ground) => state.grounds.insert(view, ground),
-        None => state.grounds.remove(&view),
-    };
-    state.names.forget_view(view);
-    state.layer_sample = None;
-    state.published_bar = None;
-    state.fill_exhausted = false;
-}
-
-/// The cut itself, apart from the worker's state so a test can make one.
-#[frb(ignore)]
-fn cut_to_prefix(
-    prefix: &crate::api::state::BridgePrefixPoint,
-    document: &std::sync::Arc<lumit_core::model::Document>,
-) -> Option<std::sync::Arc<lumit_core::model::Document>> {
-    // A node graph's point is the other arm: the box is shown by wiring it
-    // into the Output on a patched copy, and the copy names its own frame by
-    // construction, the key feeding the Output's wire. `None` where the
-    // reading would be the one the Viewer already has.
-    if let Some(point) = prefix.graph {
-        let graph = document
-            .comp(point.comp)?
-            .graph
-            .as_ref()?
-            .viewed_at(point.node)?;
-        let mut copy = (**document).clone();
-        copy.comp_mut(point.comp)?.graph = Some(graph);
-        return Some(std::sync::Arc::new(copy));
-    }
-    let layer_ref = prefix.layer?;
-    let comp = layer_ref.comp_id;
-    let layer = document
-        .comp(comp)?
-        .layers
-        .iter()
-        .find(|l| l.id == layer_ref.layer_id)?;
-    let keep = lumit_core::graph::prefix_len(
-        &layer.effects,
-        prefix
-            .effect
-            .map_or(lumit_core::graph::NodeRef::Source, |id| {
-                lumit_core::graph::NodeRef::Effect(id)
-            }),
-    )?;
-    // ponytail: one document clone per cut frame, which is what every drag
-    // preview already costs. The ceiling is that the clone scales with the
-    // *document* — layer and keyframe count — not with the picture, so it is
-    // free on a small comp and grows without the frame getting any harder. The
-    // trigger is docs/13 §2.1's mandate breaking here first: an effect-list
-    // drag on a comp of hundreds of layers missing B1's 8 ms UI frame while the
-    // same drag on a handful of layers is smooth. The fix is to memoise the cut
-    // document by `(prefix, revision)` on the worker state — a drag holds both
-    // still, so one clone would serve the whole gesture.
-    lumit_core::graph::truncated_effects(document, comp, layer_ref.layer_id, keep)
-}
-
 fn render_comp(
     req: RenderCompRequest,
     state: &mut WorkerState,
@@ -4883,6 +4601,9 @@ fn render_comp(
         set_prefix(state, req.prefix);
         state.prefix
     } else {
+        state.beside_shown.retain(|shown| shown.0 != req.view);
+        let shown = (req.view, req.comp.clone(), req.frame, req.scale);
+        state.beside_shown.push(shown);
         None
     };
     let view = state.camera_view();
@@ -5084,12 +4805,7 @@ fn render_comp_with_preview(
 
     if let Some(effects) = req.effects {
         // **Which list this is, read off the ids** (docs/impl/layer-styles.md
-        // §5). A style parameter is dragged through the same staging path an
-        // effect parameter is — one list read, edited, and sent along with the
-        // request — so what arrives here is either the whole effect stack or
-        // the whole style list, and the layer itself says which. Without this
-        // a drag on a shadow's Distance would preview the layer with its
-        // effect stack *replaced by its styles*.
+        // §5). What is dragged arrives as one whole list, and the layer says which.
         let layer = &mut comp.layers[index];
         if staged_graph_inputs {
             // A placed graph's Inputs are one instance, staged as a list of
@@ -5100,6 +4816,10 @@ fn render_comp_with_preview(
             .is_some_and(|f| layer.styles.iter().any(|s| s.id == f.id))
         {
             layer.styles = effects;
+        } else if lumit_render::model_material::owns(layer, &effects) {
+            crate::api::place::stage_rows(comp, index, effects);
+        } else if lumit_render::model_motion::owns(layer, &effects) {
+            lumit_render::model_motion::stage(&*layer_ref.snapshot()?, layer, &effects);
         } else if let Some(clip) = staged_clip(layer, &effects) {
             clip.effects = effects;
         } else {
@@ -5196,9 +4916,28 @@ fn render_comp_with_preview(
             .time_of_frame(req.frame as i64)
             .ok()
             .map(|t| t.0);
-        if let lumit_core::model::LayerKind::Shape { contents } = &mut comp.layers[index].kind {
+        let layer = &mut comp.layers[index];
+        if let lumit_core::model::LayerKind::Shape { contents } = &mut layer.kind {
             if let Ok(written) = crate::api::shape::write_entries(&items, contents, offset, at) {
+                // The position follows the art's corner, as the commit's
+                // does, or a growing stroke slides the art while it is
+                // dragged and jumps back on release.
+                let shift = match (
+                    lumit_core::shape::contents_bounds(contents, 0.0),
+                    lumit_core::shape::contents_bounds(&written, 0.0),
+                ) {
+                    (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
+                    _ => (0.0, 0.0),
+                };
                 *contents = written;
+                for (property, delta) in [
+                    (&mut layer.transform.position_x, shift.0),
+                    (&mut layer.transform.position_y, shift.1),
+                ] {
+                    if let lumit_core::anim::Animation::Static(value) = &mut property.animation {
+                        *value += delta;
+                    }
+                }
             }
         }
     }
@@ -5274,6 +5013,7 @@ fn publish_preview(
 /// publishes nothing rather than taking the worker down — a scope that cannot
 /// draw is a blank panel, not a lost session.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn trace_scope(
     req: RenderScopeRequest,
     state: &mut WorkerState,
@@ -5282,7 +5022,7 @@ fn trace_scope(
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The picture that view shows: through its own 3D view, and the chip.
     // The kept copy, which playback has usually made already.
@@ -5308,19 +5048,37 @@ fn trace_scope(
     // a second time for every trace of it. Reading it back is a copy.
     let quality = quality_for(req.scale);
     let bgra = zero_copy_wants_bgra();
-    let on_card = state
-        .renderer
-        .frame_key(&document, req.comp.id, req.frame, quality)
-        .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
-        .map(|(width, height, mut bytes)| {
-            if bgra {
-                // The Scopes bin R, G and B by name.
-                for px in bytes.chunks_exact_mut(4) {
-                    px.swap(0, 2);
-                }
+    let named = |(width, height, mut bytes): (u32, u32, Vec<u8>)| {
+        if bgra {
+            // The Scopes bin R, G and B by name.
+            for px in bytes.chunks_exact_mut(4) {
+                px.swap(0, 2);
             }
-            (width, height, bytes)
-        });
+        }
+        (width, height, bytes)
+    };
+    // The picture on screen before anything: while a value is dragged the
+    // Viewer shows a preview the document has not been given, and a colourist
+    // grades by the scope, so it must trace what the drag is doing. Only the
+    // frame the Viewer was last given, in that view; playback presents its
+    // frames another way and they are read off the card below.
+    let shown = state
+        .presented
+        .as_ref()
+        .filter(|_| state.playback.is_none())
+        .filter(|(view, comp, frame, _)| {
+            (*view, *comp, *frame) == (req.view, req.comp.id, req.frame)
+        })
+        .and_then(|(.., prepared)| state.renderer.read_back_prepared(prepared))
+        .map(named);
+    let on_card = match shown {
+        Some(shown) => Some(shown),
+        None => state
+            .renderer
+            .frame_key(&document, req.comp.id, req.frame, quality)
+            .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
+            .map(named),
+    };
     let still_current = |key: u128, quality: lumit_render::plan::Quality| {
         state
             .renderer
@@ -5419,6 +5177,7 @@ fn trace_scope(
 /// the composition with the layer soloed and keeps the result in
 /// `layer_sample`.
 #[frb(ignore)]
+#[cfg(not(target_arch = "wasm32"))]
 fn sample_pixels(
     req: SamplePixelsRequest,
     state: &mut WorkerState,
@@ -5427,7 +5186,7 @@ fn sample_pixels(
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
 
     let layer_alone = req.layer.is_some();
@@ -5580,123 +5339,6 @@ fn sample_pixels(
     Ok(())
 }
 
-/// The composition rendered with one layer soloed — that layer alone, in its
-/// own place, on nothing.
-///
-/// Held in `state.layer_sample` against `(comp, frame, layer, revision,
-/// view)`: the dropper asks again on every pointer move, and re-compositing
-/// the whole composition per move is not a thing to do while someone is
-/// dragging a pointer. An edit moves the document's revision, which retires
-/// the entry.
-#[frb(ignore)]
-fn sample_layer_alone(
-    document: &lumit_core::model::Document,
-    revision: u64,
-    layer: Uuid,
-    req: &SamplePixelsRequest,
-    state: &mut WorkerState,
-) -> Option<(u32, u32, Vec<u8>)> {
-    let stamp = (req.comp.id, req.frame, layer, revision, req.view);
-    if let Some(held) = &state.layer_sample {
-        if held.stamp == stamp {
-            return Some((held.width, held.height, held.rgba.clone()));
-        }
-    }
-
-    // A patched *copy* of the snapshot: soloing for the read must never be
-    // something the document remembers, so nothing here goes near `commit`.
-    let mut patched = lumit_core::model::Document::clone(document);
-    let comp = patched.comp_mut(req.comp.id)?;
-    for l in &mut comp.layers {
-        l.switches.solo = l.id == layer;
-        // Soloed and still hidden is nothing at all — and a depth pass is very
-        // often hidden, which is exactly why this read exists.
-        if l.id == layer {
-            l.switches.visible = true;
-        }
-    }
-
-    // Seen through the view's own 3D view, so the read lands where the
-    // pointer is.
-    let patched = viewed_through(
-        None,
-        state.camera_views.get(&req.view).copied(),
-        std::sync::Arc::new(patched),
-    );
-    let (rgba, w, h) = state
-        .renderer
-        .render_preview(
-            &patched,
-            req.comp.id,
-            req.frame,
-            quality_for(req.scale),
-            req.scale,
-        )
-        .ok()?;
-    state.layer_sample = Some(LayerSample {
-        stamp,
-        width: w,
-        height: h,
-        rgba: rgba.clone(),
-    });
-    Some((w, h, rgba))
-}
-
-/// A window cut out of a picture: the pixels, and where its centre landed.
-#[frb(ignore)]
-pub(crate) struct Patch {
-    pub window: u32,
-    pub rgba: Vec<u8>,
-    pub x: u32,
-    pub y: u32,
-}
-
-/// Cut a `window × window` square centred on the fraction `(u, v)` of a
-/// picture.
-///
-/// `window` is forced odd and capped at [`MAX_WINDOW`] here rather than
-/// trusted: the centre must be a single pixel for the magnifier's centre cell
-/// to mean anything, and the payload must stay small enough to be a reading
-/// rather than a picture. Pixels off the edge repeat the edge, so the square is
-/// always exactly `window × window` and the caller never has a ragged one to
-/// draw — and the frontend can index it without a bounds case at the picture's
-/// border.
-#[frb(ignore)]
-pub(crate) fn cut_patch(
-    rgba: &[u8],
-    width: u32,
-    height: u32,
-    u: f64,
-    v: f64,
-    window: u32,
-) -> Option<Patch> {
-    if width == 0 || height == 0 || rgba.len() < (width as usize * height as usize * 4) {
-        return None;
-    }
-    let grid = window.clamp(1, MAX_WINDOW) | 1;
-    let w = width as i64;
-    let h = height as i64;
-    let cx = ((u * width as f64) as i64).clamp(0, w - 1);
-    let cy = ((v * height as f64) as i64).clamp(0, h - 1);
-    let half = i64::from(grid / 2);
-
-    let mut out = Vec::with_capacity((grid * grid * 4) as usize);
-    for dy in 0..i64::from(grid) {
-        for dx in 0..i64::from(grid) {
-            let px = (cx - half + dx).clamp(0, w - 1);
-            let py = (cy - half + dy).clamp(0, h - 1);
-            let i = ((py * w + px) * 4) as usize;
-            out.extend_from_slice(&rgba[i..i + 4]);
-        }
-    }
-    Some(Patch {
-        window: grid,
-        rgba: out,
-        x: cx as u32,
-        y: cy as u32,
-    })
-}
-
 /// Render one frame and publish it to Dart — always as a GPU handle.
 ///
 /// Two implementations, selected at compile time, because the zero-copy entry
@@ -5726,7 +5368,8 @@ fn publish_frame(
     #[cfg(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     ))]
     {
         // Everything that reaches here is a scrub, an edit's render or a drag
@@ -5743,7 +5386,8 @@ fn publish_frame(
     #[cfg(not(any(
         all(windows, feature = "shared-texture"),
         all(target_os = "linux", feature = "shared-texture-linux"),
-        all(target_os = "macos", feature = "shared-texture-macos")
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        target_arch = "wasm32"
     )))]
     {
         let _ = (state, comp, frame, scale, document, stream, mode, cacheable);
@@ -5757,7 +5401,8 @@ fn publish_frame(
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "linux", feature = "shared-texture-linux"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn stand_in(
     state: &mut WorkerState,
@@ -5806,11 +5451,13 @@ fn stand_in(
 #[cfg(any(
     all(windows, feature = "shared-texture"),
     all(target_os = "linux", feature = "shared-texture-linux"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn remember_shown(
     state: &mut WorkerState,
     comp: Uuid,
+    frame: u64,
     prepared: &lumit_render::headless::PreparedFrame,
 ) {
     let view = state.view_id();
@@ -5819,6 +5466,7 @@ fn remember_shown(
     if state.stand_ins.len() > 8 {
         state.stand_ins.remove(0);
     }
+    state.presented = Some((view, comp, frame, prepared.clone()));
 }
 
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
@@ -5871,7 +5519,7 @@ fn publish_zero_copy(
         }
     };
     if send_dmabuf(state, frame, &prepared, stream) {
-        remember_shown(state, comp, &prepared);
+        remember_shown(state, comp, frame, &prepared);
     }
 }
 
@@ -5922,7 +5570,8 @@ fn send_dmabuf(
 
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 #[allow(clippy::too_many_arguments)]
 fn publish_zero_copy(
@@ -5971,7 +5620,7 @@ fn publish_zero_copy(
         }
     };
     if send_shared(state, frame, &prepared, stream) {
-        remember_shown(state, comp, &prepared);
+        remember_shown(state, comp, frame, &prepared);
     }
 }
 
@@ -5979,7 +5628,8 @@ fn publish_zero_copy(
 /// be.
 #[cfg(any(
     all(windows, feature = "shared-texture"),
-    all(target_os = "macos", feature = "shared-texture-macos")
+    all(target_os = "macos", feature = "shared-texture-macos"),
+    target_arch = "wasm32"
 ))]
 fn send_shared(
     state: &mut WorkerState,
@@ -6022,279 +5672,6 @@ mod tests {
     use std::sync::mpsc::channel;
     use uuid::Uuid;
 
-    /// **The Viewer's own prefix cut, on the interactive path**.
-    ///
-    /// Three things, and each is a way the chip could look as if it worked
-    /// while showing the wrong picture:
-    ///
-    /// - the cut really shortens the stack, and only the named layer's;
-    /// - the cut frame **names its own frame** — the key hashes each layer's
-    ///   effects, so a shorter stack is a different name and the cache can
-    ///   never hand the chip the Viewer's full picture (WP5 proved this for
-    ///   the thumbnail; the interactive path is where it now matters);
-    /// - a point that names nothing this document has cuts nothing, so a chip
-    ///   left over from a deleted effect shows the honest picture rather than
-    ///   an empty one.
-    #[test]
-    fn a_prefix_point_cuts_the_stack_and_names_its_own_frame() {
-        use crate::api::state::BridgePrefixPoint;
-
-        let (project, comp) = project_with_solid_of(4);
-        let layer_id = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            state.store.snapshot().comp(comp).expect("comp").layers[0].id
-        };
-        let (first, second) = (
-            lumit_core::fx::builtins::instantiate("exposure").expect("a built-in"),
-            lumit_core::fx::builtins::instantiate("exposure").expect("a built-in"),
-        );
-        {
-            let state = project.state().expect("state");
-            let state = state.write().expect("write");
-            state
-                .store
-                .commit(lumit_core::ops::Op::SetLayerEffects {
-                    comp,
-                    layer: layer_id,
-                    effects: vec![first.clone(), second.clone()],
-                })
-                .expect("two effects");
-        }
-        let document = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            state.store.snapshot()
-        };
-        let stack = |doc: &std::sync::Arc<lumit_core::model::Document>| {
-            doc.comp(comp)
-                .expect("comp")
-                .layers
-                .iter()
-                .find(|l| l.id == layer_id)
-                .expect("the layer")
-                .effects
-                .len()
-        };
-        assert_eq!(stack(&document), 2);
-
-        let project_id = project.id;
-        let at = |effect| BridgePrefixPoint {
-            layer: Some(crate::api::layer::LayerReference::new(
-                project_id, comp, layer_id,
-            )),
-            effect: Some(effect),
-            graph: None,
-        };
-        // The Source box: the layer's own picture, before any effect (N4).
-        let at_source = BridgePrefixPoint {
-            layer: Some(crate::api::layer::LayerReference::new(
-                project_id, comp, layer_id,
-            )),
-            effect: None,
-            graph: None,
-        };
-        assert_eq!(
-            stack(&super::viewed(Some(at_source), document.clone())),
-            0,
-            "at the Source nothing of the stack is kept"
-        );
-        assert_eq!(
-            stack(&super::viewed(Some(at(first.id)), document.clone())),
-            1,
-            "at the first effect the stack stops after it"
-        );
-        assert_eq!(
-            stack(&super::viewed(Some(at(second.id)), document.clone())),
-            2,
-            "at the last effect nothing is cut, so the Viewer's own frame serves"
-        );
-        assert_eq!(
-            stack(&super::viewed(Some(at(Uuid::now_v7())), document.clone())),
-            2,
-            "an effect the layer no longer carries cuts nothing"
-        );
-        assert_eq!(
-            stack(&super::viewed(None, document.clone())),
-            2,
-            "and the chip off is the document as it stands"
-        );
-
-        // The name, which is the half a wrong cache would get away with.
-        let Some(mut state) = worker_state(project) else {
-            return;
-        };
-        let quality = still_quality(1.0);
-        let cut = super::viewed(Some(at(first.id)), document.clone());
-        let full = state
-            .renderer
-            .frame_key(&document, comp, 0, quality)
-            .expect("a solid is nameable");
-        let short = state
-            .renderer
-            .frame_key(&cut, comp, 0, quality)
-            .expect("and so is the cut one");
-        assert_ne!(
-            full, short,
-            "a truncated stack must name its own frame on the interactive path too"
-        );
-        assert_eq!(
-            state.renderer.frame_key(&cut, comp, 0, quality),
-            Some(short),
-            "and the same cut must name the same frame, or the cache is defeated"
-        );
-    }
-
-    /// **The picture at a box** (docs/impl/node-graph-comp.md §4.5): the point
-    /// names a comp and a box, and the cut is a patched copy whose Output shows
-    /// that box.
-    ///
-    /// Three things, each a way the chip could look as though it worked while
-    /// showing the wrong picture: the copy really rewires the Output; the box
-    /// that already feeds the Output cuts nothing, so the Viewer rides the
-    /// frame it has; and a point naming a comp with no graph cuts nothing
-    /// either.
-    #[test]
-    fn a_prefix_point_at_a_box_rewires_the_output() {
-        use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
-        use lumit_core::model::{Composition, LinearColour, ProjectItem};
-        use lumit_core::time::{Duration, FrameRate, Rational};
-
-        let (project, layer_comp) = project_with_solid_of(4);
-        let solid = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            match state
-                .store
-                .snapshot()
-                .comp(layer_comp)
-                .expect("comp")
-                .layers[0]
-                .kind
-            {
-                lumit_core::model::LayerKind::Solid { def } => def,
-                _ => unreachable!("project_with_solid_of makes a solid layer"),
-            }
-        };
-
-        // A graph of one Read into a blur into the Output, so the picture at
-        // the Read is genuinely a different picture from the Output's.
-        let read = Uuid::now_v7();
-        let blur = lumit_core::fx::builtins::instantiate("blur").expect("a built-in");
-        let blur_id = blur.id;
-        let mut graph = CompGraph::new_with_output();
-        let output = graph.output_id().expect("the seeded Output");
-        graph.nodes.push(GraphNode::Read {
-            id: read,
-            item: solid,
-            custom_name: None,
-        });
-        graph.nodes.push(GraphNode::Fx(blur));
-        graph.edges.push(GraphEdge {
-            from: read,
-            from_port: "output".into(),
-            to: blur_id,
-            to_port: "input".into(),
-        });
-        graph.edges.push(GraphEdge {
-            from: blur_id,
-            from_port: "output".into(),
-            to: output,
-            to_port: "input".into(),
-        });
-
-        let comp = Uuid::now_v7();
-        {
-            let state = project.state().expect("state");
-            let state = state.write().expect("write");
-            state
-                .store
-                .commit(lumit_core::ops::Op::AddItem {
-                    index: 0,
-                    item: Box::new(ProjectItem::Composition(Composition {
-                        graph: Some(graph),
-                        master_volume_db: 0.0,
-                        lighting: Default::default(),
-                        sound_mix: false,
-                        groups: Vec::new(),
-                        beat_grid: None,
-                        id: comp,
-                        name: "Graph".into(),
-                        width: 64,
-                        height: 32,
-                        frame_rate: FrameRate::new(30, 1).expect("30 fps"),
-                        duration: Duration(Rational::new(4, 30).expect("a duration")),
-                        background: LinearColour([0.0, 0.0, 0.0, 0.0]),
-                        work_area: None,
-                        layers: Vec::new(),
-                        markers: Vec::new(),
-                        motion_blur: Default::default(),
-                        extra: serde_json::Map::new(),
-                    })),
-                })
-                .expect("the node graph is filed");
-        }
-        let document = {
-            let state = project.state().expect("state");
-            let state = state.read().expect("read");
-            state.store.snapshot()
-        };
-
-        let at = |comp, node| crate::api::state::BridgePrefixPoint {
-            layer: None,
-            effect: None,
-            graph: Some(crate::api::state::BridgeGraphPoint { comp, node }),
-        };
-        let feeds = |doc: &std::sync::Arc<lumit_core::model::Document>| {
-            doc.comp(comp)
-                .expect("comp")
-                .graph
-                .as_ref()
-                .expect("a node graph")
-                .wire_into(output, "input")
-                .map(|(from, _)| *from)
-        };
-
-        assert_eq!(feeds(&document), Some(blur_id), "as the document has it");
-        assert_eq!(
-            feeds(&super::viewed(Some(at(comp, read)), document.clone())),
-            Some(read),
-            "at the Read the Output shows the Read"
-        );
-        assert_eq!(
-            feeds(&super::viewed(Some(at(comp, blur_id)), document.clone())),
-            Some(blur_id),
-            "the box that already feeds the Output cuts nothing"
-        );
-        assert_eq!(
-            feeds(&super::viewed(Some(at(layer_comp, read)), document.clone())),
-            Some(blur_id),
-            "a point naming a comp with no graph cuts nothing"
-        );
-        assert_eq!(
-            feeds(&super::viewed(None, document.clone())),
-            Some(blur_id),
-            "and the chip off is the document as it stands"
-        );
-
-        // And the cut names its own frame, which is the half a wrong cache
-        // would get away with.
-        let Some(mut state) = worker_state(project) else {
-            return;
-        };
-        let quality = still_quality(1.0);
-        let cut = super::viewed(Some(at(comp, read)), document.clone());
-        let (whole, at_read) = (
-            state.renderer.frame_key(&document, comp, 0, quality),
-            state.renderer.frame_key(&cut, comp, 0, quality),
-        );
-        assert!(whole.is_some() && at_read.is_some(), "a solid is nameable");
-        assert_ne!(
-            whole, at_read,
-            "the picture at a box must name its own frame, or the cache serves the Output's"
-        );
-    }
-
     /// **A view puts its own camera on top of the comp it names**
     /// (docs/impl/camera.md §6): one Camera layer at index 0, under the fixed
     /// id every render through that view shares, holding the pose's numbers.
@@ -6327,14 +5704,15 @@ mod tests {
         };
         let latch = super::ViewLatch {
             comp,
-            pose,
+            pose: Some(pose),
             draft: false,
             canvas: (0, 0),
+            display: Default::default(),
         };
         let through = super::viewed_through(None, Some(latch), two.clone());
         let layers = &through.comp(comp).expect("comp").layers;
         assert_eq!(layers.len(), two.comp(comp).expect("comp").layers.len() + 1);
-        assert_eq!(layers[0].id, super::VIEW_CAMERA_ID);
+        assert_eq!(layers[0].id, super::views::VIEW_CAMERA_ID);
         assert_eq!(
             lumit_core::model::stored_camera_pose_lt(&layers[0], 0.0),
             Some(pose),
@@ -6378,16 +5756,17 @@ mod tests {
         let (document, revision) = {
             let document = state.project.state().expect("state");
             let document = document.read().expect("read");
-            (document.store.snapshot(), document.store.revision())
+            document.store.snapshot_and_revision()
         };
         state.renderer.sync_colour(&document);
         let quality = super::still_quality(1.0);
         let top = camera_view_pose(BridgeCameraView::Top, 64.0, 32.0).core();
         let latch = super::ViewLatch {
             comp,
-            pose: top,
+            pose: Some(top),
             draft: false,
             canvas: (0, 0),
+            display: Default::default(),
         };
         super::set_view(&mut state, 1, Some(latch), None);
 
@@ -6527,7 +5906,7 @@ mod tests {
                 transparent_background: true,
                 region: None,
                 colour_view: None,
-                ground: None,
+                ..Default::default()
             },
         );
         super::look_at(&mut state, 0);
@@ -6617,7 +5996,9 @@ mod tests {
 
     /// A worker's state around a real renderer, built as `worker_loop` builds
     /// it. `None` where there is no graphics adapter to build one on.
-    fn worker_state(project: crate::api::project::ProjectReference) -> Option<super::WorkerState> {
+    pub(super) fn worker_state(
+        project: crate::api::project::ProjectReference,
+    ) -> Option<super::WorkerState> {
         let Ok(renderer) = super::HeadlessRenderer::new() else {
             eprintln!("no graphics adapter; skipping");
             return None;
@@ -6634,6 +6015,7 @@ mod tests {
             prioritised: false,
             prefetcher: lumit_render::prefetch::Prefetcher::default(),
             last_shown: None,
+            beside_shown: Vec::new(),
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
             looks: std::collections::HashMap::new(),
             applied_look: (0, super::ViewerLook::default()),
@@ -6663,6 +6045,7 @@ mod tests {
             layer_sample: None,
             pending_measure: None,
             stand_ins: Vec::new(),
+            presented: None,
             epochs: std::sync::Arc::default(),
         })
     }
@@ -6674,7 +6057,9 @@ mod tests {
     }
 
     /// The same, `frames` frames long at 30 fps.
-    fn project_with_solid_of(frames: i64) -> (crate::api::project::ProjectReference, Uuid) {
+    pub(super) fn project_with_solid_of(
+        frames: i64,
+    ) -> (crate::api::project::ProjectReference, Uuid) {
         project_with_solid_sized(frames, 64, 32)
     }
 
@@ -7213,6 +6598,30 @@ mod tests {
             "each view keeps its newest, in the order the views first asked"
         );
         assert_eq!(superseded, 5);
+    }
+
+    /// **A drag's last preview never lands on the frame it ended on.** The
+    /// active view's picture runs first, so a preview queued before it ran
+    /// after it and left the drag's reduced picture on screen.
+    #[test]
+    fn the_active_views_frame_supersedes_an_older_drag_preview() {
+        let (tx, rx) = channel();
+        tx.send(Req::Adaptive(2, super::PREVIEW_LANE)).unwrap();
+        tx.send(Req::Adaptive(3, 0)).unwrap();
+        drop(tx);
+        let (pictures, _, _, superseded) =
+            drain_to_newest(Req::Adaptive(1, super::PREVIEW_LANE), &rx, classify, 0);
+        assert_eq!(pictures, vec![Req::Adaptive(3, 0)]);
+        assert_eq!(superseded, 2);
+        // A preview asked after the frame is newer, and still runs.
+        let (tx, rx) = channel();
+        tx.send(Req::Adaptive(5, super::PREVIEW_LANE)).unwrap();
+        drop(tx);
+        let (pictures, _, _, _) = drain_to_newest(Req::Adaptive(4, 0), &rx, classify, 0);
+        assert_eq!(
+            pictures,
+            vec![Req::Adaptive(4, 0), Req::Adaptive(5, super::PREVIEW_LANE)]
+        );
     }
 
     /// The bug this policy exists to fix: during playback the Viewer asks for a

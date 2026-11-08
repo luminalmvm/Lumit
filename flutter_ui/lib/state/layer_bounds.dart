@@ -23,6 +23,8 @@ import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeEffectInstanceInfo;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
@@ -31,6 +33,33 @@ import 'package:lumit_flutter/panels/graph_maths.dart' show evaluateScalar;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
 import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:uuid/uuid.dart';
+
+/// What Geometry options are known by: a Text or Shape layer's, then each
+/// 3D shape's.
+const geometryOptionsNames = {
+  'geometry_options',
+  'cube_geometry',
+  'sphere_geometry',
+  'cylinder_geometry',
+  'cone_geometry',
+  'torus_geometry',
+  'plane_geometry',
+};
+
+/// Whether [fx] is those rows rather than a material's.
+bool isGeometryOptions(BridgeEffectInstanceInfo fx) =>
+    geometryOptionsNames.contains(fx.name);
+
+/// The kind of layer [info] draws as. A Text or Shape layer in 3D with a depth
+/// or a bevel to show draws as a Model layer does.
+BridgeLayerKind meshKindOf(BridgeLayerInfo info) {
+  final rows = info.materials;
+  final solid = info.switches.threeD &&
+      rows != null &&
+      rows.length > 1 &&
+      isGeometryOptions(rows.first);
+  return solid ? BridgeLayerKind.model : info.kind;
+}
 
 /// A Null layer's box, in layer pixels.
 ///
@@ -116,9 +145,19 @@ bool textIsAnimated(BridgeTextDocument document) =>
 /// hands a shape item's keys over on.
 Rect? shapeContentsRect(List<BridgeShapeEntry> contents, {double t = 0}) {
   double? minX, minY, maxX, maxY;
+  // Inside a group whose eye is off: nothing in it is drawn, so nothing in
+  // it is measured, as the engine has it.
+  int? off;
   for (final (index, entry) in contents.indexed) {
+    if (off != null && entry.depth > off) continue;
+    off = null;
+    if (entry.kind case BridgeShapeEntryKind_Group(:final field0)
+        when field0.hidden) {
+      off = entry.depth;
+    }
     if (entry.kind is! BridgeShapeEntryKind_Item) continue;
     final item = (entry.kind as BridgeShapeEntryKind_Item).field0;
+    if (item.hidden) continue;
     final own = _boxOf(_controlPoints(item));
     if (own == null) continue;
     // The modifiers acting on this item, in the order they apply: the
@@ -162,7 +201,8 @@ Rect? shapeContentsRect(List<BridgeShapeEntry> contents, {double t = 0}) {
     }
     // Half the outline sits outside the path.
     final half =
-        (item.stroke != null ? evaluateScalar(item.strokeWidth, t) / 2 : 0.0) +
+        (item.stroke != null && !item.strokeHidden
+                ? evaluateScalar(item.strokeWidth, t) / 2 : 0.0) +
             margin;
     final (ix0, iy0, ix1, iy1) =
         (box.$1 - half, box.$2 - half, box.$3 + half, box.$4 + half);
@@ -351,6 +391,10 @@ class LayerBoundsCache extends ChangeNotifier {
   /// Sizes by layer id, good for as long as [_revision] is.
   final Map<UuidValue, Size> _byLayer = {};
 
+  /// Model boxes by layer id, the same. Only kept once the model is read.
+  final Map<UuidValue, List<double>> _boxes = {};
+  final Map<UuidValue, int> _boxFrames = {};
+
   /// Probed media sizes by footage item id. Kept for the session: a file's
   /// dimensions do not change under us, and a relink refreshes through the
   /// document revision below anyway.
@@ -360,7 +404,7 @@ class LayerBoundsCache extends ChangeNotifier {
   /// second one.
   final Set<UuidValue> _probing = {};
 
-  BigInt? _revision;
+  int? _revision;
 
   /// The probed sizes, in the shape the engine's wireframe call takes: its own
   /// probe lives on the worker and that call runs on the caller's thread, so
@@ -381,10 +425,40 @@ class LayerBoundsCache extends ChangeNotifier {
   /// The probed media sizes survive: what a *file* measures does not depend on
   /// the document, and re-probing on every edit would put FFmpeg in the paint
   /// path.
-  void _atRevision(BigInt? revision) {
+  void _atRevision(int? revision) {
     if (revision == _revision) return;
     _revision = revision;
     _byLayer.clear();
+    _boxes.clear();
+  }
+
+  /// [entry]'s model box at document [revision] and comp [frame]
+  /// (`LayerBox.cube`), or a box of smoke's, or null on any other layer and
+  /// until the model's file has been read. Held for the revision, and asked
+  /// again each frame only on an [outlined] layer whose shape moves with the
+  /// playhead, as a mask's keyed path is. A click meets the model where it is,
+  /// whatever the box says.
+  List<double>? modelBoxOf(BridgeLayerEntry entry,
+      {required int? revision, required int frame, required bool outlined}) {
+    final model = meshKindOf(entry.info) == BridgeLayerKind.model;
+    if (!model && !entry.info.switches.threeD) return null;
+    _atRevision(revision);
+    final id = entry.layer.internallayerId;
+    final moves = outlined && (entry.info.modelRows?.moves ?? false);
+    final held = _boxes[id];
+    if (held != null && (!moves || _boxFrames[id] == frame)) {
+      return held.isEmpty ? null : held;
+    }
+    try {
+      final box = entry.layer.getModelBox(atFrame: frame);
+      _boxFrames[id] = frame;
+      if (box.length == 24) return _boxes[id] = box;
+      // Asked once a revision of a 3D layer with no box.
+      if (!model) _boxes[id] = const [];
+    } catch (_) {
+      // The layer went away between the model being read and this call.
+    }
+    return null;
   }
 
   /// The size of [entry]'s content in layer pixels, at document [revision].
@@ -396,7 +470,7 @@ class LayerBoundsCache extends ChangeNotifier {
   Size boundsOf(
     BridgeLayerEntry entry, {
     required BridgeCompSize compSize,
-    required BigInt? revision,
+    required int? revision,
     double t = 0,
   }) {
     _atRevision(revision);
@@ -421,8 +495,13 @@ class LayerBoundsCache extends ChangeNotifier {
 
   Size _measure(BridgeLayerEntry entry, BridgeCompSize compSize, double t) {
     // A Null never draws, so its box is the convention above rather than
-    // anything read from the document.
-    if (entry.info.kind == BridgeLayerKind.nullLayer) return nullLayerBounds;
+    // anything read from the document. A Model layer borrows it until its box
+    // comes from the model's own bounds.
+    if (entry.info.kind == BridgeLayerKind.nullLayer ||
+        entry.info.kind == BridgeLayerKind.model ||
+        entry.info.kind == BridgeLayerKind.mesh) {
+      return nullLayerBounds;
+    }
 
     // A shape layer is exactly as big as its art, and **that changes as the art
     // is edited** — the first kind whose size is not fixed by a source.

@@ -33,6 +33,10 @@ import 'timeline_extras_frb.dart';
 
 /// The speed envelope: every clip's map drawn as points and straight lines,
 /// against an axis that grows to hold whatever the curves reach.
+/// The speed line Copy speed took, in its clip's own time. For this run of
+/// the app only.
+List<BridgeKeyframe>? speedLineClipboard;
+
 class SpeedEnvelope extends StatefulWidget {
   final BridgeLayerEntry entry;
   final CompositionReference? comp;
@@ -137,7 +141,8 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     if (comp == null) return;
     for (final clip in _clips) {
       final id = clip.id.toString();
-      if (clip.sourceIsComp || _everyFrame.containsKey(id)) continue;
+      if (clip.sourceIsComp || clip.sourceIsSolid) continue;
+      if (_everyFrame.containsKey(id)) continue;
       _everyFrame[id] = null;
       final FootageReference? footage;
       try {
@@ -792,11 +797,14 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       _lineMenu(local, global, height);
       return;
     }
-    final inner =
-        found.index > 0 && found.index < _keysOf(found.clip).length - 1;
+    final keys = _keysOf(found.clip);
+    final inner = found.index > 0 && found.index < keys.length - 1;
+    final atFull =
+        (envelopeSpeeds(keys)[found.index] - 100).abs() < 1e-9;
     final picked = await showMenuAt<String>(
       context: context,
       position: global,
+      width: 170,
       rows: (close) => [
         MenuRow(
             key: const ValueKey('seq-envelope-set-speed'),
@@ -804,13 +812,16 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
             child: Text(l10n.menuSetSpeed)),
         MenuRow(
             key: const ValueKey('seq-envelope-reset-point'),
+            enabled: !atFull,
             onPressed: () => close('reset'),
-            child: Text(l10n.speedPointReset)),
-        if (inner)
+            child: MenuLabel(l10n.speedPointReset, enabled: !atFull)),
+        if (inner) ...[
+          const MenuDivider(),
           MenuRow(
               key: const ValueKey('seq-envelope-delete-point'),
               onPressed: () => close('delete'),
               child: Text(l10n.speedPointDelete)),
+        ],
       ],
     );
     if (!mounted || picked == null) return;
@@ -828,10 +839,11 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     }
   }
 
-  /// The menu on the line between two points: plant one there, or choose
-  /// the curve the speed takes across it.
+  /// The menu on the line between two points: plant one there, choose the
+  /// curve the speed takes across it, and what goes for the clip's whole line.
+  /// In the open strip the whole height is the line's; on a clip, only the line.
   Future<void> _lineMenu(Offset local, Offset global, double height) async {
-    if (!_onALine(local, height)) return;
+    if (widget.onClip && !_onALine(local, height)) return;
     final clip = _clipAt(local.dx);
     if (clip == null) return;
     final keys = _keysOf(clip);
@@ -846,46 +858,60 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
       SpeedCurve.sharp: l10n.speedCurveSharp,
       SpeedCurve.hold: l10n.speedCurveHold,
     };
+    MenuRow plain(String key, String label, Object answer,
+            void Function(Object) close, {bool enabled = true}) =>
+        MenuRow(
+          key: ValueKey<String>(key),
+          enabled: enabled,
+          onPressed: () => close(answer),
+          child: MenuLabel(label, ticked: false, enabled: enabled),
+        );
     final picked = await showMenuAt<Object>(
       context: context,
       position: global,
-      width: 170,
+      width: 180,
       rows: (close) => [
-        MenuRow(
-            key: const ValueKey('seq-envelope-add-point'),
-            onPressed: () => close('add'),
-            child: Text(l10n.speedPointAdd)),
+        plain('seq-envelope-add-point', l10n.speedPointAdd, 'add', close),
+        const MenuDivider(),
         for (final MapEntry(key: curve, value: name) in names.entries)
-          MenuRow.option(
+          // A line still at one speed throughout has no change for a curve to shape.
+          MenuRow(
             key: ValueKey<String>('seq-envelope-curve-${curve.name}'),
+            enabled: clip.retimed,
             onPressed: () => close(curve),
-            child: Row(children: [
-              menuTick(curve == current),
-              Expanded(child: Text(name)),
-            ]),
+            child: MenuLabel(name,
+                ticked: curve == current, enabled: clip.retimed),
           ),
-        MenuRow(
-            key: const ValueKey('seq-envelope-flip'),
-            onPressed: () => close('flip'),
-            child: Text(l10n.speedFlip)),
-        MenuRow(
-            key: const ValueKey('seq-envelope-thin'),
-            onPressed: () => close('thin'),
-            child: Text(l10n.speedThin)),
-        MenuRow(
-            key: const ValueKey('seq-envelope-reset-clip'),
-            onPressed: () => close('reset'),
-            child: Text(l10n.clipResetSpeed)),
+        const MenuDivider(),
+        plain('seq-envelope-thin', l10n.speedThin, 'thin', close,
+            enabled: keys.length > 2),
+        const MenuDivider(),
+        plain('seq-envelope-copy', l10n.cutCopySpeed, 'copy', close),
+        plain('seq-envelope-paste', l10n.cutPasteSpeed, 'paste', close,
+            enabled: speedLineClipboard != null),
+        plain('seq-envelope-reset-clip', l10n.clipResetSpeed, 'reset', close,
+            enabled: clip.retimed),
       ],
     );
     if (!mounted || picked == null) return;
     switch (picked) {
       case 'add':
         _plant(local);
-      case 'flip':
-        _write(clip, flipEnvelope(keys));
       case 'thin':
         _write(clip, thinEnvelope(keys));
+      case 'copy':
+        speedLineClipboard = keys;
+      case 'paste':
+        final copied = speedLineClipboard;
+        if (copied == null || keys.isEmpty) return;
+        final stretched = envelopeStretchedOnto(
+          copied,
+          (clip.endFrame - clip.startFrame).toDouble() / widget.fps,
+          keys.first.value,
+          (seconds) =>
+              timeOfSubframe(seconds * widget.fps, widget.fpsNum, widget.fpsDen),
+        );
+        if (stretched.isNotEmpty) _write(clip, stretched);
       case 'reset':
         _write(clip, envelopeToKeys(keys, [for (final _ in keys) 100.0],
             curves: [for (var i = 1; i < keys.length; i++) SpeedCurve.linear]));

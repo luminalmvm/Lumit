@@ -19,8 +19,10 @@ import '../state/settings.dart';
 import '../state/viewer_view.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'timeline_extras_frb.dart' show workAreaFrames;
 import 'viewer_bar.dart';
+import 'viewer_menus.dart';
 import 'viewer_progress_bar.dart';
 import 'viewer_strips.dart';
 
@@ -97,99 +99,116 @@ class ViewerDeck extends StatelessWidget {
             ? math.max(concentric, ShapeTokens.capsuleEnd)
             : viewerStripPadding,
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // Desk's round keys are wider than the bare marks, so its deck
-          // needs more room before it can spread; below that the row keeps
-          // its own width and the deck scrolls.
-          final loose =
-              constraints.maxWidth >= _deckMinimum + (desk ? 60 : 0);
-          final row = Row(
-              mainAxisSize: loose ? MainAxisSize.max : MainAxisSize.min,
-              children: [
-                ...viewerTransportMarks(
-                  t,
-                  playing: playing,
-                  playhead: ui.playheadFrame,
-                  settings: settings,
-                  comp: comp,
-                  onPlayPause: onPlayPause,
-                  onSeek: onSeek,
-                  detached: detached,
-                  clockSize: t.shape == ThemeShape.studio
-                      ? viewerTimecodeSize
-                      : _deckClockSize,
-                  playFilled: detached,
-                ),
-                viewerBarGapBox(viewerBarGap),
-                // The frame count beside the clock: where the playhead is, out
-                // of how many. Off the held settings, never the engine.
-                Text(
-                  'F$frame/$duration',
-                  key: const ValueKey('viewer-frame-count'),
-                  style: valueStyle,
-                ),
-                viewerBarGapBox(viewerBarGap),
-                // Preview mode and quality: the same two answers the header's
-                // quality menu carries, each as its own picker here, then the
-                // speed.
-                LumitTooltip(
-                  message: l10n.viewerQualityPlayback,
-                  child: BareDropdown<PlaybackMode>(
-                    key: const ValueKey('viewer-preview-mode'),
-                    dense: true,
-                    value: ui.workspace.performance.playback,
-                    options: PlaybackMode.values,
-                    label: (mode) => mode == PlaybackMode.adaptive
-                        ? l10n.playbackAdaptiveShort
-                        : l10n.playbackEveryFrame,
-                    onChanged: (mode) {
-                      ui.workspace.performance.playback = mode;
-                      ui.workspace.touch();
-                    },
+      // The empty deck's own menu. Every mark on it takes its own click first.
+      child: ViewerRightClick(
+        rows: (close) => viewerBarRows(ui, close),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Desk's round keys are wider than the bare marks, so its deck
+            // needs more room before it can spread; below that the row keeps
+            // its own width and the deck scrolls.
+            final loose =
+                constraints.maxWidth >= _deckMinimum + (desk ? 60 : 0);
+            final row = Row(
+                mainAxisSize: loose ? MainAxisSize.max : MainAxisSize.min,
+                children: [
+                  ViewerRightClick(
+                    rows: (close) =>
+                        viewerClockRows(ui, settings, comp, onSeek, close),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      ...viewerTransportMarks(
+                        t,
+                        playing: playing,
+                        playhead: ui.playheadFrame,
+                        settings: settings,
+                        comp: comp,
+                        onPlayPause: onPlayPause,
+                        onSeek: onSeek,
+                        detached: detached,
+                        clockSize: t.shape == ThemeShape.studio
+                            ? viewerTimecodeSize
+                            : _deckClockSize,
+                        playFilled: detached,
+                      ),
+                      viewerBarGapBox(viewerBarGap),
+                      // The frame count beside the clock: where the playhead is,
+                      // out of how many. Off the held settings, never the engine.
+                      Text(
+                        'F$frame/$duration',
+                        key: const ValueKey('viewer-frame-count'),
+                        style: valueStyle,
+                      ),
+                    ]),
                   ),
-                ),
-                const SizedBox(width: viewerHeaderGap),
-                LumitTooltip(
-                  message: l10n.viewerQualityResolution,
-                  child: BareDropdown<PreviewResolution>(
-                    key: const ValueKey('viewer-quality'),
-                    dense: true,
-                    value: ui.previewResolution,
-                    options: PreviewResolution.values,
-                    label: (r) => r.title,
-                    onChanged: ui.setPreviewResolution,
+                  viewerBarGapBox(viewerBarGap),
+                  // Preview mode and quality: the same two answers the header's
+                  // quality menu carries, each as its own picker here, then the
+                  // speed.
+                  ViewerRightClick(
+                    rows: (close) => viewerQualityRows(ui),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      LumitTooltip(
+                        message: l10n.viewerQualityPlayback,
+                        child: BareDropdown<PlaybackMode>(
+                          key: const ValueKey('viewer-preview-mode'),
+                          dense: true,
+                          value: ui.workspace.performance.playback,
+                          options: PlaybackMode.values,
+                          label: (mode) => mode == PlaybackMode.adaptive
+                              ? l10n.playbackAdaptiveShort
+                              : l10n.playbackEveryFrame,
+                          onChanged: (mode) {
+                            ui.workspace.performance.playback = mode;
+                            ui.workspace.touch();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: viewerHeaderGap),
+                      LumitTooltip(
+                        message: l10n.viewerQualityResolution,
+                        child: BareDropdown<PreviewResolution>(
+                          key: const ValueKey('viewer-quality'),
+                          dense: true,
+                          value: ui.previewResolution,
+                          options: PreviewResolution.values,
+                          label: (r) => r.title,
+                          onChanged: ui.setPreviewResolution,
+                        ),
+                      ),
+                    ]),
                   ),
-                ),
-                const SizedBox(width: viewerHeaderGap),
-                const ViewerSpeedPicker(),
-                viewerBarGapBox(viewerBarGap),
-                // The loop mode, the same mark the bar carries.
-                viewerLoopMark(t,
-                    loop: loop, onLoop: ui.workspace.setLoopMode),
-                viewerBarGapBox(viewerBarGap),
-                // The mute: lit while the output is silenced, which is the
-                // state worth noticing.
-                viewerBarMark(
-                  key: const ValueKey('viewer-mute'),
-                  icon: muted ? LumitIcon.mute : LumitIcon.audio,
-                  colour: muted ? t.textPrimary : t.textMuted,
-                  onPressed: () => ui.setAudioMuted(!muted),
-                  tip: muted ? l10n.tipTransportUnmute : l10n.tipTransportMute,
-                ),
-                viewerBarGapBox(viewerBarGap),
-                _CacheMeter(comp: comp, duration: duration),
-                if (loose) const Spacer() else const SizedBox(width: 24),
-                ViewerProgressBar(
-                  tracker: Provider.of<LumitUiState>(context, listen: false)
-                      .previewProgress,
-                ),
-              ]);
-          return loose
-              ? row
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal, child: row);
-        },
+                  const SizedBox(width: viewerHeaderGap),
+                  const ViewerSpeedPicker(),
+                  viewerBarGapBox(viewerBarGap),
+                  // The loop mode, the same mark the bar carries.
+                  viewerLoopMark(t,
+                      loop: loop, onLoop: ui.workspace.setLoopMode),
+                  viewerBarGapBox(viewerBarGap),
+                  // The mute: lit while the output is silenced, which is the
+                  // state worth noticing.
+                  viewerBarMark(
+                    key: const ValueKey('viewer-mute'),
+                    icon: muted ? LumitIcon.mute : LumitIcon.audio,
+                    colour: muted ? t.textPrimary : t.textMuted,
+                    onPressed: () => ui.setAudioMuted(!muted),
+                    tip: muted ? l10n.tipTransportUnmute : l10n.tipTransportMute,
+                  ),
+                  viewerBarGapBox(viewerBarGap),
+                  // Nothing cached is nothing to say, so the meter waits.
+                  _CacheMeter(comp: comp, duration: duration),
+                  if (loose) const Spacer() else const SizedBox(width: 24),
+                  ViewerProgressBar(
+                    tracker: Provider.of<LumitUiState>(context, listen: false)
+                        .previewProgress,
+                  ),
+                ]);
+            return loose
+                ? row
+                : EdgeFade(
+                    child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal, child: row));
+          },
+        ),
       ),
     );
   }
@@ -254,7 +273,7 @@ class _CacheMeterState extends State<_CacheMeter> {
     try {
       final work = workAreaFrames(widget.comp);
       final held = widget.comp.cachedFrames(
-        frames: BigInt.from(frames),
+        frames: frames,
         scale: ui.viewerScale,
       );
       final start = work.start.clamp(0, frames);
@@ -275,6 +294,7 @@ class _CacheMeterState extends State<_CacheMeter> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    if ((_fraction * 100).round() == 0) return const SizedBox.shrink();
     final radius = BorderRadius.circular(t.tokens.actionRadius);
     return LumitTooltip(
       message: l10n.tipViewerCacheReady,

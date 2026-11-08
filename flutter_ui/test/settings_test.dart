@@ -1,13 +1,15 @@
 // Settings defaults must be a no-op for existing installs, and the workspace
 // JSON must round-trip.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A settings file of this test's own, never the developer's real one — every
 /// setter calls `save()`, and the store is machine state a test must not reach.
@@ -66,6 +68,14 @@ void main() {
       cutAutoRipple: true,
       cutAutoCrossfade: true,
       cutSpeedLines: true,
+      cutDefaultTransition: 'iris_wipe',
+      cutFreezeSeconds: 3,
+      retimeHoldSeconds: 4,
+      retimeRampTo: 50,
+      retimeRampFrames: 24,
+      retimeRampInSeconds: true,
+      retimeRampEase: 'smooth',
+      cutFreezeKeepsSound: true,
       cutVegasDrags: true,
       cutHeadWidth: 240,
       quantiseSound: false,
@@ -75,12 +85,16 @@ void main() {
       viewerBars: ViewerBars.bottom,
       toolBarPosition: ToolBarPosition.left,
       rangeSliders: false,
-      rightClickOpensNodeSearch: false,
+      rightClickOpensNodeSearch: true,
       tabOpensNodeSearch: false,
       shiftAOpensNodeSearch: false,
       wireStyle: WireStyle.angled,
       room: LanternRoom.night,
       labelCase: LabelCase.lower,
+      peakHoldSeconds: 10,
+      viewerGuidesLocked: true,
+      viewerRulerPercent: true,
+      alignToFirstPicked: true,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -107,6 +121,14 @@ void main() {
     expect(back.cutAutoRipple, isTrue);
     expect(back.cutAutoCrossfade, isTrue);
     expect(back.cutSpeedLines, isTrue);
+    expect(back.cutDefaultTransition, 'iris_wipe');
+    expect(back.cutFreezeSeconds, 3);
+    expect(back.retimeHoldSeconds, 4);
+    expect(back.retimeRampTo, 50);
+    expect(back.retimeRampFrames, 24);
+    expect(back.retimeRampInSeconds, isTrue);
+    expect(back.retimeRampEase, 'smooth');
+    expect(back.cutFreezeKeepsSound, isTrue);
     expect(back.cutVegasDrags, isTrue);
     expect(back.cutHeadWidth, 240);
     expect(back.quantiseSound, isFalse);
@@ -116,15 +138,19 @@ void main() {
     expect(back.viewerBars, ViewerBars.bottom);
     expect(back.toolBarPosition, ToolBarPosition.left);
     expect(back.rangeSliders, isFalse);
-    expect(back.rightClickOpensNodeSearch, isFalse);
+    expect(back.rightClickOpensNodeSearch, isTrue);
     expect(back.tabOpensNodeSearch, isFalse);
     expect(back.shiftAOpensNodeSearch, isFalse);
     expect(back.wireStyle, WireStyle.angled);
     expect(back.room, LanternRoom.night);
     expect(back.labelCase, LabelCase.lower);
+    expect(back.peakHoldSeconds, 10);
+    expect(back.viewerGuidesLocked, isTrue);
+    expect(back.viewerRulerPercent, isTrue);
+    expect(back.alignToFirstPicked, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 42);
+    expect(all.toJson().keys.length, 54);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

@@ -37,12 +37,15 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/engine_labels.dart';
+import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'scopes_panel_frb.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// The histogram's trace code (docs/17: 0 waveform, 1 parade, 2 vectorscope,
 /// 3 histogram).
@@ -179,7 +182,7 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     final t = ThemeScope.of(context).theme;
     try {
       widget.comp.renderScope(
-        frame: BigInt.from(widget.playheadFrame),
+        frame: widget.playheadFrame,
         scale: state.measuredScale,
         kind: _histogramKind,
         colours: levelsHistogramColours(t,
@@ -303,6 +306,57 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
 
   double _fractionOf(double dx) => (dx / _plotWidth).clamp(0.0, 1.0);
 
+  /// The channel showing's five numbers back to where a fresh Levels has them.
+  void _resetChannel() {
+    const fresh = {
+      _inBlack: 0.0,
+      _gamma: 1.0,
+      _inWhite: 1.0,
+      _outBlack: 0.0,
+      _outWhite: 1.0,
+    };
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      for (final e in fresh.entries) {
+        final now = _scalarOf(e.key);
+        // A number already at rest makes no undo step.
+        if (_driven(e.key) ||
+            (now is BridgeScalar_Static && now.field0 == e.value)) {
+          continue;
+        }
+        widget.onWrite(widget.effectId, _id(e.key),
+            BridgeEffectValue.float(BridgeScalar.static_(e.value)));
+      }
+    });
+  }
+
+  /// The display's menu: which channel the handles aim at, and putting it back.
+  void _menu(Offset at) {
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        for (final (i, channel) in levelsChannels.indexed)
+          MenuRow(
+            key: ValueKey<String>('fx-levels-menu-$channel'),
+            onPressed: () {
+              close(null);
+              setState(() => _channel = i);
+            },
+            child: MenuLabel(_channelLabel(channel), ticked: i == _channel),
+          ),
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('fx-levels-menu-reset'),
+          onPressed: () {
+            close(null);
+            _resetChannel();
+          },
+          child: MenuLabel(l10n.reset, ticked: false),
+        ),
+      ],
+    );
+  }
+
   Widget _strip({
     required bool output,
     required Widget child,
@@ -340,7 +394,10 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final at = _positions();
-    return Padding(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (d) => _menu(d.globalPosition),
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,12 +494,8 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
             ],
           ),
           const SizedBox(height: 2),
-          Text(
-            '${engineLabel('Input black')} · ${engineLabel('Gamma')} · '
-            '${engineLabel('Input white')}',
-            style: t.small.copyWith(color: t.textMuted),
-          ),
         ],
+      ),
       ),
     );
   }

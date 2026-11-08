@@ -18,74 +18,32 @@
 //!   keys.
 //! - **Evaluated values, not keyframe data**: a property animated elsewhere
 //!   but constant here hashes the same across the constant span.
-//! - **Algorithm version** (`ALGO_VERSION`) is bumped whenever rendering
-//!   output changes, invalidating every old entry by construction.
+//! - **Algorithm version** (`ALGO_VERSION`) is bumped when rendering output changes.
 
 use std::sync::Arc;
 
 use lumit_core::{
     expression::ExpressionContext,
+    fx::effects::depth_points::stamp as points_stamp,
     model::{CameraPose, Composition, Document, LayerKind, MatteChannel},
 };
 use uuid::Uuid;
 
+use algo::ALGO_VERSION;
+
+mod algo;
 pub mod epoch;
 pub mod exec;
 pub mod graph;
+mod lights;
+mod material;
+mod model;
+mod moments;
+mod orient;
+mod overlap_key;
 pub mod pool;
+mod projection;
 pub mod schedule;
-
-/// Bump when any rendering algorithm's output changes — or when the key itself
-/// starts covering something it did not: every cached frame keyed under the old
-/// version stops being addressed, which is what makes a fix to the key safe.
-///
-/// * 1 — the original key.
-/// * 2 — a layer's inherited parent-chain placement joined the key (see
-///   [`feed_layer`]). Under version 1 a hidden parent could be moved without
-///   renaming its children's frames, so those frames were served stale; every
-///   version-1 entry has to stop being addressed for the fix to mean anything.
-/// * 3 — anti-aliasing. Two reasons at once, either sufficient: the key
-///   now covers the project's sample count, and turning the setting on by
-///   default changes what every comp renders to. Every version-2 frame was made
-///   without anti-aliasing, so none of them may be served again.
-/// * 5 — the Lens flare's aperture. The key now covers a file
-///   parameter's size and modification time, so an edited .lens or .cube
-///   renames the frames that read it; and the flare's bake snaps its
-///   continuous iris dials to a step, which moves the picture very slightly
-///   at every f-stop between two steps.
-/// * 6: a 3D layer off z = 0 or tilted in a comp with no camera now
-///   draws, where it used to be cut away.
-/// * 7: a 2D layer and its children ignore the z and X/Y Rotation it
-///   kept from being 3D.
-/// * 8: a parented adjustment layer grades where its parent puts it.
-/// * 9: a lit plain solid is lit at its own size, not as a stretched tile.
-/// * 10: a Rhai expression reads another layer's properties at that layer's
-///   own time.
-/// * 11: Depth of field pro blurs up to the frame's edge, where it left a strip
-///   of the edge pixel.
-/// * 12: 3D layers draw farthest first and cut where they pass through each
-///   other, so a 3D comp with a camera can look different.
-/// * 13: with no camera layer, 3D layers are seen through the default camera.
-/// * 14: camera depth of field blurs a 3D layer by each pixel's distance, round
-///   on screen, Scene depth lets a higher group of 3D layers cover a lower
-///   one, and an adjustment layer's Depth row pointed at itself reads the 3D
-///   layers below.
-/// * 15: shadows are drawn, where a light and a layer cast them.
-/// * 16: camera depth of field blurs a 3D layer's outline too, and blurs as
-///   much as After Effects does.
-/// * 17: on main, a 3D layer's outline blurs under the camera's depth of
-///   field, and a plain solid under one is blurred at its own size.
-/// * 18: main's 17 meets 12 to 16.
-/// * 19: a shape whose outline crosses itself is filled where it crosses.
-/// * 20: main's 18, a phone clip filmed upright drawn upright, meets 19.
-/// * 21: an open shape path is filled, as if a straight line closed it, and
-///   an open mask no longer hides its layer.
-/// * 22: Depth of field pro smooths the grain out of a wide blur.
-/// * 23: a blurred layer is drawn with more copies the faster it moves, its
-///   parents and the camera move them too, a still one is drawn once, and the
-///   inner layers of a collapsed Precomp blur.
-/// * 28: a project at 8 or 32 bits draws its effects.
-pub const ALGO_VERSION: u32 = 28;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -425,56 +383,7 @@ fn feed_comp(
         h.update(&comp.motion_blur.samples.to_le_bytes());
         h.update(&comp.motion_blur.limit.to_le_bytes());
     }
-    // The comp's lights (docs/06). Hashed once here rather than per
-    // layer, because a light shades every layer that accepts it — and hashed
-    // only when the comp actually has one, so every key made before lighting
-    // existed stays valid. A Light layer draws no pixels of its own, so
-    // nothing else in this walk would notice it moving.
-    let context = lumit_core::model::comp_context(doc, comp, t);
-    let read = lumit_core::model::context_reader(&context, t);
-    let lights = comp.lights_at(t, &read, stamper.solves().map(|store| (doc, store)));
-    if !lights.is_empty() {
-        h.update(b"lights/");
-        if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
-            h.update(b"after-effects/");
-            h.update(&[u8::from(linear)]);
-        }
-        for l in &lights {
-            h.update(&[match l.kind {
-                lumit_core::model::LightKind::Point => 0u8,
-                lumit_core::model::LightKind::Spot => 1,
-                lumit_core::model::LightKind::Area => 2,
-                lumit_core::model::LightKind::Parallel => 3,
-                lumit_core::model::LightKind::Ambient => 4,
-            }]);
-            h.update(&[l.falloff as u8, u8::from(l.legacy_shape)]);
-            for v in [
-                l.position.0,
-                l.position.1,
-                l.z,
-                l.half_size.0,
-                l.half_size.1,
-                l.cone_deg,
-                l.rotation_deg,
-                l.rotation_x_deg,
-                l.rotation_y_deg,
-                l.falloff_px,
-                l.cone_feather,
-                l.radius_px,
-                f64::from(l.gain),
-            ] {
-                feed_f64(h, v);
-            }
-            for c in l.colour {
-                feed_f64(h, f64::from(c));
-            }
-            if l.shadow_darkness > 0.0 {
-                h.update(b"shadows/");
-                feed_f64(h, f64::from(l.shadow_darkness));
-                feed_f64(h, f64::from(l.shadow_diffusion));
-            }
-        }
-    }
+    lights::feed_lights(h, doc, comp, t, quality, stamper, visited)?;
     // **A node graph composition** (docs/impl/node-graph-comp.md §2.5). The
     // walk forks here, so every byte a layer comp feeds is unchanged and no
     // key ever made moves: a comp with no graph never reaches this line, and a
@@ -518,6 +427,8 @@ fn feed_comp(
         // As the build draws it: a Sequence layer wearing its clip's effects
         // and blend mode, so a change to either retires the frame.
         let worn = lumit_core::sequence::worn_at(layer, lt);
+        // The builder reads a layer's own moments off the layer itself.
+        moments::feed_own_moments(h, doc, comp, layer, t, quality, stamper, visited)?;
         let layer = worn.as_ref().unwrap_or(layer);
         feed_layer(h, doc, comp, layer, t, lt, quality, stamper, visited)?;
     }
@@ -914,7 +825,7 @@ fn feed_effect_stack(
                 if name == "origin" {
                     continue;
                 }
-                // The inner graph's `layout` is canvas positions (CS4, §4.2):
+                // The inner graph's `layout` and `ties` (CS4, §4.2) are
                 // presentation state, absent from the key for the reason
                 // `LayerGraph::layout` is — moving a box changes no pixel.
                 let text = if name == "graph" {
@@ -922,7 +833,7 @@ fn feed_effect_stack(
                         serde_json::Value::Object(graph) => serde_json::Value::Object(
                             graph
                                 .iter()
-                                .filter(|(k, _)| *k != "layout")
+                                .filter(|(k, _)| !matches!(k.as_str(), "layout" | "ties"))
                                 .map(|(k, v)| (k.clone(), v.clone()))
                                 .collect(),
                         )
@@ -956,10 +867,15 @@ fn feed_effect_stack(
         // side of the frame, which this frame's rows alone don't say.
         let shutter =
             comp.motion_blur.enabled && marker_layer.is_some_and(|l| l.switches.motion_blur);
-        if e.effect.match_name == "sprite_flare"
-            && (shutter || lumit_core::fx::effects::sprite_flare::moves_with_time(e))
-        {
+        let moves = || {
+            lumit_core::fx::builtins::def(e.effect.match_name.as_str())
+                .is_some_and(|def| def.moves_with_time(e))
+        };
+        if e.effect.match_name == "sprite_flare" && (shutter || moves()) {
             h.update(b"flare-time");
+            feed_f64(h, lt);
+        } else if moves() {
+            h.update(b"fx-time");
             feed_f64(h, lt);
         }
         // Track points draws nothing until its analysis lands, and a landing
@@ -1073,8 +989,8 @@ fn feed_effect_stack(
         // under the name its kept walks go by. Trails draw every frame from
         // the in point too.
         if let Some(layer) = marker_layer.filter(|_| {
-            use lumit_core::fx::points::stepped::{trails, wanted};
-            wanted(comp, e) || trails(comp, e)
+            use lumit_core::fx::points::stepped::{carried, wanted};
+            wanted(comp, e) || carried(comp, e)
         }) {
             use lumit_core::fx::points::stepped::{definition, target};
             h.update(b"stepped/");
@@ -1230,6 +1146,61 @@ fn feed_effect_stack(
                 }
             }
         }
+        // Time loop shows its Source layer at the loop's moments, which the
+        // row values alone do not name: the source at those moments joins.
+        if allow_after_effects_refs && e.effect.match_name == "time_loop" {
+            h.update(b"time-loop/");
+            for (layer, at) in lumit_core::fx::effects::time_loop::TimeLoop::planned(e, comp, t, lt)
+            {
+                feed_f64(h, at);
+                let Some(src) = comp.layers.iter().find(|l| l.id == layer) else {
+                    continue;
+                };
+                if at < src.in_point.0.to_f64() || at >= src.out_point.0.to_f64() {
+                    h.update(&[0]);
+                    continue;
+                }
+                h.update(&[1]);
+                let slt = lumit_core::time::layer_time(at, src.start_offset.0);
+                feed_source(h, doc, comp, src, slt, at, quality, stamper, visited)?;
+                feed_effect_stack(
+                    h,
+                    src.switches.fx,
+                    &src.effects,
+                    Some(src),
+                    comp,
+                    doc,
+                    at,
+                    slt,
+                    quality,
+                    stamper,
+                    visited,
+                    false,
+                )?;
+                // As placed in comp draws the source where it stands at
+                // that moment, parents and all.
+                let tr = &src.transform;
+                for v in [
+                    tr.position_x.value_at(slt),
+                    tr.position_y.value_at(slt),
+                    tr.position_z.value_at(slt),
+                    tr.anchor_x.value_at(slt),
+                    tr.anchor_y.value_at(slt),
+                    tr.scale_x.value_at(slt),
+                    tr.scale_y.value_at(slt),
+                    tr.rotation.value_at(slt),
+                    tr.rotation_x.value_at(slt),
+                    tr.rotation_y.value_at(slt),
+                    tr.opacity.value_at(slt),
+                ] {
+                    feed_f64(h, v);
+                }
+                feed_depth(h, tr, slt, &|p| p.value_at(slt));
+                if src.parent.is_some() {
+                    feed_parents(h, doc, comp, src, at, stamper);
+                }
+            }
+        }
         // An expression is read about its layer at this moment, as the builder
         // reads it. Without that it ran detached, so `time` and anything naming
         // a layer gave the same number on every frame, and the stale frame was
@@ -1334,15 +1305,11 @@ fn feed_effect_stack(
                 }
                 EffectValue::Layer(lref) => {
                     // The referenced layer is rendered alone at comp size as
-                    // this effect's auxiliary input (a depth pass for depth
-                    // of field, docs/impl/layer-input.md §4): its content is
-                    // content the parameter hash cannot otherwise see, so it
-                    // joins the key. It is rendered SOURCE-ONLY (its own
-                    // effect stack is not applied), so — exactly like a matte
-                    // source — the key is the referenced layer's source plus
-                    // its evaluated transform. A source-only render never
-                    // re-enters an effect stack, so a layer reference cannot
-                    // recurse; `visited` still guards any precomp cycle
+                    // this effect's auxiliary input (docs/impl/layer-input.md
+                    // §4), content the parameter hash cannot otherwise see.
+                    // Rendered source-only, the key is its source, its paint
+                    // and its evaluated transform, and a layer reference
+                    // cannot recurse; `visited` still guards any precomp cycle
                     // inside that source. An unset or dangling reference
                     // feeds a distinct 0 marker (the effect is a no-op).
                     //
@@ -1357,20 +1324,21 @@ fn feed_effect_stack(
                     // source for no gain.
                     //
                     // **Audio level's Audio row is a reading, not a picture**
-                    // (docs/impl/audio-nodes.md §3). Every source the node
-                    // offers is the comp's mix under a filter, the whole of
-                    // it, one layer of it, or one clip of one layer, so a fader
-                    // anywhere in the comp can move the number the picture
-                    // follows, and folding the named layer's own file says
-                    // nothing about it. The mix's fingerprint is the term that
-                    // does. It is asked for this one row alone, so no other
-                    // reference pays for a job list. Beat trigger's Audio row
-                    // reads the same mix.
+                    // (docs/impl/audio-nodes.md §3). Every source the node offers
+                    // is the comp's mix under a filter, so a fader anywhere can
+                    // move the number the picture follows and the named layer's
+                    // file says nothing about it. The mix's fingerprint does. Asked
+                    // for this row alone, and Beat trigger's. Depth points' Camera
+                    // row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
-                        && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
+                        && matches!(
+                            e.effect.match_name.as_str(),
+                            "audio_level" | "beat_trigger" | "audio_spectrum"
+                        )
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
-                        .flatten();
+                        .flatten()
+                        .or_else(|| points_stamp(doc, comp, marker_layer, e, &p.id, t));
                     if let Some(sig) = mix {
                         h.update(&sig.to_le_bytes());
                     }
@@ -1387,6 +1355,9 @@ fn feed_effect_stack(
                             h.update(src.id.as_bytes());
                             let slt = lumit_core::time::layer_time(t, src.start_offset.0);
                             feed_source(h, doc, comp, src, slt, t, quality, stamper, visited)?;
+                            if !src.paint.is_empty() {
+                                let _ = serde_json::to_writer(&mut *h, &src.paint);
+                            }
                             let dtr = &src.transform;
                             for v in [
                                 dtr.position_x.value_at(slt),
@@ -1704,31 +1675,7 @@ fn feed_layer(
     if !layer.switches.accepts_lights && comp.layers.iter().any(|l| l.is_light()) {
         h.update(b"unlit");
     }
-    // The material shades only a 3D layer and only where there is a light,
-    // and is hashed only once it has moved off what layers had before it
-    // existed, so those keys stay valid.
-    let m = &layer.transform.material;
-    if layer.switches.three_d
-        && comp.layers.iter().any(|l| l.is_light())
-        && **m != lumit_core::model::Material::legacy()
-    {
-        h.update(b"material");
-        for p in [
-            &m.ambient,
-            &m.diffuse,
-            &m.specular,
-            &m.shininess,
-            &m.metal,
-            &m.light_transmission,
-        ] {
-            feed_f64(h, p.value_at(lt));
-        }
-        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
-    } else if [m.casts_shadows, m.accepts_shadows].contains(&lumit_core::model::ShadowMode::Only) {
-        // Set to Only, a layer can go undrawn with no light in the comp too.
-        h.update(b"shadow only");
-        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
-    }
+    material::feed(h, comp, layer, lt);
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
     if layer.switches.collapse && matches!(layer.kind, LayerKind::Precomp { .. }) {
@@ -1814,11 +1761,9 @@ fn feed_layer(
         true,
     )?;
 
-    // The **style stack** (docs/impl/layer-styles.md §1), immediately
-    // after it and through the very same fold: styles are picture, not metadata,
-    // so editing one has to retire the cached frames it changed. Emits nothing
-    // at all when the list is empty, which is every layer that has none — so
-    // every key written before styles existed is still the key that layer names.
+    // The **style stack** and a Model layer's material rows, which draw
+    // whatever the fx switch says, through the same fold. Nothing at all for
+    // an empty list, so every older key is still that layer's.
     feed_effect_stack(
         h,
         layer.switches.fx,
@@ -1833,15 +1778,19 @@ fn feed_layer(
         visited,
         true,
     )?;
+    let (m, l) = (lumit_core::model_material::stored(layer), Some(layer));
+    let named = lumit_core::model_material::unheld(&m, comp, lt);
+    feed_effect_stack(
+        h, true, &named, l, comp, doc, t, lt, quality, stamper, visited, true,
+    )?;
+    projection::feed_projections(h, doc, comp, &m, (t, lt), quality, stamper, visited)?;
 
-    // A temporal effect (echo, docs/08 §3.13) reads the layer's neighbour
-    // source frames, which are content the parameter hash cannot see:
-    // two comp times sharing the current frame — a held/frozen leading frame —
+    // A temporal effect (echo) reads the layer's neighbour source frames, which
+    // the parameter hash cannot see: two comp times sharing the current frame
     // can differ in their neighbours, so their echoes differ. Key the stamped
     // neighbour frames, exactly the ones the render decodes (same window, same
-    // retime mapping, same comp frame step). Footage layers only, matching the
-    // render's neighbour decode; empty otherwise, so a plain layer's key is
-    // untouched.
+    // retime mapping, same comp frame step). Footage layers only, as the render
+    // decodes; a plain layer's key is untouched.
     if lumit_core::fx::temporal::stack_is_temporal(&layer.effects, layer.switches.fx) {
         if let LayerKind::Footage { item, .. } = &layer.kind {
             let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -1973,6 +1922,10 @@ fn feed_layer(
                             stamper.stamp(item, clip.held_source_time(at), native)
                         }
                         ClipSource::Comp(_) => None,
+                        ClipSource::Solid(def) => {
+                            feed_solid(h, doc, def);
+                            return;
+                        }
                     };
                     match stamp {
                         Some((identity, frame)) => {
@@ -2418,11 +2371,28 @@ fn feed_source(
             // render evaluates. The map itself feeds no byte of its own - two
             // layer times that land on one source time are one picture and
             // share one name - and an un-retimed Precomp keeps the name it had.
-            let st = lumit_core::model::nested_source_time(layer, nested, lt);
+            //
+            // On Flow between two frames the picture is made from both, so
+            // both are named, with how far along and the Flow settings.
+            let pair = lumit_core::precomp_flow::pair(layer, nested, lt, comp_fps);
+            let st = pair.map_or_else(
+                || lumit_core::model::nested_source_time(layer, nested, lt),
+                |(a, _, _)| a,
+            );
             visited.push(*comp);
             let r = comp_key_visited(doc, nested, st, quality, stamper, visited);
+            let then = pair.map(|(_, b, phase)| {
+                let r = comp_key_visited(doc, nested, b, quality, stamper, visited);
+                (r, phase)
+            });
             visited.pop();
             h.update(&r?.0.to_le_bytes());
+            if let Some((r, phase)) = then {
+                h.update(b"flow/");
+                h.update(&r?.0.to_le_bytes());
+                feed_interp(h, &layer.interpolation, lt, stamper);
+                feed_f64(h, f64::from(phase));
+            }
             // What an analysis filed for this layer, named by the nested
             // comp's own frame as a footage layer's is by the file's. Nothing
             // for a layer with no such effect, so its name stays what it was.
@@ -2463,17 +2433,16 @@ fn feed_source(
             h.update(b"camera"); // draws nothing; pose is hashed at comp level
         }
         LayerKind::Light { light } => {
-            // A light draws nothing of its own, but unlike a Camera it is not
-            // enough to say so: what it *is* changes every frame that reads it
-            // (the Lens flare's Lights mode), so its own properties have to be
-            // in the name or moving a light would serve a stale frame. The
-            // transform is hashed at the layer level, like every other
-            // layer's, which covers where it is.
+            // Nothing drawn, but the Lens flare's Lights mode reads what it *is*.
             h.update(b"light");
             if let Ok(json) = serde_json::to_vec(light) {
                 h.update(&json);
             }
         }
+        LayerKind::Model { .. } => {
+            model::feed(h, doc, owner, layer, comp_time, quality, stamper, visited)?;
+        }
+        LayerKind::Mesh { shape } => model::feed_shape(h, *shape),
         LayerKind::Sequence { clips } => {
             use lumit_core::sequence::{Clip, ClipSource, Shown};
             // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a
@@ -2512,6 +2481,7 @@ fn feed_source(
                             feed_f64(h, st);
                         }
                     }
+                    ClipSource::Solid(def) => feed_solid(h, doc, def),
                     ClipSource::Comp(comp) => {
                         if visited.contains(&comp) {
                             h.update(b"cycle");
@@ -2566,12 +2536,7 @@ fn feed_source(
                     gain,
                     opacity,
                 } => {
-                    h.update(b"seq-dissolve/");
-                    feed_f64(h, gain);
-                    // The clips' own opacity, drawn as the layer's.
-                    if opacity < 1.0 {
-                        feed_f64(h, opacity);
-                    }
+                    overlap_key::feed_overlap(h, outgoing, incoming, gain, opacity, lt);
                     feed_clip(h, outgoing)?;
                     feed_clip(h, incoming)?;
                 }
@@ -2887,6 +2852,7 @@ fn feed_depth(
     lt: f64,
     read: &dyn Fn(&lumit_core::anim::Property) -> f64,
 ) {
+    orient::feed(h, tr, lt);
     let (x, y, z) = tr.orientation_at(lt, read);
     let values = [x, y, z, read(&tr.anchor_z), read(&tr.scale_z)];
     if values != [0.0, 0.0, 0.0, 0.0, 100.0] || tr.after_effects_order {
@@ -2897,6 +2863,23 @@ fn feed_depth(
         });
         for v in values {
             feed_f64(h, v);
+        }
+    }
+}
+
+/// A solid clip's picture: its colour and size, the same at every time.
+fn feed_solid(h: &mut blake3::Hasher, doc: &lumit_core::model::Document, def: uuid::Uuid) {
+    h.update(b"seq-solid/");
+    match doc.solid(def) {
+        Some(sd) => {
+            for ch in sd.colour.0 {
+                h.update(&ch.to_le_bytes());
+            }
+            h.update(&sd.width.to_le_bytes());
+            h.update(&sd.height.to_le_bytes());
+        }
+        None => {
+            h.update(b"nosolid");
         }
     }
 }
@@ -3019,6 +3002,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -3105,8 +3089,10 @@ mod tests {
         let wiggle_id = wiggle.id;
 
         let wired = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle.clone()],
@@ -3573,6 +3559,8 @@ mod tests {
                     id: Uuid::now_v7(),
                     name: kind.label().into(),
                     kind,
+                    hidden: false,
+                    own: false,
                 })
             }));
             layer.kind = LayerKind::Shape { contents };
@@ -4843,12 +4831,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 28, which renamed every frame.
+        // Pinned under ALGO_VERSION 37, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                328_268_729_066_176_038_303_228_577_772_713_744_142,
-                36_726_106_807_010_197_772_526_010_792_187_696_186
+                147_468_104_447_878_697_879_367_290_286_622_048_124,
+                257_304_935_719_304_727_937_549_597_088_181_006_687
             )
         );
 
@@ -4917,8 +4905,10 @@ mod tests {
         let fx_id = fx.id;
         let mut comp = comp_with(Vec::new());
         comp.graph = Some(CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

@@ -76,6 +76,8 @@ fn entries(items: Vec<Art>) -> Vec<ShapeEntry> {
                 id: uuid::Uuid::now_v7(),
                 name: kind.label().into(),
                 kind,
+                hidden: false,
+                own: false,
             })
         }));
         if out.is_empty() {

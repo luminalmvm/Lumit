@@ -26,13 +26,16 @@
 // turns it into a sentence from the .arb. The service holds state, not copy.
 
 import 'dart:convert';
-import 'dart:ffi' show Abi;
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
 
 import 'download.dart';
+import 'package:lumit_flutter/state/win32.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/win32_web.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// Where the official catalogue lives: one file on the `main` branch of the
 /// second repository, read straight rather than through an API, so there is no
@@ -212,9 +215,6 @@ typedef AddonRemover = void Function(String id);
 /// Reading the runtime's state, which is a value the engine already holds.
 typedef RuntimeReader = RuntimeStatus Function();
 
-/// Loading the runtime now and saying what happened.
-typedef RuntimeLoader = Future<RuntimeStatus> Function();
-
 /// Where addons live, as the engine has it, so the two sides cannot disagree
 /// about the folder. Null on a machine with no home directory.
 typedef AddonsFolder = String? Function();
@@ -228,7 +228,6 @@ class AddonService extends ChangeNotifier {
   final AddonInstaller _install;
   final AddonRemover _remove;
   final RuntimeReader _readRuntime;
-  final RuntimeLoader _loadRuntime;
   final AddonsFolder _folderOf;
   final TextFetcher _fetch;
   final AssetDownloader _download;
@@ -242,7 +241,6 @@ class AddonService extends ChangeNotifier {
     required AddonInstaller install,
     required AddonRemover remove,
     required RuntimeReader runtime,
-    required RuntimeLoader loadRuntime,
     required AddonsFolder folder,
     TextFetcher? fetch,
     AssetDownloader? download,
@@ -251,7 +249,6 @@ class AddonService extends ChangeNotifier {
         _install = install,
         _remove = remove,
         _readRuntime = runtime,
-        _loadRuntime = loadRuntime,
         _folderOf = folder,
         _fetch = fetch ?? fetchText,
         _download = download ?? downloadAsset,
@@ -273,7 +270,7 @@ class AddonService extends ChangeNotifier {
   /// What the engine found in the addons folder, as of the last [refresh].
   List<Addon> get installed => _installed;
 
-  /// The state of the model runtime, as of the last [refresh] or [runtimeLoad].
+  /// The state of the model runtime, as of the last [refresh].
   RuntimeStatus get runtime => _runtime;
 
   AddonStage get stage => _stage;
@@ -314,10 +311,16 @@ class AddonService extends ChangeNotifier {
   /// installed, installed at another version, which the row reads as Update,
   /// or installed with its files gone, because installing it again is the one
   /// thing that mends that.
-  List<Addon> get available => [
-        for (final e in _entries)
-          if (e.kind != AddonKind.runtime && _worthOffering(e)) e
-      ];
+  ///
+  /// None when this machine has no runtime and the catalogue has none for it,
+  /// as on an Intel Mac, since a pack could only ever read Needs runtime.
+  List<Addon> get available =>
+      runtimeInstalled == null && runtimeOffered == null
+          ? const []
+          : [
+              for (final e in _entries)
+                if (e.kind != AddonKind.runtime && _worthOffering(e)) e
+            ];
 
   bool _worthOffering(Addon offer) {
     final here = installedById(offer.id);
@@ -495,14 +498,6 @@ class AddonService extends ChangeNotifier {
     _cancelRequested = true;
   }
 
-  /// Load the runtime now and report what happened, which is the one way to
-  /// find out whether an installed library actually works on this machine.
-  Future<void> runtimeLoad() async {
-    if (busy) return;
-    _runtime = await _loadRuntime();
-    notifyListeners();
-  }
-
   /// The whole install: each file down, each file checked, then the engine.
   Future<void> _fetchAndInstall(
     Addon entry,
@@ -666,7 +661,7 @@ class AddonService extends ChangeNotifier {
 /// `macos-aarch64`, `macos-x86_64` or `linux-x86_64`
 /// (docs/impl/addons.md §4). `Abi` is where Dart says both halves at once.
 String defaultPlatformKey() {
-  final parts = Abi.current().toString().split('_');
+  final parts = abiName().split('_');
   if (parts.length < 2) return parts.first;
   final architecture = switch (parts.last) {
     'x64' => 'x86_64',

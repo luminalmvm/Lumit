@@ -200,7 +200,7 @@ void main() {
 
     /// **New node graph on the panel's own menu** (§4.4). It goes through the
     /// same settings dialogue New composition does, and fronts what it made.
-    testWidgets('New node graph from the row menu makes one and fronts it',
+    testWidgets('New node graph from the ground menu makes one and fronts it',
         (tester) async {
       final p = freshProject();
       p.state.project!.newComposition(name: 'Scene');
@@ -213,12 +213,12 @@ void main() {
       await tester.pump();
 
       await tester.tapAt(
-        tester.getCenter(rowText('Scene')),
+        tester.getCenter(find.byKey(const ValueKey('project-empty-area'))),
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
       await tester
-          .tap(find.byKey(const ValueKey('project-menu-new-node-graph')));
+          .tap(find.byKey(const ValueKey('project-ground-new-node-graph')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('comp-apply')));
       await tester.pumpAndSettle();
@@ -427,7 +427,7 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
+      await tester.tap(find.byKey(const ValueKey('project-menu-delete')));
       await tester.pumpAndSettle();
 
       expect(find.text('a.mov'), findsNothing);
@@ -885,6 +885,8 @@ void main() {
           tester.getCenter(rowText('shot.mov')),
           buttons: kSecondaryButton,
         );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('project-menu-proxy-group')));
         await tester.pumpAndSettle();
       }
 

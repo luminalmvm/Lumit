@@ -44,6 +44,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod chord;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -200,6 +202,9 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("motion_blur", on(true)),
             ("mb_amount", f(0.3)),
         ],
+        // A fresh Jolt's seed is new each time, and most frames have no jolt
+        // on them. This seed lands a scale, a slide and a blur on the frame.
+        "jolt" => vec![("seed", EffectValue::Seed(408))],
 
         // --- geometry ---
         "transform" => vec![
@@ -331,6 +336,9 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // which is the Linear wipe picture mirrored. A third of the way round
         // leaves a wedge, so the two pages do not show the same figure twice.
         "radial_wipe" => vec![("completion", f(35.0))],
+        // Soft, so the edge reads as a fade rather than a threshold, and short
+        // of half way, as the plate is a dark frame.
+        "luma_fade" => vec![("completion", f(45.0)), ("softness", f(30.0))],
         "iris_wipe" => vec![
             ("centre_y", f(f64::from(H) / 2.0)),
             ("outer_radius", f(540.0)),
@@ -343,6 +351,14 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         // where it opens by default: doubling the speed and opening the shutter
         // as well turned the picture into porridge.
         "motion_blur" => vec![("samples", f(24.0))],
+        // Faster than real time, held in whole frames and smeared along the
+        // measured motion, so the still shows what the effect adds.
+        "timewarp" => vec![
+            ("speed", f(150.0)),
+            ("method", choice(0)),
+            ("motion_blur", on(true)),
+            ("samples", f(32.0)),
+        ],
         // Thirty-two samples, because the whole claim of this effect is that
         // each one is a real render: too few and the picture is a stack of
         // copies rather than a blur.
@@ -379,6 +395,22 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("intensity", f(3.5)),
             ("source_width", f(120.0)),
             ("source_height", f(120.0)),
+        ],
+        // The light on its own would leave the plate behind, so the plate
+        // stays under it, and the line runs across the frame on a slant.
+        // Over the plate, and hearing the chord example_doc lays under it.
+        "audio_spectrum" => vec![
+            ("composite_on_original", on(true)),
+            ("hue_spread", f(120.0)),
+            ("from_y", f(720.0)),
+            ("to_y", f(720.0)),
+        ],
+        "energy_line" => vec![
+            ("composite_on_original", on(true)),
+            ("start_x", f(260.0)),
+            ("start_y", f(620.0)),
+            ("end_x", f(1660.0)),
+            ("end_y", f(200.0)),
         ],
 
         _ => Vec::new(),
@@ -452,6 +484,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,
@@ -821,6 +854,11 @@ fn example_doc(
     if let Some(d) = depth {
         footage("depth.mp4", d);
     }
+    // The plate is silent and Audio spectrum has to hear something.
+    let hears = fx
+        .as_ref()
+        .is_some_and(|f| f.effect.match_name == "audio_spectrum");
+    let chord = hears.then(|| chord::layer(footage("chord.wav", &chord::written()), span));
 
     let mut plate = layer("Plate", LayerKind::Footage { item }, span);
     if let Some(f) = fx.as_ref() {
@@ -956,6 +994,7 @@ fn example_doc(
     if let Some(aux) = aux_layer(depth, span) {
         layers.push(aux);
     }
+    layers.extend(chord);
 
     let comp_id = id("Example");
     doc.items.push(ProjectItem::Composition(Composition {

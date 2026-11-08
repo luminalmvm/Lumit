@@ -77,12 +77,17 @@ mod frb_generated;
 // module below it — see [`note`] for why no module may `println!`.
 #[macro_use]
 mod note;
+mod enabled_rules;
+mod project_cache;
 
 #[cfg(feature = "media")]
 mod audio;
 mod autosave;
 mod beats;
 mod claim;
+mod closing;
+// The command line, which the browser build has none of.
+#[cfg(not(target_arch = "wasm32"))]
 mod cli;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod cursor;
@@ -93,8 +98,10 @@ mod footage;
 mod framecache;
 #[cfg(feature = "media")]
 mod layered;
+mod light_settings;
 mod live;
 mod media;
+mod motion_path;
 mod names;
 mod outlines;
 mod packing;
@@ -110,6 +117,13 @@ mod scratch;
 mod script;
 mod shape_paint;
 mod streams;
+#[cfg(test)]
+mod test_files;
+mod turns;
+#[cfg(target_arch = "wasm32")]
+mod web_kept;
+#[cfg(target_arch = "wasm32")]
+mod web_media;
 
 pub mod api;
 

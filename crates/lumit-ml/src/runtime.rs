@@ -66,6 +66,7 @@ pub fn provider() -> &'static str {
 /// for a session that asked for the platform's own, and by nothing else: a
 /// session built deliberately on the processor says nothing about what this
 /// machine can do.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn took(provider: &'static str) {
     let _ = TAKEN.set(provider);
 }
@@ -182,6 +183,7 @@ pub fn status() -> RuntimeStatus {
 }
 
 /// The load itself, run once.
+#[cfg(not(target_arch = "wasm32"))]
 fn open(library: &Path) -> Result<Loaded, String> {
     #[cfg(windows)]
     if let Some(folder) = library.parent() {
@@ -197,6 +199,16 @@ fn open(library: &Path) -> Result<Loaded, String> {
         provider: PROVIDER,
         version: version(),
     })
+}
+
+/// What the browser build says when asked for the runtime, which it has not
+/// got.
+#[cfg(target_arch = "wasm32")]
+pub(crate) const NOT_HERE: &str = "ONNX Runtime is not in the browser build";
+
+#[cfg(target_arch = "wasm32")]
+fn open(_library: &Path) -> Result<Loaded, String> {
+    Err(NOT_HERE.into())
 }
 
 /// Put `folder` at the front of the process `PATH`.
@@ -225,6 +237,7 @@ fn put_on_path(folder: &Path) {
 /// rather than a release number. With nothing installed - which only happens
 /// when something pointed [`load`] at a folder of its own - the library's own
 /// words about its build are what is left.
+#[cfg(not(target_arch = "wasm32"))]
 fn version() -> String {
     store::pack(RUNTIME_ID).map_or_else(
         || ort::info().to_owned(),

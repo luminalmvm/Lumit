@@ -1527,17 +1527,9 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage arrives as a layer, and the Retime graph shows which moment of the source is on screen.",
-  "@firstRunAfterEffects": {
-    "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
   "firstRunContinue": "Жалғастыру",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
-  },
-  "firstRunCutName": "Premiere Pro немесе Resolve",
-  "@firstRunCutName": {
-    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
   },
   "firstRunSetup": "Lumit-ті баптау",
   "@firstRunSetup": {
@@ -1546,10 +1538,6 @@
   "firstRunStyle": "Стиль",
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
-  },
-  "firstRunTitle": "Монтаж стилі",
-  "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
   },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
@@ -5266,10 +5254,6 @@
   "playbackEveryFrame": "Әр кадр",
   "@playbackEveryFrame": {
     "description": "Playback setting: show every frame at full resolution, however long it takes."
-  },
-  "popOutPanelBlocked": "Қолжетімсіз",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
   },
   "precompose": "Pre-compose",
   "@precompose": {

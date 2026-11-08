@@ -25,9 +25,11 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'settings_account.dart' show askBefore;
 
 /// The window's width and the height of its list.
 ///
@@ -38,6 +40,7 @@ import 'dialog_frame.dart';
 /// it was left, so a long session can make it as tall as the screen.
 const double historyDialogWidth = 320;
 const double historyListHeight = 320;
+const double _rowExtent = 24;
 
 /// Open the History window.
 Future<void> showHistoryFrb(BuildContext context, LumitState app) =>
@@ -66,12 +69,23 @@ class _HistoryDialogState extends State<_HistoryDialog> {
   /// `i` of [_rows] is applied when `i < _applied`.
   int _applied = 0;
 
+  late final ScrollController _scroll;
+
   @override
   void initState() {
     super.initState();
     // Straight into the fields rather than through `setState`: the first build
     // has not happened yet, so there is nothing to schedule.
     _read();
+    // It opens where the document stands, not at the far end of a long list.
+    _scroll = ScrollController(
+        initialScrollOffset: (_applied - 6).clamp(0, 1 << 20) * _rowExtent);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   void _read() {
@@ -93,50 +107,52 @@ class _HistoryDialogState extends State<_HistoryDialog> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // No width of its own: the window around it has the size, and the corner
+    // grip would lose to one set here.
     return DialogFrame(
-      width: historyDialogWidth,
       children: [
         dialogTitleBar(
           t,
-          title: l10n.menuHistory,
+          title: l10n.historyTitle,
           onClose: widget.onClose,
           keyPrefix: 'history',
         ),
-        Flexible(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: historyListHeight),
+        Expanded(
+          // The ground under the rows takes the menu without a step to go to.
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onSecondaryTapUp: (up) => _menu(null, up.globalPosition),
             child: ListView.builder(
-              // One more than the steps: the row above them all is the state
-              // the list begins at, so the window can walk back to where it
-              // starts rather than leaving that one point to the keyboard.
-              itemCount: _rows.length + 1,
-              itemBuilder: (context, index) => index == 0
-                  // Never quiet: the state the list begins at is behind the
-                  // document wherever the document stands, so it is never one
-                  // of the steps waiting to be redone.
-                  ? _row(t,
-                      id: 'origin',
-                      label: l10n.historyOrigin,
-                      undone: false,
-                      selected: _applied == 0,
-                      applied: 0)
-                  : _row(t,
-                      id: '$index',
-                      label: engineLabel(_rows[index - 1].name),
-                      undone: _rows[index - 1].undone,
-                      selected: _applied == index,
-                      applied: index),
-            ),
-          ),
+            controller: _scroll,
+            itemExtent: _rowExtent,
+            // One more than the steps: the row above them all is the state
+            // the list begins at, so the window can walk back to where it
+            // starts rather than leaving that one point to the keyboard.
+            itemCount: _rows.length + 1,
+            itemBuilder: (context, index) => index == 0
+                // Never quiet: the state the list begins at is behind the
+                // document wherever the document stands, so it is never one
+                // of the steps waiting to be redone.
+                ? _row(t,
+                    id: 'origin',
+                    label: l10n.historyOrigin,
+                    undone: false,
+                    selected: _applied == 0,
+                    applied: 0)
+                : _row(t,
+                    id: '$index',
+                    label: engineLabel(_rows[index - 1].name),
+                    undone: _rows[index - 1].undone,
+                    selected: _applied == index,
+                    applied: index),
+          )),
         ),
         dialogFooter(
           t,
           keyPrefix: 'history',
           actions: [
             HouseButton(
-              key: const ValueKey('history-close'),
-              small: true,
-              primary: true,
+              key: const ValueKey('history-done'),
               onPressed: widget.onClose,
               child: Text(l10n.close),
             ),
@@ -156,14 +172,77 @@ class _HistoryDialogState extends State<_HistoryDialog> {
     required bool selected,
     required int applied,
   }) =>
-      MenuRow(
-        key: ValueKey<String>('history-row-$id'),
-        selected: selected,
-        onPressed: () => _jump(applied),
-        child: Text(
-          label,
-          overflow: TextOverflow.ellipsis,
-          style: undone ? t.body.copyWith(color: t.textMuted) : t.body,
+      GestureDetector(
+        onSecondaryTapDown: (d) => _menu(applied, d.globalPosition),
+        child: MenuRow(
+          key: ValueKey<String>('history-row-$id'),
+          selected: selected,
+          onPressed: () => _jump(applied),
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: undone ? t.body.copyWith(color: t.textMuted) : t.body,
+          ),
         ),
       );
+
+  /// A row's right-click: go to it, a step either way from where the
+  /// document stands, or clear the list.
+  void _menu(int? applied, Offset at) {
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        Widget row(String id, String label, int? to, {String? action}) =>
+            MenuRow(
+              key: ValueKey<String>('history-menu-$id'),
+              enabled: to != null,
+              onPressed: () {
+                close(null);
+                if (to != null) _jump(to);
+              },
+              child: MenuLabel(label, action: action, enabled: to != null),
+            );
+        return [
+          if (applied != null) ...[
+            row('go', l10n.historyGoToStep,
+                applied == _applied ? null : applied),
+            const MenuDivider(),
+          ],
+          row('undo', l10n.menuUndo, _applied > 0 ? _applied - 1 : null,
+              action: 'edit.undo'),
+          row('redo', l10n.menuRedo,
+              _applied < _rows.length ? _applied + 1 : null,
+              action: 'edit.redo'),
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('history-menu-clear'),
+            enabled: _rows.isNotEmpty,
+            onPressed: () {
+              close(null);
+              _clear();
+            },
+            child: MenuLabel(l10n.historyClearEllipsis,
+                enabled: _rows.isNotEmpty),
+          ),
+        ];
+      },
+    );
+  }
+
+  Future<void> _clear() async {
+    if (await clearHistoryAsking(context, widget.app) && mounted) {
+      setState(_read);
+    }
+  }
+}
+
+/// Drop every undo and redo step, once asked: the project stays as it is,
+/// and the history starts again from here. Says whether it did.
+Future<bool> clearHistoryAsking(BuildContext context, LumitState app) async {
+  if (!await askBefore(context, l10n.historyClearAsk, l10n.clear)) return false;
+  if (!context.mounted) return false;
+  app.settleHistory();
+  app.project?.clearHistory();
+  return true;
 }

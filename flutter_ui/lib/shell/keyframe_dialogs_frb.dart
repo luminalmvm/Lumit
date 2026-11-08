@@ -20,6 +20,7 @@ import '../l10n/strings.dart';
 import '../panels/graph_maths.dart' show KeyEase;
 import '../panels/key_ease_fields.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 
 /// What one side of a keyframe can be. The four the graph editor's own strip
 /// offers, named the way After Effects names them.
@@ -168,9 +169,8 @@ class _SpeedBodyState extends State<_SpeedBody> {
       );
 }
 
-/// The shape both of these wear: a title, label-left rows in a 110px column,
-/// and the single filled action with Cancel beside it. Enter applies wherever
-/// the focus sits.
+/// The shape both of these wear: the shared frame, label-left rows, and the
+/// footer with its filled action last. Enter applies wherever the focus sits.
 Widget _dialogue(
   BuildContext context, {
   required String title,
@@ -190,50 +190,40 @@ Widget _dialogue(
       onConfirm();
       return KeyEventResult.handled;
     },
-    child: FloatSurface(
+    child: DialogFrame(
       width: 320,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Text(title, style: t.bodyPrimary),
+      children: [
+        dialogTitleBar(t,
+            // The menu's word, without the dots that promise this window.
+            title: title.replaceAll('…', ''),
+            onClose: onCancel,
+            keyPrefix: 'keyframe'),
+        Padding(
+          padding: const EdgeInsets.all(dialogPadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
           ),
-          for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0) const SizedBox(height: 8),
-            rows[i],
-          ],
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              HouseButton(
-                key: const ValueKey('keyframe-confirm'),
-                primary: true,
-                onPressed: onConfirm,
-                child: Text(l10n.apply),
-              ),
-              const SizedBox(width: 8),
-              HouseButton(
+        ),
+        dialogFooter(
+          t,
+          keyPrefix: 'keyframe',
+          actions: [
+            dialogPlainAction(t,
                 key: const ValueKey('keyframe-cancel'),
-                onPressed: onCancel,
-                child: Text(l10n.cancel),
-              ),
-            ],
-          ),
-        ],
-      ),
+                label: l10n.cancel,
+                onPressed: onCancel),
+            dialogFilledAction(t,
+                key: const ValueKey('keyframe-confirm'),
+                label: l10n.apply,
+                onPressed: onConfirm),
+          ],
+        ),
+      ],
     ),
   );
 }
 
-Widget _labelled(BuildContext context, String label, Widget child) {
-  final t = ThemeScope.of(context).theme;
-  return Row(
-    children: [
-      SizedBox(width: 110, child: Text(label, style: t.small)),
-      Expanded(child: child),
-    ],
-  );
-}
+Widget _labelled(BuildContext context, String label, Widget child) =>
+    dialogRow(ThemeScope.of(context).theme, label, child, labelColumn: 64);

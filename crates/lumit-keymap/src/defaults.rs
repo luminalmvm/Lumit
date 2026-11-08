@@ -23,7 +23,9 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 /// it to Cmd on macOS. Ships conflict-free (proven in tests).
 #[must_use]
 pub fn default_keymap() -> Keymap {
-    use KeyContext::{Cut, Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
+    use KeyContext::{
+        Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Viewer,
+    };
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
         row(Global, "Space", "playback.toggle"),
@@ -52,6 +54,8 @@ pub fn default_keymap() -> Keymap {
         row(Global, ".", "keyframe.next"),
         row(Global, "Mod+,", "edit.point.prev"),
         row(Global, "Mod+.", "edit.point.next"),
+        row(Global, "Mod+Alt+ArrowLeft", "marker.prev"),
+        row(Global, "Mod+Alt+ArrowRight", "marker.next"),
         // A keyframe at the playhead on whichever property rows are picked, or
         // the one already there taken away. After Effects has no key for this,
         // only the per-property five below, so the chord is Lumit's own.
@@ -115,6 +119,9 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+Alt+S", "file.save.version"),
         row(Global, "Mod+I", "file.import"),
         row(Global, "Mod+Alt+M", "file.export"),
+        // A still of the frame at the playhead, beside the chord that
+        // exports the whole composition.
+        row(Global, "Mod+Alt+Shift+M", "comp.frame.save"),
         row(Global, "Mod+N", "comp.new"),
         row(Global, "Mod+A", "edit.select.all"),
         row(Global, "Mod+Shift+A", "edit.deselect.all"),
@@ -132,11 +139,15 @@ pub fn default_keymap() -> Keymap {
         // switch anyway. One chord, like every other action; anyone who wants
         // a second can bind it.
         row(Global, "Mod+Alt+T", "layer.retime.enable"),
+        row(Global, "Mod+Shift+R", "layer.retime.hold"),
+        row(Global, "Mod+Alt+R", "layer.retime.ramp"),
         // Layer ▸ New. After Effects' own chords, so the rows read the way
         // anyone arriving from there expects. Spot and Area lights have no
         // chord there and ship without one here.
         row(Global, "Mod+Y", "layer.new.solid"),
         row(Global, "Mod+Alt+Shift+T", "layer.new.text"),
+        // Global, as the Path row it works on is picked in the Timeline.
+        row(Global, "Mod+Shift+T", "path.points.transform"),
         row(Global, "Mod+Alt+Shift+C", "layer.new.camera"),
         row(Global, "Mod+Alt+Shift+L", "layer.new.light.point"),
         row(Global, "Mod+Alt+Y", "layer.new.adjustment"),
@@ -166,6 +177,9 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Alt+Shift+PageDown", "layer.shift.later10"),
         row(Global, "Mod+Home", "layer.centre"),
         row(Global, "Mod+Alt+Home", "layer.centre.anchor"),
+        row(Global, "Mod+Alt+Shift+F", "layer.fit"),
+        row(Global, "Mod+Alt+Shift+H", "layer.fit.width"),
+        row(Global, "Mod+Alt+Shift+G", "layer.fit.height"),
         // The mask whose row is picked in the Timeline.
         row(Global, "Mod+Shift+F", "mask.feather"),
         row(Global, "Mod+Shift+I", "mask.invert"),
@@ -198,6 +212,7 @@ pub fn default_keymap() -> Keymap {
         row(Tools, "Alt+W", "tool.roto"),
         row(Tools, "Mod+P", "tool.puppet"),
         row(Tools, "Shift+C", "tool.camera"),
+        row(Tools, "Shift+D", "tool.shape3d"),
         // With a camera tool in hand over the Viewer, After Effects' F and
         // Ctrl+Shift+F look at the selected layers and at all of them.
         row(Tools, "F", "viewer.3d.look.selected"),
@@ -214,6 +229,7 @@ pub fn default_keymap() -> Keymap {
         row(Timeline, "E", "reveal.effects"),
         row(Timeline, "M", "reveal.masks"),
         row(Timeline, "U", "reveal.animated"),
+        row(Timeline, "Shift+U", "reveal.changed"),
         // `L` opens a layer's Audio group; a second `L` adds its waveform lane,
         // a third shuts the layer again. It shadows the J/K/L shuttle
         // inside the Timeline and nowhere else — the panel where you reach for
@@ -242,6 +258,8 @@ pub fn default_keymap() -> Keymap {
         // Layers mode's own F, beside the graph's: the keys of the selected
         // layers, or of every layer, across the lanes.
         row(Timeline, "F", "timeline.fit.keys"),
+        row(Timeline, "Mod+Alt+`", "timeline.collapse.all"),
+        row(Timeline, "Mod+Alt+Shift+`", "timeline.expand.all"),
         row(Timeline, "Enter", "layer.rename"),
         // Enter renames the selected thing wherever one is selected:
         // the item in the Project panel, the effect in Effect controls — the
@@ -259,12 +277,26 @@ pub fn default_keymap() -> Keymap {
         row(Project, "Mod+Alt+C", "footage.interpretation.remember"),
         row(Project, "Mod+Alt+V", "footage.interpretation.apply"),
         row(Effects, "Enter", "effect.rename"),
+        row(Effects, "Mod+D", "effect.duplicate"),
+        // The Effect menu's two rows above its categories, from anywhere.
+        row(Global, "Mod+Alt+Shift+E", "effect.apply.last"),
+        row(Global, "Mod+Shift+E", "effect.remove.all"),
+        // The Grade panel's Copy grade and Paste grade, from anywhere, so a
+        // grade goes across a dozen shots with one key each.
+        row(Global, "Alt+Shift+C", "grade.copy"),
+        row(Global, "Alt+Shift+V", "grade.paste"),
         row(Timeline, "X", "layer.toggle.visible"),
         // --- Graph editor ---
         row(Graph, "F9", "graph.ease"),
         row(Graph, "Shift+F9", "graph.ease.in"),
         row(Graph, "Mod+Shift+F9", "graph.ease.out"),
         row(Graph, "F", "graph.fit"),
+        row(Graph, "Shift+F", "graph.frame.all"),
+        // --- Node graph ---
+        // F frames what is picked and Shift+F everything, as in a 3D viewport.
+        row(Nodes, "F", "nodes.frame.selected"),
+        row(Nodes, "Shift+F", "nodes.frame.all"),
+        row(Nodes, "Mod+D", "effect.duplicate"),
         // --- Viewer ---
         row(Viewer, "Shift+/", "viewer.zoom.fit"),
         row(Viewer, "Mod+=", "viewer.zoom.in"),
@@ -292,6 +324,17 @@ pub fn default_keymap() -> Keymap {
         // Escape goes back to the last 3D view, as in After Effects, and
         // only when nothing else on screen wanted it.
         row(Viewer, "Escape", "viewer.3d.last"),
+        // The fixed views on the number pad, the opposite side with Mod.
+        row(Viewer, "Numpad 0", "viewer.3d.camera"),
+        row(Viewer, "Numpad 1", "viewer.3d.view.front"),
+        row(Viewer, "Mod+Numpad 1", "viewer.3d.view.back"),
+        row(Viewer, "Numpad 3", "viewer.3d.view.right"),
+        row(Viewer, "Mod+Numpad 3", "viewer.3d.view.left"),
+        row(Viewer, "Numpad 7", "viewer.3d.view.top"),
+        row(Viewer, "Mod+Numpad 7", "viewer.3d.view.bottom"),
+        row(Viewer, "Numpad 5", "viewer.3d.reset"),
+        // Wireframe on and off, the key other 3D tools give it.
+        row(Viewer, "Shift+Z", "viewer.look.lines"),
         // --- Panels ---
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),
@@ -312,8 +355,12 @@ pub fn default_keymap() -> Keymap {
         // in the Timeline.
         row(Cut, "I", "cut.mark.in"),
         row(Cut, "O", "cut.mark.out"),
+        row(Cut, "Shift+I", "cut.goto.in"),
+        row(Cut, "Shift+O", "cut.goto.out"),
         row(Cut, ",", "cut.insert"),
         row(Cut, ".", "cut.overwrite"),
+        row(Cut, "Shift+R", "cut.replace"),
+        row(Cut, "Shift+F", "cut.fit.fill"),
         row(Cut, "Shift+Delete", "cut.delete.ripple"),
         // The tools, the trims to the playhead and the nudges, on the
         // letters editors already have under their fingers. Each shadows an
@@ -361,7 +408,11 @@ pub fn default_keymap() -> Keymap {
         row(Cut, ";", "cut.lift"),
         row(Cut, "'", "cut.extract"),
         row(Cut, "F", "cut.match.frame"),
-        row(Cut, "Mod+D", "cut.transition.default"),
+        // Ctrl+D duplicates in every workspace; the default transition sits
+        // one modifier along.
+        row(Cut, "Mod+D", "cut.duplicate"),
+        row(Cut, "Mod+Shift+D", "cut.transition.default"),
+        row(Cut, "Mod+T", "cut.insert.title"),
         row(Cut, "=", "timeline.zoom.in"),
         row(Cut, "-", "timeline.zoom.out"),
         row(Cut, "\\", "timeline.zoom.fit"),
@@ -393,11 +444,21 @@ pub fn default_keymap() -> Keymap {
     }
     Keymap {
         bindings,
-        unbound: Vec::new(),
+        unbound: UNBOUND.iter().map(|a| (Viewer, (*a).into())).collect(),
         wheel: WheelKeys::default(),
         break_handles: HandleModifier::default(),
     }
 }
+
+/// The Viewer actions that ship with no key: how a 3D view shows models.
+const UNBOUND: &[&str] = &[
+    "viewer.look.final",
+    "viewer.look.shaded",
+    "viewer.look.wireframe",
+    "viewer.look.shaded_wire",
+    "viewer.look.normals",
+    "viewer.look.faces",
+];
 
 /// A **stored** keymap laid over the shipped defaults: the file's chord
 /// wins for every action it names, and an action it never heard of — one added
@@ -414,6 +475,14 @@ pub fn default_keymap() -> Keymap {
 #[must_use]
 pub fn with_new_defaults(stored: Keymap) -> Keymap {
     let mut out = stored;
+    // The actions that ship with no key, so the page lists them.
+    for action in UNBOUND {
+        let known = out.bindings.iter().any(|b| b.action.0 == *action)
+            || out.unbound.iter().any(|(_, a)| a.0 == *action);
+        if !known {
+            out.unbound.push((KeyContext::Viewer, (*action).into()));
+        }
+    }
     for binding in default_keymap().bindings {
         let known = out
             .bindings
@@ -557,8 +626,6 @@ pub fn vegas_preset() -> Keymap {
         (Cut, "Mod+Alt+ArrowRight", "edit.point.next"),
         (Cut, "ArrowUp", "timeline.zoom.in"),
         (Cut, "ArrowDown", "timeline.zoom.out"),
-        (Cut, "Mod+Shift+D", "cut.transition.default"),
-        (Cut, "Mod+D", "cut.tool.select"),
         (Cut, "Mod+Shift+U", "cut.linked.toggle"),
         (Cut, "Mod+L", "cut.ripple.toggle"),
         (Cut, "Mod+Shift+X", "cut.crossfade.toggle"),

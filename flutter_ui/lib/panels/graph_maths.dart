@@ -329,8 +329,16 @@ double evaluateKeysSpeed(List<BridgeKeyframe> keys, double t) {
       t >= rationalSeconds(keys.last.time)) {
     return 0;
   }
-  final (i, a, b, t1, t2) = _spanAt(keys, t);
-  final dt = t2 - t1;
+  final (i, _, _, _, _) = _spanAt(keys, t);
+  return speedInSpan(keys, i, t);
+}
+
+/// [evaluateKeysSpeed] inside the span leaving `keys[i]`, with no search for
+/// the span: a caller walking the spans would otherwise cost the square of the
+/// keys, and a baked camera is thousands of them.
+double speedInSpan(List<BridgeKeyframe> keys, int i, double t) {
+  final a = keys[i], b = keys[i + 1];
+  final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
   if (dt <= 0) return 0;
   if (a.interpOut is BridgeSideInterp_Hold) return 0;
   if (a.interpOut is BridgeSideInterp_Linear &&
@@ -350,6 +358,12 @@ double evaluateKeysAcceleration(List<BridgeKeyframe> keys, double t) {
     return 0;
   }
   final (i, _, _, _, _) = _spanAt(keys, t);
+  return accelerationInSpan(keys, i, t);
+}
+
+/// [evaluateKeysAcceleration] inside the span leaving `keys[i]`, with no search
+/// for the span ([speedInSpan]).
+double accelerationInSpan(List<BridgeKeyframe> keys, int i, double t) {
   final cubic = _shapedSpan(keys, i);
   return cubic == null ? 0 : cubic.accelerationAtU(cubic.solveU(t));
 }
@@ -403,6 +417,280 @@ double? influenceForAcceleration(List<BridgeKeyframe> keys, int index,
   final squared = 2 * k / (3 * target * dt);
   if (!(squared > 0)) return 1.0;
   return math.sqrt(squared).clamp(1e-3, 1.0).toDouble();
+}
+
+/// One side of `keys[index]` shaped so the curve has the acceleration
+/// [target] at the key, or null where the side has no curve to shape (no
+/// neighbour that way, a hold, keys on one moment).
+///
+/// The influence moves first, keeping the side's speed
+/// ([influenceForAcceleration]). Where the influence alone cannot get there —
+/// the other sign, or more gently than full influence allows — the influence
+/// stays where it ended and the side's **speed** is solved instead: at the key
+/// the acceleration is linear in that speed. Null too where the far side's
+/// influence is full, as the side's speed then has no say in the acceleration.
+BridgeSideInterp? sideForAcceleration(List<BridgeKeyframe> keys, int index,
+    {required bool isOut, required double target}) {
+  final span = isOut ? index : index - 1;
+  if (span < 0 || span + 1 >= keys.length) return null;
+  final a = keys[span], b = keys[span + 1];
+  final dt = rationalSeconds(b.time) - rationalSeconds(a.time);
+  if (dt <= 0 || a.interpOut is BridgeSideInterp_Hold) return null;
+  final chord = (b.value - a.value) / dt;
+  final (s1, b1) =
+      sideParams(a.interpOut, chord, _autoOf(keys, span, isOut: true));
+  final (s2, b2) =
+      sideParams(b.interpIn, chord, _autoOf(keys, span + 1, isOut: false));
+  final speed = isOut ? s1 : s2;
+  final influence =
+      influenceForAcceleration(keys, index, isOut: isOut, target: target) ??
+          (isOut ? b1 : b2);
+  BridgeSideInterp side(double s, double b) => BridgeSideInterp.bezier(
+      BridgeBezierSide(speed: s, influence: b.clamp(1e-3, 1.0).toDouble()));
+  // At the key: acceleration = 2k / (3 · b² · Δt), k as in
+  // [influenceForAcceleration]. Met with the speed kept?
+  double reached(double s, double bSide) {
+    final k = isOut ? chord - s - b2 * (s2 - s) : s - chord + b1 * (s1 - s);
+    return 2 * k / (3 * bSide * bSide * dt);
+  }
+
+  if ((reached(speed, influence) - target).abs() <=
+      1e-6 * (target.abs() + 1)) {
+    return side(speed, influence);
+  }
+  // Solve the speed for k = 3 · target · b² · Δt / 2.
+  final k = 3 * target * influence * influence * dt / 2;
+  if (isOut) {
+    // k = chord − s − b2·(s2 − s) = chord − b2·s2 − s·(1 − b2)
+    if ((1 - b2).abs() < 1e-9) return null;
+    return side((chord - b2 * s2 - k) / (1 - b2), influence);
+  }
+  // k = s2 − chord + b1·(s1 − s2) = s2·(1 − b1) − chord + b1·s1
+  if ((1 - b1).abs() < 1e-9) return null;
+  return side((k + chord - b1 * s1) / (1 - b1), influence);
+}
+
+/// `keys` with a stretch of **constant acceleration** from `keys[index]`: the
+/// value leaves there at [startSpeed] and its speed changes by [acceleration]
+/// every second, `value(t) = start + startSpeed · t + ½ · acceleration · t²`,
+/// until [endTime], where it reaches [endValue]. The caller works the numbers
+/// out together ([constantAcceleration]) so they agree.
+///
+/// A cubic span holds that parabola exactly: [startSpeed] leaving the start,
+/// `startSpeed + acceleration · T` reaching the end, both influences a third
+/// (so time runs evenly along the span). The key after `index` becomes the end
+/// — moved there — or one is added where there is none. Null when the end is
+/// not after the start, or would land on or past the key after that one.
+List<BridgeKeyframe>? keysWithConstantAcceleration(
+  List<BridgeKeyframe> keys,
+  int index, {
+  double startSpeed = 0,
+  required double acceleration,
+  required BridgeRational endTime,
+  required double endValue,
+}) {
+  if (index < 0 || index >= keys.length) return null;
+  final start = keys[index];
+  final t0 = rationalSeconds(start.time);
+  final duration = rationalSeconds(endTime) - t0;
+  if (duration <= 1e-9) return null;
+  if (index + 2 < keys.length &&
+      rationalSeconds(endTime) >= rationalSeconds(keys[index + 2].time) - 1e-9) {
+    return null;
+  }
+  const third = 1 / 3;
+  final leave = BridgeSideInterp.bezier(
+      BridgeBezierSide(speed: startSpeed, influence: third));
+  final arrive = BridgeSideInterp.bezier(BridgeBezierSide(
+      speed: startSpeed + acceleration * duration, influence: third));
+  final next = index + 1 < keys.length ? keys[index + 1] : null;
+  return [
+    for (var i = 0; i < index; i++) keys[i],
+    BridgeKeyframe(
+        time: start.time,
+        value: start.value,
+        interpIn: start.interpIn,
+        interpOut: leave),
+    BridgeKeyframe(
+        time: endTime,
+        value: endValue,
+        interpIn: arrive,
+        interpOut: next?.interpOut ?? const BridgeSideInterp.linear()),
+    for (var i = index + 2; i < keys.length; i++) keys[i],
+  ];
+}
+
+/// A stretch of constant acceleration from the start value and [startSpeed]
+/// (0 is at rest), ending at [endValue] or after [seconds], exactly one of
+/// them. The other is worked out from
+/// `endValue − start = startSpeed · t + ½ · acceleration · t²`.
+///
+/// Null where the time comes out at nought or before it: an end value never
+/// reached, or nothing to go on.
+({double endValue, double seconds})? constantAcceleration(
+  double startValue, {
+  double startSpeed = 0,
+  required double acceleration,
+  double? endValue,
+  double? seconds,
+}) {
+  if ((endValue == null) == (seconds == null)) return null;
+  final v0 = startSpeed;
+  final double t;
+  if (seconds != null) {
+    t = seconds;
+  } else {
+    final d = endValue! - startValue;
+    if (acceleration.abs() < 1e-12) {
+      if (v0 == 0) return null;
+      t = d / v0;
+    } else {
+      // ½·a·t² + v0·t − d = 0: the first moment it gets there.
+      final disc = v0 * v0 + 2 * acceleration * d;
+      if (disc < 0) return null;
+      final r = math.sqrt(disc);
+      final roots = [(-v0 + r) / acceleration, (-v0 - r) / acceleration]
+          .where((x) => x > 1e-9)
+          .toList()
+        ..sort();
+      if (roots.isEmpty) return null;
+      t = roots.first;
+    }
+  }
+  if (!(t > 1e-9)) return null;
+  return (
+    endValue: startValue + v0 * t + acceleration * t * t / 2,
+    seconds: t,
+  );
+}
+
+/// A **speed profile**: from rest, speed up by [acceleration] to
+/// [cruiseSpeed], hold it, then slow by [deceleration] to rest again — over
+/// [distance], or in [seconds] (one of the two). All are sizes (the way is
+/// the caller's). Where the distance or the time is too short to reach the
+/// cruise speed, it speeds up and at once slows down, to the highest speed
+/// that fits ([peakSpeed] below the cruise, no time at it).
+///
+/// Null where a number is not above nought, or neither or both of distance
+/// and seconds are given.
+({
+  double peakSpeed,
+  double accelSeconds,
+  double cruiseSeconds,
+  double decelSeconds,
+  double distance
+})? speedProfile({
+  required double acceleration,
+  required double cruiseSpeed,
+  required double deceleration,
+  double? distance,
+  double? seconds,
+}) {
+  final a1 = acceleration, v = cruiseSpeed, a2 = deceleration;
+  if (!(a1 > 0) || !(v > 0) || !(a2 > 0)) return null;
+  if ((distance == null) == (seconds == null)) return null;
+  if (distance != null) {
+    if (!(distance > 0)) return null;
+    final ramps = v * v / (2 * a1) + v * v / (2 * a2);
+    if (ramps <= distance) {
+      return (
+        peakSpeed: v,
+        accelSeconds: v / a1,
+        cruiseSeconds: (distance - ramps) / v,
+        decelSeconds: v / a2,
+        distance: distance,
+      );
+    }
+    final peak = math.sqrt(2 * distance * a1 * a2 / (a1 + a2));
+    return (
+      peakSpeed: peak,
+      accelSeconds: peak / a1,
+      cruiseSeconds: 0,
+      decelSeconds: peak / a2,
+      distance: distance,
+    );
+  }
+  final t = seconds!;
+  if (!(t > 0)) return null;
+  final t1 = v / a1, t3 = v / a2;
+  if (t1 + t3 <= t) {
+    final cruise = t - t1 - t3;
+    return (
+      peakSpeed: v,
+      accelSeconds: t1,
+      cruiseSeconds: cruise,
+      decelSeconds: t3,
+      distance: v * (t1 / 2 + cruise + t3 / 2),
+    );
+  }
+  final peak = t / (1 / a1 + 1 / a2);
+  return (
+    peakSpeed: peak,
+    accelSeconds: peak / a1,
+    cruiseSeconds: 0,
+    decelSeconds: peak / a2,
+    distance: peak * t / 2,
+  );
+}
+
+/// `keys` with a speed profile from `keys[index]`: at rest there, up to
+/// [peakSpeed] (signed: the way the value goes) by [accelEnd], held to
+/// [cruiseEnd], down to rest at [end]. Each stretch is exact — a parabola,
+/// a straight line, a parabola — as cubics with a third of influence a side.
+/// Keys are added where the speeding up ends and the slowing down starts (one
+/// only when there is no time at the cruise speed); the key after `index`
+/// becomes the end, or one is added. The values follow from the times, so they
+/// agree however the times were rounded.
+///
+/// Null when the times are not in order, or the end would land on or past the
+/// key after the next.
+List<BridgeKeyframe>? keysWithSpeedProfile(
+  List<BridgeKeyframe> keys,
+  int index, {
+  required double peakSpeed,
+  required BridgeRational accelEnd,
+  required BridgeRational cruiseEnd,
+  required BridgeRational end,
+}) {
+  if (index < 0 || index >= keys.length) return null;
+  final start = keys[index];
+  final t0 = rationalSeconds(start.time);
+  final ta = rationalSeconds(accelEnd);
+  final tb = rationalSeconds(cruiseEnd);
+  final te = rationalSeconds(end);
+  if (!(ta > t0 + 1e-9) || tb < ta - 1e-9 || !(te > tb + 1e-9)) return null;
+  if (index + 2 < keys.length &&
+      te >= rationalSeconds(keys[index + 2].time) - 1e-9) {
+    return null;
+  }
+  const third = 1 / 3;
+  BridgeSideInterp side(double speed) =>
+      BridgeSideInterp.bezier(BridgeBezierSide(speed: speed, influence: third));
+  final v = peakSpeed;
+  final ya = start.value + v * (ta - t0) / 2;
+  final yb = ya + v * (tb - ta);
+  final ye = yb + v * (te - tb) / 2;
+  final cruise = tb - ta > 1e-9;
+  final next = index + 1 < keys.length ? keys[index + 1] : null;
+  return [
+    for (var i = 0; i < index; i++) keys[i],
+    BridgeKeyframe(
+        time: start.time,
+        value: start.value,
+        interpIn: start.interpIn,
+        interpOut: side(0)),
+    BridgeKeyframe(
+        time: accelEnd, value: ya, interpIn: side(v), interpOut: side(v)),
+    if (cruise)
+      BridgeKeyframe(
+          time: cruiseEnd, value: yb, interpIn: side(v), interpOut: side(v)),
+    BridgeKeyframe(
+        time: end,
+        value: ye,
+        interpIn: side(0),
+        interpOut: next?.interpOut ?? const BridgeSideInterp.linear()),
+    for (var i = index + 2; i < keys.length; i++) keys[i],
+  ];
 }
 
 /// The speed a key's chosen side reads *at the key* — what the speed graph's
@@ -1154,17 +1442,9 @@ List<BridgeKeyframe> envelopeStretchedOnto(
   return envelopeToKeys(keys, kept, curves: shapes);
 }
 
-/// [keys] with every point's speed mirrored about 100%, as Vegas's Flip does:
-/// a slow-down becomes the same speed-up. Curves and times stay.
-List<BridgeKeyframe> flipEnvelope(List<BridgeKeyframe> keys) => envelopeToKeys(
-      keys,
-      [for (final s in envelopeSpeeds(keys)) 200 - s],
-      curves: envelopeCurves(keys),
-    );
-
-/// [keys] without the points that change nothing, as Vegas's Thin does: an
-/// inner point between two Linear spans whose speed is already where the
-/// straight line between its neighbours would put it.
+/// [keys] without the points that change nothing: an inner point between two
+/// Linear spans whose speed is already where the straight line between its
+/// neighbours would put it.
 List<BridgeKeyframe> thinEnvelope(List<BridgeKeyframe> keys) {
   if (keys.length < 3) return keys;
   final speeds = envelopeSpeeds(keys);
@@ -1194,6 +1474,118 @@ List<BridgeKeyframe> thinEnvelope(List<BridgeKeyframe> keys) {
     curves: [for (var k = 0; k + 1 < keep.length; k++) curves[keep[k + 1] - 1]],
   );
 }
+
+/// The speed of [keys] at [seconds], in per cent. Read just inside the two end
+/// keys, since a curve has no speed outside itself and its ends would read as
+/// nothing.
+double envelopeSpeedAt(List<BridgeKeyframe> keys, double seconds) {
+  if (keys.length < 2) return 0;
+  const nudge = 1e-6;
+  final first = rationalSeconds(keys.first.time) + nudge;
+  final last = rationalSeconds(keys.last.time) - nudge;
+  return evaluateKeysSpeed(keys, seconds.clamp(first, last).toDouble()) * 100;
+}
+
+/// One side of a key once time runs the other way. A curve that was climbing
+/// through the key is falling through it now, so a stored speed changes sign.
+BridgeSideInterp turnedSide(BridgeSideInterp side) => switch (side) {
+      BridgeSideInterp_Bezier(:final field0) => BridgeSideInterp.bezier(
+          BridgeBezierSide(speed: -field0.speed, influence: field0.influence)),
+      _ => side,
+    };
+
+/// [keys] played backwards across the stretch they cover: the same times from
+/// end to end, each key's value and eases coming the other way round. [timeOf]
+/// puts a moment in seconds on the composition's grid.
+List<BridgeKeyframe> reversedKeys(
+    List<BridgeKeyframe> keys, BridgeRational Function(double seconds) timeOf) {
+  if (keys.length < 2) return keys;
+  final sum =
+      rationalSeconds(keys.first.time) + rationalSeconds(keys.last.time);
+  return [
+    for (final key in keys.reversed)
+      BridgeKeyframe(
+        time: timeOf(sum - rationalSeconds(key.time)),
+        value: key.value,
+        interpIn: turnedSide(key.interpOut),
+        interpOut: turnedSide(key.interpIn),
+      ),
+  ];
+}
+
+/// [keys] with a ramp in them: a point at [from] seconds holding the speed
+/// already there, and a second at [to] seconds at [percent], the curve between
+/// them [curve]. Points between the two go. With no point of its own left after
+/// [to] the line stays at [percent] to its end, so a ramp is where the speed ends
+/// up and not a dip that comes back by itself.
+List<BridgeKeyframe> rampEnvelope(
+  List<BridgeKeyframe> keys,
+  double from,
+  double to,
+  double percent,
+  SpeedCurve curve,
+  BridgeRational Function(double seconds) timeOf,
+) {
+  if (keys.length < 2) return keys;
+  double at(BridgeKeyframe key) => rationalSeconds(key.time);
+  final first = at(keys.first), last = at(keys.last);
+  final start = from.clamp(first, last);
+  final end = to.clamp(first, last);
+  if (end <= start) return keys;
+  final speeds = envelopeSpeeds(keys);
+  final curves = envelopeCurves(keys);
+  // A span's curve is the one its starting point carries, and a point within
+  // half a thousandth of the ramp's ends stands for it.
+  const near = 5e-4;
+  var spanEnd = 0;
+  while (spanEnd + 2 < keys.length && at(keys[spanEnd + 1]) <= end + near) {
+    spanEnd++;
+  }
+  final here = envelopeSpeedAt(keys, start);
+  BridgeKeyframe plain(double seconds) => BridgeKeyframe(
+        time: timeOf(seconds),
+        value: 0,
+        interpIn: const BridgeSideInterp.linear(),
+        interpOut: const BridgeSideInterp.linear(),
+      );
+  final outKeys = <BridgeKeyframe>[];
+  final outSpeeds = <double>[];
+  final outCurves = <SpeedCurve>[];
+  void point(BridgeKeyframe key, double speed, SpeedCurve? next) {
+    outKeys.add(key);
+    outSpeeds.add(speed);
+    if (next != null) outCurves.add(next);
+  }
+
+  for (var i = 0; i < keys.length && at(keys[i]) < start - near; i++) {
+    point(keys[i], speeds[i], curves[i]);
+  }
+  final startsOnFirst = start <= first + near;
+  point(startsOnFirst ? keys.first : plain(start), here, curve);
+  final after = [
+    for (var i = 1; i + 1 < keys.length; i++)
+      if (at(keys[i]) > end + near) i,
+  ];
+  // Reaching the end, or with nothing left to come back to.
+  if (end >= last - near) {
+    point(keys.last, percent, null);
+  } else {
+    point(plain(end), percent, after.isEmpty ? SpeedCurve.linear : curves[spanEnd]);
+    for (var i = 0; i < after.length; i++) {
+      final k = after[i];
+      point(keys[k], speeds[k], curves[k]);
+    }
+    point(keys.last, after.isEmpty ? percent : speeds.last, null);
+  }
+  return envelopeToKeys(outKeys, outSpeeds, curves: outCurves);
+}
+
+/// [keys] back to one straight run at 100%, from the first key's moment to the
+/// last key's time.
+List<BridgeKeyframe> resetEnvelope(List<BridgeKeyframe> keys) => keys.length < 2
+    ? keys
+    : envelopeToKeys([keys.first, keys.last], const [100.0, 100.0],
+        curves: const [SpeedCurve.linear]);
 
 /// [keys] with span [span] played in [curve].
 List<BridgeKeyframe> setEnvelopeCurve(
@@ -1231,6 +1623,34 @@ List<BridgeKeyframe> moveEnvelopePoint(
         keys[i],
   ];
   return envelopeToKeys(moved, speeds, curves: envelopeCurves(keys));
+}
+
+/// [keys] with a point at [seconds] playing at [percent]: the point there, or
+/// a new one splitting the span it lands in, both halves keeping that span's
+/// curve. The other points keep their speeds.
+List<BridgeKeyframe> envelopeWithSpeedAt(List<BridgeKeyframe> keys,
+    double seconds, double percent, BridgeRational Function(double) timeOf) {
+  if (keys.length < 2) return keys;
+  double at(BridgeKeyframe key) => rationalSeconds(key.time);
+  const near = 5e-4;
+  final hit = keys.indexWhere((k) => (at(k) - seconds).abs() <= near);
+  if (hit >= 0) return setEnvelopeSpeed(keys, hit, percent);
+  if (seconds <= at(keys.first) || seconds >= at(keys.last)) return keys;
+  final index = keys.indexWhere((k) => at(k) > seconds);
+  final speeds = envelopeSpeeds(keys)
+    ..insert(index, envelopeSpeedAt(keys, seconds))
+    ..[index] = percent;
+  final curves = envelopeCurves(keys);
+  curves.insert(index, curves[index - 1]);
+  final split = [...keys]..insert(
+      index,
+      BridgeKeyframe(
+        time: timeOf(seconds),
+        value: 0,
+        interpIn: const BridgeSideInterp.linear(),
+        interpOut: const BridgeSideInterp.linear(),
+      ));
+  return envelopeToKeys(split, speeds, curves: curves);
 }
 
 /// [keys] with the envelope point at [index] moved to [percent].

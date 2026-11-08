@@ -3172,21 +3172,9 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffectsShortcuts": "استخدام اختصارات After Effects",
-  "@firstRunAfterEffectsShortcuts": {
-    "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
   "firstRunContinue": "متابعة",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
-  },
-  "firstRunCut": "تصل اللقطات على طبقات تسلسل، في مساحة عمل القص.",
-  "@firstRunCut": {
-    "description": "First run: what choosing Premiere Pro or Resolve habits does. Sequence layer and Cut (the workspace) are Lumit product terms."
-  },
-  "firstRunCutName": "Premiere Pro أو Resolve",
-  "@firstRunCutName": {
-    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
   },
   "firstRunSetup": "إعداد Lumit",
   "@firstRunSetup": {
@@ -3196,17 +3184,9 @@
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
   },
-  "firstRunTitle": "أسلوب التحرير",
-  "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
-  },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
     "description": "First run: the name of the other editor offered. A product name — leave it as it is."
-  },
-  "firstRunVegasShortcuts": "استخدام اختصارات Vegas",
-  "@firstRunVegasShortcuts": {
-    "description": "First-run screen: a tick on the Vegas card that loads the Vegas keyboard shortcuts as well. Off by default."
   },
   "flowAlwaysOn": "مفعّل دائمًا",
   "@flowAlwaysOn": {
@@ -8675,10 +8655,6 @@
   "popOutPanel": "فصل",
   "@popOutPanel": {
     "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
-  },
-  "popOutPanelBlocked": "غير متاح",
-  "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
   },
   "precompose": "إنشاء تكوين مسبق",
   "@precompose": {

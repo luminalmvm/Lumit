@@ -215,6 +215,8 @@ pub struct BridgeCompNodePosition {
     pub node: Uuid,
     pub x: f64,
     pub y: f64,
+    /// The width an edge drag gave the box; none keeps the panel's own.
+    pub width: Option<f64>,
 }
 
 /// A named region of the canvas: a tinted wash behind a set of boxes.
@@ -438,6 +440,11 @@ fn wiring_of(graph: &CompGraph) -> BridgeCompWiring {
                 node: *node,
                 x: *x,
                 y: *y,
+                width: graph
+                    .widths
+                    .iter()
+                    .find(|(n, _)| n == node)
+                    .map(|(_, w)| *w),
             })
             .collect(),
         exposed: graph.exposed.clone(),
@@ -482,8 +489,14 @@ pub(crate) fn wiring_into(wiring: BridgeCompWiring, instances: Vec<EffectInstanc
     nodes.push(GraphNode::Output { id: wiring.output });
 
     CompGraph {
+        widths: wiring
+            .layout
+            .iter()
+            .filter_map(|p| p.width.map(|w| (p.node, w)))
+            .collect(),
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes,
         edges: wiring
             .edges
@@ -580,11 +593,17 @@ impl CompositionReference {
     #[frb(sync)]
     pub fn fire_graph_action(&self, effect: Uuid, param: String) -> Result<(), BridgeError> {
         let fx = self.graph_fx(effect)?;
+        let source = self.box_source(effect);
+        let span = self
+            .composition()
+            .ok()
+            .and_then(|comp| lumit_core::planes::source_span(&fx, None, &comp));
+        let range = crate::api::roto::analysis_range(&source, span);
         if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
-            return crate::api::roto::press(self.box_source(effect), &fx, &param, None);
+            return crate::api::roto::press(source, &fx, &param, range);
         }
         if lumit_core::planes::task_of(&fx).is_some() {
-            return crate::api::planes::press(self.box_source(effect), &fx, &param, None);
+            return crate::api::planes::press(source, &fx, &param, range);
         }
         Err(BridgeError::InvalidParam)
     }

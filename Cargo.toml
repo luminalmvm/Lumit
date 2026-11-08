@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/lumit-*"]
 
 [workspace.package]
-version = "0.10.2"
+version = "0.11.0"
 edition = "2021"
 license = "GPL-3.0-only"
 
@@ -43,4 +43,79 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.lumit-render]
+opt-level = 3
+
+# The browser build (scripts/build-web.ps1). One codegen unit and full LTO make
+# the engine's wasm much smaller, and the page downloads every byte of it.
+[profile.web]
+inherits = "release"
+lto = true
+codegen-units = 1
+debug = false
+strip = true
+
+# The browser build is sized for Cloudflare's 25 MiB a file. Dependencies and
+# the crates around the engine build small, while the maths crates and the
+# dependencies a frame leans on (text shaping, paths, expressions) stay fast.
+[profile.web.package."*"]
+opt-level = "s"
+
+[profile.web.package.lumit_bridge]
+opt-level = "s"
+
+[profile.web.package.lumit-share]
+opt-level = "s"
+
+[profile.web.package.lumit-script]
+opt-level = "s"
+
+[profile.web.package.lumit-import]
+opt-level = "s"
+
+[profile.web.package.lumit-keymap]
+opt-level = "s"
+
+[profile.web.package.lumit-project]
+opt-level = "s"
+
+[profile.web.package.lumit-ml]
+opt-level = "s"
+
+[profile.web.package.lumit-extensions]
+opt-level = "s"
+
+[profile.web.package.lumit-ingress]
+opt-level = "s"
+
+[profile.web.package.lumit-text]
+opt-level = "s"
+
+[profile.web.package.lumit-peer]
+opt-level = "s"
+
+[profile.web.package.rhai]
+opt-level = 3
+
+[profile.web.package.harfrust]
+opt-level = 3
+
+[profile.web.package.hashbrown]
+opt-level = 3
+
+[profile.web.package.i_overlay]
+opt-level = 3
+
+[profile.web.package.zeno]
+opt-level = 3
+
+[profile.web.package.read-fonts]
+opt-level = 3
+
+[profile.web.package.skrifa]
+opt-level = 3
+
+[profile.web.package.spade]
+opt-level = 3
+
+[profile.web.package.half]
 opt-level = 3

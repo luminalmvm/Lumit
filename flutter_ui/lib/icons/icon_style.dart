@@ -11,11 +11,17 @@
 // A file may be named after the glyph (`direct-select.svg`, `directSelect.svg`)
 // or after the older icon name (`pointer.svg`). Case and punctuation are
 // ignored, so all of those find the same icon.
+//
+// A file drawn in one colour is tinted like the set, so it follows hover and
+// the active state. One drawn in several colours, or naming the theme's own as
+// `var(--accent)`, keeps them, and only its `currentColor` parts follow.
 
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:flutter/painting.dart' show Color;
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/theme/theme_tokens.dart';
 
 import 'icons.dart' show LumitIcon, glyphOf;
 import 'lumit_icons.dart';
@@ -132,4 +138,64 @@ abstract final class IconStyle {
 
   /// How many icons the folder replaces, for the Settings row.
   static int get overrideCount => _overrides.length;
+
+  static final Map<String, bool> _keeps = {};
+
+  /// Whether [svg] keeps its own colours rather than being tinted: it names
+  /// one of the theme's, or draws in more than one, a gradient or a picture.
+  /// `currentColor` counts as a colour, so a red dot beside tinted lines keeps
+  /// its red.
+  static bool keepsColours(String svg) => _keeps.putIfAbsent(svg, () {
+        if (svg.contains('var(--') ||
+            RegExp(r'<(linearGradient|radialGradient|image)\b').hasMatch(svg)) {
+          return true;
+        }
+        final seen = <String>{};
+        for (final m in RegExp(
+                r'''(?:fill|stroke|color)\s*[:=]\s*["']?\s*([^;"'\s>)]+\)?)''',
+                caseSensitive: false)
+            .allMatches(svg)) {
+          var v = m[1]!.toLowerCase();
+          if (v == 'none' || v == 'transparent' || v.startsWith('url(')) {
+            continue;
+          }
+          if (RegExp(r'^#[0-9a-f]{3}$').hasMatch(v)) {
+            v = '#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}';
+          }
+          seen.add(v);
+          if (seen.length > 1) return true;
+        }
+        return false;
+      });
+
+  static final Map<String, String> _themed = {};
+  static LumitTheme? _themedFor;
+
+  /// [svg] with each `var(--name)` in it, or `var(--name, #fallback)`, made
+  /// the theme's colour of that name. A name the theme doesn't have takes
+  /// the fallback, or the tint.
+  static String themed(String svg, LumitTheme t) {
+    if (!svg.contains('var(--')) return svg;
+    if (!identical(_themedFor, t)) {
+      _themed.clear();
+      _themedFor = t;
+    }
+    return _themed.putIfAbsent(
+        svg,
+        () => svg.replaceAllMapped(
+                RegExp(r'var\(\s*--([a-zA-Z0-9-]+)\s*(?:,\s*([^)]+))?\)'),
+                (m) {
+              final k = _key(m[1]!);
+              for (final token in themeTokens) {
+                if (_key(token.key) == k) return _hex(token.read(t));
+              }
+              return m[2]?.trim() ?? 'currentColor';
+            }));
+  }
+
+  /// [c] as SVG reads a colour.
+  static String _hex(Color c) {
+    int byte(double v) => (v * 255).round().clamp(0, 255);
+    return 'rgba(${byte(c.r)},${byte(c.g)},${byte(c.b)},${c.a.toStringAsFixed(3)})';
+  }
 }

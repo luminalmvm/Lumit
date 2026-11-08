@@ -1,0 +1,10 @@
+# Served with every file by Cloudflare Pages. The page is isolated from other
+# origins, which lets the renderer draw on threads of its own, and it loads
+# nothing from anywhere else.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()

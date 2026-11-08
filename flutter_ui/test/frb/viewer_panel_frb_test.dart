@@ -82,7 +82,7 @@ BridgeSampledPixels wholePicture({int width = 100, int height = 50}) {
     height: height,
     x: centreX,
     y: centreY,
-    frame: BigInt.zero,
+    frame: 0,
     view: 0,
     layerAlone: false,
   );
@@ -156,7 +156,8 @@ void main() {
         shape: ThemeShape.lantern,
       ));
       await tester.pump();
-      expect(find.byKey(const ValueKey('viewer-cache-ready')), findsOneWidget);
+      expect(find.byKey(const ValueKey('viewer-cache-ready')), findsNothing,
+          reason: 'nothing cached is nothing to say');
 
       await tester.runAsync(() => p.state.newProject(ask: false));
       p.uiState.cacheChanged.value++;
@@ -552,15 +553,9 @@ void main() {
       final show = find.byKey(const ValueKey('viewer-snapshot-show'));
       final shown = find.byKey(const ValueKey('viewer-snapshot-overlay'));
 
-      // Nothing photographed yet, so Show is deaf rather than flashing the
-      // live picture at itself.
-      await tester.ensureVisible(show);
-      await tester.pump();
-      final empty = await tester.startGesture(tester.getCenter(show));
-      await tester.pump(const Duration(milliseconds: 300));
+      // Nothing photographed yet, so there is no Show to press.
+      expect(show, findsNothing);
       expect(shown, findsNothing);
-      await empty.up();
-      await tester.pump();
 
       await pressBar(tester, 'viewer-snapshot');
       // The photograph is taken off the render tree, which is a real async
@@ -707,7 +702,14 @@ void main() {
       await mount(tester, p);
 
       final box = find.byKey(const ValueKey('viewer-exposure'));
-      expect(box, findsOneWidget);
+      expect(box, findsNothing, reason: 'at nought only the aperture stands');
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester
+          .getCenter(find.byKey(const ValueKey('viewer-exposure-reset'))));
+      await tester.pump();
+      expect(box, findsOneWidget, reason: 'hovering brings the number up');
       expect(find.text('+0.0'), findsOneWidget,
           reason: 'neutral still reads signed, and to one decimal');
 
@@ -1416,11 +1418,12 @@ void main() {
       // A shape layer with a square of its own, in comp coordinates — the
       // layer maps 1:1 to the comp, so its points sit where the maths below
       // says they do.
+      final item = UuidValue.fromString(const Uuid().v4());
       final shape = p.comp.addShapeLayer(
         name: 'Square',
         contents: [
           BridgeShapeItem(
-            id: UuidValue.fromString(const Uuid().v4()),
+            id: item,
             name: 'Rectangle',
             vertices: const [
               BridgeVertex(
@@ -1453,11 +1456,18 @@ void main() {
             gradientEndOpacity: const BridgeScalar.static_(100),
             gradientStops: const [],
             combine: 0,
+            hidden: false,
+            fillHidden: false,
+            strokeHidden: false,
             pathKeys: const [],
           ),
         ],
       );
       p.uiState.setSelection([shape]);
+      // A shape's points are offered while its Path row is picked.
+      p.uiState.selectedProperties.value = [
+        '${shape.internallayerId}/contents/$item/path'
+      ];
       p.uiState.model.refresh();
       await mount(tester, p);
 
@@ -1958,7 +1968,11 @@ void main() {
               kind: BridgeLightKind.spot,
               falloff: BridgeLightFalloff.none,
               twoNode: true,
-              castsShadows: false));
+              castsShadows: false,
+              inAir: false,
+              noisy: false,
+              source: null,
+              background: false));
       set(beam, {
         BridgeTransformProp.positionZ: -300,
         BridgeTransformProp.rotation: -15,
@@ -1988,9 +2002,9 @@ void main() {
           rotationX: -10,
           rotationY: 25,
           rotationZ: 0);
-      final rows = comp.viewProjection(frame: BigInt.zero, view: view);
+      final rows = comp.viewProjection(frame: 0, view: view);
       final marks = comp.wireframes(
-          frame: BigInt.zero,
+          frame: 0,
           view: view,
           ground: false,
           grid: false,
@@ -2005,7 +2019,7 @@ void main() {
           byId,
           (e) => e.info.transform,
           (s, _, __) => (s as BridgeScalar_Static).field0,
-          cameraPose: (c) => c.layer.cameraOwnPoseAt(frame: BigInt.zero),
+          cameraPose: (c) => c.layer.cameraOwnPoseAt(frame: 0),
         )!;
         final m = parent.storage;
         final w = [

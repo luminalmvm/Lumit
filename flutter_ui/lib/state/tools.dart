@@ -39,6 +39,7 @@ enum ToolGroup {
   anchor,
   razor,
   shape,
+  shape3d,
   pen,
   type,
   paint,
@@ -70,6 +71,16 @@ enum ToolMode {
   shapeEllipse(ToolGroup.shape, LumitIcon.ellipse, ready: true),
   shapePolygon(ToolGroup.shape, LumitIcon.polygon, ready: true),
   shapeStar(ToolGroup.shape, LumitIcon.star, ready: true),
+
+  // The 3D shapes: a click in the Viewer puts one there, in the order
+  // Layer > New > 3D shape lists them.
+  shape3dCube(ToolGroup.shape3d, LumitIcon.cube3d, ready: true),
+  shape3dSphere(ToolGroup.shape3d, LumitIcon.sphere, ready: true),
+  shape3dCylinder(ToolGroup.shape3d, LumitIcon.cylinder, ready: true),
+  shape3dCone(ToolGroup.shape3d, LumitIcon.cone, ready: true),
+  shape3dTorus(ToolGroup.shape3d, LumitIcon.torus, ready: true),
+  shape3dPlane(ToolGroup.shape3d, LumitIcon.plane, ready: true),
+  shape3dPyramid(ToolGroup.shape3d, LumitIcon.pyramid, ready: true),
 
   // The Pen builds a mask path point by point. Its four siblings edit a
   // finished path, which is the gizmo's work.
@@ -142,6 +153,13 @@ enum ToolMode {
         ToolMode.shapeEllipse => l10n.toolShapeEllipse,
         ToolMode.shapePolygon => l10n.toolShapePolygon,
         ToolMode.shapeStar => l10n.toolShapeStar,
+        ToolMode.shape3dCube => l10n.shape3dCube,
+        ToolMode.shape3dSphere => l10n.shape3dSphere,
+        ToolMode.shape3dCylinder => l10n.shape3dCylinder,
+        ToolMode.shape3dCone => l10n.shape3dCone,
+        ToolMode.shape3dTorus => l10n.shape3dTorus,
+        ToolMode.shape3dPlane => l10n.shape3dPlane,
+        ToolMode.shape3dPyramid => l10n.shape3dPyramid,
         ToolMode.pen => l10n.toolPen,
         ToolMode.penAddVertex => l10n.toolPenAddVertex,
         ToolMode.penDeleteVertex => l10n.toolPenDeleteVertex,
@@ -164,41 +182,46 @@ enum ToolMode {
         ToolMode.cameraDolly => l10n.toolCameraDolly,
       };
 
-  /// What its modifiers and keys do, for the status line's hint, or null for a
-  /// tool with nothing to add. Every claim here is one the tool's own handler
-  /// keeps today: change the handler and this line changes with it.
-  String? get hint => switch (this) {
-        ToolMode.select => l10n.statusHintSelect,
-        ToolMode.zoom => l10n.statusHintZoom,
-        ToolMode.rotate => l10n.statusHintRotate,
-        // The snap is on the platform's primary modifier, spelt as a chord
-        // spells it: Ctrl here, the command key on a Mac.
-        ToolMode.anchor =>
-          l10n.statusHintAnchor(chordLabel('Mod+').replaceAll('+', '')),
-        ToolMode.razor => l10n.statusHintRazor,
-        ToolMode.shapeRectangle ||
-        ToolMode.shapeRoundedRectangle ||
-        ToolMode.shapeEllipse ||
-        ToolMode.shapePolygon ||
-        ToolMode.shapeStar =>
-          l10n.statusHintShape,
-        ToolMode.pen => l10n.statusHintPen,
-        ToolMode.penConvertVertex => l10n.statusHintConvertVertex,
-        ToolMode.penMaskFeather => l10n.statusHintMaskFeather,
-        ToolMode.typeHorizontal => l10n.statusHintType,
-        ToolMode.brush || ToolMode.eraser => l10n.statusHintPaint,
-        ToolMode.cloneStamp => l10n.statusHintCloneStamp,
-        ToolMode.rotoBrush => l10n.statusHintRotoBrush,
-        ToolMode.puppetPosition ||
-        ToolMode.puppetStarch ||
-        ToolMode.puppetOverlap =>
-          l10n.statusHintPuppet,
-        ToolMode.puppetBend => l10n.statusHintPuppetBend,
-        ToolMode.cameraUnified => l10n.statusHintCameraUnified,
-        ToolMode.cameraOrbit => l10n.statusHintCameraOrbit,
-        ToolMode.cameraPan => l10n.statusHintCameraPan,
-        // The Hand, Refine edge and the dolly have no modifier, and the rest
-        // cannot be armed.
+  /// What [held] does to this tool, for the status line while the key is
+  /// down, or null for a tool the key does nothing to. Every claim here is
+  /// one the tool's own handler keeps today: change the handler and this
+  /// line changes with it.
+  String? hintFor(ToolModifier held) => switch ((this, held)) {
+        (ToolMode.select, ToolModifier.shift) => l10n.statusShiftSelect,
+        (ToolMode.select, ToolModifier.alt) => l10n.statusAltSelect,
+        (ToolMode.select, ToolModifier.mod) => l10n.statusModSelect,
+        (ToolMode.zoom, ToolModifier.alt) => l10n.statusAltZoom,
+        (ToolMode.rotate, ToolModifier.shift) => l10n.statusShiftRotate,
+        (ToolMode.anchor, ToolModifier.shift) => l10n.statusShiftAnchor,
+        (ToolMode.anchor, ToolModifier.mod) => l10n.statusModAnchor,
+        (ToolMode.razor, ToolModifier.shift) => l10n.statusShiftRazor,
+        (
+          ToolMode.shapeRectangle ||
+              ToolMode.shapeRoundedRectangle ||
+              ToolMode.shapeEllipse ||
+              ToolMode.shapePolygon ||
+              ToolMode.shapeStar,
+          ToolModifier.alt
+        ) =>
+          l10n.statusAltShape,
+        (
+          ToolMode.shapeRectangle ||
+              ToolMode.shapeRoundedRectangle ||
+              ToolMode.shapeEllipse ||
+              ToolMode.shapePolygon ||
+              ToolMode.shapeStar,
+          ToolModifier.shift
+        ) =>
+          l10n.statusShiftShape,
+        (ToolMode.pen, ToolModifier.alt) => l10n.statusAltPen,
+        (ToolMode.cloneStamp, ToolModifier.alt) => l10n.statusAltCloneStamp,
+        (ToolMode.rotoBrush, ToolModifier.alt) => l10n.statusAltRotoBrush,
+        (ToolMode.puppetBend, ToolModifier.alt) => l10n.statusAltPuppetBend,
+        (ToolMode.cameraUnified, ToolModifier.shift) =>
+          l10n.statusShiftCameraUnified,
+        (ToolMode.cameraOrbit, ToolModifier.shift) =>
+          l10n.statusShiftCameraOrbit,
+        (ToolMode.cameraPan, ToolModifier.shift) => l10n.statusShiftCameraPan,
         _ => null,
       };
 
@@ -228,6 +251,7 @@ const Map<String, ToolGroup> toolActions = {
   'tool.anchor': ToolGroup.anchor,
   'tool.razor': ToolGroup.razor,
   'tool.shape': ToolGroup.shape,
+  'tool.shape3d': ToolGroup.shape3d,
   'tool.pen': ToolGroup.pen,
   'tool.type': ToolGroup.type,
   'tool.paint': ToolGroup.paint,
@@ -235,6 +259,23 @@ const Map<String, ToolGroup> toolActions = {
   'tool.puppet': ToolGroup.puppet,
   'tool.camera': ToolGroup.camera,
 };
+
+/// A modifier key held while a tool is armed, which the status line answers
+/// with what the key does to that tool ([ToolMode.hintFor]).
+enum ToolModifier {
+  shift,
+  alt,
+
+  /// The platform's main modifier: Ctrl here, the command key on a Mac.
+  mod;
+
+  /// The key's name, spelt as a chord spells it.
+  String get label => chordLabel(switch (this) {
+        ToolModifier.shift => 'Shift+',
+        ToolModifier.alt => 'Alt+',
+        ToolModifier.mod => 'Mod+',
+      }).replaceAll('+', '');
+}
 
 /// The axes a 3D layer's move arrows and rotation rings follow.
 enum GizmoAxes { local, world, view }
@@ -371,6 +412,54 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the other layers' edges and middles are things to land on. On by
+  /// default: lining one thing up with another is most of what a drag is for.
+  bool _snapToLayers = true;
+  bool get snapToLayers => _snapToLayers;
+  set snapToLayers(bool value) {
+    if (_snapToLayers == value) return;
+    _snapToLayers = value;
+    notifyListeners();
+  }
+
+  /// Put [group]'s options back as they ship, for the tool's own menu. The
+  /// starting values are the ones below, so each is written once.
+  void resetOptionsOf(ToolGroup group) {
+    switch (group) {
+      case ToolGroup.select || ToolGroup.rotate:
+        _axes = GizmoAxes.local;
+        _rotateSets = RotateSets.orientation;
+      case ToolGroup.type:
+        _fill = ToolColour.white;
+        _textSize = plainTextSize;
+      case ToolGroup.shape || ToolGroup.pen:
+        _fill = ToolColour.white;
+        _stroke = ToolColour.black;
+        _strokeWidth = 2;
+      case ToolGroup.paint:
+        _fill = ToolColour.white;
+        _brushSize = 20;
+        _brushHardness = 80;
+        _brushShape = BridgeBrushShape.round;
+        _brushPressureSize = true;
+        _brushOpacity = 100;
+      case ToolGroup.roto:
+        _rotoSize = 40;
+      case ToolGroup.puppet:
+        _puppetDensity = 24;
+        _puppetExpansion = 3;
+      case ToolGroup.camera:
+        _cameraPivot = CameraPivot.cursor;
+      case ToolGroup.hand ||
+            ToolGroup.zoom ||
+            ToolGroup.anchor ||
+            ToolGroup.razor ||
+            ToolGroup.shape3d:
+        return;
+    }
+    notifyListeners();
+  }
+
   /// Which way the 3D handles point: along the layer's own axes, the comp's,
   /// or the screen's, as After Effects' three axis modes do.
   GizmoAxes _axes = GizmoAxes.local;
@@ -401,6 +490,16 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether a new shape gets a fill at all: the Fill label's None, as in
+  /// After Effects. Text and paint always use the colour.
+  bool _fillOn = true;
+  bool get fillOn => _fillOn;
+  set fillOn(bool value) {
+    if (_fillOn == value) return;
+    _fillOn = value;
+    notifyListeners();
+  }
+
   /// The fill as the bridge wants it. Opaque: a fill's transparency is the
   /// layer's Opacity, which is a transform property and animatable, rather than
   /// a fourth number hidden in a swatch.
@@ -408,7 +507,7 @@ class ToolsState extends ChangeNotifier {
       BridgeColourRgba(r: _fill.r, g: _fill.g, b: _fill.b, a: 1);
 
   /// The point size new text is set at.
-  double _textSize = 72;
+  double _textSize = plainTextSize;
   double get textSize => _textSize;
   set textSize(double value) {
     final next = value.clamp(1.0, 2000.0);
@@ -448,6 +547,15 @@ class ToolsState extends ChangeNotifier {
   set stroke(ToolColour value) {
     if (_stroke == value) return;
     _stroke = value;
+    notifyListeners();
+  }
+
+  /// Whether a new shape gets an outline: the Stroke label's None.
+  bool _strokeOn = true;
+  bool get strokeOn => _strokeOn;
+  set strokeOn(bool value) {
+    if (_strokeOn == value) return;
+    _strokeOn = value;
     notifyListeners();
   }
 

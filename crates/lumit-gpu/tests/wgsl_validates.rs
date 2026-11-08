@@ -21,6 +21,14 @@ const NOISE_CORE: &str = include_str!("../src/fx_noise_core.wgsl");
 const OCIO_SAMPLE: &str = include_str!("../src/ocio_sample.wgsl");
 /// The layer blend modes' maths, exactly as its consumers prepend it.
 const BLEND_CORE: &str = include_str!("../src/fx_blend_core.wgsl");
+/// The lighting kernel, which volumetric light is compiled after.
+const LIGHTING: &str = include_str!("../src/fx_lighting.wgsl");
+/// The light maths planes and models share, exactly as both prepend it.
+const LIGHT_CORE: &str = include_str!("../src/light_core.wgsl");
+/// What the casters let through, prepended to everything that reads it.
+const SHADOW_CORE: &str = include_str!("../src/shadow_core.wgsl");
+/// An Environment light as the passes it lights read it.
+const ENVIRONMENT_CORE: &str = include_str!("../src/environment_core.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -53,9 +61,18 @@ fn every_wgsl_kernel_parses_and_validates() {
         if name == "fx_noise_core.wgsl"
             || name == "ocio_sample.wgsl"
             || name == "fx_blend_core.wgsl"
+            || name == "light_core.wgsl"
+            || name == "shadow_core.wgsl"
+            || name == "environment_core.wgsl"
         {
             continue;
         }
+        // Appended to Particulate's kernel, as the engine compiles it.
+        let source = if name == "fx_particulate_scene.wgsl" || name == "fx_particulate_sim.wgsl" {
+            format!("{}{source}", include_str!("../src/fx_particulate.wgsl"))
+        } else {
+            source
+        };
         // Any `nc_` name means this kernel is one of the core's consumers —
         // Card wipe (docs/08 §3.72) takes only `nc_hash01` and no fractal at
         // all, so the older "does it call nc_fractal" test would have compiled
@@ -65,9 +82,29 @@ fn every_wgsl_kernel_parses_and_validates() {
         } else {
             source
         };
+        let source = if name == "fx_volumetric.wgsl" {
+            format!("{LIGHTING}{source}")
+        } else {
+            source
+        };
         // The blend modes' maths, prepended to the two kernels that call it.
         let source = if source.contains("blend_pixel(") {
             format!("{BLEND_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("transmitted(") {
+            format!("{SHADOW_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("env_turn(") || source.contains("env_radiance(") {
+            format!("{ENVIRONMENT_CORE}{source}")
+        } else {
+            source
+        };
+        let source = if source.contains("irradiance(") {
+            format!("{LIGHT_CORE}{source}")
         } else {
             source
         };

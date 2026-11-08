@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 /// directory, in which case nothing is remembered and nothing is an error.
 #[must_use]
 pub fn plugin_prefs_path() -> Option<PathBuf> {
-    let dirs = crate::project_dirs()?;
+    let dirs = crate::dirs::project_dirs()?;
     Some(dirs.data_dir().join("plugins.json"))
 }
 

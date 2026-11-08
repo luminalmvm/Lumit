@@ -9,9 +9,8 @@ Lumit is layer-based, in the manner of After Effects, with a few additions to he
 coming from Vegas, Premiere Pro or Resolve, such as the Sequence layer, which is where 
 cutting and speed ramping happen. Most of what you already know can be transferred.
 
-On its first run Lumit asks which of the three you are coming from, under **Editing
-style**. Each answer sets a few preferences, all of them ordinary rows in **Settings**
-afterwards.
+On its first run Lumit asks for a workspace and a set of shortcuts. See
+[First start](/start/install/#first-start).
 
 ## After Effects to Lumit
 
@@ -29,10 +28,9 @@ bezier with speed and influence.
 
 If you aren't used to all of Lumit's keybinds, an After Effects keymap 
 preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Shortcuts**.
-Choosing **After Effects** under **Editing style** on the first run, with
-**Use the After Effects shortcuts** ticked, loads it.
+Choosing **After Effects** under **Shortcuts** on the first run loads it.
 
-Whole projects come across too. **File ▸ Import ▸ After Effects project…**, and a
+Whole projects come across too. **File ▸ Import .aep project…**, and a
 report will appear telling you what was carried across with or without adjustments.
 Common third-party effects become the maker's own OFX plugin when it is installed. See
 [Importing](/use/importing/).
@@ -58,11 +56,10 @@ imported from **Settings ▸ General ▸ After Effects presets**. See
 | Automatic crossfades | **Auto crossfade**, on the Cut timeline |
 | Quantize to frames | **Quantise**, on the Cut timeline |
 
-Choosing **Vegas** on the first run opens the **Cut** workspace, makes video arrive as a
-Sequence layer and opens the Retime graph to speed. It also turns on Vegas's clip drags and
-**Auto crossfade**. **Only change default Retime graph** leaves video arriving as footage
-layers. **Use the Vegas shortcuts** is ticked to begin with, and loads the **Vegas** preset
-from [Settings ▸ Shortcuts](/use/settings/).
+Choosing **Vegas** under **Shortcuts** on the first run loads the **Vegas** preset from
+[Settings ▸ Shortcuts](/use/settings/), opens the Retime graph to speed, and turns on
+Vegas's clip drags and **Auto crossfade**. Choosing the **Cut** workspace as well makes
+video arrive as a Sequence layer.
 
 ## Premiere Pro or Resolve to Lumit
 
@@ -76,9 +73,9 @@ from [Settings ▸ Shortcuts](/use/settings/).
 | Linked audio and video | **Linked clips**: a picture clip and its sound clip move as one |
 | Ripple, roll, slip, slide | The same four edits, on the Cut timeline |
 
-Choosing **Premiere Pro or Resolve** on the first run makes footage arrive on Sequence
-layers and opens Lumit in the **Cut** workspace: the Project panel, the Viewer with its
-source view, and the Cut timeline. See [Cutting](/use/cutting/).
+Choosing the **Cut** workspace on the first run opens the Project panel, the Viewer with
+its source view, and the Cut timeline, and makes footage arrive on Sequence layers. See
+[Cutting](/use/cutting/).
 
 The next step is your [first composition](/start/first-composition/).
 

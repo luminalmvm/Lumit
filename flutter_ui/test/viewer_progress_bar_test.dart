@@ -14,7 +14,7 @@ import 'package:lumit_flutter/widgets/controls.dart';
 BridgeRenderProgress _report(int frame,
         {double fraction = 0.42, int stage = 3, bool done = false}) =>
     BridgeRenderProgress(
-      frame: BigInt.from(frame),
+      frame: frame,
       stage: stage,
       fraction: fraction,
       done: done,

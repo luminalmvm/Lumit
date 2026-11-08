@@ -6,7 +6,8 @@
 ; Registers the .lum, .lumfx and .lumtheme associations with their document icons
 ; (assets/brand) and an open command; Lumit itself reads the document
 ; path from the command line (projectPathFromArgs in flutter_ui/lib/main.dart).
-; .lfx extension packages open the same way, with no icon of their own yet.
+; .lfx extension packages open the same way, with no icon of their own yet,
+; and .lumstyle styles with the theme's icon.
 
 ; Keep in step with flutter_ui/pubspec.yaml `version:` when cutting a release.
 ; The release workflow overrides this from the tag (iscc /DMyAppVersion=...).
@@ -119,22 +120,34 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Extension"; ValueType: string; \
   ValueData: "Lumit extension"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Lumit.Extension\shell\open\command"; ValueType: string; \
   ValueData: """{app}\{#MyAppExe}"" ""%1"""
-; .lumfx — presets. No open verb: a preset is applied inside a project, not
-; opened on its own, so it gets the icon and a name only.
+; .lumstyle: styles, a file or a folder packed into one. Opening one takes it
+; in and uses it.
+Root: HKA; Subkey: "Software\Classes\.lumstyle"; ValueType: string; \
+  ValueData: "Lumit.Style"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Lumit.Style"; ValueType: string; \
+  ValueData: "Lumit style"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Lumit.Style\DefaultIcon"; ValueType: string; \
+  ValueData: "{app}\icons\lumit-theme.ico"
+Root: HKA; Subkey: "Software\Classes\Lumit.Style\shell\open\command"; ValueType: string; \
+  ValueData: """{app}\{#MyAppExe}"" ""%1"""
+; .lumfx: presets. Opening one puts it on the selected layer.
 Root: HKA; Subkey: "Software\Classes\.lumfx"; ValueType: string; \
   ValueData: "Lumit.Preset"; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\Lumit.Preset"; ValueType: string; \
   ValueData: "Lumit preset"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Lumit.Preset\DefaultIcon"; ValueType: string; \
   ValueData: "{app}\icons\lumit-preset.ico"
-; .lumtheme — shared colour themes. No open verb either: a theme is
-; taken in from Settings → Appearance → Import…, not opened as a document.
+Root: HKA; Subkey: "Software\Classes\Lumit.Preset\shell\open\command"; ValueType: string; \
+  ValueData: """{app}\{#MyAppExe}"" ""%1"""
+; .lumtheme: colour themes. Opening one takes it in and uses it.
 Root: HKA; Subkey: "Software\Classes\.lumtheme"; ValueType: string; \
   ValueData: "Lumit.Theme"; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\Lumit.Theme"; ValueType: string; \
   ValueData: "Lumit theme"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string; \
   ValueData: "{app}\icons\lumit-theme.ico"
+Root: HKA; Subkey: "Software\Classes\Lumit.Theme\shell\open\command"; ValueType: string; \
+  ValueData: """{app}\{#MyAppExe}"" ""%1"""
 
 [Run]
 ; No `skipifsilent`. `/VERYSILENT` is how Lumit runs this installer on

@@ -3,6 +3,7 @@
 
 use crate::sequence::MediaSource;
 use crate::{Fingerprint, MediaError};
+#[cfg(not(target_arch = "wasm32"))]
 use rsmpeg::ffi;
 use std::path::{Path, PathBuf};
 
@@ -168,7 +169,38 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
             interpret: src.interpret,
         });
     }
-    let mut input = crate::probe::open_input(&src)?;
+    scan(&src, fingerprint)
+}
+
+/// A still the page reads itself is one frame, as an Illustrator document is.
+/// Nothing else opens without FFmpeg.
+#[cfg(target_arch = "wasm32")]
+fn scan(src: &MediaSource, fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
+    if let Some(mut index) = crate::web::index(src.on_disk()) {
+        index.interpret = src.interpret;
+        return Ok(index);
+    }
+    if !crate::web::reads_still(src.on_disk()) {
+        return Err(crate::no_ffmpeg());
+    }
+    Ok(FrameIndex {
+        timebase_num: 1,
+        timebase_den: 25,
+        entries: vec![IndexEntry {
+            pts: 0,
+            keyframe: true,
+        }],
+        vfr: false,
+        median_delta: 0,
+        fingerprint,
+        interpret: src.interpret,
+    })
+}
+
+/// The packet scan itself, for everything ffmpeg opens.
+#[cfg(not(target_arch = "wasm32"))]
+fn scan(src: &MediaSource, fingerprint: Fingerprint) -> Result<FrameIndex, MediaError> {
+    let mut input = crate::probe::open_input(src)?;
 
     let (stream_index, timebase, rate) = input
         .streams()
@@ -291,6 +323,7 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
 /// ponytail: the rate is the file's average, so a stretch recorded faster than
 /// that loses frames. The upgrade is to conform to the recording's nominal
 /// rate, which the probe would have to report as the item's rate as well.
+#[cfg(not(target_arch = "wasm32"))]
 fn conformed(
     entries: &[IndexEntry],
     timebase: ffi::AVRational,

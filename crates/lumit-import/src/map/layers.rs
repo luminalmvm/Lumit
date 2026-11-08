@@ -40,6 +40,7 @@ use lumit_core::model::{
     BlendMode, Layer, LayerInputSource, LayerKind, LightDef, LightKind, Material, MatteChannel,
     MatteRef, ShadowMode, Switches, TransformGroup,
 };
+use lumit_core::model::{EffectInstance, EffectValue};
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Rational};
 use uuid::Uuid;
@@ -148,12 +149,28 @@ pub(crate) fn map_layer(
     // rotations come across exactly.
     transform.after_effects_order = ae.switches.as_ref().and_then(|s| s.three_d) == Some(true)
         || matches!(kind, LayerKind::Camera { .. } | LayerKind::Light { .. });
+    // A camera's or a light's Auto-orient is its two-node aim.
+    transform.orient = match ae.auto_orient.as_deref() {
+        Some("ALONG_PATH") => lumit_core::orient::Orient::AlongPath,
+        Some("CAMERA_OR_POINT_OF_INTEREST")
+            if !matches!(kind, LayerKind::Camera { .. } | LayerKind::Light { .. }) =>
+        {
+            lumit_core::orient::Orient::TowardsCamera
+        }
+        _ => lumit_core::orient::Orient::Off,
+    };
     // Nothing lights a camera, a light or a null, so it keeps the material a
     // file leaves out.
     transform.material = Box::new(match kind {
         LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Null => Material::legacy(),
         _ => material(conv, &path, props),
     });
+    if conv.solids && matches!(kind, LayerKind::Text { .. } | LayerKind::Shape { .. }) {
+        transform.material.geometry = geometry(conv, &path, props);
+    }
+    if let LayerKind::Mesh { shape } = kind {
+        transform.material.geometry = super::mesh_shapes::rows(conv, &path, props, shape);
+    }
     // After Effects measures a text layer from its first baseline, and a
     // shape layer from its own zero, where Lumit measures both from the corner
     // of the raster they are drawn into. The anchor and the masks move by the
@@ -207,6 +224,7 @@ pub(crate) fn map_layer(
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime,
         interpolation,
         parked_flow: None,
@@ -274,6 +292,9 @@ fn layer_kind(
         }
     }
 
+    if let Some(shape) = super::mesh_shapes::shape_of(props) {
+        return LayerKind::Mesh { shape };
+    }
     match kind {
         "camera" => {
             // After Effects' Position is the eye, as Lumit's is
@@ -443,6 +464,7 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
         shininess: read("ADBE Shininess Coefficient", 5.0),
         metal: read("ADBE Metal Coefficient", 100.0),
         light_transmission: read("ADBE Light Transmission", 0.0),
+        reflection: read("ADBE Reflection Coefficient", 0.0),
         casts_shadows: shadow_mode(
             shadow_switch(conv, path, options, "ADBE Casts Shadows", "Casts Shadows"),
             ShadowMode::Off,
@@ -457,7 +479,55 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
             ),
             ShadowMode::On,
         ),
+        holdout: false,
+        geometry: Vec::new(),
     }
+}
+
+/// A Text or Shape layer's Geometry options, keyframes and all, or nothing for
+/// a layer with no depth and no bevel.
+fn geometry(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    props: &[Property],
+) -> Vec<Option<EffectInstance>> {
+    let options = group(props, "ADBE Extrsn Options Group");
+    let Some(mut rows) = lumit_core::fx::builtins::instantiate(lumit_core::extrude::MATCH_NAME)
+    else {
+        return Vec::new();
+    };
+    // After Effects numbers its styles None, Angular, Concave, Convex.
+    let style = still(options, "ADBE Bevel Styles", 0).map_or(1, |v| v.round() as i64);
+    for (id, name, fallback) in [
+        ("extrusion_depth", "ADBE Extrsn Depth", 0.0),
+        ("bevel_depth", "ADBE Bevel Depth", 0.0),
+        ("hole_bevel_depth", "ADBE Hole Bevel Depth", 100.0),
+    ] {
+        let value = match (id, style) {
+            ("bevel_depth", 1) => lumit_core::anim::Property::zero(),
+            _ => scalar(conv, path, options, name, 0, fallback),
+        };
+        if let Some(row) = rows.params.iter_mut().find(|p| p.id == id) {
+            row.value = EffectValue::Float(value);
+        }
+    }
+    let shape = match style {
+        3 => 2,
+        4 => 1,
+        _ => 0,
+    };
+    if let Some(row) = rows.params.iter_mut().find(|p| p.id == "bevel_style") {
+        row.value = EffectValue::Choice(shape);
+    }
+    if !lumit_core::extrude::is_solid(Some(&rows)) {
+        return Vec::new();
+    }
+    conv.report.row(
+        path.clone(),
+        Outcome::Adjusted,
+        Reason::GeometryOptionsCarried,
+    );
+    vec![Some(rows)]
 }
 
 /// A shadow switch's setting. Lumit keeps one, so a keyframed switch keeps
@@ -499,6 +569,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         None => return TransformGroup::default(),
     };
     TransformGroup {
+        orient: lumit_core::orient::Orient::Off,
         anchor_x: scalar(conv, path, props, "ADBE Anchor Point", 0, 0.0),
         anchor_y: scalar(conv, path, props, "ADBE Anchor Point", 1, 0.0),
         position_x: scalar(conv, path, props, "ADBE Position", 0, 0.0),

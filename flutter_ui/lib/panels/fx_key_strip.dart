@@ -38,9 +38,21 @@ import '../l10n/strings.dart';
 import '../state/comp_time.dart' show sampledScalar;
 import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
+import 'timeline_extras_frb.dart' show addMarkerFrb, showRulerMenu;
 import '../widgets/controls.dart';
+import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
 import 'fx_section.dart';
-import 'graph_maths.dart' show axisKeyIndex, keyframeAmong, rowKeysOf;
+import 'graph_clipboard.dart' show easeClipboard, keysWithCopiedEase;
+import 'graph_edits.dart' show keyHandlesSplit, keyWithHandlesJoined;
+import 'graph_maths.dart'
+    show
+        axisKeyIndex,
+        easyEase,
+        keyEaseOf,
+        keyWithEase,
+        keyframeAmong,
+        rowKeysOf,
+        withTangentMode;
 import 'key_block.dart';
 import 'layer_fold_frb.dart'
     show asOneUndoStep, laneKeyFrame, timeOfSubframe;
@@ -53,7 +65,7 @@ import 'timeline_extras_frb.dart'
         rulerMinorStepSeconds,
         showMenuAt;
 import 'timeline_key_block_frb.dart' show LaneKeysPainter;
-import 'timeline_key_lane_frb.dart' show KeyLane;
+import 'timeline_key_lane_frb.dart' show KeyLane, keyMenuRows, keyMenuWidth;
 import 'timeline_metrics_frb.dart' show keyShapeOf, laneKeyHalf;
 
 /// The narrowest the strip is let get, and what it opens at.
@@ -241,6 +253,15 @@ class FxKeyStripHost extends StatefulWidget {
   /// Added to every key's time before it is placed. Zero for a layer's own
   /// keys.
   final int keyOffset;
+
+  /// Lanes this wide and nothing else: no ruler, ground, playhead or divider,
+  /// and no switch or remembered width. For a panel that lays the lanes under
+  /// a ruler of its own, as the Timeline does over a node graph. Null for the
+  /// Effect controls strip.
+  final double? width;
+
+  /// The panel whose Delete takes the picked keys.
+  final Panel panel;
   final Widget child;
 
   const FxKeyStripHost({
@@ -248,6 +269,8 @@ class FxKeyStripHost extends StatefulWidget {
     required this.spanStart,
     required this.spanFrames,
     this.keyOffset = 0,
+    this.width,
+    this.panel = Panel.effectControls,
     required this.child,
   });
 
@@ -318,7 +341,7 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     final ui = _ui;
     if (!mounted ||
         ui == null ||
-        ui.activePanel != Panel.effectControls ||
+        ui.activePanel != widget.panel ||
         _selection.isEmpty) {
       return _priorDeleteClaim?.call() ?? false;
     }
@@ -483,23 +506,113 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
     lane.onWrite(next);
   }
 
-  /// The key's own menu, on a right-click.
-  Future<void> _keyMenu(
-      BuildContext context, String id, Offset position) async {
+  /// The key's own menu, on a right-click: the one every key has, with the rows
+  /// its lanes can answer. They hold keys and a write, not the curves the
+  /// clipboard, Ease and Reverse work on.
+  void _keyMenu(BuildContext context, String id, Offset position) {
     if (!_selection.contains(id)) _select(id, false);
-    final picked = await showMenuAt<String>(
+    void interp(BridgeSideInterp side,
+            {bool inSide = true, bool outSide = true}) =>
+        _rewrite((keys, i) => BridgeKeyframe(
+              time: keys[i].time,
+              value: keys[i].value,
+              interpIn: inSide ? side : keys[i].interpIn,
+              interpOut: outSide ? side : keys[i].interpOut,
+            ));
+    final picked = _pickedKeys().toList();
+    final ease = [
+      for (final (keys, own) in picked)
+        for (final i in own)
+          if (!keyEaseOf(keys, i).isEmpty) keyEaseOf(keys, i),
+    ].firstOrNull;
+    showMenuAt<void>(
       context: context,
       position: position,
-      rows: (close) => [
-        MenuRow(
-          key: const ValueKey('fx-key-menu-delete'),
-          onPressed: () => close('delete'),
-          child: Text(l10n.deleteKey),
-        ),
-      ],
+      width: keyMenuWidth,
+      rows: (close) => keyMenuRows(
+        close: () => close(null),
+        keyPrefix: 'fx-key-menu',
+        many: _selection.length > 1,
+        onInterp: interp,
+        onEaseIn: () => interp(easyEase, outSide: false),
+        onEaseOut: () => interp(easyEase, inSide: false),
+        onTangents: (mode) => _rewrite((keys, i) => BridgeKeyframe(
+              time: keys[i].time,
+              value: keys[i].value,
+              interpIn: withTangentMode(keys[i].interpIn, mode),
+              interpOut: withTangentMode(keys[i].interpOut, mode),
+            )),
+        onSpeed: () async {
+          final asked = await showKeyframeSpeedFrb(
+              context: context, ease: ease!, unit: null);
+          if (asked == null || asked.isEmpty || !mounted) return;
+          _rewrite((keys, i) => keyWithEase(keys, i, asked));
+        },
+        canSpeed: ease != null,
+        onJoinHandles: () => _rewrite((keys, i) =>
+            keyHandlesSplit(keys, i) ? keyWithHandlesJoined(keys, i) : keys[i]),
+        canJoinHandles: picked
+            .any((row) => row.$2.any((i) => keyHandlesSplit(row.$1, i))),
+        onCopyEase: () {
+          if (picked.isEmpty) return;
+          final (keys, own) = picked.first;
+          easeClipboard = [
+            for (final i in own.toList()..sort())
+              (keys[i].interpIn, keys[i].interpOut),
+          ];
+        },
+        onPasteEase: _pasteEase,
+        onDelete: _deleteSelected,
+      ),
     );
-    if (picked == 'delete' && mounted) _deleteSelected();
   }
+
+  /// Each animated channel under the picked keys, with the indices picked on it.
+  Iterable<(List<BridgeKeyframe>, Set<int>)> _pickedKeys() sync* {
+    for (final row in _byRow(_selection).entries) {
+      final lane = _lanes[row.key];
+      if (lane == null) continue;
+      for (final scalar in lane.scalars) {
+        if (scalar case BridgeScalar_Keyframed(field0: final keys)) {
+          final own = _ownKeys(row.value, lane, keys);
+          if (own.isNotEmpty) yield (keys, own);
+        }
+      }
+    }
+  }
+
+  /// Every channel of every row with a picked key, through [write], one undo
+  /// step.
+  void _writePicked(
+      List<BridgeKeyframe> Function(List<BridgeKeyframe> keys, Set<int> own)
+          write) {
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    asOneUndoStep(project, () {
+      for (final row in _byRow(_selection).entries) {
+        final lane = _lanes[row.key];
+        if (lane == null) continue;
+        lane.onWrite([
+          for (final scalar in lane.scalars)
+            if (scalar case BridgeScalar_Keyframed(field0: final keys))
+              BridgeScalar.keyframed(
+                  write(keys, _ownKeys(row.value, lane, keys)))
+            else
+              scalar,
+        ]);
+      }
+    });
+  }
+
+  /// Every picked key replaced by what [key] makes of it.
+  void _rewrite(
+          BridgeKeyframe Function(List<BridgeKeyframe> keys, int index) key) =>
+      _writePicked((keys, own) => [
+            for (var i = 0; i < keys.length; i++)
+              own.contains(i) ? key(keys, i) : keys[i],
+          ]);
+
+  void _pasteEase() => _writePicked(
+      (keys, own) => keysWithCopiedEase(keys, own.toList()..sort()));
 
   ({double fps, int fpsNum, int fpsDen}) get _scopeValues {
     final model = Provider.of<LumitUiState>(context, listen: false).model;
@@ -526,6 +639,25 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final scope = ThemeScope.of(context);
+    if (widget.width case final width?) {
+      final (fpsNum, fpsDen) = ui.model.fpsExact;
+      return FxKeyStripScope._(
+        width: width,
+        stacked: false,
+        reveal: 1,
+        playhead: ui.playheadFrame,
+        axis: TimelineAxis(frames: widget.spanFrames, width: width),
+        spanStart: widget.spanStart,
+        keyOffset: widget.keyOffset,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        selected: _selected,
+        stretch: _stretch,
+        host: this,
+        child: widget.child,
+      );
+    }
     return ListenableBuilder(
       listenable: ui.workspace,
       builder: (context, _) => LayoutBuilder(
@@ -826,8 +958,31 @@ class _FxRuler extends StatelessWidget {
     required this.onSeek,
   });
 
-  void _seek(double x) => onSeek(
-      spanStart + axis.frameAt(x).clamp(0, axis.frames < 0 ? 0 : axis.frames));
+  int _frameAt(double x) =>
+      spanStart + axis.frameAt(x).clamp(0, axis.frames < 0 ? 0 : axis.frames);
+
+  void _seek(double x) => onSeek(_frameAt(x));
+
+  /// The same menu the Timeline's ruler has.
+  void _menu(BuildContext context, TapUpDetails d) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final comp = ui.selectedComp;
+    if (comp == null) return;
+    showRulerMenu(
+      context,
+      comp: comp,
+      at: d.globalPosition,
+      frame: _frameAt(d.localPosition.dx),
+      addMarker: (frame) async {
+        addMarkerFrb(comp, frame: frame);
+        ui.model.refresh();
+      },
+      setWork: (span) {
+        comp.setWorkArea(span: span);
+        ui.model.refresh();
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -838,6 +993,7 @@ class _FxRuler extends StatelessWidget {
       onTapDown: (d) => _seek(d.localPosition.dx),
       onHorizontalDragStart: (d) => _seek(d.localPosition.dx),
       onHorizontalDragUpdate: (d) => _seek(d.localPosition.dx),
+      onSecondaryTapUp: (d) => _menu(context, d),
       child: ClipRect(
         child: CustomPaint(
           painter: _FxRulerPainter(

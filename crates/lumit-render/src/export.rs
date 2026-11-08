@@ -19,6 +19,10 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use uuid::Uuid;
 
+mod frame;
+#[cfg(target_arch = "wasm32")]
+pub mod web;
+
 pub enum ExportEvent {
     /// Which encoder the ladder settled on ("NVENC", "software x264", …),
     /// sent once the file is open.
@@ -2661,6 +2665,7 @@ pub fn start(
     let cancel = Arc::new(AtomicBool::new(false));
     let flag = cancel.clone();
     std::thread::spawn(move || {
+        crate::model::stop_reads_with(Arc::clone(&flag));
         let opened = AtomicBool::new(false);
         let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened);
         // No half files, but only a file this export began. One that failed
@@ -3201,57 +3206,16 @@ fn run(
     let overridden = apply_render_overrides(doc, &spec.render_options());
     let doc = overridden.as_ref().unwrap_or(doc);
     let comp = doc.comp(comp_id).ok_or("composition missing")?;
-    let fps = comp.frame_rate.fps().max(1.0);
-    let (first, end) = frame_span(comp, spec);
-    // The output rate. A rate other than the comp's resamples by nearest comp
-    // frame over the same wall-clock span, so a 60 fps comp exported at 30
-    // shows every other frame and lasts exactly as long.
-    let out_fps = spec.fps.unwrap_or(fps).clamp(1.0, 1000.0);
-    let span_seconds = (end - first) as f64 / fps;
-    let total = ((span_seconds * out_fps).round() as usize).max(1);
+    let span = frame::Span::of(comp, spec);
+    let (out_fps, total) = (span.out_fps, span.total);
     let _ = tx.send(ExportEvent::Progress { frame: 0, total });
 
-    // The comp's audio, mixed exactly as playback mixes it, then cut to the
-    // export range and padded so sound and picture end together.
     let rate = spec.audio_rate;
     let chans = usize::from(spec.audio_layout.channels());
-    // Sound only joins a container that can hold it: a folder of stills has
-    // nowhere to put it, and the dialogue says so rather than silently
-    // dropping it. An audio-only export is nothing *but* sound, so the
-    // include-audio tick has no say there.
-    let caps = spec.format.caps();
-    let wants_audio = caps.audio && (spec.include_audio || !caps.video);
-    // A silent comp exported as sound still writes silence of the right
-    // length — an empty .wav would look like a failure that wasn't one — but
-    // a video export of a silent comp carries no audio stream at all rather
-    // than a mute one.
-    let audio_mix: Option<Vec<f32>> = if wants_audio && (!audio_jobs.is_empty() || !caps.video) {
-        let full = mixdown_at(
-            audio_jobs,
-            rate,
-            comp.duration.0.to_f64(),
-            lumit_audio::mix::db_to_gain(comp.master_volume_db),
-        );
-        if cancel.load(Ordering::Relaxed) {
-            return Ok(());
-        }
-        // The cut starts where the range starts on the comp's own clock, and
-        // covers the output's duration — total frames at the *output* rate —
-        // so sound and picture end together whatever rate was chosen.
-        let start = audio_samples_through(first, fps, rate).min(full.len() / 2);
-        let expect = audio_samples_through(total, out_fps, rate);
-        let mut cut = full[start * 2..(start + expect).min(full.len() / 2) * 2].to_vec();
-        cut.resize(expect * 2, 0.0);
-        // The mix is stereo throughout — playback's own mix, so preview and
-        // export cannot disagree — and folds down once, at the very end,
-        // where nothing else reads it.
-        Some(match spec.audio_layout {
-            AudioLayout::Stereo => cut,
-            AudioLayout::Mono => lumit_audio::mix::downmix_to_mono(&cut),
-        })
-    } else {
-        None
-    };
+    let audio_mix = frame::sound(spec, comp, audio_jobs, &span);
+    if audio_mix.is_some() && cancel.load(Ordering::Relaxed) {
+        return Ok(());
+    }
 
     // Sound with no picture needs no compositor and no graphics card at all:
     // the mix is already made, and there is nothing to render.
@@ -3280,7 +3244,6 @@ fn run(
     // model's name. The pre-flight turns away everything the document alone can
     // show; this is the rest of it (docs/08 §3.1, docs/impl/addons.md §6.3).
     renderer.refuse_substitution();
-    renderer.keep_attachments();
     renderer.hand_over_prefetched();
     // The project's colour config, before anything is written: the refusal has
     // to happen with the config in hand, and it has to happen before a file
@@ -3297,17 +3260,8 @@ fn run(
     // One sink, two shapes: the mp4 muxer, or one image file per frame. The
     // loop below is shared — a second frame loop would be a second chance to
     // disagree about sampling, cancellation or progress.
-    // The crop happens in composition pixels, so the picture that
-    // leaves the compositor is cropped first and sized afterwards. When the
-    // delivery size *is* the comp's own — every Custom export — the cropped
-    // size becomes the file's size, which is what cropping is for; a preset
-    // that asked for a different frame letterboxes the cropped picture into
-    // it, exactly as an uncropped one does.
     let (crop_w, crop_h) = spec.crop.output_size(comp.width, comp.height);
-    let delivered = match spec.target {
-        Some(t) if t != (comp.width, comp.height) => t,
-        _ => (crop_w, crop_h),
-    };
+    let delivered = frame::delivered(spec, comp);
     let mut sink = match spec.format {
         ExportFormat::Video(codec) => {
             // Encoded frame dimensions must be even for 4:2:0 H.264/HEVC.
@@ -3386,17 +3340,7 @@ fn run(
         ExportFormat::Audio(_) => return Err("audio-only export took the picture path".into()),
     };
     let resize = sink.size() != (crop_w, crop_h);
-    // Worked out once: the primaries matrix and the destination curve are the
-    // same for every frame, and deriving them per pixel would be the same
-    // answer two million times over.
-    let colour = spec.colour_space.transform();
-    // A GIF pixel is either clear or solid, so the edge pixels it keeps are
-    // written at their own colour, not darkened by their coverage.
-    let alpha = if !spec.format.caps().alpha_mode {
-        AlphaMode::Straight
-    } else {
-        spec.alpha
-    };
+    let pack = frame::Pack::new(spec, comp, sink.size());
 
     let (tw, th) = sink.size();
     let audio_mix = audio_mix.as_deref();
@@ -3452,20 +3396,7 @@ fn run(
                 BitDepth::Sixteen => Rendered::Bytes({
                     let (px, _, _) =
                         renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
-                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
-                    let px = if resize {
-                        lumit_core::pixels::letterbox_resize(
-                            &px,
-                            crop_w,
-                            crop_h,
-                            tw,
-                            th,
-                            spec.resample,
-                        )
-                    } else {
-                        px
-                    };
-                    pack_frame(&px, spec.channels, alpha, colour.as_ref())
+                    pack.frame(px)
                 }),
                 // The float depths read the composite back as it stands: no
                 // display transform, no curve, no clamp (docs/06 §7.4a). The
@@ -3497,21 +3428,9 @@ fn run(
                 Rendered::Bytes(rgba) => return Ok(rgba),
                 Rendered::Coming(pending) => pending,
             };
-            let px = renderer.finish_preview(pending)?;
-            let px = spec.crop.apply(px, comp.width, comp.height, 4);
-            let px = if resize {
-                lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
-            } else {
-                px
-            };
-            Ok(pack_frame(&px, spec.channels, alpha, colour.as_ref()))
+            Ok(pack.frame(renderer.finish_preview(pending)?))
         };
-        // The comp frame under an output frame: exact when the rates match
-        // (the rounding is then of an integer), nearest otherwise.
-        let src_of = |n: usize| {
-            let src = first + ((n as f64) * fps / out_fps).round() as usize;
-            src.min(end.saturating_sub(1))
-        };
+        let src_of = |n: usize| span.source(n);
         // The footage is decoded a couple of frames ahead, on the threads
         // playback reads with, so one frame decodes while another renders.
         // Only while that is safe: a few files a frame, frames small enough
@@ -3565,7 +3484,7 @@ fn run(
                 Vec::new()
             };
             if let Some(prefetch) = ahead.as_ref() {
-                let since = std::time::Instant::now();
+                let since = web_time::Instant::now();
                 let mut bytes = 0usize;
                 let mut landed = prefetch.drain();
                 loop {
@@ -3952,6 +3871,7 @@ mod tests {
                 audio_streams: Default::default(),
                 adjustment: false,
                 pitch_follows_speed: false,
+                audio_routes: Default::default(),
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,

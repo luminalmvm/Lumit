@@ -421,6 +421,12 @@ class _InterpretBodyState extends State<_InterpretBody> {
                 key: const ValueKey('interpret-matte'),
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (details) => _pickMatte(details.globalPosition),
+                onSecondaryTapUp: (details) => showColourWellMenu(
+                  context,
+                  details.globalPosition,
+                  current: PickedColour.of(_matteColour),
+                  onPicked: _setMatte,
+                ),
                 child: Container(
                   width: 20,
                   height: 16,
@@ -464,12 +470,14 @@ class _InterpretBodyState extends State<_InterpretBody> {
       position: position,
       initial: PickedColour.of(_matteColour),
       presets: t.backgroundPresets,
-      onCommit: (picked) => _set(() => _matte = [
-            for (final v in [picked.r, picked.g, picked.b])
-              (v.clamp(0.0, 1.0) * 255).round(),
-          ]),
+      onCommit: _setMatte,
     );
   }
+
+  void _setMatte(PickedColour picked) => _set(() => _matte = [
+        for (final v in [picked.r, picked.g, picked.b])
+          (v.clamp(0.0, 1.0) * 255).round(),
+      ]);
 
   Widget _rateRow(LumitTheme t) {
     final own = formatRate(_file.fpsNum, _file.fpsDen);
@@ -753,7 +761,7 @@ class _InterpretBodyState extends State<_InterpretBody> {
   Widget _tick(LumitTheme t, String key, String label, bool value,
           ValueChanged<bool>? onChanged) =>
       Padding(
-        padding: const EdgeInsets.only(left: _labelColumn + 10),
+        padding: const EdgeInsetsDirectional.only(start: _labelColumn + 10),
         child: SizedBox(
           height: 26,
           child: GestureDetector(

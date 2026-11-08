@@ -6,7 +6,6 @@
 // probing media in a widget tree, exactly as timeline_rows_test.dart checks the
 // twirl's reach.
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/audio_timeline_clips_frb.dart';
 import 'package:lumit_flutter/panels/audio_timeline_rows_frb.dart';
@@ -18,6 +17,7 @@ import 'package:lumit_flutter/panels/volume_band_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
@@ -49,6 +49,7 @@ void main() {
       ),
       info: BridgeLayerInfo(
         pitchFollowsSpeed: false,
+        sends: const [],
         collapseForced: false,
         volumeDb: const BridgeScalar.static_(0),
         pan: const BridgeScalar.static_(0),
@@ -76,9 +77,10 @@ void main() {
         ),
         inFrame: 0,
         outFrame: 10,
-        clipFrames: Int64List(0),
+        clipFrames: const [],
         clips: const [],
         transform: BridgeTransform(
+          orient: BridgeOrient.off,
           anchorX: const BridgeScalar.static_(0),
           anchorY: const BridgeScalar.static_(0),
           positionX: const BridgeScalar.static_(0),
@@ -98,6 +100,7 @@ void main() {
         ),
         effects: const [],
         styles: const [],
+        drivers: const [],
         label: 0,
         masks: const [],
         paint: const [],
@@ -231,6 +234,7 @@ void main() {
         sourceIn: const BridgeRational(num: 0, den: 1),
         sourceOut: const BridgeRational(num: 1, den: 1),
         sourceIsComp: false,
+        sourceIsSolid: false,
         source: UuidValue.fromString(id),
         opacity: 1,
         takes: const [],
@@ -271,6 +275,7 @@ void main() {
       hiddenRows: const [],
       disabledRows: const [],
       rowOptions: const [],
+      rowLabels: const [],
     );
     final sound = BridgeClip(
       id: clipId,
@@ -294,6 +299,7 @@ void main() {
       sourceIn: const BridgeRational(num: 0, den: 1),
       sourceOut: const BridgeRational(num: 1, den: 1),
       sourceIsComp: false,
+      sourceIsSolid: false,
       source: clipId,
       opacity: 1,
       takes: const [],

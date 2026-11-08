@@ -64,6 +64,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
         audio_streams: Default::default(),
         adjustment: false,
         pitch_follows_speed: false,
+        audio_routes: Default::default(),
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -261,8 +262,10 @@ fn a_brush_box_in_a_node_graph_cuts_by_the_matte_filed_under_it() {
     };
     let mut graph = comp_of("Graph", Vec::new());
     graph.graph = Some(CompGraph {
+        widths: Vec::new(),
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes: vec![
             GraphNode::Read {
                 id: read,

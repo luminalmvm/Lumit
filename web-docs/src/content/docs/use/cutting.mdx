@@ -8,9 +8,9 @@ sidebar:
 import Shot from "../../../components/Shot.astro";
 import Clip from "../../../components/Clip.astro";
 
-The **Cut** workspace arranges Lumit for cutting footage: a **source view** beside the
-composition in the Viewer, and the **Cut timeline** across the bottom with the **Mixer** at
-its right.
+The **Cut** workspace arranges Lumit for cutting footage: the composition in the Viewer, with a
+**source view** beside it once footage is loaded, and the **Cut timeline** across the bottom
+with the **Mixer** at its right.
 
 <Shot file="cut-workspace.png" caption="The Cut workspace: the Project panel, the source view beside the composition, and the Cut timeline." eager/>
 
@@ -24,7 +24,7 @@ the same composition opens in the [Timeline](/panels/timeline/) and the Audio ti
 - A picture track is a [Sequence layer](/use/sequence-layers/). Picture tracks stand above
   the dividing line, and the top one wins the picture.
 - A sound track is an audio-only Sequence layer. Sound tracks stand below the line.
-- Any other layer draws as one plain bar on a track of its own.
+- Any other layer with a picture draws as one plain bar on a track of its own. A Camera, a Light and a Null have no track here, and stay in the Timeline.
 - A footage layer with sound also draws its sound on a track below the line. Both tracks are
   the same layer.
 
@@ -42,35 +42,52 @@ for finer steps. Double-click puts it back. On a keyed property the slider sets 
 playhead.
 
 A track wears its layer's label colour: its clips are tinted with it and their waveforms
-drawn in it. Right-click a track's header for **Volume envelope**, **Pan envelope**,
-**Minimise all tracks**, **New layer**, **Duplicate**, **Delete** and **Label colour**.
-**Minimise all tracks** again puts them back. **Clip colour** on a clip's menu
+drawn in it. Right-click a track's header, or a plain bar, for the layer's commands: **Rename**,
+its switches, **Reset level**, **Select layer**, **Move up**, **Move down**, **Minimise all
+tracks**, **Duplicate**, **Label colour** and **Delete**. A sound track has the menu a track
+head has in the [Audio timeline](/panels/audio/), less **Lane ▸**. Right-click a slider for
+the Mixer's own rows: **Reset volume**, **Set level…**, **Add keyframe** and so on.
+
+A title, a solid, an adjustment layer or a composition opens at the least height, and so does
+every picture track in a short panel, so the sound tracks stay in sight. **Minimise all
+tracks** puts every track at the least height, and again puts them back. **Clip colour** on a clip's menu
 gives the picked clips a colour of their own, and **Track colour** hands it back.
 
 A picture clip shows a strip of its frames. A retimed clip's frames follow its speed.
 
-Right-click the empty ground under the tracks for **Insert audio layer**, **Insert video
-layer** and **Insert adjustment layer**. Each adds an empty track above the selected one, or
-at the top. With nothing selected an audio layer goes to the bottom.
+Right-click the empty ground under the tracks for **Insert title** (`Ctrl`+`T`), **Insert
+solid**, **Insert audio layer**, **Insert video layer** and **Insert adjustment layer**. Each
+adds a track above the selected one, or at the top. The first two are also under
+**Layer ▸ New**. With nothing selected an audio layer goes
+to the bottom. A title or a solid is five seconds long from the playhead, and a title opens
+for typing with the composition's name in it. A gap on a track has the title and the solid
+too, at the frame under the pointer.
 
 Double-clicking the bar of a Precomp layer opens its composition.
 
 ## The source view
 
 Double-click footage in the [Project panel](/panels/project/) to load it into the source
-view. Drag along the strip under the picture to move through it.
+view, which opens beside the composition. Its close button lets the footage go, and the
+composition has the Viewer back. Drag along the strip under the picture to move through it.
 
 | Control | What it does |
 | --- | --- |
 | **Play** | Plays the footage from the frame shown, with its sound. |
+| **Previous frame**, **Next frame** | Step the footage a frame. |
+| **Go to In**, **Go to Out** | Stand the source on its marks. |
 | **In**, `I` | Marks the frame shown as the start of the stretch to place. |
 | **Out**, `O` | Marks the frame shown as its end. |
 | **Insert**, `,` | Places the marked stretch at the playhead and moves everything after it later. |
 | **Overwrite**, `.` | Places the marked stretch at the playhead, over what is there. |
+| **Replace**, `Shift+R` | Places the footage from its In over the clip picked in the Cut timeline, which keeps its place and length. |
+| **Fit to fill**, `Shift+F` | Places the marked stretch over the work area, at whatever speed fills it. |
 
 With no marks set, the whole item is placed. The clip lands on the selected picture track,
 or the lowest one, or a new track when the composition has none. The playhead moves to the
-end of the placed clip.
+end of the placed clip. Replace lands on the picked clip's own track, and is **refused**
+where the footage ends before the clip does. Each is one undo step. In a narrow source view
+**Replace** and **Fit to fill** are on its menu only, and narrower still the steps go.
 
 In and Out are kept on the footage item and saved with the project. Setting them is one
 undo step, **Mark In and Out**. An Out that is not after the In is **refused**.
@@ -80,7 +97,8 @@ Timeline, its In lands on the composition's start. Dropped on a track, the clip 
 marked stretch, and several files dropped together are spaced by their marked lengths.
 
 `I` and `O` mark the source while the source view has the keyboard. With the Cut timeline
-active they set the start and end of the work area at the playhead.
+active they set the start and end of the work area at the playhead. `Shift+I` and `Shift+O`,
+**Go to In** and **Go to Out** on the source view's menu, stand the source on its marks.
 
 With the source view in front and the Viewer active, the transport keys play and step the
 clip instead of the composition: `Space` plays it, `Page Up` and `Page Down` or `Ctrl+←`
@@ -91,9 +109,12 @@ Choosing any workspace other than Cut takes the source view away. **One view** i
 keeps the composition.
 
 Footage dragged from the Project panel onto a track makes a clip where it is dropped.
-Dropped on empty ground it makes a new track. Several files dropped together land one after
+Dropped on empty ground it makes a new track, named for its kind: **Picture 1**, **Sound 1**
+and so on. Several files dropped together land one after
 another on one track, in the Project panel's order. Hold `Shift` to give each a track of its
-own, all at the drop point. A still takes five seconds.
+own, all at the drop point. A still takes five seconds, and so does a solid. Files dragged
+in from outside Lumit are imported and land the same way. While dragging, the clip-to-be
+shows where it will land, and its start or end snaps as a moved clip does.
 
 A clip placed past the end of the composition lengthens the composition to fit.
 
@@ -111,6 +132,11 @@ The picture clip is silent, and its sound is heard from the linked clip. With **
 Timeline ▸ Video sound in Cut** set to **With the picture**, the sound stays on the picture
 clip and is drawn along its foot. A picture track whose audible switch is off keeps its sound
 on linked clips either way.
+
+Right-click a sound clip for **Normalise**, which sets the gain of every picked clip so its
+loudest sample lands at **Normalise to** in [Settings](/use/settings/#audio), as one undo step,
+**Normalise loudness ▸**, which does the same for a measured loudness of −14, −16 or −23 LUFS,
+and **Reset gain**, which puts it back at 0 dB.
 
 Right-click a picture clip for **Detach audio**, which puts its sound on a sound track as a
 linked clip, and **Attach audio**, which puts it back. **Attach audio** needs the sound clip
@@ -213,9 +239,13 @@ the Audio timeline and Audio layers in the Timeline follow it.
   leaves a gap, and **Ripple delete**, which closes it. **Split** cuts at the playhead and
   is there while the playhead is over the clip. **Select to end** selects the clip and
   every clip after it.
-- Right-click a gap for **Paste**, **Select all** and **Close gap**.
+- Right-click a gap for **Paste**, **Close gap**, **Insert title**, **Insert solid**,
+  **Select all**, **Add marker here** and the work area's ends.
+- Right-click the ground under the last track for **Paste**, the insert rows, **Select all**,
+  **Add marker here** and the work area's ends.
 - `;` lifts the work area: everything inside it is removed and the gap is left. `'` extracts
-  it: the gap is closed.
+  it: the gap is closed. **Lift work area** and **Extract work area** on the ruler's menu do
+  the same, and **Split all tracks**, `Ctrl`+`Shift`+`K`, cuts every track at the playhead.
 - `Ctrl`+`C` copies the selected clips, `Ctrl`+`X` cuts them, and `Ctrl`+`V` pastes at the
   playhead, onto the selected track when there is one. The playhead moves to the end of what
   was pasted.
@@ -228,10 +258,21 @@ that overlap crossfade.
 - `Ctrl`+`D` puts a one-second dissolve on the edit point nearest the playhead. Each clip is
   extended into its own source to make the overlap, as far as its media allows.
 - Drag either edge of a dissolve to lengthen or shorten it.
+- With **Linked** on, the sound linked to either clip crossfades at the same edit point, or
+  fades where nothing meets it.
 - A clip's menu offers **Fade in** and **Fade out**, which bring a picture clip up from or
   down to transparent, and a sound clip from or to silence.
 - With **Select**, drag the handle at a clip's top corner to set the length of its fade.
   Dragged back to the corner, the fade is removed.
+- An edit point on a picture track can be a wipe rather than a dissolve. **Transition ▸** on a
+  clip's menu lists **Dissolve**, **Linear wipe**, **Radial wipe**, **Iris wipe**, **Card wipe**,
+  **Venetian blinds** and **Luma fade**. The effect runs over the outgoing clip with the incoming
+  clip beneath it, from nothing to everything across the overlap.
+- Right-click an overlap on a picture track to change what it is. Its rows open in
+  [Effect controls](/panels/effect-controls/), marked **Transition**, less the ones the overlap
+  decides. Bypassed there, it is a dissolve again.
+- **Settings ▸ Timeline ▸ Default transition** picks what `Ctrl`+`D` adds, and what a clip dragged
+  across another under **Auto crossfade** takes.
 - Right-click a fade, a dissolve or a crossfade for its curve: **Linear**, **Fast**,
   **Slow**, **Smooth** or **Sharp**.
 - A dissolve between two clips with no spare media at the cut is **refused**.
@@ -327,9 +368,12 @@ whose volume or pan has keys shows its envelope to begin with.
 - Double-click a key to put it back at 0 dB or centre.
 - The value shows beside the pointer while dragging.
 
-Right-click a key for **Reset** and **Delete**. Right-click the line for **Add point**, the
-curve of the stretch under the pointer (**Linear**, **Fast**, **Slow**, **Smooth**,
-**Sharp** or **Hold**), **Flip all points** and **Reset all**.
+Right-click a key for **Set value…**, **Reset** and **Delete**. **Set value…** opens a field
+at the key, `Enter` keeps what is typed. Right-click the line for **Add point**, the curve of
+the stretch under the pointer (**Linear**, **Fast**, **Slow**, **Smooth**, **Sharp** or
+**Hold**), **Remove unneeded points**, **Flip all points** on pan, **Copy volume** and **Paste
+volume** (or pan), **Reset volume** or **Reset pan**, and the envelope's own switch, which
+hides it. **Remove unneeded points** takes away the keys the line does not need.
 
 An envelope shows on a track tall enough to take it, under the fade handles. A locked
 track's envelope cannot be dragged, and a property driven by an expression has none.
@@ -343,9 +387,22 @@ group. A copy of a clip is outside the original's group.
 
 ## Clips as compositions
 
-**Open as composition** on a clip's menu turns the clip's footage into a composition and
+**New composition from clip** on a clip's menu turns the clip's footage into a composition and
 opens it. The clip plays that composition from then on, showing what it showed. Its linked
 sound clip is left as it was.
+
+With more than one clip picked, the row reads **New composition from selection**. The clips
+move into a new composition as long as their span, on the same tracks with their effects, fades
+and speed, and their linked sound comes too. One clip playing it takes their place. It goes on
+the first of their tracks if nothing there would act on it twice, and on a new track otherwise.
+
+## Freezing a frame
+
+**Freeze frame…** on a clip's menu asks how long and holds the frame at the playhead, two
+seconds until it is changed. The clip is cut there, a clip of the same source goes between the
+halves with its speed line flat at 0, and everything after it moves later. Linked sound is cut
+too, with silence under the hold, unless **Settings ▸ Timeline ▸ Sound plays on through a
+freeze** is on. In the Audio timeline the same row holds a sound clip.
 
 Double-clicking a clip that already plays a composition opens the composition.
 

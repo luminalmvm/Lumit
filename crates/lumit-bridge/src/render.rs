@@ -165,16 +165,67 @@ pub(crate) fn thumbnail(
     frame: u64,
     scale: f32,
 ) -> Option<(Vec<u8>, u32, u32)> {
+    // A picture read back off the graphics card is waited for, and the page
+    // can't wait. The browser build goes without thumbnails for now.
+    if cfg!(target_arch = "wasm32") {
+        return None;
+    }
     with_ready(|renderer| {
         // The colour choice decides the display transform the picture is read
         // back through, so a thumbnail taken without it would be a different
         // picture from the one the Viewer shows of the same frame.
         renderer.sync_colour(doc);
-        renderer
-            .render_preview(doc, comp, frame, quality_for(scale), scale)
-            .ok()
+        still(renderer, doc, comp, frame, scale)
     })
     .flatten()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn still(
+    renderer: &mut lumit_render::headless::HeadlessRenderer,
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    frame: u64,
+    scale: f32,
+) -> Option<(Vec<u8>, u32, u32)> {
+    renderer
+        .render_preview(doc, comp, frame, quality_for(scale), scale)
+        .ok()
+}
+
+/// The browser build can't wait for a still to come off the card. The first
+/// ask starts it and answers nothing, and an ask after it has landed takes it.
+#[cfg(target_arch = "wasm32")]
+fn still(
+    renderer: &mut lumit_render::headless::HeadlessRenderer,
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    frame: u64,
+    scale: f32,
+) -> Option<(Vec<u8>, u32, u32)> {
+    type Asked = ((Uuid, u64, u32), lumit_gpu::PendingReadback);
+    thread_local! {
+        static STILLS: std::cell::RefCell<Vec<Asked>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let key = (comp, frame, scale.to_bits());
+    STILLS.with(|stills| {
+        let mut stills = stills.borrow_mut();
+        if let Some(at) = stills.iter().position(|(asked, _)| *asked == key) {
+            let (width, height) = stills[at].1.size();
+            let landed = renderer.poll_read(&mut stills[at].1)?;
+            stills.remove(at);
+            return landed.ok().map(|rgba| (rgba, width, height));
+        }
+        // A handful asked and never collected is as many as are kept.
+        if stills.len() >= 16 {
+            stills.remove(0);
+        }
+        let read = renderer
+            .start_preview_scaled(doc, comp, frame, quality_for(scale), scale)
+            .ok()?;
+        stills.push((key, read));
+        None
+    })
 }
 
 /// Frame `frame` of `comp` at `scale`, written to a new PNG at `out`, never

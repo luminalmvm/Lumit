@@ -19,7 +19,7 @@
 //   bridge-call budget test is the gate; these tests keep the wiring that makes
 //   it possible honest.
 
-import 'dart:io';
+import 'dart:io' hide Platform;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +31,8 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
+import 'package:lumit_flutter/state/platform.dart'
+    if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
 
 /// A small, complete config: four spaces, one display with one view, and the
 /// roles the resolution walk reads. The same fixture `colour_seam_frb_test`
@@ -58,6 +60,8 @@ colorspaces:
 
 void main() {
   setUpAll(initEngineForTests);
+  // The rows these tests reach live inside the Export window's folds.
+  setUp(() => exportOpenSections.addAll(ExportSection.values));
 
   late Directory dir;
   setUp(() => dir = Directory.systemTemp.createTempSync('lumit-ocio-ui'));

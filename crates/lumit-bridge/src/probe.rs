@@ -176,15 +176,21 @@ fn run(rx: &Receiver<Job>) {
 /// we can read at all — which is the same answer a probe of it would give.
 #[cfg(feature = "media")]
 fn stamp(src: &MediaSource) -> Option<Stamp> {
-    let meta = std::fs::metadata(src.on_disk()).ok()?;
-    if !meta.is_file() {
+    let path = src.on_disk();
+    // A file the browser build's page holds never changes under its path.
+    #[cfg(target_arch = "wasm32")]
+    if lumit_media::is_file(path) && lumit_ingress::files::len(path).is_err() {
+        return Some((0, None));
+    }
+    if !lumit_ingress::files::is_file(path) {
         return None;
     }
     // A run still being exported is longer each time it is asked about.
     if src.sequence_fps.is_some() {
         return src.stamp_now().map(|(files, at)| (files, Some(at)));
     }
-    Some((meta.len(), meta.modified().ok()))
+    let len = lumit_ingress::files::len(path).ok()?;
+    Some((len, lumit_ingress::files::modified(path).ok()))
 }
 
 /// Open the container and read its statistics. The one place this crate calls
@@ -266,6 +272,10 @@ fn whole_file(mut src: MediaSource) -> MediaSource {
 #[cfg(feature = "media")]
 pub(crate) fn request(src: impl Into<MediaSource>) {
     let src = whole_file(src.into());
+    // A 3D model is read by its own reader, never by FFmpeg.
+    if lumit_scene::is_model(&src.path) {
+        return;
+    }
     let Some(stamp) = stamp(&src) else {
         return;
     };
@@ -340,6 +350,11 @@ pub(crate) fn ensure_probed(
 /// size. A picture with no size is one FFmpeg found but could not read.
 #[cfg(feature = "media")]
 pub(crate) fn reads(src: impl Into<MediaSource>) -> bool {
+    let src = src.into();
+    // A 3D model has its own reader, so FFmpeg's probe says nothing about it.
+    if lumit_scene::is_model(&src.path) {
+        return true;
+    }
     ensure_probed(src).is_some_and(|info| {
         info.video
             .as_ref()

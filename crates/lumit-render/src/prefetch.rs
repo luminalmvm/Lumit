@@ -145,6 +145,12 @@ impl Prefetcher {
             }
         }
         for (item, group) in groups {
+            // The browser build can't start a thread, so no stream starts
+            // below. The page decodes ahead instead.
+            #[cfg(target_arch = "wasm32")]
+            for want in &group {
+                lumit_media::web::frames::ahead(&want.source, want.frame, want.target_width);
+            }
             if !self.streams.contains_key(&item) {
                 self.make_room();
                 let Some(tx) = spawn(self.done_tx.clone()) else {

@@ -22,11 +22,11 @@ import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
-import '../shell/layer_settings_frb.dart' show newSolidFrb;
-import '../shell/light_settings_dialog.dart';
+import '../shell/menu_bar_frb.dart' show newLayerFrb, pasteSelectionFrb;
 import '../widgets/time_readout.dart';
 import 'graph_channels.dart';
 import 'graph_maths.dart';
+import 'layer_fold_frb.dart' show RevealFilter;
 import 'timeline_extras_frb.dart';
 import 'timeline_metrics_frb.dart';
 
@@ -107,6 +107,8 @@ class Toolbar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final (fpsNum, fpsDen) = model.fpsExact;
     final lastFrame = model.durationFrames - 1;
+    // The clock reads from the comp's Start timecode; the frame count does not.
+    final start = model.startFrame;
     return Container(
       key: const ValueKey('tl-toolbar'),
       height: t.density.timelineChromeRow + t.density.navigatorBand,
@@ -138,14 +140,18 @@ class Toolbar extends StatelessWidget {
                     TimeReadout(
                       key: const ValueKey('tl-timecode'),
                       frame: frame,
-                      format: (f) => timecodeOfRate(f, fpsNum, fpsDen),
+                      format: (f) => timecodeOfRate(f + start, fpsNum, fpsDen),
                       widthChars: timecodeChars(fpsNum, fpsDen),
                       // The clock is the row's first fact and reads at full
                       // strength; the frame count beside it is the same moment
                       // said again, so it stays muted (§12A.1).
                       style:
                           t.mono.copyWith(fontSize: 11, color: t.textPrimary),
-                      parse: (text) => framesOfTimecode(text, fpsNum, fpsDen),
+                      parse: (text) => switch (
+                          framesOfTimecode(text, fpsNum, fpsDen)) {
+                        final f? => f - start,
+                        null => null,
+                      },
                       onCommit: onSeek,
                       minFrame: 0,
                       maxFrame: lastFrame,
@@ -207,9 +213,23 @@ class Toolbar extends StatelessWidget {
           // tabs. The 8 is the rhythm the compose boxes keep from one another
           // in the rows below, so the panel breathes the same everywhere.
           const SizedBox(width: outlineGap),
+          // A search box, not a bar: it keeps to a field's width and leaves
+          // the rest of the row empty, so it reads as the box it is.
           Expanded(
-              child: timelineChromeControl(
-                  t, LayerSearchFrb(onChanged: onSearch, width: 1e9))),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                // A field shows its menu without claiming the press, so this
+                // claims it from the row's menu round it.
+                child: GestureDetector(
+                  onSecondaryTapUp: (_) {},
+                  child: timelineChromeControl(
+                      t, LayerSearchFrb(onChanged: onSearch, width: 1e9)),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(width: outlineGap),
           // The two modes, at the far right of the row (§12A.1).
           // Kicker segments rather than icons: "Layers" and "Graph" are the
@@ -356,6 +376,42 @@ Widget _compToggleButton(
 /// razor row stays on the button: the ground has no razor to hand over.
 /// The empty ground under the outline's rows opens it too, with no [frame],
 /// so "here" is the playhead.
+/// What Expand all and Collapse all run, null for a row with nothing to do,
+/// and the reveals the Animation menu has.
+typedef TimelineFoldRows = ({
+  VoidCallback? expand,
+  VoidCallback? collapse,
+  ValueChanged<RevealFilter>? reveal,
+  bool anyPicked,
+});
+
+/// The fold rows, on the ground's menu and the headings' alike.
+List<Widget> timelineFoldRows(TimelineFoldRows fold, VoidCallback close) {
+  Widget row(String id, String text, String? action, VoidCallback? run) =>
+      MenuRow(
+        key: ValueKey<String>('tl-$id'),
+        enabled: run != null,
+        onPressed: () {
+          close();
+          run?.call();
+        },
+        child: MenuLabel(text, action: action, enabled: run != null),
+      );
+  return [
+    row('expand-all', l10n.expandAll, 'timeline.expand.all', fold.expand),
+    row('collapse-all', l10n.collapseAll, 'timeline.collapse.all',
+        fold.collapse),
+    if (fold.reveal case final reveal?) ...[
+      row('reveal-animated', l10n.menuRevealPropertiesWithKeyframes,
+          'reveal.animated', () => reveal(RevealFilter.keyframed)),
+      row('reveal-changed', l10n.menuRevealAllModifiedProperties,
+          'reveal.changed', () => reveal(RevealFilter.modified)),
+      row('reveal-picked', l10n.menuRevealSelectedProperties, null,
+          fold.anyPicked ? () => reveal(RevealFilter.picked) : null),
+    ],
+  ];
+}
+
 Future<void> showTimelineMoreMenu(
   BuildContext context, {
   required CompositionReference comp,
@@ -365,29 +421,65 @@ Future<void> showTimelineMoreMenu(
   bool razor = false,
   VoidCallback? onToggleRazor,
   required VoidCallback onChanged,
+  TimelineFoldRows? fold,
 }) async {
-  final t = ThemeScope.of(context).theme;
   final box = context.findRenderObject();
   if (box is! RenderBox) return;
   final playheadNow = playhead.value;
+  final app = context.read<LumitState>();
+  final ui = context.read<LumitUiState>();
   final picked = await showMenuAt<String>(
     context: context,
     // Anchored on the button. Opening from a *bottom* bar, the popup's own
     // layout pulls it back up on screen rather than running off below —
     // which is why the anchor no longer guesses at an offset.
     position: position ?? box.localToGlobal(Offset.zero),
-    width: 190,
+    width: 240,
     rows: (close) => [
+      SubmenuRow(
+        key: const ValueKey('tl-add-layer'),
+        closeParent: () => close(null),
+        submenu: (dismiss) => FloatSurface(
+          // Room for the longest chord beside the longest word.
+          width: 240,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (action, label) in _newLayerKinds())
+                MenuRow(
+                  key: ValueKey<String>('tl-new-$action'),
+                  onPressed: () {
+                    dismiss();
+                    newLayerFrb(context, ui, comp, action);
+                  },
+                  child: MenuLabel(label, action: action),
+                ),
+            ],
+          ),
+        ),
+        child: Text(l10n.newLayer),
+      ),
       MenuRow(
-          key: const ValueKey('tl-add-layer'),
-          onPressed: () => close('new-layer'),
-          child: Text(l10n.newLayer)),
-      if (onToggleRazor != null)
-        MenuRow(
-            key: const ValueKey('tl-razor'),
-            onPressed: () => close('razor'),
-            child: Text(razor ? l10n.disarmRazor : l10n.armRazor,
-                style: razor ? t.body.copyWith(color: t.accent) : null)),
+          key: const ValueKey('tl-paste'),
+          onPressed: () => close('paste'),
+          child: MenuLabel(l10n.menuPaste, action: 'edit.paste')),
+      MenuRow(
+          key: const ValueKey('tl-select-all'),
+          onPressed: () => close('select-all'),
+          child: MenuLabel(l10n.menuSelectAll, action: 'edit.select.all')),
+      MenuRow(
+          key: const ValueKey('tl-deselect-all'),
+          enabled: ui.selectedLayerIds.isNotEmpty,
+          onPressed: () => close('deselect-all'),
+          child: MenuLabel(l10n.menuDeselectAll,
+              action: 'edit.deselect.all',
+              enabled: ui.selectedLayerIds.isNotEmpty)),
+      const MenuDivider(),
+      if (fold != null) ...[
+        ...timelineFoldRows(fold, () => close(null)),
+        const MenuDivider(),
+      ],
       MenuRow(
           key: const ValueKey('tl-work-in'),
           onPressed: () => close('work-in'),
@@ -398,22 +490,37 @@ Future<void> showTimelineMoreMenu(
           child: Text(l10n.workAreaEnd)),
       MenuRow(
           key: const ValueKey('tl-clear-work-area'),
+          enabled: comp.getWorkArea() != null,
           onPressed: () => close('work-clear'),
           child: Text(l10n.workAreaClear)),
+      const MenuDivider(),
       MenuRow(
           key: const ValueKey('tl-markers'),
           onPressed: () => close('markers'),
-          child: Text(l10n.menuMarkers)),
+          child: Text(l10n.menuCompMarkers)),
       MenuRow(
           key: const ValueKey('tl-detect-beats'),
           onPressed: () => close('beats'),
           child: Text(l10n.menuDetectBeats)),
+      if (onToggleRazor != null) ...[
+        const MenuDivider(),
+        MenuRow(
+            key: const ValueKey('tl-razor'),
+            onPressed: () => close('razor'),
+            child: MenuLabel(razor ? l10n.disarmRazor : l10n.armRazor,
+                action: 'tool.razor')),
+      ],
     ],
   );
   if (!context.mounted) return;
   switch (picked) {
-    case 'new-layer':
-      await _showLayerMenu(context, comp, onChanged, position);
+    case 'paste':
+      pasteSelectionFrb(app, ui, comp, ui.selectedLayer.value);
+    // What the Edit menu's two rows run.
+    case 'select-all':
+      ui.setSelection(comp.getLayers());
+    case 'deselect-all':
+      ui.clearSelection();
     case 'razor':
       onToggleRazor?.call();
     case 'work-in' || 'work-out':
@@ -453,43 +560,16 @@ Future<void> showTimelineMoreMenu(
   }
 }
 
-Future<void> _showLayerMenu(
-  BuildContext context,
-  CompositionReference comp,
-  VoidCallback onChanged, [
-  Offset? position,
-]) async {
-  final box = context.findRenderObject();
-  if (box is! RenderBox) return;
-  final picked = await showMenuAt<VoidCallback>(
-    context: context,
-    position: position ?? box.localToGlobal(Offset(0, box.size.height + 2)),
-    width: 190,
-    rows: (close) => [
-      // The row carries what it does, not a word to switch on: the label is
-      // translated and would no longer match an English case.
-      for (final (label, add) in <(String, VoidCallback)>[
-        (
-          l10n.menuSolid,
-          () => newSolidFrb(context: context, comp: comp, onDone: onChanged)
-        ),
-        (l10n.menuText, comp.addTextLayer),
-        (l10n.menuCamera, comp.addCameraLayer),
-        (
-          l10n.menuLight,
-          () => newLightFrb(context: context, comp: comp, onDone: onChanged)
-        ),
-        (l10n.menuAdjustment, comp.addAdjustmentLayer),
-        (l10n.menuNull, comp.addNullLayer),
-        (l10n.menuSequence, comp.addSequenceLayer),
-      ])
-        MenuRow(onPressed: () => close(add), child: Text(label)),
-    ],
-  );
-  if (picked == null) return;
-  picked();
-  onChanged();
-}
+/// The kinds a new layer can be, each with its keymap action.
+List<(String, String)> _newLayerKinds() => [
+      ('layer.new.solid', l10n.menuSolidEllipsis),
+      ('layer.new.text', l10n.menuText),
+      ('layer.new.camera', l10n.menuCamera),
+      ('layer.new.light.point', l10n.menuLight),
+      ('layer.new.adjustment', l10n.menuAdjustment),
+      ('layer.new.null', l10n.menuNull),
+      ('layer.new.sequence', l10n.menuSequence),
+    ];
 
 /// **The key commands, at the outline's foot** — the interpolation words and
 /// what goes with them, standing under the list they act on.
@@ -509,16 +589,16 @@ Future<void> _showLayerMenu(
 /// the four interpolations — and nothing after them, since the owner removed
 /// Reverse, Copy and Paste at playhead from the bar (2026-08-31).
 /// In **graph view** it is the graph's own commands (docs/07 §5.3): the eases,
-/// the tangent modes, the value/speed lens and the auto-fit toggle. Every
-/// button keeps the face, the tooltip and the widget key it had on the lane
-/// bar — this is a move, not a redesign.
+/// the tangent modes and Break handles (the graph is chosen in its own
+/// corner, [GraphLensSwitch]). Both shapes draw glyphs named by their
+/// tooltips, so the two views share one face.
 class KeyCommandStrip extends StatelessWidget {
   /// Set in **Layers mode**: the keyframe strip.
   final bool strip;
 
-  /// Set in graph view; null leaves the graph's own commands out.
+  /// The graph drawn, set in graph view; null leaves the graph's own commands
+  /// out. Which one is chosen in the graph's corner ([GraphLensSwitch]).
   final GraphLens? lens;
-  final ValueChanged<GraphLens>? onLens;
 
   /// Break handles: on, a handle drag in the graph moves one side only.
   final bool breakHandles;
@@ -541,7 +621,6 @@ class KeyCommandStrip extends StatelessWidget {
     super.key,
     this.strip = false,
     this.lens,
-    this.onLens,
     this.breakHandles = false,
     this.onToggleBreakHandles,
     this.onInterp,
@@ -549,34 +628,6 @@ class KeyCommandStrip extends StatelessWidget {
     this.onOpenEasing,
     this.onEaseBlock,
   });
-
-  Widget _button(
-    LumitTheme t, {
-    required String keyName,
-    required String label,
-    required String tip,
-    required bool on,
-    required VoidCallback onPressed,
-    String? action,
-  }) =>
-      LumitTooltip(
-        message: tip,
-        action: action,
-        child: HouseButton(
-          key: ValueKey<String>(keyName),
-          small: true,
-          // The one in force wears the button's own `hairline_strong` idle
-          // edge; the rest are frameless. **No accent** — §3.1's accent list
-          // is closed and a lens or an ease is not on it, so which is in force
-          // reads from the frame and the brighter label, as the mode tabs do.
-          frameless: !on,
-          // 18px bottom bar: one pixel of the button's own edge is
-          // all the room a 9px kicker leaves above and below it.
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          onPressed: onPressed,
-          child: Text(t.kickerCase(label), style: on ? t.kickerOn : t.kicker),
-        ),
-      );
 
   /// A strip command drawn as a glyph of the set: the interpolation
   /// entries, whose shapes — a line, an eased curve, a step, a curve that
@@ -589,10 +640,12 @@ class KeyCommandStrip extends StatelessWidget {
     required String mark,
     required String word,
     required VoidCallback onPressed,
+    String? tip,
     String? action,
+    bool on = false,
   }) =>
       LumitTooltip(
-        message: word,
+        message: tip ?? word,
         action: action,
         child: HouseButton(
           key: ValueKey<String>(keyName),
@@ -602,10 +655,13 @@ class KeyCommandStrip extends StatelessWidget {
           // button's 1px edge is the whole of an 18px bottom bar.
           padding: const EdgeInsets.symmetric(horizontal: 4),
           onPressed: onPressed,
-          // A command, not a toggle: it rests at the column's muted strength,
-          // the way the magnet and the shy filter rest when off.
+          // A command rests at the column's muted strength, the way the
+          // magnet and the shy filter rest when off; a toggle that is on
+          // takes the foreground, as the column toggles beside it do.
           child: glyph.LumitIcon(mark,
-              size: iconSize, colour: t.textMuted, semanticLabel: word),
+              size: iconSize,
+              colour: on ? t.textPrimary : t.textMuted,
+              semanticLabel: word),
         ),
       );
 
@@ -634,38 +690,24 @@ class KeyCommandStrip extends StatelessWidget {
           child: Padding(padding: EdgeInsets.only(left: gap), child: button),
         );
     FoldItem glyphItem(String keyName, String mark, String word,
-        {required VoidCallback onPressed, String? action, double gap = 2}) {
+        {required VoidCallback onPressed,
+        String? tip,
+        String? action,
+        bool on = false,
+        double gap = 2}) {
       return item(
           _glyphButton(t,
               keyName: keyName,
               mark: mark,
               word: word,
-              action: action,
-              onPressed: onPressed),
-          label: word,
-          mark: mark,
-          gap: gap,
-          onPressed: onPressed);
-    }
-
-    FoldItem wordItem(String keyName, String label, String tip,
-        {required VoidCallback onPressed,
-        String? action,
-        bool on = false,
-        double gap = 2,
-        bool keep = false}) {
-      return item(
-          _button(t,
-              keyName: keyName,
-              label: label,
               tip: tip,
               action: action,
               on: on,
               onPressed: onPressed),
-          label: label,
+          label: word,
+          mark: mark,
           on: on,
           gap: gap,
-          keep: keep,
           onPressed: onPressed);
     }
 
@@ -728,35 +770,24 @@ class KeyCommandStrip extends StatelessWidget {
               // interpolations are the whole of the bar.
             ],
             if (lens != null) ...[
-              // Which graph is drawn comes first and never folds, so it is in
-              // reach however narrow the outline is.
-              wordItem('graph-lens-value', l10n.clipboardValueColumn,
-                  l10n.tipValueGraph,
-                  gap: 0,
-                  keep: true,
-                  on: lens == GraphLens.value,
-                  onPressed: () => onLens?.call(GraphLens.value)),
-              wordItem('graph-lens-speed', l10n.graphSpeed, l10n.tipSpeedGraph,
-                  keep: true,
-                  on: lens == GraphLens.speed,
-                  onPressed: () => onLens?.call(GraphLens.speed)),
-              wordItem('graph-lens-acceleration', l10n.graphAcceleration,
-                  l10n.tipAccelerationGraph,
-                  keep: true,
-                  on: lens == GraphLens.acceleration,
-                  onPressed: () => onLens?.call(GraphLens.acceleration)),
+              // Which graph is drawn is chosen in the graph's own corner, under
+              // the Layers / Graph switch ([GraphLensSwitch]).
+              //
               // The selected keys' easing, one click each — the F9 family's
-              // buttons (docs/07 §5.3).
-              wordItem('graph-interp-linear', l10n.easeLinear,
-                  l10n.tipLinearKeyframes,
-                  gap: 12,
+              // buttons (docs/07 §5.3), in the strip's own glyphs.
+              glyphItem('graph-interp-linear', LumitIcons.linear,
+                  l10n.easeLinear,
+                  tip: l10n.tipLinearKeyframes,
+                  gap: 0,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.linear())),
-              wordItem('graph-interp-bezier', l10n.easeEasy, l10n.tipEasyEase,
+              glyphItem('graph-interp-bezier', LumitIcons.easeInOut,
+                  l10n.easeEasy,
+                  tip: l10n.tipEasyEase,
                   action: 'graph.ease',
                   onPressed: () => onInterp?.call(easyEase)),
-              wordItem('graph-interp-hold', l10n.easeHold,
-                  l10n.tipHoldKeyframes,
+              glyphItem('graph-interp-hold', LumitIcons.hold, l10n.easeHold,
+                  tip: l10n.tipHoldKeyframes,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.hold())),
               // The shaped ease, one step along from the one-click three: same
@@ -774,15 +805,16 @@ class KeyCommandStrip extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(left: 2),
                       child: Builder(
-                        builder: (buttonContext) => _button(t,
+                        builder: (buttonContext) => _glyphButton(t,
                             keyName: 'graph-interp-easing',
-                            label: l10n.easeCustom,
+                            mark: LumitIcons.bezier,
+                            word: l10n.easeCustom,
                             tip: l10n.tipEasingEditor,
-                            on: false,
                             onPressed: () => onOpenEasing?.call(buttonContext)),
                       ),
                     ),
                     label: l10n.easeCustom,
+                    mark: LumitIcons.bezier,
                     onPressed: () => onOpenEasing?.call(context)),
               // Tangents — Auto / Clamp / Free (§6.3), after the ease
               // presets. A run of three like the eases
@@ -791,20 +823,22 @@ class KeyCommandStrip extends StatelessWidget {
               // has no one answer to light. Which mode a side is in is legible
               // where it matters — in the handle, which stops following its
               // neighbours the moment it is dragged.
-              wordItem('graph-tangent-auto', l10n.graphTangentAuto,
-                  l10n.tipTangentAuto,
+              glyphItem('graph-tangent-auto', LumitIcons.auto,
+                  l10n.graphTangentAuto,
+                  tip: l10n.tipTangentAuto,
                   gap: 12,
                   onPressed: () => onTangentMode?.call(TangentMode.auto)),
-              wordItem('graph-tangent-clamp', l10n.graphTangentClamp,
-                  l10n.tipTangentClamp,
+              glyphItem('graph-tangent-clamp', LumitIcons.clamp,
+                  l10n.graphTangentClamp,
+                  tip: l10n.tipTangentClamp,
                   onPressed: () => onTangentMode?.call(TangentMode.clamp)),
-              wordItem('graph-tangent-free', l10n.graphTangentFree,
-                  l10n.tipTangentFree,
+              glyphItem('graph-tangent-free', LumitIcons.free,
+                  l10n.graphTangentFree,
+                  tip: l10n.tipTangentFree,
                   onPressed: () => onTangentMode?.call(TangentMode.free)),
-              wordItem(
-                  'graph-break-handles',
+              glyphItem('graph-break-handles', LumitIcons.unlink,
                   l10n.graphBreakHandles,
-                  breakHandles
+                  tip: breakHandles
                       ? l10n.tipBreakHandlesOn
                       : l10n.tipBreakHandlesOff,
                   gap: 12,

@@ -78,7 +78,8 @@ pub fn blend_seam(
     if mode == 0 {
         return None;
     }
-    let mix = (p.float(super::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+    let mix = (p.float(super::schema::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0)
+        * p.float(super::schema::BLEND_FADE, 1.0);
     let entries = p
         .iter()
         .map(|(id, v)| {
@@ -344,6 +345,11 @@ pub fn glow_gaussian_plan(radius_px: f32, w: u32, h: u32) -> GlowGaussian {
 /// picture itself.
 pub fn glow_gaussian(seed: &[f32], w: u32, h: u32, g: &GlowGaussian) -> Vec<f32> {
     let (fw, fh) = (w as usize, h as usize);
+    // A grid as fine as the picture is the picture, as on the GPU.
+    if g.step <= 1.0 {
+        let lit = glow_gauss_pass(seed, fw, fh, g, false);
+        return glow_gauss_pass(&lit, fw, fh, g, true);
+    }
     let (cw, ch) = (glow_grid(w, g.step) as usize, glow_grid(h, g.step) as usize);
     let across = glow_tent(seed, (fw, fh), (cw, fh), g.step, true);
     let coarse = glow_tent(&across, (cw, fh), (cw, ch), g.step, false);
@@ -717,27 +723,35 @@ pub fn transform_matted(
 /// by `mix`. The accumulation order and the divide-by-count match the WGSL
 /// kernel op-for-op, so both paths agree within the cheap-class fp16 bound
 /// (§1.6). An empty `ops` is a defensive no-op (the caller never passes one).
+///
+/// Each op also names the channels it feeds (1 red, 2 green, 4 blue; alpha
+/// always), and a channel is the mean of the ops that feed it: that is how
+/// Shake's Channels shake the colours apart. `crop` is the part of the image
+/// the edge policy treats as the whole, `[x0, y0, x1, y1]` in pixels.
 pub fn transform_average(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    ops: &[([f32; 4], [f32; 2])],
+    ops: &[([f32; 4], [f32; 2], u32)],
     edge: u32,
+    crop: [u32; 4],
     mix: f32,
 ) {
-    transform_average_matted(rgba, w, h, ops, edge, mix, &[]);
+    transform_average_matted(rgba, w, h, ops, edge, crop, mix, &[]);
 }
 
 /// [`transform_average`] driven by a matte: every sub-frame
 /// tap's displacement is scaled toward none by the destination pixel's matte
 /// strength, exactly as [`transform_matted`] scales the single tap. An empty
 /// matte is the unmatted path to the byte.
+#[allow(clippy::too_many_arguments)]
 pub fn transform_average_matted(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    ops: &[([f32; 4], [f32; 2])],
+    ops: &[([f32; 4], [f32; 2], u32)],
     edge: u32,
+    crop: [u32; 4],
     mix: f32,
     matte: &[f32],
 ) {
@@ -745,7 +759,13 @@ pub fn transform_average_matted(
         return;
     }
     let original = rgba.to_vec();
-    let n = ops.len() as f32;
+    let feeds = |bits: u32| [bits & 1, bits >> 1 & 1, bits >> 2 & 1, 1].map(|b| b as f32);
+    let mut n = [0.0f32; 4];
+    for (_, _, bits) in ops {
+        for (n, f) in n.iter_mut().zip(feeds(*bits)) {
+            *n += f;
+        }
+    }
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
@@ -753,16 +773,17 @@ pub fn transform_average_matted(
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
             let mut acc = [0.0f32; 4];
-            for (m, o) in ops {
+            for (m, o, bits) in ops {
                 let qx = matte_toward(m[0] * px + m[1] * py + o[0], px, k);
                 let qy = matte_toward(m[2] * px + m[3] * py + o[1], py, k);
-                let s = bilinear_edge(&original, w, h, qx, qy, edge);
+                let s = bilinear_edge_in(&original, w, qx, qy, edge, crop);
+                let f = feeds(*bits);
                 for c in 0..4 {
-                    acc[c] += s[c];
+                    acc[c] += s[c] * f[c];
                 }
             }
             for c in 0..4 {
-                let v = acc[c] / n;
+                let v = acc[c] / n[c];
                 rgba[i + c] = original[i + c] * (1.0 - mix) + v * mix;
             }
         }
@@ -1624,19 +1645,20 @@ pub fn gamma_matted(rgba: &mut [f32], gamma: f32, mix: f32, matte: &[f32]) {
 
 /// Temperature (docs/08 §3.20): a warm/cool white-balance shift as a
 /// per-channel gain in scene-linear light — red by `gain_r`, blue by
-/// `gain_b`, green and alpha untouched. Like Exposure, a per-channel scalar
+/// `gain_b`, green and alpha untouched here (the tint rides on the green
+/// gain in [`temperature_matted`]). Like Exposure, a per-channel scalar
 /// scales premultiplied colour consistently (straight × gain, then × the
 /// unchanged alpha), so there is no unpremultiply round trip — unlike the
 /// affine Contrast/Saturation grades, whose − pivot offset breaks that
 /// commutation. The gains are computed host-side (in the resolve step) so
 /// the CPU reference and the WGSL kernel multiply by the identical numbers
-/// (§1.6). Gains `(1.0, 1.0)` (Temperature 0) short-circuit the whole
+/// (§1.6). Gains of 1.0 all round (Temperature 0) short-circuit the whole
 /// effect — the bit-exact neutral point (the WGSL twin matches); Mix 0 is
 /// likewise the identity. Purely continuous (a linear per-channel scale),
 /// so it is safe under the §1.6 fp16 ULP oracle; highlights are never
 /// clipped (§2.1).
 pub fn temperature(rgba: &mut [f32], gain_r: f32, gain_b: f32, mix: f32) {
-    temperature_matted(rgba, gain_r, gain_b, 0.0, mix, &[]);
+    temperature_matted(rgba, [gain_r, 1.0, gain_b], 0.0, 0.0, mix, &[]);
 }
 
 /// The two channel gains for a Temperature of `t` (the slider ÷ 100, clamped
@@ -1648,34 +1670,46 @@ pub fn temperature_gains(t: f32) -> (f32, f32) {
     ((1.0 + 0.75 * t).max(0.0), (1.0 - 0.75 * t).max(0.0))
 }
 
+/// The green gain for a Tint of `k` (the slider ÷ 100, clamped to ±2):
+/// `1 − 0.75·k` floored at 0, so positive goes magenta and negative green.
+#[must_use]
+pub fn tint_gain(k: f32) -> f32 {
+    (1.0 - 0.75 * k).max(0.0)
+}
+
 /// [`temperature`] driven by a matte (docs/08 §2.6): each pixel's
-/// matte strength `k` scales its **Temperature toward 0**, and the two gains
-/// are rebuilt from `t·k` ([`temperature_gains`]) — not lerped, because the
-/// blue gain floors at 0 past ±133 and a lerp of a floored gain is not the
-/// gain of a smaller temperature. `gain_r`/`gain_b` stay the host's and are
-/// what an unmatted pixel multiplies by; `t` is only read under a matte, which
-/// keeps the empty-matte path byte-identical.
+/// matte strength `k` scales its **Temperature and Tint toward 0**, and the
+/// three gains are rebuilt from `t·k` and `tint·k` ([`temperature_gains`],
+/// [`tint_gain`]), not lerped, because a gain floors at 0 past ±133 and a
+/// lerp of a floored gain is not the gain of a smaller temperature. `gains`
+/// are the host's (red, green, blue) and are what an unmatted pixel multiplies
+/// by; `t` and `tint` are only read under a matte, which keeps the empty-matte
+/// path byte-identical.
 pub fn temperature_matted(
     rgba: &mut [f32],
-    gain_r: f32,
-    gain_b: f32,
+    gains: [f32; 3],
     t: f32,
+    tint: f32,
     mix: f32,
     matte: &[f32],
 ) {
-    if gain_r == 1.0 && gain_b == 1.0 {
+    if gains == [1.0, 1.0, 1.0] {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
     let matted = !matte.is_empty();
     for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
-        let (gain_r, gain_b) = if matted {
-            temperature_gains(t * matte_strength(matte, i * 4))
+        let [gain_r, gain_g, gain_b] = if matted {
+            let k = matte_strength(matte, i * 4);
+            let (r, b) = temperature_gains(t * k);
+            [r, tint_gain(tint * k), b]
         } else {
-            (gain_r, gain_b)
+            gains
         };
         let sr = px[0] * gain_r;
+        let sg = px[1] * gain_g;
         let sb = px[2] * gain_b;
         px[0] = px[0] * (1.0 - mix) + sr * mix;
+        px[1] = px[1] * (1.0 - mix) + sg * mix;
         px[2] = px[2] * (1.0 - mix) + sb * mix;
     }
 }
@@ -2198,9 +2232,35 @@ pub struct GradientParams {
     /// alpha, and the alpha itself left alone — which is the whole difference
     /// between the two, and why there is one kernel rather than two.
     pub clip_to_alpha: bool,
+    /// How many of `mid` are in use, 0..=3: colours between `c0` and `c1`,
+    /// scene-linear rgb with the place along the ramp (0..1, ascending) in
+    /// the last lane.
+    pub mids: u32,
+    pub mid: [[f32; 4]; 3],
 }
 
-/// Gradient (docs/08 §3.35): a linear or radial two-colour ramp with optional
+/// The ramp's colour at `t` (0..1): `c0`, the colours in use from `mid`,
+/// then `c1`, each mixed with the next by how far between them `t` is.
+#[must_use]
+pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 3] {
+    let (mut at, mut from) = (0.0f32, p.c0);
+    for m in p.mid.iter().take(p.mids.min(3) as usize) {
+        let to = [m[0], m[1], m[2]];
+        if t <= m[3] {
+            let k = if m[3] > at {
+                (t - at) / (m[3] - at)
+            } else {
+                1.0
+            };
+            return std::array::from_fn(|c| from[c] + (to[c] - from[c]) * k);
+        }
+        (at, from) = (m[3], to);
+    }
+    let k = if at < 1.0 { (t - at) / (1.0 - at) } else { 1.0 };
+    std::array::from_fn(|c| from[c] + (p.c1[c] - from[c]) * k)
+}
+
+/// Gradient (docs/08 §3.35): a linear or radial ramp with optional
 /// scatter — a **generator**, so it replaces the frame edge to edge and writes
 /// opaque alpha. Interpolation is in the working space (scene-linear, §2.1), so
 /// the ramp is photometrically even and can drive another effect's matte. Mix 0
@@ -2224,8 +2284,9 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
             // "this ramp at this coverage", so the overlay works on
             // premultiplied values with no round trip, exactly as `fill` does.
             let cover = if p.clip_to_alpha { rgba[i + 3] } else { 1.0 };
+            let ramp = gradient_ramp(p, t);
             for c in 0..3 {
-                let g = (p.c0[c] + (p.c1[c] - p.c0[c]) * t) * cover;
+                let g = ramp[c] * cover;
                 rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + g * p.mix;
             }
             if !p.clip_to_alpha {
@@ -3569,6 +3630,9 @@ pub struct BezierWarpParams {
     pub steps: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Where the frame sits on the raster, `[x, y, width, height]`. A zero
+    /// width is the whole raster.
+    pub frame: [f32; 4],
 }
 
 /// The narrowest Jacobian determinant the patch inversion will divide by. Below
@@ -3660,14 +3724,18 @@ pub fn bezier_warp(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams) {
 /// empty matte is the unmatted path to the byte.
 pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams, matte: &[f32]) {
     let original = rgba.to_vec();
-    let (fw, fh) = (w as f32, h as f32);
+    let [ox, oy, fw, fh] = if p.frame[2] > 0.0 {
+        p.frame
+    } else {
+        [0.0, 0.0, w as f32, h as f32]
+    };
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
-            let mut u = px / fw;
-            let mut v = py / fh;
+            let mut u = (px - ox) / fw;
+            let mut v = (py - oy) / fh;
             for _ in 0..p.steps {
                 let (s, du, dv) = coons(&p.pts, u, v);
                 let fx = s[0] - px;
@@ -3689,8 +3757,8 @@ pub fn bezier_warp_matted(rgba: &mut [f32], w: u32, h: u32, p: &BezierWarpParams
             {
                 [0.0f32; 4]
             } else {
-                let mut sx = u * fw;
-                let mut sy = v * fh;
+                let mut sx = ox + u * fw;
+                let mut sy = oy + v * fh;
                 if (sx - px).abs() < BEZ_SNAP_PX && (sy - py).abs() < BEZ_SNAP_PX {
                     sx = px;
                     sy = py;
@@ -5913,7 +5981,7 @@ fn edge_y(edge: u32) -> u32 {
     }
 }
 
-fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
+pub fn edge_index(i: i64, len: i64, edge: u32) -> Option<i64> {
     if (0..len).contains(&i) {
         return Some(i);
     }
@@ -5950,16 +6018,24 @@ pub fn radial_blur_taps(amount_px: f32) -> i32 {
 /// keeping full weight, exactly like the gaussian's normalisation). An
 /// `edge` past 3 carries a separate policy for y in its upper bits (see
 /// [`edge_y`]).
-fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
+pub fn bilinear_edge(rgba: &[f32], w: u32, h: u32, sx: f32, sy: f32, edge: u32) -> [f32; 4] {
+    bilinear_edge_in(rgba, w, sx, sy, edge, [0, 0, w, h])
+}
+
+/// [`bilinear_edge`] with the edges at `crop`, `[x0, y0, x1, y1]` in pixels:
+/// what lies outside it is read as the policy reads outside the frame.
+fn bilinear_edge_in(rgba: &[f32], w: u32, sx: f32, sy: f32, edge: u32, crop: [u32; 4]) -> [f32; 4] {
     let fx = sx - 0.5;
     let fy = sy - 0.5;
     let x0 = fx.floor();
     let y0 = fy.floor();
     let tx = fx - x0;
     let ty = fy - y0;
-    let (wi, hi) = (w as i64, h as i64);
+    let wi = w as i64;
+    let [x0c, y0c, x1c, y1c] = crop.map(i64::from);
     let (ex, ey) = (edge & 3, edge_y(edge));
-    let at = |x: i64, y: i64| match (edge_index(x, wi, ex), edge_index(y, hi, ey)) {
+    let inside = |i: i64, lo: i64, hi: i64, e: u32| edge_index(i - lo, hi - lo, e).map(|i| i + lo);
+    let at = |x: i64, y: i64| match (inside(x, x0c, x1c, ex), inside(y, y0c, y1c, ey)) {
         (Some(x), Some(y)) => {
             let s = ((y * wi + x) * 4) as usize;
             [rgba[s], rgba[s + 1], rgba[s + 2], rgba[s + 3]]
@@ -8515,8 +8591,11 @@ pub fn texturize_matted(
 pub struct MoodLightingParams {
     /// The light field's shape (§3.37's core), seed included.
     pub field: FractalField,
-    /// `1 ÷ pool size`, in raster pixels.
-    pub inv_scale: f32,
+    /// `1 ÷ pool size` across and down, in raster pixels.
+    pub inv_scale: [f32; 2],
+    /// Raster pixels a side of the square the field is read once for; 1 reads
+    /// it at every pixel.
+    pub block: u32,
     /// The field's depth coordinate: Drift ÷ 360.
     pub z: f32,
     /// Intensity ÷ 100.
@@ -8562,6 +8641,10 @@ pub fn mood_lighting_matted(
     p: &MoodLightingParams,
     matte: &[f32],
 ) {
+    // Each pixel reads the field at the centre of its block. A block of one is
+    // the pixel's own centre.
+    let b = p.block.max(1);
+    let half = b as f32 * 0.5;
     for y in 0..h {
         for x in 0..w {
             let i = (y as usize * w as usize + x as usize) * 4;
@@ -8570,8 +8653,8 @@ pub fn mood_lighting_matted(
             let contrast = matte_toward(p.contrast, 1.0, k);
             let n = fractal(
                 &p.field,
-                (x as f32 + 0.5) * p.inv_scale,
-                (y as f32 + 0.5) * p.inv_scale,
+                ((x / b * b) as f32 + half) * p.inv_scale[0],
+                ((y / b * b) as f32 + half) * p.inv_scale[1],
                 p.z,
             );
             // The field, spread to fill 0..1: a Perlin sum rarely reaches its

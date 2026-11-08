@@ -225,6 +225,24 @@ lumit = "lightning"
 conversion = "lightning"
 
 [[effect]]
+ae = "VIDEOCOPILOT LightSaber"
+name = "Saber"
+lumit = "energy_line"
+conversion = "energy_line"
+
+[[effect]]
+ae = "ADBE AudSpect"
+name = "Audio Spectrum"
+lumit = "audio_spectrum"
+conversion = "audio_spectrum"
+
+[[effect]]
+ae = "ADBE AudWave"
+name = "Audio Waveform"
+lumit = "audio_spectrum"
+conversion = "audio_waveform"
+
+[[effect]]
 ae = "ADBE Grid"
 name = "Grid"
 lumit = "grid"
@@ -380,6 +398,13 @@ name = "Warp"
 lumit = "warp"
 conversion = "warp"
 
+[[effect]]
+ae = "VIDEOCOPILOT Twitch"
+name = "Twitch"
+lumit = "jolt"
+conversion = "twitch"
+pending_audit = true
+
 # --- Stylise ---------------------------------------------------------------
 
 [[effect]]
@@ -431,6 +456,12 @@ ae = "ADBE Linear Wipe"
 name = "Linear Wipe"
 lumit = "linear_wipe"
 conversion = "linear_wipe"
+
+[[effect]]
+ae = "ADBE Gradient Wipe"
+name = "Gradient Wipe"
+lumit = "luma_fade"
+conversion = "gradient_wipe"
 
 [[effect]]
 ae = "ADBE Radial Wipe"
@@ -493,6 +524,14 @@ lumit = "point_control"
 conversion = "point_control"
 pending_audit = true
 
+# --- Time ------------------------------------------------------------------
+
+[[effect]]
+ae = "ADBE Timewarp"
+name = "Timewarp"
+lumit = "timewarp"
+conversion = "timewarp"
+
 # --- Deliberate placeholders (docs/11 §5) ----------------------------------
 
 [[effect]]
@@ -500,10 +539,6 @@ ae = "VISINF Grain Removal"
 name = "Remove Grain"
 suggest = "removing grain is a programme of its own rather than an effect port"
 
-[[effect]]
-ae = "ADBE Timewarp"
-name = "Timewarp"
-suggest = "Retime with flow frame interpolation does the same job"
 
 # --- Third-party effects (docs/11 §5) --------------------------------------
 #
@@ -613,3 +648,31 @@ ae = "S_TimeWarpRGB"
 name = "S_TimeWarpRGB"
 ofx = ["com.genarts.sapphire.Time.S_TimeWarpRGB", "com.borisfx.sapphire.Time.S_TimeWarpRGB"]
 pending_audit = true
+
+# Film emulation. The match names were read off installed copies (2026-11-01).
+# Film takes the stock, the print, the halation and the grain in their place.
+
+[[effect]]
+ae = "Magic_Bullet_Suite_Magic_Bullet_Film"
+name = "Magic Bullet Film"
+suggest = "Film does the same job"
+ofx = ["com.redgiant.MBS_Film_OFX"]
+
+[[effect]]
+ae = "S_FilmEffect"
+name = "S_FilmEffect"
+suggest = "Film does the same job"
+ofx = [
+  "com.genarts.sapphire.Stylize.S_FilmEffect",
+  "com.borisfx.sapphire.Stylize.S_FilmEffect",
+]
+
+[[effect]]
+ae = "BCC3Film Process"
+name = "BCC Film Process"
+suggest = "Film does the same job"
+
+[[effect]]
+ae = "BCC_FILMSTOCKS"
+name = "BCC Film Stocks"
+suggest = "Film does the same job"

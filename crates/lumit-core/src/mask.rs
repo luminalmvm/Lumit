@@ -1585,7 +1585,7 @@ pub fn effect_path_at(
             _ => MaskPolyline::default(),
         };
     }
-    if !crate::fx::builtins::param_enabled(effect, param) {
+    if !crate::fx::enabled::param_enabled(effect, param) {
         return MaskPolyline::default();
     }
     let masks = layer.map_or(&[][..], |l| &l.masks);

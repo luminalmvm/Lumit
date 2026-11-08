@@ -12,10 +12,11 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 import 'roto.dart';
+import 'shader_fault.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `on_picture`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `driven_value`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `on_picture`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -284,7 +285,7 @@ Float64List sampleScalarRangeWithContext(
         required LayerReference layer,
         required BridgeRational start,
         required BridgeRational end,
-        required PlatformInt64 samples,
+        required int samples,
         BridgeExpressionRow? row}) =>
     BridgeLib.instance.api.crateApiEffectSampleScalarRangeWithContext(
         scalar: scalar,
@@ -438,6 +439,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// declaration to hold the stored rows against, none of them is unused.
   BridgeParamSync parameterSync();
 
+  /// The names of the presets this effect ships with, in menu order. Engine
+  /// labels, so the panel translates them. Empty for most effects.
+  List<String> presetNames();
+
   /// Stage the removal of an Expression box's last input and answer its
   /// name, so the caller can take its wire off in the same commit. `None`
   /// for a box with no inputs.
@@ -476,7 +481,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   void rotoAddPrompt(
       {required List<double> points,
       required List<int> labels,
-      required PlatformInt64 frame});
+      required int frame});
 
   /// Add one stroke to this Roto brush, on the **staged** copy.
   ///
@@ -498,7 +503,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
       {required List<double> points,
       required double radius,
       required BridgeRotoStrokeKind kind,
-      required PlatformInt64 frame});
+      required int frame});
 
   /// The frame the propagation runs outward from, or `None` on a brush
   /// nothing has been drawn or tapped on yet.
@@ -506,7 +511,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// The Viewer needs it to know whether the frame on screen is the one a tap
   /// may seed: a prompt is only ever read on the base frame, so a tap
   /// anywhere else is the ordinary dab of a stroke it has always been.
-  PlatformInt64? rotoBaseFrame();
+  int? rotoBaseFrame();
 
   /// Throw away every stroke and the base frame, on the staged copy — the
   /// panel's "start again". The cached mattes are not touched: they are keyed
@@ -532,7 +537,7 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// edit so one undo brings them back: the model is only ever asked about
   /// the base frame, and a tap stranded on the old one would keep renaming
   /// mattes without changing a picture (docs/impl/addons.md §6.2).
-  void rotoSetBaseFrame({PlatformInt64? frame});
+  void rotoSetBaseFrame({int? frame});
 
   /// Every stroke this instance holds, for the overlay to draw.
   ///
@@ -761,7 +766,7 @@ class BridgeColour {
 }
 
 /// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
-/// ([`lumit_core::fx::schema::ColourNameRole`]). A View row lists the views of the
+/// ([`lumit_core::fx::colour_name::ColourNameRole`]). A View row lists the views of the
 /// display its sibling `display` row names.
 enum BridgeColourNameRole {
   space,
@@ -925,6 +930,9 @@ class BridgeEffectInstanceInfo {
   /// draw in place of the schema's.
   final List<BridgeRowOptions> rowOptions;
 
+  /// The rows drawn under another name right now, with that name.
+  final List<BridgeRowLabel> rowLabels;
+
   /// The node graph this instance applies (docs/impl/node-graph-comp.md
   /// §4.4), and `None` for every other effect.
   ///
@@ -948,6 +956,7 @@ class BridgeEffectInstanceInfo {
     required this.hiddenRows,
     required this.disabledRows,
     required this.rowOptions,
+    required this.rowLabels,
     this.nodeGraphComp,
   });
 
@@ -966,6 +975,7 @@ class BridgeEffectInstanceInfo {
       hiddenRows.hashCode ^
       disabledRows.hashCode ^
       rowOptions.hashCode ^
+      rowLabels.hashCode ^
       nodeGraphComp.hashCode;
 
   @override
@@ -986,6 +996,7 @@ class BridgeEffectInstanceInfo {
           hiddenRows == other.hiddenRows &&
           disabledRows == other.disabledRows &&
           rowOptions == other.rowOptions &&
+          rowLabels == other.rowLabels &&
           nodeGraphComp == other.nodeGraphComp;
 }
 
@@ -1075,12 +1086,18 @@ sealed class BridgeEnabledCond with _$BridgeEnabledCond {
 
   /// Editable while the named number is a still nought.
   const factory BridgeEnabledCond.nought() = BridgeEnabledCond_Nought;
+
+  /// Editable while this other bool is on, or while the condition holds.
+  const factory BridgeEnabledCond.or(
+    String field0,
+    BridgeEnabledCond field1,
+  ) = BridgeEnabledCond_Or;
 }
 
 /// One greying rule: `param`'s row is editable only while `on` satisfies
 /// `cond`. The panel evaluates it against values it already holds, so ticking
 /// a switch greys its dependent row without a round trip;
-/// `lumit_core::fx::builtins::param_enabled` is the same rule in Rust and the authority
+/// `lumit_core::fx::enabled::param_enabled` is the same rule in Rust and the authority
 /// the tests pin.
 class BridgeEnabledWhen {
   final String param;
@@ -1350,11 +1367,11 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   /// scalar in the model — the kind only asks the row to step, display and
   /// commit whole numbers.
   const factory BridgeParamKind.int({
-    required PlatformInt64 default_,
-    required PlatformInt64 sliderMin,
-    required PlatformInt64 sliderMax,
-    PlatformInt64? hardMin,
-    PlatformInt64? hardMax,
+    required int default_,
+    required int sliderMin,
+    required int sliderMax,
+    int? hardMin,
+    int? hardMax,
   }) = BridgeParamKind_Int;
 
   /// Degrees, drawn as a dial beneath the number (docs/07 §6). The value
@@ -1611,14 +1628,19 @@ class BridgePresetInfo {
   /// top of the library.
   final String group;
 
+  /// Whether it carries transform keys or text animators as well as effects.
+  final bool keyed;
+
   const BridgePresetInfo({
     required this.name,
     required this.path,
     required this.group,
+    required this.keyed,
   });
 
   @override
-  int get hashCode => name.hashCode ^ path.hashCode ^ group.hashCode;
+  int get hashCode =>
+      name.hashCode ^ path.hashCode ^ group.hashCode ^ keyed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1627,7 +1649,8 @@ class BridgePresetInfo {
           runtimeType == other.runtimeType &&
           name == other.name &&
           path == other.path &&
-          group == other.group;
+          group == other.group &&
+          keyed == other.keyed;
 }
 
 /// An exact rational time in seconds, as `num / den`.
@@ -1637,11 +1660,11 @@ class BridgePresetInfo {
 /// at 1/3 s read back as 0.333… and written again would no longer land on the
 /// frame it was set on, and this round trip has to be exact.
 class BridgeRational {
-  final PlatformInt64 num;
+  final int num;
 
   /// Always positive in anything the engine hands out; a zero or negative
   /// denominator coming the other way is refused, not normalised.
-  final PlatformInt64 den;
+  final int den;
 
   const BridgeRational({
     required this.num,
@@ -1658,6 +1681,29 @@ class BridgeRational {
           runtimeType == other.runtimeType &&
           num == other.num &&
           den == other.den;
+}
+
+/// A row drawn under another name (`RowState::labels`): Type fill's rows
+/// when its Direction is Columns.
+class BridgeRowLabel {
+  final String id;
+  final String label;
+
+  const BridgeRowLabel({
+    required this.id,
+    required this.label,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ label.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeRowLabel &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          label == other.label;
 }
 
 /// One choice row's list, as its plugin has it now.
@@ -1795,9 +1841,9 @@ enum BridgeScanStage {
   ;
 }
 
-/// One box of the inner graph, resolved for drawing. `label` is set only for
-/// a Parameter box — the user's own word for their own control, shown as-is
-/// and never translated; every other box is named by the frontend from `kind`.
+/// One box of the inner graph, resolved for drawing. `label` is the user's own
+/// name for the box, shown as-is and never translated, and a Parameter box
+/// always has one; the frontend names every box from `kind` beside it.
 class BridgeShaderGraphNode {
   final int id;
   final String kind;
@@ -1833,13 +1879,13 @@ class BridgeShaderGraphNode {
           outputs == other.outputs;
 }
 
-/// A stored inner graph as the canvas draws it, plus the one sentence that
-/// says whether it will compile. The canvas draws a broken graph exactly as it
-/// draws a working one — being broken is a state to work in, and the badge is
-/// the messenger (§2.2) — so the boxes and the error travel together.
+/// A stored inner graph as the canvas draws it, plus why it will not compile
+/// when it will not. The canvas draws a broken graph exactly as it draws a
+/// working one, since being broken is a state to work in and the badge is the
+/// messenger (§2.2), so the boxes and the fault travel together.
 class BridgeShaderGraphView {
   final List<BridgeShaderGraphNode> nodes;
-  final String? error;
+  final BridgeShaderGraphError? error;
 
   const BridgeShaderGraphView({
     required this.nodes,

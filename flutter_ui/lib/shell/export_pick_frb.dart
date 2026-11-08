@@ -193,7 +193,7 @@ class _ExportPickState extends State<_ExportPick> {
                       key: const ValueKey('export-pick-browse'),
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       onPressed: _busy ? null : _chooseFolder,
-                      child: Text(l10n.exportBrowse, style: t.body),
+                      child: Text(l10n.exportBrowseEllipsis, style: t.body),
                     ),
                   ),
                 ]),
@@ -205,7 +205,7 @@ class _ExportPickState extends State<_ExportPick> {
                 SizedBox(
                   height: exportQueueRow,
                   child: Align(
-                    alignment: Alignment.centerLeft,
+                    alignment: AlignmentDirectional.centerStart,
                     child: Text(l10n.exportPickNone,
                         style: t.body.copyWith(color: t.textMuted)),
                   ),
@@ -228,7 +228,7 @@ class _ExportPickState extends State<_ExportPick> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Align(alignment: Alignment.centerLeft, child: _add(t)),
+                Align(alignment: AlignmentDirectional.centerStart, child: _add(t)),
               ],
             ],
           ),

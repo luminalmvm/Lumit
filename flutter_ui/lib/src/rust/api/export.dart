@@ -42,7 +42,7 @@ BridgeCrop exportCropFor(
 /// `width` × `height` at `fps` — the typed number, or the one *Auto* works out.
 /// Zero when the format has no bitrate to choose or the encoder is choosing its
 /// own quality, which is when the footer offers no size estimate.
-PlatformInt64 exportResolvedBitrate(
+int exportResolvedBitrate(
         {required BridgeExportSpec spec,
         required int width,
         required int height,
@@ -112,6 +112,15 @@ List<BridgeExportQueueItem> exportQueueList() =>
 /// Let the queue run: the next waiting item starts, and the rest follow it.
 void exportQueueStart() =>
     BridgeLib.instance.api.crateApiExportExportQueueStart();
+
+/// Stop after this one: the running export finishes and nothing after it
+/// starts. [`export_queue_start`] lets the queue run again.
+void exportQueueStopAfter() =>
+    BridgeLib.instance.api.crateApiExportExportQueueStopAfter();
+
+/// Whether the queue will start the next waiting item by itself.
+bool exportQueueGoesOn() =>
+    BridgeLib.instance.api.crateApiExportExportQueueGoesOn();
 
 /// Cancel one item. A running export stops at its next frame and leaves no
 /// half-file; an item still waiting simply leaves the list.
@@ -360,8 +369,8 @@ class BridgeExportQueueItem {
 
   /// The range in comp frames, end exclusive. Both −1 when the item takes the
   /// default: the work area as it stood at queue time, else the whole comp.
-  final PlatformInt64 rangeStartFrame;
-  final PlatformInt64 rangeEndFrame;
+  final int rangeStartFrame;
+  final int rangeEndFrame;
   final BridgeExportQueueState state;
 
   const BridgeExportQueueItem({
@@ -412,15 +421,21 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
   const factory BridgeExportQueueState.waiting() =
       BridgeExportQueueState_Waiting;
   const factory BridgeExportQueueState.running({
-    required BigInt frame,
+    required int frame,
 
     /// Zero until the exporter has worked out how many there are.
-    required BigInt total,
+    required int total,
 
     /// The encoder actually chosen, which may not be the one asked for.
     required String encoder,
   }) = BridgeExportQueueState_Running;
-  const factory BridgeExportQueueState.done() = BridgeExportQueueState_Done;
+  const factory BridgeExportQueueState.done({
+    /// How long it took to export, in whole seconds.
+    required int seconds,
+
+    /// The file's size, zero for an image sequence.
+    required int bytes,
+  }) = BridgeExportQueueState_Done;
   const factory BridgeExportQueueState.failed({
     required String error,
   }) = BridgeExportQueueState_Failed;
@@ -461,14 +476,14 @@ class BridgeExportSpec {
 
   /// Export range start, in comp frames. Negative means the default — the
   /// work area when one is set, else the whole comp.
-  final PlatformInt64 rangeStartFrame;
+  final int rangeStartFrame;
 
   /// Export range end (exclusive), in comp frames. Negative = the default.
-  final PlatformInt64 rangeEndFrame;
+  final int rangeEndFrame;
   final bool includeAudio;
 
   /// Audio bits per second; zero takes the delivery-preset rate.
-  final PlatformInt64 audioBitRate;
+  final int audioBitRate;
 
   /// The sound's sample rate in hertz — one of [`export_audio_rates`].
   /// Zero means the customary 48 kHz, so a caller that never sets
@@ -727,10 +742,10 @@ sealed class BridgeExportState with _$BridgeExportState {
   /// Nothing has run since start-up.
   const factory BridgeExportState.idle() = BridgeExportState_Idle;
   const factory BridgeExportState.running({
-    required BigInt frame,
+    required int frame,
 
     /// Zero until the exporter has worked out how many there are.
-    required BigInt total,
+    required int total,
 
     /// The encoder actually chosen, which may not be the one asked for —
     /// a hardware encoder that is not there falls back to software, and the

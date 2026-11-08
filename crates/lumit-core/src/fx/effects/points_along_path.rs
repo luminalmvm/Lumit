@@ -58,8 +58,20 @@ pub const ALONG_GROUPS: &[ParamGroup] = &[
         ],
         None,
     ),
+    group(
+        "Deform",
+        &[
+            "deform",
+            "deform_wave",
+            "deform_amplitude",
+            "deform_frequency",
+            "deform_phase",
+        ],
+        None,
+    ),
     group("Point", &["size", "feather", "colour"], None),
-    group("", &["seed"], Some(("placement", &[1]))),
+    // Random placement and Value noise both read it.
+    group("", &["seed"], None),
 ];
 
 const fn grey(param: &'static str) -> EnabledWhen {
@@ -76,6 +88,14 @@ pub const ALONG_ENABLED_WHEN: &[EnabledWhen] = &[
     grey("count"),
     grey("offset"),
     grey("wrap"),
+    deforms("deform_amplitude"),
+    deforms("deform_frequency"),
+    deforms("deform_phase"),
+    EnabledWhen {
+        param: "deform_wave",
+        on: "deform",
+        cond: EnabledCond::ChoiceIs(1),
+    },
     EnabledWhen {
         param: "mask_path",
         on: "path_from",
@@ -84,6 +104,18 @@ pub const ALONG_ENABLED_WHEN: &[EnabledWhen] = &[
 ];
 
 /// Which dice a Random placement rolls for where a point sits.
+/// Greys a Deform row while Deform is Off.
+const fn deforms(param: &'static str) -> EnabledWhen {
+    EnabledWhen {
+        param,
+        on: "deform",
+        cond: EnabledCond::ChoiceIsNot(0),
+    }
+}
+
+/// The noise channel Value noise reads, kept off the one Random rolls.
+const DEFORM_ATTR: u32 = 7;
+
 const ALONG_ATTR: u32 = 0;
 
 /// Where along the path the points are put.
@@ -120,7 +152,7 @@ impl Placement {
     match_name = "points_along_path",
     label = "Points along path",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A mask may be drawn anywhere, and the discs are drawn over the whole
     // picture.
@@ -194,6 +226,41 @@ pub struct PointsAlongPath {
     /// Turn each point to face the way the path runs.
     #[toggle(label = "Align to path", default = true)]
     pub align: bool,
+
+    /// Moves each point off the path, along the normal where it stands, by
+    /// a wave or by noise measured along the path, so a curved or closed
+    /// path bends as a straight one does. Off leaves the points on the path.
+    #[choice(label = "Deform", options = ["Off", "Oscillator", "Value noise"], default = 0)]
+    pub deform: u32,
+
+    /// The Oscillator's shape.
+    #[choice(
+        label = "Wave",
+        options = ["Sine", "Triangle", "Square", "Sawtooth"],
+        default = 0
+    )]
+    pub deform_wave: u32,
+
+    /// How far a point moves off the path at most, px@comp. Below nought it
+    /// moves the other way.
+    #[slider(label = "Amplitude", min = -500.0, max = 500.0, default = 40.0, unit = Px)]
+    pub deform_amplitude: f32,
+
+    /// How many waves, or how many noise cells, fit along the whole path.
+    #[slider(
+        label = "Frequency",
+        min = 0.0,
+        max = 20.0,
+        default = 2.0,
+        hard_min = 0.0,
+        unit = Raw
+    )]
+    pub deform_frequency: f32,
+
+    /// Slides the wave or the noise along the path, degrees: 360 is one
+    /// wave. Key it to make the path ripple.
+    #[dial(label = "Phase", default = 0.0)]
+    pub deform_phase: f32,
 
     /// The diameter of the disc a point is drawn as, px@comp.
     #[slider(min = 0.0, max = 200.0, default = 8.0, hard_min = 0.0, unit = Px)]
@@ -277,6 +344,7 @@ impl PointsAlongPath {
         ];
         // One point at `at`, `far` px along the path.
         let mut put = |at: [f32; 2], facing: [f32; 2], far: f32, id: u64| {
+            let (at, facing) = self.deformed(at, facing, far, length);
             out.position.push([at[0], at[1], 0.0]);
             out.speed.push([0.0; 3]);
             out.age.push(0.0);
@@ -338,6 +406,62 @@ impl PointsAlongPath {
             put(path.point_at(far), path.tangent_at(far), far, id);
         }
         out
+    }
+
+    /// How far Deform moves the point `far` px along a path `length` long
+    /// off it, px: Amplitude times the wave or the noise there.
+    fn bend(self, far: f32, length: f32) -> f32 {
+        if self.deform == 0 || length <= 0.0 {
+            return 0.0;
+        }
+        let x = far / length * self.deform_frequency + self.deform_phase / 360.0;
+        let wave = if self.deform == 2 {
+            crate::fx::maths::value_noise_1d(self.seed, DEFORM_ATTR, f64::from(x)) as f32
+        } else {
+            let f = x.rem_euclid(1.0);
+            match self.deform_wave {
+                1 => 1.0 - 2.0 * (2.0 * (x + 0.25).rem_euclid(1.0) - 1.0).abs(),
+                2 => {
+                    if f < 0.5 {
+                        1.0
+                    } else {
+                        -1.0
+                    }
+                }
+                3 => 2.0 * f - 1.0,
+                _ => (x * std::f32::consts::TAU).sin(),
+            }
+        };
+        self.deform_amplitude * wave
+    }
+
+    /// A point Deform has moved: off the path along the normal at `at`, and
+    /// facing the way the bent path runs there.
+    fn deformed(
+        self,
+        at: [f32; 2],
+        facing: [f32; 2],
+        far: f32,
+        length: f32,
+    ) -> ([f32; 2], [f32; 2]) {
+        if self.deform == 0 {
+            return (at, facing);
+        }
+        let l = facing[0].hypot(facing[1]);
+        if l <= 0.0 {
+            return (at, facing);
+        }
+        let along = [facing[0] / l, facing[1] / l];
+        // To the left of the way the path runs, which is up on a path drawn
+        // left to right.
+        let normal = [along[1], -along[0]];
+        let shift = self.bend(far, length);
+        let h = 0.5;
+        let slope = (self.bend(far + h, length) - self.bend(far - h, length)) / (2.0 * h);
+        (
+            [at[0] + normal[0] * shift, at[1] + normal[1] * shift],
+            [along[0] + normal[0] * slope, along[1] + normal[1] * slope],
+        )
     }
 
     /// How the stream is drawn: a feathered disc per point, and the Mix.

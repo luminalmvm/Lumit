@@ -159,7 +159,9 @@ fn with_copies(
 ) -> Vec<ShapeEntry> {
     match path {
         [r] => {
-            let mut out = baked(&entries[..*r], copies);
+            let from = reach(entries, *r);
+            let mut out = entries[..from].to_vec();
+            out.extend(baked(&entries[from..*r], copies));
             out.extend(entries[r + 1..].iter().cloned());
             out
         }
@@ -193,15 +195,21 @@ fn with_copy(
         if whole {
             rest.to_vec()
         } else {
-            rest.iter()
-                .filter(|e| matches!(e, ShapeEntry::Modifier(_)))
-                .cloned()
+            super::modifier::acting_after(rest)
+                .into_iter()
+                .map(|m| ShapeEntry::Modifier(m.clone()))
                 .collect()
         }
     };
     match path {
         [r] => {
-            let mut out = baked_nth(&entries[..*r], copy, n);
+            let from = reach(entries, *r);
+            let mut out = if whole {
+                entries[..from].to_vec()
+            } else {
+                Vec::new()
+            };
+            out.extend(baked_nth(&entries[from..*r], copy, n));
             out.extend(after(&entries[r + 1..]));
             out
         }
@@ -225,6 +233,31 @@ fn with_copy(
         }
         [] => entries.to_vec(),
     }
+}
+
+/// Where the art the modifier at `r` acts on starts: the top of its group,
+/// or for an [`own`](super::modifier::ShapeModifier::own) one the art right
+/// above it, with the items combined into it.
+fn reach(entries: &[ShapeEntry], r: usize) -> usize {
+    let ShapeEntry::Modifier(m) = &entries[r] else {
+        return 0;
+    };
+    if !m.own {
+        return 0;
+    }
+    let Some(mut at) = entries[..r]
+        .iter()
+        .rposition(|e| !matches!(e, ShapeEntry::Modifier(_)))
+    else {
+        return 0;
+    };
+    while at > 0
+        && matches!(&entries[at], ShapeEntry::Item(item) if item.combine != 0)
+        && matches!(&entries[at - 1], ShapeEntry::Item(_))
+    {
+        at -= 1;
+    }
+    at
 }
 
 /// `art` drawn out `copies` times: each run of items becomes its copies,

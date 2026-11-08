@@ -1,0 +1,64 @@
+---
+title: Luma fade
+description: "Fades the layer away in order of brightness, darkest first."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Luma fade is a **Transition** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Luma fade" category="transition" slug="luma-fade" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Takes the layer away in order of brightness as Completion rises, the darkest parts first.
+The brightness is the layer's own, or another layer's when **Matte** is set.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Completion** | Slider | 0 to 100 | 50 | Per cent |
+| **Softness** | Slider | 0 to 100 | 10 | Per cent |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Map placement** is editable while **Matte** names a layer.
+- **Matte** is where the brightness is read from: the darkest parts of the matte go first, and with no matte set the layer fades by its own brightness. **Invert** reads that matte inverted.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Completion** is how far the fade has got as a percentage.
+- **Softness** sets how wide the edge between gone and kept is.
+- **Map placement** sets where the Matte layer's picture sits on this one.
+- **Mix**: how much of the result replaces the original.
+- **Matte** sets the layer the brightness is read from.
+- **Invert** takes the brightest parts first.
+
+## Presets
+
+On the effect's menu, under **Presets**. Each starts at the playhead.
+
+- **Luma reveal** brings the layer in over a second, with a soft edge.
+- **Luma hide** takes the layer away over a second, with a soft edge.
+- **Hard hide** takes the layer away over a second, with a hard edge.
+
+## Related
+
+- [Linear wipe](/effects/transition/linear-wipe/)
+- [Set matte](/effects/utility/set-matte/)
+- [Transition](/effects/#transition)
+- [Effects](/use/effects/)

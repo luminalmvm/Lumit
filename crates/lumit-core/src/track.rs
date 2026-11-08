@@ -172,7 +172,7 @@ pub(crate) fn solve_store() -> Option<&'static dyn CameraSolveStore> {
 }
 
 /// Nothing solved yet: a link with nothing to follow reads the stored pose.
-struct Unsolved;
+pub(crate) struct Unsolved;
 
 impl CameraSolveStore for Unsolved {
     fn solved_range(&self, _media: Uuid) -> Option<SolvedRange> {
@@ -490,6 +490,7 @@ fn tracked_source_at(
             match source {
                 ClipSource::Footage(item) => Some((item, st)),
                 ClipSource::Comp(nested) => descend(doc, nested, st, depth),
+                ClipSource::Solid(_) => None,
             }
         }
         _ => None,
@@ -1146,6 +1147,7 @@ mod tests {
             audio_streams: Default::default(),
             adjustment: false,
             pitch_follows_speed: false,
+            audio_routes: Default::default(),
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

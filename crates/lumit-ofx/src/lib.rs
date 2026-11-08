@@ -45,24 +45,162 @@
 //! No Rust panic may cross back into C, so every entry point a plugin can
 //! reach runs its body inside a catch (see [`suites`]).
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod bundle;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod def;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod describe;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod discover;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod gpu;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod handles;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod host;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod image;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod instance;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ipc;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod props;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod quirks;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod render;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod schema;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod status;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod suites;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
+
+// The browser build has no OFX plugins. These are the few calls the bridge
+// makes, answering as a machine with none installed would.
+
+#[cfg(target_arch = "wasm32")]
+pub mod discover {
+    use std::collections::BTreeSet;
+    use std::path::{Path, PathBuf};
+
+    use lumit_core::fx::registry::EffectDef;
+
+    pub const DISABLED_REASON: &str = "plugin_disabled";
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Hosting {
+        Broker,
+        InProcess,
+    }
+
+    pub struct ScanOptions {
+        pub paths: Vec<PathBuf>,
+        pub disabled: BTreeSet<String>,
+        pub hosting: Hosting,
+    }
+
+    impl ScanOptions {
+        #[must_use]
+        pub fn standard() -> Self {
+            Self {
+                paths: Vec::new(),
+                disabled: BTreeSet::new(),
+                hosting: Hosting::Broker,
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct DiscoveredPlugin {
+        pub match_name: String,
+        pub identifier: String,
+        pub label: String,
+        pub grouping: String,
+        pub bundle: PathBuf,
+    }
+
+    #[derive(Debug, Default)]
+    pub struct ScanOutcome {
+        pub registered: Vec<DiscoveredPlugin>,
+        pub skipped: Vec<String>,
+    }
+
+    pub fn stop_brokers(_folder: &Path) {}
+
+    pub fn follow_gpu_setting() {}
+
+    #[must_use]
+    pub fn plugin_of(_match_name: &str) -> Option<DiscoveredPlugin> {
+        None
+    }
+
+    pub fn set_enabled(_identifier: &str, _enabled: bool) {}
+
+    pub fn set_disabled(_list: &BTreeSet<String>) {}
+
+    pub fn scan(
+        _options: &ScanOptions,
+        _register: &mut dyn FnMut(&'static dyn EffectDef) -> bool,
+    ) -> ScanOutcome {
+        ScanOutcome::default()
+    }
+
+    pub fn scan_reporting(
+        _options: &ScanOptions,
+        _register: &mut dyn FnMut(&'static dyn EffectDef) -> bool,
+        _bundle: &mut dyn FnMut(&Path, usize, usize),
+    ) -> ScanOutcome {
+        ScanOutcome::default()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub mod gpu {
+    pub fn set_enabled(_on: bool) {}
+
+    pub fn set_adapter(_summary: Option<&str>) {}
+}
+
+#[cfg(target_arch = "wasm32")]
+pub mod host {
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct HostMessage {
+        pub message_type: String,
+        pub message_id: String,
+        pub text: String,
+    }
+
+    pub struct HostState;
+
+    impl HostState {
+        pub fn take_messages(&mut self) -> Vec<HostMessage> {
+            Vec::new()
+        }
+    }
+
+    #[must_use]
+    pub fn state() -> HostState {
+        HostState
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub mod ipc {
+    pub mod broker {
+        pub const BROKER_EXE_ENV: &str = "LUMIT_OFX_BROKER";
+
+        #[must_use]
+        pub fn broker_exe_name() -> &'static str {
+            "lumit-ofx-broker"
+        }
+    }
+}

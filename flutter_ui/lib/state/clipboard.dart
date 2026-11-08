@@ -23,7 +23,7 @@ import 'dart:ui' show Offset;
 
 /// What kind of thing is on the clipboard, so Paste knows what to do with the
 /// text rather than guessing from its shape.
-enum ClipboardKind { layer, effects }
+enum ClipboardKind { layer, effects, masks }
 
 /// The one tray. Held by the shell state, read by the Edit menu.
 class LumitClipboard {
@@ -53,6 +53,12 @@ class LumitClipboard {
     _text = text;
   }
 
+  /// Put masks down (from `LayerReference.copyMasks`).
+  void putMasks(String text) {
+    _kind = ClipboardKind.masks;
+    _text = text;
+  }
+
   void clear() {
     _kind = null;
     _text = null;
@@ -62,6 +68,28 @@ class LumitClipboard {
   /// top-left corner stood. Kept apart from the tray, since only a canvas
   /// pastes them.
   ({String text, Offset at})? boxes;
+}
+
+/// Several layers as one document: each one's own document, top of the stack
+/// first, so a copy of the whole pick pastes as the whole pick.
+String layersDocument(List<String> layers) => layers.length == 1
+    ? layers.single
+    : jsonEncode({
+        'kind': 'layers',
+        'layers': [for (final l in layers) jsonDecode(l)],
+      });
+
+/// The single-layer documents in a layer document, top of the stack first.
+List<String> layerDocuments(String text) {
+  try {
+    final decoded = jsonDecode(text);
+    if (decoded is Map<String, dynamic> &&
+        decoded['kind'] == 'layers' &&
+        decoded['layers'] is List) {
+      return [for (final l in decoded['layers'] as List) jsonEncode(l)];
+    }
+  } catch (_) {}
+  return [text];
 }
 
 /// What kind of Lumit document [text] is, or null when it is not one.
@@ -80,6 +108,12 @@ ClipboardKind? lumitDocumentKind(String text) {
     if (decoded is! Map<String, dynamic>) return null;
     if (decoded['kind'] == 'layer' && decoded['layer'] != null) {
       return ClipboardKind.layer;
+    }
+    if (decoded['kind'] == 'layers' && decoded['layers'] is List) {
+      return ClipboardKind.layer;
+    }
+    if (decoded['kind'] == 'masks' && decoded['masks'] is List) {
+      return ClipboardKind.masks;
     }
     if (decoded['effects'] is List) return ClipboardKind.effects;
     return null;

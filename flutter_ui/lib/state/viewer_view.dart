@@ -19,6 +19,7 @@
 
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraView;
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 
 /// Which way the Viewer looks at a 3D composition (docs/impl/camera.md §6).
 ///
@@ -67,6 +68,21 @@ enum ViewerView {
       this == ViewerView.custom3 ||
       this == ViewerView.free;
 
+  /// The keymap action that switches to this view, where it has one: the
+  /// fixed six and the active camera. The custom views are on the F10 to F12
+  /// shortcuts instead.
+  String? get action => switch (this) {
+        ViewerView.activeCamera => 'viewer.3d.camera',
+        ViewerView.front ||
+        ViewerView.back ||
+        ViewerView.left ||
+        ViewerView.right ||
+        ViewerView.top ||
+        ViewerView.bottom =>
+          'viewer.3d.view.$name',
+        _ => null,
+      };
+
   /// What the picker's row reads.
   String get title => switch (this) {
         ViewerView.activeCamera => l10n.viewerViewActiveCamera,
@@ -80,6 +96,17 @@ enum ViewerView {
         ViewerView.custom2 => l10n.viewerViewCustom2,
         ViewerView.custom3 => l10n.viewerViewCustom3,
         ViewerView.free => l10n.viewerViewFree,
+      };
+}
+
+/// What the 3D view menu shows for each way of showing models.
+extension ModelDisplayRow on BridgeModelDisplay {
+  String get title => switch (this) {
+        BridgeModelDisplay.final_ => l10n.viewerDisplayFinal,
+        BridgeModelDisplay.shaded => l10n.viewerDisplayShaded,
+        BridgeModelDisplay.wireframe => l10n.viewerDisplayWireframe,
+        BridgeModelDisplay.shadedWire => l10n.viewerDisplayShadedWire,
+        BridgeModelDisplay.normals => l10n.viewerDisplayNormals,
       };
 }
 

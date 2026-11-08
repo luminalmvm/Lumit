@@ -1,0 +1,136 @@
+---
+title: "Jolt"
+description: "Sudden random hits of blur, colour, light, scale and slide."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Jolt is a [Distortion](/effects/#distortion) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Jolt" category="distortion" slug="jolt" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Hits the layer with sudden jolts that ease back to rest. Each kind of hit has its own
+switch and amount, and they land together as one jolt.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 100 | 100 | Per cent |
+| **Trigger** | Dropdown | Random · Markers · Beats | Random | - |
+| **Rate** | Slider | 0 to 20; higher | 2 | - |
+| **Separate timing** | Checkbox | On or off | Off | - |
+| **Ease in** | Slider | 0 to 12; higher | 0 | Frames |
+| **Ease out** | Slider | 0 to 24; higher | 4 | Frames |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Mirror | - |
+| **Jolts only** | Checkbox | On or off | Off | - |
+| **Blur** | Checkbox | On or off | On | - |
+| **Blur › Amount** | Slider | 0 to 100; up to 500 | 20 | Pixels at composition size |
+| **Aspect** | Slider | -100 to 100 | 0 | Per cent |
+| **Colour** | Checkbox | On or off | Off | - |
+| **Colour › Amount** | Slider | 0 to 100 | 50 | Per cent |
+| **Tint** | Colour | Each channel 0 to 1, scene-linear | 0.9, 0.05, 0.35, 1 | - |
+| **Random hue** | Slider | 0 to 100 | 25 | Per cent |
+| **Light** | Checkbox | On or off | On | - |
+| **Light › Amount** | Slider | 0 to 4; up to 10 | 1 | - |
+| **Light › Direction** | Dropdown | Brighter · Darker · Both | Brighter | - |
+| **Scale** | Checkbox | On or off | On | - |
+| **Scale › Amount** | Slider | 0 to 50; up to 100 | 10 | Per cent |
+| **Origin x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Origin y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Random origin** | Slider | 0 to 100 | 0 | Per cent |
+| **Slide** | Checkbox | On or off | On | - |
+| **Slide › Amount** | Slider | 0 to 200; up to 2000 | 40 | Pixels at composition size |
+| **Slide › Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Spread** | Slider | 0 to 180 | 180 | Degrees |
+| **RGB split** | Slider | 0 to 100 | 0 | Per cent |
+| **Time** | Checkbox | On or off | Off | - |
+| **Time › Amount** | Slider | 0 to 30; up to 240 | 4 | Frames |
+| **Time › Direction** | Dropdown | Both · Forward · Backward | Both | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Blur** groups **Blur**, **Amount**, **Aspect**, and starts closed.
+- **Colour** groups **Colour**, **Amount**, **Tint**, **Random hue**, and starts closed.
+- **Light** groups **Light**, **Amount**, **Direction**, and starts closed.
+- **Scale** groups **Scale**, **Amount**, **Origin x**, **Origin y**, **Random origin**, and starts closed.
+- **Slide** groups **Slide**, **Amount**, **Direction**, **Spread**, **RGB split**, and starts closed.
+- **Time** groups **Time**, **Amount**, **Direction**, and starts closed.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount**: how hard every kind of hit lands.
+- **Trigger**: what fires a jolt. Random fires them at the **Rate**. Markers fires one on
+  each of the layer's markers and the composition's markers that are not beats. Beats fires
+  one on each of the composition's beat markers. On Markers and Beats every kind of hit
+  fires at once.
+- **Rate** (Random): how many jolts a second.
+- **Separate timing** (Random): each kind of hit keeps its own time instead of landing
+  together.
+- **Ease in**: how many frames a jolt takes to reach its peak. At 0 it hits at once.
+- **Ease out**: how many frames a jolt takes to settle.
+- **Seed**: which random jolts occur.
+- **Edges**: what fills the border a scale or a slide reveals. Mirror reflects the picture
+  back. Repeat holds the edge pixel. Transparent leaves it clear.
+- **Jolts only**: the layer shows only while a jolt is on it.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+Each group starts with its own switch. Each hit's strength is random, up to the group's
+**Amount**.
+
+- **Blur**: **Amount** is the radius. **Aspect** at 0 blurs evenly; towards 100 only
+  sideways, towards −100 only up and down.
+- **Colour**: **Amount** is how far the picture takes on **Tint**, over its own light. **Random hue**
+  is how far each hit's hue wanders from it.
+- **Light**: **Amount** is in stops. **Direction** is Brighter, Darker, or Both at random.
+- **Scale**: **Amount** is how much a hit scales the picture, up or down at random, about
+  **Origin x** and **Origin y**. **Random origin** is how far each hit's origin wanders.
+- **Slide**: **Amount** is how far a hit slides the picture. **Direction** is the way it
+  goes, and **Spread** how far either side of it a hit may go; at 180 any way at all.
+  **RGB split** parts red and blue along the slide.
+- **Time**: **Amount** is how many frames a hit jumps the layer, back to the frame itself as
+  it settles. **Direction** is Both at random, Forward or Backward. The layer jumps with the
+  effects above Jolt applied.
+
+## Presets
+
+On the effect's menu, under **Presets**.
+
+- **Camera kick** knocks the picture down about once a second, with a blur along the knock.
+- **Glitch hit** slides the picture sideways with the colour channels parted and a random
+  colour.
+- **Light flicker** flickers the light brighter and darker.
+- **Time stutter** jumps the layer a few frames ahead or back three times a second.
+- **Beat pulse** hits scale, blur and light on each beat marker.
+
+:::note[Not built]
+- With Time on, only the first of Jolt and Timewarp in a stack moves the layer in time. The
+  other shows the frame as it is.
+:::
+
+## Related
+
+- [Shake](/effects/distortion/shake/)
+- [RGB split](/effects/distortion/rgb-split/)
+- [Flash](/effects/stylise/flash/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

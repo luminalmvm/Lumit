@@ -639,7 +639,7 @@ void main() {
               find.byKey(const ValueKey<String>('graph-node-source'))),
           tester
               .getCenter(find.byKey(const ValueKey<String>('graph-node-out'))),
-          tester.getCenter(find.byKey(const ValueKey<String>('graph-legend'))),
+          tester.getCenter(find.byKey(const ValueKey<String>('graph-zoom'))),
           const Offset(700, 500),
         ]) {
           await mouse.moveTo(spot);
@@ -884,6 +884,10 @@ void main() {
     /// complaint was that scrubbing got worse the more lanes were open.
     testWidgets('a scrub costs the same with twice the rows open',
         (tester) async {
+      // Every layer's open rows on screen, for the taps that open them.
+      tester.view.physicalSize = const Size(1000, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       Future<int> callsForScrub(int layers) async {
         final p = freshProject();
         final comp = p.state.project!.newComposition(name: 'Scene');
@@ -917,7 +921,7 @@ void main() {
         await tester.pumpWidget(hostPanel(
           state: p.state,
           uiState: p.uiState,
-          size: const Size(900, 700),
+          size: const Size(900, 1000),
           child: const TimelinePanelFrb(),
         ));
         await settleFrb(tester, minRounds: 8);
@@ -1470,7 +1474,7 @@ void main() {
         height: 30,
         x: 20,
         y: 15,
-        frame: BigInt.zero,
+        frame: 0,
         view: 0,
         layerAlone: false,
       );
@@ -1700,11 +1704,12 @@ void main() {
     testWidgets('dragging a path point previews the picture', (tester) async {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
+      final item = UuidValue.fromString(const Uuid().v4());
       final shape = comp.addShapeLayer(
         name: 'Square',
         contents: [
           BridgeShapeItem(
-            id: UuidValue.fromString(const Uuid().v4()),
+            id: item,
             name: 'Rectangle',
             vertices: const [
               BridgeVertex(
@@ -1737,6 +1742,9 @@ void main() {
             gradientEndOpacity: const BridgeScalar.static_(100),
             gradientStops: const [],
             combine: 0,
+            hidden: false,
+            fillHidden: false,
+            strokeHidden: false,
             pathKeys: const [],
           ),
         ],
@@ -1744,6 +1752,10 @@ void main() {
       p.uiState
         ..setSelectedComp(comp)
         ..setSelection([shape]);
+      // A shape's points are offered while its Path row is picked.
+      p.uiState.selectedProperties.value = [
+        '${shape.internallayerId}/contents/$item/path'
+      ];
       p.uiState.model.refresh();
 
       await tester.pumpWidget(hostPanel(

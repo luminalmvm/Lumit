@@ -25,9 +25,10 @@ folder becomes a project folder of the same name.
 ## What Lumit opens
 
 The dialogue's **Footage** filter lists the common formats: MP4, MOV, MKV, AVI, WebM,
-M4V, MPEG, TS, MTS, M2TS, WMV, FLV, 3GP, OGV, MXF and GIF; PNG, JPEG, TIFF, OpenEXR,
+M4V, MPEG, TS, MTS, M2TS, WMV, FLV, 3GP, OGV, MXF and GIF; PNG, JPEG, TIFF, OpenEXR, HDR,
 Targa, DPX, BMP, WebP, PSD, AI and the Netpbm family; WAV, MP3, FLAC, AAC, M4A, OGG, Opus, AIFF
-and WMA.
+and WMA; and the 3D models glTF, GLB, FBX and OBJ, plus OpenVDB volumes, Blender, USD, Alembic, PLY, STL and
+Collada files.
 
 The filter is a convenience, not a limit. Switch it to **All files** and pick anything -
 Lumit reads the file rather than its extension, so a container or codec the list does not
@@ -98,6 +99,117 @@ the first artboard is read. Sublayers are not split out. Files from before Illus
 are not read.
 :::
 
+## 3D models
+
+A glTF, GLB, FBX or OBJ file imports as a **3D model** footage item, with the cube on its
+row. Its `.bin`, pictures and `.mtl` are found beside it, or by name in the folders next to
+it, and are packed with it. Dropped into a comp it makes a **Model layer** at the centre and
+opens **Model settings**: **Up axis**, **Fit to comp**, and **Units**, the comp pixels for
+each metre of the model, greyed while it is fitted. **Layer ▸ 3D ▸ Model settings** opens it again. In a comp with no
+lights, the first model also adds an **Ambient light** and a **Key light**.
+
+A `.vdb` file imports the same way and draws through [Smoke and
+fire](/effects/generate/smoke-and-fire/).
+
+A Model layer is drawn through the comp's camera with the file's own materials, lit by the
+comp's lights, and passes through other 3D layers by depth. Its effects run on its
+picture, which keeps its depth. Motion blur smears it along its own movement. In the
+Viewer it is outlined by its box and picked where the model itself is. A model with
+pictures missing wears **Missing** in the Project panel, with their names on it.
+
+Under **Materials** a Model layer has a group of rows for each material in its file, named
+as the file names it, in the Timeline and in **Effect controls**: **Base colour**,
+**Metallic**, **Roughness**, **Emission colour**, **Emission strength**, **Opacity**,
+**Normal strength**, **Textures**, **Transmission**, **IOR**, **Coat** and **Coat
+roughness**. They start at the file's own values, keyframe like any other row, and are kept
+on the layer, never in the file. **Textures** off leaves out the file's base colour and
+metal-rough pictures. **Base colour layer**, **Emission layer**, **Opacity layer** and
+**Normal layer** each take a layer of the comp as the picture on the model's own uvs. A
+Normal layer is read as a normal map saved to a PNG would be.
+**Projected from** names a Camera layer, and the Base colour layer is then read where that
+camera saw each point, not on the model's uvs. Where the camera can't see a point, behind it,
+outside its frame or hidden by another model on the same camera, the point keeps **Base
+colour**. **Projection time** is **Follow**, which moves with the playhead, or **Hold**, which
+stops the camera and the picture at **Hold frame**, and picking Hold starts it at the playhead.
+Under Hold the picture stays on a model that moves. A point its camera saw at a steep angle
+fades to Base colour once it is seen much more square-on. A projected point takes the shadows
+of other models and no light, with **Accepts shadows** Only or **Holdout** too.
+**Layer ▸ 3D ▸ Project from camera** sets every material of the selected Model layers at once: the
+selected Camera layer or the comp's own, or a new one when the comp has none, and the shot that
+camera was solved from, the selected picture, or the nearest picture below. A still holds at
+the playhead and anything else follows it. A row on a 3D layer can't be projected. **Layer
+▸ New ▸ Card** makes a flat Model layer with no file, filling the frame, for any plane.
+Transmission bends the comp's picture behind the model, softened by Roughness and tinted by
+Base colour. Under an environment light, metal, glass and Coat reflect it. In a view's
+**Shaded** look glass shows what is behind it without bending it, and **Normals** draws it
+solid. A material's menu has **Presets** (Chrome, Gold, Brushed metal, Glass, Frosted
+glass, Plastic, Rubber, Emissive, and any saved), **Save preset…** and **Reset**, which puts
+the file's values back. A preset starts from the file's values and turns Textures off.
+
+A `.blend`, USD (`.usd`, `.usdz`, `.usdc`, `.usda`), Alembic (`.abc`), PLY, STL or Collada
+(`.dae`) file opens through your own Blender, which turns it into a glTF in the cache. Its row
+reads **Converting** until then; click it to stop Blender, and click **Stopped** to start again.
+An FBX Lumit can't read goes the same way. Saving the file again converts it again, and the
+layer keeps the old model until the new one is ready, or if it won't convert. Objects hidden in
+Blender are left out. With no Blender found the row reads **No 3D app**; click it to choose one
+in [Settings](/use/settings/#general). Blender 5 and later have no Collada importer. Two Blenders
+run at once, and the rest wait.
+**Edit in 3D app**, under **Layer ▸ 3D** and on the item's right-click menu, opens a `.blend` in
+Blender.
+
+A new Model layer casts shadows, on itself, on other models and on 3D layers, and takes
+theirs. Its **Casts shadows** and **Accepts shadows** rows work as on any 3D layer, and
+**Holdout** draws what is under it in its place (see [Layers](/use/layers/)).
+
+A file with takes shows an **Animation** group on its layer. **Take** picks one by name, and
+a new layer starts on the first. A take the file has lost reads as **(missing)** and draws at
+rest. **Offset** moves it in seconds. The layer's
+[Retime](/use/retime/) times it, as it times footage. **Loop** says what happens past its
+ends:
+
+| Loop | Past the ends of the take |
+| --- | --- |
+| **Off** | The model rests as its file has it |
+| **Loop** | The take goes round |
+| **Mirror** | The take runs there and back |
+| **Freeze** | The first and last poses hold |
+
+Skins and morph targets from glTF and FBX are drawn, and motion blur, shadows and the outline
+follow them. A skin that names a joint the file doesn't have draws at rest and wears
+**Missing**, as does a model too large for the graphics card to pose. A model that
+[Smoke and fire](/effects/generate/smoke-and-fire/) comes from or goes round holds the pose its
+take starts in.
+
+**Parts** on the layer lists the file's nodes as a tree. Each part has a tick that hides it and
+what hangs from it, and a **Transform** heading over **Visible**, **Position**, **Rotation**
+and **Scale**, in the layer's pixels and axes, turning about the part's own origin. They key
+like any row. A part with nothing changed isn't saved. Hiding a bone shrinks what it moves to
+its origin. A mesh on a skin has only the tick. Double-clicking the model in the Viewer opens
+the part under the pointer, the bone that moves it on a skin.
+
+A picked part wears a thin box and the 3D handles at its pivot. A drag moves it, or turns it
+with the Rotation tool, along the layer's axes, in one undo step. Shift keeps a move to steps
+of 10 and a turn to steps of 15 degrees.
+
+**Layer ▸ 3D ▸ Create cameras and lights** makes a Camera or Light layer for each one in the file,
+keyed over the layer's span, in one undo step, with Zoom keyed where an FBX or a `.blend` moves
+the lens. They follow the model at the time, and don't change if it changes later. Lights made
+this way take the place of the **Key light** the first model brought, if it hasn't been changed.
+
+:::note[Not built yet]
+A projected point has no row to take the comp's light, and what its camera didn't see can't be
+left clear for a second projection to fill. Under **Hold** a model's take plays on under the
+picture, which doesn't stick to what moves, and a projected model's take doesn't blur with
+motion.
+A faded model's shadow doesn't fade, and a holdout's outline doesn't blur with motion.
+Expressions can't name a part's rows. FBX in-between shapes use the final shape. An
+orthographic camera gets the default lens. A glTF file's lens doesn't animate. A particle
+shape or emitter surface from a model stays at rest. Materials don't change the shadow a
+model casts, so glass casts a whole shadow, and they don't reach a model used as a particle's
+shape. Glass does not bend the model itself, and shadows and haze from 3D layers below a 2D
+layer don't reach a run with glass in it.
+:::
+
 ## Interpretation
 
 Frame rate and alpha are read from the file itself, and so is the colour space.
@@ -160,7 +272,7 @@ the project, with everything it uses. A `.lum` dragged onto the window is not im
 
 ## After Effects projects
 
-A whole After Effects project can be imported via **File ▸ Import ▸ After Effects
+A whole After Effects project can be imported via **File ▸ Import .aep
 project…**, with support for compositions, markers, layers, keyframes, and built-in
 effects. A text layer keeps its font, spacing, outline, alignment, and box width. A
 light keeps its type, its aim and its light options, and a 3D layer its Orientation,

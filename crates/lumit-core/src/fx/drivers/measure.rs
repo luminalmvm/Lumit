@@ -243,10 +243,15 @@ pub fn layer_rect(
             Shown::One { clip, .. } | Shown::Two { incoming: clip, .. } => match clip.source {
                 ClipSource::Footage(item) => footage(item),
                 ClipSource::Comp(id) => doc.comp(id).and_then(|c| frame(c.width, c.height)),
+                ClipSource::Solid(id) => doc.solid(id).and_then(|s| frame(s.width, s.height)),
             },
         },
         LayerKind::Adjustment => frame(comp.width, comp.height),
-        LayerKind::Null | LayerKind::Camera { .. } | LayerKind::Light { .. } => None,
+        LayerKind::Null
+        | LayerKind::Camera { .. }
+        | LayerKind::Light { .. }
+        | LayerKind::Model { .. }
+        | LayerKind::Mesh { .. } => None,
     }
 }
 
@@ -305,7 +310,8 @@ fn placement(layer: &Layer, t: f64, context: &ExpressionContext) -> Affine {
     let tr = &layer.transform;
     let v = |p: &crate::anim::Property| p.value_at_with_context(lt, ctx.clone());
     let (sx, sy) = (v(&tr.scale_x) / 100.0, v(&tr.scale_y) / 100.0);
-    let (sin, cos) = v(&tr.rotation).to_radians().sin_cos();
+    let turn = v(&tr.rotation) + crate::orient::flat_turn(tr, lt);
+    let (sin, cos) = turn.to_radians().sin_cos();
     Affine::translation(-v(&tr.anchor_x), -v(&tr.anchor_y))
         .then(&Affine([sx, 0.0, 0.0, sy, 0.0, 0.0]))
         .then(&Affine([cos, sin, -sin, cos, 0.0, 0.0]))

@@ -59,6 +59,8 @@ pub enum RenderStage {
     Compositing,
     /// Display-encoding and handing the finished frame over.
     Presenting,
+    /// Walking a simulation up to the frame, inside compositing.
+    Simulating,
 }
 
 impl RenderStage {
@@ -72,6 +74,7 @@ impl RenderStage {
             RenderStage::Building => 2,
             RenderStage::Compositing => 3,
             RenderStage::Presenting => 4,
+            RenderStage::Simulating => 5,
         }
     }
 }
@@ -108,6 +111,29 @@ fn span_fraction(from: f32, to: f32, done: u32, total: u32) -> f32 {
     }
     let through = done as f32 / total as f32;
     (from + (to - from) * through.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+}
+
+thread_local! {
+    /// Where the frame being drawn on this thread reports, for a simulation deep
+    /// in an effect, which no profiler is handed to.
+    static WALK_SINK: RefCell<Option<(ProgressSink, Uuid, u64)>> = const { RefCell::new(None) };
+}
+
+/// A simulation has walked `through` of the way to the frame being drawn. Silent
+/// when nobody is waiting on the frame, as in playback and export.
+pub(crate) fn report_walk(through: f32) {
+    WALK_SINK.with(|slot| {
+        if let Some((sink, comp, frame)) = slot.borrow().as_ref() {
+            sink(FrameProgress {
+                comp: *comp,
+                frame: *frame,
+                stage: RenderStage::Simulating,
+                fraction: (COMPOSITE_FROM
+                    + (COMPOSITE_TO - COMPOSITE_FROM) * through.clamp(0.0, 1.0))
+                .clamp(0.0, 1.0),
+            });
+        }
+    });
 }
 
 /// One effect's measured cost within its layer.
@@ -170,7 +196,7 @@ pub struct FrameProfiler {
     /// because the two have different costs: reporting progress is free,
     /// measuring nodes fences the graphics card.
     timing: bool,
-    started: std::time::Instant,
+    started: web_time::Instant,
     /// How deep in the comp tree the walk is: 0 outside it, 1 in the
     /// composition being rendered, more inside a Precomp. Only depth 1 is
     /// reported — see the module note.
@@ -186,7 +212,7 @@ pub struct FrameProfiler {
     /// simply stays at zero and nothing is double-counted.
     stage_ms: RefCell<[f32; 5]>,
     /// When the currently open stage began, and which one it is.
-    stage_mark: Cell<std::time::Instant>,
+    stage_mark: Cell<web_time::Instant>,
     open_stage: Cell<RenderStage>,
 }
 
@@ -197,7 +223,8 @@ impl FrameProfiler {
     /// in that case.
     #[must_use]
     pub fn new(comp: Uuid, frame: u64, progress: Option<ProgressSink>, timing: bool) -> Self {
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
+        WALK_SINK.with(|slot| *slot.borrow_mut() = progress.clone().map(|s| (s, comp, frame)));
         Self {
             comp,
             frame,
@@ -219,7 +246,7 @@ impl FrameProfiler {
     /// what the stages themselves cost, so this runs whether or not timings
     /// were asked for.
     fn advance_to(&self, next: RenderStage) {
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         let open = self.open_stage.get();
         if let Ok(mut ms) = self.stage_ms.try_borrow_mut() {
             ms[open.code() as usize] +=
@@ -327,7 +354,7 @@ impl FrameProfiler {
     /// the clock is read — see the module note on why the fence is there.
     /// Returns the value and the elapsed milliseconds.
     pub fn span<T>(&self, ctx: &lumit_gpu::GpuContext, f: impl FnOnce() -> T) -> (T, f32) {
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         let out = f();
         // The span may have recorded into a batched frame buffer; hand it over
         // before fencing, or the wait returns on an empty queue and the number

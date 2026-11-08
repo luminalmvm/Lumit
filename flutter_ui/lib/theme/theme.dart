@@ -9,6 +9,8 @@
 // The numbers the Rust frontend has are carried over digit-for-digit so the
 // two can be compared.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
@@ -248,9 +250,19 @@ class ShapeTokens {
   /// sets timecode and values, rather than in the mono face.
   final bool tabularNumbers;
 
-  /// The kicker's tracking in logical pixels at its 9px: 1.08 for the caps
-  /// label (+0.12em), 0.36 for Desk's lowercase one (+0.04em).
+  /// The kicker's tracking in logical pixels: 1.08 for Lantern's caps label
+  /// (+0.12em), 0.36 for Desk's lowercase one (+0.04em), 0.2 for Studio's.
   final double kickerTracking;
+
+  /// Whether a container label is set in the mono face, the way Lantern's
+  /// tracked caps are. Off, a label is a word and takes the sans, and the
+  /// mono is kept for numbers.
+  final bool kickerMono;
+
+  /// The kicker's size and weight. Studio's sans label is a point bigger and
+  /// a step heavier than the mono one, so it still reads in muted ink.
+  final double kickerSize;
+  final FontWeight kickerWeight;
   const ShapeTokens({
     required this.controlRadius,
     required this.floatRadius,
@@ -273,6 +285,9 @@ class ShapeTokens {
     this.monoFamily = LumitTheme.monoFontFamily,
     this.tabularNumbers = false,
     this.kickerTracking = 1.08,
+    this.kickerMono = false,
+    this.kickerSize = 9,
+    this.kickerWeight = FontWeight.w400,
   });
 
   /// The value a capsule radius carries: bigger than any control is tall, so
@@ -308,6 +323,10 @@ class ShapeTokens {
     contentRadius: 2,
     roomed: false,
     pillInset: 0,
+    // Words in the sans, numbers in the mono: a label is a word.
+    kickerSize: 10,
+    kickerWeight: FontWeight.w500,
+    kickerTracking: 0.2,
   );
 
   static const desk = ShapeTokens(
@@ -369,6 +388,8 @@ class ShapeTokens {
     contentRadius: 3,
     roomed: true,
     pillInset: 3,
+    // Lantern's labels are its tracked mono capitals.
+    kickerMono: true,
   );
 
   static ShapeTokens of(ThemeShape shape) => switch (shape) {
@@ -1145,7 +1166,7 @@ class LumitTheme {
       viewerSurround: _rgb(0x1e, 0x1e, 0x1e),
       textPrimary: _rgb(0xe6, 0xe9, 0xea),
       textSecondary: _rgb(0xb6, 0xbc, 0xbf),
-      textMuted: _rgb(0x83, 0x8b, 0x90),
+      textMuted: _rgb(0x8f, 0x97, 0x9c),
       textDisabled: _rgb(0x66, 0x70, 0x77),
       hairline: _rgb(0x25, 0x27, 0x29),
       hairlineStrong: _rgb(0x3d, 0x40, 0x42),
@@ -1172,8 +1193,9 @@ class LumitTheme {
         viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
         textPrimary: _rgb(0x1a, 0x1a, 0x18),
         textSecondary: _rgb(0x45, 0x45, 0x42),
-        textMuted: _rgb(0x7a, 0x7a, 0x76),
-        textDisabled: _rgb(0xa8, 0xa8, 0xa4),
+        // Muted at 5:1 on white and disabled at 3:1, so a label still reads.
+        textMuted: _rgb(0x6c, 0x6c, 0x68),
+        textDisabled: _rgb(0x98, 0x98, 0x94),
         hairline: _rgb(0xd8, 0xd6, 0xd2),
         hairlineStrong: _rgb(0xc4, 0xc1, 0xbc),
         // Light used to keep a hand-darkened accent of its own, because clay
@@ -1294,7 +1316,8 @@ class LumitTheme {
         viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
         textPrimary: _rgb(0xcd, 0xd6, 0xf4),
         textSecondary: _rgb(0xba, 0xc2, 0xde),
-        textMuted: _rgb(0x7f, 0x84, 0x9c),
+        // The palette's brighter overlay, as the menu surface is a pale one.
+        textMuted: _rgb(0x93, 0x99, 0xb2),
         textDisabled: _rgb(0x6c, 0x70, 0x86),
         hairline: _rgb(0x39, 0x3a, 0x4d),
         hairlineStrong: _rgb(0x4f, 0x52, 0x66),
@@ -1332,8 +1355,10 @@ class LumitTheme {
         viewerSurround: _rgb(0xa8, 0xa8, 0xa8),
         textPrimary: _rgb(0x4c, 0x4f, 0x69),
         textSecondary: _rgb(0x5c, 0x5f, 0x77),
-        textMuted: _rgb(0x8c, 0x8f, 0xa1),
-        textDisabled: _rgb(0x9c, 0xa0, 0xb0),
+        // Subtext and overlay from the palette, which hold on its panel
+        // where the two overlays did not.
+        textMuted: _rgb(0x6c, 0x6f, 0x85),
+        textDisabled: _rgb(0x8c, 0x8f, 0xa1),
         hairline: _rgb(0xcc, 0xd0, 0xda),
         hairlineStrong: _rgb(0xbc, 0xc0, 0xcc),
         accent: _rgb(0x88, 0x39, 0xef),
@@ -2327,7 +2352,7 @@ class LumitTheme {
         viewerSurround: _rgb(0x1c, 0x1c, 0x1c),
         textPrimary: _rgb(0xf0, 0xef, 0xeb),
         textSecondary: _rgb(0xc4, 0xc2, 0xbc),
-        textMuted: _rgb(0x91, 0x8f, 0x89),
+        textMuted: _rgb(0x9b, 0x99, 0x93),
         textDisabled: _rgb(0x78, 0x75, 0x6f),
         hairline: _rgb(0x35, 0x35, 0x32),
         hairlineStrong: _rgb(0x4e, 0x4e, 0x4a),
@@ -2424,43 +2449,34 @@ class LumitTheme {
   /// **Every container label** (docs/15-DESIGN.md §7.1): panel titles, section
   /// headers, column headers, tab labels, dialog titles, attribution.
   ///
-  /// In plain terms, a kicker is the small capitalised word above a thing that
-  /// says what the thing is. Lumit sets all of them in Paper Mono, small, with
-  /// the letters spaced out, and quiet — so everything the *application* names
-  /// looks unmistakably different from everything the *user* names, which stays
-  /// sentence-case Hanken Grotesk.
+  /// In plain terms, a kicker is the small quiet word above a thing that says
+  /// what the thing is. The shape says how it is set: Lantern in tracked mono
+  /// capitals, Studio and Desk in the sans, so the mono is for numbers there.
+  /// Everything the application names still reads apart from everything the
+  /// user names, which is body size and bright.
   ///
-  /// The capitals are the *style*, not the string: a widget upper-cases what it
-  /// is handed, so the translated phrase in the arb file stays an ordinary
+  /// The case is the *style*, not the string: a widget cases what it is
+  /// handed, so the translated phrase in the arb file stays an ordinary
   /// sentence and no key has to be spelled twice.
-  TextStyle get kicker => TextStyle(
-        // Desk's label is its one sans, lowercase; the caps kicker is mono.
-        fontFamily:
-            tokens.tabularNumbers ? tokens.sansFamily : tokens.monoFamily,
-        fontFamilyFallback: monoFontFamilyFallback,
-        fontFeatures: _monoFigures,
-        // 9px at +0.12em, regular weight — **the approved mockups' own
-        // `.kick`** (their metrics are canonical), and the bottom of §7.1's
-        // 9–11px / 0.08–0.12em band rather than its middle. It was 10px at
-        // +0.10em in Medium, which read a size heavier than every kicker the
-        // mockups draw. Flutter measures tracking in logical pixels, so an em
-        // is the font size.
-        fontSize: 9,
-        // 1.08 written out, not `9 * 0.12`: the product is 0.12000000000000001
-        // in binary floating point, which lands a hair outside the band the
-        // spec states and the primitives test checks.
-        //
-        // That tracking was drawn for capitals. Small letters at it read as
-        // loose single characters, so a label not in capitals takes the
-        // drawings' sentence-case 0.06em, unless the shape is tighter still.
-        letterSpacing:
-            labelCase == LabelCase.caps || tokens.kickerTracking < 0.54
-                ? tokens.kickerTracking
-                : 0.54,
-        color: textMuted,
-        decoration: TextDecoration.none,
-        fontWeight: FontWeight.w400,
-      );
+  TextStyle get kicker {
+    final mono = tokens.kickerMono;
+    // Capitals want air between them, a tenth of an em at least. Small
+    // letters tracked that far read as loose single characters, so a label
+    // not in capitals takes the drawings' 0.06em unless the shape is tighter.
+    final tracking = labelCase == LabelCase.caps
+        ? math.max(tokens.kickerTracking, 0.08 * tokens.kickerSize)
+        : math.min(tokens.kickerTracking, 0.54);
+    return TextStyle(
+      fontFamily: mono ? tokens.monoFamily : tokens.sansFamily,
+      fontFamilyFallback: mono ? monoFontFamilyFallback : fontFamilyFallback,
+      fontFeatures: mono ? _monoFigures : _figures,
+      fontSize: tokens.kickerSize,
+      letterSpacing: tracking,
+      color: textMuted,
+      decoration: TextDecoration.none,
+      fontWeight: tokens.kickerWeight,
+    );
+  }
 
   /// The kicker of the container that is *in force* — the fronted dock tab, the
   /// section being edited. Only the colour changes: same face, same size, same

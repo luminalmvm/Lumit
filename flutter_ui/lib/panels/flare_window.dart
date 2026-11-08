@@ -27,6 +27,7 @@ import '../l10n/strings.dart';
 import '../shell/dialog_frame.dart';
 import '../shell/theme_name_dialog.dart';
 import '../state/file_dialogs.dart';
+import '../state/landed.dart';
 import '../state/preview_throttle.dart';
 import '../theme/theme.dart';
 import '../widgets/angle_dial.dart';
@@ -74,7 +75,7 @@ bool pressFlareButton({
   required String param,
   required VoidCallback onApplied,
   CompositionReference? comp,
-  BigInt? frame,
+  int? frame,
 }) {
   if (param != 'edit_flare') return false;
   unawaited(() async {
@@ -99,7 +100,7 @@ Future<bool> showFlareWindow({
   required InstanceHome home,
   required UuidValue effect,
   CompositionReference? comp,
-  BigInt? frame,
+  int? frame,
 }) async {
   String? design;
   double? lightX, lightY;
@@ -137,8 +138,8 @@ Future<bool> showFlareWindow({
               lightY / (compSize ?? _fallbackComp).height),
       still: comp == null || frame == null
           ? null
-          : (maxEdge) => comp.stillWithoutEffect(
-              frame: frame, maxEdge: maxEdge, effect: effect),
+          : (maxEdge) => landed(() => comp.stillWithoutEffect(
+              frame: frame, maxEdge: maxEdge, effect: effect)),
       draw: draw == null
           ? null
           : (json) {

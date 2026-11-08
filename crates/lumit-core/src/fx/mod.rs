@@ -22,13 +22,17 @@ pub mod builtins;
 pub mod catalogue;
 /// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
+pub mod colour_name;
 /// The drivers and the driver-graph evaluation: one module per driver,
 /// plus the demand-driven walk that works out what every wire carries.
 pub mod drivers;
 /// One module per migrated built-in: its declaration and its behaviour (§2.1).
 pub mod effects;
+pub mod enabled;
 /// The in-house FFT / fractional Fourier transform the Lens flare bakes use.
 pub mod fft;
+/// Film's model: stocks, their spectra, and the passes they make.
+pub mod film;
 /// The Sprite flare's design: its elements and how they are drawn.
 pub mod flare;
 /// The Lens flare optics core, bake, and CPU reference (docs/08 §3.27).
@@ -45,6 +49,8 @@ pub mod lens_library;
 pub mod lfx;
 pub mod markers;
 pub mod maths;
+pub mod moments;
+pub mod names;
 /// The shared procedural noise core (docs/08 §3.37): seeded 3-D value and
 /// Perlin noise and the fractal sum over them, reused by the displacement
 /// family.
@@ -55,6 +61,7 @@ pub mod params;
 /// The points stream and its closed forms: one frame's
 /// particles, worked out from their birth indices and nothing else.
 pub mod points;
+pub mod presets;
 /// The catalogue as JSON, for the manual's per-effect parameter tables.
 pub mod reference;
 /// What an effect is, as a value rather than a variant (§2.4).

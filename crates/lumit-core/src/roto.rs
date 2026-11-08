@@ -63,7 +63,10 @@ use crate::model::{EffectInstance, EffectValue};
 /// Version 2 is the one that can seed the base frame from a segmentation model
 /// (docs/impl/addons.md §6.2): what a matte is a function of grew, so the
 /// mattes a version 1 build wrote are never asked for again.
-pub const TIER_VERSION: u16 = 2;
+///
+/// Version 3 refines the edge from the nearer-seed answer, so the grey mattes
+/// version 2 wrote are dropped.
+pub const TIER_VERSION: u16 = 3;
 
 /// The Roto brush's `match_name`, so the render path and the frame key can find
 /// the effect without importing the catalogue's type.

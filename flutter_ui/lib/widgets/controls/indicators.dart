@@ -36,7 +36,9 @@ class HouseProgressBar extends StatelessWidget {
     final radius = BorderRadius.circular(height / 2);
     return Container(
       height: height,
-      decoration: BoxDecoration(color: t.surface3, borderRadius: radius),
+      // The hairline, not a surface: the light schemes draw surface3 in the
+      // panel's own white, and the track vanished with it.
+      decoration: BoxDecoration(color: t.hairline, borderRadius: radius),
       // A job reports its progress in steps, and a bar that jumped from one
       // to the next read as a stutter in the job. The fill runs to each new
       // reading instead (docs/15 §8). It is paint inside a fixed track, so
@@ -46,7 +48,7 @@ class HouseProgressBar extends StatelessWidget {
         duration: eased ? scope.motion.mark.duration : Duration.zero,
         curve: Curves.easeOut,
         builder: (context, shown, child) => FractionallySizedBox(
-          alignment: Alignment.centerLeft,
+          alignment: AlignmentDirectional.centerStart,
           widthFactor: shown.clamp(0.0, 1.0),
           child: child,
         ),

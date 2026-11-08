@@ -17,7 +17,6 @@ import 'dart:ui' as ui;
 
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/panels/key_block.dart';
@@ -29,6 +28,7 @@ import 'package:lumit_flutter/panels/timeline_key_lane_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:uuid/uuid.dart';
@@ -48,6 +48,7 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
     ),
     info: BridgeLayerInfo(
       pitchFollowsSpeed: false,
+      sends: const [],
       collapseForced: false,
       volumeDb: const BridgeScalar.static_(0),
       pan: const BridgeScalar.static_(0),
@@ -75,7 +76,7 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
       ),
       inFrame: 0,
       outFrame: 200,
-      clipFrames: Int64List(0),
+      clipFrames: const [],
       clips: const [],
       transform: transform ?? _still,
       axisModes: const BridgeAxisModes(
@@ -85,6 +86,7 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
       ),
       effects: const [],
       styles: const [],
+      drivers: const [],
       label: 0,
       masks: const [],
       paint: const [],
@@ -99,6 +101,7 @@ BridgeLayerEntry _entry({BridgeTransform? transform}) {
 
 /// A transform with nothing animated on it.
 const _still = BridgeTransform(
+  orient: BridgeOrient.off,
   anchorX: BridgeScalar.static_(0),
   anchorY: BridgeScalar.static_(0),
   positionX: BridgeScalar.static_(0),
@@ -120,6 +123,7 @@ BridgeTransform _keyed({
   List<BridgeKeyframe> opacity = const [],
 }) =>
     BridgeTransform(
+      orient: BridgeOrient.off,
       anchorX: const BridgeScalar.static_(0),
       anchorY: const BridgeScalar.static_(0),
       positionX: BridgeScalar.keyframed(position),

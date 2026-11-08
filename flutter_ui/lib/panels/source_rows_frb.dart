@@ -320,13 +320,6 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           ],
         ),
       ),
-      Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text(
-          l10n.sourceAssetNote,
-          style: t.small.copyWith(color: t.textMuted),
-        ),
-      ),
     ];
   }
 
@@ -394,11 +387,13 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
     int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
     final shown =
         documentColour(byte(colour.r), byte(colour.g), byte(colour.b), 255);
+    void pick(PickedColour picked) => onPicked(
+        BridgeColourRgba(r: picked.r, g: picked.g, b: picked.b, a: colour.a));
 
     return SizedBox(
       width: _cellWidth,
       child: Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: GestureDetector(
           key: ValueKey<String>(keyName),
           behavior: HitTestBehavior.opaque,
@@ -414,14 +409,15 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
               scale: ColourScale.bytes,
               // It applies as it is chosen — there is no cheaper preview of a
               // solid than the solid itself.
-              onCommit: (picked) => onPicked(BridgeColourRgba(
-                r: picked.r,
-                g: picked.g,
-                b: picked.b,
-                a: colour.a,
-              )),
+              onCommit: pick,
             );
           },
+          onSecondaryTapUp: (details) => showColourWellMenu(
+            context,
+            details.globalPosition,
+            current: PickedColour(colour.r, colour.g, colour.b),
+            onPicked: pick,
+          ),
           child: HoverMark(
             swells: true,
             builder: (_, lit) => Container(

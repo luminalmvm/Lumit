@@ -18,12 +18,16 @@ pub mod probe;
 pub mod psd;
 pub mod sequence;
 pub mod slate;
+#[cfg(not(target_arch = "wasm32"))]
 mod vaapi;
+#[cfg(target_arch = "wasm32")]
+pub mod web;
 
 use std::path::Path;
 
 // rsmpeg's bindings are for FFmpeg 8. Against another major the build can go through
 // and then read FFmpeg's structures at the wrong offsets, so stop it here instead.
+#[cfg(not(target_arch = "wasm32"))]
 const _: () = assert!(
     rsmpeg::ffi::LIBAVUTIL_VERSION_MAJOR == 60,
     "Lumit needs FFmpeg 8.x (libavutil 60) and the build found another version. \
@@ -63,7 +67,57 @@ pub enum MediaError {
 /// can't open at all, or an EXR's render pass.
 #[must_use]
 pub fn reads_own(src: &MediaSource) -> bool {
-    src.source_layer.is_some() || ai::is_ai(src.on_disk()) || exr::reads_pass(src)
+    src.source_layer.is_some()
+        || ai::is_ai(src.on_disk())
+        || exr::reads_pass(src)
+        || reads_still(src.on_disk())
+}
+
+/// Whether `path` is a file footage can be read from. In the browser build a
+/// file the page has handed in (`web`) is one too, though no disk holds it.
+#[must_use]
+pub fn is_file(path: &Path) -> bool {
+    #[cfg(target_arch = "wasm32")]
+    if web::holds(path) {
+        return true;
+    }
+    lumit_ingress::files::is_file(path)
+}
+
+/// How many frames the page has handed in, in the browser build. A picture
+/// drawn while one was on its way is worth drawing again once this moves.
+/// Nought on the desktop, which decodes its own.
+#[must_use]
+pub fn frames_landed() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    return web::frames::landed();
+    #[cfg(not(target_arch = "wasm32"))]
+    0
+}
+
+/// How many times a render has drawn another frame in place of one still on
+/// its way, in the browser build. A picture drawn while this moved is never
+/// kept. Nought on the desktop.
+#[must_use]
+pub fn stand_ins() -> u64 {
+    #[cfg(target_arch = "wasm32")]
+    return web::frames::stand_ins();
+    #[cfg(not(target_arch = "wasm32"))]
+    0
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl decode::VideoDecoder {
+    /// Frame `n` for a render, which may draw a stand-in while the real one is
+    /// on its way. The desktop decodes every frame it is asked for, so this is
+    /// [`Self::frame_rgba`]. The browser build's is in `web`.
+    pub fn frame_or_stand_in(
+        &mut self,
+        n: usize,
+        target_width: Option<u32>,
+    ) -> Result<DecodedFrame, MediaError> {
+        self.frame_rgba(n, target_width)
+    }
 }
 
 /// The picture of a source that [`reads_own`], at `frame` when it is a run of
@@ -90,9 +144,12 @@ pub fn read_own(
             .map(|frame| exr::downsample(frame, target_width))
     } else if ai::is_ai(path) {
         ai::read_layer(path, src.source_layer, target_width)
-    } else {
-        let layer = src.source_layer?;
+    } else if let Some(layer) = src.source_layer {
         psd::read_layer(path, layer).map(|frame| psd::downsample(frame, target_width))
+    } else if reads_still(path) {
+        read_still(path).map(|frame| psd::downsample(frame, target_width))
+    } else {
+        return None;
     };
     // A still has no fields, cadence or loop to read, only its alpha and the
     // shape of its pixels.
@@ -105,6 +162,22 @@ pub fn read_own(
     }))
 }
 
+#[cfg(target_arch = "wasm32")]
+use web::{read_still, reads_still};
+
+/// A desktop leaves every plain still to FFmpeg. The browser build has none,
+/// and reads some itself.
+#[cfg(not(target_arch = "wasm32"))]
+fn reads_still(_path: &Path) -> bool {
+    false
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_still(_path: &Path) -> Result<DecodedFrame, MediaError> {
+    Err(MediaError::NoStreams)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl From<rsmpeg::error::RsmpegError> for MediaError {
     fn from(e: rsmpeg::error::RsmpegError) -> Self {
         MediaError::Ffmpeg(e.to_string())
@@ -112,6 +185,7 @@ impl From<rsmpeg::error::RsmpegError> for MediaError {
 }
 
 /// The linked FFmpeg (libavformat) version, for the boot log.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn ffmpeg_version() -> String {
     format!(
         "{}.{}.{}",
@@ -119,6 +193,19 @@ pub fn ffmpeg_version() -> String {
         rsmpeg::ffi::LIBAVFORMAT_VERSION_MINOR,
         rsmpeg::ffi::LIBAVFORMAT_VERSION_MICRO
     )
+}
+
+/// The browser build has no FFmpeg.
+#[cfg(target_arch = "wasm32")]
+pub fn ffmpeg_version() -> String {
+    "none".into()
+}
+
+/// What opening anything that needs FFmpeg answers in the browser build,
+/// where the page decodes video and sound itself.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn no_ffmpeg() -> MediaError {
+    MediaError::Ffmpeg("not in the browser build".into())
 }
 
 /// Content fingerprint for relinking and index-cache keys
@@ -133,15 +220,17 @@ pub struct Fingerprint {
 impl Fingerprint {
     pub fn of(path: &Path) -> Result<Self, MediaError> {
         use std::io::{Read, Seek, SeekFrom};
-        let meta = std::fs::metadata(path)?;
-        let size = meta.len();
-        let mtime_unix = meta
-            .modified()?
+        #[cfg(target_arch = "wasm32")]
+        if let Some(print) = web::fingerprint(path) {
+            return Ok(print);
+        }
+        let size = lumit_ingress::files::len(path)?;
+        let mtime_unix = lumit_ingress::files::modified(path)?
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
             .unwrap_or(0);
 
-        let mut file = std::fs::File::open(path)?;
+        let mut file = lumit_ingress::files::open(path)?;
         let mut hasher = blake3::Hasher::new();
         let chunk = 64 * 1024;
         let mut buf = vec![0u8; chunk];

@@ -15,7 +15,7 @@
 import 'dart:io';
 
 import 'package:flutter/gestures.dart'
-    show kDoubleTapMinTime;
+    show PointerDeviceKind, kDoubleTapMinTime, kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,12 +37,28 @@ void main() {
   group('Graph panel (frb)', () {
     /// A comp with one solid carrying one Gaussian blur, selected.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
-        withBlur() {
+        withBlur({bool open = true}) {
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       comp.addSolidLayer();
       final layer = comp.getLayers().single;
       layer.addEffect(name: 'blur');
+      // Twirled open from outside, so a test can reach a parameter socket
+      // nobody has wired yet.
+      if (open) {
+        final graph = layer.getGraph();
+        final blur = graph.nodes.firstWhere((n) => n.matchName == 'blur').node;
+        layer.setGraph(
+          drivers: layer.getGraphDrivers(),
+          wiring: BridgeGraphWiring(
+            edges: graph.wiring.edges,
+            layout: graph.wiring.layout,
+            exposed: [...graph.wiring.exposed, blur],
+            groups: graph.wiring.groups,
+            outUnwired: false,
+          ),
+        );
+      }
       p.uiState.selectedLayer.value = layer;
       p.uiState.model.refresh();
       return (state: p.state, uiState: p.uiState, layer: layer);
@@ -99,27 +115,27 @@ void main() {
     String effectKey(LayerReference layer) => graphNodeKey(
         layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node);
 
-    /// A new effect's box starts open, showing every parameter socket. The
-    /// header twirl shuts it, and a number socket nobody has wired is then not
-    /// drawn at all.
+    /// A new effect's box starts shut: a number socket nobody has wired is
+    /// not drawn at all. The header twirl opens it, showing every parameter
+    /// socket.
     testWidgets('exposure shows the parameter sockets, and is one op',
         (tester) async {
-      final p = withBlur();
+      final p = withBlur(open: false);
       await mount(tester, p);
       final key = effectKey(p.layer);
 
-      expect(socket(key, 'radius'), findsOneWidget);
-      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
+      expect(socket(key, 'radius'), findsNothing);
+      expect(p.layer.getGraph().wiring.exposed, isEmpty);
       await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
       await tester.pump();
 
-      expect(socket(key, 'radius'), findsNothing);
-      expect(p.layer.getGraph().wiring.exposed, isEmpty);
+      expect(socket(key, 'radius'), findsOneWidget);
+      expect(p.layer.getGraph().wiring.exposed, hasLength(1));
 
       p.state.project!.undo();
       p.uiState.model.refresh();
       await tester.pump();
-      expect(p.layer.getGraph().wiring.exposed, hasLength(1),
+      expect(p.layer.getGraph().wiring.exposed, isEmpty,
           reason: 'one gesture, one undo step');
     });
 
@@ -408,6 +424,57 @@ void main() {
       await tester.pump();
       expect(placed().x, 67, reason: 'off means off — no snapping');
       expect(placed().y, 313);
+    });
+
+    /// A box's left or right edge drags its width, which commits with its
+    /// position: the right edge keeps the left one still, and the reverse.
+    testWidgets('dragging a box edge commits its width', (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(40, 300));
+      await mount(tester, p);
+      await tester.tap(find.byKey(const ValueKey('graph-snap')));
+      await tester.pump();
+
+      final box = find.byKey(ValueKey<String>('graph-node-driver:$wiggle'));
+      final start = tester.getRect(box);
+      BridgeNodePosition placed() => p.layer
+          .getGraph()
+          .wiring
+          .layout
+          .firstWhere((l) => l.node == BridgeNodeRef.driver(wiggle));
+
+      // On the header, where no socket sits.
+      await tester.dragFrom(
+          Offset(start.right - 1, start.top + 6), const Offset(60, 0));
+      await tester.pump();
+      expect(placed().width, closeTo(start.width - 2 + 60, 1.5));
+      expect(placed().x, 40, reason: 'the left edge stays');
+
+      final wider = tester.getRect(box);
+      await tester.dragFrom(
+          Offset(wider.left + 1, wider.top + 6), const Offset(-30, 0));
+      await tester.pump();
+      expect(placed().width, closeTo(start.width - 2 + 90, 1.5));
+      expect(placed().x, closeTo(10, 1.5), reason: 'the right edge stays');
+    });
+
+    /// M mutes the picked box, as node editors have it, and M again brings
+    /// it back: the bypass its tick sets.
+    testWidgets('M bypasses the picked box and M again restores it',
+        (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+
+      await tester.tap(find.byKey(ValueKey<String>('graph-node-$key')));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
+      await tester.pump();
+      expect(p.layer.getEffects().single.enabled(), isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyM);
+      await tester.pump();
+      expect(p.layer.getEffects().single.enabled(), isTrue);
     });
 
     /// **N7 — a box dropped on a wire falls into it.** The wire splits: what
@@ -756,7 +823,14 @@ void main() {
           tester,
           find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}')),
           held: LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.byKey(const ValueKey('graph-save-group')));
+      // Save group… is on the box's menu, over the whole pick.
+      await tester.tapAt(
+          tester.getCenter(
+              find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}'))),
+          buttons: kSecondaryMouseButton,
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('graph-menu-save-group')));
       await tester.pumpAndSettle();
       await tester.enterText(
           find.byKey(const ValueKey('graph-group-name')), 'Audio rig');
@@ -813,7 +887,10 @@ void main() {
 
       await mount(tester, p,
           groups: () =>
-              [BridgePresetInfo(name: 'Audio rig', path: path, group: '')]);
+              [
+                BridgePresetInfo(
+                    name: 'Audio rig', path: path, group: '', keyed: false)
+              ]);
       await tester.tapAt(const Offset(600, 500));
       await tester.pump();
       p.uiState.activePane.value = Panel.graph.pane();
@@ -885,7 +962,7 @@ void main() {
       await tester.pumpAndSettle();
       expect([for (final e in layer.getEffects()) e.getInfo().name],
           ['blur', 'exposure']);
-      expect(comp.documentRevision(), was + BigInt.one, reason: 'one op');
+      expect(comp.documentRevision(), was + 1, reason: 'one op');
 
       await tester.drag(find.byKey(const ValueKey<String>('drag-driver')),
           const Offset(300, 350),
@@ -893,16 +970,14 @@ void main() {
       await tester.pumpAndSettle();
       final drivers = layer.getGraphDrivers();
       expect(drivers, hasLength(1));
-      final canvas =
-          tester.getTopLeft(find.byKey(const ValueKey('graph-canvas')));
+      // The canvas opens framed, so the box is checked on screen.
       final from =
           tester.getTopLeft(find.byKey(const ValueKey<String>('drag-driver')));
-      final place = layer.getGraph().wiring.layout.firstWhere(
-          (l) => l.node == BridgeNodeRef.driver(drivers.single.id()));
-      expect(Offset(place.x, place.y),
-          from + const Offset(300, 350) - canvas,
+      final box = tester.getTopLeft(find.byKey(
+          ValueKey<String>('graph-node-driver:${drivers.single.id()}')));
+      expect((box - (from + const Offset(300, 350))).distance, lessThan(1),
           reason: 'the driver sits where it was let go');
-      expect(comp.documentRevision(), was + BigInt.two, reason: 'one op');
+      expect(comp.documentRevision(), was + 2, reason: 'one op');
     });
   });
 }

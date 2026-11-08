@@ -14,6 +14,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:provider/provider.dart';
@@ -26,8 +27,8 @@ import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/name_direction.dart';
+import '../shell/settings_window_frb.dart' show showSettingsWindowFrb;
 import 'project_columns_frb.dart';
-import 'project_menu_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
 
 /// The state badge ("missing"): 14 tall, 4px of padding either side, its text
@@ -137,6 +138,53 @@ class ProjectBadge extends StatelessWidget {
   }
 }
 
+/// A badge waiting on something: its word breathes slowly while [on], as the
+/// file can take a while and nothing else on the row moves. Still with motion
+/// turned down.
+class _Breathing extends StatefulWidget {
+  final bool on;
+  final Widget child;
+
+  const _Breathing({required this.on, required this.child});
+
+  @override
+  State<_Breathing> createState() => _BreathingState();
+}
+
+class _BreathingState extends State<_Breathing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _beat = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  late final Animation<double> _opacity = _beat
+      .drive(CurveTween(curve: Curves.easeInOut))
+      .drive(Tween<double>(begin: 1, end: 0.5));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final moves =
+        widget.on && ThemeScope.of(context).motion.level == AnimationLevel.all;
+    if (moves && !_beat.isAnimating) {
+      _beat.repeat(reverse: true);
+    } else if (!moves && _beat.isAnimating) {
+      _beat.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _beat.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+        child: FadeTransition(opacity: _opacity, child: widget.child),
+      );
+}
+
 /// How wide [text] is on one line. Kept once measured, since rows ask on
 /// every build and a panel holds few different names and fewer badges.
 double _lineWidth(String text, TextStyle style, TextScaler scale) {
@@ -186,6 +234,18 @@ class ProjectRowFrb extends StatefulWidget {
   /// On disk, but the engine cannot decode it.
   final bool undecodable;
 
+  /// The pictures a 3D model names that are missing, shown in its badge's
+  /// tooltip.
+  final List<String> missingPictures;
+
+  /// Where a 3D model's trip through the user's Blender stands, null when it
+  /// needs none or is done.
+  final BridgeBlenderState? blender;
+
+  /// A press on its converting badge and on its stopped one.
+  final VoidCallback? onStopBlender;
+  final VoidCallback? onConvertAgain;
+
   /// Sound with no picture — the media probe's own answer, which is what picks
   /// the speaker glyph over the film one.
   final bool audio;
@@ -207,7 +267,11 @@ class ProjectRowFrb extends StatefulWidget {
   /// Handed in from the panel's cache, for the reason the name is.
   final bool nodeGraph;
 
-  /// Whether any composition places this item — the `in use` badge.
+  /// A 3D model rather than footage that plays, which wears the cube.
+  final bool model;
+
+  /// Whether any composition places this item. A file or solid nothing uses
+  /// reads a step quieter than one that is, so the unused stand out as such.
   final bool inUse;
 
   /// This item's proxy, or null where it has none. Null on every kind
@@ -263,9 +327,11 @@ class ProjectRowFrb extends StatefulWidget {
   /// The panel's whole footage selection, read when a drag starts so dragging
   /// any selected row brings the rest with it.
   final List<FootageReference> Function() selectedFootage;
-  final VoidCallback onStartRename;
   final VoidCallback onEndRename;
-  final VoidCallback onFindMissing;
+
+  /// A right press on the row, at this point in the window. The panel holds
+  /// what the menu is about, so the row only says where.
+  final ValueChanged<Offset> onMenu;
 
   /// Make a comp from these items — the panel's own New composition, so a
   /// double-clicked footage item goes through the one funnel every other route
@@ -288,25 +354,6 @@ class ProjectRowFrb extends StatefulWidget {
   /// File these items into this row's folder — the drop gesture. Null on every
   /// kind but a folder, which is what makes a folder row the only drop target.
   final void Function(List<ItemReference> items)? onDropItems;
-
-  /// File this row (and the rest of the selection, when it is part of one) into
-  /// the folder picked from **Move to folder**.
-  final void Function(ItemReference folder) onMoveToFolder;
-
-  /// Select items the row menu has just made, such as the copies Duplicate
-  /// leaves.
-  final void Function(List<ItemReference> items) onPick;
-
-  /// The folders **Move to folder** may offer, read when the menu is raised.
-  /// A function rather than a list because a menu is a gesture: reading the
-  /// tree per rebuild is exactly the chatter the budget test guards against.
-  final List<(String, ItemReference)> Function() folderChoices;
-
-  /// What a command from this row's menu acts on — the panel's own
-  /// `_targets`, which is the whole selection when this row is in it and this
-  /// row alone when it is not. A function for the same reason
-  /// [folderChoices] is: it is read when the menu is raised, never in build.
-  final List<ItemReference> Function() menuTargets;
   final Future<String?> Function()? relinkPicker;
 
   const ProjectRowFrb({
@@ -316,10 +363,15 @@ class ProjectRowFrb extends StatefulWidget {
     required this.depth,
     required this.missing,
     this.undecodable = false,
+    this.missingPictures = const [],
+    this.blender,
+    this.onStopBlender,
+    this.onConvertAgain,
     required this.audio,
     required this.label,
     required this.inherited,
     this.nodeGraph = false,
+    this.model = false,
     required this.inUse,
     required this.proxy,
     this.standIn = false,
@@ -336,18 +388,13 @@ class ProjectRowFrb extends StatefulWidget {
     required this.loneSelection,
     required this.onSelect,
     required this.selectedFootage,
-    required this.onStartRename,
     required this.onEndRename,
-    required this.onFindMissing,
+    required this.onMenu,
     required this.onNewComposition,
     required this.folderOpen,
     required this.onToggleFolder,
     required this.onLocalEdit,
     required this.onSetLabel,
-    required this.onMoveToFolder,
-    required this.onPick,
-    required this.menuTargets,
-    required this.folderChoices,
     this.onDropItems,
     this.relinkPicker,
   });
@@ -359,19 +406,7 @@ class ProjectRowFrb extends StatefulWidget {
 class _ProjectRowFrbState extends State<ProjectRowFrb> {
   bool _hover = false;
   TextEditingController? _rename;
-  // Escape on the field's own node, ahead of the shortcut system: the
-  // row's editor is a bare EditableText rather than a HouseTextField, so it
-  // wires the same key itself instead of inheriting it.
-  late final FocusNode _renameFocus = FocusNode(onKeyEvent: _onRenameKey);
-
-  KeyEventResult _onRenameKey(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape) {
-      _cancelRename();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
+  final FocusNode _renameFocus = FocusNode();
 
   ItemReference get item => widget.item;
 
@@ -529,31 +564,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
             // is about what is picked, and collapsing four rows to one because the
             // menu was opened would throw the selection away.
             if (!widget.selected) widget.onSelect(SelectMode.replace);
-            showProjectMenuFrb(
-              context: context,
-              item: item,
-              missing: widget.missing,
-              position: d.globalPosition,
-              onFindMissing: widget.onFindMissing,
-              onLocalEdit: widget.onLocalEdit,
-              onStartRename: widget.onStartRename,
-              onSetLabel: widget.onSetLabel,
-              label: widget.label,
-              inherited: widget.inherited,
-              onRelink: item is ItemReference_Footage
-                  ? () => _doRelink((item as ItemReference_Footage).field0)
-                  : null,
-              proxy: widget.proxy,
-              // The same picker seam the relink uses — picking a proxy file
-              // and picking a replacement are the same gesture over the same
-              // dialogue, and tests inject one stub for both.
-              proxyPicker: widget.relinkPicker,
-              // Read here, not in build: raising the menu is a gesture.
-              folders: widget.folderChoices(),
-              onMoveToFolder: widget.onMoveToFolder,
-              onPick: widget.onPick,
-              targets: widget.menuTargets(),
-            );
+            widget.onMenu(d.globalPosition);
           },
           child: Container(
             height: projectRowHeight,
@@ -574,12 +585,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     [for (final c in widget.holders) t.personColour(c)],
                     tint: 0.14,
                   ),
-            padding: EdgeInsets.only(
+            padding: EdgeInsetsDirectional.only(
               // Five levels at most, so a deep folder still leaves its rows
               // a name and room for the columns.
-              left: projectRowPadding +
+              start: projectRowPadding +
                   math.min(widget.depth, 5) * projectIndentPerDepth,
-              right: projectRowPadding,
+              end: projectRowPadding,
             ),
             child: Row(
               children: [
@@ -642,6 +653,14 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         feedback: _DragFeedbackFrb(
           name: dragged.length > 1 ? l10n.projectItemCount(dragged.length) : name,
         ),
+        child: row,
+      );
+    }
+    if (item case ItemReference_Solid(:final field0)) {
+      return Draggable<SolidDragData>(
+        data: SolidDragData(field0, widget.name),
+        dragAnchorStrategy: pointerDragAnchorStrategy,
+        feedback: _DragFeedbackFrb(name: widget.name, icon: LumitIcon.solid),
         child: row,
       );
     }
@@ -784,9 +803,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                         color: Color.lerp(
                             widget.missing
                                 ? t.warning
-                                : tag != 0
-                                    ? t.labelColour(tag)
-                                    : tint,
+                                : (tag != 0 ? t.labelColour(tag) : tint)
+                                    .withValues(alpha: _unused ? 0.6 : 1),
                             t.textPrimary,
                             0.35 * lit)!,
                       ),
@@ -799,7 +817,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   }
 
   /// The name, then who else has the composition open, then the quiet
-  /// badges: placed somewhere, read from a proxy, read from a stand-in.
+  /// badges: read from a proxy, read from a stand-in.
   ///
   /// **The name keeps [_nameFloor] of room, or all it needs when that is
   /// less.** It is the one thing on the row that cannot be guessed, and two
@@ -811,10 +829,23 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   Widget _nameAndBadges(LumitTheme t) {
     final id = projectItemId(item);
     final badges = [
-      // Placed somewhere (§12A.3a). Before the missing badge, so a broken
-      // file that is nonetheless *in* a comp reads left to right as "used,
-      // and lost", which is the order those two facts matter in.
-      if (widget.inUse) ('in-use-$id', l10n.projectItemInUse, t.success),
+      // First, so a narrow column keeps it: the one thing the row is waiting
+      // on, or that wants fixing before the model can draw.
+      ...switch (widget.blender) {
+        BridgeBlenderState_Converting() => [
+            ('converting-$id', l10n.projectItemConverting, t.textMuted)
+          ],
+        BridgeBlenderState_NoBlender() => [
+            ('no-blender-$id', l10n.projectItemNoBlender, t.warning)
+          ],
+        BridgeBlenderState_Failed() || BridgeBlenderState_NoImporter() => [
+            ('blender-failed-$id', l10n.projectItemUndecodable, t.warning)
+          ],
+        BridgeBlenderState_Stopped() => [
+            ('stopped-$id', l10n.projectItemStopped, t.textMuted)
+          ],
+        null => const <(String, String, Color)>[],
+      },
       // Reading from its proxy. **Quiet on purpose**: a proxy is a fact
       // about which file the item is being read from, not something that
       // wants acting on, so it takes the badge family's shape at
@@ -831,6 +862,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
       if (widget.missing) ('relink-$id', l10n.projectItemMissing, t.warning),
       if (widget.undecodable)
         ('undecodable-$id', l10n.projectItemUndecodable, t.warning),
+      if (widget.missingPictures.isNotEmpty)
+        ('pictures-$id', l10n.projectItemMissing, t.warning),
     ];
     final name = _nameOrEditor(t);
     if (badges.isEmpty && widget.people.isEmpty) return name;
@@ -842,9 +875,12 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         // What is left past the name's floor goes to the people first, as
         // many as fit and never fewer than a count of them, and then to the
         // badges, in order, until one does not fit.
+        // A trip through Blender says why the model isn't drawing, so it's
+        // worth half the name's room. The tooltip still has the whole name.
+        final floor = widget.blender == null ? _nameFloor : _nameFloor / 2;
         final needs = widget.renaming
-            ? _nameFloor
-            : math.min(_nameFloor, _lineWidth(widget.name, t.body, scale));
+            ? floor
+            : math.min(floor, _lineWidth(widget.name, t.body, scale));
         var room = box.maxWidth - needs;
         const each = projectRowGap + _personDotSize;
         final marks =
@@ -917,9 +953,61 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                     ),
                   ),
                 )
-              else if (key.startsWith('undecodable-'))
+              else if (key.startsWith('no-blender-'))
+                // Straight to the row that fixes it.
                 LumitTooltip(
-                  message: l10n.tipProjectUndecodable,
+                  message: l10n.tipProjectNoBlender,
+                  child: GestureDetector(
+                    key: ValueKey<String>(key),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => showSettingsWindowFrb(context,
+                        row: l10n.settingsBlender),
+                    child: ProjectBadge(label: label, colour: colour),
+                  ),
+                )
+              else if (key.startsWith('converting-') ||
+                  key.startsWith('stopped-'))
+                // A press on it stops the conversion, or starts it again.
+                LumitTooltip(
+                  message: key.startsWith('stopped-')
+                      ? l10n.tipProjectConvertAgain
+                      : l10n.tipProjectStopConverting,
+                  child: HoverMark(
+                    swells: true,
+                    builder: (context, lit) => GestureDetector(
+                      key: ValueKey<String>(key),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: key.startsWith('stopped-')
+                          ? widget.onConvertAgain
+                          : widget.onStopBlender,
+                      child: _Breathing(
+                        on: key.startsWith('converting-'),
+                        child: ProjectBadge(
+                          label: label,
+                          colour:
+                              Color.lerp(colour, t.textPrimary, 0.35 * lit)!,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (key.startsWith('blender-failed-'))
+                LumitTooltip(
+                  message: switch (widget.blender) {
+                    BridgeBlenderState_Failed(:final reason) => reason,
+                    BridgeBlenderState_NoImporter() =>
+                      l10n.tipProjectNoImporter,
+                    _ => l10n.tipProjectUndecodable,
+                  },
+                  child: ProjectBadge(
+                      key: ValueKey<String>(key), label: label, colour: colour),
+                )
+              else if (key.startsWith('undecodable-') ||
+                  key.startsWith('pictures-'))
+                LumitTooltip(
+                  message: key.startsWith('pictures-')
+                      ? widget.missingPictures.join('\n')
+                      : l10n.tipProjectUndecodable,
                   child: ProjectBadge(
                       key: ValueKey<String>(key), label: label, colour: colour),
                 )
@@ -936,31 +1024,25 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     );
   }
 
-  /// The label square: always the hues, never the row's current colour — the
-  /// glyph two cells left already wears that, so this stays the mark that
-  /// says "a colour is set here" rather than a second copy of the answer.
-  /// Opens the same eight-colour picker every label control does.
+  /// Nothing places it. A composition doesn't count, as one nothing nests is
+  /// usually the one being made, and a folder has no uses of its own.
+  bool get _unused =>
+      !widget.inUse &&
+      (item is ItemReference_Footage || item is ItemReference_Solid);
+
   Widget _nameOrEditor(LumitTheme t) {
     final controller = _rename;
     if (widget.renaming && controller != null) {
-      return Container(
+      return HouseTextField(
+        key: const ValueKey('rename-field'),
+        controller: controller,
+        focusNode: _renameFocus,
+        width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          color: t.surface0,
-          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-          border: Border.all(color: t.accent),
-        ),
-        child: EditableText(
-          key: const ValueKey('rename-field'),
-          controller: controller,
-          focusNode: _renameFocus,
-          style: t.body,
-          cursorColor: t.accent,
-          backgroundCursorColor: t.surface2,
-          selectionColor: t.accent.withValues(alpha: 0.5),
-          onSubmitted: (_) => _commitRename(),
-          onTapOutside: (_) => _commitRename(),
-        ),
+        style: t.body,
+        onSubmitted: (_) => _commitRename(),
+        onTapOutside: _commitRename,
+        onCancelled: _cancelRename,
       );
     }
     // A folder names a group, and a picked row is the one being talked about:
@@ -970,7 +1052,9 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         ? t.textMuted
         : (widget.selected || item is ItemReference_Folder)
             ? t.textPrimary
-            : t.textSecondary;
+            : _unused
+                ? t.textMuted
+                : t.textSecondary;
     return Text(widget.name,
         style: t.body.copyWith(color: colour),
         textDirection: nameDirection(widget.name),
@@ -986,7 +1070,11 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     final fallback = projectDefaultLabel(item, audio: widget.audio);
     return switch (item) {
       ItemReference_Footage() => (
-          widget.audio ? LumitIcon.audioFile : LumitIcon.footage,
+          widget.model
+              ? LumitIcon.cube3d
+              : widget.audio
+                  ? LumitIcon.audioFile
+                  : LumitIcon.footage,
           t.labelColour(fallback),
         ),
       ItemReference_Folder() => (LumitIcon.folder, t.textMuted),
@@ -1002,14 +1090,40 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
 }
 
 /// The floating label shown under the pointer while a row is dragged.
-class _DragFeedbackFrb extends StatelessWidget {
+class _DragFeedbackFrb extends StatefulWidget {
   final String name;
   final LumitIcon icon;
   const _DragFeedbackFrb({required this.name, this.icon = LumitIcon.footage});
 
   @override
+  State<_DragFeedbackFrb> createState() => _DragFeedbackFrbState();
+}
+
+class _DragFeedbackFrbState extends State<_DragFeedbackFrb> {
+  bool _replacing = HardwareKeyboard.instance.isAltPressed;
+
+  bool _onKey(KeyEvent _) {
+    final alt = HardwareKeyboard.instance.isAltPressed;
+    if (alt != _replacing) setState(() => _replacing = alt);
+    return false;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final (name, icon) = (widget.name, widget.icon);
     return FloatSurface(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1021,6 +1135,11 @@ class _DragFeedbackFrb extends StatelessWidget {
                 color: icon == LumitIcon.comp ? t.textMuted : t.labelColour(1)),
             const SizedBox(width: 6),
             Text(name, style: t.small),
+            if (_replacing) ...[
+              const SizedBox(width: 8),
+              Text(l10n.menuReplaceSource,
+                  style: t.small.copyWith(color: t.accent)),
+            ],
           ],
         ),
       ),

@@ -64,6 +64,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod files;
+
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -206,6 +208,16 @@ impl Limits {
         bytes: 5 << 30,
         items: 4096,
         depth: 8,
+        work: 1 << 32,
+    };
+
+    /// A 3D model with its geometry and pictures. A heavy scene with every
+    /// picture at 4K decodes to a few gigabytes; 6 GiB admits it and stops a
+    /// file that claims a mesh larger than any graphics card holds.
+    pub const MODEL: Limits = Limits {
+        bytes: 6 << 30,
+        items: 1_000_000,
+        depth: 64,
         work: 1 << 32,
     };
 
@@ -471,9 +483,9 @@ pub fn read_capped(path: &Path, limit: u64) -> Result<Vec<u8>> {
         path: path.to_path_buf(),
         reason: e.to_string(),
     };
-    let file = std::fs::File::open(path).map_err(io)?;
+    let file = files::open(path).map_err(io)?;
     // The declared length is a hint for sizing, never a promise about content.
-    let declared = file.metadata().map_err(io)?.len();
+    let declared = files::len(path).map_err(io)?;
     if declared > limit {
         return Err(IngressError::FileTooLarge {
             path: path.to_path_buf(),

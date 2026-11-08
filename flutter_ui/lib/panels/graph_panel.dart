@@ -38,54 +38,58 @@ import 'package:flutter/rendering.dart'
     show BoxHitTestEntry, BoxHitTestResult, RenderStack;
 import 'package:flutter/services.dart'
     show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
+import 'package:flutter/rendering.dart' show RenderOffstage;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
+import 'package:lumit_flutter/src/rust/api/graph_looks.dart';
+import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
-import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
 import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../icons/icons.dart' show LumitIcon, lumitIcon;
+import '../icons/icons.dart' show LumitIcon;
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
+import '../state/comp_time.dart' show timeOfFrame;
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
-import '../state/preview_throttle.dart';
+import '../state/external_links.dart' show effectManualUrl, openExternalLink;
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 import '../state/settings.dart' show InterfaceSettings;
-import '../state/timeline_columns.dart' show ValueColumn;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'comp_graph_panel.dart' show CompBoxRows, CompGraphPanel, compBoxRows;
-import 'effect_param_row_frb.dart'
-    show
-        EffectParamRowFrb,
-        EffectStackEditor,
-        cachedListParameters,
-        relistedRows,
-        withChained;
+import 'effect_commands.dart' show EffectCommands;
+import 'effect_param_row_frb.dart' show instanceParameters, relistedRows;
+import 'graph_card.dart';
+import 'graph_cut_fade.dart';
 import 'graph_groups.dart';
+import 'node_menus.dart';
 import 'graph_ties.dart';
-import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
+import 'graph_value_row.dart';
+import '../state/clipboard.dart' show ClipboardKind;
+import 'fx_section.dart' show fxEnableMarkScale;
 import 'layer_fold_frb.dart' show effectPath;
-import 'flare_window.dart' show pressFlareButton;
-import 'lens_window.dart' show pressLensButton;
 import '../state/share.dart';
 import 'placeholder.dart';
-import 'shader_editor.dart'
-    show InstanceHome, editExpressionOn, pressShaderButton;
+import 'shader_editor.dart' show InstanceHome;
 import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'viewer_tool_cursor.dart' show handPanLayer;
+
+// The boxes' own layout and drawing live in graph_card.dart; the other
+// canvases reach them through this library, as they always have.
+export 'graph_card.dart';
 
 // --- The drawing's own numbers (NodeGraph, Nodes-workspace) ---------------
 //
@@ -130,18 +134,11 @@ const double graphEnableSize = graphBadgeSize * fxEnableMarkScale;
 /// (the default is a default, not a law).
 const double graphTwirlSize = 12;
 
-/// A node graph box twirled open draws a control on every parameter row, so
-/// it is wider than a shut one: the stopwatch, the name and the control column
-/// the Node panel gives a row, inside the row inset on both sides.
-const double graphNodeOpenWidth = 300;
-
-/// A parameter row with a control in it: the 20px well with 2px of air either
-/// side, on the four-pixel module. A socket-only row keeps [graphPortRowHeight].
-const double graphControlRowHeight = 24;
-
-/// The control column on an open box's row. Wide enough for every control the
-/// row widget draws, the Range sliders setting's well and track included.
-const double graphControlColumn = 150;
+/// A box twirled open draws every parameter as a row of its name and its
+/// value, so it is wider than a shut one: room for the longest names and a
+/// number with its unit, inside the row inset on both sides. The controls
+/// are the Node panel's rows.
+const double graphNodeOpenWidth = 200;
 
 /// What a row keeps clear of the card's edge on either side, where the socket
 /// sits.
@@ -278,10 +275,15 @@ const double graphGroupHead = graphNodeHeaderHeight;
 const String graphGroupExtension = 'lumgrp';
 
 /// Where an unplaced box lands: the chain marches right, the drivers sit
-/// below it. The drawing's own spacing — a node's width plus 88 of air.
+/// below it. The drawing's own spacing: a node's width plus 88 of air, and
+/// 64 along the layer's own chain.
 const double _autoX = 26;
 const double _autoY = 44;
 const double _autoAir = 88;
+const double _chainAir = 64;
+
+/// The smallest a graph opens at, so its words stay readable.
+const double _openFloor = 0.85;
 const double _autoDriverY = 222;
 const double _autoDriverStepY = 140;
 
@@ -374,6 +376,17 @@ bool graphAddKey(KeyEvent event, InterfaceSettings settings) {
       keys.isShiftPressed && settings.shiftAOpensNodeSearch,
     _ => false,
   };
+}
+
+/// M with no modifier: the key that mutes the picked boxes, as node editors
+/// have it, and unmutes them again.
+bool graphMuteKey(KeyEvent event) {
+  final keys = HardwareKeyboard.instance;
+  return event.logicalKey == LogicalKeyboardKey.keyM &&
+      !keys.isControlPressed &&
+      !keys.isAltPressed &&
+      !keys.isMetaPressed &&
+      !keys.isShiftPressed;
 }
 
 /// Where the pointer is inside the box [key] names, in that box's own pixels,
@@ -474,180 +487,6 @@ class GraphSocket {
   const GraphSocket(this.node, this.port, this.isInput, this.at);
 }
 
-/// The picture of its inner graph a Custom shader box carries under its rows:
-/// how tall it is, the air round it, and the room the two take on the box.
-const double graphShaderThumbHeight = 56;
-const double graphFootPad = 6;
-const double graphShaderFoot = graphShaderThumbHeight + graphFootPad * 2;
-
-/// What one box shows, whichever graph it came out of.
-///
-/// The canvas draws three subjects and each has a model of its own, so a card
-/// is drawn from this record rather than from any one of them: the key is what
-/// the panel means by identity everywhere else, and the three marks say which
-/// of the header's controls this box has.
-typedef GraphCard = ({
-  String key,
-  String title,
-  String? customName,
-
-  /// A word after the names saying what the box is: a Read box's item kind, an
-  /// Input's kind. Null where the title says it all.
-  String? kicker,
-  bool enabled,
-
-  /// The bypass tick, the twirl, and whether a double-click renames.
-  bool tick,
-  bool twirl,
-  bool rename,
-
-  /// A box with an inside wears the viz tint on its header.
-  bool tinted,
-  List<BridgePort> inputs,
-  List<BridgePort> outputs,
-
-  /// A box that reads a points stream with none wired in wears a warning.
-  bool noStream,
-});
-
-/// One row of a box: the input socket on its left edge, the output socket on
-/// its right, and on an open node graph box the parameter whose control fills
-/// it. [top] is measured from under the header.
-typedef GraphRow = ({
-  BridgePort? input,
-  BridgePort? output,
-  String? param,
-  double top,
-  double height,
-});
-
-/// One box, laid out: where it sits and which sockets it shows.
-class GraphBox {
-  final GraphCard card;
-  final Rect rect;
-  final List<BridgePort> inputs;
-  final List<BridgePort> outputs;
-  final List<GraphRow> rows;
-  const GraphBox(this.card, this.rect, this.inputs, this.outputs, this.rows);
-
-  String get key => card.key;
-
-  Offset? socket(String portId, bool isInput) {
-    for (final row in rows) {
-      if ((isInput ? row.input : row.output)?.id != portId) continue;
-      return Offset(
-        isInput ? rect.left : rect.right,
-        rect.top + 1 + graphNodeHeaderHeight + row.top + row.height / 2,
-      );
-    }
-    return null;
-  }
-}
-
-/// One box's rectangle and the sockets it draws, from its card and the spot it
-/// sits on.
-///
-/// A shut box draws the picture's own path and whatever is already wired; open,
-/// it draws every socket it has (§1.4). Exposure grows the box; it is not a
-/// second kind of wiring. [params] are the parameters an open node graph box
-/// gives a control row each, in the order the panel lists them; the layer
-/// canvas passes none and its rows are sockets alone. [foot] is room left
-/// under the rows, which a Custom shader box fills with its inner graph.
-GraphBox graphLayoutBox(
-  GraphCard card,
-  Offset at, {
-  required bool open,
-  double width = graphNodeWidth,
-  List<String> params = const [],
-  double foot = 0,
-}) {
-  List<BridgePort> shown(List<BridgePort> ports) => [
-        for (final p in ports)
-          if (_alwaysDrawn(p.portType) || p.wired || open) p,
-      ];
-  final inputs = shown(card.inputs);
-  final outputs = shown(card.outputs);
-  final rows = graphRows(inputs, outputs, params);
-  final height = rows.isEmpty ? 0.0 : rows.last.top + rows.last.height;
-  return GraphBox(
-    card,
-    Rect.fromLTWH(
-      at.dx,
-      at.dy,
-      width + 2,
-      2 + graphNodeHeaderHeight + height + foot,
-    ),
-    inputs,
-    outputs,
-    rows,
-  );
-}
-
-/// The rows a box draws, top to bottom.
-///
-/// The picture's sockets come first in the order the engine lists them, then
-/// one control row per parameter where the first parameter socket stood, then
-/// whatever sockets follow. An output shares a socket's row where there is one
-/// to share, else a control's, and only a box whose every row already carries
-/// an output grows another.
-List<GraphRow> graphRows(
-  List<BridgePort> inputs,
-  List<BridgePort> outputs,
-  List<String> params,
-) {
-  final byId = {for (final p in inputs) p.id: p};
-  final wanted = params.toSet();
-  final first = inputs.indexWhere((p) => wanted.contains(p.id));
-  final rows = <({BridgePort? input, BridgePort? output, String? param})>[];
-  void controls() => rows.addAll([
-        for (final id in params) (input: byId[id], output: null, param: id),
-      ]);
-  for (var i = 0; i < inputs.length; i++) {
-    if (i == first) controls();
-    if (!wanted.contains(inputs[i].id)) {
-      rows.add((input: inputs[i], output: null, param: null));
-    }
-  }
-  if (first < 0) controls();
-  var at = 0;
-  for (final out in outputs) {
-    while (at < rows.length && rows[at].param != null) {
-      at++;
-    }
-    if (at < rows.length) {
-      rows[at] = (input: rows[at].input, output: out, param: null);
-      at++;
-      continue;
-    }
-    // No socket row left to share with. A box of controls alone, which is
-    // every driver, puts its output on the first row with none yet rather than
-    // on a blank row under everything it draws.
-    final spare = rows.indexWhere((r) => r.output == null);
-    if (spare < 0) {
-      rows.add((input: null, output: out, param: null));
-      at = rows.length;
-    } else {
-      rows[spare] =
-          (input: rows[spare].input, output: out, param: rows[spare].param);
-    }
-  }
-  final laid = <GraphRow>[];
-  var top = 0.0;
-  for (final row in rows) {
-    final height =
-        row.param == null ? graphPortRowHeight : graphControlRowHeight;
-    laid.add((
-      input: row.input,
-      output: row.output,
-      param: row.param,
-      top: top,
-      height: height,
-    ));
-    top += height;
-  }
-  return laid;
-}
-
 /// Where an unplaced box lands: a row marching right, and a second row below
 /// it for the boxes that make values rather than pictures. [width] is the
 /// widest box the canvas draws, so the row steps clear of it.
@@ -674,6 +513,42 @@ Offset graphClearSpot(Offset at, Iterable<Rect> taken) {
     spot += const Offset(step, step);
   }
   return spot;
+}
+
+/// Whether [context] is drawn. The dock keeps a pane behind another tab
+/// alive but offstage, and such a canvas must not answer for the one in
+/// front.
+bool graphOnStage(BuildContext context) {
+  RenderObject? node = context.findRenderObject();
+  if (node == null || !node.attached) return false;
+  while (node != null) {
+    if (node is RenderOffstage && node.offstage) return false;
+    final parent = node.parent;
+    node = parent is RenderObject ? parent : null;
+  }
+  return true;
+}
+
+/// The view that fits [rects] in [viewport] with a little air round them,
+/// the zoom held to [maxZoom]. Null when there is nothing to fit.
+({Offset pan, double zoom})? graphFrame(Size viewport, Iterable<Rect> rects,
+    {double maxZoom = 2}) {
+  Rect? bounds;
+  for (final r in rects) {
+    bounds = bounds?.expandToInclude(r) ?? r;
+  }
+  if (bounds == null || viewport.isEmpty) return null;
+  bounds = bounds.inflate(20);
+  final zoom = math
+      .min(viewport.width / bounds.width, viewport.height / bounds.height)
+      .clamp(0.2, maxZoom);
+  return (
+    zoom: zoom,
+    pan: Offset(
+      (viewport.width - bounds.width * zoom) / 2 - bounds.left * zoom,
+      (viewport.height - bounds.height * zoom) / 2 - bounds.top * zoom,
+    ),
+  );
 }
 
 /// The rectangle a group's wash covers, in canvas units: its members' own
@@ -710,6 +585,8 @@ class GraphLayout {
   /// The socket nearest [at], within grabbing distance, or null.
   GraphSocket? socketAt(Offset at) {
     for (final box in boxes) {
+      // A folded box's ends stand for every wire on it, so they take none.
+      if (box.collapsed) continue;
       for (final (isInput, ports) in [
         (true, box.inputs),
         (false, box.outputs)
@@ -733,6 +610,7 @@ class GraphLayout {
     GraphSocket? best;
     var nearest = double.infinity;
     for (final box in boxes) {
+      if (box.collapsed) continue;
       for (final (isInput, ports) in [
         (true, box.inputs),
         (false, box.outputs)
@@ -770,24 +648,49 @@ class GraphLayout {
 GraphLayout _layoutOf(
   BridgeLayerGraph graph,
   Map<String, Offset> positions,
+  Map<String, double> widths,
   Set<String> exposed,
   String layerName,
-  Map<String, CompBoxRows> params,
-) {
+  Map<String, CompBoxRows> params, {
+  BridgeNodeLooks? looks,
+}) {
+  final colours = {
+    for (final c in looks?.colours ?? const <BridgeNodeColour>[])
+      graphNodeKey(c.node): c.colour,
+  };
+  final folded = {...?looks?.collapsed.map(graphNodeKey)};
   final boxes = <GraphBox>[];
-  var chain = 0;
+  var chainX = _autoX;
   var drivers = 0;
   for (final node in graph.nodes) {
     final key = graphNodeKey(node.node);
     final isDriver = node.node is BridgeNodeRef_Driver;
     final derived = _derivedNode(node.node);
+    final held = params[key];
+    // The chain steps on each box's shut width, so a chain of seven opens at
+    // a size you can read. A box twirled open eats into the air after it.
+    final shut = node.node is BridgeNodeRef_Out
+        ? graphOutNodeWidth
+        : held?.telling.isNotEmpty ?? false
+            ? graphNodeOpenWidth
+            : graphNodeWidth;
     final placed = positions[key] ??
-        graphAutoPlace(isDriver ? drivers : chain,
-            lower: isDriver, width: graphNodeOpenWidth);
-    isDriver ? drivers++ : chain++;
+        (isDriver
+            ? graphAutoPlace(drivers, lower: true, width: graphNodeOpenWidth)
+            : Offset(chainX, _autoY));
+    if (isDriver) {
+      drivers++;
+    } else {
+      chainX += shut + _chainAir;
+    }
     final open = exposed.contains(key) || isDriver;
-    final rows =
-        open ? params[key]?.rows ?? const <BridgeParamInfo>[] : const [];
+    // Open, every row under its group's heading; shut, the rows that tell
+    // something: a wire on them, a key, or a value off its default.
+    final rows = held == null
+        ? const <BridgeParamInfo>[]
+        : open
+            ? held.open
+            : held.telling;
     boxes.add(graphLayoutBox(
       (
         key: key,
@@ -808,12 +711,18 @@ GraphLayout _layoutOf(
       placed,
       open: open,
       params: [for (final p in rows) p.id],
-      width: node.node is BridgeNodeRef_Out
+      kickers: open ? held?.kickers ?? const {} : const {},
+      width: graphBoxWidth(
+          node.node is BridgeNodeRef_Out
           ? graphOutNodeWidth
           : rows.isEmpty
               ? graphNodeWidth
               : graphNodeOpenWidth,
+          widths[key],
+          open: rows.isNotEmpty),
       foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
+      colour: colours[key] ?? 0,
+      collapsed: folded.contains(key),
     ));
   }
   return GraphLayout(boxes);
@@ -830,20 +739,6 @@ List<GraphBox> _chainOf(GraphLayout layout) => [
       for (final b in layout.boxes)
         if (!b.key.startsWith('driver:')) b,
     ];
-
-/// Sockets that are always drawn, wired or not: the picture's own path, and
-/// every **wire-only** port beside it.
-///
-/// A wire-only port has no stored value and therefore no panel row anywhere
-/// (points-stream.md §2.2) — a matte's, an audio stream's, a points stream's.
-/// The socket is the only way to reach it, so hiding it behind the twirl
-/// would hide the whole port. A *parameter* socket is different: the row is
-/// still there in Effect controls, so the canvas may keep it folded away.
-bool _alwaysDrawn(BridgePortType type) =>
-    type == BridgePortType.image ||
-    type == BridgePortType.matte ||
-    type == BridgePortType.audio ||
-    type == BridgePortType.points;
 
 /// A box that consumes a points stream with **nothing wired into it**.
 ///
@@ -1056,6 +951,74 @@ class GraphNodeDrag {
   GraphNodeDrag(this.key, this.grab, this.origins, {this.collapse = false});
 }
 
+/// How near a box's left or right edge the pointer takes the edge, in screen
+/// pixels either side of it.
+const double graphEdgeGrab = 4;
+
+/// The narrowest a shut box can be dragged.
+const double graphMinNodeWidth = 90;
+
+/// The widest a box can be dragged.
+const double graphMaxNodeWidth = 900;
+
+/// The narrowest a box can be: a shut one keeps its name, an open one a name
+/// and a short value.
+double graphMinWidth({required bool open}) => open ? 140 : graphMinNodeWidth;
+
+/// A box's content width: the one an edge drag gave it, held inside what the
+/// box can take, or [fallback] where it has none.
+double graphBoxWidth(double fallback, double? dragged, {required bool open}) =>
+    dragged == null
+        ? fallback
+        : dragged.clamp(graphMinWidth(open: open), graphMaxNodeWidth);
+
+/// The box whose left or right edge is under [at], and which edge. The Layer
+/// out and a box whose width cannot change are left out by [resizable].
+({GraphBox box, bool left})? graphEdgeAt(
+    GraphLayout layout, Offset at, double zoom,
+    {bool Function(GraphBox box)? resizable}) {
+  final reach = graphEdgeGrab / zoom;
+  for (final box in layout.boxes.reversed) {
+    final r = box.rect;
+    if (at.dy < r.top || at.dy > r.bottom) continue;
+    if (resizable != null && !resizable(box)) continue;
+    if ((at.dx - r.left).abs() <= reach) return (box: box, left: true);
+    if ((at.dx - r.right).abs() <= reach) return (box: box, left: false);
+    if (r.contains(at)) return null;
+  }
+  return null;
+}
+
+/// The left-right arrows while the pointer rests on a box's edge or drags
+/// one; the cursor of whatever is underneath otherwise. Laid over the whole
+/// canvas and let through, so it takes no press.
+Widget graphEdgeCursor(bool on) => Positioned.fill(
+      child: MouseRegion(
+        opaque: false,
+        cursor: on ? SystemMouseCursors.resizeLeftRight : MouseCursor.defer,
+      ),
+    );
+
+/// A box's edge in hand: the side, where the press was and the box as it
+/// stood, so every move works from the start rather than adding up steps.
+class GraphEdgeDrag {
+  final String key;
+  final bool left;
+  final double grab;
+  final Rect from;
+  final bool open;
+  GraphEdgeDrag(this.key, this.left, this.grab, this.from, {required this.open});
+
+  /// The content width and left edge for the pointer at [x]: the right edge
+  /// stays put while the left one moves, and the reverse.
+  ({double width, double x}) at(double x) {
+    final start = from.width - 2;
+    final width = (left ? start - (x - grab) : start + (x - grab))
+        .clamp(graphMinWidth(open: open), graphMaxNodeWidth);
+    return (width: width, x: left ? from.right - width - 2 : from.left);
+  }
+}
+
 class GraphPanelFrb extends StatefulWidget {
   /// The driver catalogue seam, injected by tests so the popover can be
   /// asserted without the real registry.
@@ -1106,14 +1069,6 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   Map<String, BridgeEffectInstanceInfo> _infos = const {};
   Map<String, CompBoxRows> _params = const {};
 
-  /// A drag on an effect box's control: staged, previewed, committed on
-  /// release as one op, as the Node panel's is.
-  final EffectStackEditor _stack = EffectStackEditor();
-
-  /// The same for a driver box, whose commit is `setGraph`.
-  ({String key, Map<String, BridgeEffectValue> values})? _driverDrag;
-  final PreviewThrottle _driverPreview = PreviewThrottle();
-
   /// The layer's name, taken at the same moment, so the Source box can be
   /// headed without asking the model during a paint.
   String _layerName = '';
@@ -1121,6 +1076,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// Canvas positions, staged: a drag moves this map and the release commits
   /// it. Seeded from the document on each read.
   Map<String, Offset> _positions = {};
+
+  /// The widths edge drags gave boxes, by key.
+  Map<String, double> _widths = {};
+
+  /// A box edge in hand, and the edge the pointer is resting on.
+  GraphEdgeDrag? _edgeDrag;
+  bool _edgeHover = false;
 
   /// **The picked boxes**, by node key, in the order they were picked.
   ///
@@ -1271,6 +1233,25 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// A right-click on empty canvas, waiting for its release.
   bool _menuPress = false;
 
+  /// The box a right press landed on, whose menu opens if the release never
+  /// moved.
+  String? _menuBox;
+
+  @override
+  List<TieWire> tieWiresNow() {
+    final graph = _graph;
+    if (graph == null) return const [];
+    return _wiresOf(_layoutOf(
+      graph,
+      _positions,
+      _widths,
+      graph.wiring.exposed.map(graphNodeKey).toSet(),
+      _layerName,
+      _params,
+      looks: _looks,
+    ));
+  }
+
   /// The boxes as they stand, for a placement that has to miss them.
   List<GraphBox> _boxesNow() {
     final graph = _graph;
@@ -1278,9 +1259,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     return _layoutOf(
       graph,
       _positions,
+      _widths,
       graph.wiring.exposed.map(graphNodeKey).toSet(),
       _layerName,
       _params,
+      looks: _looks,
     ).boxes;
   }
 
@@ -1307,6 +1290,19 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     // `Ctrl+A` here means every box on this canvas, which it can only
     // mean now the pick is a set.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
+    // The Node panel's index of boxes asks for a pick the same way the
+    // canvas publishes one.
+    ui.graphNode.addListener(_onGraphNodeAsked);
+    ui.frameBoxRequest.addListener(_onFrameAsked);
+    ui.graphBoxMenuAsk.addListener(_onBoxMenuAsked);
+    // A reveal that opened this panel asked before it was listening: the
+    // pick and the framing are answered once the canvas has drawn.
+    if (ui.graphNode.value != null || ui.frameBoxRequest.value != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onGraphNodeAsked();
+        _onFrameAsked();
+      });
+    }
     // **Ctrl+Space with this panel focused adds to the graph**. The
     // shell's console applies to the selected layer; the same key over this
     // canvas opens the same popover wearing the canvas's own list. Chained the
@@ -1326,7 +1322,39 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     // rows — because there is one claim and more than one panel that wants it.
     if (ui.deleteClaim != _deleteClaim) _priorDeleteClaim = ui.deleteClaim;
     ui.deleteClaim = _deleteClaim;
+    // Ctrl+C and Ctrl+V over the layer's graph mean the picked effects, as
+    // they do in Effect controls. A node graph composition and a shader
+    // hold claims of their own above this one.
+    if (ui.copyClaim != _copyClaim) _priorCopyClaim = ui.copyClaim;
+    ui.copyClaim = _copyClaim;
+    if (ui.pasteClaim != _pasteClaim) _priorPasteClaim = ui.pasteClaim;
+    ui.pasteClaim = _pasteClaim;
     _reload();
+  }
+
+  bool Function()? _priorCopyClaim;
+  bool Function()? _priorPasteClaim;
+
+  bool _ownsClipboard(LumitUiState ui) =>
+      mounted &&
+      ui.activePanel == Panel.graph &&
+      !_showsCompGraph &&
+      ui.shaderGraphEntry.value == null;
+
+  bool _copyClaim() {
+    final ui = _ui;
+    if (ui == null || !_ownsClipboard(ui)) {
+      return _priorCopyClaim?.call() ?? false;
+    }
+    return _copyPicked(ui) || (_priorCopyClaim?.call() ?? false);
+  }
+
+  bool _pasteClaim() {
+    final ui = _ui;
+    if (ui == null || !_ownsClipboard(ui)) {
+      return _priorPasteClaim?.call() ?? false;
+    }
+    return _pasteEffects(ui) || (_priorPasteClaim?.call() ?? false);
   }
 
   /// The claim this panel had to displace to take Delete.
@@ -1340,7 +1368,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         _showsCompGraph) {
       return _priorDeleteClaim?.call() ?? false;
     }
-    return _deleteSelected() || (_priorDeleteClaim?.call() ?? false);
+    return tieDelete() ||
+        _deleteSelected() ||
+        (_priorDeleteClaim?.call() ?? false);
   }
 
   /// Whether the panel's face is the **node graph composition's** canvas,
@@ -1387,12 +1417,17 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     _ui?.model.removeListener(_reload);
     _ui?.shaderGraphEntry.removeListener(_onShaderEntry);
     _ui?.selectAllRequest.removeListener(_onSelectAllRequested);
+    _ui?.graphNode.removeListener(_onGraphNodeAsked);
+    _ui?.graphBoxMenuAsk.removeListener(_onBoxMenuAsked);
+    _ui?.frameBoxRequest.removeListener(_onFrameAsked);
     if (_ui?.deleteClaim == _deleteClaim) {
       _ui!.deleteClaim = _priorDeleteClaim;
     }
     if (_ui?.consoleClaim == _consoleClaim) {
       _ui!.consoleClaim = _priorConsoleClaim;
     }
+    if (_ui?.copyClaim == _copyClaim) _ui!.copyClaim = _priorCopyClaim;
+    if (_ui?.pasteClaim == _pasteClaim) _ui!.pasteClaim = _priorPasteClaim;
   }
 
   /// Pick every box the canvas is drawing — Source and Layer out included,
@@ -1405,12 +1440,39 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     setState(() => _pick([for (final n in _graph?.nodes ?? const []) n.node]));
   }
 
+  /// A pick asked for from outside, by the Node panel's index: the box
+  /// becomes the pick here, where the pick lives. The canvas's own publish
+  /// lands here too and finds the box already picked.
+  void _onGraphNodeAsked() {
+    final node = _ui?.graphNode.value;
+    if (!mounted || _showsCompGraph || !graphOnStage(context)) return;
+    // The Node panel going back to its index clears the pick with it.
+    if (node == null) {
+      if (_selection.isNotEmpty) setState(() => _pick(const []));
+      return;
+    }
+    final key = graphNodeKey(node);
+    if (_selection.containsKey(key) || !_byKey.containsKey(key)) return;
+    setState(() => _pick([node]));
+  }
+
+  /// The Node panel's heading asking for a box's menu: the box becomes the
+  /// pick, and the menu opens with every row the canvas has.
+  void _onBoxMenuAsked() {
+    final ask = _ui?.graphBoxMenuAsk.value;
+    if (!mounted || ask == null || _showsCompGraph || !graphOnStage(context)) {
+      return;
+    }
+    final node = _byKey[ask.key];
+    if (node == null) return;
+    _ui!.graphBoxMenuAsk.value = null;
+    if (!_isPicked(ask.key)) setState(() => _pick([node.node]));
+    _boxMenu(ask.key, ask.at);
+  }
+
   @override
   void dispose() {
     _unbind();
-    // A held tick would fire into a panel that is gone.
-    _driverPreview.cancel();
-    _stack.clear();
     _canvasFocus.dispose();
     super.dispose();
   }
@@ -1419,9 +1481,15 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   void _reload() {
     if (!mounted) return;
     final layer = _ui?.selectedLayer.value;
+    // Another layer's graph opens as a graph first opens: at rest or framed.
+    if (layer?.internallayerId != _layer?.internallayerId) {
+      _frameNext = true;
+      _viewMoved = false;
+    }
     BridgeLayerGraph? graph;
     var notes = const <BridgeGraphNote>[];
     var ties = const <BridgeWireTie>[];
+    BridgeNodeLooks? looks;
     var name = '';
     final infos = <String, BridgeEffectInstanceInfo>{};
     final params = <String, CompBoxRows>{};
@@ -1430,8 +1498,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         graph = layer.getGraph();
         notes = layer.getGraphNotes();
         ties = layer.getGraphTies();
+        looks = layer.getGraphLooks();
         name = layer.getInfo().name;
-        // The rows an open box draws, by the Effect controls panel's rules.
+        final ports = {for (final n in graph.nodes) graphNodeKey(n.node): n.inputs};
+        // The rows a box draws, by the Effect controls panel's rules.
         void read(BridgeNodeRef node, BridgeEffectInstance instance) {
           final key = graphNodeKey(node);
           final info = instance.getInfo();
@@ -1439,12 +1509,14 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           params[key] = compBoxRows(
             info.name,
             relistedRows(
-              [...cachedListParameters(info.name), ...info.derivedParams],
+              instanceParameters(info),
               info.rowOptions,
             ),
             {for (final v in info.values) v.id: v.value},
             info.hiddenRows.toSet(),
             info.disabledRows,
+            {for (final p in ports[key] ?? const <BridgePort>[]) if (p.wired) p.id},
+            layer.internallayerId,
           );
         }
 
@@ -1465,9 +1537,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _graph = graph;
       _infos = infos;
       _params = params;
-      _driverDrag = null;
       _notes = graph == null ? const [] : notes;
       _ties = graph == null ? const [] : ties;
+      _looks = graph == null ? null : looks;
       _byKey = {
         for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
           graphNodeKey(n.node): n,
@@ -1476,6 +1548,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _positions = {
         for (final p in graph?.wiring.layout ?? const <BridgeNodePosition>[])
           graphNodeKey(p.node): Offset(p.x, p.y),
+      };
+      _widths = {
+        for (final p in graph?.wiring.layout ?? const <BridgeNodePosition>[])
+          if (p.width case final w?) graphNodeKey(p.node): w,
       };
       // A box that has gone leaves the pick; the rest of the pick stands.
       final present =
@@ -1489,195 +1565,65 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
   // --- A box's own controls -----------------------------------------------
 
-  /// One parameter row on an open box: the Node panel's row, committed and
-  /// previewed the way that panel's edit is.
-  Widget _paramRow(String key, String param) {
+  /// What a wired parameter on an effect's box reads at the playhead, dimmed
+  /// beside its port name: the wire decides it, so it is shown, not edited.
+  /// Null for a driver's own inputs and anything but a number.
+  Widget? _drivenValue(String key, String param) {
     final layer = _layer;
     final ui = _ui;
     final comp = ui?.selectedComp;
     final info = _infos[key];
-    final held = _params[key];
-    final p = held?.rows.where((p) => p.id == param).firstOrNull;
     if (layer == null ||
         ui == null ||
+        comp == null ||
+        info == null ||
+        key.startsWith('driver:')) {
+      return null;
+    }
+    final held = info.values.where((v) => v.id == param).firstOrNull?.value;
+    if (held is! BridgeEffectValue_Float) return null;
+    final t = ThemeScope.of(context).theme;
+    return ValueListenableBuilder<int>(
+      valueListenable: ui.playheadFrame,
+      builder: (context, frame, _) => Text(
+        sampleScalarWithContext(
+          scalar: held.field0,
+          time: timeOfFrame(comp, frame),
+          layer: layer,
+          row: BridgeExpressionRow.effect(effect: info.id, param: param),
+        ).toStringAsFixed(2),
+        key: ValueKey<String>('graph-driven-$key-$param'),
+        style: t.small.copyWith(color: t.textMuted),
+      ),
+    );
+  }
+
+  /// One parameter row on an open box: the Node panel's row, committed and
+  /// previewed the way that panel's edit is.
+  /// A parameter's row on an open box: the name and the value, read. The
+  /// control for it is the Node panel's row.
+  Widget _paramRow(String key, String param) {
+    final ui = _ui;
+    final comp = ui?.selectedComp;
+    final info = _infos[key];
+    final held = _params[key];
+    final p = held?.open.where((p) => p.id == param).firstOrNull;
+    if (ui == null ||
         comp == null ||
         info == null ||
         held == null ||
         p == null) {
       return const SizedBox.shrink();
     }
-    final driver = key.startsWith('driver:');
-    final values = {for (final v in info.values) v.id: v.value};
-    final drag = _driverDrag;
-    BridgeEffectValue? valueOf(String id) =>
-        (driver
-            ? (drag?.key == key ? drag!.values[id] : null)
-            : _stack.stagedValue(info.id, id)) ??
-        values[id];
-    Map<String, BridgeEffectValue> chained(
-            String param, BridgeEffectValue value) =>
-        withChained(info, param, value, comp, ui.playheadFrame.value);
-    return EffectParamRowFrb(
+    return GraphValueRow(
       key: ValueKey<String>('graph-row-$key-$param'),
-      effectId: info.id,
       param: p,
-      value: valueOf(param),
+      value: info.values.where((v) => v.id == param).firstOrNull?.value,
       comp: comp,
-      ownerLayerId: layer.internallayerId,
-      ownerLayers: ui.model.layers,
-      playheadFrame: ui.playheadFrame.value,
-      onSeek: (frame) => ui.playheadFrame.value = frame,
-      onWrite: (_, param, value) =>
-          _writeParams(key, info, chained(param, value)),
-      onLive: (_, param, value) =>
-          _liveParams(key, info, chained(param, value)),
-      rowPadding: EdgeInsets.zero,
-      valueColumn: const ValueColumn(graphControlColumn, graphRowInset),
-      siblings: values,
+      frame: ui.playheadFrame.value,
       // Greyed where another control has taken the row over.
       enabled: !held.disabled.contains(param),
-      riders: [
-        for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
-          (r, valueOf(r.id)),
-      ],
-      onAction: (effect, param) => _pressParam(info, driver, effect, param),
     );
-  }
-
-  /// The layer's drivers, freshly read, with [values] written into one of
-  /// them: what a driver box's preview and commit both send.
-  List<BridgeEffectInstance> _driversWith(LayerReference layer, UuidValue node,
-      Map<String, BridgeEffectValue> values) {
-    final drivers = layer.getGraphDrivers();
-    for (final instance in drivers) {
-      if (instance.id() != node) continue;
-      for (final entry in values.entries) {
-        instance.setValue(id: entry.key, value: entry.value);
-      }
-    }
-    return drivers;
-  }
-
-  /// A typed value, or the release of a drag: one op, one undo step.
-  void _writeParams(String key, BridgeEffectInstanceInfo info,
-      Map<String, BridgeEffectValue> values) {
-    final layer = _layer;
-    if (layer == null) return;
-    if (key.startsWith('driver:')) {
-      _driverPreview.cancel();
-      final List<BridgeEffectInstance> drivers;
-      try {
-        drivers = _driversWith(layer, info.id, values);
-      } catch (_) {
-        return;
-      }
-      _commit(_wiringNow(), drivers: drivers);
-      return;
-    }
-    _stack.writeAll(layer, info.id, values);
-    _ui?.model.refresh();
-  }
-
-  /// A drag tick: the row shows it and the Viewer previews it, and nothing is
-  /// committed.
-  void _liveParams(String key, BridgeEffectInstanceInfo info,
-      Map<String, BridgeEffectValue> values) {
-    final ui = _ui;
-    final layer = _layer;
-    final comp = ui?.selectedComp;
-    if (ui == null || layer == null || comp == null) return;
-    if (key.startsWith('driver:')) {
-      setState(() => _driverDrag = (key: key, values: values));
-      _driverPreview.request(() {
-        try {
-          comp.renderFrameWithDriverPreview(
-            frame: BigInt.from(ui.playheadFrame.value),
-            scale: ui.viewerScale,
-            layer: layer,
-            drivers: _driversWith(layer, info.id, values),
-          );
-        } catch (_) {
-          // The graph moved under the drag; the release re-reads.
-        }
-      });
-      return;
-    }
-    setState(() {
-      for (final entry in values.entries) {
-        _stack.live(comp, layer, info.id, entry.key, entry.value,
-            frame: ui.playheadFrame.value, scale: ui.viewerScale);
-      }
-    });
-  }
-
-  /// A press on one of a box's buttons, the same press Effect controls and the
-  /// Node panel make.
-  void _pressParam(BridgeEffectInstanceInfo info, bool driver,
-      UuidValue effect, String param) {
-    final ui = _ui;
-    final layer = _layer;
-    if (ui == null || layer == null) return;
-    final comp = ui.selectedComp;
-    final frame = BigInt.from(ui.playheadFrame.value);
-    final home = driver
-        ? InstanceHome.drivers(layer)
-        : InstanceHome.layer(layer,
-            draw: comp == null
-                ? null
-                : (staged) => comp.renderFrameWithPreview(
-                    frame: frame,
-                    scale: ui.viewerScale,
-                    layer: layer,
-                    effects: staged));
-    void applied() => ui.model.refresh();
-    if (info.name == 'expression' &&
-        editExpressionOn(
-            context: context,
-            home: home,
-            effect: effect,
-            param: param,
-            onApplied: applied)) {
-      return;
-    }
-    if (info.name == 'custom_shader' &&
-        pressShaderButton(
-            context: context,
-            home: home,
-            effect: effect,
-            param: param,
-            onApplied: applied)) {
-      return;
-    }
-    if (pressLensButton(
-        context: context,
-        home: home,
-        effect: effect,
-        param: param,
-        onApplied: applied)) {
-      return;
-    }
-    if (pressFlareButton(
-        context: context,
-        home: home,
-        effect: effect,
-        param: param,
-        onApplied: applied,
-        comp: comp,
-        frame: frame)) {
-      return;
-    }
-    if (info.name == 'node_graph' && param == 'open') {
-      final project = Provider.of<LumitState>(context, listen: false).project;
-      final inner = graphCompById(project, info.nodeGraphComp);
-      if (inner != null) ui.setSelectedComp(inner);
-      return;
-    }
-    if (driver) return;
-    try {
-      fireEffectAction(layer: layer, effect: effect, param: param, frame: frame);
-    } catch (_) {
-      // Refused; the effect's own status line says why.
-    }
   }
 
   // --- Committing ---------------------------------------------------------
@@ -1697,7 +1643,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       layout: [
         for (final e in _positions.entries)
           if (_refOf(e.key) case final ref?)
-            BridgeNodePosition(node: ref, x: e.value.dx, y: e.value.dy),
+            BridgeNodePosition(
+                node: ref,
+                x: e.value.dx,
+                y: e.value.dy,
+                width: _widths[e.key]),
       ],
       exposed: exposed ?? w.exposed,
       groups: groups ?? w.groups,
@@ -2130,6 +2080,17 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     _reload();
   }
 
+  /// M on the canvas: the picked boxes are bypassed, or brought back when the
+  /// last one picked already is. The Source and the Layer out have no bypass.
+  void _mutePicked() {
+    for (final key in _selection.keys.toList().reversed) {
+      final node = _node(key);
+      if (node == null || _derivedNode(node.node)) continue;
+      _toggleBypass(key, node.enabled);
+      return;
+    }
+  }
+
   /// The user's own name for a box, committed the way its bypass is:
   /// a driver stages on the graph's driver list and commits `setGraph`, an
   /// effect stages on the stack and commits `setEffects`. One op, one undo
@@ -2275,6 +2236,396 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   bool _touchesKey(BridgeGraphEdge edge, String key) =>
       _sourceKey(edge) == key || _destKey(edge) == key;
 
+  // --- Menus --------------------------------------------------------------
+
+  /// An effect box's page in the manual, asked as its menu opens.
+  String? _manualOf(BridgeGraphNode node) {
+    if (_effectIdOf(node.node) == null) return null;
+    final info =
+        listEffects().where((e) => e.name == node.matchName).firstOrNull;
+    return info == null
+        ? null
+        : effectManualUrl(
+            name: info.name,
+            category: info.category,
+            label: info.label,
+            namespace: info.namespace);
+  }
+
+  /// A box's menu, over the pick as it stands: the right press made an
+  /// unpicked box the pick, so every row acts on the whole pick.
+  void _boxMenu(String key, Offset at) {
+    final graph = _graph;
+    final node = _node(key);
+    final ui = _ui;
+    if (_layer == null || graph == null || node == null || ui == null) return;
+    final derived = _derivedNode(node.node);
+    final driver = node.node is BridgeNodeRef_Driver;
+    final picked = _selection.keys.toSet();
+    final effects = _pickedEffects();
+    final wired =
+        graph.wiring.edges.any((e) => picked.any((k) => _touchesKey(e, k)));
+    final enter = switch (node.matchName) {
+      'custom_shader' => l10n.shaderEditorTitle,
+      'node_graph' => l10n.fxOpenGraph,
+      _ => null,
+    };
+    showGraphBoxMenu(
+      context,
+      at,
+      // The effect's own menu while only effects are picked. A pick with a
+      // driver or an end in it keeps the box rows, which act on all of it.
+      effect: picked.every((k) => k.startsWith('effect:'))
+          ? _effectCommands(key)
+          : null,
+      bypassed: derived ? null : !node.enabled,
+      onBypass: derived ? null : () => _toggleBypass(key, node.enabled),
+      onRename: derived ? null : () => setState(() => _renamingNode = key),
+      expanded: derived || driver || _isCollapsed(key)
+          ? null
+          : graph.wiring.exposed.any((e) => graphNodeKey(e) == key),
+      onExpand: derived || driver || _isCollapsed(key)
+          ? null
+          : () => _toggleExposed(key),
+      enterLabel: enter,
+      onEnter: enter == null ? null : () => _enterBox(node),
+      // An effect after this box in the chain, as the wire out of it offers.
+      onAddNode: driver || picked.length > 1
+          ? null
+          : () => _openSearch(
+              _boxesNow()
+                      .where((b) => b.key == key)
+                      .firstOrNull
+                      ?.rect
+                      .centerRight ??
+                  Offset.zero,
+              chain: true,
+              before: _chainAfter(node.node)),
+      onCopy: effects.isEmpty ? null : () => _copyPicked(ui),
+      onPaste: () => _pasteEffects(ui),
+      canPaste: ui.clipboard.kind == ClipboardKind.effects,
+      onDuplicate: effects.isEmpty ? null : _duplicatePicked,
+      onGroup: groupPicked,
+      onSaveGroup: () => saveGroup(),
+      canSaveGroup: canSaveGroup,
+      onUngroup: ungroupPicked,
+      canUngroup: groups.any((g) => g.members.any(picked.contains)),
+      onReveal: switch (_effectIdOf(node.node)) {
+        final id? => () => _reveal(_layer!, id),
+        null => null,
+      },
+      onManual: switch (_manualOf(node)) {
+        final url? => () => openExternalLink(url),
+        null => null,
+      },
+      // The picture stops at an effect box or the Source; a driver and the
+      // Layer out make no point to stop at. The right-click has picked the box,
+      // so the chip's point is this one.
+      viewHere: ui.viewerPrefixPoint == null ? null : ui.atSelectedEffect.value,
+      onViewHere: ui.viewerPrefixPoint == null
+          ? null
+          : () => ui.setAtSelectedEffect(!ui.atSelectedEffect.value),
+      onDisconnectAll: wired ? _disconnectPicked : null,
+      collapsed: _isCollapsed(key),
+      onCollapse: () => _restyle(key, collapsed: !_isCollapsed(key)),
+      colour: _looks?.colours
+              .where((c) => graphNodeKey(c.node) == key)
+              .firstOrNull
+              ?.colour ??
+          0,
+      onColour: (colour) => _restyle(key, colour: colour),
+      onDelete: derived ? null : _deleteSelected,
+      locked: ui.model.byId(_layer!.internallayerId)?.info.switches.locked ??
+          false,
+    );
+  }
+
+  /// What the effect behind box [key] can do, through the commands its
+  /// headings use, over the picked effects. Null for a box that isn't one.
+  EffectCommands? _effectCommands(String key) {
+    final ui = _ui;
+    final layer = _layer;
+    final comp = ui?.selectedComp;
+    final info = _infos[key];
+    if (ui == null ||
+        layer == null ||
+        comp == null ||
+        info == null ||
+        !key.startsWith('effect:')) {
+      return null;
+    }
+    // The commands act on the effect selection, so it is the pick here.
+    ui.setEffectSelection(layer, _pickedEffects());
+    return EffectCommands(
+        info: info, layer: layer, comp: comp, onStackChanged: _effectRowDone);
+  }
+
+  /// An effect's row, or the shell's Duplicate, has changed the stack. The
+  /// pick follows the effect selection, so Duplicate's copies are picked here
+  /// as they are in Effect controls, and the graph is read again.
+  void _effectRowDone() {
+    final ui = _ui;
+    final layer = _layer;
+    if (!mounted || ui == null || layer == null) return;
+    if (ui.selectedEffectsLayer?.internallayerId == layer.internallayerId) {
+      _selection
+        ..clear()
+        ..addEntries([
+          for (final id in ui.selectedEffects.value)
+            MapEntry(graphNodeKey(BridgeNodeRef.effect(id)),
+                BridgeNodeRef.effect(id)),
+        ]);
+    }
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
+    _reload();
+  }
+
+  /// The effect a box added after [node] goes in front of: the next one in the
+  /// stack, or null for the chain's end.
+  UuidValue? _chainAfter(BridgeNodeRef node) {
+    if (node is BridgeNodeRef_Out) return null;
+    List<UuidValue> ids;
+    try {
+      ids = [for (final e in _layer?.getEffects() ?? const []) e.id()];
+    } catch (_) {
+      return null;
+    }
+    final at = switch (node) {
+      BridgeNodeRef_Effect(:final field0) => ids.indexOf(field0),
+      _ => -1,
+    };
+    return at + 1 < ids.length ? ids[at + 1] : null;
+  }
+
+  /// Each box's colour and fold, read with the graph.
+  BridgeNodeLooks? _looks;
+
+  bool _isCollapsed(String key) =>
+      _looks?.collapsed.any((n) => graphNodeKey(n) == key) ?? false;
+
+  /// Colour or fold the pressed box, and the rest of the pick with it, as one
+  /// undo step.
+  void _restyle(String key, {int? colour, bool? collapsed}) {
+    final layer = _layer;
+    if (layer == null) return;
+    final nodes = _targets(key);
+    try {
+      if (colour != null) {
+        layer.setGraphBoxColour(nodes: nodes, colour: colour);
+      }
+      if (collapsed != null) {
+        layer.setGraphBoxCollapsed(nodes: nodes, collapsed: collapsed);
+      }
+    } catch (_) {
+      // The layer moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  /// Reveal in Effect controls: the shell opens the panel, fronts it and
+  /// hands it the effect to pick and scroll to.
+  void _reveal(LayerReference layer, UuidValue effect) =>
+      _ui?.revealEffectCard(layer, effect);
+
+  /// An effect's Reveal in node graph: the box is brought to the middle of the
+  /// canvas on the next layout, at the zoom in force.
+  void _onFrameAsked() {
+    final node = _ui?.frameBoxRequest.value;
+    if (!mounted || node == null || _showsCompGraph) return;
+    _ui!.frameBoxRequest.value = null;
+    setState(() => _frameKey = graphNodeKey(node));
+  }
+
+  /// The box the next layout centres on, or null.
+  String? _frameKey;
+
+  /// A socket's menu: its wire off, and the box's unused sockets shown or
+  /// hidden. The chain's wires are the effect list and are not stored, so
+  /// a chain socket has nothing to take off.
+  void _socketMenu(GraphSocket socket, Offset at) {
+    final graph = _graph;
+    final node = _node(socket.node);
+    if (graph == null || node == null) return;
+    VoidCallback? disconnect;
+    if (socket.isInput) {
+      if (_edgeInto(socket) case final edge?) {
+        disconnect = () => _removeEdge(edge);
+      }
+    } else if (_sourceOf(socket) case final source?
+        when graph.wiring.edges.any((e) => e.from == source)) {
+      disconnect = () => _commit(_wiringNow(edges: [
+            for (final e in graph.wiring.edges)
+              if (e.from != source) e,
+          ]));
+    }
+    final twirl =
+        !_derivedNode(node.node) && node.node is! BridgeNodeRef_Driver;
+    showGraphSocketMenu(
+      context,
+      at,
+      onDisconnect: disconnect,
+      expanded: twirl
+          ? graph.wiring.exposed.any((e) => graphNodeKey(e) == socket.node)
+          : null,
+      onExpand: twirl ? () => _toggleExposed(socket.node) : null,
+    );
+  }
+
+  /// The wire nearest [at] within a wire's grab distance, with its stored
+  /// edge, which is null for one of the picture's chain.
+  (TieWire, BridgeGraphEdge?)? _wireAt(GraphLayout layout, Offset at) {
+    final graph = _graph;
+    if (graph == null) return null;
+    final all = _layerWires(layout, graph.wiring.edges,
+        outUnwired: graph.wiring.outUnwired);
+    final wires = [for (final (w, _, _) in all) w];
+    (TieWire, BridgeGraphEdge?)? best;
+    var nearest = graphWireGrab;
+    for (final (w, edge, _) in all) {
+      final d = tieWireDistance(w, at, wires);
+      if (d < nearest) {
+        nearest = d;
+        best = (w, edge);
+      }
+    }
+    return best;
+  }
+
+  /// A wire's menu. A chain wire takes an effect into the chain where it
+  /// runs; a stored wire takes a driver between its two ends, and can be
+  /// taken off.
+  void _wireMenu(GraphLayout layout, TieWire wire, BridgeGraphEdge? edge,
+      Offset at, Offset position) {
+    // A chain wire's key names the box it feeds; the Layer out is no effect,
+    // so a wire into it inserts at the chain's end.
+    final fed = edge == null
+        ? _effectIdOf(_refOf(wire.key.substring(0, wire.key.indexOf('/'))))
+        : null;
+    // A stored wire's input end, which the search holds in hand.
+    GraphSocket? into;
+    if (edge != null) {
+      final (key, port) = _inputEnd(edge);
+      final box = layout.byKey[key];
+      final socket = box?.inputs.where((p) => p.id == port).firstOrNull;
+      final centre = box?.socket(port, true);
+      if (socket != null && centre != null) {
+        into = GraphSocket(key, socket, true, centre);
+      }
+    }
+    showGraphWireMenu(
+      context,
+      position,
+      onInsert: edge == null
+          ? () => _openSearch(at, chain: true, before: fed)
+          : into == null
+              ? null
+              : () => _openSearch(at, wire: into, feed: edge.from),
+      onReroute: () => tieAddPoint(wire.key, at),
+      onDelete: edge == null ? null : () => _removeEdge(edge),
+    );
+  }
+
+  void _canvasMenu(GraphLayout layout, Offset at, Offset position) {
+    final ui = _ui;
+    if (ui == null) return;
+    final nodes = [
+      for (final n in _graph?.nodes ?? const <BridgeGraphNode>[]) n.node
+    ];
+    showGraphCanvasMenu(
+      context,
+      position,
+      onAddNode: () => _openSearch(at),
+      onPaste: () => _pasteEffects(ui),
+      canPaste: ui.clipboard.kind == ClipboardKind.effects,
+      onSelectAll: () => setState(() => _pick(nodes)),
+      onFrameSelected: () => _frameSelected(_viewport, layout),
+      canFrameSelected: _selection.isNotEmpty,
+      onFrameAll: () => _frameAll(_viewport, layout),
+      onAddNote: addNote,
+      onGroup: groupPicked,
+      canGroup: canGroup,
+      onCollapseAll: nodes.isEmpty ? null : () => _foldAll(nodes, true),
+      canCollapseAll: nodes.any((n) => !_isCollapsed(graphNodeKey(n))),
+      onExpandAll: nodes.isEmpty ? null : () => _foldAll(nodes, false),
+      canExpandAll: nodes.any((n) => _isCollapsed(graphNodeKey(n))),
+    );
+  }
+
+  /// Fold or open every box, as one undo step.
+  void _foldAll(List<BridgeNodeRef> nodes, bool collapsed) {
+    try {
+      _layer?.setGraphBoxCollapsed(nodes: nodes, collapsed: collapsed);
+    } catch (_) {
+      // The layer moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  /// Every stored wire off the picked boxes, in one write. The chain's wires
+  /// are the effect list and stay.
+  void _disconnectPicked() {
+    final picked = _selection.keys.toSet();
+    _commit(_wiringNow(edges: [
+      for (final e in _graph!.wiring.edges)
+        if (!picked.any((k) => _touchesKey(e, k))) e,
+    ]));
+  }
+
+  // --- Copy and paste -----------------------------------------------------
+
+  /// The picked effects, in stack order. A driver has no clipboard shape.
+  List<UuidValue> _pickedEffects() => [
+        for (final node in _graph?.nodes ?? const <BridgeGraphNode>[])
+          if (_selection.containsKey(graphNodeKey(node.node)))
+            if (_effectIdOf(node.node) case final effect?) effect,
+      ];
+
+  /// Copy the picked effects, as the Effect controls heading does.
+  bool _copyPicked(LumitUiState ui) {
+    final layer = _layer;
+    final ids = _pickedEffects();
+    if (layer == null || ids.isEmpty) return false;
+    try {
+      ui.copyEffectsToClipboard(layer.copyEffects(effects: ids));
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Paste the effects on the clipboard onto the layer; they join the
+  /// chain's end. One op.
+  bool _pasteEffects(LumitUiState ui) {
+    final layer = _layer;
+    final text = ui.clipboard.text;
+    if (layer == null ||
+        text == null ||
+        ui.clipboard.kind != ClipboardKind.effects) {
+      return false;
+    }
+    try {
+      layer.pasteEffects(text: text, atFrame: ui.playheadFrame.value);
+    } catch (_) {
+      return false;
+    }
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
+    _reload();
+    return true;
+  }
+
+  /// The picked effects again, each copy after its original and picked in its
+  /// place: the effect menu's Duplicate. The clipboard is left as it was.
+  void _duplicatePicked() {
+    final ids = _pickedEffects();
+    if (ids.isEmpty) return;
+    _effectCommands(graphNodeKey(BridgeNodeRef.effect(ids.first)))
+        ?.duplicate(context);
+  }
+
   // --- The console --------------------------------------------------------
 
   /// Ctrl+Space, and a wire let go over empty canvas, open **the console** —
@@ -2282,14 +2633,19 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// saying what a row will do. One search surface, two doors: what the
   /// canvas contributes is the list, the spot the box lands on, and the
   /// sentence. Tab, Shift+A and a right-click are the Ctrl+Space door.
-  Future<void> _openSearch(Offset at, {GraphSocket? wire}) async {
+  Future<void> _openSearch(Offset at,
+      {GraphSocket? wire,
+      bool chain = false,
+      UuidValue? before,
+      BridgeOutputRef? feed}) async {
     if (_searching) return;
     setState(() => _searching = true);
     try {
       await showFxConsoleFrb(
         context: context,
         anchor: lastKnownPointerPosition,
-        model: _searchModel(at, wire: wire),
+        model: _searchModel(at,
+            wire: wire, chain: chain, before: before, feed: feed),
       );
     } finally {
       if (mounted) setState(() => _searching = false);
@@ -2297,8 +2653,14 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   }
 
   /// What the console lists over this canvas, for a box that would land on
-  /// [at] and ride [wire] when there is one in hand.
-  FxConsoleModel _searchModel(Offset at, {GraphSocket? wire}) {
+  /// [at] and ride [wire] when there is one in hand. Asked from a wire of
+  /// the picture's chain ([chain]), it lists the effects alone, and the one
+  /// chosen goes into the chain just before [before].
+  FxConsoleModel _searchModel(Offset at,
+      {GraphSocket? wire,
+      bool chain = false,
+      UuidValue? before,
+      BridgeOutputRef? feed}) {
     final all = (widget.driversLister ?? listDrivers)();
     // `listEffects` carries the drivers too; here they come from the
     // drivers listing instead, because the canvas's own add places the box on
@@ -2313,12 +2675,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         // is what makes the foot's sentence true: pick one and it is
         // connected.
         for (final driver in all)
-          if (wire == null || _fitsWire(driver, wire))
+          if (!chain && (wire == null || _fitsWire(driver, wire)))
             FxConsoleEntry(
               label: engineLabel(driver.label),
               kind: FxConsoleKind.effect,
               group: engineLabel(driver.categoryLabel),
-              run: () => _addDriver(driver, at, wire),
+              run: () => _addDriver(driver, at, wire, feed: feed),
             ),
         // Then every effect: chosen, it joins the layer's stack,
         // and the stack is the chain — so the box appears wired into the
@@ -2332,12 +2694,14 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                 label: engineLabel(effect.label),
                 kind: FxConsoleKind.effect,
                 group: engineLabel(effect.categoryLabel),
-                run: () => _addEffect(effect.name),
+                run: () => chain
+                    ? _addEffectBefore(effect.name, before)
+                    : _addEffect(effect.name),
               ),
         // The saved groups, beside the drivers they are made of.
         // Only with no wire in hand: a group is a rig, not a socket, so
         // there is nothing for the wire to land on.
-        if (wire == null)
+        if (wire == null && !chain)
           for (final saved in (widget.groupsLister ?? listNodeGroups)())
             FxConsoleEntry(
               label: saved.name,
@@ -2381,6 +2745,32 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   void _addEffect(String name) {
     final layer = _layer;
     if (layer == null || !(_ui?.addEffect(layer, name) ?? false)) return;
+    _reload();
+  }
+
+  /// An effect into the chain just before [before], or at the chain's end
+  /// when the wire ran into the Layer out. The stack's add puts it last, so
+  /// moving it up is a second write, wrapped with the first as one undo step.
+  void _addEffectBefore(String name, UuidValue? before) {
+    final layer = _layer;
+    if (layer == null) return;
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    if (before != null) project?.beginUndoGroup();
+    try {
+      if ((_ui?.addEffect(layer, name) ?? false) && before != null) {
+        final stack = layer.getEffects();
+        final at = stack.indexWhere((i) => i.id() == before);
+        if (at >= 0 && at < stack.length - 1) {
+          final added = stack.removeLast();
+          stack.insert(at, added);
+          layer.setEffects(effects: stack);
+        }
+      }
+    } catch (_) {
+      // The stack moved under us; what was added stands where it landed.
+    }
+    if (before != null) project?.endUndoGroup();
+    _ui?.model.refresh();
     _reload();
   }
 
@@ -2573,7 +2963,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// §3), which is what makes "drag a wire out, pick a driver" one undo step
   /// rather than two. It can, because a catalogue entry carries the ports it
   /// declares — the socket is known before the node is in the document.
-  void _addDriver(BridgeEffectInfo info, Offset at, GraphSocket? wire) {
+  /// [feed] is the source a stored wire carried before the new box took its
+  /// input end: the box goes between the two, fed from it where it has an
+  /// input of the wire's type.
+  void _addDriver(BridgeEffectInfo info, Offset at, GraphSocket? wire,
+      {BridgeOutputRef? feed}) {
     final layer = _layer;
     if (layer == null || _graph == null) return;
 
@@ -2594,6 +2988,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       // rule `_connect` applies to a wire drawn by hand.
       edges.removeWhere((e) => e.to == joined.to);
       edges.add(joined);
+      if (feed != null && wire != null) {
+        final takes = info.inputs
+            .where((p) => p.portType == wire.port.portType)
+            .firstOrNull;
+        final dest = takes == null ? null : _inputRef(ref, takes);
+        if (dest != null) edges.add(BridgeGraphEdge(from: feed, to: dest));
+      }
     }
     try {
       layer.setGraph(
@@ -2602,7 +3003,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           edges: edges,
           layout: [
             ..._wiringNow().layout,
-            BridgeNodePosition(node: ref, x: at.dx, y: at.dy),
+            BridgeNodePosition(node: ref, x: at.dx, y: at.dy, width: null),
           ],
           exposed: _graph!.wiring.exposed,
           groups: _graph!.wiring.groups,
@@ -2683,14 +3084,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final at = (_positions[drag.key] ?? box.rect.topLeft) +
         Offset(box.rect.width / 2, box.rect.height / 2);
 
+    // Measured along each wire as its ties route it.
+    final wires = _wiresOf(layout);
     for (final edge in graph.wiring.edges) {
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
-      if (graphWireDistance(ends.$1, ends.$2, at,
-              wires: _ui!.workspace.interface.wireStyle) >
-          graphWireGrab) {
-        continue;
-      }
+      final wire = (key: tieWireKey(_inputEnd(edge).$1, _inputEnd(edge).$2), from: ends.$1, to: ends.$2);
+      if (tieWireDistance(wire, at, wires) > graphWireGrab) continue;
       final into = _freeSocket(box, ends.$3, isInput: true);
       final outOf = _freeSocket(box, ends.$3, isInput: false);
       // Both types match the wire's by construction and the box has nothing
@@ -2735,10 +3135,17 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final at = _toCanvas(event.localPosition);
     _pressAt = event.localPosition;
 
-    final socket = layout.socketAt(at);
+    // Ctrl and a press on a point is a press on the socket its wires leave.
+    final socket =
+        layout.socketAt(tieWireFrom(event, at, _wiresOf(layout)) ?? at);
     // A group's bar, unless a socket is poking out over it.
     if (groupDown(event, at, (drag) => _nodeDrag = drag,
         unless: socket != null)) {
+      return;
+    }
+    // The right button asks a socket rather than pulling on it.
+    if (socket != null && event.buttons == kSecondaryMouseButton) {
+      _socketMenu(socket, event.position);
       return;
     }
     if (socket != null && _isChainType(socket.port.portType)) {
@@ -2782,7 +3189,18 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         return;
       }
       // Fall through: the Layer out has no output, so its press is a box press.
-    } else if (socket != null) {
+    }
+    // **A box's left or right edge drags its width**, as node editors have it;
+    // a socket on the edge still wins the press.
+    if (socket == null && event.buttons == kPrimaryMouseButton) {
+      if (graphEdgeAt(layout, at, _zoom) case final edge?) {
+        setState(() => _edgeDrag = GraphEdgeDrag(
+            edge.box.key, edge.left, at.dx, edge.box.rect,
+            open: edge.box.hasControls));
+        return;
+      }
+    }
+    if (socket != null && !_isChainType(socket.port.portType)) {
       // **A wire that is already there is grabbed by its far end** (owner, desk
       // test: "connections that already exist can't be un-done"). Pressing a
       // wired input used to start a *second* wire from that input, which no
@@ -2808,16 +3226,21 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       // like entering a precomp. Counted with [DoubleTap] because the canvas
       // reads raw pointers; the first press still picks the box, exactly as a
       // precomp's first click selects.
-      final again = _boxTaps.tap(at: event.localPosition, slop: 6) &&
+      // A right press picks and grabs as the left does, and a release that
+      // never moved opens the box's menu. It counts for no double-click.
+      final right = event.buttons == kSecondaryMouseButton;
+      final again = !right &&
+          _boxTaps.tap(at: event.localPosition, slop: 6) &&
           _boxTapKey == key;
       _boxTapKey = key;
       if (again && node != null) {
         if (_enterBox(node)) return;
       }
       final keys = HardwareKeyboard.instance;
-      final toggle = keys.isControlPressed || keys.isMetaPressed;
-      final add = keys.isShiftPressed;
+      final toggle = !right && (keys.isControlPressed || keys.isMetaPressed);
+      final add = !right && keys.isShiftPressed;
       final held = _isPicked(key);
+      _menuBox = right ? key : null;
       setState(() {
         // **Click replaces, Ctrl toggles, Shift adds** — the three rules a
         // layer row, a project row and an effect heading all follow, because a
@@ -2850,7 +3273,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
             for (final k in moving)
               k: _positions[k] ?? layout.byKey[k]?.rect.topLeft ?? Offset.zero,
           },
-          collapse: held && !toggle && !add,
+          // A menu is about the pick as it stands, so a right press on a
+          // standing pick leaves it whole.
+          collapse: held && !toggle && !add && !right,
         );
       });
       return;
@@ -2864,11 +3289,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       setState(() => _panFrom = _pan - event.localPosition);
       return;
     }
-    // The right button opens the console on release, and a right-button drag
-    // ties the wires it crosses.
+    // The right button opens a menu, or the console, on release, and a
+    // right-button drag ties the wires it crosses.
     if (tieDown(event, at, _wiresOf(layout))) {
-      _menuPress = event.buttons == kSecondaryMouseButton &&
-          _ui!.workspace.interface.rightClickOpensNodeSearch;
+      _menuPress = event.buttons == kSecondaryMouseButton;
       return;
     }
     final keys = HardwareKeyboard.instance;
@@ -2933,6 +3357,14 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
   void _move(PointerMoveEvent event, GraphLayout layout) {
     final at = _toCanvas(event.localPosition);
+    if (_edgeDrag case final edge?) {
+      final next = edge.at(at.dx);
+      setState(() {
+        _widths[edge.key] = next.width;
+        _positions[edge.key] = Offset(next.x, edge.from.top);
+      });
+      return;
+    }
     if (_flight case final flight?) {
       setState(() {
         flight.to = at;
@@ -2969,6 +3401,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       return;
     }
     if (_panFrom case final from?) {
+      _viewMoved = true;
       setState(() => _pan = from + event.localPosition);
     }
   }
@@ -2978,8 +3411,19 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final moved = _pressAt == null ||
         (event.localPosition - _pressAt!).distance > graphDragSlop;
 
+    if (_edgeDrag case final edge?) {
+      // A box's new width, kept with its position: one commit, one undo step.
+      setState(() => _edgeDrag = null);
+      if (moved) {
+        _positions.putIfAbsent(edge.key, () => edge.from.topLeft);
+        _commit(_wiringNow());
+      }
+      return;
+    }
+
     if (_flight case final flight?) {
       setState(() => _flight = null);
+      tieWireLanded();
       final landed = layout.snapAt(at, _fits(flight)) ?? layout.socketAt(at);
       if (flight.chain case final held?) {
         // Out of an effect's output into a Matte below: a wire, not a move.
@@ -3041,6 +3485,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           if (node != null) _pick([node]);
         }
       });
+      final menuBox = _menuBox;
+      _menuBox = null;
+      if (!moved && menuBox != null) {
+        _boxMenu(menuBox, event.position);
+        return;
+      }
       if (insert != null) {
         final source = _sourceOf(insert.outOf);
         final dest = _destOf(insert.into);
@@ -3062,13 +3512,22 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       return;
     }
 
-    if (tieUp(at, moved, _wiresOf(layout))) {
+    if (tieUp(at, moved, _wiresOf(layout), menuAt: event.position)) {
       _menuPress = false;
       return;
     }
     if (_menuPress) {
       _menuPress = false;
-      if (!moved && _graph != null) _openSearch(at);
+      if (moved || _graph == null) return;
+      // A wire under the pointer takes the click; the ground opens the
+      // console or its own menu, as the setting says.
+      if (_wireAt(layout, at) case final hit?) {
+        _wireMenu(layout, hit.$1, hit.$2, at, event.position);
+      } else if (_ui!.workspace.interface.rightClickOpensNodeSearch) {
+        _openSearch(at);
+      } else {
+        _canvasMenu(layout, at, event.position);
+      }
       return;
     }
 
@@ -3096,26 +3555,27 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     setState(() => _panFrom = null);
   }
 
-  /// Fit every box on screen, with a little air round the edges.
+  /// Fit every box on screen, with a little air round the edges. Asked for
+  /// by hand, so the panel's own resizes leave the view be after it.
   void _frameAll(Size viewport, GraphLayout layout) {
-    if (layout.boxes.isEmpty) return;
-    var bounds = layout.boxes.first.rect;
-    for (final box in layout.boxes) {
-      bounds = bounds.expandToInclude(box.rect);
-    }
-    bounds = bounds.inflate(20);
-    final zoom = math
-        .min(
-          viewport.width / bounds.width,
-          viewport.height / bounds.height,
-        )
-        .clamp(0.2, 2.0);
+    _viewMoved = true;
+    _frame(graphFrame(viewport, [for (final b in layout.boxes) b.rect]));
+  }
+
+  /// The picked boxes, or every box when none is picked.
+  void _frameSelected(Size viewport, GraphLayout layout) {
+    _viewMoved = true;
+    _frame(graphFrame(viewport, [
+      for (final b in layout.boxes)
+        if (_selection.isEmpty || _selection.containsKey(b.key)) b.rect
+    ]));
+  }
+
+  void _frame(({Offset pan, double zoom})? view) {
+    if (view == null) return;
     setState(() {
-      _zoom = zoom;
-      _pan = Offset(
-        (viewport.width - bounds.width * zoom) / 2 - bounds.left * zoom,
-        (viewport.height - bounds.height * zoom) / 2 - bounds.top * zoom,
-      );
+      _zoom = view.zoom;
+      _pan = view.pan;
     });
   }
 
@@ -3126,6 +3586,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (next == was) return;
     // Zoom about the pointer, so what is under it stays under it.
     final anchor = (event.localPosition - _pan) / was;
+    _viewMoved = true;
     setState(() {
       _zoom = next;
       _pan = event.localPosition - anchor * next;
@@ -3171,16 +3632,18 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     final layout = _layoutOf(
       graph,
       _positions,
+      _widths,
       graph.wiring.exposed.map(graphNodeKey).toSet(),
       _layerName,
       _params,
+      looks: _looks,
     );
     _boxRects = {for (final box in layout.boxes) box.key: box.rect};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _toolbar(t, layout),
+        _toolbarMenu(t, layout),
         if (groupShelf(t) case final shelf?) shelf,
         Expanded(
           child: LayoutBuilder(
@@ -3191,6 +3654,25 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     );
   }
 
+  /// The toolbar, whose right-click lists its switches and the framing.
+  Widget _toolbarMenu(LumitTheme t, GraphLayout layout) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (d) => showGraphToolbarMenu(
+          context,
+          d.globalPosition,
+          autoWire: _autoWire,
+          onAutoWire: () => setState(() => _autoWire = !_autoWire),
+          heal: _heal,
+          onHeal: () => setState(() => _heal = !_heal),
+          snap: _snapToGrid,
+          onSnap: () => setState(() => _snapToGrid = !_snapToGrid),
+          onFrameSelected: () => _frameSelected(_viewport, layout),
+          canFrameSelected: _selection.isNotEmpty,
+          onFrameAll: () => _frameAll(_viewport, layout),
+        ),
+        child: _toolbar(t, layout),
+      );
+
   Widget _toolbar(LumitTheme t, GraphLayout layout) => Container(
         key: const ValueKey('graph-toolbar'),
         height: graphToolbarHeight,
@@ -3199,62 +3681,54 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         child: Row(
           children: [
             Expanded(
-              child: Text(_layerName,
-                  key: const ValueKey('graph-layer-name'),
-                  style: t.body.copyWith(color: t.textMuted),
-                  overflow: TextOverflow.ellipsis),
-            ),
-            ...groupButtons(t),
-            const SizedBox(width: 10),
-            Text(l10n.graphAutoWire, style: t.kicker),
-            const SizedBox(width: 10),
-            HouseToggle(
-              key: const ValueKey('graph-auto-wire'),
-              value: _autoWire,
-              onChanged: (on) => setState(() => _autoWire = on),
-            ),
-            const SizedBox(width: 10),
-            Text(l10n.graphHeal, style: t.kicker),
-            const SizedBox(width: 10),
-            HouseToggle(
-              key: const ValueKey('graph-heal'),
-              value: _heal,
-              onChanged: (on) => setState(() => _heal = on),
-            ),
-            const SizedBox(width: 10),
-            // The snap magnet, beside the view controls where the board draws
-            // it: on reads as the glyph at foreground strength on the button's
-            // own face, off frameless and muted — the Timeline's own magnet,
-            // in the Timeline's own dress (no accent; §3.1's list is closed).
-            LumitTooltip(
-              message: _snapToGrid ? l10n.tipSnapOn : l10n.tipSnapOff,
-              child: HouseButton(
-                key: const ValueKey('graph-snap'),
-                small: true,
-                frameless: !_snapToGrid,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                onPressed: () => setState(() => _snapToGrid = !_snapToGrid),
-                child: lumitIcon(LumitIcon.magnet,
-                    size: graphIconSize,
-                    color: _snapToGrid ? t.textPrimary : t.textMuted),
+              // The layer's name is the layer: its menu, as anywhere a layer
+              // is shown.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapUp: (d) {
+                  if (_layer case final layer?) {
+                    showLayerRowMenu(
+                        context, layer.internallayerId, d.globalPosition);
+                  }
+                },
+                child: Text(_layerName,
+                    key: const ValueKey('graph-layer-name'),
+                    style: t.body.copyWith(color: t.textMuted),
+                    overflow: TextOverflow.ellipsis),
               ),
             ),
-            const SizedBox(width: 10),
-            LumitTooltip(
-              message: l10n.graphFrameAll,
-              child: HoverMark(
-                swells: true,
-                builder: (context, lit) => GestureDetector(
-                  key: const ValueKey('graph-frame-all'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _frameAll(_viewport, layout),
-                  child: glyph.LumitIcon(LumitIcons.frameAll,
-                      size: graphIconSize,
-                      colour: Color.lerp(t.textMuted, t.textPrimary, lit)),
-                ),
-              ),
+            // The controls fold into one mark when the panel is narrow. The
+            // three switches wear the magnet's dress: on is the glyph on the
+            // button's own face, off is frameless and muted.
+            graphToolbarFold(
+              markKey: const ValueKey('graph-toolbar-more'),
+              [
+                ...groupFoldItems(t),
+                graphToolFold(t,
+                    key: const ValueKey('graph-auto-wire'),
+                    tip: l10n.graphAutoWire,
+                    icon: LumitIcons.autoWire,
+                    on: _autoWire,
+                    onPressed: () => setState(() => _autoWire = !_autoWire)),
+                graphToolFold(t,
+                    key: const ValueKey('graph-heal'),
+                    tip: l10n.graphHeal,
+                    icon: LumitIcons.heal,
+                    on: _heal,
+                    onPressed: () => setState(() => _heal = !_heal)),
+                graphToolFold(t,
+                    key: const ValueKey('graph-snap'),
+                    tip: _snapToGrid ? l10n.tipSnapOn : l10n.tipSnapOff,
+                    icon: LumitIcons.snap,
+                    on: _snapToGrid,
+                    gap: 10,
+                    onPressed: () =>
+                        setState(() => _snapToGrid = !_snapToGrid)),
+                graphFrameAllFold(t,
+                    key: const ValueKey('graph-frame-all'),
+                    onPressed: () => _frameAll(_viewport, layout)),
+              ],
             ),
-            const SizedBox(width: 10),
             Text(
               l10n.graphZoom((_zoom * 100).round()),
               key: const ValueKey('graph-zoom'),
@@ -3266,8 +3740,60 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
   Size _viewport = Size.zero;
 
+  /// The next layout sets the view: on the first, and when the layer changes.
+  bool _frameNext = true;
+
+  /// The panel size the view was last set for. Until the user pans or zooms,
+  /// a new size frames the boxes again, as the node graph composition does.
+  Size? _framedFor;
+  bool _viewMoved = false;
+
   Widget _canvas(LumitTheme t, GraphLayout layout, Size size) {
     _viewport = size;
+    final cut = GraphCutFade.cuts(
+        size, [for (final b in layout.boxes) b.rect], _pan, _zoom);
+    if (_frameKey case final key? when layout.byKey.containsKey(key)) {
+      _frameKey = null;
+      _frameNext = false;
+      _viewMoved = true;
+      final box = layout.byKey[key]!.rect;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // At rest, not at the zoom a framed-all graph left: the box is what
+        // was asked for, readable.
+        // A quarter in from the left, with the box's chain running on to the
+        // right: a box's card is wider than its collapsed face, so centring
+        // the card pushed the face to the edge.
+        setState(() {
+          _zoom = 1;
+          _pan = Offset(size.width / 4 - box.left, size.height / 2 - box.center.dy);
+        });
+      });
+    }
+    if (layout.boxes.isNotEmpty &&
+        (_frameNext || (!_viewMoved && _framedFor != size))) {
+      _frameNext = false;
+      _framedFor = size;
+      // The boxes open in the middle of the panel, never larger than they
+      // are. After the frame, as a view change is.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final rects = [for (final b in layout.boxes) b.rect];
+        final fit = graphFrame(size, rects, maxZoom: 1);
+        // Never too small to read: a chain longer than the panel opens on
+        // its start and runs on under the fade.
+        if (fit != null && fit.zoom < _openFloor) {
+          final all = rects.reduce((a, b) => a.expandToInclude(b));
+          _frame((
+            zoom: _openFloor,
+            pan: Offset(20 - all.left * _openFloor,
+                size.height / 2 - all.center.dy * _openFloor),
+          ));
+        } else {
+          _frame(fit);
+        }
+      });
+    }
     return Focus(
       focusNode: _canvasFocus,
       onKeyEvent: (node, event) {
@@ -3279,9 +3805,40 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           _deleteSelected();
           return KeyEventResult.handled;
         }
+        if (node.hasPrimaryFocus && graphMuteKey(event)) {
+          _mutePicked();
+          return KeyEventResult.handled;
+        }
         if (node.hasPrimaryFocus &&
             groupKey(event) == KeyEventResult.handled) {
           return KeyEventResult.handled;
+        }
+        // Enter renames the one picked box, as it renames a picked effect.
+        if (node.hasPrimaryFocus &&
+            event.logicalKey == LogicalKeyboardKey.enter &&
+            _selection.length == 1) {
+          final key = _selection.keys.single;
+          if (_byKey[key] case final n? when !_derivedNode(n.node)) {
+            setState(() => _renamingNode = key);
+            return KeyEventResult.handled;
+          }
+        }
+        // F, Shift+F and Ctrl+D, as the keymap has them for the node canvases.
+        if (node.hasPrimaryFocus) {
+          switch (_ui?.keymap.actionFor(BridgeKeyContext.nodes, event)) {
+            case 'nodes.frame.selected':
+              _frameSelected(_viewport, layout);
+              return KeyEventResult.handled;
+            case 'nodes.frame.all':
+              _frameAll(_viewport, layout);
+              return KeyEventResult.handled;
+            // The shell has already duplicated the picked effects, as the
+            // Edit menu's Duplicate does, and picked the copies. They
+            // become the pick here too.
+            case 'effect.duplicate':
+              _effectRowDone();
+              return KeyEventResult.handled;
+          }
         }
         // Only the canvas itself: a rename field inside it types these.
         if (node.hasPrimaryFocus &&
@@ -3309,11 +3866,21 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
               onPointerDown: (e) => _down(e, layout),
               onPointerMove: (e) => _move(e, layout),
               onPointerUp: (e) => _up(e, layout),
-              onPointerHover: (e) =>
-                  tieHover(_toCanvas(e.localPosition), _wiresOf(layout)),
+              onPointerHover: (e) {
+                final at = _toCanvas(e.localPosition);
+                tieHover(at, _wiresOf(layout));
+                final edge = layout.socketAt(at) == null &&
+                    graphEdgeAt(layout, at, _zoom) != null;
+                if (edge != _edgeHover) setState(() => _edgeHover = edge);
+              },
               onPointerSignal: _wheel,
               behavior: HitTestBehavior.opaque,
-              child: Container(
+              child: tieCursorRegion(GraphCutFade(
+                left: cut.left,
+                right: cut.right,
+                top: cut.top,
+                bottom: cut.bottom,
+                child: Container(
                 key: const ValueKey('graph-canvas'),
                 // Clipped, so a box or a group's frame pushed past the top
                 // edge goes under the toolbar and not over it.
@@ -3352,6 +3919,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                           outUnwired: _graph!.wiring.outUnwired,
                           wires: ThemeScope.of(context).wireStyle,
                           ties: tieView(),
+                          picked: _selection.keys.toSet(),
                         ),
                       ),
                     ),
@@ -3400,6 +3968,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                               Positioned(
                                 left: box.rect.left,
                                 top: box.rect.top,
+                                width: box.rect.width,
+                                height: box.rect.height,
                                 child: GraphNodeCard(
                                   box: box,
                                   selected: _isPicked(box.key),
@@ -3420,6 +3990,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                                   foot: _shaderThumb(box.key),
                                   paramRow: (param) =>
                                       _paramRow(box.key, param),
+                                  drivenValue: (param) =>
+                                      _drivenValue(box.key, param),
                                   snap: _flight?.snap?.node == box.key
                                       ? _flight!.snap
                                       : null,
@@ -3439,10 +4011,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                         rect: Rect.fromPoints(_marqueeFrom!, _marqueeTo!),
                         child: const MarqueeBox(),
                       ),
-                    _legend(t),
                   ],
                 ),
-              ),
+              ))),
             ),
           ),
           // An effect dragged in from Effects & presets. Translucent, so every
@@ -3462,456 +4033,106 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
             ),
           ),
           handPanLayer(_ui!.tools, t, (d) => setState(() => _pan += d)),
+          graphEdgeCursor(_edgeHover || _edgeDrag != null),
         ],
       ),
     );
   }
 
-  /// The legend along the canvas's bottom edge: colour *is* the type, and this
-  /// strip is what says so.
-  Widget _legend(LumitTheme t) => Positioned(
-        left: 10,
-        bottom: 8,
-        child: Row(
-          key: const ValueKey('graph-legend'),
-          children: [
-            Text(l10n.graphTypes, style: t.kicker),
-            for (final (colour, word) in [
-              (t.port.image, l10n.graphTypeImage),
-              (t.port.number, l10n.graphTypeNumber),
-              (t.port.colour, l10n.graphTypeColour),
-              (t.port.geometry, l10n.graphTypeGeometry),
-              (t.port.audio, l10n.graphTypeAudio),
-            ]) ...[
-              const SizedBox(width: 12),
-              Container(
-                width: 7,
-                height: 7,
-                decoration:
-                    BoxDecoration(color: colour, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 4),
-              Text(word, style: t.kicker.copyWith(letterSpacing: 0.54)),
-            ],
-          ],
-        ),
-      );
 }
 
-/// One box on the canvas: a header strip carrying its enable tick, its twirl
-/// and its name, then the port rows with their sockets sitting on the border.
-///
-/// Public because all three of the panel's subjects draw the same card: what a
-/// box shows is [GraphCard], and which model it came out of is the caller's
-/// business alone.
-class GraphNodeCard extends StatelessWidget {
-  final GraphBox box;
-  final bool selected;
-  final bool exposed;
-  final VoidCallback onExpose;
-  final VoidCallback onBypass;
-
-  /// A control on this card has taken the press, so the canvas behind it
-  /// leaves the pick alone.
-  final VoidCallback onOwnPress;
-
-  /// The name is an inline editor rather than a label, its commit —
-  /// empty clears back to the box's own label — and the Escape that throws the
-  /// edit away instead. The same contract the Effect controls heading
-  /// has, because it is the same rename.
-  final bool renaming;
-  final VoidCallback onStartRename;
-  final ValueChanged<String> onRenamed;
-  final VoidCallback onRenameCancelled;
-
-  /// The control a parameter row draws, by parameter id: the Node panel's
-  /// own row, on the box. Null on a canvas whose rows are sockets alone.
-  final Widget Function(String param)? paramRow;
-
-  /// What the box draws under its rows, in the room its layout left: a Custom
-  /// shader's picture of its inner graph. A press on it is its own.
-  final Widget? foot;
-
-  /// The socket on this card a wire in hand has snapped to, drawn lit.
-  final GraphSocket? snap;
-
-  const GraphNodeCard({
-    super.key,
-    required this.box,
-    required this.selected,
-    required this.exposed,
-    required this.onExpose,
-    required this.onBypass,
-    required this.onOwnPress,
-    required this.renaming,
-    required this.onStartRename,
-    required this.onRenamed,
-    required this.onRenameCancelled,
-    this.paramRow,
-    this.foot,
-    this.snap,
-  });
-
-  GraphCard get _card => box.card;
-  String get _key => box.key;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return SizedBox(
-      key: ValueKey<String>('graph-node-$_key'),
-      width: box.rect.width,
-      height: box.rect.height,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: GraphNodeFrame(
-              // A bypassed box draws its border dashed, both drawings; the
-              // selected one draws it in `animated`.
-              colour: selected ? t.animated : t.hairline,
-              dashed: !_card.enabled,
-              fill: t.surface1,
-              radius: t.tokens.controlRadius,
-            ),
-          ),
-          Positioned(
-            left: 1,
-            top: 1,
-            width: box.rect.width - 2,
-            child: _header(t),
-          ),
-          for (final row in box.rows)
-            Positioned(
-              left: 1,
-              top: 1 + graphNodeHeaderHeight + row.top,
-              width: box.rect.width - 2,
-              height: row.height,
-              child: _row(t, row),
-            ),
-          if (foot case final foot?)
-            Positioned(
-              left: 1 + graphFootPad,
-              right: 1 + graphFootPad,
-              bottom: 1 + graphFootPad,
-              child: _claim(foot),
-            ),
-        ],
+/// A toolbar switch drawn as the snap magnet is: the glyph on the button's
+/// own face while on, frameless and muted while off. One dress for every
+/// switch on the strip.
+Widget graphToolSwitch(
+  LumitTheme t, {
+  required Key key,
+  required String tip,
+  required String icon,
+  required bool on,
+  required VoidCallback onPressed,
+}) =>
+    LumitTooltip(
+      message: tip,
+      child: HouseButton(
+        key: key,
+        small: true,
+        frameless: !on,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        onPressed: onPressed,
+        child: glyph.LumitIcon(icon,
+            size: graphIconSize, colour: on ? t.textPrimary : t.textMuted),
       ),
     );
-  }
 
-  Widget _header(LumitTheme t) => Container(
-        height: graphNodeHeaderHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          // A box with an inside (a Custom shader, a nested node graph)
-          // wears the viz tint so it reads at a glance.
-          color: _card.tinted ? graphShaderHeader(t) : t.surface2,
-          border: Border(bottom: BorderSide(color: t.hairline)),
-        ),
-        child: Row(
-          children: [
-            // **Enable tick, twirl, name** — the order an Effect controls
-            // heading reads in, because on a node card it is the same
-            // grammar and, for the tick, the same control. What the box *is
-            // doing* comes before what the header does to what is under it.
-            if (_card.tick) ...[
-              _enable(t),
-              const SizedBox(width: 2),
-            ],
-            // A **driver** draws every socket it has whatever its exposure
-            // says, so a twirl on one would be a control that answers nothing
-            // and it is left off.
-            if (_card.twirl) ...[
-              _twirl(t),
-              const SizedBox(width: 2),
-            ],
-            // **The name takes every pixel the marks leave** (owner, desk
-            // test). It used to be a `Flexible` name beside a `Spacer`, and a
-            // `Spacer` is an `Expanded` of flex 1: the two shared the header's
-            // free space half each, so a name ellipsised with half the strip
-            // standing empty beside it. One `Expanded` holding the names puts
-            // the whole remainder at their disposal — the controls are
-            // fixed-width — so a name cuts only when it is genuinely out of
-            // room.
-            Expanded(child: renaming ? _editor(t) : _names(t)),
-            // **Nothing wired in**. A driver that reads a stream and
-            // has none answers its documented no-op — a distance so large it
-            // pins whatever it drives at the far end of the range — and the
-            // box is the one place that can say so before the wire is drawn.
-            if (_card.noStream) ...[
-              const SizedBox(width: 4),
-              LumitTooltip(
-                message: l10n.graphNoStream,
-                child: Container(
-                  key: ValueKey<String>('graph-no-stream-$_key'),
-                  width: graphBadgeSize,
-                  height: graphBadgeSize,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                    border: Border.all(color: t.warning),
-                  ),
-                  child: Text('!',
-                      style: t.mono.copyWith(fontSize: 9, color: t.warning)),
-                ),
-              ),
-            ],
-          ],
-        ),
-      );
-
-  /// The box's type name and, where the user has given it one, their own name
-  /// beside it. **Double-click either to rename the box** (owner, desk test):
-  /// the derived boxes are left out, since the Source shows the layer's name
-  /// and the Out is the layer's own end — neither is a thing with a name of
-  /// its own to give.
-  Widget _names(LumitTheme t) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onDoubleTap: _card.rename ? onStartRename : null,
-        child: Row(
-          children: [
-            Flexible(
-              child: Text(
-                _card.title,
-                key: ValueKey<String>('graph-node-name-$_key'),
-                style: _card.enabled ? t.kickerOn : t.kicker,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // A box the user has named of their own says so beside its type
-            // name, quieter and less tracked — the same reading the drawing
-            // gives the Audio level box called "Music".
-            if (_card.customName case final own?) ...[
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(own,
-                    style: t.kicker.copyWith(letterSpacing: 0.54),
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
-            // And what kind of box it is, where the title does not say: the
-            // item's kind under a Read, the value's kind under an Input.
-            if (_card.kicker case final word?) ...[
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(word,
-                    key: ValueKey<String>('graph-node-kicker-$_key'),
-                    style: t.kicker,
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ],
-        ),
-      );
-
-  /// The inline rename, opened with the current name selected and committing
-  /// on Enter or on clicking away — the contract every inline rename in the
-  /// application has, and the one the Effect controls heading's own
-  /// editor keeps.
-  Widget _editor(LumitTheme t) => GraphNameField(
-        key: ValueKey<String>('graph-node-rename-$_key'),
-        initial: _card.customName ?? '',
-        onDone: onRenamed,
-        onCancel: onRenameCancelled,
-      );
-
-  /// **Pressing a control on the header is not picking the box** (the
-  /// Timeline's rule for its switch cells). The canvas reads its
-  /// pointers through one `Listener` above this card, and a child listener is
-  /// dispatched first — so the flag is set before the canvas decides what the
-  /// press meant. Without it, switching one of four picked boxes off collapsed
-  /// the pick to that box and then bypassed only it.
-  Widget _claim(Widget child) =>
-      Listener(onPointerDown: (_) => onOwnPress(), child: child);
-
-  /// **The enable tick**, left of the name — the Effect controls heading's own
-  /// switch face ([fxEnableMark]), because a box's enable and its effect
-  /// card's switch are one control drawn on two surfaces. Off, the box's
-  /// border goes dashed and its name goes quiet (15-DESIGN §12A.7): a bypassed
-  /// box is not a fault, it is the one box deliberately doing nothing.
-  Widget _enable(LumitTheme t) => _claim(SizedBox(
-        width: graphEnableSize,
-        height: graphEnableSize,
-        child: Center(
-          child: fxEnableMark(
-            key: ValueKey<String>('graph-enable-$_key'),
-            on: _card.enabled,
-            onChanged: (_) => onBypass(),
-          ),
-        ),
-      ));
-
-  /// **The twirl**, which opens the box up. Shut, an effect draws the
-  /// picture's own sockets and whatever is already wired; open, it draws a
-  /// socket for every parameter it has (`LayerGraph::exposed`). The same mark
-  /// and the same reading as the twirl on an Effect controls heading — what is
-  /// under the header, shown or folded away.
-  Widget _twirl(LumitTheme t) => _claim(HoverMark(
-        builder: (context, lit) => GestureDetector(
-          key: ValueKey<String>('graph-twirl-$_key'),
-          behavior: HitTestBehavior.opaque,
-          onTap: onExpose,
-          child: SizedBox(
-            width: graphBadgeSize,
-            height: graphBadgeSize,
-            child: Center(
-              child: TwirlTurn(
-                open: exposed,
-                child: lumitIcon(
-                  exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                  size: graphTwirlSize,
-                  color: exposed
-                      ? t.textPrimary
-                      : Color.lerp(t.textMuted, t.textPrimary, lit)!,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ));
-
-  /// One row: its sockets, and either the control that sets the parameter or
-  /// the port's name. **A wired row draws the name alone**, because the wire
-  /// is the value and a control under it would be a lie about what is in
-  /// charge, the reading the Node panel's driven rows take.
-  Widget _row(LumitTheme t, GraphRow row) {
-    final input = row.input;
-    final output = row.output;
-    final control = row.param != null && !(input?.wired ?? false)
-        ? paramRow?.call(row.param!)
-        : null;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        if (control != null)
-          Positioned.fill(
-            left: graphRowInset,
-            child: _claim(control),
-          )
-        else if (input != null)
-          Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.only(left: graphRowInset),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(engineLabel(input.label),
-                    key: ValueKey<String>(
-                        'graph-port-$_key-in-${input.id}'),
-                    style:
-                        t.small.copyWith(color: portColour(t, input.portType)),
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ),
-          ),
-        // Its name, unless a control has the row: the words would sit on top of
-        // it, and the socket alone says what the row gives out.
-        if (output != null && control == null)
-          Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.only(right: graphRowInset),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Text(engineLabel(output.label),
-                    key: ValueKey<String>(
-                        'graph-port-$_key-out-${output.id}'),
-                    style:
-                        t.small.copyWith(color: portColour(t, output.portType)),
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ),
-          ),
-        if (input != null)
-          Positioned(
-            left: -graphSocketSize / 2 - 1,
-            top: (row.height - graphSocketSize) / 2,
-            child: _socket(t, input, isInput: true),
-          ),
-        if (output != null)
-          Positioned(
-            right: -graphSocketSize / 2 - 1,
-            top: (row.height - graphSocketSize) / 2,
-            child: _socket(t, output, isInput: false),
-          ),
-      ],
-    );
-  }
-
-  /// A filled socket is wired, a hollow one is not (15-DESIGN §12A.7). The
-  /// one a wire in hand has snapped to is filled and ringed.
-  Widget _socket(LumitTheme t, BridgePort port, {required bool isInput}) {
-    final colour = portColour(t, port.portType);
-    final lit = snap?.isInput == isInput && snap?.port.id == port.id;
-    return Container(
-      key: ValueKey<String>('graph-socket-$_key-${port.id}'),
-      width: graphSocketSize,
-      height: graphSocketSize,
-      decoration: BoxDecoration(
-        color: port.wired || lit ? colour : t.surface1,
-        shape: BoxShape.circle,
-        border: Border.all(
-            color: lit ? t.animated : colour, width: lit ? 2 : 1),
+/// A toolbar switch as an item of the row that folds into the overflow mark
+/// when the panel is narrow: the switch as drawn, and the menu row it folds
+/// into, ticked while it is on.
+FoldItem graphToolFold(
+  LumitTheme t, {
+  required Key key,
+  required String tip,
+  required String icon,
+  required bool on,
+  required VoidCallback onPressed,
+  double gap = 6,
+}) =>
+    FoldItem(
+      label: tip,
+      icon: glyph.LumitIcon(icon,
+          size: graphIconSize, colour: on ? t.textPrimary : t.textMuted),
+      selected: on,
+      onPressed: onPressed,
+      child: Padding(
+        padding: EdgeInsets.only(right: gap),
+        child: graphToolSwitch(t,
+            key: key, tip: tip, icon: icon, on: on, onPressed: onPressed),
       ),
     );
-  }
-}
 
-/// A node's frame, drawn rather than decorated so that a bypassed one can be
-/// dashed — Flutter's `Border` has no dash.
-/// Public because the inner shader graph's cards wear the identical frame
-/// (the canvas is shared, the model is not).
-class GraphNodeFrame extends StatelessWidget {
-  final Color colour;
-  final Color fill;
-  final bool dashed;
-  final double radius;
-  const GraphNodeFrame({
-    super.key,
-    required this.colour,
-    required this.fill,
-    required this.dashed,
-    required this.radius,
-  });
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-        painter: _FramePainter(colour, fill, dashed, radius),
-      );
-}
-
-class _FramePainter extends CustomPainter {
-  final Color colour;
-  final Color fill;
-  final bool dashed;
-  final double radius;
-  const _FramePainter(this.colour, this.fill, this.dashed, this.radius);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0.5, 0.5, size.width - 1, size.height - 1),
-      Radius.circular(radius),
+/// The toolbar's frame-all mark as a fold item.
+FoldItem graphFrameAllFold(LumitTheme t,
+        {required Key key, required VoidCallback onPressed}) =>
+    FoldItem(
+      label: l10n.graphFrameAll,
+      icon: glyph.LumitIcon(LumitIcons.frameAll,
+          size: graphIconSize, colour: t.textMuted),
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 10),
+        child: LumitTooltip(
+          message: l10n.graphFrameAll,
+          action: 'nodes.frame.all',
+          child: HoverMark(
+            swells: true,
+            builder: (context, lit) => GestureDetector(
+              key: key,
+              behavior: HitTestBehavior.opaque,
+              onTap: onPressed,
+              child: glyph.LumitIcon(LumitIcons.frameAll,
+                  size: graphIconSize,
+                  colour: Color.lerp(t.textMuted, t.textPrimary, lit)),
+            ),
+          ),
+        ),
+      ),
     );
-    canvas.drawRRect(rect, Paint()..color = fill);
-    final stroke = Paint()
-      ..color = colour
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    if (!dashed) {
-      canvas.drawRRect(rect, stroke);
-      return;
-    }
-    canvas.drawPath(graphDashPath(Path()..addRRect(rect)), stroke);
-  }
 
-  @override
-  bool shouldRepaint(_FramePainter old) =>
-      old.colour != colour ||
-      old.fill != fill ||
-      old.dashed != dashed ||
-      old.radius != radius;
-}
+/// The toolbar's controls, folding from the end into one mark rather than
+/// overflowing. They sit at the row's end, against the zoom, and the name
+/// beside them keeps its share.
+Widget graphToolbarFold(List<FoldItem> items, {required Key markKey}) =>
+    Flexible(
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: FoldingRow(
+          markKey: markKey,
+          markWidth: 22,
+          markHeight: graphToolbarHeight,
+          items: items,
+        ),
+      ),
+    );
 
 /// The boxes' own stack, under the canvas's pan and zoom.
 ///
@@ -3956,13 +4177,13 @@ class _RenderBoxStack extends RenderStack {
 /// A path as 3-on, 3-off dashes — the drawing's own stroke-dasharray. Public
 /// for the reason [GraphNodeFrame] is: the inner shader graph draws its wire
 /// in hand with the same stroke.
-Path graphDashPath(Path path) {
+Path graphDashPath(Path path, {double dash = 3}) {
   final out = Path();
   for (final metric in path.computeMetrics()) {
     var at = 0.0;
     var on = true;
     while (at < metric.length) {
-      final to = math.min(at + 3, metric.length);
+      final to = math.min(at + dash, metric.length);
       if (on) out.addPath(metric.extractPath(at, to), Offset.zero);
       at = to;
       on = !on;
@@ -4062,6 +4283,10 @@ class _GraphPainter extends CustomPainter {
   final WireStyle wires;
   final TieView ties;
 
+  /// The picked boxes, whose wires draw heavier so what a pick is joined to
+  /// reads at a glance.
+  final Set<String> picked;
+
   const _GraphPainter({
     required this.layout,
     required this.edges,
@@ -4074,7 +4299,21 @@ class _GraphPainter extends CustomPainter {
     required this.outUnwired,
     required this.wires,
     required this.ties,
+    required this.picked,
   });
+
+  /// Whether a wire ends on a picked box: either end sits on the box's edge.
+  bool _lit(TieWire wire) {
+    if (picked.isEmpty) return false;
+    for (final key in picked) {
+      final rect = layout.byKey[key]?.rect.inflate(graphSocketSize);
+      if (rect != null &&
+          (rect.contains(wire.from) || rect.contains(wire.to))) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
 
@@ -4094,7 +4333,7 @@ class _GraphPainter extends CustomPainter {
               edge != null && edge == dropWire
                   ? theme.animated
                   : portColour(theme, type),
-              edge != null && edge == dropWire ? 2.0 : 1.0,
+              (edge != null && edge == dropWire) || _lit(wire) ? 2.0 : 1.0,
             ),
         ],
         ties,
@@ -4106,7 +4345,9 @@ class _GraphPainter extends CustomPainter {
     if (flight case final f?) {
       // A wire drawn out of an input runs the other way, pointer to socket,
       // so it leaves the input heading left as a stored wire would.
-      final (a, b) = f.from.isInput ? (f.end, f.from.at) : (f.from.at, f.end);
+      final (a, b) = f.from.isInput
+          ? (f.end, f.from.at)
+          : (ties.via ?? f.from.at, f.end);
       _wire(canvas, a, b, dragged, dashes: true);
     }
   }

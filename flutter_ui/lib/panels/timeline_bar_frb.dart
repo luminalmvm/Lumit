@@ -8,8 +8,6 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
-    show Int64List;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -838,7 +836,7 @@ class _BarState extends State<Bar> {
                   // selection is selected first, so the menu is about it.
                   onSecondaryTapUp: (d) {
                     if (!widget.selected) widget.onSelect();
-                    showLayerRowMenu(
+                    showLayerRowMenu(context,
                         widget.entry.layer.internallayerId, d.globalPosition);
                   },
                   onHorizontalDragDown: widget.razor || held
@@ -1322,8 +1320,7 @@ class _BarState extends State<Bar> {
     if (fan != null && moving != null) {
       widget.comp.fanLayers(
         layerIds: moving.layerIds,
-        deltas: Int64List.fromList(
-            [for (final id in moving.layerIds) fan['$id'] ?? 0]),
+        deltas: [for (final id in moving.layerIds) fan['$id'] ?? 0],
       );
       widget.onChanged();
       return;

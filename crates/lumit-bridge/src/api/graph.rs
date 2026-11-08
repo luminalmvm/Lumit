@@ -86,7 +86,7 @@ pub enum BridgeNodeRef {
 
 impl BridgeNodeRef {
     #[frb(ignore)]
-    fn of(node: NodeRef) -> BridgeNodeRef {
+    pub(crate) fn of(node: NodeRef) -> BridgeNodeRef {
         match node {
             NodeRef::Source => BridgeNodeRef::Source,
             NodeRef::Effect(id) => BridgeNodeRef::Effect(id),
@@ -253,6 +253,8 @@ pub struct BridgeNodePosition {
     pub node: BridgeNodeRef,
     pub x: f64,
     pub y: f64,
+    /// The width an edge drag gave the box; none keeps the panel's own.
+    pub width: Option<f64>,
 }
 
 /// A named region of the canvas: a tinted wash behind a set of boxes.
@@ -305,6 +307,7 @@ impl BridgeGraphWiring {
                     node: BridgeNodeRef::of(*node),
                     x: *x,
                     y: *y,
+                    width: g.widths.iter().find(|(n, _)| n == node).map(|(_, w)| *w),
                 })
                 .collect(),
             exposed: g.exposed.iter().copied().map(BridgeNodeRef::of).collect(),
@@ -404,7 +407,14 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
         // reads, so the socket that lets a consumer be wired and the one the
         // validator accepts a wire onto cannot disagree — and so an unwired one
         // reaches the canvas as the "no stream" mark with no
-        // effect-specific code at the seam.
+        // effect-specific code at the seam. Clone to points that makes its
+        // own points (Distribution other than Points input) reads no stream,
+        // so its unwired socket is left out rather than marked missing.
+        let own_points = effect.effect.match_name == "clone_to_points"
+            && !matches!(
+                effect.param("distribution"),
+                None | Some(lumit_core::model::EffectValue::Choice(0))
+            );
         inputs.extend(
             def.map(|d| d.signature().inputs())
                 .unwrap_or_default()
@@ -417,7 +427,8 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
                             port: port.id.to_owned(),
                         }),
                     )
-                }),
+                })
+                .filter(|port| !(own_points && !port.wired)),
         );
         nodes.push(BridgeGraphNode {
             node: BridgeNodeRef::Effect(effect.id),
@@ -635,6 +646,11 @@ pub(crate) fn wiring_into(
             .into_iter()
             .map(BridgeGraphEdge::core)
             .collect(),
+        widths: wiring
+            .layout
+            .iter()
+            .filter_map(|p| p.width.map(|w| (p.node.core(), w)))
+            .collect(),
         layout: wiring
             .layout
             .into_iter()
@@ -654,10 +670,11 @@ pub(crate) fn wiring_into(
                 members: group.members.into_iter().map(BridgeNodeRef::core).collect(),
             })
             .collect(),
-        // The wiring carries none. Whoever commits it puts the document's
-        // own back.
+        // The wiring carries none of these. Whoever commits it puts the
+        // document's own back ([`LayerGraph::keep_canvas`]).
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         out_unwired: wiring.out_unwired,
     }
 }

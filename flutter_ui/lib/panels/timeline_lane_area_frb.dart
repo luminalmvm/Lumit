@@ -7,13 +7,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/marquee.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'expression_editor.dart';
@@ -34,7 +37,7 @@ import 'timeline_bar_frb.dart';
 import 'timeline_key_lane_frb.dart';
 import 'timeline_key_block_frb.dart';
 import 'timeline_group_row_frb.dart';
-import 'timeline_toolbar_frb.dart' show showTimelineMoreMenu;
+import 'timeline_toolbar_frb.dart' show TimelineFoldRows, showTimelineMoreMenu;
 
 /// One selected keyframe, and where it sits: which row's curve it belongs to,
 /// which key of that curve it is, what frame it reads and where its lane is in
@@ -216,6 +219,9 @@ class LayerArea extends StatelessWidget {
   final ValueChanged<LayerReference> onSelect;
   final VoidCallback onChanged;
 
+  /// Expand all and Collapse all, asked as the ground's menu opens.
+  final TimelineFoldRows Function()? foldRows;
+
   /// Fires when something may have changed which frames are held — a frame
   /// arriving or the idle fill banking one — so the bar repaints then rather
   /// than polling the cache on every frame it draws.
@@ -362,6 +368,7 @@ class LayerArea extends StatelessWidget {
     required this.onSeek,
     required this.onSelect,
     required this.onChanged,
+    this.foldRows,
     required this.cacheRevision,
     required this.dragPreview,
     required this.bounds,
@@ -682,7 +689,25 @@ class LayerArea extends StatelessWidget {
                     // layer rather than stopping at it: a lane area that ran out of
                     // rows half way down read as a hole in the table, and a click in
                     // that hole reached nothing to deselect against.
-                    child: LayoutBuilder(
+                    //
+                    // A right-click no bar or key took opens the bottom strip's
+                    // menu, and "here" is the frame under the pointer. Round
+                    // the rows rather than behind them, as a layer's own lane
+                    // would catch the press first.
+                    child: GestureDetector(
+                  onSecondaryTapUp: (d) => showTimelineMoreMenu(
+                    context,
+                    comp: comp,
+                    playhead: playhead,
+                    position: d.globalPosition,
+                    frame: axis.frameAt(d.localPosition.dx),
+                    onChanged: onChanged,
+                    fold: foldRows?.call(),
+                  ),
+                  child: EdgeFade(
+                  axis: Axis.vertical,
+                  reach: 16,
+                  child: LayoutBuilder(
                   builder: (context, box) => SingleChildScrollView(
                     controller: vScroll,
                     child: ConstrainedBox(
@@ -775,24 +800,6 @@ class LayerArea extends StatelessWidget {
                                 // the click is reported by position.
                                 onClear: onDeselectAll,
                                 onTapAt: _tapGround,
-                              ),
-                            ),
-                            // A right-click on the ground opens the bottom
-                            // strip's menu, and "here" is the frame under the
-                            // pointer. Translucent, so the marquee behind it
-                            // still gets every press; the bars and keys above
-                            // take their own.
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.translucent,
-                                onSecondaryTapUp: (d) => showTimelineMoreMenu(
-                                  context,
-                                  comp: comp,
-                                  playhead: playhead,
-                                  position: d.globalPosition,
-                                  frame: axis.frameAt(d.localPosition.dx),
-                                  onChanged: onChanged,
-                                ),
                               ),
                             ),
                             // The ground inside the block box moves the block.
@@ -935,7 +942,12 @@ class LayerArea extends StatelessWidget {
                                           // must not redraw the bar above it.
                                           onlyLit: true,
                                           onEffectDropped: (data) => data
-                                              .landOn(rows[i].entry.layer)
+                                              .landOn(rows[i].entry.layer,
+                                                  atFrame: Provider.of<LumitUiState>(
+                                                          context,
+                                                          listen: false)
+                                                      .playheadFrame
+                                                      .value)
                                               .then((_) => onChanged()),
                                           builder: (context, mine) => Bar(
                                             key: ValueKey<String>(
@@ -1197,7 +1209,7 @@ class LayerArea extends StatelessWidget {
                       ),
                     ),
                   ),
-                )),
+                )))),
               ],
             ),
             // Each marker's line, from the ruler down through every row.

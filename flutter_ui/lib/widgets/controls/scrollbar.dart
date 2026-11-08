@@ -44,6 +44,7 @@ class HouseScrollbar extends RawScrollbar {
     super.thickness,
     super.padding,
     super.crossAxisMargin,
+    super.notificationPredicate,
   }) : super(radius: const Radius.circular(3), minThumbLength: 20);
 
   @override

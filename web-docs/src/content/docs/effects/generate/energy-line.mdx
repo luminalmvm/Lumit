@@ -1,0 +1,137 @@
+---
+title: Energy line
+description: "Draws a hot core of light with a glow along a line, a mask, a shape or text."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Energy line is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Energy line" category="generate" slug="energy-line" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Energy line draws a white-hot core with a coloured glow along a path: a line between two
+points, the layer's masks, a Shape layer's paths, or the letters of a Text layer. The lit
+stretch can be trimmed and slid along the path, and noise can push the core and the glow
+about. With motion blur on for the layer, a moving line and a moving stretch blur across
+the shutter.
+
+:::note
+Text draws its letters as the layer sets them. Text animators don't move the light.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Preset** | Dropdown | Custom · Blue blade · Red blade · Neon · Ice · Electric · Fire · Energy · Plasma · Ghost · Toxic · Solar · Laser | Custom | - |
+| **Draw along** | Dropdown | Line · Mask · Shape · Text | Line | - |
+| **From x** | Slider | 0 to 3840; any value by typing | 480 | Pixels at composition size |
+| **From y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **To x** | Slider | 0 to 3840; any value by typing | 1440 | Pixels at composition size |
+| **To y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Mask** | Masks | This layer's masks | First mask | - |
+| **Every mask** | Checkbox | On or off | On | - |
+| **Paths** | Dropdown | One after another · All at once | One after another | - |
+| **Start** | Slider | 0 to 100 | 0 | Per cent |
+| **End** | Slider | 0 to 100 | 100 | Per cent |
+| **Offset** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Core size** | Slider | 0 to 100; higher | 10 | Pixels at composition size |
+| **Core softness** | Slider | 0 to 100 | 40 | Per cent |
+| **Core colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Halo** | Slider | 0 to 200; higher | 60 | Per cent |
+| **Start size** | Slider | 0 to 200; higher | 100 | Per cent |
+| **End size** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Glow colour** | Colour | Each channel 0 to 4, scene-linear | 0.06, 0.28, 1, 1 | - |
+| **Glow intensity** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Glow size** | Slider | 0 to 400; higher | 60 | Pixels at composition size |
+| **Glow falloff** | Slider | 0 to 100 | 50 | Per cent |
+| **Flicker** | Slider | 0 to 100 | 0 | Per cent |
+| **Flicker speed** | Slider | 0 to 30; higher | 12 | - |
+| **Type** | Dropdown | Smooth · Smoke · Crackle | Smooth | - |
+| **Core distortion** | Slider | 0 to 100; higher | 0 | Pixels at composition size |
+| **Glow distortion** | Slider | 0 to 200; higher | 0 | Pixels at composition size |
+| **Noise size** | Slider | 4 to 400; down to 1 and higher | 60 | Pixels at composition size |
+| **Detail** | Slider, whole numbers | 1 to 6 | 3 | - |
+| **Evolution speed** | Slider | 0 to 10; higher | 1 | - |
+| **Wind direction** | Slider | -180 to 180; any value by typing | 0 | Degrees |
+| **Wind speed** | Slider | 0 to 1000; higher | 0 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Composite on original** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Core** groups **Core size**, **Core softness**, **Core colour**, **Halo**, **Start size**, **End size**.
+- **Glow** groups **Glow colour**, **Glow intensity**, **Glow size**, **Glow falloff**.
+- **Flicker** groups **Flicker**, **Flicker speed**, and starts closed.
+- **Distortion** groups **Type**, **Core distortion**, **Glow distortion**, **Noise size**, **Detail**, **Evolution speed**, **Wind direction**, **Wind speed**, and starts closed.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Preset**: a look to start from. Picking one sets the core, glow, flicker and
+  distortion controls. Editing any of them sets **Preset** back to **Custom**.
+- **Draw along**: **Line** runs between **From** and **To**. **Mask** follows the
+  layer's masks. **Shape** follows a Shape layer's paths. **Text** follows the outlines of
+  a Text layer's letters.
+- **From x**, **From y**, **To x** and **To y**: the two ends of the line.
+- **Mask**: which mask to follow when **Every mask** is off.
+- **Every mask**: on, every mask on the layer is drawn.
+- **Paths**: with several masks, a shape's items or the letters, **One after another**
+  lights them in turn along **Start** and **End**. **All at once** lights each on its own,
+  together.
+- **Start** and **End**: where the light starts and stops, as a share of the whole path.
+  Keyframe **End** from **Start** to draw the line on. A stretch shorter than the core is
+  wide is dimmer.
+- **Offset**: slides the lit stretch along the path. On a closed path it comes round
+  again.
+- **Core size**: the core's width.
+- **Core softness**: how much of the core's width its edge fades over.
+- **Core colour**: the colour in the middle of the core. The edge of the core takes the
+  glow colour.
+- **Halo**: a tight glow hugging the core, in the glow colour.
+- **Start size** and **End size**: the core's width at each end of the lit stretch, as a
+  share of **Core size**.
+- **Glow colour**: the glow's colour.
+- **Glow intensity**: how bright the glow is.
+- **Glow size**: how far the glow reaches.
+- **Glow falloff**: how much of the glow is sent far out rather than kept near the core.
+- **Flicker**: how far the light dips.
+- **Flicker speed**: how many times a second it dips.
+- **Type**: the distortion noise. **Smooth** swells, **Smoke** curls, **Crackle** is fast
+  and jagged.
+- **Core distortion** and **Glow distortion**: how far the noise pushes the core and the
+  glow, in pixels.
+- **Noise size**: the size of the noise's swirls.
+- **Detail**: how many layers of finer noise ride on the first.
+- **Evolution speed**: how fast the noise changes.
+- **Wind direction** and **Wind speed**: which way the noise is carried, and how many
+  pixels a second. 0° is up.
+- **Seed**: a different arrangement of the noise and the flicker.
+- **Composite on original**: on, the layer stays under the light. Off, the light is all
+  there is.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Beam](/effects/generate/beam/)
+- [Stroke](/effects/generate/stroke/)
+- [Glow](/effects/stylise/glow/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

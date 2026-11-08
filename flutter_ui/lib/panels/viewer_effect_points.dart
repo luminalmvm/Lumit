@@ -8,7 +8,8 @@
 // With the Selection tool in hand a mark can be dragged: the point follows
 // the pointer through the same preview a row's drag uses, and the release
 // writes both halves as one undo step. Only the marks take the pointer, so the
-// rest of the picture behaves as before.
+// rest of the picture behaves as before. A point an expression works out is
+// drawn in the number colour, and neither it nor a wired one moves.
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
@@ -20,6 +21,10 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
 
+import '../l10n/strings.dart';
+import '../state/comp_time.dart' show sampledExpression, timeOfFrame;
+import '../state/dock.dart' show Panel;
+import '../widgets/controls.dart' show MenuDivider, ThemeScope;
 import 'effect_param_row_frb.dart'
     show
         EffectStackEditor,
@@ -29,8 +34,10 @@ import 'effect_param_row_frb.dart'
 import 'graph_panel.dart' show drivenParamsOf;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show effectPath;
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_anchor.dart' show constrainToAxis;
 import 'viewer_gizmo.dart' show gizmoAnchorSlop;
+import 'viewer_menus.dart' show viewerRow;
 import 'viewer_tool_cursor.dart' show paintAnchorMark;
 
 /// A point's row changed in Effect controls or the Timeline picks its effect,
@@ -60,8 +67,11 @@ class _Mark {
   final Size span;
   final Offset at;
 
+  /// An expression works out either half, so the mark is not dragged.
+  final bool driven;
+
   const _Mark(this.layer, this.effect, this.x, this.y, this.xWas, this.yWas,
-      this.span, this.at);
+      this.span, this.at, this.driven);
 
   String get key => '${layer.internallayerId}/$effect/$x';
 }
@@ -100,7 +110,9 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
   final EffectStackEditor _editor = EffectStackEditor();
 
   String? _hover;
-  bool _hoverWired = false;
+
+  /// The mark under the pointer is driven, by an expression or a wire.
+  bool _hoverDriven = false;
 
   /// The drag in flight: the mark, where the press was, the point it started
   /// from, and where it is now.
@@ -132,7 +144,7 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
             if (marks.isEmpty) return const SizedBox.shrink();
             final lit = [
               for (final m in marks)
-                if (m.key == _held?.key || (m.key == _hover && !_hoverWired))
+                if (m.key == _held?.key || (m.key == _hover && !_hoverDriven))
                   m.at
             ];
             return Stack(
@@ -141,7 +153,11 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
                   child: IgnorePointer(
                     child: CustomPaint(
                       painter: _PointsPainter(
-                          [for (final m in marks) m.at], lit, widget.colour),
+                          [for (final m in marks) m.at],
+                          lit,
+                          [for (final m in marks) m.driven],
+                          widget.colour,
+                          ThemeScope.of(context).theme.port.number),
                     ),
                   ),
                 ),
@@ -161,16 +177,19 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
         width: gizmoAnchorSlop,
         height: gizmoAnchorSlop,
         child: MouseRegion(
-          cursor: m.key == _hover && !_hoverWired
-              ? SystemMouseCursors.move
-              : MouseCursor.defer,
+          cursor: m.key != _hover
+              ? MouseCursor.defer
+              : _hoverDriven
+                  ? SystemMouseCursors.forbidden
+                  : SystemMouseCursors.move,
           onEnter: (_) => setState(() {
             _hover = m.key;
-            _hoverWired = _wired(m);
+            _hoverDriven = m.driven || _wired(m);
           }),
           onExit: (_) => setState(() => _hover = null),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onSecondaryTapUp: (d) => _menu(m, d.globalPosition),
             onPanDown: (d) => _start(m, d.localPosition),
             onPanUpdate: (d) => _move(d.localPosition),
             onPanEnd: (_) => _end(),
@@ -178,6 +197,67 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
           ),
         ),
       );
+
+  /// A point's own menu: where it can go, its key at the playhead, and its
+  /// rows. A point worked out by an expression or a wire goes nowhere.
+  void _menu(_Mark m, Offset at) {
+    final fixed = m.driven || _wired(m);
+    final frame = _ui.playheadFrame.value;
+    void place(Offset to) {
+      _editor.writeAll(m.layer, m.effect, {
+        m.x: _value(m.xWas, to.dx, frame),
+        m.y: _value(m.yWas, to.dy, frame),
+      });
+      widget.onChanged();
+    }
+
+    double? def(String id) => switch (cachedListParameters(_fxName(m))
+            .where((p) => p.id == id)
+            .firstOrNull
+            ?.kind) {
+          BridgeParamKind_Float(:final default_) => default_,
+          _ => null,
+        };
+    final defX = def(m.x), defY = def(m.y);
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          viewerRow(
+              l10n.viewerMenuCentrePoint,
+              fixed
+                  ? null
+                  : () => place(Offset(m.span.width / 2, m.span.height / 2)),
+              close,
+              id: 'viewer-fx-point-centre'),
+          viewerRow(
+              l10n.viewerMenuResetPoint,
+              fixed || defX == null || defY == null
+                  ? null
+                  : () => place(Offset(defX, defY)),
+              close,
+              id: 'viewer-fx-point-reset'),
+          const MenuDivider(),
+          viewerRow(l10n.viewerMenuPointReveal, () {
+            _ui.setEffectSelection(m.layer, [m.effect]);
+            _ui.frontPanel(Panel.effectControls);
+          }, close, id: 'viewer-fx-point-reveal'),
+        ];
+      },
+    );
+  }
+
+  String _fxName(_Mark m) {
+    for (final entry in _ui.model.layers) {
+      if (entry.layer.internallayerId != m.layer.internallayerId) continue;
+      for (final fx in entry.info.effects) {
+        if (fx.id == m.effect) return fx.name;
+      }
+    }
+    return '';
+  }
 
   /// Whether a wire drives either half. The graph is read here, on a hover or
   /// a press, never in a build.
@@ -293,8 +373,15 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
           BridgeScalar? held(String id) =>
               scalar(fx.values.where((v) => v.id == id).firstOrNull?.value);
           // What a drag has staged first, so the mark follows the picture.
-          double? at(String id) => scalarValueAt(
-              scalar(staged[(fx.id, id)]) ?? held(id), widget.comp, frame);
+          double? at(String id) {
+            final s = scalar(staged[(fx.id, id)]) ?? held(id);
+            return s is BridgeScalar_Expression
+                ? sampledExpression(s, timeOfFrame(widget.comp, frame),
+                    entry.layer, _ui.model.heldRevision,
+                    row: BridgeExpressionRow.effect(effect: fx.id, param: id))
+                : scalarValueAt(s, widget.comp, frame);
+          }
+
           final x = at(pair.x), y = at(pair.y);
           if (x == null || y == null) continue;
           out.add(_Mark(
@@ -309,6 +396,8 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
               fitted.left + x / span.width * fitted.width,
               fitted.top + y / span.height * fitted.height,
             ),
+            held(pair.x) is BridgeScalar_Expression ||
+                held(pair.y) is BridgeScalar_Expression,
           ));
         }
       }
@@ -322,14 +411,18 @@ class _PointsPainter extends CustomPainter {
 
   /// The marks under the pointer or in hand, drawn a touch heavier.
   final List<Offset> lit;
-  final Color colour;
 
-  const _PointsPainter(this.points, this.lit, this.colour);
+  /// Which of [points] an expression works out, drawn in [drivenColour].
+  final List<bool> driven;
+  final Color colour, drivenColour;
+
+  const _PointsPainter(
+      this.points, this.lit, this.driven, this.colour, this.drivenColour);
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final at in points) {
-      paintAnchorMark(canvas, at, colour);
+    for (var i = 0; i < points.length; i++) {
+      paintAnchorMark(canvas, points[i], driven[i] ? drivenColour : colour);
     }
     for (final at in lit) {
       canvas.drawCircle(
@@ -341,6 +434,8 @@ class _PointsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PointsPainter old) =>
       old.colour != colour ||
+      old.drivenColour != drivenColour ||
       !listEquals(old.points, points) ||
+      !listEquals(old.driven, driven) ||
       !listEquals(old.lit, lit);
 }

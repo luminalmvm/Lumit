@@ -33,8 +33,6 @@ const double cameraLabelColumn = 120;
 const double cameraRowGap = 12;
 const double cameraRowHeight = 30;
 const double cameraWell = 90;
-const double cameraSectionKicker = 24;
-const double cameraSectionTop = 4;
 
 /// Which units the window shows its distances in. Display only: the document
 /// holds comp pixels and millimetres whichever of these is chosen.
@@ -236,14 +234,14 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
             ],
           ),
         ),
-        _section(t, l10n.cameraOptions, [
+        dialogSection(t, l10n.cameraOptions, [
           _row(t, l10n.sourceZoom, _distanceRow(t, 'zoom', _zoom, _setZoom)),
           _row(t, l10n.cameraAngleOfView, _angleRow(t)),
           _row(t, l10n.cameraFilmSize, _filmRow(t)),
           _row(t, l10n.cameraFocalLength, _focalRow(t)),
           _row(t, l10n.cameraPixelsPerMetre, _metreRow(t)),
         ]),
-        _section(t, l10n.cameraDepthOfField, [
+        dialogSection(t, l10n.cameraDepthOfField, [
           _row(t, l10n.cameraDepthOfField, _depthRow(t)),
           _row(
               t,
@@ -447,7 +445,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
         );
 
   Widget _depthRow(LumitTheme t) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: HouseCheckbox(
           key: const ValueKey('camera-dof'),
           value: _depthOfField,
@@ -456,7 +454,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
       );
 
   Widget _lockRow(LumitTheme t) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: HouseCheckbox(
           key: const ValueKey('camera-lock'),
           value: _lockToZoom,
@@ -516,7 +514,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
 
   /// What an animated channel shows where its well would be.
   Widget _animated(LumitTheme t, String id) => Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: Text(
           l10n.animated,
           key: ValueKey<String>('camera-$id-animated'),
@@ -533,36 +531,5 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
         labelColumn: cameraLabelColumn,
         gap: cameraRowGap,
         minHeight: cameraRowHeight,
-      );
-
-  /// A named group of rows, on the Composition settings dialog's own pattern:
-  /// a rule, a little air, a kicker band, and the rows under it.
-  Widget _section(LumitTheme t, String title, List<Widget> rows) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(height: 1, color: t.hairline),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                dialogPadding, cameraSectionTop, dialogPadding, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: cameraSectionKicker,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 4),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(t.kickerCase(title), style: t.kicker),
-                    ),
-                  ),
-                ),
-                ...rows,
-              ],
-            ),
-          ),
-        ],
       );
 }

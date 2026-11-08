@@ -14,7 +14,6 @@
 // exception to "an action runs on all of them", and every other field here is
 // that layer's own identity too.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
@@ -29,6 +28,7 @@ import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 
 /// Show the layer's settings. Completes with whether anything was applied, so
 /// the caller can redraw only when there is something to redraw.
@@ -78,22 +78,27 @@ Future<bool> showLayerSettingsFrb({
 /// as After Effects does.
 BridgeColourRgba _lastColour = const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1);
 
-/// Layer ▸ New ▸ Solid: ask for its name, size and colour first, as After
-/// Effects does, then make it above [row] as one undo step. Does nothing when
+/// Layer ▸ New ▸ Solid: ask for its name, size and colour first, then make it
+/// above [row] as one undo step. Answers the new layer, or null when
 /// cancelled.
-Future<void> newSolidFrb({
+Future<LayerReference?> newSolidFrb({
   required BuildContext context,
   required CompositionReference comp,
   int? row,
+  void Function(LayerReference layer)? place,
   VoidCallback? onDone,
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
   final size = comp.getSettings();
+  // The name the engine would give it, as New composition suggests "Comp 3".
+  final next = project?.nextSolidName() ?? '';
   final picked = await showLumitModal<(String, BridgeSolidDef?)>(
     context: context,
     id: 'layer-settings',
     builder: (close) => _LayerSettingsBody(
-      name: '',
+      name: _solidName(next, _lastColour),
+      suggest: (colour) => _solidName(next, colour),
+      fresh: true,
       definition: BridgeSolidDef(
           name: '',
           colour: _lastColour,
@@ -104,20 +109,13 @@ Future<void> newSolidFrb({
     ),
   );
   final def = picked?.$2;
-  if (picked == null || def == null) return;
+  if (picked == null || def == null) return null;
   _lastColour = def.colour;
+  LayerReference? solid;
   asOneUndoStep(project, () {
-    final layer = comp.addSolidLayer(row: row);
+    final layer = solid = comp.addSolidLayer(row: row);
     final made = layer.getName();
-    final white = def.colour.r == 1 && def.colour.g == 1 && def.colour.b == 1;
-    // ponytail: the engine names every new solid "White solid N", so a
-    // coloured one loses the word. A name per colour wants the engine to take
-    // the colour.
-    final name = picked.$1.isNotEmpty
-        ? picked.$1
-        : white
-            ? made
-            : made.replaceFirst('White solid', l10n.menuSolid);
+    final name = picked.$1.isNotEmpty ? picked.$1 : _solidName(made, def.colour);
     if (name != made) layer.rename(name: name);
     if (layer.getSourceItem() case ItemReference_Solid(:final field0)) {
       field0.setDefinition(
@@ -127,9 +125,19 @@ Future<void> newSolidFrb({
               width: def.width,
               height: def.height));
     }
+    place?.call(layer);
   });
   onDone?.call();
+  return solid;
 }
+
+/// The engine's name for a new solid, [made], for one of [colour].
+// ponytail: the engine names every new solid "White solid N", so a coloured
+// one loses the word. A name per colour wants the engine to take the colour.
+String _solidName(String made, BridgeColourRgba colour) =>
+    colour.r == 1 && colour.g == 1 && colour.b == 1
+        ? made
+        : made.replaceFirst('White solid', l10n.menuSolid);
 
 class _LayerSettingsBody extends StatefulWidget {
   final String name;
@@ -137,11 +145,20 @@ class _LayerSettingsBody extends StatefulWidget {
   final void Function(String, BridgeSolidDef?) onConfirm;
   final VoidCallback onCancel;
 
+  /// A solid that does not exist yet: the window is New solid, not its settings.
+  final bool fresh;
+
+  /// The name New solid suggests for a colour, which the field follows until
+  /// it is typed over. Null for a solid that has a name already.
+  final String Function(BridgeColourRgba colour)? suggest;
+
   const _LayerSettingsBody({
     required this.name,
     required this.definition,
     required this.onConfirm,
     required this.onCancel,
+    this.fresh = false,
+    this.suggest,
   });
 
   @override
@@ -182,123 +199,128 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final solid = widget.definition != null;
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (_, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey != LogicalKeyboardKey.enter &&
-            event.logicalKey != LogicalKeyboardKey.numpadEnter) {
-          return KeyEventResult.ignored;
-        }
-        _confirm();
-        return KeyEventResult.handled;
-      },
-      child: FloatSurface(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(l10n.menuLayerSettings, style: t.bodyPrimary),
-            ),
-            _row(
-              t,
-              label: l10n.name,
-              child: HouseTextField(
-                key: const ValueKey('layer-settings-name'),
-                controller: _name,
-                width: double.infinity,
-                autofocus: true,
-                onSubmitted: (_) => _confirm(),
-              ),
-            ),
-            if (solid) ...[
-              const SizedBox(height: 8),
-              _row(
-                t,
-                label: l10n.sourceSolidSize,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DragValueField(
-                        key: const ValueKey('layer-settings-width'),
-                        value: _width,
-                        min: 1,
-                        max: 16384,
-                        decimals: 0,
-                        onChanged: (v) => setState(() => _width = v.round()),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: DragValueField(
-                        key: const ValueKey('layer-settings-height'),
-                        value: _height,
-                        min: 1,
-                        max: 16384,
-                        decimals: 0,
-                        onChanged: (v) => setState(() => _height = v.round()),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              _row(
-                t,
-                label: l10n.sourceSolidColour,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  // A solid's colour is chosen as a **display** colour, so the
-                  // picker's channels read 0—255 — the same reading the
-                  // source card's own swatch opens with.
-                  child: ColourSwatchButton(
-                    key: const ValueKey('layer-settings-colour'),
-                    colour: PickedColour(
-                            _colour?.r ?? 0, _colour?.g ?? 0, _colour?.b ?? 0)
-                        .clipped,
-                    onPicked: (picked) => setState(() => _colour =
-                        BridgeColourRgba(
-                            r: picked.r,
-                            g: picked.g,
-                            b: picked.b,
-                            a: _colour?.a ?? 1)),
+    return dialogEnter(
+      onEnter: _confirm,
+      child: DialogFrame(
+        width: 400,
+        children: [
+          dialogTitleBar(t,
+              title: widget.fresh ? l10n.newSolidTitle : l10n.layerSettingsTitle,
+              onClose: widget.onCancel,
+              keyPrefix: 'layer-settings'),
+          Padding(
+            padding: dialogBodyPadding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _row(
+                  t,
+                  label: l10n.name,
+                  child: HouseTextField(
+                    key: const ValueKey('layer-settings-name'),
+                    controller: _name,
+                    width: double.infinity,
+                    autofocus: true,
+                    onSubmitted: (_) => _confirm(),
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: const ValueKey('layer-settings-confirm'),
-                  primary: true,
-                  onPressed: _confirm,
-                  child: Text(l10n.apply),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('layer-settings-cancel'),
-                  onPressed: widget.onCancel,
-                  child: Text(l10n.cancel),
-                ),
+                if (solid) ...[
+                  _row(
+                    t,
+                    label: l10n.sourceSolidSize,
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: _sizeWell,
+                          height: dialogControlHeight,
+                          child: DragValueField(
+                            key: const ValueKey('layer-settings-width'),
+                            value: _width,
+                            min: 1,
+                            max: 16384,
+                            decimals: 0,
+                            onChanged: (v) =>
+                                setState(() => _width = v.round()),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('×', style: dialogMono(t)),
+                        ),
+                        SizedBox(
+                          width: _sizeWell,
+                          height: dialogControlHeight,
+                          child: DragValueField(
+                            key: const ValueKey('layer-settings-height'),
+                            value: _height,
+                            min: 1,
+                            max: 16384,
+                            decimals: 0,
+                            onChanged: (v) =>
+                                setState(() => _height = v.round()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _row(
+                    t,
+                    label: l10n.sourceSolidColour,
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      // A solid's colour is chosen as a **display** colour, so
+                      // the picker's channels read 0-255, the same reading the
+                      // source card's own swatch opens with.
+                      child: ColourSwatchButton(
+                        key: const ValueKey('layer-settings-colour'),
+                        colour: PickedColour(_colour?.r ?? 0, _colour?.g ?? 0,
+                                _colour?.b ?? 0)
+                            .clipped,
+                        onPicked: (picked) => setState(() {
+                          final was = _colour;
+                          final now = _colour = BridgeColourRgba(
+                              r: picked.r,
+                              g: picked.g,
+                              b: picked.b,
+                              a: _colour?.a ?? 1);
+                          if (widget.suggest case final suggest?
+                              when was != null && _name.text == suggest(was)) {
+                            _name.text = suggest(now);
+                          }
+                        }),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
-          ],
-        ),
+          ),
+          dialogFooter(
+            t,
+            keyPrefix: 'layer-settings',
+            actions: [
+              HouseButton(
+                key: const ValueKey('layer-settings-cancel'),
+                onPressed: widget.onCancel,
+                child: Text(l10n.cancel),
+              ),
+              HouseButton(
+                key: const ValueKey('layer-settings-confirm'),
+                primary: true,
+                onPressed: _confirm,
+                child: Text(widget.fresh ? l10n.create : l10n.apply),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  /// Label left, control right — the dialogue pattern's row.
   Widget _row(LumitTheme t, {required String label, required Widget child}) =>
-      Row(
-        children: [
-          SizedBox(width: 110, child: Text(label, style: t.small)),
-          Expanded(child: child),
-        ],
-      );
+      dialogRow(t, label, child, labelColumn: 90);
 }
+
+/// A solid's width and height, each wide enough for 16384.
+const double _sizeWell = 84;

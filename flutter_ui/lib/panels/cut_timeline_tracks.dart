@@ -19,6 +19,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'clip_fades.dart' show clipFadeEdge;
 import 'timeline_bar_frb.dart' show BarGrab, barGrabAt;
 import 'timeline_extras_frb.dart' show TimelineAxis;
+import 'timeline_snap.dart' show SnapTarget;
 
 /// The tools the strip offers, in the strip's order. Select moves and trims
 /// without moving anything else; Ripple trims and closes or opens the room
@@ -120,6 +121,9 @@ class CutTrack {
 ///
 /// With [anyOrder] there is no dividing line: every track stands in stack
 /// order, and an uncut footage layer's sound row stands under its bar.
+///
+/// A Camera, a Light or a Null has no picture and no sound, so there is
+/// nothing on it to cut. It gets no row here, and the Timeline keeps it.
 List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
     {Map<String, bool> hasAudio = const {}, bool anyOrder = false}) {
   final above = <CutTrack>[];
@@ -127,7 +131,7 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
   final own = <CutTrack>[];
   if (anyOrder) {
     final all = <CutTrack>[];
-    for (final entry in layers) {
+    for (final entry in layers.where(_cuttable)) {
       final info = entry.info;
       final id = entry.layer.internallayerId.toString();
       final clips = [...info.clips]
@@ -146,7 +150,7 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
     }
     return all;
   }
-  for (final entry in layers) {
+  for (final entry in layers.where(_cuttable)) {
     final info = entry.info;
     final id = entry.layer.internallayerId.toString();
     final clips = [...info.clips]
@@ -165,6 +169,45 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
   }
   return [...above, ...below, ...own];
 }
+
+/// The project clips were last copied in, which is as far as a paste of them
+/// reaches.
+Object? cutClipsCopiedIn;
+
+/// Whether a paste in [project] has clips to land.
+bool cutClipsHeld(Object? project) =>
+    project != null && identical(project, cutClipsCopiedIn);
+
+/// How far a copy of [picked] lands from them: straight after them, or at the
+/// far end of the [tracks] they sit on where something is in the way, since a
+/// clip that lands on another overwrites it.
+int cutDuplicateFrames(
+    List<BridgeClip> picked, Iterable<List<BridgeClip>> tracks) {
+  final ids = {for (final clip in picked) clip.id.toString()};
+  final from = picked.map((clip) => clip.startFrame.toInt()).reduce(min);
+  final to = picked.map((clip) => clip.endFrame.toInt()).reduce(max);
+  final span = to - from;
+  var last = to;
+  var clear = true;
+  for (final clips in tracks) {
+    for (final clip in clips) {
+      if (ids.contains(clip.id.toString())) continue;
+      last = max(last, clip.endFrame.toInt());
+      if (clip.startFrame.toInt() < to + span && clip.endFrame.toInt() > to) {
+        clear = false;
+      }
+    }
+  }
+  return clear ? span : last - from;
+}
+
+bool _cuttable(BridgeLayerEntry entry) => switch (entry.info.kind) {
+      BridgeLayerKind.camera ||
+      BridgeLayerKind.light ||
+      BridgeLayerKind.nullLayer =>
+        false,
+      _ => true,
+    };
 
 /// How many tracks stand above the dividing line.
 int cutPictureCount(List<CutTrack> tracks) {
@@ -215,6 +258,17 @@ List<double> cutTrackTops(List<double> heights) {
   }
   return tops;
 }
+
+/// Where something dragged onto the Cut timeline would land: its track (null
+/// for a new one under the rest), its first frame and length, the name it is
+/// drawn with, and what its start or end caught.
+typedef CutLanding = ({
+  int? track,
+  int frame,
+  int length,
+  String label,
+  SnapTarget? caught,
+});
 
 /// Which track the point [y] lands on, measured down from the top of the
 /// first track, with [tops] from [cutTrackTops]. Null above the first or
@@ -547,6 +601,23 @@ BridgeClip? cutClipAfter(CutTrack track, BridgeClip clip) {
     if (track.clips[i].startFrame.toInt() == end) return track.clips[i];
   }
   return null;
+}
+
+/// [cutBadges] for [clip] on [track], less any where the clip across its end
+/// runs over it: an overlap shows its transition, not the outgoing clip's
+/// buttons.
+List<(CutBadge, Rect)> cutBadgesOf(
+    CutTrack track, BridgeClip clip, Rect box, TimelineAxis axis,
+    {required bool picture}) {
+  final next = cutEdgeOverlaps(track, clip, endEdge: true)
+      ? cutClipAcross(track, clip, endEdge: true)
+      : null;
+  final into =
+      next == null ? double.infinity : axis.xOf(next.startFrame.toInt());
+  return [
+    for (final badge in cutBadges(box, picture: picture))
+      if (badge.$2.right <= into) badge,
+  ];
 }
 
 /// [shift] held to what the source can give. The engine allows overrun, a

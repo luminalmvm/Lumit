@@ -20,11 +20,10 @@
 use std::sync::Arc;
 
 use flutter_rust_bridge::frb;
-use lumit_core::model::EffectInstance;
 use lumit_core::{
     anim::{Animation, Keyframe, Property, SideInterp},
     expression::ExpressionContext,
-    model::{EffectParam, EffectValue, FileParam},
+    model::{EffectInstance, EffectParam, EffectValue, FileParam},
     time::Rational,
 };
 use serde_json::json;
@@ -32,6 +31,7 @@ use uuid::Uuid;
 
 use crate::api::{
     layer::{BridgeTransformProp, LayerReference},
+    shader_fault::{BridgeShaderFault, BridgeShaderGraphError},
     state::PROJECTS,
     BridgeError,
 };
@@ -618,6 +618,8 @@ pub struct BridgePresetInfo {
     /// The group it is filed in, with `/` between nested groups. Empty at the
     /// top of the library.
     pub group: String,
+    /// Whether it carries transform keys or text animators as well as effects.
+    pub keyed: bool,
 }
 
 /// Every `.lumfx` in the preset library and its groups, sorted by name — what the
@@ -626,9 +628,15 @@ pub struct BridgePresetInfo {
 /// things in, and a stray file there is not a fault.
 #[frb(sync)]
 pub fn list_presets() -> Vec<BridgePresetInfo> {
-    lumit_project::presets_dir()
-        .map(|dir| presets_in(&dir, lumit_core::preset::PRESET_EXTENSION))
-        .unwrap_or_default()
+    let extension = lumit_core::preset::PRESET_EXTENSION;
+    let mut presets: Vec<BridgePresetInfo> = lumit_project::presets_dir()
+        .map(|dir| presets_in(&dir, extension))
+        .unwrap_or_default();
+    // The presets that come with Lumit, in their own group.
+    if let Some(dir) = crate::api::presets::shipped_dir() {
+        presets.extend(presets_in(&dir, extension));
+    }
+    presets
 }
 
 /// Every `.lumgrp` **node group** in the same library folder, sorted by name —
@@ -775,6 +783,8 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
         // them is parsed properly at load time.
         effects: Option<serde_json::Value>,
         nodes: Option<serde_json::Value>,
+        transform: Option<serde_json::Value>,
+        animators: Option<serde_json::Value>,
     }
     let mut out: Vec<BridgePresetInfo> = Vec::new();
     for folder in crate::api::presets::folders_under(dir) {
@@ -812,6 +822,7 @@ pub(crate) fn presets_in(dir: &std::path::Path, extension: &str) -> Vec<BridgePr
                 name,
                 path: path.to_string_lossy().into_owned(),
                 group: group.clone(),
+                keyed: named.transform.is_some() || named.animators.is_some(),
             })
         }));
     }
@@ -943,6 +954,44 @@ impl BridgeExpressionRow {
     }
 }
 
+/// What a wire into `row` on `layer` carries at comp time `time`, or `None`
+/// when no wire drives it. The engine reads this in the row's place, so the
+/// interface shows it too (as copy 0, for a driver that reads the copy).
+fn driven_value(
+    layer: &LayerReference,
+    time: &BridgeRational,
+    row: Option<&BridgeExpressionRow>,
+) -> Option<f64> {
+    let Some(BridgeExpressionRow::Effect { effect, param }) = row else {
+        return None;
+    };
+    use lumit_core::graph::{InputRef, NodeRef};
+    let node = NodeRef::Effect(*effect);
+    let doc = document_for(layer)?;
+    let comp = doc.comp(layer.comp_id)?;
+    let owner = comp.layers.iter().find(|l| l.id == layer.layer_id)?;
+    owner.graph.wire_into(&InputRef::Param {
+        node,
+        port: param.clone(),
+    })?;
+    let t = Rational::new(time.num, time.den).unwrap_or(Rational::ZERO);
+    let lt = lumit_core::time::layer_time(t.to_f64(), owner.start_offset.0);
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(layer.comp_id),
+        layer: Some(layer.layer_id),
+        comp_time: t.to_f64(),
+        current_depth: 0,
+        inputs: None,
+    });
+    let resolved = lumit_core::fx::drivers::resolve_drivers(&owner.graph, lt, context, None);
+    match resolved.param(node, lumit_core::fx::params::ParamId::new(param))? {
+        lumit_core::fx::params::Value::Float(v) => Some(f64::from(v)),
+        lumit_core::fx::params::Value::Int(v) => Some(f64::from(v)),
+        _ => None,
+    }
+}
+
 #[frb(sync)]
 pub fn sample_scalar_with_context(
     scalar: BridgeScalar,
@@ -951,6 +1000,10 @@ pub fn sample_scalar_with_context(
     held: Option<BridgeScalar>,
     row: Option<BridgeExpressionRow>,
 ) -> f64 {
+    // A wire wins over whatever the row holds, as it does in the render.
+    if let Some(v) = driven_value(&layer, &time, row.as_ref()) {
+        return v;
+    }
     let seconds = seconds_of(time);
     match scalar {
         BridgeScalar::Static(value) => value,
@@ -1053,7 +1106,7 @@ fn own_slot(
 /// the app down for from inside an FFI call, where a panic unwinds across the
 /// language boundary rather than into a handler, so the samplers below fall
 /// back to the un-driven value instead.
-fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::model::Document>> {
+pub(crate) fn document_for(layer: &LayerReference) -> Option<Arc<lumit_core::model::Document>> {
     let projects = PROJECTS.read().ok()?;
     let project = projects.get(&layer.project_id)?.clone();
     drop(projects);
@@ -1270,7 +1323,7 @@ pub enum BridgeParamKind {
 }
 
 /// Which of the config's lists a [`BridgeParamKind::ColourName`] row offers
-/// ([`lumit_core::fx::schema::ColourNameRole`]). A View row lists the views of the
+/// ([`lumit_core::fx::colour_name::ColourNameRole`]). A View row lists the views of the
 /// display its sibling `display` row names.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1380,11 +1433,13 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::schema::ParamSchema) -> Bridg
         ParamKind::Angle { default, dial_step } => BridgeParamKind::Angle { default, dial_step },
         ParamKind::ColourName { role } => BridgeParamKind::ColourName {
             role: match role {
-                lumit_core::fx::schema::ColourNameRole::Space => BridgeColourNameRole::Space,
-                lumit_core::fx::schema::ColourNameRole::Display => BridgeColourNameRole::Display,
-                lumit_core::fx::schema::ColourNameRole::View => BridgeColourNameRole::View,
-                lumit_core::fx::schema::ColourNameRole::Look => BridgeColourNameRole::Look,
-                lumit_core::fx::schema::ColourNameRole::Config => BridgeColourNameRole::Config,
+                lumit_core::fx::colour_name::ColourNameRole::Space => BridgeColourNameRole::Space,
+                lumit_core::fx::colour_name::ColourNameRole::Display => {
+                    BridgeColourNameRole::Display
+                }
+                lumit_core::fx::colour_name::ColourNameRole::View => BridgeColourNameRole::View,
+                lumit_core::fx::colour_name::ColourNameRole::Look => BridgeColourNameRole::Look,
+                lumit_core::fx::colour_name::ColourNameRole::Config => BridgeColourNameRole::Config,
             },
         },
         ParamKind::Text { default } => BridgeParamKind::Text {
@@ -1631,7 +1686,7 @@ pub fn list_parameter_groups(effect: String) -> Vec<BridgeParamGroup> {
 /// One greying rule: `param`'s row is editable only while `on` satisfies
 /// `cond`. The panel evaluates it against values it already holds, so ticking
 /// a switch greys its dependent row without a round trip;
-/// `lumit_core::fx::builtins::param_enabled` is the same rule in Rust and the authority
+/// `lumit_core::fx::enabled::param_enabled` is the same rule in Rust and the authority
 /// the tests pin.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
@@ -1658,6 +1713,8 @@ pub enum BridgeEnabledCond {
     LayerUnset,
     /// Editable while the named number is a still nought.
     Nought,
+    /// Editable while this other bool is on, or while the condition holds.
+    Or(String, Box<BridgeEnabledCond>),
 }
 
 /// Every greying rule `effect` declares (empty for an effect whose controls are
@@ -1665,8 +1722,6 @@ pub enum BridgeEnabledCond {
 /// carrying an effect this build does not know still opens).
 #[frb(sync)]
 pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
-    use lumit_core::fx::schema::EnabledCond;
-
     // The **whole** catalogue: a plugin's parameters have to reach Effect
     // controls exactly as a built-in's do, and `BUILTINS` is the compile-time
     // half alone. `def` rather than the catalogue itself, so a
@@ -1683,14 +1738,7 @@ pub fn list_enabled_when(effect: String) -> Vec<BridgeEnabledWhen> {
         .map(|r| BridgeEnabledWhen {
             param: r.param.to_owned(),
             on: r.on.to_owned(),
-            cond: match r.cond {
-                EnabledCond::BoolIs(v) => BridgeEnabledCond::BoolIs(v),
-                EnabledCond::ChoiceIs(i) => BridgeEnabledCond::ChoiceIs(i),
-                EnabledCond::ChoiceIsNot(i) => BridgeEnabledCond::ChoiceIsNot(i),
-                EnabledCond::LayerSet => BridgeEnabledCond::LayerSet,
-                EnabledCond::LayerUnset => BridgeEnabledCond::LayerUnset,
-                EnabledCond::Nought => BridgeEnabledCond::Nought,
-            },
+            cond: crate::enabled_rules::cond(r.cond),
         })
         .collect()
 }
@@ -2361,6 +2409,8 @@ pub struct BridgeEffectInstanceInfo {
     /// The choice rows whose list a plugin has replaced, with the list to
     /// draw in place of the schema's.
     pub row_options: Vec<BridgeRowOptions>,
+    /// The rows drawn under another name right now, with that name.
+    pub row_labels: Vec<BridgeRowLabel>,
     /// The node graph this instance applies (docs/impl/node-graph-comp.md
     /// §4.4), and `None` for every other effect.
     ///
@@ -2534,9 +2584,9 @@ pub struct BridgeShaderPort {
     pub ty: BridgeShaderTy,
 }
 
-/// One box of the inner graph, resolved for drawing. `label` is set only for
-/// a Parameter box — the user's own word for their own control, shown as-is
-/// and never translated; every other box is named by the frontend from `kind`.
+/// One box of the inner graph, resolved for drawing. `label` is the user's own
+/// name for the box, shown as-is and never translated, and a Parameter box
+/// always has one; the frontend names every box from `kind` beside it.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgeShaderGraphNode {
@@ -2547,15 +2597,15 @@ pub struct BridgeShaderGraphNode {
     pub outputs: Vec<BridgeShaderPort>,
 }
 
-/// A stored inner graph as the canvas draws it, plus the one sentence that
-/// says whether it will compile. The canvas draws a broken graph exactly as it
-/// draws a working one — being broken is a state to work in, and the badge is
-/// the messenger (§2.2) — so the boxes and the error travel together.
+/// A stored inner graph as the canvas draws it, plus why it will not compile
+/// when it will not. The canvas draws a broken graph exactly as it draws a
+/// working one, since being broken is a state to work in and the badge is the
+/// messenger (§2.2), so the boxes and the fault travel together.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgeShaderGraphView {
     pub nodes: Vec<BridgeShaderGraphNode>,
-    pub error: Option<String>,
+    pub error: Option<BridgeShaderGraphError>,
 }
 
 /// One entry of the inner graph's add-search: a kind the frontend translates,
@@ -2596,12 +2646,12 @@ pub fn shader_graph_view(graph: String) -> BridgeShaderGraphView {
     let Ok(g) = parsed else {
         return BridgeShaderGraphView {
             nodes: Vec::new(),
-            error: Some("the stored graph does not parse".to_owned()),
+            error: Some(BridgeShaderFault::Unreadable.into()),
         };
     };
     let error = lumit_core::fx::shader::compile::compile(&g)
         .err()
-        .map(|why| why.to_string());
+        .map(Into::into);
     let nodes = g
         .nodes
         .iter()
@@ -2616,22 +2666,18 @@ pub fn shader_graph_view(graph: String) -> BridgeShaderGraphView {
             BridgeShaderGraphNode {
                 id: node.id,
                 kind: node.kind.clone(),
-                label: (node.kind == "param").then(|| {
-                    node.settings
-                        .get("label")
-                        .and_then(|v| v.as_str())
-                        .filter(|s| !s.trim().is_empty())
-                        .map_or_else(
-                            || {
-                                node.settings
-                                    .get("id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("?")
-                                    .to_owned()
-                            },
-                            str::to_owned,
-                        )
-                }),
+                label: node
+                    .settings
+                    .get("label")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                    .map(str::to_owned)
+                    .or_else(|| {
+                        (node.kind == "param").then(|| {
+                            let id = node.settings.get("id").and_then(|v| v.as_str());
+                            id.unwrap_or("?").to_owned()
+                        })
+                    }),
                 inputs: inputs.iter().map(port).collect(),
                 outputs: outputs.iter().map(port).collect(),
             }
@@ -2863,6 +2909,14 @@ pub(crate) fn read_instance_info(
                 options,
             })
             .collect(),
+        row_labels: rows
+            .labels
+            .into_iter()
+            .map(|(id, label)| BridgeRowLabel {
+                id: id.to_owned(),
+                label: label.to_owned(),
+            })
+            .collect(),
         node_graph_comp: lumit_core::fx::effects::node_graph::comp_of(effect),
     }
 }
@@ -2873,6 +2927,15 @@ pub(crate) fn read_instance_info(
 pub struct BridgeRowOptions {
     pub id: String,
     pub options: Vec<String>,
+}
+
+/// A row drawn under another name (`RowState::labels`): Type fill's rows
+/// when its Direction is Columns.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeRowLabel {
+    pub id: String,
+    pub label: String,
 }
 
 impl BridgeEffectInstance {

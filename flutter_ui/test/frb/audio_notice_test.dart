@@ -56,8 +56,7 @@ void main() {
 
       expect(
         p.state.notice.value?.message,
-        'No beats: nothing in this composition is sounding — a mute or a '
-            'solo can silence the mix.',
+        'No sound in this composition',
         reason: 'a refused detection says why rather than doing nothing',
       );
     });

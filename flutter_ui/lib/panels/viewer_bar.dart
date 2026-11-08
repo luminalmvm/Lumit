@@ -11,21 +11,27 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
+import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
-import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/settings.dart' show LoopMode;
 import '../state/timecode.dart';
-import '../state/viewer_view.dart' show ViewerView;
+import '../state/viewer_view.dart'
+    show ModelDisplayRow, ViewerCameraCommand, ViewerView;
 import '../state/workspace.dart' show ViewerLook;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/time_readout.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_camera.dart' show activeCameraAt;
+import 'viewer_menus.dart';
 import 'viewer_overlays.dart';
+import 'viewer_panel_frb.dart' show showViewerBackgroundPicker;
 import 'viewer_progress_bar.dart';
 import 'viewer_stage.dart';
 import 'viewer_strips.dart';
@@ -84,6 +90,9 @@ class ViewerBar extends StatelessWidget {
   final VoidCallback onSnapshotTake;
   final ValueChanged<bool> onSnapshotHold;
 
+  /// What the marks' right clicks open.
+  final ViewerMenuHost host;
+
   /// Drawn as a tile of its own under Round, rather than a strip welded to the
   /// panel's bottom edge under Sharp.
   final bool detached;
@@ -107,6 +116,10 @@ class ViewerBar extends StatelessWidget {
   /// reads and sets.
   final int viewId;
 
+  /// The frame the comp's clock reads at its first frame, its Start
+  /// timecode: the clock adds it, the frame count beside it does not.
+  final int startFrame;
+
   const ViewerBar({
     super.key,
     required this.channel,
@@ -116,6 +129,7 @@ class ViewerBar extends StatelessWidget {
     required this.playing,
     required this.playhead,
     required this.settings,
+    this.startFrame = 0,
     required this.comp,
     required this.compSize,
     required this.tier,
@@ -131,6 +145,7 @@ class ViewerBar extends StatelessWidget {
     required this.hasSnapshot,
     required this.onSnapshotTake,
     required this.onSnapshotHold,
+    required this.host,
     required this.detached,
     required this.loop,
     required this.onLoop,
@@ -153,11 +168,20 @@ class ViewerBar extends StatelessWidget {
         left: viewerStripPaddingFor(t) - viewerMarkEdge,
         right: viewerStripPaddingFor(t),
       ),
-      // A Viewer docked narrow has less width than this bar wants, and an
-      // overflow stripe is not a design: below the width the drawing needs,
-      // the same row is laid out with plain gaps and scrolls sideways
-      // (§12A.6's ladder, step 5).
-      child: LayoutBuilder(
+      // The empty bar's own menu. Every mark on it takes its own click first.
+      child: ViewerRightClick(
+        rows: (close) => viewerBarRows(
+            Provider.of<LumitUiState>(context, listen: false), close),
+        child: _body(context, t),
+      ),
+    );
+  }
+
+  // A Viewer docked narrow has less width than this bar wants, and an
+  // overflow stripe is not a design: below the width the drawing needs,
+  // the same row is laid out with plain gaps and scrolls sideways
+  // (§12A.6's ladder, step 5).
+  Widget _body(BuildContext context, LumitTheme t) => LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           // Desk's round keys are wider than the bare marks, so its bar
@@ -171,105 +195,123 @@ class ViewerBar extends StatelessWidget {
           final keepsClock = width >= _barKeepsClock;
           final reading = _Readout(
             comp: comp,
-            settings: settings,
+            // The header says the name, where there is a header.
+            name: leading.isEmpty ? null : settings.name,
             compSize: compSize,
             tier: tier,
-            shownScale: shownScale,
+            host: host,
           );
-          final row = Row(
-            // **The two gaps are the same gap, and they are what gives way
-            // first** (§12A.6). The drawing sets the transport and the
-            // reading each with a `margin-left: auto`, which in a flex row
-            // splits whatever is left over equally between them — so the
-            // reading is at its own natural width and the gaps take the rest.
-            // `spaceBetween` over three groups is exactly that, and it is why
-            // the reading is a plain child of the last group rather than one
-            // of three equal flex shares: sharing the free space three ways
-            // gave the reading a third of it and elided a line that fitted.
-            mainAxisAlignment: loose
-                ? MainAxisAlignment.spaceBetween
-                : MainAxisAlignment.start,
-            children: [
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                ...leading,
-                if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
-                if (keepsLooking)
-                  ..._looking(context, t)
-                else
-                  // **Step 4 of the ladder**: a run of buttons that no longer
-                  // fits collapses into one overflow mark at the end of its
-                  // run rather than shrinking or clipping. The very same
-                  // widgets stand inside it, so nothing here has a second
-                  // implementation that can drift from the first.
-                  _LookingOverflow(marks: () => _looking(context, t)),
-              ]),
-              if (!loose && transport) const SizedBox(width: 24),
-              if (transport)
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  ...viewerTransportMarks(
-                    t,
-                    playing: playing,
-                    playhead: playhead,
-                    settings: settings,
-                    comp: comp,
-                    onPlayPause: onPlayPause,
-                    onSeek: onSeek,
-                    detached: detached,
-                    clock: keepsClock,
-                  ),
-                  // The loop mode, beside the clock. The first of the controls
-                  // to leave a narrowing bar. One edge to allow for: the clock
-                  // before it is text.
-                  if (keepsLoop) ...[
-                    SizedBox(width: viewerTransportGap - viewerMarkEdge),
-                    viewerLoopMark(t, loop: loop, onLoop: onLoop),
-                  ],
-                ]),
-              if (!loose && keepsReading) const SizedBox(width: 24),
-              // The reading takes the room the two gaps are not using, and
-              // sheds parts of itself before it elides — the ladder is in
-              // [_Readout]. Flexible only where the bar is spread; where it
-              // scrolls there is no width to be flexible against.
-              if (loose)
-                Flexible(
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    // Before the reading, so the reading stays put at the
-                    // bar's right-hand end while a frame is waited on.
-                    ViewerProgressBar(
-                      tracker: Provider.of<LumitUiState>(context, listen: false)
-                          .previewProgress,
-                    ),
-                    Flexible(child: reading),
-                  ]),
-                )
-              else if (keepsReading) ...[
-                ViewerProgressBar(
-                  tracker: Provider.of<LumitUiState>(context, listen: false)
-                      .previewProgress,
-                ),
-                reading,
+          final looking = Row(mainAxisSize: MainAxisSize.min, children: [
+            ...leading,
+            if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
+            if (keepsLooking)
+              ..._looking(context, t)
+            else
+              // **Step 4 of the ladder**: a run of buttons that no longer
+              // fits collapses into one overflow mark at the end of its
+              // run rather than shrinking or clipping. The very same
+              // widgets stand inside it, so nothing here has a second
+              // implementation that can drift from the first.
+              _LookingOverflow(
+                  marks: () => _looking(context, t, folded: true)),
+          ]);
+          final ui = Provider.of<LumitUiState>(context, listen: false);
+          final marks = ViewerRightClick(
+            rows: (close) =>
+                viewerTransportRows(ui, settings, comp, onSeek, close),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              ...viewerTransportMarks(
+                t,
+                playing: playing,
+                playhead: playhead,
+                settings: settings,
+                startFrame: startFrame,
+                comp: comp,
+                onPlayPause: onPlayPause,
+                onSeek: onSeek,
+                detached: detached,
+                clock: keepsClock,
+              ),
+              // The loop mode, beside the clock. The first of the controls
+              // to leave a narrowing bar. One edge to allow for: the clock
+              // before it is text.
+              if (keepsLoop) ...[
+                SizedBox(width: viewerTransportGap - viewerMarkEdge),
+                viewerLoopMark(t, loop: loop, onLoop: onLoop),
               ],
-            ],
+            ]),
           );
-          return loose
-              ? row
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal, child: row);
+          final progress = ViewerProgressBar(
+            tracker: Provider.of<LumitUiState>(context, listen: false)
+                .previewProgress,
+          );
+          if (loose) {
+            return CustomMultiChildLayout(
+              delegate: _SpreadBar(Directionality.of(context)),
+              children: [
+                LayoutId(id: _BarPart.looking, child: looking),
+                if (transport) LayoutId(id: _BarPart.transport, child: marks),
+                LayoutId(id: _BarPart.progress, child: progress),
+                LayoutId(id: _BarPart.reading, child: reading),
+              ],
+            );
+          }
+          return EdgeFade(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                looking,
+                if (transport) ...[const SizedBox(width: 24), marks],
+                if (keepsReading) ...[
+                  const SizedBox(width: 24),
+                  progress,
+                  reading,
+                ],
+              ]),
+            ),
+          );
         },
-      ),
-    );
-  }
+      );
 
-  /// The ways of looking, and the snapshot behind its seam.
-  List<Widget> _looking(BuildContext context, LumitTheme t) => [
-        // The transparency board: the checkerboard itself rather than the word
-        // "grid", which is also the overlay this is not.
-        viewerBarMark(
-          key: const ValueKey('viewer-grid'),
-          icon: LumitIcon.checkerboard,
-          colour: grid ? t.accent : t.textMuted,
-          onPressed: onGrid,
-          tip: l10n.tipTransparencyGrid,
+  /// The ways of looking, then the snapshot, then the exposure, a seam between
+  /// each. A right click on any of them opens its own rows. [folded] is the
+  /// overflow's strip, opened on purpose, where the exposure's number stays up.
+  List<Widget> _looking(BuildContext context, LumitTheme t,
+          {bool folded = false}) =>
+      [
+        // What's behind the picture: the checkerboard while it's there, the
+        // flat block while the comp's own background is. On is what's usual, so
+        // it stays quiet, and the mark itself says which.
+        ViewerRightClick(
+          rows: (close) {
+            final ui = Provider.of<LumitUiState>(context, listen: false);
+            return [
+              viewerRow(l10n.tipTransparencyGrid, onGrid, close,
+                  id: 'viewer-menu-checkerboard', ticked: ui.viewerGrid),
+              viewerRow(l10n.viewerOverlayBackground, () {
+                showViewerBackgroundPicker(
+                  context: context,
+                  comp: comp,
+                  background: background,
+                  position: _above(context),
+                );
+              }, close, id: 'viewer-background'),
+            ];
+          },
+          child: viewerBarMark(
+            key: const ValueKey('viewer-grid'),
+            icon: LumitIcon.checkerboard,
+            colour: grid ? t.textMuted : t.textPrimary,
+            face: CustomPaint(
+              size: const Size.square(viewerBarIconSize),
+              painter: _BoardFacePainter(
+                  board: grid,
+                  colour: grid ? t.textMuted : t.textPrimary),
+            ),
+            onPressed: onGrid,
+            tip: l10n.tipTransparencyGrid,
+            keyed: false,
+          ),
         ),
         viewerBarGapBox(viewerBarGap),
         // Everything drawn *over* the picture, under one mark (docs/07 §2.2
@@ -282,69 +324,188 @@ class ViewerBar extends StatelessWidget {
           comp: comp,
           background: background,
           viewId: viewId,
+          host: host,
         ),
         viewerBarGapBox(viewerBarGap),
         // The channel as a mark tinted by its own answer: the face is read at
         // a glance during a key, where "Green" spelled out is a word to read
         // and a green mark is a thing to see. The menu still lists the names.
-        _ChannelPicker(channel: channel, onChannel: onChannel),
-        viewerBarGapBox(viewerBarGap),
+        _ChannelPicker(channel: channel, host: host),
         // Which way the composition is looked at (docs/impl/camera.md §6):
         // through its own camera, or from one of the fixed and custom
-        // viewpoints a 3D scene is arranged from.
-        _ViewPicker(viewId: viewId),
-        viewerBarGapBox(viewerBarGap),
-        // **The aperture names the number, and is the way back to nothing**
-        // (owner ruling, superseding the appears-with-the-value reading):
-        // the mark stands always, left of the stops, so the bare number has
-        // its identity — and clicking it resets to 0. It brightens while a
-        // value is engaged, so at rest it reads as a label rather than as an
-        // armed control.
-        viewerBarMark(
-          key: const ValueKey('viewer-exposure-reset'),
-          icon: LumitIcon.aperture,
-          colour: look.stops != 0 ? t.textPrimary : t.textMuted,
-          onPressed: () => onStops(0),
-          tip: l10n.tipViewerExposureReset,
+        // viewpoints a 3D scene is arranged from. A flat comp has nothing to
+        // look round, so the mark waits until it does.
+        if (viewerOffers3d(
+            Provider.of<LumitUiState>(context, listen: false), viewId)) ...[
+          viewerBarGapBox(viewerBarGap),
+          _ViewPicker(viewId: viewId),
+        ],
+        const _BarSeam(),
+        // Snapshots (§2.2 item 14): take one, and once there is one, a second
+        // mark puts it back over the picture while held.
+        ViewerRightClick(
+          rows: (close) => viewerSnapshotRows(host, close),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            viewerBarMark(
+              key: const ValueKey('viewer-snapshot'),
+              icon: LumitIcon.snapshot,
+              colour: t.textMuted,
+              onPressed: onSnapshotTake,
+              tip: l10n.tipViewerSnapshotTake,
+              keyed: false,
+            ),
+            if (hasSnapshot) ...[
+              viewerBarGapBox(viewerBarGap),
+              _SnapshotShowButton(onHold: onSnapshotHold),
+            ],
+          ]),
         ),
-        // One edge to allow for rather than two: the exposure is text.
-        SizedBox(width: viewerBarGap - viewerMarkEdge),
-        // The exposure (docs/07 §2.2 item 12), bare: the number with
-        // no well under it. Preview only, and the header's colour picker is
-        // what says so while it is engaged.
-        LumitTooltip(
-          message: l10n.tipViewerExposure,
-          child: _ExposureField(
-              stops: look.stops, onStops: onStops, onLive: onStopsLive),
-        ),
-        // One edge each side of the seam rather than two: the hairline is a
-        // plain rule and carries none of its own.
-        SizedBox(width: viewerBarGap - viewerMarkEdge),
-        Container(
+        const _BarSeam(),
+        // The exposure (docs/07 §2.2 item 12), at the end of the run because
+        // its number comes and goes. A preview only, and the header's colour
+        // picker says so while it's engaged.
+        _Exposure(
+            stops: look.stops,
+            onStops: onStops,
+            onLive: onStopsLive,
+            always: folded),
+      ];
+
+  /// A spot above this bar's mark, for what opens from its menu.
+  Offset _above(BuildContext context) {
+    final box = context.findRenderObject();
+    return box is RenderBox ? box.localToGlobal(Offset.zero) : Offset.zero;
+  }
+}
+
+/// The hairline between two groups of marks. One edge each side rather than
+/// two: the rule carries none of its own.
+class _BarSeam extends StatelessWidget {
+  const _BarSeam();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: viewerBarGap - viewerMarkEdge),
+        child: Container(
           width: 1,
           height: viewerBarDividerHeight,
-          color: t.hairline,
+          color: ThemeScope.of(context).theme.hairline,
         ),
-        SizedBox(width: viewerBarGap - viewerMarkEdge),
-        // Snapshots (§2.2 item 14): **two marks**, because a
-        // snapshot nobody can see they have taken is a snapshot nobody uses.
-        // Take photographs the picture on a plain click; Show, beside it, puts
-        // the photograph back over the live one while it is held — and is
-        // muted, saying why, until there is one to show.
-        viewerBarMark(
-          key: const ValueKey('viewer-snapshot'),
-          icon: LumitIcon.snapshot,
-          colour: t.textMuted,
-          onPressed: onSnapshotTake,
-          tip: l10n.tipViewerSnapshotTake,
-        ),
-        viewerBarGapBox(viewerBarGap),
-        _SnapshotShowButton(
-          hasSnapshot: hasSnapshot,
-          onHold: onSnapshotHold,
-        ),
-      ];
+      );
 }
+
+/// What's behind the picture, as a mark: the board in a box while it's the
+/// checkerboard, and the box filled while it's the comp's own flat background.
+/// Painted, for the channel mark's reason: the set's glyph for this reads as a
+/// window at this size, and the mark has to say which of two states it's in.
+class _BoardFacePainter extends CustomPainter {
+  final bool board;
+  final Color colour;
+
+  const _BoardFacePainter({required this.board, required this.colour});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 14;
+    final box = Rect.fromLTWH(1.5 * k, 1.5 * k, 11 * k, 11 * k);
+    final fill = Paint()..color = colour;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(box, Radius.circular(1.5 * k)),
+      Paint()
+        ..color = colour
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = k,
+    );
+    if (!board) {
+      canvas.drawRect(box.deflate(k), fill);
+      return;
+    }
+    final half = box.width / 2;
+    canvas
+      ..drawRect(Rect.fromLTWH(box.left, box.top, half, half), fill)
+      ..drawRect(Rect.fromLTWH(box.center.dx, box.center.dy, half, half), fill);
+  }
+
+  @override
+  bool shouldRepaint(_BoardFacePainter old) =>
+      old.board != board || old.colour != colour;
+}
+
+/// The exposure: the aperture and its number.
+///
+/// At nought only the aperture stands, and hovering it brings the number up to
+/// drag. Any other value stays up, with the mark bright, as it changes what's on
+/// screen.
+class _Exposure extends StatefulWidget {
+  final double stops;
+  final ValueChanged<double> onStops;
+  final ValueChanged<double> onLive;
+
+  /// The number stays up at nought too.
+  final bool always;
+
+  const _Exposure(
+      {required this.stops,
+      required this.onStops,
+      required this.onLive,
+      this.always = false});
+
+  @override
+  State<_Exposure> createState() => _ExposureState();
+}
+
+class _ExposureState extends State<_Exposure> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final engaged = widget.stops != 0;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        ViewerRightClick(
+          rows: (close) => [
+            viewerRow(l10n.tipViewerExposureReset,
+                engaged ? () => widget.onStops(0) : null, close,
+                id: 'viewer-menu-exposure-reset'),
+          ],
+          child: viewerBarMark(
+            key: const ValueKey('viewer-exposure-reset'),
+            icon: LumitIcon.aperture,
+            colour: engaged ? t.textPrimary : t.textMuted,
+            onPressed: engaged ? () => widget.onStops(0) : () {},
+            tip: engaged ? l10n.tipViewerExposureReset : l10n.tipViewerExposure,
+            keyed: false,
+          ),
+        ),
+        if (engaged || _hover || widget.always) ...[
+          // One edge to allow for rather than two: the exposure is text.
+          SizedBox(width: viewerBarGap - viewerMarkEdge),
+          LumitTooltip(
+            message: l10n.tipViewerExposure,
+            child: _ExposureField(
+                stops: widget.stops,
+                onStops: widget.onStops,
+                onLive: widget.onLive),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+/// Whether this view can show anything in 3D: it looks from a fixed or custom
+/// view, or its comp has something in depth, which with no camera layer is seen
+/// through the default camera. Off the read model, so a rebuild crosses nothing.
+bool viewerOffers3d(LumitUiState ui, int viewId) =>
+    ui.viewPoseOf(viewId) != null ||
+    ui.model.heldLayers.any((e) =>
+        e.info.switches.threeD ||
+        e.info.kind == BridgeLayerKind.camera ||
+        e.info.kind == BridgeLayerKind.light);
 
 /// The five transport buttons and the clock, one instrument at one spacing.
 ///
@@ -369,6 +530,7 @@ List<Widget> viewerTransportMarks(
   bool clock = true,
   double clockSize = viewerTimecodeSize,
   bool playFilled = false,
+  int startFrame = 0,
 }) {
   // The one lit mark on the bar: the control the eye goes to without
   // looking for it (the drawing's own `.ico.on`).
@@ -469,20 +631,33 @@ List<Widget> viewerTransportMarks(
     // either end of the composition lands on that end.
     // The one part of the transport that moves while playing.
     if (clock)
-      ValueListenableBuilder<int>(
-        valueListenable: playhead,
-        builder: (context, frame, _) => TimeReadout(
-          key: const ValueKey('viewer-timecode'),
-          frame: frame,
-          format: (f) => timecodeOf(f, settings),
-          widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
-          style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
-          parse: (text) =>
-              framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
-          onCommit: onSeek,
-          minFrame: 0,
-          maxFrame: _lastFrameOf(settings),
-          tooltip: l10n.tipFrameOnScreen,
+      Builder(
+        builder: (context) => ViewerRightClick(
+          rows: (close) => viewerClockRows(
+              Provider.of<LumitUiState>(context, listen: false),
+              settings,
+              comp,
+              onSeek,
+              close),
+          child: ValueListenableBuilder<int>(
+            valueListenable: playhead,
+            builder: (context, frame, _) => TimeReadout(
+              key: const ValueKey('viewer-timecode'),
+              frame: frame,
+              format: (f) => timecodeOf(f + startFrame, settings),
+              widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
+              style: t.mono.copyWith(fontSize: clockSize, color: t.textPrimary),
+              parse: (text) => switch (
+                  framesOfTimecode(text, settings.fpsNum, settings.fpsDen)) {
+                final f? => f - startFrame,
+                null => null,
+              },
+              onCommit: onSeek,
+              minFrame: 0,
+              maxFrame: _lastFrameOf(settings),
+              tooltip: l10n.tipFrameOnScreen,
+            ),
+          ),
         ),
       ),
   ];
@@ -499,25 +674,34 @@ Widget viewerLoopMark(
   required LoopMode loop,
   required ValueChanged<LoopMode> onLoop,
 }) =>
-    viewerBarMark(
-      key: const ValueKey('viewer-loop'),
-      icon: LumitIcon.loop,
-      colour: switch (loop) {
-        LoopMode.workArea => t.textPrimary,
-        LoopMode.once => t.textMuted,
-        LoopMode.pingPong => t.accent,
-      },
-      onPressed: () =>
-          onLoop(LoopMode.values[(loop.index + 1) % LoopMode.values.length]),
-      tip: switch (loop) {
-        LoopMode.workArea => l10n.tipTransportLoopWorkArea,
-        LoopMode.once => l10n.tipTransportLoopOnce,
-        LoopMode.pingPong => l10n.tipTransportLoopPingPong,
-      },
+    Builder(
+      builder: (context) => ViewerRightClick(
+        rows: (close) => viewerLoopRows(
+            Provider.of<LumitUiState>(context, listen: false), close),
+        child: viewerBarMark(
+          key: const ValueKey('viewer-loop'),
+          icon: LumitIcon.loop,
+          colour: switch (loop) {
+            LoopMode.workArea => t.textPrimary,
+            LoopMode.once => t.textMuted,
+            LoopMode.pingPong => t.accent,
+          },
+          onPressed: () => onLoop(
+              LoopMode.values[(loop.index + 1) % LoopMode.values.length]),
+          tip: switch (loop) {
+            LoopMode.workArea => l10n.tipTransportLoopWorkArea,
+            LoopMode.once => l10n.tipTransportLoopOnce,
+            LoopMode.pingPong => l10n.tipTransportLoopPingPong,
+          },
+        ),
+      ),
     );
 
 /// The width of the deck's accent play capsule under Lantern (12B.4).
 const double viewerPlayCapsuleWidth = 34;
+
+/// The least the transport keeps from what's either side of it.
+const double _barSideGap = 16;
 
 /// **The bar's shedding ladder, and what is left at the end of it** (§12A.6
 /// and the owner's ruling on the order).
@@ -531,10 +715,11 @@ const double viewerPlayCapsuleWidth = 34;
 ///
 /// Narrowing, in order:
 ///
-/// 1. **the two gaps close** and the bar stops spreading ([_barMinimum]) — the
-///    reading and the transport come together rather than a word being cut;
-/// 2. **the reading sheds its own statements**, arrowed preview size then
-///    composition name, which is the ladder inside [viewerReadoutLadder];
+/// 1. **the transport leaves the middle** and the bar stops spreading
+///    ([_barMinimum]), and the reading and the transport come together rather than
+///    a word being cut;
+/// 2. **the reading sheds its own statements**, which is the ladder inside
+///    [viewerReadoutLadder];
 /// 3. **the reading goes entirely** ([_barKeepsReading]) — every one of its
 ///    facts is said again in the header, the tabs or the clock;
 /// 4. **the loop mark goes** ([_barKeepsLoop]), the least of the transport:
@@ -548,17 +733,76 @@ const double viewerPlayCapsuleWidth = 34;
 ///
 /// The numbers are the widths at which the pieces below them stop fitting,
 /// rounded outward, and `viewer_metrics_test` walks the whole ladder.
-const double _barMinimum = 560;
+const double _barMinimum = 620;
+
+enum _BarPart { looking, transport, progress, reading }
+
+/// The bar while it is spread: the ways of looking at one end, the reading at
+/// its natural width at the other, and the transport between them.
+///
+/// The progress bar is no part of that sum. It has what the gap before the
+/// reading has, so its coming and going moves nothing.
+class _SpreadBar extends MultiChildLayoutDelegate {
+  final TextDirection direction;
+
+  _SpreadBar(this.direction);
+
+  @override
+  void performLayout(Size size) {
+    Size laid(_BarPart part, double room) => hasChild(part)
+        ? layoutChild(
+            part,
+            BoxConstraints(
+              maxWidth: room < 0 ? 0 : room,
+              maxHeight: size.height,
+            ),
+          )
+        : Size.zero;
+    void place(_BarPart part, Size own, double x) {
+      if (!hasChild(part)) return;
+      positionChild(
+        part,
+        Offset(
+          direction == TextDirection.rtl ? size.width - x - own.width : x,
+          (size.height - own.height) / 2,
+        ),
+      );
+    }
+
+    final looking = laid(_BarPart.looking, size.width);
+    final marks = laid(_BarPart.transport, size.width - looking.width);
+    final reading =
+        laid(_BarPart.reading, size.width - looking.width - marks.width);
+    final readingAt = size.width - reading.width;
+    // The transport stands in the middle of the bar, so nothing coming and
+    // going either side of it moves it from under the pointer. Only when one
+    // side reaches it does it give way.
+    final centred = (size.width - marks.width) / 2;
+    final marksAt = centred < looking.width + _barSideGap
+        ? looking.width + _barSideGap
+        : centred + marks.width > readingAt - _barSideGap
+            ? readingAt - _barSideGap - marks.width
+            : centred;
+    final progress = laid(_BarPart.progress, readingAt - marksAt - marks.width);
+    place(_BarPart.looking, looking, 0);
+    place(_BarPart.transport, marks, marksAt);
+    place(_BarPart.progress, progress, readingAt - progress.width);
+    place(_BarPart.reading, reading, readingAt);
+  }
+
+  @override
+  bool shouldRelayout(_SpreadBar old) => old.direction != direction;
+}
 
 /// Below this the bar drops the reading and keeps the controls.
-const double _barKeepsReading = 460;
+const double _barKeepsReading = 560;
 
 /// Below this the loop mark goes: it no longer fits beside the ways of
 /// looking, the transport and the clock.
-const double _barKeepsLoop = 450;
+const double _barKeepsLoop = 530;
 
 /// Below this the ways of looking fold into the overflow mark.
-const double _barKeepsLooking = 400;
+const double _barKeepsLooking = 500;
 
 /// Below this the clock goes and the transport stands alone.
 const double _barKeepsClock = 280;
@@ -653,60 +897,44 @@ class _LookingOverflow extends StatelessWidget {
   }
 }
 
-/// **What is on screen, in one line**: the composition, the pixels the
-/// engine actually made, and the magnification they are drawn at.
+/// **The picture's pixels**, at the bar's right-hand end: what the composition
+/// is, and while the preview is made smaller, the arrowed pair
+/// (`1920×1080 → 960×540`) in the warning colour. It absorbs the degradation
+/// badge (docs/07 §2.2 item 9) that used to come and go beside the transport.
 ///
-/// It is the drawing's right-hand end, and it absorbs the degradation badge
-/// (docs/07 §2.2 item 9) that used to come and go beside the transport: a
-/// reading that says `1920×1080 → 960×540` states the tier plainly, in
-/// the one place a person already looks to ask what they are looking at, and
-/// without a box appearing mid-playback and dragging the bar about.
-/// **What it sheds, and in what order** (§12A.6's ladder). The reading is
-/// several statements on one line, so step 1, "flexible text ellipsises", is
-/// not one decision, and cutting the line at the ellipsis would take the
-/// magnification, which is the part a person is most often watching.
+/// The magnification is on the zoom picker and the name is on the header, so
+/// neither is said twice. Where the bars are gathered into one strip there's no
+/// header, and the name leads.
 ///
-/// **The time is not on it.** The clock beside the transport and the
-/// Timeline's own both say it already. **The size is said once** while the
-/// preview is made at the composition's own, and as the arrowed pair
-/// ([degraded], `1920×1080 → 960×540`) only while it is made smaller.
-///
-/// So, narrowing:
-///
-/// 1. it **takes room from the two gaps** either side of the transport, which
-///    slides the transport off centre rather than shortening a word;
-/// 2. it drops the **arrowed preview size** (`→ 960×540`) — the tier is the
-///    least of what the line says, and the picture itself shows it;
-/// 3. it drops the **composition's name**, which the panel's header and the
-///    composition tabs both still carry;
-/// 4. and only then does what is left, the size and the magnification,
-///    **ellipsise**. In practice the bar reaches [_barMinimum] and scrolls
-///    (step 5) before that, so a value is never cut.
+/// Narrowing, it drops the name, then the arrowed pair, and only then does the
+/// size ellipsise. In practice the bar reaches [_barMinimum] and scrolls (step
+/// 5) before that, so a value is never cut.
 List<String> viewerReadoutLadder({
-  required String comp,
+  required String? comp,
   required String source,
   required String? degraded,
-  required String zoom,
 }) =>
     [
-      if (degraded != null) l10n.viewerReadoutFull(comp, degraded, zoom),
-      l10n.viewerReadoutFull(comp, source, zoom),
-      l10n.viewerReadoutShort(source, zoom),
+      if (comp != null && degraded != null)
+        l10n.viewerReadoutNamed(comp, degraded),
+      if (comp != null) l10n.viewerReadoutNamed(comp, source),
+      if (degraded != null) degraded,
+      source,
     ];
 
 class _Readout extends StatelessWidget {
   final CompositionReference comp;
-  final BridgeCompSettings settings;
+  final String? name;
   final BridgeCompSize compSize;
   final int tier;
-  final double shownScale;
+  final ViewerMenuHost host;
 
   const _Readout({
     required this.comp,
-    required this.settings,
+    required this.name,
     required this.compSize,
     required this.tier,
-    required this.shownScale,
+    required this.host,
   });
 
   @override
@@ -721,22 +949,20 @@ class _Readout extends StatelessWidget {
     final degraded = preview == source
         ? null
         : l10n.viewerReadoutDegraded(source, preview);
-    final zoom = '${(shownScale * 100).round()}%';
     final rungs = viewerReadoutLadder(
-      comp: settings.name,
+      comp: name,
       source: source,
       degraded: degraded,
-      zoom: zoom,
     );
     // The line as it would read with the arrowed pair at its widest. Its room
     // is kept whether or not the pair is showing, so the transport does not
     // shift under the pointer when playback drops the preview a tier.
     final widest = viewerReadoutLadder(
-      comp: settings.name,
+      comp: name,
       source: source,
       degraded: l10n.viewerReadoutDegraded(source, source),
-      zoom: zoom,
     );
+    final ui = Provider.of<LumitUiState>(context, listen: false);
     return LayoutBuilder(
       builder: (context, constraints) {
         final text =
@@ -745,41 +971,50 @@ class _Readout extends StatelessWidget {
         // than the composition stands out. From the end: a composition can be
         // named anything, and the name comes first.
         final at = degraded == null ? -1 : text.lastIndexOf(degraded);
-        return Stack(
-          alignment: Alignment.centerRight,
-          children: [
-            Opacity(
-              opacity: 0,
-              child: Text(
-                _widestThatFits(widest, style, constraints.maxWidth, context),
+        return ViewerRightClick(
+          rows: (close) => viewerCompositionRows(
+              context, ui, host, close, _spotOf(context)),
+          child: Stack(
+            alignment: Alignment.centerRight,
+            children: [
+              Opacity(
+                opacity: 0,
+                child: Text(
+                  _widestThatFits(widest, style, constraints.maxWidth, context),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: style,
+                ),
+              ),
+              Text.rich(
+                TextSpan(
+                  text: at < 0 ? text : text.substring(0, at),
+                  children: at < 0
+                      ? null
+                      : [
+                          TextSpan(
+                              text: degraded,
+                              style: TextStyle(color: t.warning)),
+                          TextSpan(text: text.substring(at + degraded!.length)),
+                        ],
+                ),
+                key: const ValueKey('viewer-readout'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 softWrap: false,
                 style: style,
               ),
-            ),
-            Text.rich(
-              TextSpan(
-                text: at < 0 ? text : text.substring(0, at),
-                children: at < 0
-                    ? null
-                    : [
-                        TextSpan(
-                            text: degraded,
-                            style: TextStyle(color: t.warning)),
-                        TextSpan(text: text.substring(at + degraded!.length)),
-                      ],
-              ),
-              key: const ValueKey('viewer-readout'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: style,
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
+  }
+
+  Offset _spotOf(BuildContext context) {
+    final box = context.findRenderObject();
+    return box is RenderBox ? box.localToGlobal(Offset.zero) : Offset.zero;
   }
 
   /// The first rung of the ladder that fits [maxWidth], or the last one — which
@@ -835,58 +1070,105 @@ class _ViewPicker extends StatelessWidget {
     // from the state rather than from its own rebuild.
     final ui = context.watch<LumitUiState>();
     final view = ui.viewOf(viewId);
+    final display = ui.displayOf(viewId);
+    final faces = ui.facesShown(viewId);
+    Widget row(String key, bool on, String text, VoidCallback pick) =>
+        MenuRow(
+          key: ValueKey<String>(key),
+          onPressed: pick,
+          child: MenuLabel(text, ticked: on),
+        );
+    void open(BuildContext context, Offset at) {
+      // Asked as the menu opens, never on a rebuild.
+      final models = ui.holdsModels(viewId);
+      final camera =
+          activeCameraAt(ui, ui.playheadFrame.value / ui.model.fps)?.info.name;
+      String title(ViewerView v) =>
+          v == ViewerView.activeCamera && camera != null
+              ? l10n.viewerViewActiveCameraNamed(camera)
+              : v.title;
+      showMenuAt<void>(
+        context: context,
+        position: at,
+        rows: (close) => [
+          // Each view with its key: the number pad for the fixed ones, the
+          // F10 to F12 shortcuts for whichever views sit on them.
+          for (final v in ui.viewsOffered(viewId))
+            MenuRow(
+              key: ValueKey<String>('viewer-view-${v.name}'),
+              onPressed: () {
+                close(null);
+                ui.setViewerView(v, viewId: viewId);
+              },
+              child: MenuLabel(title(v),
+                  ticked: v == view,
+                  action: v.action ??
+                      switch ([
+                        for (var slot = 0; slot < 3; slot++) ui.viewSlotOf(slot)
+                      ].indexOf(v)) {
+                        -1 => null,
+                        final slot => 'viewer.3d.slot.${slot + 1}',
+                      }),
+            ),
+          // Back to where this view started, where it can move at all.
+          if (view != ViewerView.activeCamera) ...[
+            const MenuDivider(),
+            viewerRow(
+                ViewerCameraCommand.reset.title,
+                () => ui.requestViewerCamera(ViewerCameraCommand.reset),
+                () => close(null),
+                id: 'viewer-view-reset',
+                action: ViewerCameraCommand.reset.action),
+          ],
+          // How models show, only where there are any to show.
+          if (models) ...[
+            const MenuDivider(),
+            for (final d in BridgeModelDisplay.values)
+              row('viewer-display-${d.name}', d == display, d.title, () {
+                close(null);
+                ui.setModelDisplay(viewId, display: d);
+              }),
+            const MenuDivider(),
+            row('viewer-display-faces', faces, l10n.viewerDisplayFaces, () {
+              close(null);
+              ui.setModelDisplay(viewId, faces: !faces);
+            }),
+          ],
+          const MenuDivider(),
+          viewerRow(l10n.menuOpenIn3dViewport, ui.addViewportPanel,
+              () => close(null),
+              id: 'viewer-view-viewport', action: 'viewer.new.viewport'),
+        ],
+      );
+    }
+
     return LumitTooltip(
       message: l10n.tipViewerView,
       child: Builder(
-        builder: (context) => HouseButton(
-          key: const ValueKey('viewer-view'),
-          frameless: true,
-          padding: EdgeInsets.zero,
-          onPressed: () {
-            final box = context.findRenderObject();
-            if (box is! RenderBox) return;
-            showMenuAt<void>(
-              context: context,
-              position: box.localToGlobal(Offset(0, box.size.height + 2)),
-              rows: (close) => [
-                for (final v in ui.viewsOffered(viewId))
-                  MenuRow(
-                    key: ValueKey<String>('viewer-view-${v.name}'),
-                    onPressed: () {
-                      close(null);
-                      ui.setViewerView(v, viewId: viewId);
-                    },
-                    child: Row(children: [
-                      menuTick(v == view),
-                      Text(v.title),
-                    ]),
-                  ),
-                Container(
-                    height: 1,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: t.hairline),
-                MenuRow(
-                  key: const ValueKey('viewer-view-viewport'),
-                  onPressed: () {
-                    close(null);
-                    ui.addViewportPanel();
-                  },
-                  child: Row(children: [
-                    menuTick(false),
-                    Text(l10n.menuOpenIn3dViewport),
-                  ]),
+        builder: (context) => GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapUp: (d) => open(context, d.globalPosition),
+          child: HouseButton(
+            key: const ValueKey('viewer-view'),
+            frameless: true,
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              final box = context.findRenderObject();
+              if (box is! RenderBox) return;
+              open(context, box.localToGlobal(Offset(0, box.size.height + 2)));
+            },
+            child: SizedBox(
+              width: viewerBarIconSize,
+              height: viewerStripHeight - 2 * viewerMarkEdge,
+              child: Center(
+                // The cube, not a camera: the snapshot along the bar is the
+                // camera, and two of them read as one thing.
+                child: lumitIcon(
+                  LumitIcon.cube3d,
+                  size: viewerBarIconSize,
+                  color:
+                      view == ViewerView.activeCamera ? t.textMuted : t.accent,
                 ),
-              ],
-            );
-          },
-          child: SizedBox(
-            width: viewerBarIconSize,
-            height: viewerStripHeight - 2 * viewerMarkEdge,
-            child: Center(
-              child: lumitIcon(
-                LumitIcon.camera,
-                size: viewerBarIconSize,
-                color: view == ViewerView.activeCamera ? t.textMuted : t.accent,
               ),
             ),
           ),
@@ -898,17 +1180,9 @@ class _ViewPicker extends StatelessWidget {
 
 class _ChannelPicker extends StatelessWidget {
   final ViewerChannel channel;
-  final ValueChanged<ViewerChannel> onChannel;
+  final ViewerMenuHost host;
 
-  const _ChannelPicker({required this.channel, required this.onChannel});
-
-  static String _label(ViewerChannel c) => switch (c) {
-        ViewerChannel.rgb => 'RGB',
-        ViewerChannel.red => engineLabel('Red'),
-        ViewerChannel.green => engineLabel('Green'),
-        ViewerChannel.blue => engineLabel('Blue'),
-        ViewerChannel.alpha => l10n.channelAlpha,
-      };
+  const _ChannelPicker({required this.channel, required this.host});
 
   @override
   Widget build(BuildContext context) {
@@ -916,44 +1190,34 @@ class _ChannelPicker extends StatelessWidget {
     return Builder(
       builder: (context) => LumitTooltip(
         message: l10n.tipViewerChannel,
-        child: HouseButton(
-          key: const ValueKey('viewer-channel'),
-          frameless: true,
-          padding: EdgeInsets.zero,
-          onPressed: () {
-            final box = context.findRenderObject();
-            if (box is! RenderBox) return;
-            showMenuAt<void>(
-              context: context,
-              position: box.localToGlobal(Offset(0, box.size.height + 2)),
-              rows: (close) => [
-                for (final c in ViewerChannel.values)
-                  MenuRow(
-                    key: ValueKey<String>('viewer-channel-${c.name}'),
-                    onPressed: () {
-                      close(null);
-                      onChannel(c);
-                    },
-                    child: Row(children: [
-                      menuTick(c == channel),
-                      Text(_label(c)),
-                    ]),
+        child: ViewerRightClick(
+          rows: (close) => viewerChannelRows(host, close),
+          child: HouseButton(
+            key: const ValueKey('viewer-channel'),
+            frameless: true,
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              final box = context.findRenderObject();
+              if (box is! RenderBox) return;
+              showMenuAt<void>(
+                context: context,
+                position: box.localToGlobal(Offset(0, box.size.height + 2)),
+                rows: (close) => viewerChannelRows(host, () => close(null)),
+              );
+            },
+            child: SizedBox(
+              width: viewerBarIconSize,
+              height: viewerStripHeight - 2 * viewerMarkEdge,
+              child: Center(
+                // Unkeyed: the bar's order is asserted by the keys of the
+                // controls standing on it, and the face is part of one rather
+                // than another. What finds it is its painter's own type.
+                child: SizedBox(
+                  width: viewerBarIconSize,
+                  height: viewerBarIconSize,
+                  child: CustomPaint(
+                    painter: ChannelFacePainter(channel: channel, theme: t),
                   ),
-              ],
-            );
-          },
-          child: SizedBox(
-            width: viewerBarIconSize,
-            height: viewerStripHeight - 2 * viewerMarkEdge,
-            child: Center(
-              // Unkeyed: the bar's order is asserted by the keys of the
-              // controls standing on it, and the face is part of one rather
-              // than another. What finds it is its painter's own type.
-              child: SizedBox(
-                width: viewerBarIconSize,
-                height: viewerBarIconSize,
-                child: CustomPaint(
-                  painter: ChannelFacePainter(channel: channel, theme: t),
                 ),
               ),
             ),
@@ -1047,32 +1311,25 @@ class ChannelFacePainter extends CustomPainter {
 /// exactly as long as the button is down, and a recogniser only reports once
 /// the gesture is over.
 class _SnapshotShowButton extends StatelessWidget {
-  final bool hasSnapshot;
   final ValueChanged<bool> onHold;
 
-  const _SnapshotShowButton({
-    required this.hasSnapshot,
-    required this.onHold,
-  });
+  const _SnapshotShowButton({required this.onHold});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Listener(
-      onPointerDown: hasSnapshot ? (_) => onHold(true) : null,
-      onPointerUp: hasSnapshot ? (_) => onHold(false) : null,
-      onPointerCancel: hasSnapshot ? (_) => onHold(false) : null,
+      onPointerDown: (_) => onHold(true),
+      onPointerUp: (_) => onHold(false),
+      onPointerCancel: (_) => onHold(false),
       child: viewerBarMark(
         key: const ValueKey('viewer-snapshot-show'),
         icon: LumitIcon.eye,
-        colour: hasSnapshot ? t.textPrimary : t.textDisabled,
-        // The press is the Listener's. This only says whether the control is
-        // live — what mutes it, and what stops the pointer becoming a hand
-        // over a button that does nothing.
-        onPressed: hasSnapshot ? () {} : null,
-        tip: hasSnapshot
-            ? l10n.tipViewerSnapshotShow
-            : l10n.tipViewerSnapshotNone,
+        colour: t.textPrimary,
+        // The press is the Listener's. This only says the control is live.
+        onPressed: () {},
+        tip: l10n.tipViewerSnapshotShow,
+        keyed: false,
       ),
     );
   }

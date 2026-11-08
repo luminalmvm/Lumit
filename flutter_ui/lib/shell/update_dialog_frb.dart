@@ -19,6 +19,7 @@ import 'package:flutter/widgets.dart';
 import '../l10n/strings.dart';
 import '../state/updates.dart';
 import '../widgets/controls.dart';
+import 'question_window.dart';
 
 /// Act on the Help ▸ Check for updates row, whatever it currently says.
 ///
@@ -136,7 +137,7 @@ Future<void> _offerAndFetch(
     context: context,
     builder: (close) => _Ask(
       title: l10n.updateOfferTitle(release.version),
-      body: l10n.updateOfferBody(release.assetName, release.sizeLabel),
+      summary: release.sizeLabel,
       yes: l10n.updateDownload,
       onChoose: close,
     ),
@@ -235,98 +236,56 @@ class _BeforeYouUpdate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return FloatSurface(
+    return QuestionWindow(
       width: 460,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Text(l10n.updateNoticeTitle(version), style: t.bodyPrimary),
-          ),
-          // The notes themselves, in a box edged in the warning colour (kraft,
-          // never a red alert). Capped and scrolling, so a release with a lot
-          // to say does not push the buttons off the screen.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-            child: Container(
-              key: const ValueKey('update-notice'),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: t.surface2,
-                border: Border.all(color: t.warning),
-                borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final (index, line) in lines.indexed)
-                        Padding(
-                          padding: EdgeInsets.only(top: index == 0 ? 0 : 4),
-                          child: line.bullet
-                              ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                      width: 10,
-                                      child: Text('•', style: t.body),
-                                    ),
-                                    Expanded(
-                                      child: Text(line.text, style: t.body),
-                                    ),
-                                  ],
-                                )
-                              : Text(line.text, style: t.body),
-                        ),
-                    ],
-                  ),
+      title: l10n.updateNoticeTitle(version),
+      keyPrefix: 'update-notice-window',
+      onClose: () => onChoose(false),
+      actions: [
+        questionPlain(
+            'update-notice-not-now', l10n.updateNotNow, () => onChoose(false)),
+        questionFilled(
+            'update-notice-continue', l10n.updateContinue, () => onChoose(true)),
+      ],
+      // Capped and scrolling, so a release with a lot to say does not push the
+      // buttons off the screen.
+      content: ConstrainedBox(
+        key: const ValueKey('update-notice'),
+        constraints: const BoxConstraints(maxHeight: 220),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (index, line) in lines.indexed)
+                Padding(
+                  padding: EdgeInsets.only(top: index == 0 ? 0 : 6),
+                  child: line.bullet
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              child: Text('•', style: t.body),
+                            ),
+                            Expanded(child: Text(line.text, style: t.body)),
+                          ],
+                        )
+                      : Text(line.text, style: t.body),
                 ),
-              ),
-            ),
+            ],
           ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: const ValueKey('update-notice-not-now'),
-                  small: true,
-                  frameless: true,
-                  onPressed: () => onChoose(false),
-                  child: Text(l10n.updateNotNow, style: t.small),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('update-notice-continue'),
-                  small: true,
-                  // The window's default action: Enter goes on to the restart
-                  // question, the same as every other window in the sequence.
-                  primary: true,
-                  autofocus: true,
-                  onPressed: () => onChoose(true),
-                  child: Text(l10n.updateContinue),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// A question with a sentence under it: "Not now", and the way forward.
+/// A question with [summary] in its footer: "Not now", and the way forward.
 /// The offer of an update and the nightly warning are both this.
 class _Ask extends StatelessWidget {
   final String title;
-  final String body;
+  final String? body;
+  final String summary;
 
   /// The label on the button that goes ahead.
   final String yes;
@@ -334,64 +293,29 @@ class _Ask extends StatelessWidget {
 
   const _Ask({
     required this.title,
-    required this.body,
+    this.body,
+    this.summary = '',
     required this.yes,
     required this.onChoose,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      width: 400,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Text(title, style: t.bodyPrimary),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(body, style: t.small.copyWith(color: t.textMuted)),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: const ValueKey('update-offer-no'),
-                  small: true,
-                  frameless: true,
-                  onPressed: () => onChoose(false),
-                  child: Text(l10n.updateNotNow, style: t.small),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('update-offer-yes'),
-                  small: true,
-                  // The window's default action: Enter goes ahead. No style
-                  // on the label: the filled action sets its own capitals.
-                  primary: true,
-                  autofocus: true,
-                  onPressed: () => onChoose(true),
-                  child: Text(yes),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
+  Widget build(BuildContext context) => QuestionWindow(
+        title: title,
+        body: body,
+        summary: summary,
+        keyPrefix: 'update-offer',
+        onClose: () => onChoose(false),
+        actions: [
+          questionPlain(
+              'update-offer-no', l10n.updateNotNow, () => onChoose(false)),
+          questionFilled('update-offer-yes', yes, () => onChoose(true)),
         ],
-      ),
-    );
-  }
+      );
 }
 
 /// The download, while it happens. Closes itself the moment the service leaves
-/// the downloading stage, however it left — finished, cancelled or failed.
+/// the downloading stage, however it left: finished, cancelled or failed.
 class _DownloadProgress extends StatelessWidget {
   final UpdateService updates;
   final UpdateRelease release;
@@ -406,69 +330,31 @@ class _DownloadProgress extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return ListenableBuilder(
-      listenable: updates,
-      builder: (context, _) {
-        if (updates.stage != UpdateStage.downloading) {
-          // Over before this window reached the screen, or over now — either
-          // way the close waits a frame, because a window must not dispose
-          // itself mid-build. `close` is idempotent, so a repeat callback is
-          // a no-op rather than a double dismissal.
-          WidgetsBinding.instance.addPostFrameCallback((_) => onDone());
-        }
-        final fraction = updates.progress;
-        final done = (updates.downloadBytes * fraction / (1 << 20)).round();
-        return FloatSurface(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: Text(l10n.updateDownloading(release.version),
-                    style: t.bodyPrimary),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    HouseProgressBar(fraction: fraction, height: 6),
-                    const SizedBox(height: 6),
-                    Text(
-                      l10n.updateProgressOf(
-                          '$done', megabytes(updates.downloadBytes)),
-                      style: t.small.copyWith(color: t.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    HouseButton(
-                      key: const ValueKey('update-download-cancel'),
-                      small: true,
-                      frameless: true,
-                      onPressed: onCancel,
-                      child: Text(l10n.cancel, style: t.small),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: updates,
+        builder: (context, _) {
+          if (updates.stage != UpdateStage.downloading) {
+            // Over before this window reached the screen, or over now. Either
+            // way the close waits a frame, because a window must not dispose
+            // itself mid-build. `close` is idempotent, so a repeat callback is
+            // a no-op rather than a double dismissal.
+            WidgetsBinding.instance.addPostFrameCallback((_) => onDone());
+          }
+          final fraction = updates.progress;
+          final done = (updates.downloadBytes * fraction / (1 << 20)).round();
+          return QuestionWindow(
+            title: l10n.updateDownloading(release.version),
+            summary: l10n.updateProgressOf(
+                '$done', megabytes(updates.downloadBytes)),
+            keyPrefix: 'update-download',
+            onClose: onCancel,
+            content: HouseProgressBar(fraction: fraction, height: 6),
+            actions: [
+              questionPlain('update-download-cancel', l10n.cancel, onCancel),
             ],
-          ),
-        );
-      },
-    );
-  }
+          );
+        },
+      );
 }
 
 /// The end of the update: it is on disk, and applying it means closing Lumit.
@@ -479,9 +365,8 @@ class _RestartToFinish extends StatelessWidget {
   /// button on this window rather than leaving the choice to be regretted.
   final bool dirty;
 
-  /// How the update will be applied, which is what this window is
-  /// really about: a swap and a restart, an installer and a restart, or a file
-  /// handed to Flatpak while Lumit stays open.
+  /// How the update will be applied: a swap and a restart, an installer and a
+  /// restart, or a file handed to Flatpak while Lumit stays open.
   final UpdateDelivery delivery;
 
   final ValueChanged<_RestartAnswer?> onChoose;
@@ -497,96 +382,32 @@ class _RestartToFinish extends StatelessWidget {
   bool get quits => delivery != UpdateDelivery.flatpakBundle;
 
   @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      width: 460,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Text(
-              quits
-                  ? l10n.updateRestartToFinish
-                  : l10n.updateDownloaded(version),
-              style: t.bodyPrimary,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              switch (delivery) {
-                // The Chrome-shaped one: no installer, no questions, a restart
-                // that lands in the new version a second later.
-                UpdateDelivery.inPlace => l10n.updateReadyInPlace(version) +
-                    (dirty ? ' ${l10n.updateUnsavedChanges}' : ''),
-                UpdateDelivery.installer => l10n.updateReadyInstaller(version) +
-                    (dirty ? ' ${l10n.updateUnsavedChanges}' : ''),
-                // Inside the sandbox the files are not ours to replace, so the
-                // bundle is handed over and Flatpak does the rest.
-                UpdateDelivery.flatpakBundle =>
-                  l10n.updateReadyFlatpak(version),
-              },
-              style: t.small.copyWith(color: t.textMuted),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            // A Wrap rather than a Row: with unsaved work there are three
-            // buttons and one of them is a whole sentence, which overflowed the
-            // window and pushed Save and restart off the right edge. Wrapping
-            // holds however wide the UI scale makes these labels, rather than
-            // depending on a width that happens to fit at 100%.
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                HouseButton(
-                  key: const ValueKey('update-restart-later'),
-                  small: true,
-                  frameless: true,
-                  onPressed: () => onChoose(_RestartAnswer.later),
-                  child: Text(l10n.updateLater, style: t.small),
-                ),
-                if (quits && dirty) ...[
-                  HouseButton(
-                    key: const ValueKey('update-restart-now'),
-                    small: true,
-                    frameless: true,
-                    onPressed: () => onChoose(_RestartAnswer.restart),
-                    child:
-                        Text(l10n.updateRestartWithoutSaving, style: t.small),
-                  ),
-                  HouseButton(
-                    key: const ValueKey('update-save-restart'),
-                    small: true,
-                    // The default: Enter takes the safe restart — the
-                    // one that saves.
-                    primary: true,
-                    autofocus: true,
-                    onPressed: () => onChoose(_RestartAnswer.saveAndRestart),
-                    child: Text(l10n.updateSaveAndRestart),
-                  ),
-                ] else
-                  HouseButton(
-                    key: const ValueKey('update-restart-now'),
-                    small: true,
-                    primary: true,
-                    autofocus: true,
-                    onPressed: () => onChoose(_RestartAnswer.restart),
-                    child: Text(
-                        quits ? l10n.updateRestartNow : l10n.updateShowTheFile),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
+  Widget build(BuildContext context) => QuestionWindow(
+        width: 460,
+        // Three answers, and one of them a whole phrase.
+        stacked: quits && dirty,
+        title:
+            quits ? l10n.updateRestartToFinish : l10n.updateDownloaded(version),
+        // Inside the sandbox the files are not ours to replace, so the bundle
+        // is handed over and Flatpak does the rest. Anywhere else the save
+        // button says what there is to lose.
+        body: quits ? null : l10n.updateReadyFlatpak(version),
+        keyPrefix: 'update-restart',
+        onClose: () => onChoose(_RestartAnswer.later),
+        actions: [
+          questionPlain('update-restart-later', l10n.updateLater,
+              () => onChoose(_RestartAnswer.later)),
+          if (quits && dirty) ...[
+            questionPlain('update-restart-now', l10n.updateRestartWithoutSaving,
+                () => onChoose(_RestartAnswer.restart)),
+            // The default: Enter takes the safe restart, the one that saves.
+            questionFilled('update-save-restart', l10n.updateSaveAndRestart,
+                () => onChoose(_RestartAnswer.saveAndRestart)),
+          ] else
+            questionFilled(
+                'update-restart-now',
+                quits ? l10n.updateRestartNow : l10n.updateShowTheFile,
+                () => onChoose(_RestartAnswer.restart)),
         ],
-      ),
-    );
-  }
+      );
 }

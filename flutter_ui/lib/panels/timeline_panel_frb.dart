@@ -32,6 +32,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:math';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -51,7 +52,10 @@ import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart' as glyph_set;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/menu_bar_frb.dart'
+    show copySelectionFrb, exportFrb, pasteSelectionFrb;
+import '../shell/model_settings_dialog.dart'
+    show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../state/comp_model.dart';
 import '../state/dock.dart';
@@ -64,6 +68,7 @@ import '../state/tools.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 // The ruler helpers moved with the ruler (shared with the graph editor); the
 // re-export keeps their long-standing import path alive for their tests.
 export 'timeline_extras_frb.dart' show rulerLabelStepSeconds, rulerLabelOf;
@@ -71,6 +76,7 @@ export 'timeline_extras_frb.dart' show rulerLabelStepSeconds, rulerLabelOf;
 import 'timeline_metrics_frb.dart';
 import 'timeline_layer_rows_frb.dart';
 import 'timeline_bar_frb.dart';
+import 'layer_source_menu.dart' show canReplaceSource, replaceLayerSources;
 import 'timeline_toolbar_frb.dart';
 import 'timeline_outline_frb.dart';
 import 'timeline_lane_area_frb.dart';
@@ -83,8 +89,12 @@ import 'easing_curve.dart';
 import 'key_block.dart';
 import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
+import 'graph_lens_guides.dart' show GraphLensSwitch;
 import 'graph_maths.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
+import 'graph_box_lanes.dart';
+import 'retime_commands.dart';
+import '../shell/menu_layer_frb.dart' show selectedEntries;
 import 'graph_panel.dart' show DrivenParam, drivenParamsOf;
 import 'key_ease_fields.dart' show KeyEaseClaim;
 import 'timeline_extras_frb.dart';
@@ -95,12 +105,15 @@ import 'spectral_lane_frb.dart';
 import 'stagger.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
+import 'model_fold_rows.dart' show modelPartPath, modelPartReveal;
+import 'shape_entries.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'waveform_frb.dart';
 import 'timeline_group_row_frb.dart';
+import 'timeline_outline_row_frb.dart' show renameLayerInView;
 import 'transform_rows_frb.dart';
 import 'viewer_tool_cursor.dart' show handPanLayer;
 
@@ -273,7 +286,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// and a layer's Retime are both one edit away from changing, so the bounds
   /// are taken again whenever the document moves — and never in between, which
   /// is what keeps a rebuild free of bridge calls.
-  BigInt? _boundsRevision;
+  int? _boundsRevision;
 
   /// The comp those bounds were taken on. The master fader and the mix mark
   /// read beside them are the comp's own, and fronting another comp moves no
@@ -608,7 +621,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// region's band in the lanes and the graph follows its flag by listening,
   /// not by this panel rebuilding on every pointer move.
   final ValueNotifier<MarkerPreview?> _markerPreview = ValueNotifier(null);
-  BigInt? _workRevision;
+  int? _workRevision;
   CompositionReference? _workComp;
 
   /// One layer's bounds, from what its kind can be asked cheaply.
@@ -667,6 +680,62 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         }
       });
 
+  /// These headings open or shut together, as an effect's menu asks.
+  void _foldPaths(List<String> paths, bool open) => setState(() {
+        for (final path in paths) {
+          _setOpen(path, open);
+          if (!open) _dropSelectionUnder(path);
+        }
+      });
+
+  /// The layers Expand all and Collapse all act on: the selected ones, or every
+  /// one with none selected.
+  List<BridgeLayerEntry> get _foldTargets {
+    final ui = _ui;
+    if (ui == null) return const [];
+    final picked = ui.selectedLayerIds;
+    return [
+      for (final e in ui.model.layers)
+        if (picked.isEmpty || picked.contains(e.layer.internallayerId)) e,
+    ];
+  }
+
+  /// Open each layer and the groups under it, as far as the rows that show
+  /// what is keyed. An effect stays shut, or one Levels would fill the panel.
+  void _expandLayers() => setState(() {
+        for (final entry in _foldTargets) {
+          final id = entry.layer.internallayerId.toString();
+          _setOpen(id, true);
+          _open.addAll([
+            transformPath(id),
+            if (entry.info.effects.isNotEmpty) effectsPath(id),
+            if (entry.info.masks.isNotEmpty) masksPath(id),
+          ]);
+        }
+      });
+
+  /// Shut each layer and forget what was open inside it.
+  void _collapseLayers() => setState(() {
+        for (final entry in _foldTargets) {
+          final id = entry.layer.internallayerId.toString();
+          _shutLayerDeep(id);
+          _dropSelectionUnder(id);
+        }
+      });
+
+  /// The two rows' actions, null where there is nothing to do.
+  TimelineFoldRows _foldRows() {
+    final ids = [
+      for (final e in _foldTargets) e.layer.internallayerId.toString()
+    ];
+    return (
+      expand: ids.any((id) => !_isOpen(id)) ? _expandLayers : null,
+      collapse: ids.any(_isOpen) ? _collapseLayers : null,
+      reveal: _ui?.requestRevealFilter,
+      anyPicked: _selectedProperties.isNotEmpty,
+    );
+  }
+
   /// Every row [path]'s twirl could carry with it, as the paths [_open] is
   /// keyed by: the selected layers for a layer's twirl, the selected
   /// properties for a heading's. Never both, or shutting a picked heading
@@ -711,6 +780,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // so dropping it alone would leave the list holding what was let go.
       ui.clearSelection();
       _selectedProperties.clear();
+      _publishPickedPart();
       _laneKeySelection.clear();
       _graphKeySelection.clear();
       _highlighted = null;
@@ -1006,29 +1076,29 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// by name, for anyone who looks for them on the headings first.
   Future<void> _showColumnMenu(Offset position) async {
     final timings = _ui?.renderTimings;
+    final fold = _foldRows();
     final picked = await showMenuAt<String>(
       context: context,
       position: position,
-      width: 170,
+      width: 240,
       rows: (close) => [
+        ...timelineFoldRows(fold, () => close(null)),
+        const MenuDivider(),
         for (final group in _toggleableGroups)
           MenuRow(
             key: ValueKey<String>('tl-column-menu-${group.name}'),
             onPressed: () => close(group.name),
-            child: Row(children: [
-              menuTick(!_hiddenGroups.contains(group)),
-              Expanded(child: Text(columnGroupLabel(group))),
-            ]),
+            child: MenuLabel(columnGroupLabel(group),
+                ticked: !_hiddenGroups.contains(group)),
           ),
-        if (timings != null)
+        if (timings != null) ...[
+          const MenuDivider(),
           MenuRow(
             key: const ValueKey('tl-column-menu-timings'),
             onPressed: () => close(TimelineGroup.timings.name),
-            child: Row(children: [
-              menuTick(timings.measuring),
-              Expanded(child: Text(l10n.tipRenderTime)),
-            ]),
+            child: MenuLabel(l10n.timeColumn, ticked: timings.measuring),
           ),
+        ],
       ],
     );
     if (picked == null || !mounted) return;
@@ -1229,17 +1299,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// so the bottom bar's buttons and the shortcuts act on the same set.
   final Set<String> _graphKeySelection = {};
 
-  /// The Sequence layers whose view is open — double-clicking one
-  /// opens its clips and their speed envelope inside its own row.
-  final Set<String> _sequenceOpen = {};
-
-  /// How tall each open view's **graph** half is, by layer id, once its
-  /// divider has been dragged. Absent means the default three rows.
-  ///
-  /// Only the graph resizes: the clip strip is where the cutting happens and
-  /// it is sized for that, while how much room a speed curve wants depends
-  /// entirely on how far the ramps go.
-  final Map<String, double> _sequenceGraph = {};
+  /// The Sequence layers whose view is open, and how tall each one's graph
+  /// is, kept on the UI state so a remount (a change of look) keeps them.
+  Set<String> get _sequenceOpen => _ui!.sequenceOpen;
+  Map<String, double> get _sequenceGraph => _ui!.sequenceGraph;
 
   /// How much taller each open view makes its layer's row.
   Map<String, double> get _sequenceExtra => {
@@ -1392,6 +1455,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishRowSelection();
     _publishLaneKeys();
     if (_graph) setState(() {});
+    _publishPickedPart();
   }
 
   /// The other direction: an effect picked in the Effect controls panel lights
@@ -1452,6 +1516,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final path = _ui?.selectPropertyRequest.value;
     if (path == null) return;
     _ui!.selectPropertyRequest.value = null;
+    if (_ui!.selectPropertyShowsGraph) {
+      _ui!.selectPropertyShowsGraph = false;
+      if (!_graph) _setMode(TimelineMode.graph);
+      // The curve's row opens and comes into view, so the outline names
+      // what the graph is drawing.
+      final parts = path.split('/');
+      setState(() {
+        for (var i = 1; i < parts.length; i++) {
+          _setOpen(parts.sublist(0, i).join('/'), true);
+        }
+        _foldToShow = path;
+      });
+    }
     if (_selectedProperties.length == 1 && _selectedProperties.first == path) {
       return;
     }
@@ -1523,8 +1600,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           .interface
           .videoAsSequenceLayer;
 
-  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Speed*.
+  /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Speed*, which the
+  /// Retiming workspace has on whatever the setting says.
   bool _vegas(BuildContext context) =>
+      _retiming ||
       Provider.of<LumitUiState>(context, listen: false)
           .workspace
           .interface
@@ -1674,22 +1753,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// time: [razorTargets] says what a cut at that frame can land on (strictly
   /// inside the layer), [razorCut] makes it, and a cut the engine refuses is
   /// silence.
-  bool _splitSelectionAtPlayhead(LumitUiState ui) {
-    final frame = ui.playheadFrame.value;
-    final selected = ui.selectedLayerIds;
-    final targets = [
-      for (final entry in razorTargets(ui.model.layers, frame,
-          clicked: null, allLayers: true))
-        if (selected.contains(entry.layer.internallayerId)) entry,
-    ];
-    if (targets.isEmpty) return false;
-    final made = razorCut(targets, frame);
-    if (made.cut) {
-      if (made.halves.isNotEmpty) ui.setSelection(made.halves);
-      ui.model.refresh();
-    }
-    return true;
-  }
 
   /// `[` and `]`: move the selected layers so that end lands on the playhead;
   /// with `Alt`, trim that end to it instead (docs/07 §4.4).
@@ -1796,8 +1859,113 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final id = layerId.toString();
         _setOpen(id, true);
         _open.addAll(_revealPaths(id, entry, action));
+        // A part opens with its row picked and in view.
+        if (action.startsWith('reveal.part/')) {
+          final path =
+              modelPartPath(id, action.substring('reveal.part/'.length));
+          _selectedProperties
+            ..clear()
+            ..add(path);
+          _foldToShow = path;
+          _publishPickedPart();
+        }
       }
     });
+  }
+
+  /// Layer ▸ Reveal ▸ Expand all or Collapse all: the ground menu's rows.
+  void _onFoldAllRequested() {
+    if (!mounted) return;
+    final fold = _foldRows();
+    ((_ui?.foldAllExpand ?? true) ? fold.expand : fold.collapse)?.call();
+  }
+
+  /// Tell the Viewer which part of a 3D model the last picked row is on, for
+  /// its handles.
+  void _publishPickedPart() {
+    final path = _selectedProperties.lastOrNull;
+    final segments = path?.split('/') ?? const <String>[];
+    _ui?.pickedPart.value = segments.length >= 3 && segments[1] == 'parts'
+        ? (layer: UuidValue.fromString(segments[0]), part: segments[2])
+        : null;
+  }
+
+  /// The fold row the next build brings into view.
+  String? _foldToShow;
+
+  /// The layer row the next build brings into view.
+  String? _layerToShow;
+
+  /// Rename from a menu anywhere: the row comes into view if it is out of
+  /// it, and opens its name as it builds.
+  void _renameInView(UuidValue layer) {
+    if (!mounted) return;
+    // Set afresh, so a second Rename on the same layer is heard.
+    _renameRequest.value = null;
+    _renameRequest.value = layer;
+    setState(() => _layerToShow = layer.toString());
+  }
+
+  /// Bring the fold row at [path] into view, a short glide so its place in the
+  /// tree stays readable.
+  void _scrollToFold(List<LayerRow> rows, String path) {
+    var y = 0.0;
+    for (final row in rows) {
+      var at = y + row.rowHeight + (row.sequenceExtra ?? 0);
+      for (final fold in row.foldRows) {
+        if (foldRowPath(row.id, fold) == path) {
+          if (!_vOutline.hasClients) return;
+          final view = _vOutline.position;
+          // Enough for a part's own rows under it. A property row has none.
+          final block = fold is FoldGroupRow
+              ? row.rowHeight * 11
+              : row.rowHeight;
+          if (at >= view.pixels &&
+              at + block <= view.pixels + view.viewportDimension) {
+            return;
+          }
+          // A row or two of what is above it stays on screen.
+          final to = (at - row.rowHeight * 2).clamp(0.0, view.maxScrollExtent);
+          _vOutline.animateTo(to,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut);
+          return;
+        }
+        at += row.rowHeight;
+      }
+      y += row.height;
+    }
+  }
+
+  /// The rows the last build laid out, for [_scrollToLayer].
+  List<LayerRow> _shownRows = const [];
+
+  /// Bring layer [id]'s own row into view with the same short glide, moving
+  /// only as far as it takes, and with a row to spare beyond it.
+  void _scrollToLayer(String id) {
+    if (!_vOutline.hasClients) return;
+    var y = 0.0;
+    for (final row in _shownRows) {
+      if (row.id == id) {
+        final top = y +
+            (row.groupHeader == null
+                ? 0
+                : row.rowHeight * (1 + row.drawnGroupRows.length));
+        final view = _vOutline.position;
+        final bottom = view.pixels + view.viewportDimension;
+        final to = top < view.pixels
+            ? top - row.rowHeight
+            : top + row.rowHeight > bottom
+                ? top + row.rowHeight * 2 - view.viewportDimension
+                : null;
+        if (to == null) return;
+        _vOutline.animateTo(to.clamp(0.0, view.maxScrollExtent),
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut);
+        return;
+      }
+      y += row.height;
+    }
   }
 
   /// Which fold paths a reveal key opens under [id]. Empty means the layer's
@@ -1830,7 +1998,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       'reveal.effects' =>
         entry.info.effects.isEmpty ? const [] : [effectsPath(id)],
       'reveal.masks' => entry.info.masks.isEmpty ? const [] : [masksPath(id)],
-      'reveal.volume' => [audioPath(id)],
+      'reveal.volume' || 'reveal.audio' => [audioPath(id)],
+      _ when action.startsWith('reveal.part/') => switch (entry.info.modelRows) {
+          final rows? =>
+            modelPartReveal(id, rows, action.substring('reveal.part/'.length)),
+          null => const [],
+        },
       _ => const [],
     };
   }
@@ -2047,6 +2220,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// draws every heading it keeps as open, so these are the exceptions.
   final Set<String> _revealShut = {};
 
+  /// The rows picked when Reveal selected properties ran, which it keeps
+  /// while the pick moves on.
+  Set<String> _revealPicked = const {};
+
   /// The comp's size when the last **modified** reveal was run, kept for the
   /// builds after it: that reveal asks whether a layer has been moved, and
   /// unmoved means the middle of the comp — a fact about the document that a
@@ -2065,6 +2242,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   @override
   void initState() {
     super.initState();
+    renameLayerInView = _renameInView;
     _zoomMotion = SmoothZoom(vsync: this, initial: 1, min: 1, max: 64)
       ..addListener(_onZoomTick);
     _vOutline.addListener(() => _followScroll(_vOutline, _vLane));
@@ -2137,6 +2315,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // Animation ▸ Reveal …: the menu says which reveal, the panel runs
     // it over the selection, exactly as `U` does.
     _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
+    _ui!.foldAllRequest.addListener(_onFoldAllRequested);
     _ui!.selectPropertyRequest.addListener(_onSelectPropertyRequested);
     // Merged **once**, not per build: a fresh `Listenable` every rebuild makes
     // every cache bar under it unsubscribe and resubscribe, which during a zoom
@@ -2149,6 +2328,59 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // draws the Timeline with every sounding layer's waveform lane open, and
     // the dock split alone cannot say so.
     _ui!.workspace.presetApplied.addListener(_onPresetApplied);
+    _ui!.model.addListener(_followRetime);
+    _ui!.selectedLayers.addListener(_followRetime);
+    if (_retiming) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _enterRetiming();
+      });
+    }
+  }
+
+  bool get _retiming =>
+      _ui?.workspace.activePreset == WorkspacePreset.retiming;
+
+  /// The view and the lens the Timeline had when Retiming changed them, to go
+  /// back to on the way out. Null outside Retiming.
+  (TimelineMode, GraphLens)? _beforeRetiming;
+
+  /// The Retiming arrangement is about the speed graph, which a dock tree cannot
+  /// say: the graph comes up on the speed lens, with the selected layer's Retime
+  /// on it. Nothing in the document changes for choosing a workspace.
+  void _enterRetiming() {
+    _beforeRetiming ??= (_mode, _graphLens);
+    _setMode(TimelineMode.graph);
+    setState(() => _graphLens = GraphLens.speed);
+    _publishEasingClaim();
+    _followRetime();
+  }
+
+  /// In Retiming, a layer picked with no property of it picked brings up its
+  /// Retime. After the frame, so it reads where the selection and the model
+  /// came to rest, whichever of them moved first.
+  void _followRetime() {
+    if (!_retiming || !_graph || _selectedProperties.isNotEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ui = _ui;
+      if (ui == null || !mounted || !_retiming || !_graph) return;
+      if (_selectedProperties.isNotEmpty) return;
+      final paths = [
+        for (final entry in selectedEntries(ui))
+          if (entry.info.retime != null)
+            retimePath(entry.layer.internallayerId.toString()),
+      ];
+      if (paths.isEmpty) return;
+      setState(() {
+        for (final path in paths) {
+          _setOpen(layerIdOfPath(path)!, true);
+        }
+        _selectedProperties.addAll(paths);
+        _highlighted = layerIdOfPath(paths.first);
+        _foldToShow = paths.first;
+      });
+      _publishPropertySelection();
+      _publishRowSelection();
+    });
   }
 
   /// A shipped preset was applied. Audio's board (docs/09 §1) draws the
@@ -2160,6 +2392,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void _onPresetApplied() {
     final ui = _ui;
     if (ui == null || !mounted) return;
+    if (_retiming) {
+      _enterRetiming();
+      return;
+    }
+    if (_beforeRetiming case (final mode, final lens)?) {
+      _beforeRetiming = null;
+      _setMode(mode);
+      setState(() => _graphLens = lens);
+      _publishEasingClaim();
+    }
     if (ui.workspace.activePreset != WorkspacePreset.audio) return;
     for (final entry in ui.model.layers) {
       final id = entry.layer.internallayerId.toString();
@@ -2252,6 +2494,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishRowSelection();
     _publishLaneKeys();
     if (_graph) setState(() {});
+    // A layer picked from somewhere else, a new one above all, comes into
+    // view once the frame that lays out its row has run.
+    if (now != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToLayer(now.toString());
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }
   }
 
   /// The selection changed without the primary moving: a select-all, a
@@ -2435,6 +2685,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return (_graph && _graphKeySelection.isNotEmpty && _deleteGraphKeys()) ||
         (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
         _deleteSelectedMasks() ||
+        _deleteSelectedShapeEntries() ||
         _deleteSelectedEffects() ||
         _deleteSequenceClip();
   }
@@ -2453,6 +2704,51 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.cutClip.value = null;
     Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
     _ui?.model.refresh();
+    return true;
+  }
+
+  /// Delete every picked shape entry — a modifier, a piece of art or a group
+  /// under Contents — rather than its layer, returning whether there was one.
+  /// Their paths are `<layer>/contents/<entry>`; a value row under one is
+  /// deeper and is left alone. One write per layer, so one undo step each.
+  bool _deleteSelectedShapeEntries() {
+    if (!mounted) return false;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final wanted = <String, Set<String>>{};
+    for (final path in _selectedProperties) {
+      final layerId = layerIdOfPath(path);
+      if (layerId == null) continue;
+      final stem = '${contentsPath(layerId)}/';
+      if (!path.startsWith(stem)) continue;
+      final id = path.substring(stem.length);
+      if (id.isEmpty || id.contains('/')) continue;
+      (wanted[layerId] ??= {}).add(id);
+    }
+    if (wanted.isEmpty) return false;
+    var deleted = false;
+    for (final entry in ui.model.layers) {
+      final ids = wanted[entry.layer.internallayerId.toString()];
+      if (ids == null) continue;
+      try {
+        var contents = entry.layer.getShapeContents();
+        final before = contents.length;
+        for (final id in ids) {
+          contents = contents.without(UuidValue.fromString(id));
+        }
+        if (contents.length == before) continue;
+        entry.layer.setShapeContents(contents: contents, at: null);
+        deleted = true;
+      } catch (_) {
+        // Gone between the draw and the press; nothing left to delete.
+      }
+    }
+    if (!deleted) return false;
+    setState(() => _selectedProperties.removeWhere((path) {
+          final owner = layerIdOfPath(path);
+          return owner != null && isUnderPath(contentsPath(owner), path);
+        }));
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
     return true;
   }
 
@@ -2524,78 +2820,40 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       (_priorPasteClaim?.call() ?? false) ||
       (!_onNodeGraph && _pasteKeysIntoSelection());
 
-  /// The right-click menu on a lane keyframe: the graph key's own menu —
-  /// Linear / Easy ease / Hold / Delete key — plus *Ease…*, which opens the
-  /// popover on whatever is selected.
+  /// The right-click menu on a lane keyframe, the one every key has.
   ///
   /// A right-click on an **unselected** key selects it first, so the menu acts
   /// on the thing that was clicked; on a selected one it acts on the whole
   /// selection, which is what makes it the block's menu as well as one key's.
   void _laneKeyMenu(String id, Offset position) {
     if (!_laneKeySelection.contains(id)) _onLaneKeysSelected({id});
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final (fpsNum, fpsDen) = ui.model.fpsExact;
     showMenuAt<void>(
       context: context,
       position: position,
-      width: 170,
-      rows: (close) => [
-        MenuRow(
-          key: const ValueKey('tl-key-menu-linear'),
-          onPressed: () {
-            close(null);
-            _applyInterp(const BridgeSideInterp.linear());
-          },
-          child: Text(l10n.easeLinear),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-ease'),
-          onPressed: () {
-            close(null);
-            _applyInterp(easyEase);
-          },
-          child: Text(l10n.easeEasy),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-hold'),
-          onPressed: () {
-            close(null);
-            _applyInterp(const BridgeSideInterp.hold());
-          },
-          child: Text(l10n.easeHold),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-shape'),
-          onPressed: () {
-            close(null);
-            _openEasePopover(position);
-          },
-          child: Text(l10n.keyMenuEase),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-copy-ease'),
-          onPressed: () {
-            close(null);
-            _copyEase();
-          },
-          child: Text(l10n.keyMenuCopyEase),
-        ),
-        if (easeClipboard.isNotEmpty)
-          MenuRow(
-            key: const ValueKey('tl-key-menu-paste-ease'),
-            onPressed: () {
-              close(null);
-              _pasteEase();
-            },
-            child: Text(l10n.keyMenuPasteEase),
-          ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-delete'),
-          onPressed: () {
-            close(null);
-            _deleteSelectedKeys();
-          },
-          child: Text(l10n.deleteKey),
-        ),
-      ],
+      width: keyMenuWidth,
+      rows: (close) => channelKeyMenuRows(
+        context,
+        close: () => close(null),
+        keyPrefix: 'tl-key-menu',
+        channels: () => _selectionChannels(ui),
+        picked: _actionKeySelection,
+        count: _selectedKeyCount,
+        onChanged: ui.model.refresh,
+        project: _project,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        onEase: () => _openEasePopover(position),
+        // The panel's own claims: the keys picked here, through the same two
+        // commands the Edit menu runs.
+        onCopy: () => copySelectionFrb(ui),
+        onPaste: () => pasteSelectionFrb(
+            app, ui, ui.selectedComp, ui.selectedLayer.value),
+        onDelete: _deleteSelectedKeys,
+      ),
     );
   }
 
@@ -2961,6 +3219,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (action == 'reveal.animated') {
       return _revealTap();
     }
+    if (action == 'reveal.changed') {
+      ui.requestRevealFilter(RevealFilter.modified);
+      return true;
+    }
     if (action == 'reveal.audio') {
       return _revealAudioTap(ui);
     }
@@ -2982,6 +3244,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           ui.renameItemRequest.value = parts[2];
           return true;
         }
+        // An effect's own heading on a layer: its name opens in place.
+        if (effectIdOfPath(_selectedProperties.single) != null &&
+            ui.model.layers
+                .any((e) => e.layer.internallayerId.toString() == parts[0])) {
+          foldEffectRenaming.value = _selectedProperties.single;
+          return true;
+        }
       }
       // A group header chose the current selection: Enter renames the band
       // itself, through the same request road (the owner's "the same as any
@@ -2998,7 +3267,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       return true;
     }
     if (action == 'layer.split') {
-      return _splitSelectionAtPlayhead(ui);
+      return splitSelectionAtPlayhead(
+          ui, Provider.of<LumitState>(context, listen: false).project);
     }
     if (action == 'layer.move.in' ||
         action == 'layer.move.out' ||
@@ -3042,6 +3312,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (action == 'timeline.fit.keys') {
       return _fitKeys(ui);
     }
+    if (action == 'timeline.expand.all') {
+      _foldRows().expand?.call();
+      return true;
+    }
+    if (action == 'timeline.collapse.all') {
+      _foldRows().collapse?.call();
+      return true;
+    }
     if (action == 'graph.ease' ||
         action == 'graph.ease.in' ||
         action == 'graph.ease.out') {
@@ -3067,6 +3345,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
     if (action == 'graph.fit') {
       _fitGraph();
+      return true;
+    }
+    if (action == 'graph.frame.all') {
+      _fitGraph(everything: true);
       return true;
     }
     return false;
@@ -3223,8 +3505,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   DateTime? _lastReveal;
   int _revealTaps = 0;
 
-  /// How long a second `U` still counts as the same gesture. AE's own window;
-  /// long enough to type deliberately, short enough that a `U` a moment later
+  /// How long a second `U` still counts as the same gesture. Timed on `clock`,
+  /// which a widget test drives, so a slow machine cannot split `UU` in two.
+  /// Long enough to type deliberately, short enough that a `U` a moment later
   /// starts again rather than collapsing what you just opened.
   static const Duration _revealWindow = Duration(milliseconds: 500);
 
@@ -3260,7 +3543,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         : [for (final entry in ui.model.layers) entry.layer];
     if (layers.isEmpty) return false;
 
-    final now = DateTime.now();
+    final now = clock.now();
     final last = _lastReveal;
     _revealTaps = (last != null && now.difference(last) <= _revealWindow)
         ? _revealTaps + 1
@@ -3302,9 +3585,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         }
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
-          _open.add(effectsPath(id));
+          // The drivers on the layer's graph come in the same list, and
+          // open under their own heading.
+          final drivers = {
+            for (final d in layer.getGraphDrivers()) d.id().toString()
+          };
           for (final fx in groups.effects) {
-            _open.add(effectPath(id, fx));
+            if (drivers.contains(fx)) {
+              _open
+                ..add(driversPath(id))
+                ..add(driverPath(id, fx));
+            } else {
+              _open
+                ..add(effectsPath(id))
+                ..add(effectPath(id, fx));
+            }
           }
         }
         if (groups.audio) _open.add(audioPath(id));
@@ -3336,10 +3631,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// qualify" could disagree with what the filter then keeps, and a layer
   /// opened onto no rows is an empty fold-out.
   void _revealFiltered(LumitUiState ui, RevealFilter filter) {
+    final picked = filter == RevealFilter.picked;
+    if (picked) {
+      if (_selectedProperties.isEmpty) return;
+      _revealPicked = {..._selectedProperties};
+    }
     final selected = ui.selectedLayers.value;
-    final ids = {
-      for (final layer in selected) layer.internallayerId.toString()
-    };
+    // The picked rows' own layers, for the picked rows.
+    final ids = picked
+        ? {
+            for (final path in _revealPicked)
+              if (layerIdOfPath(path) case final id?) id,
+          }
+        : {for (final layer in selected) layer.internallayerId.toString()};
     final entries = ids.isEmpty
         ? ui.model.layers
         : [
@@ -3358,9 +3662,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       for (final entry in entries) {
         final id = entry.layer.internallayerId.toString();
         // Every reveal starts from the layers closed, so it shows exactly what
-        // it says rather than adding to whatever was already open.
+        // it says rather than adding to whatever was already open. The picked
+        // rows stay picked.
         _shutLayerDeep(id);
-        _dropSelectionUnder(id);
+        if (!picked) _dropSelectionUnder(id);
       }
       // Built the way the panel is about to build them, so "does this layer
       // show anything" is answered by the rows themselves. Heights are not
@@ -3379,6 +3684,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           for (final entry in entries)
             entry.layer.internallayerId.toString(): filter
         },
+        revealPicked: _revealPicked,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight,
       );
@@ -3418,7 +3724,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   bool _revealAudioTap(LumitUiState ui) {
     final selected = ui.selectedLayerIds;
     if (selected.isEmpty) return false;
-    final now = DateTime.now();
+    final now = clock.now();
     final last = _lastAudioReveal;
     _audioRevealTaps = (last != null && now.difference(last) <= _revealWindow)
         ? _audioRevealTaps + 1
@@ -3459,6 +3765,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   @override
   void dispose() {
+    if (renameLayerInView == _renameInView) renameLayerInView = null;
     _mixRetry?.cancel();
     _itemChanges?.cancel();
     _share.roster.removeListener(_onRoster);
@@ -3469,11 +3776,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.workspace.presetApplied.removeListener(_onPresetApplied);
+    _ui?.model.removeListener(_followRetime);
+    _ui?.selectedLayers.removeListener(_followRetime);
     _ui?.selectedLayer.removeListener(_onPrimaryChanged);
     _ui?.selectedLayers.removeListener(_onLayerSelectionChanged);
     _ui?.renderTimings.removeListener(_onTimingsChanged);
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
     _ui?.revealFilterRequest.removeListener(_onRevealFilterRequested);
+    _ui?.foldAllRequest.removeListener(_onFoldAllRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
     if (_ui?.deleteClaim == _claimDelete) _ui!.deleteClaim = _priorDeleteClaim;
     if (_ui?.copyClaim == _claimCopy) _ui!.copyClaim = _priorCopyClaim;
@@ -3481,12 +3791,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.noteTimelineView == _rememberShownView) {
       _ui!.noteTimelineView = null;
     }
-    if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
-    if (_ui?.easingKey.value?.apply == _applyKeyEase) {
-      _ui!.easingKey.value = null;
+    // After the frame: the Easing panel listens to these, and it can't be asked
+    // to rebuild while the tree is being taken down. A second Timeline may have
+    // published its own by then, so only what's still this one's is cleared.
+    final held = _ui;
+    final span = held?.easingSpan.value;
+    if (held != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (held.easingApply.value == _applyEasing) {
+          held.easingApply.value = null;
+        }
+        if (held.easingKey.value?.apply == _applyKeyEase) {
+          held.easingKey.value = null;
+        }
+        if (held.easingSpan.value == span) held.easingSpan.value = null;
+      });
     }
-    // A second Timeline publishes its own again on its next build.
-    _ui?.easingSpan.value = null;
     _ui?.selectedEffects.removeListener(_onEffectSelectionChanged);
     _ui?.playheadFrame.removeListener(_edgeFollow);
     _boundTools?.removeListener(_onToolChanged);
@@ -3715,7 +4035,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// colours, then in Layer and Comp the other animated ones.
   List<GraphChannel> _shownChannels(
       LumitUiState ui, List<GraphChannel> picked) {
-    if (_graphScope == GraphScope.selected) return picked;
+    // With nothing picked, a selected layer's animated curves rather than an
+    // empty plot; while retiming, the empty plot offers Retime instead.
+    final scope = _graphScope == GraphScope.selected &&
+            picked.isEmpty &&
+            !_retiming &&
+            ui.selectedLayerIds.isNotEmpty
+        ? GraphScope.layer
+        : _graphScope;
+    if (scope == GraphScope.selected) return picked;
     final layers = {
       ...ui.selectedLayerIds.map((id) => '$id'),
       for (final path in _selectedProperties)
@@ -3724,7 +4052,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final paths = {..._selectedProperties};
     for (final entry in ui.model.layers) {
       final id = entry.layer.internallayerId.toString();
-      if (_graphScope == GraphScope.layer && !layers.contains(id)) continue;
+      if (scope == GraphScope.layer && !layers.contains(id)) continue;
       for (final row in layerFoldRows(
         entry: entry,
         open: everyFoldPath,
@@ -3765,9 +4093,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// Frame the selected keys in the graph, in time and in value, or every
   /// curve when none is picked. After Effects calls it Fit selection to view.
-  void _fitGraph() {
+  void _fitGraph({bool everything = false}) {
     final pane = _graphPane.currentState;
-    final span = pane?.fitSelection();
+    final span = pane?.fitSelection(everything: everything);
     final fps = _ui?.model.fps ?? 0;
     final viewport = positionOf(_hLane)?.viewportDimension ?? _laneViewport;
     if (span == null || fps <= 0 || viewport <= graphGutterWidth) {
@@ -3986,6 +4314,27 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return at < 0 ? 0 : at;
   }
 
+  /// The id of the row an Alt drag is over, for the row's highlight.
+  String? _replacing;
+
+  /// The layer whose row is under the window point [global], or null.
+  BridgeLayerEntry? _layerUnder(List<BridgeLayerEntry> layers,
+      List<double> heights, Offset global, DensityTokens density) {
+    final box = _dropArea.currentContext?.findRenderObject();
+    if (box is! RenderBox) return null;
+    final y = box.globalToLocal(global).dy -
+        density.navigatorBand -
+        density.ruler +
+        (_vLane.hasClients ? _vLane.offset : 0);
+    if (y < 0) return null;
+    var bottom = 0.0;
+    for (var i = 0; i < layers.length && i < heights.length; i++) {
+      bottom += heights[i];
+      if (y < bottom) return layers[i];
+    }
+    return null;
+  }
+
   /// The gutter down the right of a scrollable half: a block level with that
   /// half's header (After Effects keeps the same reserved corner), then the
   /// scrollbar itself. Reserved whether or not a thumb shows, so the columns
@@ -4070,33 +4419,48 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           LayoutBuilder(builder: (context, box) {
             // No zoom here, so the frames span the panel's width.
             final axis = TimelineAxis(frames: frames, width: box.maxWidth);
-            return SizedBox(
-              height: t.density.ruler,
-              child: Stack(
-                children: [
-                  TimelineRuler(
-                    comp: comp,
-                    axis: axis,
-                    fps: ui.model.fps,
-                    height: t.density.ruler,
-                    work: work,
-                    onSeek: (f) =>
-                        ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
-                    onWorkArea: (span) {
-                      comp.setWorkArea(span: span);
-                      setState(() {});
-                    },
-                    onWorkPreview: (span) => _workPreview.value = span,
-                    onMarkersChanged: () => setState(() {}),
-                    cache: TimelineCacheBar(
-                        comp: comp, axis: axis, revision: _cacheRevision!),
-                  ),
-                  PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
-                ],
-              ),
+            // The picked box's keyed rows hang under the ruler on its axis,
+            // and the playhead runs down through both.
+            return Stack(
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: t.density.ruler,
+                      child: TimelineRuler(
+                        comp: comp,
+                        axis: axis,
+                        fps: ui.model.fps,
+                        height: t.density.ruler,
+                        work: work,
+                        onSeek: (f) => ui
+                            .scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
+                        onWorkArea: (span) {
+                          comp.setWorkArea(span: span);
+                          setState(() {});
+                        },
+                        onWorkPreview: (span) => _workPreview.value = span,
+                        onMarkersChanged: () => setState(() {}),
+                        cache: TimelineCacheBar(
+                            comp: comp,
+                            axis: axis,
+                            revision: _cacheRevision!),
+                      ),
+                    ),
+                    GraphBoxLanes(
+                        comp: comp, frames: frames, width: box.maxWidth),
+                  ],
+                ),
+                PlayheadOverlay(playhead: ui.playheadFrame, xOf: axis.xOf),
+              ],
             );
           }),
-          Expanded(child: CompGraphPanel(comp: comp, host: Panel.timeline)),
+          // The canvas once: here only while no Node graph panel is up
+          // to draw it.
+          if (!panelVisible(ui.split, Panel.graph))
+            Expanded(child: CompGraphPanel(comp: comp, host: Panel.timeline)),
         ],
       );
     }
@@ -4199,9 +4563,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
         revealShut: _revealShut,
+        revealPicked: _revealPicked,
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
+    if (_foldToShow case final path?) {
+      _foldToShow = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToFold(rows, path);
+      });
+    }
+    _shownRows = rows;
+    if (_layerToShow case final id?) {
+      _layerToShow = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToLayer(id);
+      });
+    }
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,
@@ -4268,8 +4646,53 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // payload type and this drop honestly takes two.
           child: DragTarget<Object>(
             onWillAcceptWithDetails: (details) =>
-                details.data is FootageDragData || details.data is CompDragData,
+                details.data is FootageDragData ||
+                details.data is CompDragData ||
+                details.data is SolidDragData,
+            // With Alt held the row under the pointer is the one that changes,
+            // so it lights up.
+            onMove: (details) {
+              final over = HardwareKeyboard.instance.isAltPressed
+                  ? _layerUnder(layers, blockHeights, details.offset, t.density)
+                  : null;
+              final id = over?.layer.internallayerId.toString();
+              if (id != _replacing) {
+                setState(() => _highlighted = _replacing = id);
+              }
+            },
+            onLeave: (_) {
+              if (_replacing != null) {
+                setState(() => _highlighted = _replacing = null);
+              }
+            },
             onAcceptWithDetails: (details) {
+              _replacing = null;
+              // Alt on a row: that layer takes the item as its source, with the
+              // rest of the selection if it is in one.
+              if (HardwareKeyboard.instance.isAltPressed) {
+                final over = _layerUnder(
+                    layers, blockHeights, details.offset, t.density);
+                final item = switch (details.data) {
+                  FootageDragData(:final footage) =>
+                    ItemReference.footage(footage.first),
+                  CompDragData(comp: final dropped) =>
+                    ItemReference.composition(dropped),
+                  SolidDragData(:final solid) => ItemReference.solid(solid),
+                  _ => null,
+                };
+                if (over != null && item != null) {
+                  final picked = ui.selectedLayerIds
+                      .contains(over.layer.internallayerId);
+                  final state = Provider.of<LumitState>(context, listen: false);
+                  replaceLayerSources(
+                      state,
+                      (picked ? selectedEntries(ui) : [over])
+                          .where(canReplaceSource)
+                          .toList(),
+                      item);
+                  return;
+                }
+              }
               // Where the pointer let go, not the top of the stack: dropping
               // between two layers means "here", and a stack that ignores it
               // has to be re-sorted by hand after every drop.
@@ -4280,17 +4703,24 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // The files land on the row they were dropped on, in the
                   // order the panel lists them, as one undo step. Several lie
                   // end to end, and Shift stacks them all at the start.
-                  comp.addFootageLayers(
+                  final placed = comp.addFootageLayers(
                       footage: footage,
                       asSequence: _videoAsSequence(context),
                       row: at,
                       arrival: ui.streamsArrival,
-                      endToEnd: !HardwareKeyboard.instance.isShiftPressed);
+                      endToEnd: !HardwareKeyboard.instance.isShiftPressed,
+                      lightNames: modelLightNames());
+                  // A 3D model asks how it sits as it lands.
+                  showDroppedModelSettingsFrb(context, placed);
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
                   // the drop simply does nothing.
                   try {
                     comp.addPrecompLayer(comp: dropped, row: at);
+                  } catch (_) {}
+                case SolidDragData(:final solid):
+                  try {
+                    comp.addSolidItemLayer(solid: solid, row: at);
                   } catch (_) {}
               }
               ui.model.refresh();
@@ -4561,6 +4991,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required double outlineWidth,
   }) {
     final t = ThemeScope.of(context).theme;
+    void groundMenu(Offset at) => showTimelineMoreMenu(
+          context,
+          comp: comp,
+          playhead: ui.playheadFrame,
+          position: at,
+          onChanged: ui.model.refresh,
+          fold: _foldRows(),
+        );
     return SizedBox(
       width: outlineViewport,
       // A column, to match the lane side's: rows, then a
@@ -4599,13 +5037,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             // the outline, not across the panel: the lane
                             // side gives their height to a taller, easier
                             // to grab time ruler (docs/07 §4.1).
-                            Toolbar(
-                              model: ui.model,
-                              playhead: ui.playheadFrame,
-                              onSeek: ui.scrubTo,
-                              mode: _mode,
-                              onMode: _setMode,
-                              onSearch: (v) => setState(() => _search = v),
+                            GestureDetector(
+                              onSecondaryTapUp: (d) =>
+                                  groundMenu(d.globalPosition),
+                              child: Toolbar(
+                                model: ui.model,
+                                playhead: ui.playheadFrame,
+                                onSeek: ui.scrubTo,
+                                mode: _mode,
+                                onMode: _setMode,
+                                onSearch: (v) => setState(() => _search = v),
+                              ),
                             ),
                             // The second row of the outline: the column
                             // headers, in both views (the graph's own
@@ -4651,17 +5093,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                           ? _vOutline.offset
                                           : 0);
                                   if (d.localPosition.dy < foot) return;
-                                  showTimelineMoreMenu(
-                                    context,
-                                    comp: comp,
-                                    playhead: ui.playheadFrame,
-                                    position: d.globalPosition,
-                                    onChanged: ui.model.refresh,
-                                  );
+                                  groundMenu(d.globalPosition);
                                 },
                                 // The viewport's own height, which is what
                                 // the row list windows itself against.
-                                child: LayoutBuilder(
+                                child: EdgeFade(
+                                    axis: Axis.vertical,
+                                    reach: 16,
+                                    child: LayoutBuilder(
                                     builder: (context, box) =>
                                         NotificationListener<
                                             ScrollMetricsNotification>(
@@ -4700,6 +5139,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             onEditProperty: _selectOnEdit,
                                             keysPickedOn: _keysPickedOn,
                                             onToggle: _toggle,
+                                            onFoldPaths: _foldPaths,
                                             playheadFrame:
                                                 ui.playheadFrame.value,
                                             onSeek: ui.scrubTo,
@@ -4714,7 +5154,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             },
                                             onChanged: ui.model.refresh,
                                           ),
-                                        ))),
+                                        )))),
                               ),
                             ),
                           ],
@@ -4915,7 +5355,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // it is laid out at its own width and the toggles really do keep
           // the rest. As a flexible half it left the toggles scrolling inside
           // the other half with empty bar beside them.
-          Row(children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapUp: (d) => _showColumnMenu(d.globalPosition),
+            child: Row(children: [
             Flexible(
               flex: _graph ? 1 : 0,
               child: KeyCommandStrip(
@@ -4924,10 +5367,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 // stood on the lane bar, in the same order.
                 strip: !_graph,
                 lens: _graph ? _graphLens : null,
-                onLens: (lens) => setState(() {
-                  _graphLens = lens;
-                  _publishEasingClaim();
-                }),
                 breakHandles: _graphBreakHandles,
                 onToggleBreakHandles: () => setState(
                     () => _graphBreakHandles = !_graphBreakHandles),
@@ -4960,7 +5399,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               onToggleHideShy: () => setState(() => _hideShy = !_hideShy),
               onChanged: ui.model.refresh,
             )),
-          ]),
+          ])),
         ],
       ),
     );
@@ -5107,6 +5546,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     magnet: _magnet,
                                     snapTargets: snap,
                                     lens: _graphLens,
+                                    playhead: ui.playheadFrame,
                                     autoFit: _graphAutoFit,
                                     onAutoFitOff: () =>
                                         setState(() => _graphAutoFit = false),
@@ -5123,6 +5563,39 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     },
                                     onChanged: ui.model.refresh,
                                     onWheelTime: (e, x) => _wheel(e, x, axis),
+                                    scope: _graphScope,
+                                    onLens: (lens) => setState(() {
+                                      _graphLens = lens;
+                                      _publishEasingClaim();
+                                    }),
+                                    onScope: (scope) =>
+                                        setState(() => _graphScope = scope),
+                                    onToggleAutoFit: () => setState(
+                                        () => _graphAutoFit = !_graphAutoFit),
+                                    onToggleMagnet: () =>
+                                        setState(() => _magnet = !_magnet),
+                                    onToggleBreakHandles: () => setState(() =>
+                                        _graphBreakHandles =
+                                            !_graphBreakHandles),
+                                    onFrame: _fitGraph,
+                                    onFrameAll: () =>
+                                        _fitGraph(everything: true),
+                                    onCopyKeys: _copySelectedKeys,
+                                    onPasteKeys: _pasteKeysIntoSelection,
+                                    onOpenEase: _openEasePopover,
+                                    onEnableRetime: shown.isEmpty &&
+                                            _retiming &&
+                                            retimeTargets(ui).isNotEmpty
+                                        ? () => setRetime(context,
+                                            retimeTargets(ui), true)
+                                        : null,
+                                    // A layer in hand that can't take one has
+                                    // nothing to pick and nothing to offer.
+                                    emptyHint: !_retiming
+                                        ? null
+                                        : ui.selectedLayerIds.isEmpty
+                                            ? l10n.retimePickLayer
+                                            : '',
                                   ),
                                 ],
                               ),
@@ -5154,6 +5627,29 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 handPanLayer(ui.tools, t,
                     (d) => _graphPane.currentState?.panBy(d),
                     top: t.density.ruler),
+                // Which graph is drawn: Value, Speed or Acceleration, in the
+                // graph's top right corner — under the Layers / Graph switch
+                // and beside the value gutter, over the view and not the
+                // scrolling canvas.
+                // Under about 560 px of plot the pill would cover the keys,
+                // so it folds to one word.
+                Positioned.fill(
+                  top: t.density.ruler + 4,
+                  right: graphGutterWidth + 6,
+                  child: LayoutBuilder(
+                    builder: (context, box) => Align(
+                      alignment: Alignment.topRight,
+                      child: GraphLensSwitch(
+                        compact: box.maxWidth < 560,
+                        lens: _graphLens,
+                        onLens: (lens) => setState(() {
+                          _graphLens = lens;
+                          _publishEasingClaim();
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
                 ],
                 ),
               ),
@@ -5271,7 +5767,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       hScroll: _hLane,
                       onClipPreview: (entry, clip, keys) =>
                           comp.renderFrameWithClipRetime(
-                        frame: BigInt.from(ui.playheadFrame.value),
+                        frame: ui.playheadFrame.value,
                         scale: 1.0,
                         layer: entry.layer,
                         clip: clip.id,
@@ -5310,6 +5806,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
                       onSelect: (l) => _selectLayer(ui, l, among: layers),
                       onChanged: ui.model.refresh,
+                      foldRows: _foldRows,
                       cacheRevision: _cacheRevision!,
                       dragPreview: _barDrag,
                       bounds: _barBounds,

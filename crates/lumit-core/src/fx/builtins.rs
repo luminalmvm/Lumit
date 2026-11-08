@@ -63,6 +63,11 @@ pub enum MapPlacement {
 /// How `e` places the picture it reads through its Layer row `row`.
 #[must_use]
 pub fn map_placement(e: &EffectInstance, row: &str) -> MapPlacement {
+    // Each Clone to points copy is its layer as placed in the comp: the
+    // layer's own Position, Scale and Rotation come with it.
+    if e.effect.match_name == "clone_to_points" && row.starts_with("clone_layer") {
+        return MapPlacement::AsPlaced;
+    }
     match e.param(&format!("{row}_placement")) {
         Some(EffectValue::Choice(0)) => MapPlacement::AsPlaced,
         Some(EffectValue::Choice(2)) => MapPlacement::Centre,
@@ -92,20 +97,19 @@ pub fn schema(match_name: &str) -> Option<&'static EffectSchema> {
 /// lookup**.
 ///
 /// The catalogue is asked first, then the layer styles
-/// ([`STYLE_DEFS`](super::styles::STYLE_DEFS)). The two are separate lists on purpose:
-/// the catalogue is what the Add-effect menu, the command palette and the preset
-/// browser walk, and offering "Drop shadow (style)" there beside the Drop shadow
-/// effect would be the wrong answer to every search for a shadow. But a style
-/// resolves, backfills, greys a row and reads its parameters through exactly the
-/// machinery an effect does, and every one of those places wants "the definition
-/// answering to this name" — so they ask here rather than picking a list.
+/// ([`STYLE_DEFS`](super::styles::STYLE_DEFS)), then a Model layer's rows. They
+/// are separate lists on purpose: the catalogue is what the Add-effect menu, the
+/// command palette and the preset browser walk, and none of those should offer a
+/// style or a material as an effect. But both are read through the machinery an
+/// effect is, and every one of those places asks here rather than picking a list.
 ///
-/// `None` for a name this build does not know, which stays an inert placeholder
-/// rendering as identity.
+/// `None` for a name this build doesn't know: an inert placeholder, as identity.
 pub fn def(match_name: &str) -> Option<&'static dyn super::registry::EffectDef> {
     super::catalogue::BUILTIN_DEFS
         .get(match_name)
         .or_else(|| super::styles::STYLE_DEFS.get(match_name))
+        .or_else(|| crate::model_material::MATERIAL_DEFS.get(match_name))
+        .or_else(|| crate::model_part::PART_DEFS.get(match_name))
 }
 
 /// What every OFX plugin's `match_name` begins with — the host mints
@@ -288,8 +292,8 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // 540 is the middle of a 1080p comp and the top-left quarter of a
             // 4K one, and a fresh radial blur must spin about the middle of
             // whatever frame it landed on.
-            ("radial_blur" | "sprite_flare", "centre_x") => w * 0.5,
-            ("radial_blur" | "sprite_flare", "centre_y") => h * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_x") | ("jolt", "origin_x") => w * 0.5,
+            ("radial_blur" | "sprite_flare", "centre_y") | ("jolt", "origin_y") => h * 0.5,
             // Card wipe's Transition width is a distance across the frame,
             // and its declared half-a-frame default is only *half a frame* on
             // the comp it landed on. The default Flip order runs left to
@@ -455,6 +459,11 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
             e.params
                 .retain(|p| p.id != "centre_x" && p.id != "centre_y");
         }
+        // Clone to points' Layer transform switch is gone: a copy always
+        // carries its layer's transform.
+        if e.effect.match_name == "clone_to_points" {
+            e.params.retain(|p| p.id != "layer_transform");
+        }
         for p in s.params {
             let Some(mut value) = default_param_value(&p.kind) else {
                 continue; // a button has nothing to backfill
@@ -479,7 +488,7 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
 /// (see [`crate::anim::CubicSpan::from_ae`]), so a value axis multiplied by `k`
 /// is exactly the same curve scaled — provided the speeds go with it. Times and
 /// influences are untouched: they live on the other axis.
-fn scale_property(p: &mut Property, k: f64) {
+pub(crate) fn scale_property(p: &mut Property, k: f64) {
     use crate::anim::{Animation, SideInterp};
     let scale_side = |s: &mut SideInterp| {
         if let SideInterp::Bezier { speed, .. } = s {
@@ -610,9 +619,9 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
 
 /// Bring effects from outside, a file, a preset or the clipboard, up to this
 /// build's schemas: [`backfill_builtin_params`], [`migrate_percent_to_px`]
-/// against the `comp` size, and an old Sprite flare carried over about the
-/// middle of the `own` picture it runs on. `wired` says whether an instance's
-/// row has a wire into it.
+/// against the `comp` size, an old Sprite flare carried over about the
+/// middle of the `own` picture it runs on, and an old Shake's rows. `wired`
+/// says whether an instance's row has a wire into it.
 pub fn migrate_in(
     effects: &mut [EffectInstance],
     comp: (f64, f64),
@@ -622,12 +631,16 @@ pub fn migrate_in(
     backfill_builtin_params(effects);
     migrate_percent_to_px(effects, comp.0, comp.1);
     for e in effects.iter_mut() {
-        if e.effect.namespace == EffectNamespace::Builtin
-            && e.effect.match_name == "sprite_flare"
-            && e.effect.version < 2
-        {
-            let id = e.id;
-            crate::fx::effects::sprite_flare::migrate_v1(e, own.0, own.1, &|row| wired(id, row));
+        if e.effect.namespace != EffectNamespace::Builtin {
+            continue;
+        }
+        let id = e.id;
+        match e.effect.match_name.as_str() {
+            "sprite_flare" if e.effect.version < 2 => {
+                crate::fx::effects::sprite_flare::migrate_v1(e, own.0, own.1, &|row| wired(id, row))
+            }
+            "shake" => crate::fx::effects::shake::migrate(e, &|row| wired(id, row)),
+            _ => {}
         }
     }
 }
@@ -916,42 +929,6 @@ pub fn param_visible(inst: &EffectInstance, id: &str) -> bool {
     })
 }
 
-pub fn param_enabled(inst: &EffectInstance, id: &str) -> bool {
-    let Some(s) = schema(&inst.effect.match_name) else {
-        // No built-in schema (an OFX or placeholder instance) means no rules,
-        // so nothing is greyed.
-        return true;
-    };
-    s.enabled_when
-        .iter()
-        .filter(|rule| rule.param == id)
-        .all(|rule| {
-            // A rule naming a parameter the instance does not carry cannot be
-            // judged, so it does not grey anything: an older instance that
-            // predates the deciding parameter stays fully editable rather than
-            // locking a row it can never unlock (the `fill_missing_params`
-            // trap, from the other side).
-            let Some(value) = inst.param(rule.on) else {
-                return true;
-            };
-            match (rule.cond, value) {
-                (EnabledCond::BoolIs(want), EffectValue::Bool(got)) => *got == want,
-                (EnabledCond::ChoiceIs(want), EffectValue::Choice(got)) => *got == want,
-                (EnabledCond::ChoiceIsNot(no), EffectValue::Choice(got)) => *got != no,
-                (EnabledCond::LayerSet, EffectValue::Layer(layer)) => layer.is_some(),
-                (EnabledCond::LayerUnset, EffectValue::Layer(layer)) => layer.is_none(),
-                (EnabledCond::Nought, EffectValue::Float(p)) => {
-                    matches!(p.animation, crate::anim::Animation::Static(v) if v == 0.0)
-                }
-                // A rule pointed at the wrong kind of parameter is a schema
-                // mistake, not a reason to grey a row the owner can then never
-                // reach. `every_enablement_rule_names_a_parameter_of_its_kind`
-                // fails the build for it instead.
-                _ => true,
-            }
-        })
-}
-
 /// The stem of the one kind of pair a fresh instance starts with chained: a
 /// `scale_x` / `scale_y`, which is a size rather than a place.
 const SCALE_PAIR: &str = "scale";
@@ -986,9 +963,12 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
         // fresh **scale** starts chained, as the layer's own Scale does,
         // because a size dragged one axis at a time squashes the picture and
         // that is the rarer thing to want.
+        // Unless a plain `scale` sits beside them: then the pair is there to
+        // stretch one axis, and the uniform size has a row of its own.
         linked_pairs: s
             .pairs()
             .filter(|pair| pair.stem == SCALE_PAIR)
+            .filter(|_| !s.params.iter().any(|p| p.id == SCALE_PAIR))
             .map(|pair| pair.stem.to_owned())
             .collect(),
         // A fresh audio plugin has no memory of itself yet; it is the plugin's

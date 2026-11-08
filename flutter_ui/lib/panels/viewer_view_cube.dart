@@ -4,14 +4,18 @@
 // between perspective and orthographic, and the one that draws the view as
 // lines only.
 
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/viewer_view.dart' show ViewerView;
 import '../widgets/controls.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_camera.dart' show CameraPose;
 import 'viewer_gizmo_3d.dart' show gizmoAxisColours;
+import 'viewer_menus.dart';
 
 /// How far in from the viewport's top right corner the axes sit.
 const double viewCubeInset = 26;
@@ -31,6 +35,74 @@ const List<ViewerView> _faces = [
   ViewerView.back,
   ViewerView.front,
 ];
+
+/// How far in from the view's top left corner its look is named.
+const double viewLookInset = 8;
+
+/// Which way a view looks when it isn't through the comp's camera, and which
+/// look it shows models in when that isn't what exports: empty otherwise. The
+/// words change at once, as a shortcut can change them. Bright for a moment
+/// after they do, so the eye finds them, then quiet over the picture.
+class ViewLookTag extends StatefulWidget {
+  final String look;
+
+  const ViewLookTag({super.key, required this.look});
+
+  @override
+  State<ViewLookTag> createState() => _ViewLookTagState();
+}
+
+class _ViewLookTagState extends State<ViewLookTag> {
+  static const _bright = Duration(milliseconds: 900);
+  bool _changed = false;
+  Timer? _settle;
+
+  @override
+  void didUpdateWidget(ViewLookTag old) {
+    super.didUpdateWidget(old);
+    if (old.look == widget.look) return;
+    _changed = true;
+    _settle?.cancel();
+    _settle = Timer(_bright, () {
+      if (mounted) setState(() => _changed = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.look.isEmpty) return const SizedBox.shrink();
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: t.surface0.withValues(alpha: 0.75),
+          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: AnimatedOpacity(
+            key: const ValueKey('viewer-look-tag'),
+            // At once on the way up, and slower on the way down.
+            duration: _changed ? Duration.zero : scope.motion.hoverOut.duration,
+            curve: scope.motion.hoverOut.curve,
+            opacity: _changed ? 1 : 0.7,
+            child: Text(
+              widget.look,
+              style: t.caption.copyWith(color: t.textPrimary),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class ViewerViewCube extends StatefulWidget {
   /// The view's rotation, degrees, as its pose holds it.
@@ -125,6 +197,27 @@ class _ViewerViewCubeState extends State<ViewerViewCube> {
               final at = _endAt(d.localPosition);
               if (at != null) widget.onSnap(_faces[at]);
             },
+            onSecondaryTapUp: (d) => showMenuAt<void>(
+              context: context,
+              position: d.globalPosition,
+              rows: (closeWith) {
+                void close() => closeWith(null);
+                return [
+                  for (final face in _faces)
+                    viewerRow(face.title, () => widget.onSnap(face), close,
+                        id: 'viewport-axes-${face.name}'),
+                  const MenuDivider(),
+                  viewerRow(l10n.viewportPersp,
+                      widget.ortho ? widget.onOrtho : null, close,
+                      id: 'viewport-axes-persp', ticked: !widget.ortho),
+                  viewerRow(l10n.viewportOrtho,
+                      widget.ortho ? null : widget.onOrtho, close,
+                      id: 'viewport-axes-ortho', ticked: widget.ortho),
+                  viewerRow(l10n.menuShowWireframe, widget.onWireframe, close,
+                      id: 'viewport-axes-wire', ticked: widget.wireframe),
+                ];
+              },
+            ),
             onPanStart: (_) => widget.onOrbitStart(),
             onPanUpdate: (d) => widget.onOrbit(d.delta),
             onPanEnd: (_) => widget.onOrbitEnd(),

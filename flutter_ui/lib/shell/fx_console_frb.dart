@@ -1,13 +1,12 @@
 // The Ctrl+Space console: one search popover floating where the pointer is.
 //
-// **In plain terms.** One box, four bands, top to bottom: a search row (the
+// **In plain terms.** One box, three bands, top to bottom: a search row (the
 // magnifier, the query, and a kicker naming the key that opened it), a strip
-// of category kickers to browse by, the matching rows — grouped under small
-// inline kicker headings, the Settings-nav grammar, each row its name and a
-// small preview swatch — and one quiet sentence saying
-// what choosing a row will do. The radial ring the console used to raise, and
-// the hush it drew over the work, are gone by the owner's ruling: the list is
-// the offer, open from the first frame, and typing narrows it.
+// of category kickers to browse by, and the matching rows, grouped under small
+// inline kicker headings, the Settings-nav grammar. The radial ring the
+// console used to raise, and the hush it drew over the work, are gone by the
+// owner's ruling: the list is the offer, open from the first frame, and typing
+// narrows it.
 //
 // The console opens **where the mouse is**, so the eye never travels: type
 // "gau", press Enter, and Gaussian blur is on every selected layer. The search
@@ -16,8 +15,8 @@
 // can be compared without setting up an export.
 //
 // The graph opens this same surface — Ctrl+Space with the canvas focused, or a
-// wire let go over empty ground: what a caller contributes is the list, the
-// kicker naming its key, and the foot sentence.
+// wire let go over empty ground: what a caller contributes is the list and
+// the kicker naming its key.
 //
 // **The console applies things; it does not know how.** Every entry carries a
 // callback the caller supplied, exactly as the command palette does (docs/07
@@ -34,8 +33,11 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
+import '../state/external_links.dart' show openExternalLink;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
 
 /// Where the pointer last was, in global coordinates — recorded by the shell
@@ -64,11 +66,34 @@ class FxConsoleEntry {
   final String? group;
   final VoidCallback run;
 
+  /// Whether the row is starred, and the star, where the row can have one.
+  final bool? favourite;
+  final VoidCallback? onFavourite;
+
+  /// The row's page in the manual, where it has one.
+  final String? manual;
+
+  /// A saved preset's library rows, where the row is one: Rename and Delete
+  /// only on the user's own.
+  final VoidCallback? onRename;
+  final VoidCallback? onReveal;
+  final VoidCallback? onDelete;
+
+  /// Its Move to row, built by the caller, which knows the library's groups.
+  final Widget Function(VoidCallback closeMenu)? moveTo;
+
   const FxConsoleEntry({
     required this.label,
     required this.kind,
     required this.run,
     this.group,
+    this.favourite,
+    this.onFavourite,
+    this.manual,
+    this.onRename,
+    this.onReveal,
+    this.onDelete,
+    this.moveTo,
   });
 }
 
@@ -232,6 +257,7 @@ const double _stripHeight = 22;
 const double _rowHeight = 26;
 const double _headingHeight = 20;
 const double _margin = 8;
+const double _listMax = 260;
 
 class _FxConsoleState extends State<_FxConsole> {
   final TextEditingController _query = TextEditingController();
@@ -420,10 +446,8 @@ class _FxConsoleState extends State<_FxConsole> {
           final anchor =
               widget.anchor ?? Offset(box.maxWidth / 2, box.maxHeight / 2);
           // The search row lands on the pointer, pulled in so the whole
-          // popover fits; the list is capped to the room below it. 56 is the
-          // least list the clamp guarantees room for — two rows and the
-          // vertical padding — so a pointer at the very bottom still shows a
-          // usable console rather than a bar with nothing under it.
+          // popover fits, its longest list included: a pointer near the
+          // bottom lifts the console rather than cutting its list short.
           final left = _fit(
               anchor.dx - width / 2, _margin, box.maxWidth - width - _margin);
           final top = _fit(
@@ -432,7 +456,7 @@ class _FxConsoleState extends State<_FxConsole> {
               box.maxHeight -
                   _searchRowHeight -
                   _stripHeight -
-                  56 -
+                  _listMax -
                   _margin);
           final room = box.maxHeight -
               top -
@@ -581,18 +605,21 @@ class _FxConsoleState extends State<_FxConsole> {
             thumbVisibility: true,
             thickness: 2,
             crossAxisMargin: 0,
-            child: SingleChildScrollView(
-              controller: _strip,
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _categoryKicker(t,
-                      label: l10n.fxConsoleAll, category: null),
-                  for (final group in _groups) ...[
-                    const SizedBox(width: 10),
-                    _categoryKicker(t, label: group, category: group),
+            // A word cut at the strip's end fades rather than stopping.
+            child: EdgeFade(
+              child: SingleChildScrollView(
+                controller: _strip,
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _categoryKicker(t,
+                        label: l10n.fxConsoleAll, category: null),
+                    for (final group in _groups) ...[
+                      const SizedBox(width: 10),
+                      _categoryKicker(t, label: group, category: group),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -623,7 +650,7 @@ class _FxConsoleState extends State<_FxConsole> {
     if (matches.isEmpty) {
       return Container(
         height: _rowHeight,
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Text(l10n.noEffectsMatch,
             style: t.small.copyWith(color: t.textMuted)),
@@ -641,25 +668,109 @@ class _FxConsoleState extends State<_FxConsole> {
       final entry = matches[i];
       final heading = _headingOf(entry);
       if (heading != null && heading != last) {
-        rows.add(Container(
-          key: ValueKey<String>('fx-console-head-$heading'),
-          height: _headingHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.centerLeft,
-          child: Text(t.kickerCase(heading), style: _kickerStyle(t)),
+        rows.add(GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // The strip's choice, from the heading: this group alone, or all.
+          onSecondaryTapUp: (d) => showMenuAt<void>(
+            context: context,
+            position: d.globalPosition,
+            rows: (close) => [
+              for (final (word, group) in [
+                (l10n.fxConsoleAll, null),
+                (heading, heading),
+              ])
+                MenuRow(
+                  onPressed: () {
+                    close(null);
+                    setState(() {
+                      _category = group;
+                      _highlighted = 0;
+                    });
+                  },
+                  child: MenuLabel(word, ticked: _category == group),
+                ),
+            ],
+          ),
+          child: Container(
+            key: ValueKey<String>('fx-console-head-$heading'),
+            height: _headingHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(t.kickerCase(heading), style: _kickerStyle(t)),
+          ),
         ));
       }
       last = heading;
       rows.add(_entryRow(t, entry, hot: i == _highlighted));
     }
     return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
+      constraints: BoxConstraints(maxHeight: room.clamp(48.0, _listMax)),
       // ponytail: children not builder — a console list is at most a few
       // hundred rows; switch back to a builder if a plugin catalogue makes
       // the open-frame build measurable.
       child: ListView(shrinkWrap: true, children: rows),
     );
   }
+
+  void _entryMenu(FxConsoleEntry entry, Offset at) => showMenuAt<void>(
+        context: context,
+        position: at,
+        rows: (close) => [
+          MenuRow(
+            onPressed: () {
+              close(null);
+              widget.onClose();
+              entry.run();
+            },
+            child: MenuLabel(l10n.effectAddToSelected, ticked: false),
+          ),
+          if (entry.onFavourite case final star?)
+            MenuRow(
+              onPressed: () {
+                close(null);
+                star();
+              },
+              child: MenuLabel(l10n.tipFavourite,
+                  ticked: entry.favourite ?? false),
+            ),
+          if (entry.manual case final page?)
+            MenuRow(
+              onPressed: () {
+                close(null);
+                openExternalLink(page);
+              },
+              child: MenuLabel(l10n.effectManualPage, ticked: false),
+            ),
+          if (entry.onReveal != null) const MenuDivider(),
+          if (entry.onRename case final rename?)
+            _libraryRow(close, l10n.renameEllipsis, rename),
+          if (entry.onReveal case final reveal?)
+            _libraryRow(close, l10n.projectShowInFolder, reveal),
+          // A pick there closes the console too, as its path has moved.
+          if (entry.moveTo case final moveTo?)
+            moveTo(() {
+              close(null);
+              widget.onClose();
+            }),
+          if (entry.onDelete case final delete?) ...[
+            const MenuDivider(),
+            _libraryRow(close, l10n.delete, delete),
+          ],
+        ],
+      );
+
+  /// A saved preset's library row. The console goes first, as the list it
+  /// shows would be out of date.
+  Widget _libraryRow(
+          void Function(void) close, String label, VoidCallback act) =>
+      MenuRow(
+        onPressed: () {
+          close(null);
+          widget.onClose();
+          act();
+        },
+        child: MenuLabel(label, ticked: false),
+      );
 
   Widget _entryRow(LumitTheme t, FxConsoleEntry entry, {required bool hot}) =>
       HoverFill(
@@ -672,6 +783,8 @@ class _FxConsoleState extends State<_FxConsole> {
             widget.onClose();
             entry.run();
           },
+          // The Effects & presets row's menu, with what this row has of it.
+          onSecondaryTapUp: (d) => _entryMenu(entry, d.globalPosition),
           child: Container(
             height: _rowHeight,
             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -682,24 +795,6 @@ class _FxConsoleState extends State<_FxConsole> {
                   child: Text(entry.label,
                       overflow: TextOverflow.ellipsis,
                       style: hot ? t.bodyPrimary : t.body),
-                ),
-                const SizedBox(width: 8),
-                // The preview swatch the board draws on every row. There
-                // is no per-effect render behind it yet, so it is the
-                // surface's own gradient, the slot the picture will take.
-                Container(
-                  width: 34,
-                  height: 19,
-                  decoration: BoxDecoration(
-                    borderRadius:
-                        BorderRadius.circular(t.tokens.controlRadius),
-                    border: Border.all(color: t.hairline, width: 1),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [t.surface2, t.surface4],
-                    ),
-                  ),
                 ),
               ],
             ),

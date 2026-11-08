@@ -7,6 +7,7 @@
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -33,6 +34,8 @@ import 'frb_test_support.dart';
 
 void main() {
   setUpAll(initEngineForTests);
+  // The rows these tests reach live inside the Export window's folds.
+  setUp(() => exportOpenSections.addAll(ExportSection.values));
 
   group('Command palette ranking', () {
     test('a subsequence matches, and an absent letter does not', () {
@@ -42,6 +45,10 @@ void main() {
       expect(paletteScore('zzz', 'New composition'), isNull);
       expect(paletteScore('NC', 'new composition'), isNotNull,
           reason: 'matching ignores case both ways');
+      expect(paletteScore('reset', 'Effect presets'), isNull,
+          reason: 'a match starts a word');
+      expect(paletteScore('precompose', 'Pre-compose…'), isNotNull,
+          reason: 'hyphens are left out of the comparison');
     });
   });
 
@@ -628,7 +635,7 @@ void main() {
           reason: 'idle says nothing');
 
       state = BridgeExportState.running(
-          frame: BigInt.from(30), total: BigInt.from(120), encoder: 'x264');
+          frame: 30, total: 120, encoder: 'x264');
       statusLineExportStarted.value++;
       await tester.pump(const Duration(milliseconds: 600));
       expect(find.textContaining('frame 30 of 120'), findsOneWidget);
@@ -660,7 +667,9 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.text('Not saved yet'), findsOneWidget,
+      const dot = ValueKey('status-unsaved-dot');
+      expect(find.text('Untitled'), findsOneWidget);
+      expect(find.byKey(dot), findsNothing,
           reason: 'a fresh untouched project has nothing to lose');
 
       // The strip redraws on document notifications rather than a poll, so
@@ -668,7 +677,7 @@ void main() {
       p.state.project!.newComposition(name: 'Scene');
       p.state.notifyDocumentChanged();
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Unsaved changes'), findsOneWidget);
+      expect(find.byKey(dot), findsOneWidget);
 
       final dir = Directory.systemTemp.createTempSync('lumit-status');
       addTearDown(() => dir.deleteSync(recursive: true));
@@ -679,7 +688,9 @@ void main() {
       // As the application's own save path does once the write lands.
       p.state.notifyDocumentChanged();
       await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Saved'), findsOneWidget,
+      expect(find.text('probe'), findsOneWidget,
+          reason: 'the saved file names the project');
+      expect(find.byKey(dot), findsNothing,
           reason: 'the save stamped the revision clean');
     });
 
@@ -867,16 +878,20 @@ void main() {
 
     /// A preset is the whole settings payload under a name: saving one lists
     /// it, applying it fills the fields back in, and deleting it takes it off
-    /// the list. The built-ins are read-only and say so.
+    /// the list. The built-ins are read-only, and Edit greys on them.
     testWidgets('a preset saves, applies and is forgotten again',
         (tester) async {
       await open(tester);
 
-      // A built-in refuses to be edited rather than opening a field that
-      // cannot be used.
-      await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
+      await tester.tap(find.byKey(const ValueKey('export-preset-more')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('built-in'), findsOneWidget);
+      expect(
+          tester
+              .widget<MenuRow>(find.byKey(const ValueKey('export-preset-edit')))
+              .enabled,
+          isFalse);
+      await tester.tapAt(const Offset(1, 1));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
       await tester.pumpAndSettle();
@@ -899,6 +914,8 @@ void main() {
           reason: 'the preset carried the format it was saved with');
 
       // And it can be taken off the list again.
+      await tester.tap(find.byKey(const ValueKey('export-preset-more')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-delete')));
@@ -938,6 +955,8 @@ void main() {
       await pick('export-audio-sample-rate', '44.100 kHz');
       await pick('export-audio-layout', 'Mono');
 
+      await tester.ensureVisible(find.byKey(const ValueKey('export-preset-save-as')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-save-as')));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -1040,10 +1059,17 @@ void main() {
       expect(queued.single.compName, 'Scene',
           reason: "the row carries the comp's name as it was at queue time");
 
-      // And the row can be taken off again from the window.
+      // And the row can be taken off again from the window. The mark comes
+      // up with the pointer, so the pointer goes there first.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(
+          location: tester.getCenter(find
+              .byKey(ValueKey<String>('export-queue-item-${queued.single.id}'))));
+      await tester.pumpAndSettle();
       await tester.tap(find
           .byKey(ValueKey<String>('export-queue-drop-${queued.single.id}')));
       await tester.pumpAndSettle();
+      await mouse.removePointer();
       expect(exportQueueList().where((i) => i.path == target), isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));

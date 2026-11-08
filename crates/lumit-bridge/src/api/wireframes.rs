@@ -525,11 +525,18 @@ impl CompositionReference {
                     current_depth: 0,
                     inputs: None,
                 });
-                lumit_render::build::parent_world_placement(comp, layer, t, context)
+                lumit_render::placement::parent_world_placement(comp, layer, t, context)
                     .map(|m| m.map(|c| c.map(f64::from)))
             };
             // Orientation in the rotations, and the z of anchor and scale.
-            let placed = tr.placement_at(lt, !layer.is_3d(), &|p| p.value_at(lt));
+            let mut placed =
+                lumit_core::orient::placed_at(layer, lt, !layer.is_3d(), &|p| p.value_at(lt));
+            if tr.orient == lumit_core::orient::Orient::TowardsCamera {
+                let context = lumit_core::model::comp_context(&doc, comp, t);
+                let read = lumit_core::model::context_reader(&context, t);
+                let solves = lumit_render::track::solves_for(&doc);
+                lumit_core::orient::face_camera(comp, layer, t, &read, solves, &mut placed);
+            }
             let place = |anchor: P2, scale: P2| -> Place {
                 let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
                 let own = lumit_gpu::composite::place_matrix_3d(
@@ -544,6 +551,10 @@ impl CompositionReference {
                     None => own,
                 }
             };
+            let solid = (lumit_core::extrude::takes_geometry(layer)
+                && lumit_core::extrude::draws_mesh(layer))
+            .then(|| lumit_render::extrude::layer_box(layer.id))
+            .flatten();
             match &layer.kind {
                 K::Camera { options, .. } => {
                     let Some(cam) = lumit_core::track::camera_pose_of(
@@ -659,6 +670,8 @@ impl CompositionReference {
                         .unwrap_or(w * 0.2);
                     let mut segs = Vec::new();
                     let kind = match light.kind {
+                        // An environment is nowhere, so it has nothing to draw.
+                        L::Environment => continue,
                         L::Point | L::Ambient => BridgeWireLightKind::Point,
                         L::Parallel => {
                             // Every ray runs the same way, so one line shows it.
@@ -712,6 +725,43 @@ impl CompositionReference {
                     };
                     drops.push(at);
                     outlines.push(Outline::Light(layer.id, kind, at, segs));
+                }
+                // A Model layer, a 3D shape, or a Text or Shape layer once
+                // it's a solid.
+                K::Model { .. } | K::Mesh { .. } | K::Text { .. } | K::Shape { .. }
+                    if solid.is_some() || matches!(layer.kind, K::Model { .. }) =>
+                {
+                    let size = (w as f32, h as f32);
+                    let c = match &layer.kind {
+                        K::Model { item, settings } => {
+                            let pose = lumit_render::model_motion::layer_pose(&doc, comp, layer, t);
+                            lumit_render::model::layer_box(
+                                &doc,
+                                *item,
+                                settings,
+                                size,
+                                pose.as_ref(),
+                            )
+                        }
+                        _ => solid,
+                    };
+                    let Some(c) = c else {
+                        continue;
+                    };
+                    let anchor = (tr.anchor_x.value_at(lt), tr.anchor_y.value_at(lt));
+                    let m = place(anchor, (tr.scale_x.value_at(lt), tr.scale_y.value_at(lt)));
+                    let c = c.map(|p| apply(&m, p.map(f64::from).into()));
+                    reach_to.extend(c);
+                    if only.is_some() {
+                        continue;
+                    }
+                    // Each edge joins two corners one bit of x, y or z apart.
+                    let segs = (0..8)
+                        .flat_map(|i| [1, 2, 4].map(|b| (i, i | b)))
+                        .filter(|(i, j)| i != j)
+                        .map(|(i, j)| (c[i], c[j]))
+                        .collect();
+                    outlines.push(Outline::Layer(layer.id, segs));
                 }
                 _ => {
                     if !layer.switches.three_d || layer.audio_only {

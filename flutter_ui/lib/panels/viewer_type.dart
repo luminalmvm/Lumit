@@ -55,6 +55,7 @@ import '../state/layer_bounds.dart' show measuredText;
 import '../state/text_documents.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'viewer_gizmo.dart';
 import 'viewer_shape_layer.dart' show ShapeSpace;
 import 'viewer_tool_cursor.dart';
@@ -192,8 +193,9 @@ TextSelection wordAround(String text, int at) {
 /// A text layer the Selection tool's double-click asked to have opened for
 /// typing: the view it was clicked in, the layer, and where on it. The gizmo
 /// sets this and arms the Type tool; that view's Type layer reads it as the
-/// tool arrives, and the gizmo clears it when the frame is done.
-({int? view, LayerReference layer, Offset at})? viewerTypeEditRequest;
+/// tool arrives, and the gizmo clears it when the frame is done. No view is
+/// whichever view takes it, and no place picks the words whole.
+({int? view, LayerReference layer, Offset? at})? viewerTypeEditRequest;
 
 /// The Type tool over the picture.
 class ViewerTypeLayer extends StatefulWidget {
@@ -455,13 +457,19 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _finish();
-        if (asked == null || !widget.active || asked.view != widget.viewId) {
+        if (asked == null ||
+            !widget.active ||
+            (asked.view != null && asked.view != widget.viewId)) {
           return;
         }
         final id = asked.layer.internallayerId;
         for (final box in widget.boxes) {
           if (box.id != id) continue;
           _begin(asked.layer, created: false, box: box, at: asked.at);
+          if (asked.at == null) {
+            _controller.selection = TextSelection(
+                baseOffset: 0, extentOffset: _controller.text.length);
+          }
           break;
         }
       });
@@ -966,7 +974,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         final document = _typedDocument(_controller.text);
         if (document == null) return;
         widget.comp.renderFrameWithTextPreview(
-          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          frame: widget.uiState.playheadFrame.value,
           scale: widget.uiState.viewerScale,
           layer: layer,
           document: document,
@@ -985,6 +993,8 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final text = _controller.text;
     // Read before the edit is closed, since it is the open edit's document.
     final document = _typedDocument(text);
+    // Opened and left as it was, which is no change to undo.
+    final unchanged = !_created && text == _held?.text;
     _throttle.cancel();
     _clearLive();
     setState(() {
@@ -1009,7 +1019,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         }
         return;
       }
-      if (document != null) _write(layer, document);
+      if (document != null && !unchanged) _write(layer, document);
       widget.onChanged();
     } catch (_) {
       // The layer was deleted while it was being typed into.
@@ -1023,19 +1033,29 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   /// committing them separately made the first `Ctrl+Z` undo a pivot the user
   /// had never moved, leaving the words exactly where they were and the undo
   /// looking broken.
+  ///
+  /// A layer still wearing the name it was made with takes the first line as
+  /// its name in the same step, so a comp of titles doesn't read Text, Text.
   void _write(LayerReference layer, BridgeTextDocument document) {
-    if (!_created) {
-      layer.setText(document: document);
-      return;
-    }
-    final placed = _recentredAnchor(layer, document);
-    layer.setTextPlaced(
-      document: document,
-      anchorX: placed.anchor.dx,
-      anchorY: placed.anchor.dy,
-      positionX: placed.position.dx,
-      positionY: placed.position.dy,
-    );
+    final words = document.text.trim().split(RegExp(r'[\r\n]')).first.trim();
+    asOneUndoStep(widget.state.project, () {
+      if (!_created) {
+        layer.setText(document: document);
+      } else {
+        final placed = _recentredAnchor(layer, document);
+        layer.setTextPlaced(
+          document: document,
+          anchorX: placed.anchor.dx,
+          anchorY: placed.anchor.dy,
+          positionX: placed.position.dx,
+          positionY: placed.position.dy,
+        );
+      }
+      // The engine's own name for a new text layer.
+      if (words.isNotEmpty && layer.getName() == 'Text') {
+        layer.rename(name: words);
+      }
+    });
   }
 
   /// The open edit's document saying [text]. Everything else is carried

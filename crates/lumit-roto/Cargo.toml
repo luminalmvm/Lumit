@@ -17,3 +17,7 @@ uuid = { version = "1", features = ["v7", "serde"] }
 
 [lints]
 workspace = true
+
+# The browser build: randomness comes from the page's crypto API.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1", features = ["js"] }

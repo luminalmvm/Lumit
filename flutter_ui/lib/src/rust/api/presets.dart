@@ -7,7 +7,7 @@ import '../api.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `folder_of`, `folders_under`, `group_folder`, `group_of`, `import_ffx_into`, `is_plain_name`, `move_to`, `same_effects`, `write_ffx_as_lumfx`
+// These functions are ignored because they are not marked as `pub`: `folder_of`, `folders_under`, `group_folder`, `group_of`, `import_ffx_into`, `is_plain_name`, `move_to`, `same_effects`, `shipped_dir`, `write_ffx_as_lumfx`
 
 /// Every group in the preset library, with `/` between nested folders, sorted
 /// by name. An empty folder is a group too.

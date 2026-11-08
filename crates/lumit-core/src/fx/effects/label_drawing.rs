@@ -129,6 +129,15 @@ impl<'a> Placed<'a> {
         self.bounds[2] = self.bounds[2].min(whole(right.round()));
         self
     }
+
+    /// The same cut across the other way: only rows `top..bottom` drawn.
+    #[must_use]
+    pub fn clipped_y(mut self, [top, bottom]: [f32; 2]) -> Self {
+        let whole = |v: f32| v.clamp(-1e9, 1e9) as i64;
+        self.bounds[1] = self.bounds[1].max(whole(top.round()));
+        self.bounds[3] = self.bounds[3].min(whole(bottom.round()));
+        self
+    }
 }
 
 impl LabelDrawing {

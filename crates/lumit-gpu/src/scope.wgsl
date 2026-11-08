@@ -19,7 +19,7 @@
 const GRID: u32 = 256u;
 
 struct Params {
-    kind: u32,       // 0 luma, 1 rgb, 2 vectorscope, 3 histogram
+    kind: u32,       // 0 luma, 1 rgb, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram
     grid: u32,       // always GRID; carried so the shader reads no literal size
     n_cols: u32,     // sampled columns = ceil(width / sx)
     n_rows: u32,     // sampled rows    = ceil(height / sy)
@@ -59,6 +59,9 @@ fn channel_bytes(x: u32, y: u32) -> vec3<u32> {
 fn luma8(rgb: vec3<u32>) -> f32 {
     return (0.2126 * f32(rgb.x) + 0.7152 * f32(rgb.y) + 0.0722 * f32(rgb.z)) / 255.0;
 }
+
+// The parade's three cells: each channel gets a third of the columns.
+const THIRD: u32 = GRID / 3u;
 
 // Map a 0..1 value to a grid row: 1.0 (bright) at row 0, 0.0 at the bottom.
 fn value_row(v: f32) -> u32 {
@@ -107,6 +110,17 @@ fn bin(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (px >= 0.0 && px < f32(GRID) && py >= 0.0 && py < f32(GRID)) {
                 atomicAdd(&counts[u32(py) * GRID + u32(px)], 1u);
             }
+        }
+        case 4u: { // parade: each channel's waveform in its own third
+            let col = min((x * THIRD) / p.width, THIRD - 1u);
+            for (var c = 0u; c < 3u; c = c + 1u) {
+                let by = value_row(f32(rgb[c]) / 255.0);
+                atomicAdd(&counts[by * GRID + c * THIRD + col], 1u);
+            }
+        }
+        case 5u: { // luma histogram: one count per brightness
+            let bin_idx = min(u32(floor(luma8(rgb) * 255.0 + 0.5)), GRID - 1u);
+            atomicAdd(&counts[bin_idx], 1u);
         }
         default: { // histogram: per-channel byte counts
             for (var c = 0u; c < 3u; c = c + 1u) {
@@ -187,6 +201,18 @@ fn colourise(@builtin(global_invocation_id) gid: vec3<u32>) {
         case 2u: { // vectorscope
             let f = intensity(counts_ro[cell], peak_v);
             if (f > 0.0) { add_trace(&px, cp.trace, f); }
+        }
+        case 4u: { // parade: the cell says which channel's colour
+            let cols = array<vec4<f32>, 3>(cp.red, cp.green, cp.blue);
+            let c = min(cx / THIRD, 2u);
+            let f = intensity(counts_ro[cell], peak_v);
+            if (f > 0.0) { add_trace(&px, cols[c], f); }
+        }
+        case 5u: { // luma histogram: one filled column per bin
+            let h = u32(floor(intensity(counts_ro[cx], peak_v) * (f32(GRID) - 1.0) + 0.5));
+            if (cy + h >= GRID - 1u) {
+                add_trace(&px, cp.trace, 0.7);
+            }
         }
         default: { // histogram: column height ∝ count, filled bottom-up
             let cols = array<vec4<f32>, 3>(cp.red, cp.green, cp.blue);

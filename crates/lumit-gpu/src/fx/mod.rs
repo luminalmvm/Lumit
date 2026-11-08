@@ -10,30 +10,43 @@
 
 use crate::GpuContext;
 
+pub mod audio_spectrum;
 pub mod blur;
 pub mod colour;
 pub mod common;
 /// The Custom shader's GPU half: validate, compile, cache, dispatch.
 pub mod custom_shader;
+pub mod depth_points;
 pub mod distort;
 pub mod dof;
+pub mod energy_line;
 mod engine;
+pub mod environment;
+/// Film's passes, built on first use.
+pub mod film;
 pub mod generate;
 pub mod grid_lines;
 pub mod ground;
+pub mod jolt;
 pub mod lens_blur;
 mod lens_blur_pipes;
 pub mod lens_dirt;
 pub mod lens_flare;
 pub mod lighting;
 pub mod particulate;
+pub mod particulate_params;
+pub mod particulate_scene;
+pub mod particulate_sim;
 pub mod points_draw;
 pub mod points_field;
+pub mod smoke;
 pub mod split;
 pub mod sprite_flare;
 pub mod stylise;
 pub mod temporal;
+pub mod timewarp;
 pub mod utility;
+pub mod volumetric;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -59,6 +72,13 @@ pub struct FxEngine {
     sharpen_simple: wgpu::ComputePipeline,
     /// Sprite flare, built the first time one is drawn.
     sprite_flare: sprite_flare::LazySpriteFlare,
+    /// Energy line, compiled in the background as the engine starts.
+    energy_line: energy_line::LazyEnergyLine,
+    audio_spectrum: audio_spectrum::LazyAudioSpectrum,
+    /// The mesh pass, built the first time a model is drawn.
+    pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,
+    /// The Environment light's passes, built the first time a comp has one.
+    pub(crate) environment: std::sync::OnceLock<environment::EnvironmentFx>,
     /// Light wrap (docs/08 §3.28): the two passes that fold the
     /// background's blur and the foreground's softened matte into the edge.
     light_wrap_pack: wgpu::ComputePipeline,
@@ -89,7 +109,10 @@ pub struct FxEngine {
     /// The lighting pass (docs/06). Not an effect — the realiser calls
     /// it directly, between a layer's effect stack and its composite. Its own
     /// layout, for the shadow casters it reads.
-    lighting: lighting::LightingFx,
+    pub(crate) lighting: lighting::LightingFx,
+    /// Volumetric light, waited for the first time a comp shows a light in
+    /// the air.
+    haze: volumetric::HazeSlot,
     /// A 3D viewport's ground, drawn over its frame. Not an effect either.
     ground: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
@@ -275,12 +298,18 @@ pub struct FxEngine {
     /// The first kernel to put a camera in front of a pixel, and it *inverts*
     /// the projection rather than drawing it — Lumit's effects gather.
     card_wipe: wgpu::ComputePipeline,
+    /// Luma fade: the picture goes away in order of brightness.
+    luma_fade: wgpu::ComputePipeline,
+    /// sRGB curve: onto the sRGB curve, or back off it.
+    srgb_curve: wgpu::ComputePipeline,
     transform: wgpu::ComputePipeline,
     /// The shake's own motion blur (docs/08 §3.4, T18): averages the
     /// shake resampled at its motion-blur sub-frames. Its own kernel rather
     /// than the Transform kernel because it reads the input at several affines
     /// in one pass; it uses the shared two-input layout all the same.
     shake_mb: wgpu::ComputePipeline,
+    /// Jolt: a hit scaled, slid, split, tinted and lit in one pass.
+    jolt: wgpu::ComputePipeline,
     glow_bright: wgpu::ComputePipeline,
     glow_combine: wgpu::ComputePipeline,
     /// The three passes of a glow's exponential halo, see `fx_glow_exp.wgsl`.
@@ -346,11 +375,16 @@ pub struct FxEngine {
     /// pass — its pipelines, layouts and bake cache live in their own
     /// sub-struct rather than six more fields here.
     lens_flare: lens_flare::LazyFlare,
+    /// What a pass keeps on this device between frames and makes the first
+    /// time: Timewarp's motion measurement. Taken out while in use, so no
+    /// lock is held across a dispatch, and dropped with the engine.
+    kept: std::sync::Mutex<Vec<Box<dyn std::any::Any + Send>>>,
     /// Depth of field pro: its own layouts, pipelines and traced lenses, built
     /// the first time one is drawn.
     lens_blur: lens_blur::LazyLensBlur,
     /// Lens dirt, built the first time one is drawn.
     lens_dirt: lens_dirt::LazyLensDirt,
+    film: film::LazyFilm,
     /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer
     /// rather than a picture. Its four passes and two layouts are built with
@@ -366,6 +400,14 @@ pub struct FxEngine {
     particulate_draw: wgpu::RenderPipeline,
     /// Particle blend's passes, beside the draw they stand in for.
     particulate_blend: particulate::ParticulateBlendPipelines,
+    /// Particles in the 3D scene, built the first time some are.
+    particulate_scene: std::sync::OnceLock<particulate_scene::ScenePipelines>,
+    /// Particles worked out step by step, built the first time some are.
+    particulate_sim: std::sync::OnceLock<particulate_sim::SimPipelines>,
+    /// Smoke and fire, built the first time some are.
+    smoke: std::sync::OnceLock<smoke::SmokePipelines>,
+    /// Depth points, built the first time a shot is drawn as them.
+    depth_points: std::sync::OnceLock<depth_points::Pipeline>,
     /// Points field: the nearest point to every pixel, found by jump
     /// flooding. Its three passes share one layout of their own.
     points_field: points_field::PointsFieldPipelines,
@@ -479,6 +521,25 @@ impl FxEngine {
         // The one flare call that *does* wait for the pipelines: a caller
         // asking for a bake by name has decided a flare is wanted.
         self.lens_flare.get().warm(key, bake)
+    }
+
+    /// Take what a pass keeps here of type `T`, or `None` the first time.
+    /// Hand it back with [`Self::keep`] when done.
+    pub fn take_kept<T: std::any::Any + Send>(&self) -> Option<Box<T>> {
+        let mut kept = self
+            .kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let at = kept.iter().position(|k| k.is::<T>())?;
+        kept.swap_remove(at).downcast().ok()
+    }
+
+    /// Keep `value` here for the next [`Self::take_kept`].
+    pub fn keep<T: std::any::Any + Send>(&self, value: Box<T>) {
+        self.kept
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(value);
     }
 
     /// One compute pass: `src` and `orig` sampled, `dst` written, `params`

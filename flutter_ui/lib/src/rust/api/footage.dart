@@ -5,6 +5,7 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
+import 'blender.dart';
 import 'effect.dart';
 import 'interpret.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -104,7 +105,7 @@ class BridgeMediaInfo {
 
   /// The timecode of the first frame, as a frame number at this rate: the
   /// one the item was given, else the file's own, else nought.
-  final BigInt startFrame;
+  final int startFrame;
 
   /// Whether that timecode is written the drop-frame way.
   final bool startDropFrame;
@@ -213,10 +214,10 @@ sealed class BridgeProxyState with _$BridgeProxyState {
   /// Nothing has run since start-up.
   const factory BridgeProxyState.idle() = BridgeProxyState_Idle;
   const factory BridgeProxyState.running({
-    required BigInt frame,
+    required int frame,
 
     /// Zero until the source's length has been read.
-    required BigInt total,
+    required int total,
   }) = BridgeProxyState_Running;
 
   /// The finished file — already attached to its item by the time this is
@@ -271,6 +272,13 @@ class FootageReference {
         that: this,
       );
 
+  /// Where this 3D model's trip through Blender stands, `None` when it
+  /// needs none or is done. Cheap: it reads nothing.
+  BridgeBlenderState? blenderState() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceBlenderState(
+        that: this,
+      );
+
   /// Detach this item's proxy. The file on disk is left alone — a proxy took
   /// minutes to make, and forgetting it in the project is not a reason to
   /// delete it.
@@ -291,8 +299,32 @@ class FootageReference {
         that: this,
       );
 
+  /// Convert this file again after it was stopped.
+  void convertAgain() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceConvertAgain(
+        that: this,
+      );
+
+  /// Open this file in Blender's own window. False when no Blender was
+  /// found or it wouldn't start.
+  Future<bool> editInBlender() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceEditInBlender(
+        that: this,
+      );
+
+  /// Where the file is on disk, a path kept relative to the project
+  /// resolved against the project's folder. Whether anything is there is
+  /// [`Self::get_status`]'s question.
   String filePath() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceFilePath(
+        that: this,
+      );
+
+  /// The pictures this 3D model names that are missing or won't read, as
+  /// it names them. Reads the model if nothing has yet, so never from a
+  /// build.
+  Future<List<String>> getModelMissing() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceGetModelMissing(
         that: this,
       );
 
@@ -330,6 +362,12 @@ class FootageReference {
         that: this,
       );
 
+  /// Whether this item is a 3D model rather than footage that plays.
+  bool isModel() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceIsModel(
+        that: this,
+      );
+
   /// Make this item's proxy: transcode the original half as wide, and attach
   /// the result when it lands.
   ///
@@ -349,7 +387,7 @@ class FootageReference {
   /// When the file was last changed, in seconds since 1970, for the Project
   /// panel's Date column. `None` for a file that is not there, and for a
   /// numbered run of stills, which is no one file.
-  Future<PlatformInt64?> modified() =>
+  Future<int?> modified() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceModified(
         that: this,
       );
@@ -469,13 +507,13 @@ class FootageReference {
   /// with no picture in it — because a view showing its empty state is the
   /// honest answer and not a fault.
   void renderView(
-          {required BigInt frame,
+          {required int frame,
           required double scale,
           required int width,
           required int height,
           required int rateNum,
           required int rateDen,
-          required BigInt frames,
+          required int frames,
           required int view}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceRenderView(
           that: this,
@@ -571,8 +609,14 @@ class FootageReference {
         that: this,
       );
 
+  /// Stop this file's conversion.
+  void stopBlender() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceStopBlender(
+        that: this,
+      );
+
   Future<BridgeRenderedFrame?> thumbnail(
-          {required int maxEdge, required PlatformInt64 frame}) =>
+          {required int maxEdge, required int frame}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceThumbnail(
           that: this, maxEdge: maxEdge, frame: frame);
 

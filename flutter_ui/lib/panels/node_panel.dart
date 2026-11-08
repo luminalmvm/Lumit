@@ -43,16 +43,33 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
+import '../theme/theme.dart' show LumitTheme;
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'comp_graph_panel.dart'
-    show compInputKindWord, compInputKinds, compItemKindWord, pressGraphBox;
+    show
+        compInputKindWord,
+        compInputKinds,
+        compItemKindWord,
+        compNodeKey,
+        pressGraphBox;
+import 'effect_commands.dart' show EffectCommands;
+import 'effect_controls_panel_frb.dart' show curveChannelColour;
 import 'effect_param_row_frb.dart';
+import 'fx_section.dart'
+    show fxEnableMark, fxGroupHeaderRow, fxTwoColumnRow;
 import 'graph_panel.dart'
     show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
+import 'levels_display_frb.dart' show LevelsDisplayFrb, levelsChannels;
+import 'node_menus.dart' show showGraphBoxMenu;
 import 'placeholder.dart';
+import '../state/dock.dart' show Panel;
+import 'row_filter.dart';
 import 'plane_display_frb.dart';
 import 'roto_display_frb.dart';
 import 'flare_window.dart';
@@ -60,6 +77,9 @@ import 'lens_window.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphThumb;
+import 'shader_node_view.dart';
+import 'timeline_extras_frb.dart' show showCompTabMenuFrb, showMenuAt;
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
 /// graph's driver list rather than in the effect stack, and the read model it
@@ -98,12 +118,52 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// the traffic `bridge_call_budget_test` guards against.
   _Picked? _picked;
 
+  /// The box picked last, kept up when the pick is cleared, as the last
+  /// stack stays up in Effect controls. A new layer starts afresh.
+  BridgeNodeRef? _lastNode;
+  UuidValue? _lastLayer;
+  ({UuidValue id, String label, bool picture})? _lastCompNode;
+
+  /// With no box to draw, the layer's own boxes, each a click from being
+  /// picked, under the layer's name. A node graph composition lists its
+  /// boxes the same way under the composition's name.
+  List<BridgeGraphNode> _index = const [];
+  String _layerName = '';
+  List<BridgeCompNode> _compIndex = const [];
+  String _compName = '';
+
+  /// The listed boxes' colours, by box key, read with the list.
+  Map<String, int> _colours = const {};
+
+  /// While a list row's menu is up the list stays, though the right-click
+  /// has made that row's box the pick on the canvas. It stays after the menu
+  /// too, until something else is picked: [_menuPick] is that row's box.
+  bool _holdIndex = false;
+  Object? _menuPick;
+
   /// Which of the picked box's parameters a driver is wired to, by parameter
   /// id, with the driver's name and what its wire carries — the same shape
   /// Effect controls holds, keyed by parameter alone because there is only
   /// ever one box here.
   Map<String, ({String driver, BridgePortType type, bool noStream})> _driven =
       const {};
+
+  /// The row filter Ctrl+F opens in the header, the one Effect controls has.
+  final RowFilter _filter = RowFilter();
+
+  void _onSearchRequested() {
+    if (_ui?.searchRequestIsFor(Panel.node) ?? false) _filter.show();
+  }
+
+  void _onFilter() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _filter.addListener(_onFilter);
+  }
 
   /// The node graph box the panel is drawing, when the fronted composition is
   /// a node graph, and the Input declaration behind it. Read at the same three
@@ -136,6 +196,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// has got to without committing a step per tick.
   ({String key, double value})? _numberDrag;
 
+  /// Which of the picked box's groups are open, by box and group. The
+  /// schema's `collapsed` stands until a twirl is pressed.
+  final Map<String, bool> _groupOpen = {};
+
   /// The driver drag's own rate limit, the twin of the one inside
   /// [EffectStackEditor]: the first tick goes at once and the newest of those
   /// that follow goes when the interval is up, so a fast drag cannot queue up
@@ -153,6 +217,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     ui.graphNode.addListener(_reload);
     ui.compGraphNode.addListener(_reload);
     ui.model.addListener(_reload);
+    ui.panelSearchRequest.addListener(_onSearchRequested);
+    ui.shaderGraphEntry.addListener(_reload);
     _reload();
   }
 
@@ -161,11 +227,15 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     _ui?.graphNode.removeListener(_reload);
     _ui?.compGraphNode.removeListener(_reload);
     _ui?.model.removeListener(_reload);
+    _ui?.panelSearchRequest.removeListener(_onSearchRequested);
+    _ui?.shaderGraphEntry.removeListener(_reload);
   }
 
   @override
   void dispose() {
     _unbind();
+    lumitPopupUp.removeListener(_menuGone);
+    _filter.dispose();
     // A held tick would fire into a panel that is gone.
     _driverPreview.cancel();
     _stack.clear();
@@ -178,13 +248,22 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   void _reload() {
     if (!mounted) return;
     final ui = _ui;
+    if (_menuPick != null &&
+        (ui?.graphNode.value ?? ui?.compGraphNode.value) != _menuPick) {
+      _menuPick = null;
+      _holdIndex = false;
+    }
     final comp = ui?.selectedComp;
     if (ui != null && comp != null && ui.model.isNodeGraph) {
       _reloadGraphBox(ui, comp);
       return;
     }
     final layer = _ui?.selectedLayer.value;
-    final node = _ui?.graphNode.value;
+    if (layer?.internallayerId != _lastLayer) {
+      _lastLayer = layer?.internallayerId;
+      _lastNode = null;
+    }
+    final node = _ui?.graphNode.value ?? _lastNode;
     final (UuidValue? id, bool driver) = switch (node) {
       BridgeNodeRef_Effect(:final field0) => (field0, false),
       BridgeNodeRef_Driver(:final field0) => (field0, true),
@@ -210,11 +289,34 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         // honest answer until the selection catches up.
       }
     }
+    _lastNode = picked == null ? null : node;
+    var index = const <BridgeGraphNode>[];
+    var name = '';
+    var colours = const <String, int>{};
+    if (layer != null) {
+      try {
+        name = layer.getInfo().name;
+        // Every box, the Source and the Layer out with the rest, so a layer
+        // with no effects still lists what its graph has.
+        if (picked == null || _holdIndex) {
+          index = layer.getGraph().nodes;
+          colours = {
+            for (final c in layer.getGraphLooks().colours)
+              if (c.colour != 0) graphNodeKey(c.node): c.colour,
+          };
+        }
+      } catch (_) {
+        // The layer has gone; there is nothing to list.
+      }
+    }
     setState(() {
       _layer = layer;
       _picked = picked;
       _box = null;
       _input = null;
+      _index = index;
+      _layerName = name;
+      _colours = colours;
       _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
@@ -224,7 +326,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// where it has one, and, for an Fx box, the staged instance whose rows this
   /// panel draws.
   void _reloadGraphBox(LumitUiState ui, CompositionReference comp) {
-    final picked = ui.compGraphNode.value;
+    final picked = ui.compGraphNode.value ?? _lastCompNode;
     BridgeCompNode? box;
     BridgeGraphInput? input;
     _Picked? row;
@@ -262,14 +364,154 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       _labelFor = picked?.id;
     }
     if (input == null) _labelFor = null;
+    _lastCompNode = box == null ? null : picked;
+    var index = const <BridgeCompNode>[];
+    var name = '';
+    var colours = const <String, int>{};
+    try {
+      name = comp.getSettings().name;
+      if (box == null || _holdIndex) {
+        index = comp.getNodeGraph().nodes;
+        colours = {
+          for (final c in comp.getNodeGraphLooks().colours)
+            if (c.colour != 0) compNodeKey(c.node): c.colour,
+        };
+      }
+    } catch (_) {
+      // The comp has gone; there is nothing to list.
+    }
     setState(() {
       _layer = null;
       _picked = row;
       _box = box;
       _input = input;
+      _compIndex = index;
+      _compName = name;
+      _colours = colours;
       _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
+  }
+
+  /// Back to the index: the pick is let go of here and on the canvas, which
+  /// hears the cleared notifier.
+  void _toIndex() {
+    // Both notifiers first: each write reloads this panel, and a reload
+    // with the other still set would keep the box as the last one.
+    _ui?.graphNode.value = null;
+    _ui?.compGraphNode.value = null;
+    _askPick(null);
+    _lastNode = null;
+    _lastCompNode = null;
+    _reload();
+  }
+
+  /// Ask the Graph panel's canvas to pick [id], or nothing. Reset first: an
+  /// ask nobody was up to answer would otherwise equal the next one, and a
+  /// notifier says nothing about a value it already holds.
+  void _askPick(UuidValue? id) {
+    final ui = _ui;
+    if (ui == null) return;
+    ui.compGraphPickAsk.value = null;
+    ui.compGraphPickAsk.value = (id: id);
+  }
+
+  /// The picked box's enable tick, which the canvas's box wears too: the
+  /// same write for the same control. One op whichever box it is.
+  void _setEnabled(_Picked picked, bool on) {
+    final id = picked.info.id;
+    try {
+      if (picked.graph) {
+        final comp = _ui?.selectedComp;
+        if (comp == null) return;
+        final instances = comp.getNodeGraphInstances();
+        for (final instance in instances) {
+          if (instance.id() == id) instance.setEnabled(enabled: on);
+        }
+        comp.setNodeGraph(
+            instances: instances, wiring: comp.getNodeGraph().wiring);
+      } else if (picked.driver) {
+        final layer = _layer;
+        if (layer == null) return;
+        final drivers = layer.getGraphDrivers();
+        for (final instance in drivers) {
+          if (instance.id() == id) instance.setEnabled(enabled: on);
+        }
+        layer.setGraph(drivers: drivers, wiring: layer.getGraph().wiring);
+      } else {
+        final layer = _layer;
+        if (layer == null) return;
+        for (final instance in layer.getEffects()) {
+          if (instance.id() == id) {
+            layer.setEffectEnabled(effect: instance, enabled: on);
+          }
+        }
+      }
+    } catch (_) {
+      // The box changed under us; re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+  }
+
+  /// A list row's menu: [_askMenu], with the list kept on screen until the
+  /// menu goes, rather than the row's own rows swapped in under it.
+  void _askRowMenu(String key, Offset at) {
+    _menuPick = null;
+    setState(() => _holdIndex = true);
+    _askMenu(key, at);
+    if (lumitPopupUp.value) {
+      lumitPopupUp.addListener(_menuGone);
+    } else {
+      setState(() => _holdIndex = false);
+    }
+  }
+
+  void _menuGone() {
+    if (lumitPopupUp.value) return;
+    lumitPopupUp.removeListener(_menuGone);
+    _menuPick = _ui?.graphNode.value ?? _ui?.compGraphNode.value;
+    if (_menuPick == null && mounted) setState(() => _holdIndex = false);
+  }
+
+  /// The picked box's menu, opened by the canvas that owns its rows. Reset
+  /// first, for the reason [_askPick] is. With no canvas on stage to answer,
+  /// the panel opens the rows it can do itself.
+  void _askMenu(String key, Offset at) {
+    final ui = _ui;
+    if (ui == null) return;
+    final ask = (key: key, at: at);
+    ui.graphBoxMenuAsk.value = null;
+    ui.graphBoxMenuAsk.value = ask;
+    if (ui.graphBoxMenuAsk.value != ask) return;
+    ui.graphBoxMenuAsk.value = null;
+    final picked = _picked;
+    if (picked == null) return;
+    final comp = ui.selectedComp;
+    // An effect on a layer, as against a driver or a node graph's box.
+    final layer = picked.driver || picked.graph ? null : _layer;
+    final viewHere = !picked.driver &&
+        (picked.graph
+            ? ui.viewerGraphPoint != null
+            : ui.viewerPrefixPoint != null);
+    showGraphBoxMenu(
+      context,
+      at,
+      // An effect on a layer has its own menu, the one its box opens.
+      effect: layer == null || comp == null
+          ? null
+          : EffectCommands(
+              info: picked.info,
+              layer: layer,
+              comp: comp,
+              onStackChanged: ui.model.refresh,
+            ),
+      bypassed: !picked.info.enabled,
+      onBypass: () => _setEnabled(picked, !picked.info.enabled),
+      viewHere: viewHere ? ui.atSelectedEffect.value : null,
+      onViewHere: viewHere
+          ? () => ui.setAtSelectedEffect(!ui.atSelectedEffect.value)
+          : null,
+    );
   }
 
   /// Which of this box's parameters a wire is feeding, by socket id: the same
@@ -406,7 +648,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       // Read inside the closure: a held tick must send the newest staged
       // value, not the one that was current when it was held.
       _driverPreview.request(() => graph.renderFrameWithGraphPreview(
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
             scale: ui.viewerScale,
             instances: _graphInstancesWith(graph, effect),
           ));
@@ -421,7 +663,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       // The drivers are read *inside* the closure: a held tick must send the
       // newest staged value, not the one that was current when it was held.
       _driverPreview.request(() => comp.renderFrameWithDriverPreview(
-            frame: BigInt.from(ui.playheadFrame.value),
+            frame: ui.playheadFrame.value,
             scale: ui.viewerScale,
             layer: layer,
             drivers: _driversWith(layer, effect),
@@ -441,7 +683,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     if (ui == null) return;
     final comp = ui.selectedComp;
     final layer = _layer;
-    final frame = BigInt.from(ui.playheadFrame.value);
+    final frame = ui.playheadFrame.value;
     final home = picked.graph
         ? comp == null
             ? null
@@ -547,9 +789,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           onChanged: ui.model.refresh,
           pressed: _pressed,
         ),
-      'depth' || 'remove_background' => PlaneDisplayFrb(
+      'depth' || 'depth_points' || 'remove_background' => PlaneDisplayFrb(
           key: ValueKey<String>('node-plane-display-$id'),
-          card: picked.info.name == 'depth' ? PlaneCard.depth : PlaneCard.matte,
+          card: picked.info.name == 'remove_background'
+              ? PlaneCard.matte
+              : PlaneCard.depth,
           layer: layer,
           graph: graph,
           effectId: id,
@@ -643,17 +887,73 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    final picked = _picked;
+    // Inside a Custom shader, the Graph panel's face is its graph, and this
+    // panel follows it.
+    if (ui.shaderGraphEntry.value case final entry?) {
+      return ShaderNodeView(
+        entry: entry,
+        header: (name, {crumb, onCrumb, onMenu}) => _header(context, name,
+            crumb: crumb, onCrumb: onCrumb, onMenu: onMenu),
+      );
+    }
+    final picked = _holdIndex ? null : _picked;
     final layer = _layer;
     final comp = ui.selectedComp;
     // A node graph's Read, Input and Output boxes carry no parameters, so they
     // draw their own small face rather than a row list.
-    if (comp != null && picked == null && _box != null) {
+    if (comp != null && picked == null && _box != null && !_holdIndex) {
+      final box = _box!;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(context, _boxName(_box!)),
-          Expanded(child: _boxFace(ui, comp, _box!)),
+          _header(
+            context,
+            _boxName(box),
+            crumb: _compName,
+            onCrumb: _toIndex,
+            onMenu: (at) => _askMenu(compNodeKey(box.id), at),
+            viewHere: ui.viewerGraphPoint != null,
+          ),
+          Expanded(child: _boxFace(ui, comp, box)),
+        ],
+      );
+    }
+    if (picked == null && layer != null && comp != null && _index.isNotEmpty) {
+      // The layer's name, and the room under its boxes, are the layer: its
+      // menu, as anywhere a layer is shown.
+      void layerMenu(Offset at) =>
+          showLayerRowMenu(context, layer.internallayerId, at);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(context, _layerName, onMenu: layerMenu),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onSecondaryTapUp: (d) => layerMenu(d.globalPosition),
+              child: _indexList(context, ui),
+            ),
+          ),
+        ],
+      );
+    }
+    if (picked == null &&
+        (_box == null || _holdIndex) &&
+        comp != null &&
+        ui.model.isNodeGraph) {
+      // The graph's boxes, or nothing at all for a graph with none.
+      if (_compIndex.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The graph's name is the composition, with its menu.
+          _header(context, _compName,
+              onMenu: (at) => showCompTabMenuFrb(
+                  context: context,
+                  comp: comp,
+                  position: at,
+                  onChanged: ui.model.refresh)),
+          Expanded(child: _compIndexList(context, ui)),
         ],
       );
     }
@@ -661,9 +961,15 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       return PlaceholderPanel(
         icon: LumitIcon.nodes,
         title: l10n.panelNode,
-        hint: l10n.nodeNoSelection,
+        hint: '',
       );
     }
+    final id = picked.info.id;
+    final key = picked.graph
+        ? compNodeKey(id)
+        : graphNodeKey(picked.driver
+            ? BridgeNodeRef.driver(id)
+            : BridgeNodeRef.effect(id));
     // The keyframe controls read the playhead — which key is under it, whether
     // the diamond is filled — so the rows redraw when it moves.
     return ValueListenableBuilder<int>(
@@ -672,15 +978,175 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // The box's own title. The instance's name is its schema key.
-          _header(context, switch (_box) {
-            final box? => _boxName(box),
-            null => picked.info.customName ?? effectLabelOf(picked.info.name),
-          }),
-          Expanded(child: _rows(ui, picked, layer, playhead)),
+          _header(
+            context,
+            switch (_box) {
+              final box? => _boxName(box),
+              null =>
+                picked.info.customName ?? effectLabelOf(picked.info.name),
+            },
+            crumb: layer == null ? _compName : _layerName,
+            onCrumb: _toIndex,
+            enabled: picked.info.enabled,
+            onEnabled: (on) => _setEnabled(picked, on),
+            onMenu: (at) => _askMenu(key, at),
+            filterable: true,
+            // A driver makes no picture to stop at.
+            viewHere: !picked.driver &&
+                (picked.graph
+                    ? ui.viewerGraphPoint != null
+                    : ui.viewerPrefixPoint != null),
+          ),
+          Expanded(child: _rows(context, ui, picked, layer, playhead)),
         ],
       ),
     );
   }
+
+  /// A node graph's boxes, one row each, a click from being picked on the
+  /// canvas. The layer index's shape, with the Output and the Read and
+  /// Input boxes among the Fx ones.
+  Widget _compIndexList(BuildContext context, LumitUiState ui) {
+    final t = ThemeScope.of(context).theme;
+    final dots = _compIndex.any((n) => _colours[compNodeKey(n.id)] != null);
+    return EdgeFade(axis: Axis.vertical, child: ListView(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      children: [
+        for (final n in _compIndex)
+          HoverMark(
+            builder: (context, lit) => GestureDetector(
+              key: ValueKey<String>('node-index-${compNodeKey(n.id)}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                // The panel draws the box at once; the Graph panel's canvas
+                // picks it when it hears the ask.
+                ui.compGraphNode.value = (
+                  id: n.id,
+                  label: _boxName(n),
+                  picture: n.outputs
+                      .any((p) => p.portType == BridgePortType.image),
+                );
+                _askPick(n.id);
+              },
+              onSecondaryTapUp: (d) =>
+                  _askRowMenu(compNodeKey(n.id), d.globalPosition),
+              child: Container(
+                height: t.density.laneRow,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: t.surface2.withValues(alpha: lit),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      child: n.kind == BridgeCompNodeKind.fx
+                          ? lumitIcon(LumitIcon.fx,
+                              size: 12, color: t.textMuted)
+                          : lumitIcon(LumitIcon.nodes,
+                              size: 12, color: t.textMuted),
+                    ),
+                    if (dots) _dot(t, _colours[compNodeKey(n.id)]),
+                    Expanded(
+                      child: Text(
+                        _boxName(n),
+                        style: t.body.copyWith(
+                            color: n.enabled ? t.textPrimary : t.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (n.customName != null)
+                      Text(engineLabel(n.label), style: t.kicker),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    ));
+  }
+
+  /// The layer's boxes, one row each, a click from being picked on the
+  /// canvas. A bypassed box reads quiet, as its card does.
+  Widget _indexList(BuildContext context, LumitUiState ui) {
+    final t = ThemeScope.of(context).theme;
+    final dots = _index.any((n) => _colours[graphNodeKey(n.node)] != null);
+    return EdgeFade(axis: Axis.vertical, child: ListView(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      children: [
+        for (final n in _index)
+          HoverMark(
+            builder: (context, lit) => GestureDetector(
+              key: ValueKey<String>('node-index-${graphNodeKey(n.node)}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => ui.graphNode.value = n.node,
+              onSecondaryTapUp: (d) =>
+                  _askRowMenu(graphNodeKey(n.node), d.globalPosition),
+              // An effect's rows are a card in Effect controls as well, and
+              // a double-click goes there.
+              onDoubleTap: switch (n.node) {
+                BridgeNodeRef_Effect(:final field0) when _layer != null => () =>
+                    ui.revealEffectCard(_layer!, field0),
+                _ => null,
+              },
+              child: Container(
+                height: t.density.laneRow,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: t.surface2.withValues(alpha: lit),
+                child: Row(
+                  children: [
+                    // The mark the Timeline gives an effect, and the wire
+                    // mark for a driver, so the two kinds read apart.
+                    SizedBox(
+                      width: 18,
+                      child: switch (n.node) {
+                        BridgeNodeRef_Driver() => glyph.LumitIcon(
+                            LumitIcons.driven,
+                            size: 12,
+                            colour: t.textMuted),
+                        BridgeNodeRef_Effect() => lumitIcon(LumitIcon.fx,
+                            size: 12, color: t.textMuted),
+                        _ => lumitIcon(LumitIcon.nodes,
+                            size: 12, color: t.textMuted),
+                      },
+                    ),
+                    if (dots) _dot(t, _colours[graphNodeKey(n.node)]),
+                    Expanded(
+                      child: Text(
+                        n.customName ?? engineLabel(n.label),
+                        style: t.body.copyWith(
+                            color: n.enabled ? t.textPrimary : t.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (n.customName != null)
+                      Text(engineLabel(n.label), style: t.kicker),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    ));
+  }
+
+  /// A box's colour as a dot before its name, the Timeline's label mark. The
+  /// room is kept on every row while any box in the list has a colour, so
+  /// the names keep one edge.
+  Widget _dot(LumitTheme t, int? colour) => SizedBox(
+        width: 12,
+        child: colour == null
+            ? null
+            : Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: t.labelColour(colour),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+      );
 
   /// What a box with no parameters is called: the item's name for a Read, the
   /// Input's own word, and the engine's word for the Output.
@@ -690,39 +1156,120 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         _ => box.customName ?? engineLabel(box.label),
       };
 
-  /// The panel's own strip: the kicker, the box's name, and how many of its
-  /// parameters a wire has taken over. The dock draws the tab bar above it,
-  /// and the strip matches the Graph panel's in height and colour so the two
-  /// columns of the workspace line up.
-  Widget _header(BuildContext context, String name) {
+  /// The panel's own strip: the box's enable tick, where it has one, the
+  /// layer or composition the box is on as a crumb that leads back to the
+  /// index, the box's name, and how many of its parameters a wire has taken
+  /// over. A right-click opens the box's menu. The dock draws the tab bar
+  /// above it, and the strip matches the Graph panel's in height and colour
+  /// so the two columns of the workspace line up.
+  Widget _header(
+    BuildContext context,
+    String name, {
+    String? crumb,
+    VoidCallback? onCrumb,
+    bool? enabled,
+    ValueChanged<bool>? onEnabled,
+    void Function(Offset at)? onMenu,
+    bool viewHere = false,
+    bool filterable = false,
+  }) {
     final t = ThemeScope.of(context).theme;
-    return Container(
-      key: const ValueKey('node-header'),
-      height: graphToolbarHeight,
-      color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              name,
-              key: const ValueKey('node-name'),
-              style: t.body,
-              overflow: TextOverflow.ellipsis,
+    final ui = _ui;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp:
+          onMenu == null ? null : (d) => onMenu(d.globalPosition),
+      child: Container(
+        key: const ValueKey('node-header'),
+        height: graphToolbarHeight,
+        color: t.surface1,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          children: [
+            if (enabled != null && onEnabled != null) ...[
+              fxEnableMark(
+                key: const ValueKey('node-enable'),
+                on: enabled,
+                onChanged: onEnabled,
+              ),
+              const SizedBox(width: 6),
+            ],
+            if (crumb != null) ...[
+              Flexible(
+                child: HoverMark(
+                  cursor: SystemMouseCursors.click,
+                  builder: (context, lit) => GestureDetector(
+                    key: const ValueKey('node-crumb'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onCrumb,
+                    child: Text(
+                      crumb,
+                      style: t.body.copyWith(
+                          color: Color.lerp(t.textMuted, t.textPrimary, lit)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text('›', style: t.body.copyWith(color: t.textMuted)),
+              ),
+            ],
+            // The row filter's well takes the name's place while it is up.
+            if (_filter.open)
+              Expanded(
+                flex: 2,
+                child: rowFilterWell(context, _filter,
+                    key: const ValueKey('node-filter')),
+              )
+            else
+            Expanded(
+              flex: 2,
+              child: Text(
+                name,
+                key: const ValueKey('node-name'),
+                style: t.body,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          if (_driven.isNotEmpty)
-            Text(
-              l10n.nodeDrivenCount(_driven.length),
-              key: const ValueKey('node-driven-count'),
-              style: t.kicker,
-            ),
-        ],
+            if (filterable && !_filter.open)
+              rowFilterMark(context, _filter.show,
+                  key: const ValueKey('node-filter-mark')),
+            if (_driven.isNotEmpty)
+              Text(
+                l10n.nodeDrivenCount(_driven.length),
+                key: const ValueKey('node-driven-count'),
+                style: t.kicker,
+              ),
+            // The Viewer's "at" chip from here: the picture stopping at this
+            // box. The accent says it is in force, as the chip does.
+            if (viewHere && ui != null) ...[
+              const SizedBox(width: 6),
+              ValueListenableBuilder<bool>(
+                valueListenable: ui.atSelectedEffect,
+                builder: (context, on, _) => LumitTooltip(
+                  message: l10n.tipViewerAtEffect,
+                  child: HouseButton(
+                    key: const ValueKey('node-view-here'),
+                    small: true,
+                    frameless: true,
+                    padding: const EdgeInsets.all(1),
+                    onPressed: () => ui.setAtSelectedEffect(!on),
+                    child: glyph.LumitIcon(LumitIcons.visible,
+                        size: iconSize, colour: on ? t.accent : t.textMuted),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _rows(
+    BuildContext context,
     LumitUiState ui,
     _Picked picked,
     LayerReference? layer,
@@ -738,8 +1285,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // nested Node graph box's Input rows arrive that way, as they do in
     // Effect controls.
     final params = [
-      ...cachedListParameters(picked.info.name),
-      ...picked.info.derivedParams,
+      for (final p in [
+        ...instanceParameters(picked.info),
+      ])
+        if (_filter.matches(engineLabel(p.label))) p,
     ];
 
     // **A point is one row, here as everywhere**. An `_x`/`_y` pair of
@@ -776,57 +1325,166 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             },
           ),
         ),
-    ];
-    for (var i = 0; i < params.length; i++) {
-      final param = params[i];
-      final next = i + 1 < params.length ? params[i + 1] : null;
-      if (next != null &&
-          param.id.endsWith('_x') &&
-          next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
-          param.kind is BridgeParamKind_Float &&
-          next.kind is BridgeParamKind_Float &&
-          !drivenByExpression(_staged(id, param.id) ?? values[param.id]) &&
-          !drivenByExpression(_staged(id, next.id) ?? values[next.id])) {
-        final stem = pairStemOf(picked.info.name, param.id);
-        rows.add(EffectPointRowFrb(
-          key: ValueKey<String>('node-row-$id-${param.id}-pair'),
+      // Levels draws its histogram above its rows here as it does in Effect
+      // controls, through the same two writes.
+      if (picked.info.name == 'levels')
+        LevelsDisplayFrb(
+          key: ValueKey<String>('node-levels-display-$id'),
           effectId: id,
-          xParam: param,
-          yParam: next,
-          xValue: _staged(id, param.id) ?? values[param.id],
-          yValue: _staged(id, next.id) ?? values[next.id],
+          values: {
+            for (final p in params)
+              if ((_staged(id, p.id) ?? values[p.id]) case final v?) p.id: v,
+          },
           comp: ui.selectedComp!,
+          playheadFrame: playhead,
+          onWrite: _write,
+          onLive: _live,
+          channelColours: ui.workspace.themedEffectGraphs
+              ? null
+              : [for (final c in levelsChannels) curveChannelColour(c)],
+        ),
+    ];
+    List<Widget> rowsFor(List<BridgeParamInfo> run) {
+      final out = <Widget>[];
+      for (var i = 0; i < run.length; i++) {
+        final param = run[i];
+        final next = i + 1 < run.length ? run[i + 1] : null;
+        if (next != null &&
+            param.id.endsWith('_x') &&
+            next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
+            param.kind is BridgeParamKind_Float &&
+            next.kind is BridgeParamKind_Float &&
+            !drivenByExpression(_staged(id, param.id) ?? values[param.id]) &&
+            !drivenByExpression(_staged(id, next.id) ?? values[next.id])) {
+          final stem = pairStemOf(picked.info.name, param.id);
+          out.add(EffectPointRowFrb(
+            key: ValueKey<String>('node-row-$id-${param.id}-pair'),
+            effectId: id,
+            xParam: param,
+            yParam: next,
+            xValue: _staged(id, param.id) ?? values[param.id],
+            yValue: _staged(id, next.id) ?? values[next.id],
+            comp: ui.selectedComp!,
+            playheadFrame: playhead,
+            onSeek: (frame) => ui.playheadFrame.value = frame,
+            onWrite: _write,
+            onLive: _live,
+            onWritePair: _writeAll,
+            twoColumn: true,
+            linked: stem != null && picked.info.linkedPairs.contains(stem),
+            onToggleLink: stem == null || picked.driver
+                ? null
+                : () => _togglePairLink(picked, stem),
+          ));
+          i += 1;
+          continue;
+        }
+        out.add(EffectParamRowFrb(
+          key: ValueKey<String>('node-row-$id-${param.id}'),
+          effectId: id,
+          param: param,
+          value: _staged(id, param.id) ?? values[param.id],
+          comp: ui.selectedComp!,
+          ownerLayerId: owner,
+          ownerLayers: owners,
           playheadFrame: playhead,
           onSeek: (frame) => ui.playheadFrame.value = frame,
           onWrite: _write,
           onLive: _live,
-          onWritePair: _writeAll,
           twoColumn: true,
-          linked: stem != null && picked.info.linkedPairs.contains(stem),
-          onToggleLink: stem == null || picked.driver
-              ? null
-              : () => _togglePairLink(picked, stem),
+          siblings: values,
+          driven: _driven[param.id],
+          onAction: (e, p) => _press(picked, e, p),
         ));
+      }
+      return out;
+    }
+
+    // The engine's groups, as Effect controls draws them: a fold per named
+    // group, shut where the schema says so, and a group whose condition is
+    // unmet left out whole.
+    final groups = cachedListParameterGroups(picked.info.name);
+    final byFirstMember = {for (final g in groups) g.params.first: g};
+    final memberOf = {
+      for (final g in groups)
+        for (final m in g.params) m: g,
+    };
+    var i = 0;
+    while (i < params.length) {
+      final param = params[i];
+      final group = byFirstMember[param.id];
+      if (group == null) {
+        if (memberOf.containsKey(param.id)) {
+          rows.addAll(rowsFor([param]));
+          i += 1;
+          continue;
+        }
+        final flat = <BridgeParamInfo>[param];
         i += 1;
+        // A pair stays together when it is the next row along.
+        if (param.id.endsWith('_x') &&
+            i < params.length &&
+            !memberOf.containsKey(params[i].id)) {
+          flat.add(params[i]);
+          i += 1;
+        }
+        rows.addAll(rowsFor(flat));
         continue;
       }
-      rows.add(EffectParamRowFrb(
-        key: ValueKey<String>('node-row-$id-${param.id}'),
-        effectId: id,
-        param: param,
-        value: _staged(id, param.id) ?? values[param.id],
-        comp: ui.selectedComp!,
-        ownerLayerId: owner,
-        ownerLayers: owners,
-        playheadFrame: playhead,
-        onSeek: (frame) => ui.playheadFrame.value = frame,
-        onWrite: _write,
-        onLive: _live,
-        twoColumn: true,
-        siblings: values,
-        driven: _driven[param.id],
-        onAction: (e, p) => _press(picked, e, p),
+      final run = <BridgeParamInfo>[];
+      while (i < params.length && group.params.contains(params[i].id)) {
+        run.add(params[i]);
+        i += 1;
+      }
+      if (!paramGroupVisible(group, values)) continue;
+      if (group.label.isEmpty) {
+        rows.addAll(rowsFor(run));
+        continue;
+      }
+      final path = '$id/${group.label}';
+      final open = _groupOpen[path] ?? !group.collapsed;
+      final paths = [
+        for (final g in groups)
+          if (g.label.isNotEmpty) '$id/${g.label}',
+      ];
+      rows.add(fxGroupHeaderRow(
+        context,
+        key: ValueKey<String>('node-group-$path'),
+        label: group.label,
+        open: open,
+        onToggle: () => setState(() => _groupOpen[path] = !open),
+        onContextMenu: (at) => showMenuAt<void>(
+          context: context,
+          position: at,
+          rows: (close) => [
+            MenuRow(
+              onPressed: () {
+                close(null);
+                setState(() => _groupOpen[path] = !open);
+              },
+              child: MenuLabel(open ? l10n.fxMenuCollapse : l10n.fxMenuExpand),
+            ),
+            const MenuDivider(),
+            MenuRow(
+              onPressed: () {
+                close(null);
+                setState(
+                    () => _groupOpen.addAll({for (final p in paths) p: true}));
+              },
+              child: MenuLabel(l10n.fxMenuExpandAll),
+            ),
+            MenuRow(
+              onPressed: () {
+                close(null);
+                setState(
+                    () => _groupOpen.addAll({for (final p in paths) p: false}));
+              },
+              child: MenuLabel(l10n.fxMenuCollapseAll),
+            ),
+          ],
+        ),
       ));
+      if (open) rows.addAll(rowsFor(run));
     }
     if (_statusCard(ui, picked, layer, playhead) case final card?) {
       rows.add(card);
@@ -834,9 +1492,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // A **wire-only** input draws no row at all, and needs no code to say so:
     // it is a signature port, never a schema parameter, so it is not in the
     // list this walks. Its socket on the box is the whole of its surface.
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      children: rows,
+    return EdgeFade(
+      axis: Axis.vertical,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        children: rows,
+      ),
     );
   }
 
@@ -848,13 +1509,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       return _inputForm(comp, box, _input!);
     }
     if (box.kind == BridgeCompNodeKind.read) return _readFace(ui, box);
-    // The Output is the picture the Viewer already shows: it has nothing to
-    // set and says so.
-    return PlaceholderPanel(
-      icon: LumitIcon.nodes,
-      title: l10n.panelNode,
-      hint: l10n.nodeNoRows,
-    );
+    // The Output is the picture the Viewer already shows, with nothing to set.
+    return const SizedBox.shrink();
   }
 
   /// An Input box's five facts, the form the Custom shader's Parameter node
@@ -974,16 +1630,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// columns every other row in this panel is laid out in.
   Widget _formRow(String name, Widget control) {
     final t = ThemeScope.of(context).theme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-              width: 84,
-              child: Text(name, style: t.small.copyWith(color: t.textMuted))),
-          control,
-        ],
-      ),
+    return fxTwoColumnRow(
+      context: context,
+      name: Text(name, style: t.body, overflow: TextOverflow.ellipsis),
+      control: control,
     );
   }
 
@@ -993,7 +1643,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// back. The float row's own split.
   Widget _number(String key, double value, ValueChanged<double> onChanged) =>
       SizedBox(
-        width: 72,
+        width: effectCellWidth,
         child: DragValueField(
           key: ValueKey<String>(key),
           value: _numberDrag?.key == key ? _numberDrag!.value : value,

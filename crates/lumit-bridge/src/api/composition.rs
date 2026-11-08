@@ -226,6 +226,9 @@ pub enum BridgeGroupSwitch {
 #[frb(non_opaque)]
 pub struct BridgeCompModel {
     pub duration_frames: i64,
+    /// The frame the comp's clock reads at its first frame: its Start
+    /// timecode at its own rate. Every clock face adds it; nothing else does.
+    pub start_frame: i64,
     /// The comp's rate as a plain number, for panels that map seconds to
     /// pixels (the waveform lane) without a bridge call per paint.
     pub fps: f64,
@@ -486,6 +489,39 @@ impl CompositionReference {
         })
     }
 
+    /// The comp's **Start timecode**: the time its first frame reads, as
+    /// exact rational seconds. Zero unless set.
+    #[frb(sync)]
+    pub fn get_start_timecode(&self) -> Result<BridgeRational, BridgeError> {
+        let start = self.composition()?.start_timecode();
+        Ok(BridgeRational {
+            num: start.0.num(),
+            den: start.0.den(),
+        })
+    }
+
+    /// Set the Start timecode, one undo step. Only the clock moves: nothing
+    /// in the comp is retimed.
+    #[frb(sync)]
+    pub fn set_start_timecode(&self, start: BridgeRational) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let start = lumit_core::time::Rational::new(start.num, start.den)
+            .map(lumit_core::time::CompTime)
+            .map_err(|_| BridgeError::InvalidFrameRate)?;
+        if start == comp.start_timecode() {
+            return Ok(());
+        }
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::ops::Op::SetCompStart {
+                comp: comp.id,
+                start,
+            })
+            .map(|_| ())
+            .map_err(BridgeError::OpError)
+    }
+
     /// Whether the comp's lights fall as After Effects' do, lighting a layer
     /// from black, rather than adding to the picture.
     #[frb(sync)]
@@ -587,6 +623,7 @@ impl CompositionReference {
             fps: comp.frame_rate.fps(),
             fps_num: comp.frame_rate.num(),
             fps_den: comp.frame_rate.den(),
+            start_frame: comp.frame_rate.frame_at(comp.start_timecode()),
             motion_blur_enabled: comp.motion_blur.enabled,
             background: comp.background.0,
             is_node_graph: comp.graph.is_some(),
@@ -782,7 +819,7 @@ impl CompositionReference {
     /// One undo group around the two commits, because one Ctrl-Z has to put
     /// the layers *and* the Sound mix row back: the pack and the clearing are
     /// halves of the same act, and either alone leaves a comp that reads wrong.
-    /// The set is every layer that reads as `BridgeLayerKind::Audio`, which is
+    /// The set is every layer that reads as `BridgeLayerKind::Audio` or `Bus`, which is
     /// exactly what the Timeline's fold takes, so what is packed is what the
     /// user sees folded under the row. The new comps start unmixed, and there
     /// is no road back from a precomp to a mix.
@@ -886,7 +923,12 @@ impl CompositionReference {
         let rows: Vec<Layer> = comp
             .layers
             .iter()
-            .filter(|l| bridge_kind(l) == BridgeLayerKind::Audio)
+            .filter(|l| {
+                matches!(
+                    bridge_kind(l),
+                    BridgeLayerKind::Audio | BridgeLayerKind::Bus
+                )
+            })
             .cloned()
             .collect();
         if rows.is_empty() {
@@ -951,9 +993,7 @@ impl CompositionReference {
                     .into_iter()
                     .filter(|c| c.place_duration > Rational::ZERO)
                     .map(|clip| {
-                        let source = match clip.source {
-                            ClipSource::Footage(id) | ClipSource::Comp(id) => id,
-                        };
+                        let source = clip.source.id();
                         let (start, end) = (clip.place_start, clip.place_end());
                         let mut l = crate::edits::base_layer(
                             doc.item(source)
@@ -1125,6 +1165,31 @@ impl CompositionReference {
 
         self.commit(lumit_core::ops::Op::Batch { ops })?;
         Ok(LayerReference::new(self.project, self.id, id))
+    }
+
+    /// Place a solid from the Project panel as a Solid layer at `row`,
+    /// centred and as long as this composition, as a dropped composition is.
+    #[frb(sync)]
+    pub fn add_solid_item_layer(
+        &self,
+        solid: &crate::api::solid::SolidReference,
+        row: Option<u32>,
+    ) -> Result<LayerReference, BridgeError> {
+        let comp = self.composition()?;
+        let doc = self.document()?;
+        let sd = doc.solid(solid.id).ok_or(BridgeError::InvalidItem)?;
+        let layer = crate::edits::base_layer(
+            sd.name.clone(),
+            lumit_core::model::LayerKind::Solid { def: sd.id },
+            comp.duration.0,
+            crate::edits::centred_transform(
+                f64::from(sd.width),
+                f64::from(sd.height),
+                comp.width,
+                comp.height,
+            ),
+        );
+        self.add_at(layer, row)
     }
 
     /// Place another composition into this one as a Precomp layer.
@@ -1419,48 +1484,8 @@ impl CompositionReference {
         kind: u32,
         row: Option<u32>,
     ) -> Result<LayerReference, BridgeError> {
-        use lumit_core::anim::Property;
-        use lumit_core::model::{LightDef, LightKind, TransformGroup};
-
         let comp = self.composition()?;
-        let kind = match kind {
-            1 => LightKind::Spot,
-            2 => LightKind::Area,
-            3 => LightKind::Parallel,
-            4 => LightKind::Ambient,
-            _ => LightKind::Point,
-        };
-        let (w, h) = (f64::from(comp.width), f64::from(comp.height));
-        let light = Box::new(LightDef {
-            kind,
-            size: [Property::fixed(w * 0.2), Property::fixed(h * 0.2)],
-            two_node: true,
-            point_of_interest: [
-                Property::fixed(w * 0.5),
-                Property::fixed(h * 0.5),
-                Property::zero(),
-            ],
-            ..LightDef::default()
-        });
-        let name = match kind {
-            LightKind::Point => "Point light",
-            LightKind::Spot => "Spot light",
-            LightKind::Area => "Area light",
-            LightKind::Parallel => "Parallel light",
-            LightKind::Ambient => "Ambient light",
-        };
-        let layer = crate::edits::base_layer(
-            name.into(),
-            lumit_core::model::LayerKind::Light { light },
-            comp.duration.0,
-            TransformGroup {
-                position_x: Property::fixed(w * 0.4),
-                position_y: Property::fixed(h * 0.35),
-                position_z: Property::fixed(-w * 0.35),
-                ..TransformGroup::default()
-            },
-        );
-        self.add_at(layer, row)
+        self.add_at(Self::light_layer(&comp, kind), row)
     }
 
     /// Add an Adjustment layer: a comp-sized effect container with no source of
@@ -1651,16 +1676,16 @@ impl CompositionReference {
             layer: lumit_core::model::Layer,
         }
         let copied: Copied = serde_json::from_str(&text).map_err(|_| BridgeError::InvalidItem)?;
-        let mut layer = copied.layer;
+        let mut layer = copied.layer.clone();
         let comp = self.composition()?;
 
         layer.id = Uuid::now_v7();
         for effect in &mut layer.effects {
             effect.id = Uuid::now_v7();
         }
-        // A reference only survives if what it names is here. Pasting back into
-        // the comp it was copied from keeps both; pasting elsewhere keeps
-        // neither, because neither id means anything there.
+        lumit_render::passes::follow_copy(&*self.document()?, &copied.layer, &mut layer);
+        // A reference only survives if what it names is here, which is only in
+        // the comp it was copied from.
         let here = |id: Uuid| copied.comp == self.id && comp.layers.iter().any(|l| l.id == id);
         if layer.parent.is_some_and(|p| !here(p)) {
             layer.parent = None;
@@ -1770,7 +1795,8 @@ impl CompositionReference {
         }
         // All at once, so a separate copy that names a layer in another one
         // follows it to its new id.
-        crate::edits::fresh_ids(&mut made).ok_or(BridgeError::InvalidComp)?;
+        lumit_render::passes::fresh_ids_keeping_parts(&doc, &mut made)
+            .ok_or(BridgeError::InvalidComp)?;
         let mut ops: Vec<Op> = made
             .into_iter()
             .enumerate()
@@ -1797,7 +1823,7 @@ impl CompositionReference {
     /// Insert `layer` on `row`, soloed if the comp is showing only soloed
     /// layers ([`crate::edits::solo_on_arrival`]).
     #[frb(ignore)]
-    fn add_at(
+    pub(crate) fn add_at(
         &self,
         mut layer: lumit_core::model::Layer,
         row: Option<u32>,
@@ -1978,6 +2004,9 @@ impl CompositionReference {
         let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
             return Err(BridgeError::InvalidItem);
         };
+        if lumit_scene::is_model(f.media.on_disk()) {
+            return Ok((crate::api::model::dropped_layer(comp, f), Vec::new()));
+        }
 
         let (out, nat_w, nat_h) = Self::footage_span_and_size(&p, f, &comp);
         // Media with no picture at all can only ever be an Audio layer, so
@@ -2327,7 +2356,7 @@ impl CompositionReference {
         frame: u64,
         scale: f32,
         mode: BridgePlaybackMode,
-        prefix: Option<crate::api::state::BridgePrefixPoint>,
+        prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
         view: u32,
         active: bool,
     ) -> Result<(), BridgeError> {
@@ -2486,15 +2515,15 @@ impl CompositionReference {
     }
 
     /// Look at this comp in Viewer view `view` through `pose` rather than its
-    /// active camera, or through the active camera again with `None`. Panel
+    /// active camera, or through the active camera again with `None`, and
+    /// show its models the `look` way. Panel
     /// state, kept per view like the look, so the frontend sends it whenever a
-    /// view's 3D view changes and that view's next render looks through it.
-    /// Export never sees a view.
+    /// view's 3D view changes. Export never sees a view.
     ///
     /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
     /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
-    /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
-    /// middle, the shape of its pane. Zero is the comp's own size.
+    /// picture `canvas` comp pixels wide and high round the comp's middle, the
+    /// shape of its pane. Zero is the comp's own size.
     #[frb(sync)]
     pub fn set_camera_view(
         &self,
@@ -2502,26 +2531,20 @@ impl CompositionReference {
         view: u32,
         draft: bool,
         ground: Option<u32>,
-        canvas_width: u32,
-        canvas_height: u32,
+        canvas: (u32, u32),
+        look: crate::api::model::BridgeModelLook,
     ) -> Result<(), BridgeError> {
-        let channel =
-            |argb: u32, shift: u32| lumit_core::pixels::srgb_decode((argb >> shift) as u8);
-        let ground = ground.map(|argb| {
-            [
-                channel(argb, 16),
-                channel(argb, 8),
-                channel(argb, 0),
-                f32::from((argb >> 24) as u8) / 255.0,
-            ]
-        });
+        let channel = |argb: u32, shift| lumit_core::pixels::srgb_decode((argb >> shift) as u8);
+        let alpha = |argb: u32| f32::from((argb >> 24) as u8) / 255.0;
+        let ground = ground.map(|c| [channel(c, 16), channel(c, 8), channel(c, 0), alpha(c)]);
         self.dispatch(WorkerRequest::SetCameraView {
             comp: self.id,
             pose,
             view,
             draft,
             ground,
-            canvas: (canvas_width, canvas_height),
+            canvas,
+            display: look.engine(),
         })
     }
 
@@ -2915,14 +2938,11 @@ impl CompositionReference {
     /// the window it already holds and asks again only when the pointer nears
     /// the window's edge, the frame changes, or an edit lands.
     ///
-    /// `layer` reads that layer **alone** rather than the composite — what a
-    /// depth pick does, since a depth pass is usually hidden and so never
-    /// appears in the composite at all. The answer arrives as
-    /// `WorkerResponse::Sampled`, on the stream the frames and traces already
-    /// ride; a frame with nothing to read publishes nothing, and the magnifier
-    /// keeps what it had.
-    // The window, where in the picture, at what scale, in which view, of which
-    // layer: a dropper read genuinely names that many things.
+    /// `layer` reads that layer **alone** rather than the composite, for a depth
+    /// pass that is usually hidden, and `part_ids` its parts as their numbers.
+    /// The answer arrives as `WorkerResponse::Sampled`; a frame with nothing to
+    /// read publishes nothing, and the magnifier keeps what it had.
+    // A dropper read genuinely names that many things.
     #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn sample_pixels(
@@ -2933,6 +2953,7 @@ impl CompositionReference {
         window: u32,
         scale: f32,
         layer: Option<LayerReference>,
+        part_ids: bool,
         view: u32,
     ) -> Result<(), BridgeError> {
         self.dispatch(WorkerRequest::SamplePixels(SamplePixelsRequest {
@@ -2943,6 +2964,7 @@ impl CompositionReference {
             v,
             window,
             layer,
+            part_ids,
             view,
         }))
     }
@@ -3410,9 +3432,7 @@ impl CompositionReference {
             .collect();
         crate::api::track::settle(&before, &mut nodes);
         let mut graph = crate::api::comp_graph::wiring_into(wiring, nodes);
-        let held = self.graph_of(&doc)?;
-        graph.notes = held.notes.clone();
-        graph.ties = held.ties.clone();
+        graph.keep_canvas(self.graph_of(&doc)?);
         self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
@@ -3532,20 +3552,12 @@ impl CompositionReference {
                 taken.insert(input.id.clone());
             }
         }
-        // A pasted box starts open, as a box added any other way does. A saved
-        // group is an arrangement somebody laid out, so it keeps the boxes shut
-        // that were saved shut, and lands at the pitch it was drawn at.
-        if !named {
-            graph
-                .exposed
-                .extend(added.nodes.iter().filter_map(|node| match node {
-                    lumit_core::comp_graph::GraphNode::Fx(instance) => Some(instance.id),
-                    _ => None,
-                }));
-        }
+        // A pasted box starts shut, as a box added any other way does. A saved
+        // group lands at the pitch it was drawn at.
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
+        graph.ties.extend(added.ties);
         if named {
             graph.groups.push(added.group);
             graph.groups.extend(added.inner);

@@ -17,6 +17,7 @@ import '../time_readout.dart' show monoSlotWidth;
 import 'base.dart';
 import 'menus.dart';
 import 'popups.dart';
+import 'text_field.dart' show TextFieldGestures;
 import 'value_arithmetic.dart';
 
 /// The **modifier ladder** a value scrub runs on, coarsest first — the study's
@@ -133,10 +134,19 @@ const double wellTextSize = 11;
 const double barValueTextSize = 10;
 
 DateTime? _setExpressionAt;
+bool _setExpressionSelects = true;
 
 /// Set expression was chosen from a value's menu. The row the value turns
-/// into asks [tookSetExpression], and opens its editor when it was.
-void noteSetExpression() => _setExpressionAt = DateTime.now();
+/// into asks [tookSetExpression], and opens its editor when it was. A seeded
+/// number opens selected, so the first key replaces it; a dropped reference
+/// keeps the caret after it, which is [select] false.
+void noteSetExpression({bool select = true}) {
+  _setExpressionAt = DateTime.now();
+  _setExpressionSelects = select;
+}
+
+/// Whether the editor [tookSetExpression] opens should select its text.
+bool get setExpressionSelects => _setExpressionSelects;
 
 /// Whether Set expression was chosen a moment ago. It answers yes once.
 bool tookSetExpression() {
@@ -156,6 +166,17 @@ class ValueEditScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(ValueEditScope old) => false;
+}
+
+/// The menu of the property around a value well, which a right press on the well
+/// opens in place of the well's own.
+class ValueMenuScope extends InheritedWidget {
+  final void Function(BuildContext context, Offset at) open;
+
+  const ValueMenuScope({super.key, required this.open, required super.child});
+
+  @override
+  bool updateShouldNotify(ValueMenuScope old) => false;
 }
 
 /// The **value well** (docs/15-DESIGN.md §2.1/§3.1): drag horizontally
@@ -335,7 +356,7 @@ class _DragValueFieldState extends State<DragValueField>
   }
 
   void _showLadder() {
-    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final overlay = rootOverlayOf(context);
     final box = context.findRenderObject();
     final overlayBox = overlay?.context.findRenderObject();
     // No overlay above this field (a bare widget-test host) simply means no
@@ -409,6 +430,9 @@ class _DragValueFieldState extends State<DragValueField>
 
   @override
   GlobalKey<EditableTextState> get editableTextKey => textFieldKey;
+
+  /// The press, drag and right-click of every field, made once.
+  late final _gestures = TextFieldGestures(delegate: this, context: context);
 
   @override
   bool get forcePressEnabled => false;
@@ -533,67 +557,92 @@ class _DragValueFieldState extends State<DragValueField>
       ? v.round().toString()
       : v.toDouble().toStringAsFixed(widget.decimals);
 
-  /// The egui drag-value right-click menu: Reset (when a default is known),
-  /// Copy and Paste, over the system clipboard with the field's own clamp.
-  void _contextMenu(BuildContext context, Offset globalPos) {
+  /// Whether the number stands at the default its row declares.
+  bool get _atDefault {
+    final fallback = widget.resetTo;
+    return fallback != null && (widget.value - fallback).abs() < 1e-5;
+  }
+
+  /// The value's right-click menu: the property's own where it has one
+  /// ([ValueMenuScope]), else Reset where a default is known, and Copy and Paste
+  /// over the system clipboard with the field's own clamp.
+  Future<void> _contextMenu(BuildContext context, Offset globalPos) async {
+    final scope = context.getInheritedWidgetOfExactType<ValueMenuScope>();
+    if (scope != null) {
+      scope.open(context, globalPos);
+      return;
+    }
+    // Read first, so Paste value greys with nothing it can take.
+    final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final pasted = clip == null
+        ? null
+        : parseNumberField(clip.replaceAll(widget.suffix ?? '', '').trim());
+    if (!context.mounted) return;
     showLumitPopup<void>(
       context: context,
       position: globalPos,
-      builder: (close) => FloatSurface(
-        child: IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.resetTo != null)
+      builder: (close) {
+        void done() => close(null);
+        return FloatSurface(
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.resetTo != null) ...[
+                  MenuRow(
+                    enabled: !_atDefault,
+                    onPressed: () {
+                      done();
+                      _edit(
+                          true,
+                          () => widget.onChanged(
+                              widget.resetTo!.clamp(widget.min, widget.max)));
+                    },
+                    child: MenuLabel(l10n.reset, enabled: !_atDefault),
+                  ),
+                  const MenuDivider(),
+                ],
                 MenuRow(
                   onPressed: () {
-                    close(null);
-                    _edit(
-                        true,
-                        () => widget.onChanged(
-                            widget.resetTo!.clamp(widget.min, widget.max)));
+                    done();
+                    Clipboard.setData(ClipboardData(text: _plain(widget.value)));
                   },
-                  child: Text(l10n.reset),
+                  child: MenuLabel(l10n.paramMenuCopyValue),
                 ),
-              MenuRow(
-                onPressed: () {
-                  close(null);
-                  Clipboard.setData(ClipboardData(text: _plain(widget.value)));
-                },
-                child: Text(l10n.menuCopy),
-              ),
-              MenuRow(
-                onPressed: () async {
-                  close(null);
-                  final data = await Clipboard.getData(Clipboard.kTextPlain);
-                  final raw =
-                      data?.text?.replaceAll(widget.suffix ?? '', '').trim();
-                  final parsed = raw == null ? null : parseNumberField(raw);
-                  if (parsed != null && mounted) {
-                    _edit(
-                        true,
-                        () => widget
-                            .onChanged(parsed.clamp(widget.min, widget.max)));
-                  }
-                },
-                child: Text(l10n.menuPaste),
-              ),
-              // Only where the property can actually hold one, so the menu on
-              // a field that cannot never offers it.
-              if (widget.setExpression != null)
                 MenuRow(
+                  enabled: pasted != null,
                   onPressed: () {
-                    close(null);
-                    noteSetExpression();
-                    widget.setExpression?.call();
+                    done();
+                    if (pasted != null && mounted) {
+                      _edit(
+                          true,
+                          () => widget
+                              .onChanged(pasted.clamp(widget.min, widget.max)));
+                    }
                   },
-                  child: Text(l10n.setExpression),
+                  child: MenuLabel(l10n.paramMenuPasteValue,
+                      enabled: pasted != null),
                 ),
-            ],
+                // Only where the property can actually hold one, so the menu on
+                // a field that cannot never offers it.
+                if (widget.setExpression != null) ...[
+                  const MenuDivider(),
+                  MenuRow(
+                    onPressed: () {
+                      done();
+                      noteSetExpression();
+                      widget.setExpression?.call();
+                    },
+                    child: MenuLabel(l10n.menuAddExpression,
+                        action: 'expression.add'),
+                  ),
+                ],
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -616,21 +665,21 @@ class _DragValueFieldState extends State<DragValueField>
           decoration: dress(BoxDecoration(
             color: widget.bare ? null : widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.wellRadius),
-            // `animated`, not `accent`: the focused value field is the one
-            // focus that means "you are about to change a value" (§3.1). Drawn
-            // at the resting face's own width so the edge does not move either.
+            // The accent, as every focused field: `animated` is the keyed
+            // colour. Drawn at the resting face's own width so the edge does
+            // not move either.
             border:
-                Border.all(color: _refused ? t.error : t.animated, width: 1),
+                Border.all(color: _refused ? t.error : t.accent, width: 1),
           ), widget.bare
               ? PartStyle.none
               : partStyle(context, t, 'well', states: const {'focus'})),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
-          // text selected nothing. The I-beam says it can be typed in.
+          // text selected nothing. The I-beam says it can be typed in, and a
+          // right-click opens the same menu every field has.
           child: MouseRegion(
             cursor: SystemMouseCursors.text,
-            child: TextSelectionGestureDetectorBuilder(delegate: this)
-              .buildGestureDetector(
+            child: _gestures.buildGestureDetector(
             child: Padding(
               // The resting face's 6 of padding **plus its 1px edge**: a
               // `Container`'s decoration insets its child by the border it
@@ -641,33 +690,41 @@ class _DragValueFieldState extends State<DragValueField>
               // The well hands its child a tight height, and an `EditableText`
               // given one lays its line out at the *top* of it — so the digits
               // rose four and a half pixels the moment the editor opened, on
-              // top of not moving sideways. The `SizedBox` keeps the full
+              // top of not moving sideways. The `Expanded` keeps the full
               // width, which is what the right-hand anchor needs; the `Center`
               // gives the line its natural height and puts it down the middle.
+              // The unit stays beside the digits, so the number still says
+              // what it counts and does not move when the editor opens.
               child: Center(
-                child: SizedBox(
-                  width: double.infinity,
-                  child: EditableText(
-                    key: textFieldKey,
-                    controller: _controller,
-                    focusNode: _focus,
-                    // Mono while focused too — the number must not change
-                    // width between reading it and typing over it (§7.1) —
-                    // the same size as the resting number, so nothing reflows
-                    // on the click.
-                    style: _valueStyle(t).copyWith(color: t.textPrimary),
-                    // The resting face is right-anchored, so the editor is
-                    // too: the digits stay where they were even though the
-                    // reading loses its sign or its unit on the way into the
-                    // field.
-                    textAlign: TextAlign.right,
-                    cursorColor: t.accent,
-                    backgroundCursorColor: t.surface2,
-                    selectionColor: t.accent.withValues(alpha: 0.5),
-                    selectionControls: desktopTextSelectionHandleControls,
-                    onSubmitted: (_) => _commitText(submitted: true),
+                child: Row(children: [
+                  Expanded(
+                    child: EditableText(
+                      key: textFieldKey,
+                      controller: _controller,
+                      focusNode: _focus,
+                      // Mono while focused too, so the number keeps its width
+                      // between reading it and typing over it (§7.1), and the
+                      // same size as the resting number, so nothing reflows on
+                      // the click.
+                      style: _valueStyle(t).copyWith(color: t.textPrimary),
+                      // The resting face is right-anchored, so the editor is
+                      // too: the digits stay where they were even though the
+                      // reading loses its sign on the way into the
+                      // field.
+                      textAlign: TextAlign.right,
+                      // A number reads left to right in every language.
+                      textDirection: TextDirection.ltr,
+                      cursorColor: t.accent,
+                      backgroundCursorColor: t.surface2,
+                      selectionColor: t.accent.withValues(alpha: 0.5),
+                      selectionControls: desktopTextSelectionHandleControls,
+                      onSubmitted: (_) => _commitText(submitted: true),
+                    ),
                   ),
-                ),
+                  if (widget.suffix case final unit?)
+                    Text(unit,
+                        style: _valueStyle(t).copyWith(color: t.textMuted)),
+                ]),
               ),
             ),
           ),
@@ -806,11 +863,8 @@ class _DragValueFieldState extends State<DragValueField>
                         ? t.error
                         : _dragging
                             ? t.accent
-                            // The one focus ring that is `animated` rather
-                            // than `accent`: it means "you are about to change
-                            // a value" (§3.1, §6.5).
                             : _focused
-                                ? t.animated
+                                ? t.accent
                                 : _hover
                                     ? t.hairlineStrong
                                     : t.hairline,
@@ -835,6 +889,7 @@ class _DragValueFieldState extends State<DragValueField>
               child: Text(
                 _format(widget.value),
                 textAlign: TextAlign.right,
+                textDirection: TextDirection.ltr,
                 maxLines: 1,
                 softWrap: false,
                 style: _valueStyle(t).copyWith(
@@ -843,13 +898,14 @@ class _DragValueFieldState extends State<DragValueField>
                       : widget.keyed
                           ? t.animated
                           // A bare number has no well to say "editable", so it
-                          // rests where the drawing puts it — a bar's own
-                          // secondary reading rather than the well's primary.
-                          : widget.bare
-                              ? (_hover || _focused
-                                  ? t.textPrimary
-                                  : t.textSecondary)
-                              : t.textPrimary,
+                          // rests muted at its default and bright once changed.
+                          // A number in a well at its default rests a step down,
+                          // so one that has been changed stands out down a list.
+                          : _hover || _focused || !_atDefault
+                              ? t.textPrimary
+                              : widget.bare
+                                  ? t.textMuted
+                                  : t.textSecondary,
                 ),
               ),
             ),
