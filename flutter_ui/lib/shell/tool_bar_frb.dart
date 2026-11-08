@@ -320,7 +320,7 @@ Widget _gap(bool pills) =>
 
 /// The tools, then the gap and the armed tool's options. The tools take the
 /// width they need first, so none folds while the bar has room for it. The
-/// options take what is left, and keep at least a quarter of the row (or
+/// options take what is left, and keep at least a third of the row (or
 /// their own width, if less) so a narrow window still shows some of them.
 class _ToolsFirst extends MultiChildRenderObjectWidget {
   const _ToolsFirst({required super.children});
@@ -357,7 +357,7 @@ class _RenderToolsFirst extends RenderBox
       tools.layout(upTo(free), parentUsesSize: true);
       options.layout(upTo(free), parentUsesSize: true);
       final left = free - tools.size.width;
-      final width = min(options.size.width, max(left, room / 4));
+      final width = min(options.size.width, max(left, room / 3));
       tools.layout(upTo(free - width), parentUsesSize: true);
       options.layout(upTo(width), parentUsesSize: true);
     }

@@ -691,6 +691,14 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
               key: const ValueKey('comp-background'),
               behavior: HitTestBehavior.opaque,
               onTapDown: (details) => _pickBackground(details.globalPosition),
+              onSecondaryTapUp: (details) => showColourWellMenu(
+                context,
+                details.globalPosition,
+                current: PickedColour(
+                    _background[0], _background[1], _background[2]),
+                onPicked: (picked) => setState(() =>
+                    _background = [picked.r, picked.g, picked.b, 1.0]),
+              ),
               child: Container(
                 width: compSwatch.width,
                 height: compSwatch.height,

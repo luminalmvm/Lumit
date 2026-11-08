@@ -265,7 +265,14 @@ Widget textPanelMenu(
             act?.call();
           }
 
+          // Reset leads, as on every value field and well.
           return [
+            MenuRow(
+              key: const ValueKey('text-menu-reset'),
+              onPressed: () => run(onReset),
+              child: Text(l10n.reset),
+            ),
+            const MenuDivider(),
             MenuRow(
               key: const ValueKey('text-menu-copy-style'),
               onPressed: () => run(onCopy),
@@ -276,12 +283,6 @@ Widget textPanelMenu(
               enabled: onPaste != null,
               onPressed: () => run(onPaste),
               child: MenuLabel(l10n.textPasteStyle, enabled: onPaste != null),
-            ),
-            const MenuDivider(),
-            MenuRow(
-              key: const ValueKey('text-menu-reset'),
-              onPressed: () => run(onReset),
-              child: Text(l10n.reset),
             ),
             if (animate != null) ...[
               const MenuDivider(),

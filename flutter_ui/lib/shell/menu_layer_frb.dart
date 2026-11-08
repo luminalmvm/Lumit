@@ -46,7 +46,7 @@ import 'camera_settings_dialog.dart';
 import 'model_settings_dialog.dart';
 import 'layer_settings_frb.dart';
 import 'light_settings_dialog.dart';
-import 'menu_bar_frb.dart' show MenuEntry;
+import 'menu_bar_frb.dart' show MenuEntry, PickListEntry;
 import 'number_dialog_frb.dart';
 
 /// The engine's blend-mode names, read once and held.
@@ -1296,7 +1296,7 @@ List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
       checked: first?.info.matte == null,
     ),
     if (shownAt >= 0 && candidates.isNotEmpty)
-      MenuEntry.submenu(numbered(all[shownAt]), [
+      PickListEntry(numbered(all[shownAt]), [
         // Choosing one keeps the kind already in use, or makes an alpha matte.
         for (final e in candidates)
           MenuEntry(

@@ -6,7 +6,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show MenuEntry;
+import '../shell/menu_bar_frb.dart' show MenuEntry, PickListEntry;
 import '../shell/menu_layer_frb.dart' show selectedEntries;
 import '../state/file_dialogs.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
@@ -24,12 +24,12 @@ bool canReplaceSource(BridgeLayerEntry entry) {
 
 /// The row, its list read as it opens: the menu bar rebuilds on every edit, and
 /// walking the project is no part of that.
-class ReplaceSourceEntry extends MenuEntry {
+class ReplaceSourceEntry extends PickListEntry {
   final List<MenuEntry> Function() _rows;
 
   ReplaceSourceEntry(List<MenuEntry> Function() rows)
       : _rows = rows,
-        super.submenu(l10n.menuReplaceSource, const []);
+        super(l10n.menuReplaceSource, const []);
 
   @override
   List<MenuEntry> get children => _rows();

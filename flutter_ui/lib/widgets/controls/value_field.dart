@@ -566,12 +566,18 @@ class _DragValueFieldState extends State<DragValueField>
   /// The value's right-click menu: the property's own where it has one
   /// ([ValueMenuScope]), else Reset where a default is known, and Copy and Paste
   /// over the system clipboard with the field's own clamp.
-  void _contextMenu(BuildContext context, Offset globalPos) {
+  Future<void> _contextMenu(BuildContext context, Offset globalPos) async {
     final scope = context.getInheritedWidgetOfExactType<ValueMenuScope>();
     if (scope != null) {
       scope.open(context, globalPos);
       return;
     }
+    // Read first, so Paste value greys with nothing it can take.
+    final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final pasted = clip == null
+        ? null
+        : parseNumberField(clip.replaceAll(widget.suffix ?? '', '').trim());
+    if (!context.mounted) return;
     showLumitPopup<void>(
       context: context,
       position: globalPos,
@@ -605,20 +611,18 @@ class _DragValueFieldState extends State<DragValueField>
                   child: MenuLabel(l10n.paramMenuCopyValue),
                 ),
                 MenuRow(
-                  onPressed: () async {
+                  enabled: pasted != null,
+                  onPressed: () {
                     done();
-                    final data = await Clipboard.getData(Clipboard.kTextPlain);
-                    final raw =
-                        data?.text?.replaceAll(widget.suffix ?? '', '').trim();
-                    final parsed = raw == null ? null : parseNumberField(raw);
-                    if (parsed != null && mounted) {
+                    if (pasted != null && mounted) {
                       _edit(
                           true,
                           () => widget
-                              .onChanged(parsed.clamp(widget.min, widget.max)));
+                              .onChanged(pasted.clamp(widget.min, widget.max)));
                     }
                   },
-                  child: MenuLabel(l10n.paramMenuPasteValue),
+                  child: MenuLabel(l10n.paramMenuPasteValue,
+                      enabled: pasted != null),
                 ),
                 // Only where the property can actually hold one, so the menu on
                 // a field that cannot never offers it.

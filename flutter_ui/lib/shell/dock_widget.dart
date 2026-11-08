@@ -116,11 +116,13 @@ double dockMinWidth(DockNode node) => switch (node) {
     };
 
 /// The height below which a stacked split stops shrinking a panel and takes
-/// the room from a sibling instead. Only the timelines have one: their
-/// header, their column header and six rows. Everything else scales or
-/// scrolls.
+/// the room from a sibling instead. The timelines have one: their header,
+/// their column header and six rows. So does the Audio panel: its meter, a
+/// layer's rows and the Beats row, under its header and a shut panel's.
+/// Everything else scales or scrolls.
 double panelMinHeight(Panel panel) => switch (panel) {
       Panel.timeline || Panel.audioTimeline || Panel.cutTimeline => 250,
+      Panel.audio => 350,
       _ => 0,
     };
 

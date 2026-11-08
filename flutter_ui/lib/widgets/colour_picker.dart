@@ -123,6 +123,20 @@ Color? parseHex(String input) {
       (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff, 0xff);
 }
 
+/// The numbers in [text] when it holds nothing else, the way Copy value writes
+/// them: numbers with commas, spaces or brackets between. Null for any other
+/// text, so a path that happens to hold numbers is not taken for them.
+List<double>? numbersOnly(String text) {
+  final n = <double>[];
+  for (final part in text.split(RegExp(r'[\s,;()\[\]]+'))) {
+    if (part.isEmpty) continue;
+    final v = double.tryParse(part);
+    if (v == null || !v.isFinite) return null;
+    n.add(v);
+  }
+  return n.isEmpty ? null : n;
+}
+
 /// Format a colour as an upper-case RRGGBB string (no `#`, alpha dropped).
 String formatHex(Color colour) {
   int ch(double f) => (f * 255).round().clamp(0, 255);
@@ -155,19 +169,17 @@ abstract final class ColourClipboard {
       (await Clipboard.getData(Clipboard.kTextPlain))?.text;
 
   /// What a paste gives from [clip], the system clipboard's text: the colour
-  /// copied last while the clipboard still holds it, a hex, or the three
-  /// numbers Copy value writes. Null for anything else.
+  /// copied last while the clipboard still holds it, a hex, or the three or
+  /// four numbers Copy value writes. Null for anything else.
   static PickedColour? from(String? clip) {
     final copied = _copied;
     if (copied != null && (clip == null || clip == _text)) return copied;
     if (clip == null) return null;
     if (parseHex(clip) case final hex?) return PickedColour.of(hex);
-    final n = [
-      for (final m
-          in RegExp(r'-?\d*\.?\d+(?:[eE][-+]?\d+)?').allMatches(clip))
-        double.parse(m[0]!),
-    ];
-    return n.length < 3 ? null : PickedColour(n[0], n[1], n[2]);
+    final n = numbersOnly(clip);
+    return n == null || n.length < 3 || n.length > 4
+        ? null
+        : PickedColour(n[0], n[1], n[2]);
   }
 }
 

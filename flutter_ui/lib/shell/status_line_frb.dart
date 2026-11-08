@@ -47,7 +47,7 @@ import 'package:lumit_flutter/src/rust/api/script.dart'
 import 'cache_confirm_frb.dart';
 import 'export_queue_frb.dart' show exportTimeLeft;
 import 'live_endpoint_frb.dart';
-import 'menu_bar_frb.dart' show saveProjectFrb;
+import 'menu_bar_frb.dart' show revertToSavedFrb, saveProjectFrb;
 import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import 'profile_chip.dart';
 import 'project_history_window.dart';
@@ -559,6 +559,16 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                   saveProjectFrb(state, _ui, forcePicker: true);
                 },
                 child: MenuLabel(l10n.menuSaveAs, action: 'file.save.as'),
+              ),
+              MenuRow(
+                key: const ValueKey('status-project-revert'),
+                enabled: path != null && dirty,
+                onPressed: () {
+                  close(null);
+                  revertToSavedFrb(context, state, path!);
+                },
+                child: MenuLabel(l10n.menuRevertToSaved,
+                    enabled: path != null && dirty),
               ),
               if (path != null && !kIsWeb) ...[
                 const MenuDivider(),

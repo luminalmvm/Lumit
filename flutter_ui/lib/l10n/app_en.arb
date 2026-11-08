@@ -86,7 +86,7 @@
       }
     }
   },
-  "cacheClearAll": "Clear all caches",
+  "cacheClearAll": "Clear all caches…",
   "@cacheClearAll": {
     "description": "Right-click menu of the cache meter in the bottom strip: empties the RAM, graphics card and disk caches of rendered frames. The disk one asks first."
   },
@@ -8251,6 +8251,10 @@
   "@menuOpenRecent": {
     "description": "Menu item."
   },
+  "menuClearRecentProjects": "Clear recent projects",
+  "@menuClearRecentProjects": {
+    "description": "File > Open recent, last row: empties the list of recent projects. The projects themselves are untouched."
+  },
   "menuPaste": "Paste",
   "@menuPaste": {
     "description": "Menu item."
@@ -15862,16 +15866,6 @@
   "exportPresetName": "Preset name",
   "@exportPresetName": {
     "description": "Export dialog: the label of the row that appears under the Preset row, holding the field a preset is named in."
-  },
-  "exportPresetReadOnly": "\"{name}\" is a built-in preset and cannot be changed",
-  "@exportPresetReadOnly": {
-    "description": "Export dialog footer, in place of the summary: shown when Edit is pressed on one of the presets that ship with Lumit. They mean a fixed thing, so they are read-only.",
-    "placeholders": {
-      "name": {
-        "type": "String",
-        "example": "Master"
-      }
-    }
   },
   "exportMakeANoise": "Make a noise",
   "@exportMakeANoise": {

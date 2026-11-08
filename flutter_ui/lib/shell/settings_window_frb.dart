@@ -605,11 +605,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// row counted whatever the search hides, and never while building.
   Set<SettingsPage> _changedPages = const {};
 
+  /// What a keystroke in the search sets: nothing but the query, already read.
+  void _searched() {}
+
   @override
   void setState(VoidCallback fn) {
     super.setState(fn);
-    // Not on the cache readings' tick, which changes no setting.
-    if (fn == _pollPerf) return;
+    // Not on the cache readings' tick or a keystroke in the search, which
+    // change no setting.
+    if (fn == _pollPerf || fn == _searched) return;
     final keep = _keepEveryRow;
     _keepEveryRow = true;
     try {
@@ -3741,7 +3745,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         // out of one, only those of the page that is left showing.
         if (_everywhere && !was) _readEveryPage();
         if (was && !_everywhere) _showPage(_page);
-        setState(() {});
+        setState(_searched);
       });
     _search = created;
     return created;

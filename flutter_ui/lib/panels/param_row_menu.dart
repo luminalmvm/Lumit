@@ -15,7 +15,8 @@ import 'package:uuid/uuid.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show addExpressionRow;
-import '../widgets/colour_picker.dart' show ColourClipboard, PickedColour;
+import '../widgets/colour_picker.dart'
+    show ColourClipboard, PickedColour, numbersOnly;
 import '../widgets/controls.dart';
 import 'drive_chain.dart';
 import 'effect_param_row_frb.dart' show newExpressionLanguage;
@@ -137,16 +138,11 @@ class DriveRow {
 
 double _nought() => 0;
 
-/// Pick out the numbers in pasted text, whichever way they were separated.
-List<double> numbersIn(String text) => [
-      for (final m in RegExp(r'-?\d*\.?\d+(?:[eE][-+]?\d+)?').allMatches(text))
-        double.parse(m[0]!),
-    ];
-
 /// The numbers in pasted text for a row of [axes] axes, or null when they don't
 /// fit it. One number goes on every axis.
 List<double>? pastedAxes(String text, int axes) {
-  final n = numbersIn(text);
+  final n = numbersOnly(text);
+  if (n == null) return null;
   if (n.length == 1) return List.filled(axes, n.first);
   return n.length < axes ? null : n.sublist(0, axes);
 }
@@ -238,11 +234,16 @@ MenuRow _row(String key, String label, VoidCallback onPressed,
     );
 
 /// Copy value and Paste value, for a menu that lays out the row's rows itself.
+/// [clip] is the clipboard's text as the menu opened, '' for nothing, and
+/// Paste value greys when the row can't take it.
 List<Widget> paramCopyRows(
     BuildContext context, ParamMenu menu, VoidCallback close,
-    {bool tickColumn = false}) {
+    {bool tickColumn = false, String? clip}) {
   // A paste on a row with several keys picked moves them all, as typing does.
   final edit = context.getInheritedWidgetOfExactType<ValueEditScope>();
+  // Copy value writes one number an axis, so the row's own value counts them.
+  final axes = numbersOnly(menu.copy?.call() ?? '')?.length ?? 1;
+  final canPaste = clip == null || pastedAxes(clip, axes) != null;
   return [
     if (menu.copy case final copy?)
       _row('param-menu-copy', l10n.paramMenuCopyValue, () {
@@ -256,7 +257,7 @@ List<Widget> paramCopyRows(
         final text = data?.text;
         if (text == null) return;
         edit == null ? paste(text) : edit.run(true, () => paste(text));
-      }, tickColumn: tickColumn),
+      }, enabled: canPaste, tickColumn: tickColumn),
   ];
 }
 
@@ -544,7 +545,7 @@ List<Widget> _rows(
         }, enabled: menu.canReset),
     ],
     [
-      ...paramCopyRows(context, menu, done),
+      ...paramCopyRows(context, menu, done, clip: clip ?? ''),
       if (menu.colour case final colour?) ...[
         _row('param-menu-copy-colour', l10n.swatchCopyColour, () {
           done();

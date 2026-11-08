@@ -20,6 +20,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
+import 'profile_chip.dart' show ProBadge;
 
 /// One thing the palette can run.
 class PaletteCommand {
@@ -45,6 +46,9 @@ class PaletteCommand {
   /// comp, a layer of its kind, an effect. A command has none, and its group
   /// has no slot for one.
   final Widget? icon;
+
+  /// A row for Lumit Pro, to an account without it, wears the menu's badge.
+  final bool needsPro;
   final VoidCallback run;
 
   const PaletteCommand({
@@ -54,6 +58,7 @@ class PaletteCommand {
     this.ticked = false,
     this.disabled,
     this.icon,
+    this.needsPro = false,
     required this.run,
   });
 }
@@ -340,11 +345,22 @@ class _PaletteState extends State<_Palette> {
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Text(
-              command.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: off ? t.body.copyWith(color: t.textDisabled) : null,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    command.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: off ? t.body.copyWith(color: t.textDisabled) : null,
+                  ),
+                ),
+                if (command.needsPro)
+                  const Padding(
+                    padding: EdgeInsetsDirectional.only(start: 8),
+                    child: Opacity(opacity: 0.6, child: ProBadge()),
+                  ),
+              ],
             ),
           ),
           // After the name, so ticked and unticked names start in line.
@@ -352,9 +368,9 @@ class _PaletteState extends State<_Palette> {
             menuTick(true, colour: t.textMuted),
             const SizedBox(width: 8),
           ],
+          // Drawn as the menus draw a chord, greyed row or not.
           if (command.disabled ?? command.shortcut case final note?)
-            Text(note,
-                style: off ? t.small.copyWith(color: t.textDisabled) : t.mono),
+            Text(note, style: t.small.copyWith(color: t.textMuted)),
         ],
       ),
     );

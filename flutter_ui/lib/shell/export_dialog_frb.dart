@@ -1116,7 +1116,7 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// Save as… before them on the preset's own right-click, where the button
   /// beside it is not in reach. The default wears a tick, as a choice does.
   List<Widget> _presetRows(VoidCallback close, {bool saveAs = false}) {
-    // Greyed for a shipped preset, which is not yours to delete.
+    // Greyed for a shipped preset, which is not yours to change or delete.
     final own = _presets.any((p) => p.name == _preset && !p.readOnly);
     return [
       if (saveAs)
@@ -1130,11 +1130,12 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       MenuRow(
         key: const ValueKey('export-preset-edit'),
+        enabled: own,
         onPressed: () {
           close();
-          _editPreset();
+          _nameAPreset(_preset);
         },
-        child: MenuLabel(l10n.exportPresetEdit, ticked: false),
+        child: MenuLabel(l10n.exportPresetEdit, ticked: false, enabled: own),
       ),
       MenuRow(
         key: const ValueKey('export-preset-set-default'),
@@ -2672,17 +2673,6 @@ class _ExportDialogState extends State<_ExportDialog> {
       _refused = null;
       _defaultPreset = _preset;
     });
-  }
-
-  /// *Edit* names the preset in force, so saving replaces it. A built-in is
-  /// read-only and says so rather than opening a field that cannot be used.
-  void _editPreset() {
-    final entry = _presets.where((p) => p.name == _preset).firstOrNull;
-    if (entry != null && entry.readOnly) {
-      setState(() => _refused = l10n.exportPresetReadOnly(entry.name));
-      return;
-    }
-    _nameAPreset(_preset);
   }
 
   void _nameAPreset(String name) => setState(() {

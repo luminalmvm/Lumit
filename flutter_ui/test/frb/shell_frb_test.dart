@@ -878,18 +878,20 @@ void main() {
 
     /// A preset is the whole settings payload under a name: saving one lists
     /// it, applying it fills the fields back in, and deleting it takes it off
-    /// the list. The built-ins are read-only and say so.
+    /// the list. The built-ins are read-only, and Edit greys on them.
     testWidgets('a preset saves, applies and is forgotten again',
         (tester) async {
       await open(tester);
 
-      // A built-in refuses to be edited rather than opening a field that
-      // cannot be used.
       await tester.tap(find.byKey(const ValueKey('export-preset-more')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
+      expect(
+          tester
+              .widget<MenuRow>(find.byKey(const ValueKey('export-preset-edit')))
+              .enabled,
+          isFalse);
+      await tester.tapAt(const Offset(1, 1));
       await tester.pumpAndSettle();
-      expect(find.textContaining('built-in'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
       await tester.pumpAndSettle();
