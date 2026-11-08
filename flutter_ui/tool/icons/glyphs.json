@@ -244,8 +244,8 @@
     },
     {
      "name": "Effects switch",
-     "body": "<path d=\"M8 2.5h-.5a3 3 0 0 0-3 3v8M2.5 7h5\"/><path d=\"M9.5 7l4.5 6.5M14 7l-4.5 6.5\"/>",
-     "comment": "The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word."
+     "body": "<path d=\"M8 2.5h-.5a2.5 2.5 0 0 0-2.5 2.5v8.5M3 7h4.5\"/><path d=\"M10 7.5l3.5 5.5M13.5 7.5L10 13\"/>",
+     "comment": "The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word. The x is kept small, as two crossing strokes at 16px darken fast."
     },
     {
      "name": "Motion blur",
@@ -259,11 +259,13 @@
     {
      "name": "3D",
      "id": "threeD",
-     "body": "<path d=\"M8 2l5 3v6l-5 3-5-3V5z\"/><path d=\"M8 8l5-3M8 8v6M8 8L3 5\"/>"
+     "body": "<path d=\"M8 2l5 3v6l-5 3-5-3V5z\"/><path d=\"M8 8l5-3M8 8v6M8 8L3 5\" opacity=\".55\"/>",
+     "comment": "The inner edges are fainter, as the motion blur's ghosts are, so the cube weighs the same as the fx beside it."
     },
     {
      "name": "Adjustment",
-     "body": "<circle cx=\"8\" cy=\"8\" r=\"5.5\"/><path d=\"M8 2.5v11\"/><path d=\"M8 8a3 3 0 0 1 0 0\" fill=\"currentColor\"/><path d=\"M8 2.5a5.5 5.5 0 0 1 0 11z\" fill=\"currentColor\"/>"
+     "body": "<circle cx=\"8\" cy=\"8\" r=\"5.5\"/><path d=\"M8 2.5v11\"/><path d=\"M8 2.5a5.5 5.5 0 0 1 0 11z\" fill=\"currentColor\" opacity=\".5\"/>",
+     "comment": "The filled half is at half strength, as the matte's is, so a solid blob does not outweigh the line icons beside it."
     },
     {
      "name": "Collapse",

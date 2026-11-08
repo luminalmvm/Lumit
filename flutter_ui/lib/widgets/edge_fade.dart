@@ -1,14 +1,26 @@
-// A sideways strip that fades out at whichever end has more to scroll, so a
-// row of tabs cut off at its edge says there is more of it.
+// A scrolling strip that fades out at whichever end has more to scroll, so a
+// row of tabs or a list cut off at its edge says there is more of it.
 
 import 'package:flutter/widgets.dart';
 
-import 'controls.dart';
+import 'controls/base.dart';
 
 class EdgeFade extends StatefulWidget {
-  /// A horizontal scroll view.
+  /// A scroll view, running the way [axis] says.
   final Widget child;
-  const EdgeFade({super.key, required this.child});
+
+  /// The way the strip scrolls. Sideways unless told otherwise.
+  final Axis axis;
+
+  /// How far in from a cut edge the fade reaches.
+  final double reach;
+
+  const EdgeFade({
+    super.key,
+    this.axis = Axis.horizontal,
+    this.reach = 24,
+    required this.child,
+  });
 
   @override
   State<EdgeFade> createState() => _EdgeFadeState();
@@ -24,7 +36,7 @@ class _EdgeFadeState extends State<EdgeFade> {
       ScrollUpdateNotification(:final metrics) => metrics,
       _ => null,
     };
-    if (metrics == null || metrics.axis != Axis.horizontal) return false;
+    if (metrics == null || metrics.axis != widget.axis) return false;
     final before = metrics.extentBefore > 0.5;
     final after = metrics.extentAfter > 0.5;
     if (before != _before || after != _after) {
@@ -41,13 +53,17 @@ class _EdgeFadeState extends State<EdgeFade> {
     // Only the alpha of the mask counts, so any opaque theme colour will do.
     final ink = ThemeScope.of(context).theme.textPrimary;
     final clear = ink.withValues(alpha: 0);
+    final sideways = widget.axis == Axis.horizontal;
     // Always masked, even when nothing fades, so the scroll view under it is
     // never rebuilt and never loses its place.
     return ShaderMask(
       blendMode: BlendMode.dstIn,
       shaderCallback: (bounds) {
-        final edge = (24 / bounds.width).clamp(0.0, 0.5);
+        final length = sideways ? bounds.width : bounds.height;
+        final edge = (widget.reach / length).clamp(0.0, 0.5);
         return LinearGradient(
+          begin: sideways ? Alignment.centerLeft : Alignment.topCenter,
+          end: sideways ? Alignment.centerRight : Alignment.bottomCenter,
           colors: [_before ? clear : ink, ink, ink, _after ? clear : ink],
           stops: [0, edge, 1 - edge, 1],
         ).createShader(bounds);

@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../../l10n/strings.dart';
 import '../../theme/theme.dart';
+import '../edge_fade.dart';
 import 'base.dart';
 import 'buttons.dart';
+import 'caret.dart';
 import 'menus.dart';
 import 'popups.dart';
 import 'text_field.dart';
@@ -36,12 +38,7 @@ Widget dropdownFace(LumitTheme t, String label, {Widget? face}) =>
             // 6, the gap every `.dd` the mockups compute leaves between its
             // label and its caret.
             const SizedBox(width: 6),
-            // A small quiet mark: the border already says this is a control,
-            // so the caret only has to say which kind (§12A, no raised look).
-            CustomPaint(
-              size: const Size(7, 7),
-              painter: _CaretPainter(t.textMuted),
-            ),
+            Caret(colour: t.textMuted),
           ],
         ],
       );
@@ -413,35 +410,38 @@ class _SearchPickerBodyState extends State<_SearchPickerBody> {
                       style: t.small.copyWith(color: t.textMuted),
                     ),
                   )
-                : ListView.builder(
-                    primary: false,
-                    itemCount: _entries.length,
-                    itemBuilder: (context, i) {
-                      final e = _entries[i];
-                      final heading = e.heading;
-                      if (heading != null) {
-                        return Padding(
-                          padding:
-                              EdgeInsets.fromLTRB(10, i == 0 ? 2 : 8, 10, 2),
+                : EdgeFade(
+                    axis: Axis.vertical,
+                    child: ListView.builder(
+                      primary: false,
+                      itemCount: _entries.length,
+                      itemBuilder: (context, i) {
+                        final e = _entries[i];
+                        final heading = e.heading;
+                        if (heading != null) {
+                          return Padding(
+                            padding: EdgeInsets.fromLTRB(
+                                10, i == 0 ? 2 : 8, 10, 2),
+                            child: Text(
+                              heading,
+                              style: t.small.copyWith(color: t.textMuted),
+                            ),
+                          );
+                        }
+                        final idx = e.optionIndex!;
+                        return MenuRow(
+                          selected: idx == widget.value,
+                          hoverId: idx,
+                          onPressed: () => widget.onPick(idx),
                           child: Text(
-                            heading,
-                            style: t.small.copyWith(color: t.textMuted),
+                            widget.options[idx],
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontFamily: widget.familyOf?.call(idx)),
                           ),
                         );
-                      }
-                      final idx = e.optionIndex!;
-                      return MenuRow(
-                        selected: idx == widget.value,
-                        hoverId: idx,
-                        onPressed: () => widget.onPick(idx),
-                        child: Text(
-                          widget.options[idx],
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontFamily: widget.familyOf?.call(idx)),
-                        ),
-                      );
-                    },
+                      },
+                    ),
                   ),
           ),
         ],
@@ -535,21 +535,3 @@ class BareLazyDropdown<T> extends StatelessWidget {
   }
 }
 
-class _CaretPainter extends CustomPainter {
-  final Color color;
-  const _CaretPainter(this.color);
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-    final w = size.width, h = size.height;
-    canvas.drawLine(Offset(w * 0.2, h * 0.35), Offset(w * 0.5, h * 0.65), p);
-    canvas.drawLine(Offset(w * 0.5, h * 0.65), Offset(w * 0.8, h * 0.35), p);
-  }
-
-  @override
-  bool shouldRepaint(_CaretPainter old) => old.color != color;
-}

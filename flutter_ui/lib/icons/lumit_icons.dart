@@ -144,18 +144,20 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6c3-3 7-3 10 0" opacity=".35"/><path d="M2 9c3 3 9 3 12 0"/></svg>';
   static const String guide =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6 1v14M1 10h14" stroke-dasharray="2 1.5"/></svg>';
-  /// The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word.
+  /// The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word. The x is kept small, as two crossing strokes at 16px darken fast.
   static const String effectsSwitch =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5h-.5a3 3 0 0 0-3 3v8M2.5 7h5"/><path d="M9.5 7l4.5 6.5M14 7l-4.5 6.5"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5h-.5a2.5 2.5 0 0 0-2.5 2.5v8.5M3 7h4.5"/><path d="M10 7.5l3.5 5.5M13.5 7.5L10 13"/></svg>';
   /// A ball and the two places it has just been, the further one fainter. Three short lines behind a small ring read as an equals sign and a letter O at 16px.
   static const String motionBlur =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="8" r="3.5"/><path d="M6.2 5A3.5 3.5 0 0 0 6.2 11"/><path d="M3.2 5A3.5 3.5 0 0 0 3.2 11" opacity=".55"/></svg>';
   static const String flow =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h2.5c2.8 0 4.2 6 7 6H14M2 11h2.5c2.8 0 4.2-6 7-6H14"/><path d="M12.2 9.2L14 11l-1.8 1.8M12.2 3.2L14 5l-1.8 1.8"/></svg>';
+  /// The inner edges are fainter, as the motion blur's ghosts are, so the cube weighs the same as the fx beside it.
   static const String threeD =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5 3v6l-5 3-5-3V5z"/><path d="M8 8l5-3M8 8v6M8 8L3 5"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5 3v6l-5 3-5-3V5z"/><path d="M8 8l5-3M8 8v6M8 8L3 5" opacity=".55"/></svg>';
+  /// The filled half is at half strength, as the matte's is, so a solid blob does not outweigh the line icons beside it.
   static const String adjustment =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11"/><path d="M8 8a3 3 0 0 1 0 0" fill="currentColor"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" opacity=".5"/></svg>';
   static const String collapse =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6L8 11l3.5-5z" fill="currentColor" stroke="none"/></svg>';
   static const String expand =

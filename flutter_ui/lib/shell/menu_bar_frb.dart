@@ -3173,11 +3173,7 @@ class _MenuListState extends State<_MenuList> {
             children: [
               for (final item in items)
                 if (item.isDivider)
-                  Container(
-                    height: 1,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: t.hairline,
-                  )
+                  const MenuDivider()
                 else if (item.children case final children?)
                   SubmenuRow(
                     key: ValueKey<String>('menu-sub-${item.label}'),
