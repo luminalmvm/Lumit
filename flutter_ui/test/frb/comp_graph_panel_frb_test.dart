@@ -424,8 +424,45 @@ void main() {
 
     Finder twirl(UuidValue node) =>
         find.byKey(ValueKey<String>('graph-twirl-node:$node'));
-    /// The rows on a box only read, so the picked box is edited in the Node
-    /// panel. Backspace typed into its well is the well's, not the canvas's
+
+    testWidgets('a drag on a box control commits once and moves the box nowhere',
+        (tester) async {
+      final p = withGraph();
+      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await tester.tap(twirl(blur));
+      await tester.pump();
+
+      final was = p.graph.documentRevision();
+      final field = find.descendant(
+          of: card(blur),
+          matching: find.byKey(ValueKey<String>('fx-float-$blur-radius')));
+      final drag = await tester.startGesture(tester.getCenter(field));
+      for (var i = 0; i < 8; i++) {
+        await drag.moveBy(const Offset(6, 0));
+        await tester.pump();
+      }
+      await drag.up();
+      await tester.pump();
+
+      expect(p.graph.documentRevision(), was + 1,
+          reason: 'one drag, one op');
+      final radius = p.graph
+          .getNodeGraphInstances()
+          .firstWhere((i) => i.id() == blur)
+          .getInfo()
+          .values
+          .where((v) => v.id == 'radius')
+          .map((v) => v.value)
+          .single;
+      expect(stillValue((radius as BridgeEffectValue_Float).field0),
+          isNot(closeTo(30, 0.001)));
+      expect(placeOf(p.graph, blur), const Offset(60, 40),
+          reason: 'the value moved, the box did not');
+    });
+
+    /// The picked box is edited in the Node panel too. Backspace typed into its well is the well's, not the canvas's
     /// Delete, which would take the box with it.
     testWidgets("a Node panel row edits its box in one op, undone in one",
         (tester) async {
@@ -481,8 +518,7 @@ void main() {
 
     // --- A box lists what the Effect controls panel lists. The rows are
     // derived by that panel's own rules, so a box and the panel can never
-    // disagree about what an effect is showing. The rows read; the Node
-    // panel's rows edit.
+    // disagree about what an effect is showing.
 
     /// The Node graph box's way in, on its menu, where a double-click also
     /// goes (§4.2).
@@ -615,7 +651,7 @@ void main() {
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
       await tester.dragFrom(
-          canvas + const Offset(280, 20), const Offset(400, 300));
+          canvas + const Offset(280, 20), const Offset(440, 300));
       await tester.pump();
       expect(picked(tester, blur), isTrue);
       expect(picked(tester, read), isFalse);

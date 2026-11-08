@@ -239,7 +239,8 @@ List<GraphRow> graphRows(
   final laid = <GraphRow>[];
   var top = 0.0;
   for (final row in rows) {
-    const height = graphPortRowHeight;
+    final height =
+        row.param == null ? graphPortRowHeight : graphControlRowHeight;
     laid.add((
       input: row.input,
       output: row.output,
@@ -608,9 +609,11 @@ class GraphNodeCard extends StatelessWidget {
     // Hit-tested past its edge, as the card is: the socket sits half outside.
     return GraphBoxStack(
       children: [
-        // A readout, not a control: a press on it is a press on the box.
         if (control != null)
-          Positioned.fill(child: control)
+          Positioned.fill(
+            left: graphRowInset,
+            child: _claim(control),
+          )
         else if (input != null)
           Positioned.fill(
             child: Padding(
