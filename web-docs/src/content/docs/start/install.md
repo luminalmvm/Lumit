@@ -66,21 +66,27 @@ git clone https://github.com/luminalmvm/Lumit.git
 
 ## First start
 
-On its first start Lumit opens **Set up Lumit**. Each choice is applied as it is made,
-and each is an ordinary row in **Settings** afterwards.
+On its first start Lumit opens **Set up Lumit**. The look is applied as it is chosen.
 
-The **Editing style** cards set how footage arrives and how the Retime graph reads. See
-[Coming from After Effects, Vegas, Premiere Pro or Resolve](/start/coming-from/).
+The **Workspace** cards pick the workspace Lumit opens in. None is picked to begin with, and
+**Continue** waits for one.
 
-| Card | Sets |
+| Card | Opens |
 | --- | --- |
-| **After Effects** | Footage arrives as a layer, and the Retime graph shows the time value of the source. **Use the After Effects shortcuts** loads that keymap. |
-| **Vegas** | Video arrives as a Sequence layer, and the Retime graph shows speed as a percentage. **Only change default Retime graph** leaves video arriving as a layer. **Use the Vegas shortcuts** loads that keymap. |
-| **Premiere Pro or Resolve** | Footage arrives on Sequence layers, in the Cut workspace. |
+| **Edit** | The Project panel, the Viewer, Effects & presets and the Timeline. |
+| **Cut** | The Project panel, the Viewer and the [Cut timeline](/use/cutting/). Footage arrives on Sequence layers. |
+| **Nodes** | The Graph panel, the Timeline, the Viewer and the Node panel. |
 
-Below the cards are **Style**, **Colour scheme**, **Toolbar position** and **Motion**, and
-the tick **Check for new versions of Lumit automatically**. **Skip** puts the look back as
-it was. **Continue** keeps the choices.
+Below the cards, Lumit's own choice in each row is marked **Recommended**.
+
+- **Shortcuts**: **Lumit**, **After Effects** or **Vegas**. **Vegas** also opens the Retime
+  graph to speed, and turns on Vegas's clip drags and **Auto crossfade**.
+- **Style**: **Studio**, **Desk** or **Lantern**.
+- **Colour scheme** and **Language**.
+
+The tick **Automatic updates** sits beside the buttons. **Skip** puts the look back as it
+was. **Continue** keeps the choices. See
+[Coming from After Effects, Vegas, Premiere Pro or Resolve](/start/coming-from/).
 
 ### The tour
 
