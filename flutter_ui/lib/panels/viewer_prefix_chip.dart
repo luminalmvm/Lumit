@@ -22,10 +22,13 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show effectLabelOf;
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_menus.dart' show viewerRow;
 import 'viewer_panel_frb.dart'
     show viewerChipPlate, viewerTagLeft, viewerTagMaxWidth, viewerTagTop;
 
@@ -71,6 +74,32 @@ class ViewerPrefixChip extends StatelessWidget {
 
   const ViewerPrefixChip({super.key, required this.uiState, this.top = 0});
 
+  void _menu(BuildContext context, Offset at, bool on) {
+    final point = uiState.viewerPrefixPoint;
+    final effect = point?.$2;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        viewerRow(l10n.graphViewHere, () => uiState.setAtSelectedEffect(!on),
+            () => close(null),
+            id: 'viewer-at-view-here', ticked: on),
+        // A layer's point is a box on its graph; a node graph's box is
+        // already on the canvas it was picked on.
+        if (point != null && uiState.viewerGraphPoint == null)
+          viewerRow(
+              l10n.fxMenuRevealGraph,
+              () => uiState.revealBox(
+                  point.$1,
+                  effect == null
+                      ? const BridgeNodeRef.source()
+                      : BridgeNodeRef.effect(effect)),
+              () => close(null),
+              id: 'viewer-at-reveal'),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -109,6 +138,9 @@ class ViewerPrefixChip extends StatelessWidget {
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => uiState.setAtSelectedEffect(!on),
+                  // Its own menu, and the press stops here: under the chip is
+                  // the picture, whose menu would pick the layer beneath.
+                  onSecondaryTapUp: (d) => _menu(context, d.globalPosition, on),
                   child: Container(
                     key: const ValueKey('viewer-at-effect'),
                     constraints:

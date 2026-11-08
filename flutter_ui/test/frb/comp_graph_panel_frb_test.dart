@@ -409,6 +409,13 @@ void main() {
       return Offset(p.x, p.y);
     }
 
+    /// How far the canvas moved its boxes to centre them as it opened: where
+    /// [box]'s card is drawn against where the document has it.
+    Offset panOf(WidgetTester tester, CompositionReference graph, UuidValue box) =>
+        tester.getTopLeft(card(box)) -
+        tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas'))) -
+        placeOf(graph, box);
+
     bool picked(WidgetTester tester, UuidValue id, {int at = 0}) => tester
         .widgetList<GraphNodeCard>(find.byWidgetPredicate(
             (w) => w is GraphNodeCard && w.box.key == compNodeKey(id)))
@@ -874,7 +881,9 @@ void main() {
           .id;
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
-      expect(placeOf(p.graph, added), from + const Offset(400, 300) - canvas,
+      expect(
+          placeOf(p.graph, added),
+          from + const Offset(400, 300) - canvas - panOf(tester, p.graph, read),
           reason: 'the box sits where it was let go');
       expect(
           p.graph
@@ -895,6 +904,7 @@ void main() {
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
       final boxes = p.graph.getNodeGraph().nodes.length;
+      final pan = panOf(tester, p.graph, p.graph.getNodeGraph().wiring.output);
 
       // A right-click on empty ground opens the canvas menu, whose first
       // row is the search, and the box lands under the click.
@@ -905,7 +915,7 @@ void main() {
       await tester.pump();
       await pickExposure(tester);
       expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 1));
-      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), click);
+      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), click - pan);
 
       // Tab with the canvas focused, the box landing at the pointer.
       await tester.tapAt(canvas + const Offset(600, 450));
@@ -916,7 +926,8 @@ void main() {
       await tester.pump();
       await pickExposure(tester);
       expect(p.graph.getNodeGraph().nodes, hasLength(boxes + 2));
-      expect(placeOf(p.graph, p.uiState.compGraphNode.value!.id), pointer);
+      expect(
+          placeOf(p.graph, p.uiState.compGraphNode.value!.id), pointer - pan);
 
       // Shift+A, Blender's add key.
       await tester.tapAt(canvas + const Offset(600, 450));
@@ -963,6 +974,7 @@ void main() {
 
       final canvas =
           tester.getTopLeft(find.byKey(const ValueKey('comp-graph-canvas')));
+      final pan = panOf(tester, p.graph, blur);
       lastKnownPointerPosition = canvas + const Offset(100, 300);
       final was = p.graph.documentRevision();
       expect(await pasteSelectionFrb(p.state, p.uiState, p.graph, null), isTrue);
@@ -983,7 +995,7 @@ void main() {
           hasLength(1),
           reason: 'the wire between them came along');
       expect(after.wiring.groups, isEmpty, reason: 'a paste is not a group');
-      expect(placeOf(p.graph, fresh.first), const Offset(100, 300),
+      expect(placeOf(p.graph, fresh.first), const Offset(100, 300) - pan,
           reason: 'the copied corner lands at the pointer');
       expect(placeOf(p.graph, blur), const Offset(40, 40),
           reason: 'the originals are untouched');

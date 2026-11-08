@@ -961,6 +961,10 @@ class LumitMenuBarFrb extends StatelessWidget {
               kind: FxConsoleKind.effect,
               group: l10n.fxConsolePresets,
               run: () => applyPreset(preset),
+              favourite:
+                  ui.workspace.isFavouriteEffect('preset:${preset.name}'),
+              onFavourite: () =>
+                  ui.workspace.toggleFavouriteEffect('preset:${preset.name}'),
             ),
           // Then the effects, the overwhelmingly common reason to open this.
           for (final effect in listEffects())
@@ -969,6 +973,15 @@ class LumitMenuBarFrb extends StatelessWidget {
               kind: FxConsoleKind.effect,
               group: engineLabel(effect.categoryLabel),
               run: () => applyEffect(effect.name),
+              favourite: ui.workspace.isFavouriteEffect(effect.name),
+              onFavourite: () =>
+                  ui.workspace.toggleFavouriteEffect(effect.name),
+              manual: effectManualUrl(
+                name: effect.name,
+                category: effect.category,
+                label: effect.label,
+                namespace: effect.namespace,
+              ),
             ),
           // The node graphs, which apply as effects rather than front.
           for (final (each, name) in graphs)
@@ -1831,12 +1844,13 @@ List<MenuSection> lumitMenus(
                       ui.setViewerView(look, viewId: view.engineId);
                     }
                   },
-                  action: switch ([
-                    for (var slot = 0; slot < 3; slot++) ui.viewSlotOf(slot)
-                  ].indexOf(look)) {
-                    -1 => null,
-                    final slot => 'viewer.3d.slot.${slot + 1}',
-                  },
+                  action: look.action ??
+                      switch ([
+                        for (var slot = 0; slot < 3; slot++) ui.viewSlotOf(slot)
+                      ].indexOf(look)) {
+                        -1 => null,
+                        final slot => 'viewer.3d.slot.${slot + 1}',
+                      },
                   checked: () =>
                       ui.views.active != null &&
                       ui.viewOf(ui.views.active!.engineId) == look,

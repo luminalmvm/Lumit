@@ -3082,7 +3082,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         ),
       ];
     }
-    if (widget.channels.length < 2 && !_anyHidden) return const [];
     return [
       Positioned(
         left: left + 8,

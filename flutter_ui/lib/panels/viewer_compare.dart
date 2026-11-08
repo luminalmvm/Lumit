@@ -12,7 +12,9 @@
 // different compositions beside each other. A **wipe** draws both at the whole
 // box's size and shows the left one up to the line and the right one after it,
 // which is what a before-and-after of the same shot needs: the two pictures
-// have to be in register or the seam means nothing.
+// have to be in register or the seam means nothing. Only the pictures are
+// wiped: the first view's bars run whole under both, and the second view
+// lends its picture alone, at the first one's zoom and pan.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -21,9 +23,45 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../state/viewer_views.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_menus.dart';
+
+/// The second view of a wipe: where across the picture it starts, the line
+/// that sits there, the view whose zoom and pan it takes, and what each side
+/// shows where the two differ. The second side names its own composition
+/// when it is another one; the first one's is in the bar.
+class ViewerWipe {
+  final double x;
+  final Widget seam;
+  final ViewerSurface registerTo;
+  final String leftTag;
+  final String rightTag;
+  final bool nameComp;
+
+  const ViewerWipe({
+    required this.x,
+    required this.seam,
+    required this.registerTo,
+    this.leftTag = '',
+    this.rightTag = '',
+    this.nameComp = false,
+  });
+}
+
+/// Everything right of `x`.
+class ViewerWipeClip extends CustomClipper<Rect> {
+  final double x;
+  const ViewerWipeClip(this.x);
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(x.clamp(0, size.width), 0, size.width, size.height);
+
+  @override
+  bool shouldReclip(ViewerWipeClip old) => old.x != x;
+}
 
 class ViewerCompare extends StatelessWidget {
   final PaneId pane;
@@ -33,7 +71,13 @@ class ViewerCompare extends StatelessWidget {
   final double at;
   final ValueChanged<double> onDivider;
   final Widget left;
-  final Widget right;
+
+  /// The second view: whole in a split, its picture alone in a wipe.
+  final Widget Function(ViewerWipe? wipe) right;
+
+  /// The first view, whose zoom and pan a wipe's second one takes.
+  final ViewerSurface leftView;
+  final ViewerSurface rightView;
 
   const ViewerCompare({
     super.key,
@@ -43,6 +87,8 @@ class ViewerCompare extends StatelessWidget {
     required this.onDivider,
     required this.left,
     required this.right,
+    required this.leftView,
+    required this.rightView,
   });
 
   @override
@@ -51,36 +97,74 @@ class ViewerCompare extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final x = (box.maxWidth * at).clamp(0.0, box.maxWidth);
-        return Stack(
-          children: [
-            if (mode == CompareMode.split) ...[
-              Positioned(left: 0, top: 0, bottom: 0, width: x, child: left),
-              Positioned(
-                left: x,
-                top: 0,
-                bottom: 0,
-                width: box.maxWidth - x,
-                child: right,
-              ),
-            ] else ...[
-              // Both at the whole box's size, so the two pictures are in
-              // register and the seam is a seam rather than two shots meeting.
-              Positioned.fill(child: right),
+        if (mode != CompareMode.split) {
+          final ui = context.read<LumitUiState>();
+          final (leftTag, rightTag) = _tags(ui);
+          // Both at the whole box's size, so the two pictures are in
+          // register and the seam is a seam rather than two shots meeting.
+          return Stack(
+            children: [
+              Positioned.fill(child: left),
               Positioned.fill(
-                child: ClipRect(
-                  clipper: _LeftOf(x),
-                  child: left,
-                ),
+                child: right(ViewerWipe(
+                  x: x,
+                  seam: _seam(context, t, box, x),
+                  registerTo: leftView,
+                  leftTag: leftTag,
+                  rightTag: rightTag,
+                  nameComp: leftView.compId != rightView.compId,
+                )),
               ),
             ],
-            // The line itself, and the grab strip on it. Drawn in the accent,
-            // which §3.2 allows for a tool laid over the image.
+          );
+        }
+        return Stack(
+          children: [
+            Positioned(left: 0, top: 0, bottom: 0, width: x, child: left),
             Positioned(
-              left: x - _grab / 2,
+              left: x,
               top: 0,
               bottom: 0,
-              width: _grab,
-              child: MouseRegion(
+              width: box.maxWidth - x,
+              child: right(null),
+            ),
+            Positioned(
+              left: x - grab / 2,
+              top: 0,
+              bottom: 0,
+              width: grab,
+              child: _seam(context, t, box, x),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// What each side shows, where the two differ: the way it is looked at
+  /// and the channel. Nothing where they look the same.
+  (String, String) _tags(LumitUiState ui) {
+    final a = ui.viewOf(leftView.engineId);
+    final b = ui.viewOf(rightView.engineId);
+    final words = <(String, String)>[
+      if (a != b) (a.title, b.title),
+      if (leftView.channel != rightView.channel)
+        (
+          viewerChannelName(leftView.channel),
+          viewerChannelName(rightView.channel)
+        ),
+    ];
+    return (
+      [for (final w in words) w.$1].join(' · '),
+      [for (final w in words) w.$2].join(' · '),
+    );
+  }
+
+  /// The line itself, and the grab strip on it. Drawn in the accent, which
+  /// §3.2 allows for a tool laid over the image.
+  Widget _seam(
+          BuildContext context, LumitTheme t, BoxConstraints box, double x) =>
+      MouseRegion(
                 cursor: SystemMouseCursors.resizeLeftRight,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -99,7 +183,6 @@ class ViewerCompare extends StatelessWidget {
                       position: d.globalPosition,
                       rows: (close) => [
                         ...viewerCompareRows(ui, () => close(null)),
-                        const MenuDivider(),
                         viewerRow(l10n.viewerMenuResetDivider,
                             () => onDivider(0.5), () => close(null),
                             id: 'viewer-compare-reset'),
@@ -110,27 +193,9 @@ class ViewerCompare extends StatelessWidget {
                     child: Container(width: 1, color: t.accent),
                   ),
                 ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+              );
 
   /// How wide the invisible grab strip on the divider is. Wider than the line
   /// it draws, because a one-pixel target is a target nobody hits.
-  static const double _grab = 11;
-}
-
-/// Everything left of `x`.
-class _LeftOf extends CustomClipper<Rect> {
-  final double x;
-  const _LeftOf(this.x);
-
-  @override
-  Rect getClip(Size size) => Rect.fromLTWH(0, 0, x, size.height);
-
-  @override
-  bool shouldReclip(_LeftOf old) => old.x != x;
+  static const double grab = 11;
 }

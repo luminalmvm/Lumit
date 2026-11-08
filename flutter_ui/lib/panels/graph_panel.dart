@@ -44,6 +44,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
+import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -59,6 +60,8 @@ import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
+import '../state/external_links.dart' show effectManualUrl, openExternalLink;
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 import '../state/settings.dart' show InterfaceSettings;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -705,14 +708,35 @@ bool graphOnStage(BuildContext context) {
   return true;
 }
 
+/// The view that fits [rects] in [viewport] with a little air round them,
+/// the zoom held to [maxZoom]. Null when there is nothing to fit.
+({Offset pan, double zoom})? graphFrame(Size viewport, Iterable<Rect> rects,
+    {double maxZoom = 2}) {
+  Rect? bounds;
+  for (final r in rects) {
+    bounds = bounds?.expandToInclude(r) ?? r;
+  }
+  if (bounds == null || viewport.isEmpty) return null;
+  bounds = bounds.inflate(20);
+  final zoom = math
+      .min(viewport.width / bounds.width, viewport.height / bounds.height)
+      .clamp(0.2, maxZoom);
+  return (
+    zoom: zoom,
+    pan: Offset(
+      (viewport.width - bounds.width * zoom) / 2 - bounds.left * zoom,
+      (viewport.height - bounds.height * zoom) / 2 - bounds.top * zoom,
+    ),
+  );
+}
+
 /// Whether every box sits inside [viewport] with the view at rest (no pan,
-/// zoom 1), which is when a graph can open without being framed.
-bool graphFitsAtRest(Size viewport, GraphLayout layout) =>
-    layout.boxes.every((b) =>
-        b.rect.left >= 0 &&
-        b.rect.top >= 0 &&
-        b.rect.right <= viewport.width &&
-        b.rect.bottom <= viewport.height);
+/// zoom 1), which is when a graph can open without being framed. A box in
+/// the fade at a cut edge is not in view.
+bool graphFitsAtRest(Size viewport, GraphLayout layout) {
+  final seen = (Offset.zero & viewport).deflate(GraphCutFade.reach);
+  return layout.boxes.every((b) => seen.intersect(b.rect) == b.rect);
+}
 
 /// The rectangle a group's wash covers, in canvas units: its members' own
 /// bounds, plus air all round and a band above for its name.
@@ -2251,6 +2275,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
   // --- Menus --------------------------------------------------------------
 
+  /// An effect box's page in the manual, asked as its menu opens.
+  String? _manualOf(BridgeGraphNode node) {
+    if (_effectIdOf(node.node) == null) return null;
+    final info =
+        listEffects().where((e) => e.name == node.matchName).firstOrNull;
+    return info == null
+        ? null
+        : effectManualUrl(
+            name: info.name,
+            category: info.category,
+            label: info.label,
+            namespace: info.namespace);
+  }
+
   /// A box's menu, over the pick as it stands: the right press made an
   /// unpicked box the pick, so every row acts on the whole pick.
   void _boxMenu(String key, Offset at) {
@@ -2292,6 +2330,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       canUngroup: groups.any((g) => g.members.any(picked.contains)),
       onReveal: switch (_effectIdOf(node.node)) {
         final id? => () => _reveal(_layer!, id),
+        null => null,
+      },
+      onManual: switch (_manualOf(node)) {
+        final url? => () => openExternalLink(url),
         null => null,
       },
       // The picture stops at an effect box or the Source; a driver and the
@@ -2421,6 +2463,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       onSelectAll: () => setState(() => _pick([
             for (final n in _graph?.nodes ?? const <BridgeGraphNode>[]) n.node
           ])),
+      onFrameSelected: () => _frameSelected(_viewport, layout),
+      canFrameSelected: _selection.isNotEmpty,
       onFrameAll: () => _frameAll(_viewport, layout),
       onAddNote: addNote,
       onGroup: groupPicked,
@@ -3399,25 +3443,23 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   }
 
   /// Fit every box on screen, with a little air round the edges.
-  void _frameAll(Size viewport, GraphLayout layout, {double maxZoom = 2}) {
-    if (layout.boxes.isEmpty) return;
-    var bounds = layout.boxes.first.rect;
-    for (final box in layout.boxes) {
-      bounds = bounds.expandToInclude(box.rect);
-    }
-    bounds = bounds.inflate(20);
-    final zoom = math
-        .min(
-          viewport.width / bounds.width,
-          viewport.height / bounds.height,
-        )
-        .clamp(0.2, maxZoom);
+  void _frameAll(Size viewport, GraphLayout layout, {double maxZoom = 2}) =>
+      _frame(graphFrame(viewport, [for (final b in layout.boxes) b.rect],
+          maxZoom: maxZoom));
+
+  /// The picked boxes, or every box when none is picked.
+  void _frameSelected(Size viewport, GraphLayout layout) => _frame(graphFrame(
+      viewport,
+      [
+        for (final b in layout.boxes)
+          if (_selection.isEmpty || _selection.containsKey(b.key)) b.rect
+      ]));
+
+  void _frame(({Offset pan, double zoom})? view) {
+    if (view == null) return;
     setState(() {
-      _zoom = zoom;
-      _pan = Offset(
-        (viewport.width - bounds.width * zoom) / 2 - bounds.left * zoom,
-        (viewport.height - bounds.height * zoom) / 2 - bounds.top * zoom,
-      );
+      _zoom = view.zoom;
+      _pan = view.pan;
     });
   }
 
@@ -3482,7 +3524,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _toolbar(t, layout),
+        _toolbarMenu(t, layout),
         if (groupShelf(t) case final shelf?) shelf,
         Expanded(
           child: LayoutBuilder(
@@ -3493,6 +3535,25 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     );
   }
 
+  /// The toolbar, whose right-click lists its switches and the framing.
+  Widget _toolbarMenu(LumitTheme t, GraphLayout layout) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (d) => showGraphToolbarMenu(
+          context,
+          d.globalPosition,
+          autoWire: _autoWire,
+          onAutoWire: () => setState(() => _autoWire = !_autoWire),
+          heal: _heal,
+          onHeal: () => setState(() => _heal = !_heal),
+          snap: _snapToGrid,
+          onSnap: () => setState(() => _snapToGrid = !_snapToGrid),
+          onFrameSelected: () => _frameSelected(_viewport, layout),
+          canFrameSelected: _selection.isNotEmpty,
+          onFrameAll: () => _frameAll(_viewport, layout),
+        ),
+        child: _toolbar(t, layout),
+      );
+
   Widget _toolbar(LumitTheme t, GraphLayout layout) => Container(
         key: const ValueKey('graph-toolbar'),
         height: graphToolbarHeight,
@@ -3501,10 +3562,21 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         child: Row(
           children: [
             Expanded(
-              child: Text(_layerName,
-                  key: const ValueKey('graph-layer-name'),
-                  style: t.body.copyWith(color: t.textMuted),
-                  overflow: TextOverflow.ellipsis),
+              // The layer's name is the layer: its menu, as anywhere a layer
+              // is shown.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapUp: (d) {
+                  if (_layer case final layer?) {
+                    showLayerRowMenu(
+                        context, layer.internallayerId, d.globalPosition);
+                  }
+                },
+                child: Text(_layerName,
+                    key: const ValueKey('graph-layer-name'),
+                    style: t.body.copyWith(color: t.textMuted),
+                    overflow: TextOverflow.ellipsis),
+              ),
             ),
             // The controls fold into one mark when the panel is narrow. The
             // three switches wear the magnet's dress: on is the glyph on the
@@ -3612,6 +3684,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           if (_byKey[key] case final n? when !_derivedNode(n.node)) {
             setState(() => _renamingNode = key);
             return KeyEventResult.handled;
+          }
+        }
+        // F, Shift+F and Ctrl+D, as the keymap has them for the node canvases.
+        if (node.hasPrimaryFocus) {
+          switch (_ui?.keymap.actionFor(BridgeKeyContext.nodes, event)) {
+            case 'nodes.frame.selected':
+              _frameSelected(_viewport, layout);
+              return KeyEventResult.handled;
+            case 'nodes.frame.all':
+              _frameAll(_viewport, layout);
+              return KeyEventResult.handled;
+            case 'effect.duplicate':
+              _duplicatePicked(_ui!);
+              return KeyEventResult.handled;
           }
         }
         // Only the canvas itself: a rename field inside it types these.
@@ -3868,6 +3954,7 @@ FoldItem graphFrameAllFold(LumitTheme t,
         padding: const EdgeInsets.only(right: 10),
         child: LumitTooltip(
           message: l10n.graphFrameAll,
+          action: 'nodes.frame.all',
           child: HoverMark(
             swells: true,
             builder: (context, lit) => GestureDetector(
@@ -4121,8 +4208,12 @@ class GraphNodeCard extends StatelessWidget {
   /// dispatched first — so the flag is set before the canvas decides what the
   /// press meant. Without it, switching one of four picked boxes off collapsed
   /// the pick to that box and then bypassed only it.
-  Widget _claim(Widget child) =>
-      Listener(onPointerDown: (_) => onOwnPress(), child: child);
+  /// A right press is not the control's: it opens the box's menu.
+  Widget _claim(Widget child) => Listener(
+      onPointerDown: (e) {
+        if (e.buttons != kSecondaryMouseButton) onOwnPress();
+      },
+      child: child);
 
   /// **The enable tick**, left of the name — the Effect controls heading's own
   /// switch face ([fxEnableMark]), because a box's enable and its effect

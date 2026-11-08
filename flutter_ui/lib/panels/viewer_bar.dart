@@ -20,7 +20,8 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/settings.dart' show LoopMode;
 import '../state/timecode.dart';
-import '../state/viewer_view.dart' show ModelDisplayRow, ViewerView;
+import '../state/viewer_view.dart'
+    show ModelDisplayRow, ViewerCameraCommand, ViewerView;
 import '../state/workspace.dart' show ViewerLook;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -1073,6 +1074,8 @@ class _ViewPicker extends StatelessWidget {
         context: context,
         position: at,
         rows: (close) => [
+          // Each view with its key: the number pad for the fixed ones, the
+          // F10 to F12 shortcuts for whichever views sit on them.
           for (final v in ui.viewsOffered(viewId))
             MenuRow(
               key: ValueKey<String>('viewer-view-${v.name}'),
@@ -1080,8 +1083,26 @@ class _ViewPicker extends StatelessWidget {
                 close(null);
                 ui.setViewerView(v, viewId: viewId);
               },
-              child: MenuLabel(v.title, ticked: v == view),
+              child: MenuLabel(v.title,
+                  ticked: v == view,
+                  action: v.action ??
+                      switch ([
+                        for (var slot = 0; slot < 3; slot++) ui.viewSlotOf(slot)
+                      ].indexOf(v)) {
+                        -1 => null,
+                        final slot => 'viewer.3d.slot.${slot + 1}',
+                      }),
             ),
+          // Back to where this view started, where it can move at all.
+          if (view != ViewerView.activeCamera) ...[
+            const MenuDivider(),
+            viewerRow(
+                ViewerCameraCommand.reset.title,
+                () => ui.requestViewerCamera(ViewerCameraCommand.reset),
+                () => close(null),
+                id: 'viewer-view-reset',
+                action: ViewerCameraCommand.reset.action),
+          ],
           // How models show, only where there are any to show.
           if (models) ...[
             const MenuDivider(),

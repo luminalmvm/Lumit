@@ -74,6 +74,9 @@ import 'lens_window.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphThumb;
+import 'shader_node_view.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
 /// graph's driver list rather than in the effect stack, and the read model it
@@ -203,6 +206,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     ui.compGraphNode.addListener(_reload);
     ui.model.addListener(_reload);
     ui.panelSearchRequest.addListener(_onSearchRequested);
+    ui.shaderGraphEntry.addListener(_reload);
     _reload();
   }
 
@@ -212,6 +216,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     _ui?.compGraphNode.removeListener(_reload);
     _ui?.model.removeListener(_reload);
     _ui?.panelSearchRequest.removeListener(_onSearchRequested);
+    _ui?.shaderGraphEntry.removeListener(_reload);
   }
 
   @override
@@ -272,14 +277,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     if (layer != null) {
       try {
         name = layer.getInfo().name;
-        if (picked == null) {
-          index = [
-            for (final n in layer.getGraph().nodes)
-              if (n.node is BridgeNodeRef_Effect ||
-                  n.node is BridgeNodeRef_Driver)
-                n,
-          ];
-        }
+        // Every box, the Source and the Layer out with the rest, so a layer
+        // with no effects still lists what its graph has.
+        if (picked == null) index = layer.getGraph().nodes;
       } catch (_) {
         // The layer has gone; there is nothing to list.
       }
@@ -835,6 +835,15 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    // Inside a Custom shader, the Graph panel's face is its graph, and this
+    // panel follows it.
+    if (ui.shaderGraphEntry.value case final entry?) {
+      return ShaderNodeView(
+        entry: entry,
+        header: (name, {crumb, onCrumb}) =>
+            _header(context, name, crumb: crumb, onCrumb: onCrumb),
+      );
+    }
     final picked = _picked;
     final layer = _layer;
     final comp = ui.selectedComp;
@@ -858,11 +867,21 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       );
     }
     if (picked == null && layer != null && comp != null && _index.isNotEmpty) {
+      // The layer's name, and the room under its boxes, are the layer: its
+      // menu, as anywhere a layer is shown.
+      void layerMenu(Offset at) =>
+          showLayerRowMenu(context, layer.internallayerId, at);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(context, _layerName),
-          Expanded(child: _indexList(context, ui)),
+          _header(context, _layerName, onMenu: layerMenu),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onSecondaryTapUp: (d) => layerMenu(d.globalPosition),
+              child: _indexList(context, ui),
+            ),
+          ),
         ],
       );
     }
@@ -947,6 +966,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 );
                 _askPick(n.id);
               },
+              onSecondaryTapUp: (d) =>
+                  _askMenu(compNodeKey(n.id), d.globalPosition),
               child: Container(
                 height: t.density.laneRow,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -993,6 +1014,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               key: ValueKey<String>('node-index-${graphNodeKey(n.node)}'),
               behavior: HitTestBehavior.opaque,
               onTap: () => ui.graphNode.value = n.node,
+              onSecondaryTapUp: (d) =>
+                  _askMenu(graphNodeKey(n.node), d.globalPosition),
               // An effect's rows are a card in Effect controls as well, and
               // a double-click goes there.
               onDoubleTap: switch (n.node) {
@@ -1010,11 +1033,16 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                     // mark for a driver, so the two kinds read apart.
                     SizedBox(
                       width: 18,
-                      child: n.node is BridgeNodeRef_Driver
-                          ? glyph.LumitIcon(LumitIcons.driven,
-                              size: 12, colour: t.textMuted)
-                          : lumitIcon(LumitIcon.fx,
-                              size: 12, color: t.textMuted),
+                      child: switch (n.node) {
+                        BridgeNodeRef_Driver() => glyph.LumitIcon(
+                            LumitIcons.driven,
+                            size: 12,
+                            colour: t.textMuted),
+                        BridgeNodeRef_Effect() => lumitIcon(LumitIcon.fx,
+                            size: 12, color: t.textMuted),
+                        _ => lumitIcon(LumitIcon.nodes,
+                            size: 12, color: t.textMuted),
+                      },
                     ),
                     Expanded(
                       child: Text(
@@ -1331,12 +1359,46 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       }
       final path = '$id/${group.label}';
       final open = _groupOpen[path] ?? !group.collapsed;
+      final paths = [
+        for (final g in groups)
+          if (g.label.isNotEmpty) '$id/${g.label}',
+      ];
       rows.add(fxGroupHeaderRow(
         context,
         key: ValueKey<String>('node-group-$path'),
         label: group.label,
         open: open,
         onToggle: () => setState(() => _groupOpen[path] = !open),
+        onContextMenu: (at) => showMenuAt<void>(
+          context: context,
+          position: at,
+          rows: (close) => [
+            MenuRow(
+              onPressed: () {
+                close(null);
+                setState(() => _groupOpen[path] = !open);
+              },
+              child: MenuLabel(open ? l10n.fxMenuCollapse : l10n.fxMenuExpand),
+            ),
+            const MenuDivider(),
+            MenuRow(
+              onPressed: () {
+                close(null);
+                setState(
+                    () => _groupOpen.addAll({for (final p in paths) p: true}));
+              },
+              child: MenuLabel(l10n.fxMenuExpandAll),
+            ),
+            MenuRow(
+              onPressed: () {
+                close(null);
+                setState(
+                    () => _groupOpen.addAll({for (final p in paths) p: false}));
+              },
+              child: MenuLabel(l10n.fxMenuCollapseAll),
+            ),
+          ],
+        ),
       ));
       if (open) rows.addAll(rowsFor(run));
     }

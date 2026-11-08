@@ -133,6 +133,25 @@ void freezeAtPlayhead(BuildContext context, List<BridgeLayerEntry> targets) {
           entry.layer.freezeAtPlayhead(frame: frame, holdFrames: hold));
 }
 
+/// Every target playing at [percent] at the playhead, from a point there.
+void setSpeedAtPlayhead(
+    BuildContext context, List<BridgeLayerEntry> targets, double percent) {
+  final ui = _uiOf(context);
+  final (fpsNum, fpsDen) = ui.model.fpsExact;
+  final fps = ui.model.fps;
+  final at = ui.playheadFrame.value;
+  _forEach(context, targets, (entry) {
+    if (entry.info.retime == null) entry.layer.toggleRetimeProperty();
+    final map = entry.layer.getRetimeProperty();
+    if (map is! BridgeScalar_Keyframed) return;
+    BridgeRational timeOf(double seconds) =>
+        timeOfSubframe(seconds * fps, fpsNum, fpsDen);
+    entry.layer.setRetimeProperty(
+        value: BridgeScalar.keyframed(
+            envelopeWithSpeedAt(map.field0, at / fps, percent, timeOf)));
+  });
+}
+
 /// Ramp every target from the speed at the playhead to [percent] over [frames].
 void rampLayers(BuildContext context, List<BridgeLayerEntry> targets,
     double percent, int frames, SpeedCurve curve) {

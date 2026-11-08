@@ -82,6 +82,7 @@ import '../widgets/colour_picker.dart';
 import 'viewer_bar.dart';
 import 'viewer_camera.dart' show altNavigates;
 import 'viewer_compare.dart';
+import 'viewer_view_cube.dart' show ViewLookTag;
 import 'viewer_deck.dart';
 import 'viewer_menus.dart';
 import 'viewer_rulers.dart' show viewerRulerBand;
@@ -229,13 +230,18 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
               alone: true);
         }
         if (compare != CompareMode.none) {
+          // A wipe is one picture under one bar, so neither side wears the
+          // active edge.
+          final wipe = compare == CompareMode.wipe;
           return ViewerCompare(
             pane: widget.pane,
             mode: compare,
             at: ui.views.dividerOf(widget.pane),
             onDivider: (at) => ui.views.setDivider(widget.pane, at),
-            left: _surface(ui, shown[0]),
-            right: _surface(ui, shown[1]),
+            left: _surface(ui, shown[0], edge: !wipe, wipeLead: wipe),
+            right: (side) => _surface(ui, shown[1], wipe: side),
+            leftView: shown[0],
+            rightView: shown[1],
           );
         }
         return _grid(ui, shown, layout);
@@ -249,15 +255,27 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
   ///
   /// A press anywhere in it fronts it, before the content sees the event —
   /// the same rule the dock's own pane chrome follows, one level down.
-  Widget _surface(LumitUiState ui, ViewerSurface view, {bool alone = false}) {
+  Widget _surface(LumitUiState ui, ViewerSurface view,
+      {bool alone = false,
+      bool edge = true,
+      bool wipeLead = false,
+      ViewerWipe? wipe}) {
     final surface = ViewerViewSurface(
       key: ValueKey(view.id),
       pane: widget.pane,
       view: view,
+      wipe: wipe,
+      wipeLead: wipeLead,
     );
     // One view in the pane is the pane, so it needs no edge of its own: the
     // dock already draws one round the active pane.
     if (alone) return surface;
+    // Without an edge there is nothing here that takes a press of its own,
+    // so a wipe's second side lets presses outside its picture through.
+    if (!edge || wipe != null) {
+      return Listener(
+          onPointerDown: (_) => ui.frontView(view.id), child: surface);
+    }
     final t = ThemeScope.of(context).theme;
     final active = view.id == ui.views.activeId;
     return Listener(
@@ -315,7 +333,20 @@ class ViewerViewSurface extends StatefulWidget {
   final PaneId pane;
   final ViewerSurface view;
 
-  const ViewerViewSurface({super.key, required this.pane, required this.view});
+  /// This view as a wipe's second side: its picture alone, from the line
+  /// across, at the first view's zoom and pan.
+  final ViewerWipe? wipe;
+
+  /// This view as a wipe's first side, whose zoom and pan the second takes.
+  final bool wipeLead;
+
+  const ViewerViewSurface({
+    super.key,
+    required this.pane,
+    required this.view,
+    this.wipe,
+    this.wipeLead = false,
+  });
 
   @override
   State<ViewerViewSurface> createState() => _ViewerPanelFrbState();
@@ -335,13 +366,36 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
 
   LumitUiState? get _uiOrNull => _boundUi;
 
-  double? get _zoom => _view.magnification;
-  set _zoom(double? z) => _view.magnification = z;
+  /// Where the picture sits: this view's own place, or in a wipe the first
+  /// view's, so the two pictures stay in register.
+  ViewerSurface get _place => widget.wipe?.registerTo ?? _view;
 
-  Offset get _pan => Offset(_view.panX, _view.panY);
+  double? get _zoom => _place.magnification;
+  set _zoom(double? z) => _place.magnification = z;
+
+  Offset get _pan => Offset(_place.panX, _place.panY);
   set _pan(Offset p) {
-    _view.panX = p.dx;
-    _view.panY = p.dy;
+    _place.panX = p.dx;
+    _place.panY = p.dy;
+  }
+
+  /// In a wipe the two sides share one place, so a move on either side
+  /// redraws both: once per frame, and only when the place has moved.
+  (double?, Offset)? _placeTold;
+  bool _placeQueued = false;
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    if ((widget.wipe == null && !widget.wipeLead) || _placeQueued) return;
+    _placeQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _placeQueued = false;
+      final now = (_zoom, _pan);
+      if (!mounted || now == _placeTold) return;
+      _placeTold = now;
+      _uiOrNull?.views.touch();
+    });
   }
 
   ViewerChannel get _channel => _view.channel;
@@ -980,45 +1034,105 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         ),
     ];
 
+    // A wipe's second side: the strips keep their room, so the picture sits
+    // exactly over the first side's, and draw nothing; the first side's bars
+    // run under both.
+    final wipe = widget.wipe;
+    if (wipe != null) {
+      Widget hidden(Widget strip) => Visibility(
+          visible: false,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: strip);
+      above.setAll(0, above.map(hidden));
+      below.setAll(0, below.map(hidden));
+    }
+    final picture = wipe == null ? stage : _wiped(wipe, stage, settings.name);
+
     // Keyed either way: the picture with its strips, which is only here while
     // a composition is shown.
     if (!round) {
       return Column(
         key: const ValueKey('viewer-comp-view'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [...above, Expanded(child: stage), ...below],
+        children: [...above, Expanded(child: picture), ...below],
       );
     }
     // The room shows between the pills and the picture, the same ground that
     // shows between panels; the pane draws no card of its own under Lantern.
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final strip in above) ...[
+          strip,
+          SizedBox(height: t.tokens.tileGap)
+        ],
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+              boxShadow: wipe == null ? t.tokens.cardShadow : null,
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: picture,
+          ),
+        ),
+        for (final strip in below) ...[
+          SizedBox(height: t.tokens.tileGap),
+          strip
+        ],
+      ],
+    );
+    // A wipe's second side lets the first side's room show through.
+    if (wipe != null) {
+      return KeyedSubtree(
+          key: const ValueKey('viewer-comp-view'), child: column);
+    }
     return ColoredBox(
       key: const ValueKey('viewer-comp-view'),
       color: t.room,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final strip in above) ...[
-            strip,
-            SizedBox(height: t.tokens.tileGap)
-          ],
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(t.tokens.cardRadius),
-                boxShadow: round ? t.tokens.cardShadow : null,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: stage,
-            ),
-          ),
-          for (final strip in below) ...[
-            SizedBox(height: t.tokens.tileGap),
-            strip
-          ],
-        ],
-      ),
+      child: column,
     );
   }
+
+  /// A wipe's second side: its picture from the line across, the line on it,
+  /// and a quiet name on each side of the line where the two differ.
+  Widget _wiped(ViewerWipe wipe, Widget stage, String compName) =>
+      LayoutBuilder(builder: (context, box) {
+        final right = [
+          if (wipe.nameComp) compName,
+          if (wipe.rightTag.isNotEmpty) wipe.rightTag,
+        ].join(' · ');
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRect(clipper: ViewerWipeClip(wipe.x), child: stage),
+            if (wipe.leftTag.isNotEmpty)
+              Positioned(
+                right: box.maxWidth - wipe.x + _wipeTagGap,
+                bottom: _wipeTagGap,
+                child: ViewLookTag(look: wipe.leftTag),
+              ),
+            if (right.isNotEmpty)
+              Positioned(
+                left: wipe.x + _wipeTagGap,
+                bottom: _wipeTagGap,
+                child: ViewLookTag(look: right),
+              ),
+            Positioned(
+              left: wipe.x - ViewerCompare.grab / 2,
+              top: 0,
+              bottom: 0,
+              width: ViewerCompare.grab,
+              child: wipe.seam,
+            ),
+          ],
+        );
+      });
+
+  /// How far a wipe's side names sit from the line and the picture's foot.
+  static const double _wipeTagGap = 8;
 
   /// The picture a 3D viewport fills, on screen: round the comp's middle out
   /// to the farther edge of the pane each way, in whole steps of 16 comp

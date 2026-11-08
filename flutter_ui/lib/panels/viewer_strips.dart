@@ -19,6 +19,7 @@ import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/dock_widget.dart' show DockPaneHandle;
+import '../shell/project_settings_frb.dart' show showProjectSettingsFrb;
 import '../state/settings.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show ViewerLook;
@@ -707,18 +708,27 @@ class _ColourDropdown extends StatelessWidget {
     final summary = ui.colourSummary;
     final engaged = look.stops != 0 || look.toneMap;
     final name = _faceName(summary, ui.colourView);
-    // One transform and nothing to say about it is no choice: the name alone.
+    // One transform and nothing to say about it is no choice: the name alone,
+    // with the same menu behind it for the way to the project's colour.
     if (summary.displays.isEmpty &&
         !showToneMap &&
         ui.colourView == null &&
         (summary.path.isEmpty || summary.loaded)) {
       return LumitTooltip(
         message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
-        child: Text(
-          engaged ? l10n.viewerDisplayTransformPreview(name) : name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: t.small.copyWith(color: engaged ? t.accent : t.textMuted),
+        child: Builder(
+          builder: (context) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _open(context, t, ui, summary),
+            onSecondaryTapUp: (d) =>
+                _openAt(context, t, ui, summary, d.globalPosition),
+            child: Text(
+              engaged ? l10n.viewerDisplayTransformPreview(name) : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.small.copyWith(color: engaged ? t.accent : t.textMuted),
+            ),
+          ),
         ),
       );
     }
@@ -774,6 +784,7 @@ class _ColourDropdown extends StatelessWidget {
   void _openAt(BuildContext context, LumitTheme t, LumitUiState ui,
       BridgeColourSummary summary, Offset at) {
     final view = ui.colourView;
+    final project = Provider.of<LumitState>(context, listen: false).project;
     final problem = summary.path.isEmpty || summary.loaded
         ? null
         : colourProblem(summary.problem, {
@@ -859,6 +870,21 @@ class _ColourDropdown extends StatelessWidget {
               Text(l10n.viewerColourToneMap),
             ]),
           ),
+        // Where the working space and the config are set.
+        if (project != null) ...[
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('viewer-colour-settings'),
+            onPressed: () {
+              close(null);
+              showProjectSettingsFrb(context, project);
+            },
+            child: Row(children: [
+              menuTick(false),
+              Text(l10n.menuProjectSettings),
+            ]),
+          ),
+        ],
       ],
     );
   }

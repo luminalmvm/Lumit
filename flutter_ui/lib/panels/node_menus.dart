@@ -86,6 +86,7 @@ Future<void> showGraphBoxMenu(
   VoidCallback? onExpand,
   String? enterLabel,
   VoidCallback? onEnter,
+  VoidCallback? onAddNode,
   VoidCallback? onCopy,
   VoidCallback? onPaste,
   bool canPaste = true,
@@ -98,6 +99,7 @@ Future<void> showGraphBoxMenu(
   bool? viewHere,
   VoidCallback? onViewHere,
   VoidCallback? onReveal,
+  VoidCallback? onManual,
   VoidCallback? onDisconnectAll,
   VoidCallback? onDelete,
 }) =>
@@ -112,12 +114,14 @@ Future<void> showGraphBoxMenu(
             (expanded ?? false) ? l10n.graphHideSockets : l10n.graphShowSockets,
             onExpand),
         if (enterLabel != null) _Row('enter', enterLabel, onEnter),
+        _Row('add-node', l10n.graphAddNode, onAddNode, action: 'console.open'),
       ],
       [
         _Row('copy', l10n.menuCopy, onCopy, action: 'edit.copy'),
         _Row('paste', l10n.menuPaste, onPaste,
             action: 'edit.paste', enabled: canPaste),
-        _Row('duplicate', l10n.menuDuplicate, onDuplicate),
+        _Row('duplicate', l10n.menuDuplicate, onDuplicate,
+            action: 'effect.duplicate'),
       ],
       [
         _Row('group', l10n.graphGroup, onGroup, action: 'layer.group'),
@@ -131,6 +135,7 @@ Future<void> showGraphBoxMenu(
         // picture stops here.
         _Row('view-here', l10n.graphViewHere, onViewHere, ticked: viewHere),
         _Row('reveal', l10n.graphRevealEffect, onReveal),
+        _Row('manual', l10n.fxMenuManual, onManual),
         _Row('disconnect-all', l10n.graphDisconnectAll, onDisconnectAll),
       ],
       [
@@ -192,6 +197,8 @@ Future<void> showGraphCanvasMenu(
   VoidCallback? onPaste,
   bool canPaste = true,
   VoidCallback? onSelectAll,
+  VoidCallback? onFrameSelected,
+  bool canFrameSelected = true,
   VoidCallback? onFrameAll,
   VoidCallback? onAddNote,
   VoidCallback? onGroup,
@@ -206,11 +213,43 @@ Future<void> showGraphCanvasMenu(
       [
         _Row('select-all', l10n.menuSelectAll, onSelectAll,
             action: 'edit.select.all'),
-        _Row('frame-all', l10n.graphFrameAll, onFrameAll),
+        _Row('frame-selected', l10n.graphFrameSelected, onFrameSelected,
+            action: 'nodes.frame.selected', enabled: canFrameSelected),
+        _Row('frame-all', l10n.graphFrameAll, onFrameAll,
+            action: 'nodes.frame.all'),
       ],
       [
         _Row('add-note', l10n.tipGraphNote, onAddNote),
         _Row('group', l10n.graphGroup, onGroup,
             action: 'layer.group', enabled: canGroup),
+      ],
+    ]);
+
+/// A canvas toolbar's menu: its switches as ticked rows, then the framing.
+/// A switch the canvas doesn't have is left out.
+Future<void> showGraphToolbarMenu(
+  BuildContext context,
+  Offset at, {
+  bool? autoWire,
+  VoidCallback? onAutoWire,
+  bool? heal,
+  VoidCallback? onHeal,
+  required bool snap,
+  required VoidCallback onSnap,
+  required VoidCallback onFrameSelected,
+  bool canFrameSelected = true,
+  required VoidCallback onFrameAll,
+}) =>
+    _show(context, at, [
+      [
+        _Row('auto-wire', l10n.graphAutoWire, onAutoWire, ticked: autoWire),
+        _Row('heal', l10n.graphHeal, onHeal, ticked: heal),
+        _Row('snap', l10n.menuSnapToGrid, onSnap, ticked: snap),
+      ],
+      [
+        _Row('frame-selected', l10n.graphFrameSelected, onFrameSelected,
+            action: 'nodes.frame.selected', enabled: canFrameSelected),
+        _Row('frame-all', l10n.graphFrameAll, onFrameAll,
+            action: 'nodes.frame.all'),
       ],
     ]);

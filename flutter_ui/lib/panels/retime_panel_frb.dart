@@ -115,8 +115,14 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
   @override
   void dispose() {
     _changes.removeListener(_askEngine);
+    _typed.dispose();
     super.dispose();
   }
+
+  /// The strip's speed being typed: the speed under the playhead, written as
+  /// a point there.
+  bool _typing = false;
+  final TextEditingController _typed = TextEditingController();
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -148,12 +154,15 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
             ? 0
             : first.info.outFrame - first.info.inFrame;
     final label = t.body.copyWith(color: t.textMuted);
-    final group = clip != null ? clips.length : selectedEntries(_ui).length;
-    final name = clip?.clip.sourceName ?? first?.info.name ?? '';
+    final picked = selectedEntries(_ui);
+    final group = clip != null ? clips.length : picked.length;
+    // The picked layer is named even where it can't take a Retime.
+    final named = first ?? picked.firstOrNull;
+    final name = clip?.clip.sourceName ?? named?.info.name ?? '';
     final tint = clip != null
         ? clip.clip.label ??
             _ui.model.byId(clip.layer.internallayerId)?.info.label
-        : first?.info.label;
+        : named?.info.label;
     void toSpeed(double percent) => clip != null
         ? setClipsSpeed(context, clips, math.max(1, percent.abs()))
         : stretchToSpeed(context, targets, math.max(1, percent.abs()));
@@ -250,26 +259,24 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                         ),
                       ),
                   ]),
-                  const SizedBox(height: 6),
-                  _dimmed(
-                    on,
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Flat at 100% until there's a Retime to draw, so it
-                        // reserves no ground for a shape it hasn't got.
-                        _strip(
-                            t,
-                            first,
-                            clip?.clip,
-                            retimed
-                                ? (box.maxHeight - _besideStrip)
-                                    .clamp(_stripLeast, _stripMost)
-                                    .toDouble()
-                                : _stripLeast),
-                        // With nothing to retime the name row and the flat
-                        // strip are the whole panel.
-                        if (on) ...[
+                  // With nothing to retime the name and the switch it can't
+                  // use are the whole panel.
+                  if (on) ...[
+                    const SizedBox(height: 6),
+                    // Flat at 100% until there's a Retime to draw, so it
+                    // reserves no ground for a shape it hasn't got.
+                    _strip(
+                        t,
+                        first,
+                        clip?.clip,
+                        retimed
+                            ? (box.maxHeight - _besideStrip)
+                                .clamp(_stripLeast, _stripMost)
+                                .toDouble()
+                            : _stripLeast,
+                        onSpeed: clip == null && targets.isNotEmpty
+                            ? (v) => setSpeedAtPlayhead(context, targets, v)
+                            : null),
                           const SizedBox(height: 10),
                           if (wide)
                             Row(children: [
@@ -311,10 +318,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                               ],
                             ),
                           ],
-                        ],
-                      ],
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -333,7 +337,8 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
   /// line, so they read as "here". Past the middle they hang on the line's left.
   /// Click or drag to seek. Reads the keys in hand and asks the engine nothing.
   Widget _strip(
-      LumitTheme t, BridgeLayerEntry? entry, BridgeClip? clip, double height) {
+      LumitTheme t, BridgeLayerEntry? entry, BridgeClip? clip, double height,
+      {ValueChanged<double>? onSpeed}) {
     final keys = clip != null
         ? keysOf(clip.retime)
         : entry == null
@@ -410,16 +415,58 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                           ? 0.0
                           : (frame - inFrame) / span * box.maxWidth;
                       final hangs = x > box.maxWidth / 2;
-                      final readout = Text(
+                      final style = t.mono.copyWith(
+                        fontSize: 18,
+                        color: keys.isEmpty ? t.textMuted : t.textPrimary,
+                      );
+                      final shown = Text(
                         '${speedText(speed, fine: false)}'
                         '${l10n.unitSymbolPercent}',
                         key: const ValueKey('retime-readout'),
                         maxLines: 1,
-                        style: t.mono.copyWith(
-                          fontSize: 18,
-                          color: keys.isEmpty ? t.textMuted : t.textPrimary,
-                        ),
+                        style: style,
                       );
+                      void stop() => setState(() => _typing = false);
+                      // A click types the speed here, as a point at the
+                      // playhead; Speed below stays the whole layer's.
+                      final readout = onSpeed == null
+                          ? shown
+                          : _typing
+                              ? SizedBox(
+                                  width: 80,
+                                  child: HouseTextField(
+                                    key: const ValueKey('retime-readout-field'),
+                                    controller: _typed,
+                                    width: double.infinity,
+                                    autofocus: true,
+                                    style: style,
+                                    onCancelled: stop,
+                                    onTapOutside: stop,
+                                    onSubmitted: (text) {
+                                      stop();
+                                      final v = double.tryParse(text
+                                          .replaceAll(
+                                              l10n.unitSymbolPercent, '')
+                                          .trim());
+                                      if (v != null && v > 0) onSpeed(v);
+                                    },
+                                  ),
+                                )
+                              : MouseRegion(
+                                  cursor: SystemMouseCursors.text,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () {
+                                      _typed.text =
+                                          speedText(speed, fine: true);
+                                      _typed.selection = TextSelection(
+                                          baseOffset: 0,
+                                          extentOffset: _typed.text.length);
+                                      setState(() => _typing = true);
+                                    },
+                                    child: shown,
+                                  ),
+                                );
                       // Half the strip is the least the pair ever has to stand
                       // in, so the source time goes first when that's short.
                       final time = source == null ||

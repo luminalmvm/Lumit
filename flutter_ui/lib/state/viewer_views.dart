@@ -377,6 +377,10 @@ class ViewerViews extends ChangeNotifier {
   /// Where the divider sits in a compare, as a fraction across the pane.
   final Map<PaneId, double> paneDivider = {};
 
+  /// The layout a compare split the pane from, to put back when it ends, and
+  /// the view that was there, which stays whichever side it ended on.
+  final Map<PaneId, ({ViewLayout layout, String? keep})> _beforeCompare = {};
+
   String? _activeId;
 
   /// The view the transport plays, when one has been named (docs/07, "always
@@ -477,6 +481,8 @@ class ViewerViews extends ChangeNotifier {
         ..addAll(footage);
     }
     paneLayouts[pane] = layout;
+    // A layout picked during a compare is the one to keep after it.
+    _beforeCompare.remove(pane);
     forPane(pane);
     notifyListeners();
   }
@@ -485,12 +491,32 @@ class ViewerViews extends ChangeNotifier {
 
   void setCompare(PaneId pane, CompareMode mode) {
     if (compareOf(pane) == mode) return;
-    // A compare needs two pictures to put together.
+    // A compare needs two pictures to put together, and ending it puts back
+    // the layout it split.
     if (mode != CompareMode.none && layoutOf(pane).views < 2) {
+      _beforeCompare[pane] =
+          (layout: layoutOf(pane), keep: paneViews[pane]?.firstOrNull);
       paneLayouts[pane] = ViewLayout.twoAcross;
       forPane(pane);
+    } else if (mode == CompareMode.none) {
+      if (_beforeCompare.remove(pane) case final before?) {
+        final ids = paneViews[pane];
+        if (before.keep case final keep? when ids != null && ids.remove(keep)) {
+          ids.insert(0, keep);
+        }
+        paneLayouts[pane] = before.layout;
+        forPane(pane);
+      }
     }
     paneCompare[pane] = mode;
+    notifyListeners();
+  }
+
+  /// The two views of a compare the other way round.
+  void swapCompare(PaneId pane) {
+    final ids = paneViews[pane];
+    if (ids == null || ids.length < 2) return;
+    ids.insert(1, ids.removeAt(0));
     notifyListeners();
   }
 
@@ -643,6 +669,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.clear();
     paneCompare.clear();
     paneDivider.clear();
+    _beforeCompare.clear();
     viewportPanes.clear();
     _activeId = null;
     alwaysPreviewId = null;

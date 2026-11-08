@@ -51,6 +51,7 @@ pub mod retime;
 pub mod roto;
 pub mod routes;
 pub mod script;
+pub mod shader_fault;
 pub mod shape;
 pub mod share;
 pub mod shell;

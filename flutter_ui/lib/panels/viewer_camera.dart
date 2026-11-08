@@ -76,6 +76,7 @@ import 'viewer_gizmo.dart' show LayerBox, layerAndDepthAt, layerAtPoint;
 import 'viewer_gizmo_3d.dart'
     show Vec3, compToParent, eulerYxz, rotationMatching;
 import 'viewer_layer_map.dart' show viewerNear;
+import 'viewer_rulers.dart' show viewerRulerBand;
 import 'viewer_tool_cursor.dart';
 import 'viewer_view_cube.dart';
 
@@ -1331,17 +1332,26 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
               final models = ui.holdsModels(widget.viewId);
               final display = ui.displayOf(widget.viewId);
               final trouble = ui.modelTrouble.value;
+              final view = ui.viewOf(widget.viewId);
+              // Centred at the top, clear of the selection's name on the
+              // left and the "at" chip on the right, and naming the view
+              // whenever it isn't the comp's own camera.
               return Positioned(
-                top: viewLookInset,
-                left: viewLookInset,
-                child: ViewLookTag(
+                top: viewLookInset +
+                    (ui.viewerOverlays.rulers ? viewerRulerBand : 0),
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: ViewLookTag(
                   look: [
+                    if (view != ViewerView.activeCamera) view.title,
                     if (models && trouble != null) trouble,
                     if (models && display != BridgeModelDisplay.final_)
                       display.title,
                     if (models && ui.facesShown(widget.viewId))
                       l10n.viewerDisplayFaces,
                   ].join(' · '),
+                ),
                 ),
               );
             },

@@ -618,6 +618,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         Panel.timeline || Panel.audioTimeline => BridgeKeyContext.timeline,
         Panel.cutTimeline => BridgeKeyContext.cut,
         Panel.effectControls => BridgeKeyContext.effects,
+        Panel.graph => BridgeKeyContext.nodes,
         _ => BridgeKeyContext.global,
       };
 
@@ -1008,6 +1009,11 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = chordText(event) != 'Escape' && ui.switchToLastView();
       case 'viewer.3d.camera':
         handled = ui.backToActiveCamera();
+      case final fixed when fixed.startsWith('viewer.3d.view.'):
+        final look = ViewerView.values.where((v) => v.action == fixed);
+        final view = ui.views.active;
+        handled = look.isNotEmpty && view != null;
+        if (handled) ui.setViewerView(look.first, viewId: view.engineId);
       case 'viewer.3d.look.selected':
         ui.requestViewerCamera(ViewerCameraCommand.lookAtSelected);
       case 'viewer.3d.look.all':

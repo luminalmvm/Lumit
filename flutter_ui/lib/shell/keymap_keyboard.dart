@@ -86,6 +86,7 @@ const _onePanel = {
   BridgeKeyContext.timeline,
   BridgeKeyContext.viewer,
   BridgeKeyContext.graph,
+  BridgeKeyContext.nodes,
   BridgeKeyContext.effects,
   BridgeKeyContext.cut,
 };

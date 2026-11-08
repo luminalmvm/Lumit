@@ -23,7 +23,9 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 /// it to Cmd on macOS. Ships conflict-free (proven in tests).
 #[must_use]
 pub fn default_keymap() -> Keymap {
-    use KeyContext::{Cut, Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
+    use KeyContext::{
+        Cut, Effects, Global, Graph, Nodes, Panels, Project, Timeline, Tools, Viewer,
+    };
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
         row(Global, "Space", "playback.toggle"),
@@ -283,6 +285,11 @@ pub fn default_keymap() -> Keymap {
         row(Graph, "Shift+F9", "graph.ease.in"),
         row(Graph, "Mod+Shift+F9", "graph.ease.out"),
         row(Graph, "F", "graph.fit"),
+        // --- Node graph ---
+        // F frames what is picked and Shift+F everything, as in a 3D viewport.
+        row(Nodes, "F", "nodes.frame.selected"),
+        row(Nodes, "Shift+F", "nodes.frame.all"),
+        row(Nodes, "Mod+D", "effect.duplicate"),
         // --- Viewer ---
         row(Viewer, "Shift+/", "viewer.zoom.fit"),
         row(Viewer, "Mod+=", "viewer.zoom.in"),
@@ -310,6 +317,15 @@ pub fn default_keymap() -> Keymap {
         // Escape goes back to the last 3D view, as in After Effects, and
         // only when nothing else on screen wanted it.
         row(Viewer, "Escape", "viewer.3d.last"),
+        // The fixed views on the number pad, the opposite side with Mod.
+        row(Viewer, "Numpad 0", "viewer.3d.camera"),
+        row(Viewer, "Numpad 1", "viewer.3d.view.front"),
+        row(Viewer, "Mod+Numpad 1", "viewer.3d.view.back"),
+        row(Viewer, "Numpad 3", "viewer.3d.view.right"),
+        row(Viewer, "Mod+Numpad 3", "viewer.3d.view.left"),
+        row(Viewer, "Numpad 7", "viewer.3d.view.top"),
+        row(Viewer, "Mod+Numpad 7", "viewer.3d.view.bottom"),
+        row(Viewer, "Numpad 5", "viewer.3d.reset"),
         // Wireframe on and off, the key other 3D tools give it.
         row(Viewer, "Shift+Z", "viewer.look.lines"),
         // --- Panels ---

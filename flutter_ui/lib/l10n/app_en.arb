@@ -6533,7 +6533,7 @@
   },
   "graphFrameSelected": "Frame selected",
   "@graphFrameSelected": {
-    "description": "Graph editor, right-click on the empty plot: zooms the graph to the selected keys, in time and in value."
+    "description": "Graph editor, right-click on the empty plot: zooms the graph to the selected keys, in time and in value. Also on a node canvas's empty ground: fits the picked boxes in the panel."
   },
   "graphFlattenHandle": "Flatten",
   "@graphFlattenHandle": {
@@ -6665,6 +6665,14 @@
   },
   "keyFitTheCurvesToThePane": "Fit the curves to the pane",
   "@keyFitTheCurvesToThePane": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFrameThePickedBoxes": "Frame the picked boxes",
+  "@keyFrameThePickedBoxes": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyFrameEveryBox": "Frame every box",
+  "@keyFrameEveryBox": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyFitThePictureToThePanel": "Fit the picture to the panel",
@@ -7305,6 +7313,30 @@
   },
   "keyBackToTheActiveCamera": "Back to the active camera",
   "@keyBackToTheActiveCamera": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheFrontView": "Switch to the Front view",
+  "@keySwitchToTheFrontView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheBackView": "Switch to the Back view",
+  "@keySwitchToTheBackView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheLeftView": "Switch to the Left view",
+  "@keySwitchToTheLeftView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheRightView": "Switch to the Right view",
+  "@keySwitchToTheRightView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheTopView": "Switch to the Top view",
+  "@keySwitchToTheTopView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheBottomView": "Switch to the Bottom view",
+  "@keySwitchToTheBottomView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyLookAtTheSelectedLayers": "Look at the selected layers",
@@ -14890,6 +14922,10 @@
   "@viewerMenuResetDivider": {
     "description": "Right-click menu on the line between two compared views in the Viewer: puts the line back in the middle."
   },
+  "viewerMenuSwapSides": "Swap sides",
+  "@viewerMenuSwapSides": {
+    "description": "Right-click menu on the line between two compared views in the Viewer, and the Compare rows: puts each view on the other side of the line."
+  },
   "viewerMenuGoToKey": "Go to keyframe",
   "@viewerMenuGoToKey": {
     "description": "Right-click menu on a key of a motion path in the Viewer: moves the playhead to it."
@@ -17502,6 +17538,62 @@
   "@shaderNodeResult": {
     "description": "Name of the 'Result' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) \u2014 the one box every graph ends at: the picture going out. Also a row of the box search that adds one."
   },
+  "shaderParamSlider": "Slider",
+  "@shaderParamSlider": {
+    "description": "Node panel, a Custom shader's Parameter box: one of the kinds of control the box makes, a number on a slider whose range can be typed past."
+  },
+  "shaderParamBounded": "Clamped slider",
+  "@shaderParamBounded": {
+    "description": "Node panel, a Custom shader's Parameter box: one of the kinds of control the box makes, a number on a slider held inside its range."
+  },
+  "shaderParamDial": "Angle",
+  "@shaderParamDial": {
+    "description": "Node panel, a Custom shader's Parameter box: one of the kinds of control the box makes, an angle on a dial."
+  },
+  "shaderParamColour": "Colour",
+  "@shaderParamColour": {
+    "description": "Node panel, a Custom shader's Parameter box: one of the kinds of control the box makes, a colour well."
+  },
+  "shaderParamPoint": "Point",
+  "@shaderParamPoint": {
+    "description": "Node panel, a Custom shader's Parameter box: one of the kinds of control the box makes, a point on the picture."
+  },
+  "shaderFaultUnreadable": "This graph can't be read",
+  "@shaderFaultUnreadable": {
+    "description": "Foot of a Custom shader's inner graph, quiet: the stored graph is damaged (a box this version doesn't know, two boxes with one id, a wire to nothing), so the shader won't compile."
+  },
+  "shaderFaultNoResult": "There's no Result box",
+  "@shaderFaultNoResult": {
+    "description": "Foot of a Custom shader's inner graph, quiet: the shader won't compile because the graph has no Result box, the box its picture comes out of."
+  },
+  "shaderFaultManyResults": "There's more than one Result box",
+  "@shaderFaultManyResults": {
+    "description": "Foot of a Custom shader's inner graph, quiet: the shader won't compile because the graph has two or more Result boxes."
+  },
+  "shaderFaultDoubleInput": "Two wires go into one socket",
+  "@shaderFaultDoubleInput": {
+    "description": "Foot of a Custom shader's inner graph, quiet: the shader won't compile because two wires land on the same input."
+  },
+  "shaderFaultCycle": "The wires make a loop",
+  "@shaderFaultCycle": {
+    "description": "Foot of a Custom shader's inner graph, quiet: the shader won't compile because the wires lead round in a circle."
+  },
+  "shaderFaultTypeMismatch": "The wire into {box}'s {socket} doesn't fit",
+  "@shaderFaultTypeMismatch": {
+    "description": "Foot of a Custom shader's inner graph, quiet: the shader won't compile because a wire carries a value its input can't take, for example a picture into a number. The wire is drawn in the error colour. {box} is the box's name, as on its header; {socket} is the input's name, as on the box.",
+    "placeholders": {
+      "box": {
+        "type": "String"
+      },
+      "socket": {
+        "type": "String"
+      }
+    }
+  },
+  "shaderFaultBadParameter": "A Parameter box has a setting it can't use",
+  "@shaderFaultBadParameter": {
+    "description": "Foot of a Custom shader's inner graph, quiet: the shader won't compile because a Parameter box's settings (its name, kind, range or unit) can't make a control."
+  },
   "shaderPortColour": "colour",
   "@shaderPortColour": {
     "description": "Label of a socket on a box in a Custom shader's inner node graph \u2014 a colour value. Lower case: socket labels are quiet row text beside the wire dots."
@@ -18643,6 +18735,10 @@
   "unitRaw": "raw",
   "@unitRaw": {
     "description": "A unit meaning a plain number with nothing after it, offered in the Node panel's Unit picker beside pixels, degrees and per cent. Lower case, matching the other unit words."
+  },
+  "unitSeconds": "seconds",
+  "@unitSeconds": {
+    "description": "A unit, offered in the Node panel's Unit picker for a Custom shader's Parameter box beside pixels and degrees. Lower case, matching the other unit words."
   },
   "graphOpen": "Open",
   "@graphOpen": {

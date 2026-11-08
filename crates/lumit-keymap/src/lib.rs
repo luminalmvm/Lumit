@@ -280,6 +280,9 @@ impl ActionId {
             "graph.ease.in" => "Easy ease in",
             "graph.ease.out" => "Easy ease out",
             "graph.fit" => "Fit the curves to the pane",
+            // Node graph.
+            "nodes.frame.selected" => "Frame the picked boxes",
+            "nodes.frame.all" => "Frame every box",
             // Viewer.
             "viewer.zoom.fit" => "Fit the picture to the panel",
             "viewer.zoom.in" => "Zoom in",
@@ -311,6 +314,12 @@ impl ActionId {
             "viewer.3d.assign.3" => "Assign the 3D view to shortcut 3",
             "viewer.3d.last" => "Switch to the last 3D view",
             "viewer.3d.camera" => "Back to the active camera",
+            "viewer.3d.view.front" => "Switch to the Front view",
+            "viewer.3d.view.back" => "Switch to the Back view",
+            "viewer.3d.view.left" => "Switch to the Left view",
+            "viewer.3d.view.right" => "Switch to the Right view",
+            "viewer.3d.view.top" => "Switch to the Top view",
+            "viewer.3d.view.bottom" => "Switch to the Bottom view",
             "viewer.3d.look.selected" => "Look at the selected layers",
             "viewer.3d.look.all" => "Look at all layers",
             "viewer.3d.frame.all" => "Frame all layers in a 3D viewport",
@@ -352,6 +361,9 @@ pub enum KeyContext {
     Timeline,
     Viewer,
     Graph,
+    /// The node canvases: a layer's graph, a node graph composition and the
+    /// inside of a Custom shader.
+    Nodes,
     /// Panel focus/search shortcuts (docs/07 §15 "Panels").
     Panels,
     Effects,
@@ -363,13 +375,14 @@ pub enum KeyContext {
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 9] = [
+    pub const ALL: [KeyContext; 10] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
         KeyContext::Timeline,
         KeyContext::Viewer,
         KeyContext::Graph,
+        KeyContext::Nodes,
         KeyContext::Panels,
         KeyContext::Effects,
         KeyContext::Cut,
@@ -388,6 +401,7 @@ impl KeyContext {
             KeyContext::Timeline => "Timeline",
             KeyContext::Viewer => "Viewer",
             KeyContext::Graph => "Graph editor",
+            KeyContext::Nodes => "Node graph",
             KeyContext::Panels => "Panels",
             KeyContext::Effects => "Effect controls",
             KeyContext::Cut => "Cut timeline",

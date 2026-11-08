@@ -243,6 +243,7 @@ enum BridgeKeyContext {
   timeline,
   viewer,
   graph,
+  nodes,
   panels,
   effects,
   cut,

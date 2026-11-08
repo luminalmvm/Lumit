@@ -1625,6 +1625,34 @@ List<BridgeKeyframe> moveEnvelopePoint(
   return envelopeToKeys(moved, speeds, curves: envelopeCurves(keys));
 }
 
+/// [keys] with a point at [seconds] playing at [percent]: the point there, or
+/// a new one splitting the span it lands in, both halves keeping that span's
+/// curve. The other points keep their speeds.
+List<BridgeKeyframe> envelopeWithSpeedAt(List<BridgeKeyframe> keys,
+    double seconds, double percent, BridgeRational Function(double) timeOf) {
+  if (keys.length < 2) return keys;
+  double at(BridgeKeyframe key) => rationalSeconds(key.time);
+  const near = 5e-4;
+  final hit = keys.indexWhere((k) => (at(k) - seconds).abs() <= near);
+  if (hit >= 0) return setEnvelopeSpeed(keys, hit, percent);
+  if (seconds <= at(keys.first) || seconds >= at(keys.last)) return keys;
+  final index = keys.indexWhere((k) => at(k) > seconds);
+  final speeds = envelopeSpeeds(keys)
+    ..insert(index, envelopeSpeedAt(keys, seconds))
+    ..[index] = percent;
+  final curves = envelopeCurves(keys);
+  curves.insert(index, curves[index - 1]);
+  final split = [...keys]..insert(
+      index,
+      BridgeKeyframe(
+        time: timeOf(seconds),
+        value: 0,
+        interpIn: const BridgeSideInterp.linear(),
+        interpOut: const BridgeSideInterp.linear(),
+      ));
+  return envelopeToKeys(split, speeds, curves: curves);
+}
+
 /// [keys] with the envelope point at [index] moved to [percent].
 List<BridgeKeyframe> setEnvelopeSpeed(
     List<BridgeKeyframe> keys, int index, double percent) {

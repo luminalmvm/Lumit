@@ -3879,7 +3879,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// colours, then in Layer and Comp the other animated ones.
   List<GraphChannel> _shownChannels(
       LumitUiState ui, List<GraphChannel> picked) {
-    if (_graphScope == GraphScope.selected) return picked;
+    // With nothing picked, a selected layer's animated curves rather than an
+    // empty plot; while retiming, the empty plot offers Retime instead.
+    final scope = _graphScope == GraphScope.selected &&
+            picked.isEmpty &&
+            !_retiming &&
+            ui.selectedLayerIds.isNotEmpty
+        ? GraphScope.layer
+        : _graphScope;
+    if (scope == GraphScope.selected) return picked;
     final layers = {
       ...ui.selectedLayerIds.map((id) => '$id'),
       for (final path in _selectedProperties)
@@ -3888,7 +3896,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final paths = {..._selectedProperties};
     for (final entry in ui.model.layers) {
       final id = entry.layer.internallayerId.toString();
-      if (_graphScope == GraphScope.layer && !layers.contains(id)) continue;
+      if (scope == GraphScope.layer && !layers.contains(id)) continue;
       for (final row in layerFoldRows(
         entry: entry,
         open: everyFoldPath,
@@ -4293,7 +4301,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               ],
             );
           }),
-          Expanded(child: CompGraphPanel(comp: comp, host: Panel.timeline)),
+          // The canvas once: here only while no Node graph panel is up
+          // to draw it.
+          if (!panelVisible(ui.split, Panel.graph))
+            Expanded(child: CompGraphPanel(comp: comp, host: Panel.timeline)),
         ],
       );
     }

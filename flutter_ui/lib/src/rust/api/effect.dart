@@ -12,6 +12,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 import 'roto.dart';
+import 'shader_fault.dart';
 part 'effect.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `on_picture`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
@@ -1811,9 +1812,9 @@ enum BridgeScanStage {
   ;
 }
 
-/// One box of the inner graph, resolved for drawing. `label` is set only for
-/// a Parameter box — the user's own word for their own control, shown as-is
-/// and never translated; every other box is named by the frontend from `kind`.
+/// One box of the inner graph, resolved for drawing. `label` is the user's own
+/// name for the box, shown as-is and never translated, and a Parameter box
+/// always has one; the frontend names every box from `kind` beside it.
 class BridgeShaderGraphNode {
   final int id;
   final String kind;
@@ -1849,13 +1850,13 @@ class BridgeShaderGraphNode {
           outputs == other.outputs;
 }
 
-/// A stored inner graph as the canvas draws it, plus the one sentence that
-/// says whether it will compile. The canvas draws a broken graph exactly as it
-/// draws a working one — being broken is a state to work in, and the badge is
-/// the messenger (§2.2) — so the boxes and the error travel together.
+/// A stored inner graph as the canvas draws it, plus why it will not compile
+/// when it will not. The canvas draws a broken graph exactly as it draws a
+/// working one, since being broken is a state to work in and the badge is the
+/// messenger (§2.2), so the boxes and the fault travel together.
 class BridgeShaderGraphView {
   final List<BridgeShaderGraphNode> nodes;
-  final String? error;
+  final BridgeShaderGraphError? error;
 
   const BridgeShaderGraphView({
     required this.nodes,

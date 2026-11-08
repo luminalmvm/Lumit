@@ -84,9 +84,10 @@ void main() {
     /// Click a property's name in Graph mode's own outline — the filtered
     /// animated list (§3.3), whose rows are already flat, so the name is the
     /// whole gesture. A **still** property is not on the Animated list, so
-    /// Show is flipped to All to reach it.
+    /// Show is flipped to All to reach it. The outline's row is the first of
+    /// that name: the graph's list of curves names it too.
     Future<void> pickProperty(WidgetTester tester, String label) async {
-      await tester.tap(find.text(label));
+      await tester.tap(find.text(label).first);
       await tester.pump();
     }
 
@@ -970,7 +971,7 @@ void main() {
       await tester.tap(
           find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
       await tester.pump();
-      await tester.tap(find.text('Retime'));
+      await tester.tap(find.text('Retime').first);
       await tester.pump();
     }
 
@@ -1153,7 +1154,7 @@ void main() {
       await tester.tap(find.text('Transform'));
       await tester.pump();
 
-      await tester.tap(find.text('Opacity'));
+      await tester.tap(find.text('Opacity').first);
       await tester.pump();
       expect(glyph('transform/opacity@opacity'), findsOneWidget);
 
@@ -1161,7 +1162,7 @@ void main() {
       // curves share the pane, on one value scale (the per-curve ranges died
       // with Normalise).
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.text('Position'));
+      await tester.tap(find.text('Position').first);
       await tester.pump();
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       expect(glyph('transform/opacity@opacity'), findsOneWidget,

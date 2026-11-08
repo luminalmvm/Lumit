@@ -39,9 +39,10 @@ const List<ViewerView> _faces = [
 /// How far in from the view's top left corner its look is named.
 const double viewLookInset = 8;
 
-/// Which look a view shows models in, when that isn't what exports: empty on
-/// Final. The words change at once, as a shortcut can change them. Bright for a
-/// moment after they do, so the eye finds them, then quiet over the picture.
+/// Which way a view looks when it isn't through the comp's camera, and which
+/// look it shows models in when that isn't what exports: empty otherwise. The
+/// words change at once, as a shortcut can change them. Bright for a moment
+/// after they do, so the eye finds them, then quiet over the picture.
 class ViewLookTag extends StatefulWidget {
   final String look;
 

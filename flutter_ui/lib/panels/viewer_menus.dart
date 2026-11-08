@@ -21,7 +21,8 @@ import 'package:uuid/uuid.dart' show UuidValue;
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart' show showCompSettingsFrb;
-import '../shell/menu_bar_frb.dart' show menuEntriesFlyout;
+import '../shell/menu_bar_frb.dart'
+    show MenuEntry, lumitMenus, menuEntriesFlyout, pasteSelectionFrb;
 import '../shell/number_dialog_frb.dart' show askNumberFrb;
 import '../state/file_dialogs.dart' show pickFrameSaveLocation;
 import '../state/settings.dart';
@@ -228,6 +229,11 @@ List<Widget> viewerCompareRows(LumitUiState ui, VoidCallback close) => [
       viewerRow(
           l10n.menuCompareSplit, () => ui.setCompareMode(CompareMode.split), close,
           ticked: ui.currentCompare == CompareMode.split),
+      if (ui.currentCompare != CompareMode.none) ...[
+        const MenuDivider(),
+        viewerRow(l10n.viewerMenuSwapSides, ui.swapCompare, close,
+            id: 'viewer-compare-swap'),
+      ],
     ];
 
 /// What playback does at the end of the work area, ticked.
@@ -755,8 +761,25 @@ void showViewerPictureMenu({
     rows: (closeWith) {
       void close() => closeWith(null);
       final top = layerRows(close);
+      final app = Provider.of<LumitState>(context, listen: false);
       return [
         if (top.isNotEmpty) ...[...top, const MenuDivider()],
+        // A new layer, from the Layer menu's own rows, and the clipboard.
+        SubmenuRow(
+          key: const ValueKey('viewer-menu-new'),
+          closeParent: close,
+          submenu: (dismiss) =>
+              menuEntriesFlyout(_newLayerRows(context, app), dismiss),
+          child: MenuLabel(l10n.menuNew, ticked: false),
+        ),
+        viewerRow(
+            l10n.menuPaste,
+            () => pasteSelectionFrb(
+                app, ui, host.comp, ui.selectedLayer.value),
+            close,
+            id: 'viewer-menu-paste',
+            action: 'edit.paste'),
+        const MenuDivider(),
         viewerRow(l10n.menuAddMarkerAtPlayhead,
             () => addMarkerFrb(host.comp, frame: ui.playheadFrame.value), close,
             id: 'viewer-menu-marker', action: 'marker.add'),
@@ -799,6 +822,15 @@ void showViewerPictureMenu({
 }
 
 List<Widget> _noRows(VoidCallback close) => const [];
+
+/// The Layer menu's New rows, the same entries the bar draws.
+List<MenuEntry> _newLayerRows(BuildContext context, LumitState app) =>
+    lumitMenus(context, app)
+        .where((s) => s.title == l10n.menuLayer)
+        .expand((s) => s.items())
+        .firstOrNull
+        ?.children ??
+    const [];
 
 /// What a layer's row in a picture menu opens: the layer menu a row in the
 /// Timeline has, for the layer [id], acting on the selection as it does there.

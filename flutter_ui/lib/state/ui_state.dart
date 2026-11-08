@@ -1575,6 +1575,15 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
+  /// The compare's two sides the other way round.
+  void swapCompare() {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    views.swapCompare(pane);
+    saveLayout();
+    requestFrame();
+  }
+
   /// Which view the transport plays (docs/07 §2, "always preview this view").
   /// Pressing it on the view already named takes the naming away, so the
   /// transport goes back to following whichever view is active.
@@ -1936,6 +1945,11 @@ class LumitUiState extends ChangeNotifier {
   /// costs no call in a rebuild.
   final ValueNotifier<ShaderGraphEntry?> shaderGraphEntry = ValueNotifier(null);
 
+  /// The one box picked inside that graph, by its id, which the Node panel
+  /// draws. Either side may set it: the canvas on a pick, the Node panel's
+  /// list of boxes on a click.
+  final ValueNotifier<int?> shaderGraphNode = ValueNotifier(null);
+
   /// Where each inner graph's canvas was left **this session**, by effect
   /// instance id: the pan and the zoom come back on re-entry (§4.2 — standing
   /// somewhere in a graph is a way of working on it, not an edit to it), and
@@ -1960,6 +1974,7 @@ class LumitUiState extends ChangeNotifier {
       // The comp or layer has gone under the gesture; the crumbs read blank
       // and the canvas's own reload decides whether there is anything to show.
     }
+    shaderGraphNode.value = null;
     shaderGraphEntry.value = (
       home: InstanceHome.layer(layer),
       effect: effect,
@@ -1979,6 +1994,7 @@ class LumitUiState extends ChangeNotifier {
     } catch (_) {
       // The comp has gone under the gesture; the crumb reads blank.
     }
+    shaderGraphNode.value = null;
     shaderGraphEntry.value = (
       home: InstanceHome.graph(comp),
       effect: effect,
@@ -1989,7 +2005,10 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// The breadcrumb's way back, and Escape's.
-  void exitShaderGraph() => shaderGraphEntry.value = null;
+  void exitShaderGraph() {
+    shaderGraphNode.value = null;
+    shaderGraphEntry.value = null;
+  }
 
   /// What Copy put down, for Paste to pick up. One tray for the
   /// session, shared by the Edit menu and the panels.
@@ -3272,6 +3291,7 @@ class LumitUiState extends ChangeNotifier {
     selectedLayers.dispose();
     graphNode.dispose();
     shaderGraphEntry.dispose();
+    shaderGraphNode.dispose();
     atSelectedEffect.dispose();
     activePane.dispose();
     maximisedPane.dispose();

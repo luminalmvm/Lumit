@@ -34,8 +34,11 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
+import '../state/external_links.dart' show openExternalLink;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
 
 /// Where the pointer last was, in global coordinates — recorded by the shell
@@ -64,11 +67,21 @@ class FxConsoleEntry {
   final String? group;
   final VoidCallback run;
 
+  /// Whether the row is starred, and the star, where the row can have one.
+  final bool? favourite;
+  final VoidCallback? onFavourite;
+
+  /// The row's page in the manual, where it has one.
+  final String? manual;
+
   const FxConsoleEntry({
     required this.label,
     required this.kind,
     required this.run,
     this.group,
+    this.favourite,
+    this.onFavourite,
+    this.manual,
   });
 }
 
@@ -581,18 +594,21 @@ class _FxConsoleState extends State<_FxConsole> {
             thumbVisibility: true,
             thickness: 2,
             crossAxisMargin: 0,
-            child: SingleChildScrollView(
-              controller: _strip,
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _categoryKicker(t,
-                      label: l10n.fxConsoleAll, category: null),
-                  for (final group in _groups) ...[
-                    const SizedBox(width: 10),
-                    _categoryKicker(t, label: group, category: group),
+            // A word cut at the strip's end fades rather than stopping.
+            child: EdgeFade(
+              child: SingleChildScrollView(
+                controller: _strip,
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _categoryKicker(t,
+                        label: l10n.fxConsoleAll, category: null),
+                    for (final group in _groups) ...[
+                      const SizedBox(width: 10),
+                      _categoryKicker(t, label: group, category: group),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),
@@ -641,12 +657,36 @@ class _FxConsoleState extends State<_FxConsole> {
       final entry = matches[i];
       final heading = _headingOf(entry);
       if (heading != null && heading != last) {
-        rows.add(Container(
-          key: ValueKey<String>('fx-console-head-$heading'),
-          height: _headingHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: AlignmentDirectional.centerStart,
-          child: Text(t.kickerCase(heading), style: _kickerStyle(t)),
+        rows.add(GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // The strip's choice, from the heading: this group alone, or all.
+          onSecondaryTapUp: (d) => showMenuAt<void>(
+            context: context,
+            position: d.globalPosition,
+            rows: (close) => [
+              for (final (word, group) in [
+                (l10n.fxConsoleAll, null),
+                (heading, heading),
+              ])
+                MenuRow(
+                  onPressed: () {
+                    close(null);
+                    setState(() {
+                      _category = group;
+                      _highlighted = 0;
+                    });
+                  },
+                  child: MenuLabel(word, ticked: _category == group),
+                ),
+            ],
+          ),
+          child: Container(
+            key: ValueKey<String>('fx-console-head-$heading'),
+            height: _headingHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(t.kickerCase(heading), style: _kickerStyle(t)),
+          ),
         ));
       }
       last = heading;
@@ -661,6 +701,38 @@ class _FxConsoleState extends State<_FxConsole> {
     );
   }
 
+  void _entryMenu(FxConsoleEntry entry, Offset at) => showMenuAt<void>(
+        context: context,
+        position: at,
+        rows: (close) => [
+          MenuRow(
+            onPressed: () {
+              close(null);
+              widget.onClose();
+              entry.run();
+            },
+            child: MenuLabel(l10n.effectAddToSelected, ticked: false),
+          ),
+          if (entry.onFavourite case final star?)
+            MenuRow(
+              onPressed: () {
+                close(null);
+                star();
+              },
+              child: MenuLabel(l10n.tipFavourite,
+                  ticked: entry.favourite ?? false),
+            ),
+          if (entry.manual case final page?)
+            MenuRow(
+              onPressed: () {
+                close(null);
+                openExternalLink(page);
+              },
+              child: MenuLabel(l10n.effectManualPage, ticked: false),
+            ),
+        ],
+      );
+
   Widget _entryRow(LumitTheme t, FxConsoleEntry entry, {required bool hot}) =>
       HoverFill(
         // The keys' own highlight is a fill, so the pointer's is the faint one.
@@ -672,6 +744,10 @@ class _FxConsoleState extends State<_FxConsole> {
             widget.onClose();
             entry.run();
           },
+          // The Effects & presets row's menu, where the row is one.
+          onSecondaryTapUp: entry.onFavourite == null && entry.manual == null
+              ? null
+              : (d) => _entryMenu(entry, d.globalPosition),
           child: Container(
             height: _rowHeight,
             padding: const EdgeInsets.symmetric(horizontal: 10),
