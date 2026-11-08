@@ -541,6 +541,12 @@ fn sync_caches(state: &mut WorkerState) {
         state.fill_exhausted = false;
     }
     crate::framecache::publish_comp_decodes(state.renderer.decoded_frames());
+    // Decoded footage gets a quarter of the memory cache's budget, so the
+    // figure in Settings holds both, and a new renderer picks it up on its
+    // first turn. Cheap when nothing changed.
+    let (_, ram_budget, _, _, _) = crate::framecache::stats();
+    let decode_budget = (ram_budget / 4).max(lumit_render::decode::DEFAULT_DECODE_CACHE_BYTES);
+    state.renderer.set_decode_budget(decode_budget);
     // The decoded-frame pool's share of the memory report. Published on
     // the same turn as the rest, so the numbers a report adds up were all read
     // at one moment rather than across a second of drift.
@@ -3052,13 +3058,6 @@ fn build_viewer_renderer(
         );
         renderer.set_memory_budgets(vram, ram);
         crate::framecache::size_to_machine(vram, ram);
-        // Decoded footage gets an eighth of the same budget. It is counted
-        // against it, so the governor trims it when memory runs short.
-        renderer.set_decode_budget(
-            usize::try_from(ram / 8)
-                .unwrap_or(usize::MAX)
-                .max(lumit_render::decode::DEFAULT_DECODE_CACHE_BYTES),
-        );
     }
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it: picking a lens shows the lens
