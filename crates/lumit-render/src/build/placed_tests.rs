@@ -200,6 +200,7 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
             to_port: "input".into(),
         }],
         layout: Vec::new(),
+        widths: Vec::new(),
         exposed: Vec::new(),
         groups: Vec::new(),
     };
