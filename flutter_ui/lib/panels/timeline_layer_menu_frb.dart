@@ -19,6 +19,7 @@ import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
 import '../shell/stretch_dialog_frb.dart';
 import 'layer_source_menu.dart';
 import 'text_animation_presets.dart' show textPresetRows;
+import '../state/beats_notice.dart' show detectCompBeats;
 import '../state/dock.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
@@ -131,6 +132,8 @@ List<MenuEntry> layerMenuEntries(
     if (view.isNotEmpty) ...[...view, MenuEntry.divider()],
     MenuEntry.submenu(l10n.menuEffect,
         effectMenuEntries(app, ui, [for (final e in unlocked) e.layer])),
+    if (_styled(kind))
+      MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
     if (_sounds(kind))
       MenuEntry.submenu(l10n.menuAudio, audioRows(app, ui, entry)),
     if (kind != BridgeLayerKind.sequence)
@@ -332,6 +335,15 @@ bool _sounds(BridgeLayerKind kind) =>
     kind == BridgeLayerKind.precomp ||
     kind == BridgeLayerKind.audio;
 
+/// The kinds whose own flat picture a layer style draws around.
+bool _styled(BridgeLayerKind kind) =>
+    kind == BridgeLayerKind.footage ||
+    kind == BridgeLayerKind.solid ||
+    kind == BridgeLayerKind.precomp ||
+    kind == BridgeLayerKind.text ||
+    kind == BridgeLayerKind.shape ||
+    kind == BridgeLayerKind.sequence;
+
 /// Where the menu was opened, for a picker that follows it: the pointer has
 /// not moved, so the menu's own anchor is the right place.
 Offset _menuOrigin(BuildContext context) {
@@ -446,6 +458,9 @@ List<MenuEntry> audioRows(
             },
       checked: !entry.info.pitchFollowsSpeed,
     ),
+    // Composition ▸ Detect beats, from the music's own row.
+    if (comp != null)
+      MenuEntry(l10n.menuDetectBeats, () => detectCompBeats(app, comp)),
     if (streams != null && streams.streams.length > 1) ...[
       MenuEntry.divider(),
       for (final stream in streams.streams)

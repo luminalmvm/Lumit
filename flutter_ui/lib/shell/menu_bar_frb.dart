@@ -33,7 +33,6 @@ import 'package:provider/provider.dart';
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
-import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -62,6 +61,7 @@ import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
 import '../panels/viewer_panel_frb.dart'
     show captureViewerPicturePng, viewerHasSnapshot;
 import '../state/beats_notice.dart';
+import '../state/comp_time.dart' show frameAtTime, markersOf;
 import '../state/clipboard.dart';
 import '../state/viewer_views.dart';
 import '../state/dock.dart';
@@ -92,7 +92,8 @@ import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart' show newSolidFrb;
-import '../panels/cut_insert.dart' show cutInsertRows, insertSolid, insertTitle;
+import '../panels/cut_insert.dart'
+    show cutInsertRows, insertSolid, insertTitle, openTypeEdit;
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
@@ -1057,6 +1058,11 @@ List<MenuSection> lumitMenus(
   /// follows the selection rather than whatever it was when the menu opened.
   int? row(CompositionReference c) => newLayerRow(ui, c);
 
+  /// A Layer ▸ New row, by its keymap action.
+  MenuEntry newRow(String label, String action) => MenuEntry(
+      label, onComp((c) => newLayerFrb(context, ui, c, action)),
+      action: action);
+
   /// The same, for a command that acts on the selected *layer* — greyed out
   /// with nothing selected rather than offered and inert.
   VoidCallback? onLayer(void Function(LayerReference) run) {
@@ -1375,20 +1381,19 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuAddMarkerAtPlayhead,
                 onComp((c) => _markerAtPlayhead(ui, c)),
                 action: 'marker.add'),
+            MenuEntry(l10n.menuPreviousMarker,
+                onComp((c) => stepToMarkerFrb(ui, c, back: true)),
+                action: 'marker.prev'),
+            MenuEntry(l10n.menuNextMarker,
+                onComp((c) => stepToMarkerFrb(ui, c, back: false)),
+                action: 'marker.next'),
             // Beat detection reads the whole comp's audio and can take seconds, so
             // it runs off-thread behind the same card the Audio panel and the
             // Timeline put up; a comp with nothing sounding in it refuses, and
             // says so on the status line rather than by leaving the Timeline
             // exactly as it was.
-            MenuEntry(
-                l10n.menuDetectBeats,
-                onComp((c) => runBeatDetection(
-                    app: app,
-                    comp: c,
-                    options: BridgeBeatOptions.standard(),
-                    // The markers land after the menu's own redraw, so the
-                    // run asks for another when they do.
-                    onFound: (_) => app.notifyDocumentChanged()))),
+            MenuEntry(l10n.menuDetectBeats,
+                onComp((c) => detectCompBeats(app, c))),
             MenuEntry(
                 l10n.menuClearBeatMarkers, onComp((c) => c.clearBeatMarkers())),
           ]
@@ -1396,72 +1401,34 @@ List<MenuSection> lumitMenus(
     (
       title: l10n.menuLayer,
       items: () => [
-            // A new layer lands directly above the selected one, the way After
-            // Effects does it, and at the top of the stack when nothing is
-            // selected ([newLayerRow]).
+            // A new layer lands directly above the selected one, and at the
+            // top of the stack when nothing is selected ([newLayerFrb]).
             MenuEntry.submenu(l10n.menuNew, [
-              MenuEntry(
-                  l10n.menuSolid,
-                  comp == null
-                      ? null
-                      : () => newSolidFrb(
-                          context: context,
-                          comp: comp,
-                          row: row(comp),
-                          onDone: app.notifyDocumentChanged),
-                  action: 'layer.new.solid'),
-              MenuEntry(
-                  l10n.menuText, onComp((c) => c.addTextLayer(row: row(c))),
-                  action: 'layer.new.text'),
-              MenuEntry(
-                  l10n.menuCamera, onComp((c) => c.addCameraLayer(row: row(c))),
-                  action: 'layer.new.camera'),
-              // One row and the settings window, as After Effects asks: the
-              // kind is chosen there, with everything else about the light.
-              MenuEntry(
-                  l10n.menuLight,
-                  comp == null
-                      ? null
-                      : () => newLightFrb(
-                          context: context,
-                          comp: comp,
-                          row: row(comp),
-                          onDone: app.notifyDocumentChanged),
-                  action: 'layer.new.light.point'),
+              newRow(l10n.menuSolid, 'layer.new.solid'),
+              newRow(l10n.menuText, 'layer.new.text'),
+              newRow(l10n.menuCamera, 'layer.new.camera'),
+              // One row and the settings window: the kind is chosen there,
+              // with everything else about the light.
+              newRow(l10n.menuLight, 'layer.new.light.point'),
               MenuEntry.submenu(l10n.menuShape3d, [
                 for (final tool in shape3dTools)
                   MenuEntry(tool.label,
                       onComp((c) => addShape3d(ui, c, tool, row: row(c)))),
               ]),
-              MenuEntry(l10n.menuAdjustment,
-                  onComp((c) => c.addAdjustmentLayer(row: row(c))),
-                  action: 'layer.new.adjustment'),
-              MenuEntry(
-                  l10n.menuNull, onComp((c) => c.addNullLayer(row: row(c))),
-                  action: 'layer.new.null'),
-              MenuEntry(
-                  l10n.menuCard,
-                  onComp((c) => ui.setSelection([
-                        c.addCardLayer(
-                            row: row(c), frame: ui.playheadFrame.value),
-                      ])),
-                  action: 'layer.new.card'),
-              MenuEntry(l10n.menuSequence,
-                  onComp((c) => c.addSequenceLayer(row: row(c))),
-                  action: 'layer.new.sequence'),
-              MenuEntry(l10n.menuAudio,
-                  onComp((c) => insertEmptyLayer(ui, c, 'layer.new.audio')),
-                  action: 'layer.new.audio'),
+              newRow(l10n.menuAdjustment, 'layer.new.adjustment'),
+              newRow(l10n.menuNull, 'layer.new.null'),
+              newRow(l10n.menuCard, 'layer.new.card'),
+              newRow(l10n.menuSequence, 'layer.new.sequence'),
+              newRow(l10n.menuAudio, 'layer.new.audio'),
               MenuEntry.divider(),
-              // The Cut ground's two, so the title's chord is taught outside
-              // the Cut timeline: five seconds from the playhead.
+              // The Cut ground's two: five seconds from the playhead. Without
+              // its chord, which only the Cut timeline hears.
               MenuEntry(
                   l10n.insertTitle,
                   comp == null
                       ? null
-                      : () => insertTitle(
-                          context, ui, comp, ui.playheadFrame.value, row(comp)),
-                  action: 'cut.insert.title'),
+                      : () => insertTitle(context, ui, comp,
+                          ui.playheadFrame.value, row(comp))),
               MenuEntry(
                   l10n.insertSolid,
                   comp == null
@@ -2401,19 +2368,43 @@ int? newLayerRow(LumitUiState ui, CompositionReference comp) {
 /// its keymap action, above the selected layer as every new layer lands. With
 /// nothing selected an Audio layer goes to the bottom, where sound lives, as
 /// Vegas puts it.
-void insertEmptyLayer(
+LayerReference? insertEmptyLayer(
     LumitUiState ui, CompositionReference comp, String action) {
   final row = newLayerRow(ui, comp);
-  switch (action) {
-    case 'layer.new.audio':
-      comp.addEmptyAudioLayer(row: row ?? ui.model.layers.length);
-    case 'layer.new.sequence':
-      comp.addSequenceLayer(row: row);
-    case 'layer.new.adjustment':
-      comp.addAdjustmentLayer(row: row);
-    case 'layer.new.bus':
-      comp.addBusLayer(row: row ?? ui.model.layers.length);
-  }
+  return switch (action) {
+    'layer.new.audio' =>
+      comp.addEmptyAudioLayer(row: row ?? ui.model.layers.length),
+    'layer.new.sequence' => comp.addSequenceLayer(row: row),
+    'layer.new.adjustment' => comp.addAdjustmentLayer(row: row),
+    'layer.new.bus' => comp.addBusLayer(row: row ?? ui.model.layers.length),
+    _ => null,
+  };
+}
+
+/// Layer ▸ New, from the menu, a key or the Timeline's ground: the layer goes
+/// in above the selection and comes out picked, which brings its row into
+/// view. A Solid and a Light ask first.
+Future<void> newLayerFrb(BuildContext context, LumitUiState ui,
+    CompositionReference comp, String action) async {
+  final app = context.read<LumitState>();
+  final row = newLayerRow(ui, comp);
+  final asks = action == 'layer.new.solid' || action == 'layer.new.light.point';
+  final made = asks
+      ? await (action == 'layer.new.solid' ? newSolidFrb : newLightFrb)(
+          context: context, comp: comp, row: row)
+      : switch (action) {
+          'layer.new.text' => comp.addTextLayer(row: row),
+          'layer.new.camera' => comp.addCameraLayer(row: row),
+          'layer.new.null' => comp.addNullLayer(row: row),
+          'layer.new.card' =>
+            comp.addCardLayer(row: row, frame: ui.playheadFrame.value),
+          _ => insertEmptyLayer(ui, comp, action),
+        };
+  if (made == null) return;
+  app.notifyDocumentChanged();
+  ui.model.refresh();
+  ui.setSelection([made]);
+  if (action == 'layer.new.text') openTypeEdit(ui, made);
 }
 
 /// The right-click menu on the empty ground under the Cut and Audio
@@ -2883,6 +2874,22 @@ void _splitAtPlayhead(LumitUiState ui) {
 /// one-per-frame rule included).
 void _markerAtPlayhead(LumitUiState ui, CompositionReference comp) =>
     addMarkerFrb(comp, frame: ui.playheadFrame.value);
+
+/// Move the playhead to the composition marker either side of it, beats
+/// included. False when there is none that way.
+bool stepToMarkerFrb(LumitUiState ui, CompositionReference comp,
+    {required bool back}) {
+  final at = ui.playheadFrame.value;
+  int? to;
+  for (final marker in markersOf(comp)) {
+    final frame = frameAtTime(comp, marker.time);
+    if (back ? frame >= at : frame <= at) continue;
+    if (to == null || (back ? frame > to : frame < to)) to = frame;
+  }
+  if (to == null) return false;
+  ui.scrubTo(to);
+  return true;
+}
 
 Future<void> _compSettings(BuildContext context, LumitState app) async {
   final comp = context.read<LumitUiState>().selectedComp;

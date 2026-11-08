@@ -54,6 +54,8 @@ pub fn default_keymap() -> Keymap {
         row(Global, ".", "keyframe.next"),
         row(Global, "Mod+,", "edit.point.prev"),
         row(Global, "Mod+.", "edit.point.next"),
+        row(Global, "Mod+Alt+ArrowLeft", "marker.prev"),
+        row(Global, "Mod+Alt+ArrowRight", "marker.next"),
         // A keyframe at the playhead on whichever property rows are picked, or
         // the one already there taken away. After Effects has no key for this,
         // only the per-property five below, so the chord is Lumit's own.

@@ -1921,6 +1921,37 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     }
   }
 
+  /// The rows the last build laid out, for [_scrollToLayer].
+  List<LayerRow> _shownRows = const [];
+
+  /// Bring layer [id]'s own row into view with the same short glide, moving
+  /// only as far as it takes, and with a row to spare beyond it.
+  void _scrollToLayer(String id) {
+    if (!_vOutline.hasClients) return;
+    var y = 0.0;
+    for (final row in _shownRows) {
+      if (row.id == id) {
+        final top = y +
+            (row.groupHeader == null
+                ? 0
+                : row.rowHeight * (1 + row.drawnGroupRows.length));
+        final view = _vOutline.position;
+        final bottom = view.pixels + view.viewportDimension;
+        final to = top < view.pixels
+            ? top - row.rowHeight
+            : top + row.rowHeight > bottom
+                ? top + row.rowHeight * 2 - view.viewportDimension
+                : null;
+        if (to == null) return;
+        _vOutline.animateTo(to.clamp(0.0, view.maxScrollExtent),
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut);
+        return;
+      }
+      y += row.height;
+    }
+  }
+
   /// Which fold paths a reveal key opens under [id]. Empty means the layer's
   /// own row and nothing beneath it — what the Retime chord leaves behind, and
   /// what `E` or `M` come to on a layer with no effects or masks to show.
@@ -2442,6 +2473,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishRowSelection();
     _publishLaneKeys();
     if (_graph) setState(() {});
+    // A layer picked from somewhere else, a new one above all, comes into
+    // view once the frame that lays out its row has run.
+    if (now != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToLayer(now.toString());
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
+    }
   }
 
   /// The selection changed without the primary moving: a select-all, a
@@ -4441,6 +4480,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         if (mounted) _scrollToFold(rows, path);
       });
     }
+    _shownRows = rows;
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,

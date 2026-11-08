@@ -409,10 +409,10 @@ class EffectParamRowFrb extends StatelessWidget {
     // The unit goes on the control itself, inside the riders: `100 %` then the
     // Blend dropdown, never `100` then Blend then `%`. The reset arrow comes
     // last, after everything the row writes.
-    // An Angle prints its own degrees, and with no dial its rider would repeat them.
+    // An Angle prints its own degrees, so its rider would repeat them.
     final menu = _menu(context, keyframes is KeyframeControlsFrb ? keyframes : null);
     final drawn = _control(context, t, id, value, frame);
-    final noRider = param.kind is BridgeParamKind_Angle && !sliderTrack;
+    final noRider = param.kind is BridgeParamKind_Angle;
     final control = _greyed(_withReset(t, id, _withRiders(t, id,
         noRider ? drawn : withUnitRider(t, param.unit, drawn))));
 
@@ -1636,50 +1636,77 @@ class EffectParamRowFrb extends StatelessWidget {
       _set(BridgeEffectValue.float(next));
     }
 
-    // Turns, degrees, dial — one row. The dial is a second grip on the same
-    // value, not a second control, so it sits beside the numbers rather than
-    // under them: a two-storey row is taller than every other row in the panel
-    // and reads as two settings.
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TurnsAndDegreesField(
-          keyName: keyName,
-          degrees: shown,
-          enabled: !_off,
-          onChanged: animated
-              ? null
-              : (v) =>
-                  _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
-          onCommit: write,
-          // The same offer and the same seed the Float row makes.
-          setExpression: animated || currentLayer == null
-              ? null
-              : () => _set(BridgeEffectValue.float(BridgeScalar.expression(
-                  shown.toString(), newExpressionLanguage(context)))),
-        ),
-        // The Timeline's value cell is one number wide, as a layer's own
-        // Rotation row is.
-        if (sliderTrack) ...[
-          const SizedBox(width: 6),
-          AngleDial(
-            key: ValueKey<String>('fx-dial-$keyName'),
-            // Row height, not the standalone 34: it is a grip beside a number.
-            size: fxRowHeight(ThemeScope.of(context).theme),
-            degrees: shown,
-            step: step,
-            enabled: !_off,
-            // A dial drag is a drag like any other: preview each tick, commit
-            // the release. On a curve there is no live preview, for the same
-            // reason the numbers have none — the value being previewed is not
-            // the one that will be stored.
-            onChanged: (v) => animated
-                ? null
-                : _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
-            onChangeEnd: write,
-          ),
-        ],
-      ],
+    final live = animated
+        ? null
+        : (double v) =>
+            _setLive(BridgeEffectValue.float(BridgeScalar.static_(v)));
+    // The same offer and the same seed the Float row makes.
+    final setExpression = animated || currentLayer == null
+        ? null
+        : () => _set(BridgeEffectValue.float(BridgeScalar.expression(
+            shown.toString(), newExpressionLanguage(context))));
+    final fields = TurnsAndDegreesField(
+      keyName: keyName,
+      degrees: shown,
+      enabled: !_off,
+      onChanged: live,
+      onCommit: write,
+      setExpression: setExpression,
+    );
+    // The Timeline's value cell is one number wide, as a layer's own
+    // Rotation row is.
+    if (!sliderTrack) return fields;
+    final dial = fxRowHeight(ThemeScope.of(context).theme);
+    // Turns, degrees and dial on one row. The dial is a second grip on the
+    // same value, not a second control, so it sits beside the numbers rather
+    // than under them: a two-storey row is taller than every other row in the
+    // panel and reads as two settings. Being the second grip, it is the one
+    // that goes when the column has no room for it, and narrower still the
+    // turns fold into one box for the whole angle.
+    return LayoutBuilder(
+      builder: (context, box) => box.maxWidth < TurnsAndDegreesField.width
+          ? SizedBox(
+              width: effectCellWidth,
+              child: DragValueField(
+                key: ValueKey<String>('angle-whole-$keyName'),
+                value: shown,
+                min: -1000000,
+                max: 1000000,
+                decimals: 1,
+                suffix: '°',
+                onChanged: (v) => write(v.toDouble()),
+                onChangeLive: live == null ? null : (v) => live(v.toDouble()),
+                onChangeEnd: (v) => write(v.toDouble()),
+                setExpression: setExpression,
+              ),
+            )
+          : box.maxWidth < TurnsAndDegreesField.width + 6 + dial
+          ? fields
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                fields,
+                const SizedBox(width: 6),
+                AngleDial(
+                  key: ValueKey<String>('fx-dial-$keyName'),
+                  // Row height, not the standalone 34: it is a grip beside a
+                  // number.
+                  size: dial,
+                  degrees: shown,
+                  step: step,
+                  enabled: !_off,
+                  // A dial drag is a drag like any other: preview each tick,
+                  // commit the release. On a curve there is no live preview,
+                  // for the same reason the numbers have none: the value
+                  // being previewed is not the one that will be stored.
+                  onChanged: (v) => animated
+                      ? null
+                      : _setLive(
+                          BridgeEffectValue.float(BridgeScalar.static_(v))),
+                  onChangeEnd: write,
+                ),
+              ],
+            ),
     );
   }
 
@@ -2810,9 +2837,12 @@ int byEffectLabel(BridgeEffectInfo a, BridgeEffectInfo b) =>
 List<BridgeStyleInfo>? _styleSchema;
 List<BridgeStyleInfo> styleCatalogue() => _styleSchema ??= listStyles();
 
-/// The styles a menu may offer — the seven this version renders (§8).
-Iterable<BridgeStyleInfo> offeredStyles() =>
-    styleCatalogue().where((s) => s.offered);
+/// The styles a menu may offer: the ones this version renders (§8), less the
+/// Drop shadow style. The Drop shadow effect is one menu away under the same
+/// name, and two rows called Drop shadow that draw differently is one too
+/// many. One that arrives with an import is kept and named as ever.
+Iterable<BridgeStyleInfo> offeredStyles() => styleCatalogue()
+    .where((s) => s.offered && s.name != 'style_drop_shadow');
 
 List<BridgeParamInfo> cachedListParameters(String effect) =>
     effectSchema.parameters(effect);

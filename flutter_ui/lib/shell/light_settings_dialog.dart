@@ -136,8 +136,8 @@ class _LightValues {
 _LightValues? _lastNew;
 
 /// Layer ▸ New ▸ Light…: ask for the light, then make it directly above
-/// [row] as one undo step. Does nothing when cancelled.
-Future<void> newLightFrb({
+/// [row] as one undo step. Answers the new layer, or null when cancelled.
+Future<LayerReference?> newLightFrb({
   required BuildContext context,
   required CompositionReference comp,
   int? row,
@@ -188,11 +188,12 @@ Future<void> newLightFrb({
     builder: (close) => _LightSettingsBody(
         values: start, name: null, layers: layers, onDone: close),
   );
-  if (picked == null) return;
+  if (picked == null) return null;
   final (values, name) = picked;
   _lastNew = values.copy();
+  LayerReference? light;
   asOneUndoStep(project, () {
-    final layer = comp.addLightLayer(
+    final layer = light = comp.addLightLayer(
       kind: values.settings.kind.index,
       row: row,
     );
@@ -206,6 +207,7 @@ Future<void> newLightFrb({
     ui.setModelDisplay(ui.activeViewId, display: BridgeModelDisplay.final_);
   }
   onDone?.call();
+  return light;
 }
 
 /// Layer ▸ Light settings: the same window over a light that is already

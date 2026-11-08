@@ -2,7 +2,19 @@ use uuid::Uuid;
 
 use flutter_rust_bridge::frb;
 
-use crate::api::{state::PROJECTS, BridgeError};
+use crate::api::{project::ProjectReference, state::PROJECTS, BridgeError};
+
+impl ProjectReference {
+    /// The name a solid made right now would get, "White solid 3" when the
+    /// project holds two. What New solid puts in its Name field, read off the
+    /// same call that names the solid, so the two cannot disagree.
+    #[frb(sync)]
+    pub fn next_solid_name(&self) -> Result<String, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(lumit_core::edits::white_solid_ops(&state.store.snapshot(), 1, 1).1)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[frb]

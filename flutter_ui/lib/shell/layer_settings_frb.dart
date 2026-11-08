@@ -78,10 +78,10 @@ Future<bool> showLayerSettingsFrb({
 /// as After Effects does.
 BridgeColourRgba _lastColour = const BridgeColourRgba(r: 1, g: 1, b: 1, a: 1);
 
-/// Layer ▸ New ▸ Solid: ask for its name, size and colour first, as After
-/// Effects does, then make it above [row] as one undo step. Does nothing when
+/// Layer ▸ New ▸ Solid: ask for its name, size and colour first, then make it
+/// above [row] as one undo step. Answers the new layer, or null when
 /// cancelled.
-Future<void> newSolidFrb({
+Future<LayerReference?> newSolidFrb({
   required BuildContext context,
   required CompositionReference comp,
   int? row,
@@ -90,11 +90,14 @@ Future<void> newSolidFrb({
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
   final size = comp.getSettings();
+  // The name the engine would give it, as New composition suggests "Comp 3".
+  final next = project?.nextSolidName() ?? '';
   final picked = await showLumitModal<(String, BridgeSolidDef?)>(
     context: context,
     id: 'layer-settings',
     builder: (close) => _LayerSettingsBody(
-      name: '',
+      name: _solidName(next, _lastColour),
+      suggest: (colour) => _solidName(next, colour),
       fresh: true,
       definition: BridgeSolidDef(
           name: '',
@@ -106,20 +109,13 @@ Future<void> newSolidFrb({
     ),
   );
   final def = picked?.$2;
-  if (picked == null || def == null) return;
+  if (picked == null || def == null) return null;
   _lastColour = def.colour;
+  LayerReference? solid;
   asOneUndoStep(project, () {
-    final layer = comp.addSolidLayer(row: row);
+    final layer = solid = comp.addSolidLayer(row: row);
     final made = layer.getName();
-    final white = def.colour.r == 1 && def.colour.g == 1 && def.colour.b == 1;
-    // ponytail: the engine names every new solid "White solid N", so a
-    // coloured one loses the word. A name per colour wants the engine to take
-    // the colour.
-    final name = picked.$1.isNotEmpty
-        ? picked.$1
-        : white
-            ? made
-            : made.replaceFirst('White solid', l10n.menuSolid);
+    final name = picked.$1.isNotEmpty ? picked.$1 : _solidName(made, def.colour);
     if (name != made) layer.rename(name: name);
     if (layer.getSourceItem() case ItemReference_Solid(:final field0)) {
       field0.setDefinition(
@@ -132,7 +128,16 @@ Future<void> newSolidFrb({
     place?.call(layer);
   });
   onDone?.call();
+  return solid;
 }
+
+/// The engine's name for a new solid, [made], for one of [colour].
+// ponytail: the engine names every new solid "White solid N", so a coloured
+// one loses the word. A name per colour wants the engine to take the colour.
+String _solidName(String made, BridgeColourRgba colour) =>
+    colour.r == 1 && colour.g == 1 && colour.b == 1
+        ? made
+        : made.replaceFirst('White solid', l10n.menuSolid);
 
 class _LayerSettingsBody extends StatefulWidget {
   final String name;
@@ -143,12 +148,17 @@ class _LayerSettingsBody extends StatefulWidget {
   /// A solid that does not exist yet: the window is New solid, not its settings.
   final bool fresh;
 
+  /// The name New solid suggests for a colour, which the field follows until
+  /// it is typed over. Null for a solid that has a name already.
+  final String Function(BridgeColourRgba colour)? suggest;
+
   const _LayerSettingsBody({
     required this.name,
     required this.definition,
     required this.onConfirm,
     required this.onCancel,
     this.fresh = false,
+    this.suggest,
   });
 
   @override
@@ -267,12 +277,18 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
                         colour: PickedColour(_colour?.r ?? 0, _colour?.g ?? 0,
                                 _colour?.b ?? 0)
                             .clipped,
-                        onPicked: (picked) => setState(() => _colour =
-                            BridgeColourRgba(
-                                r: picked.r,
-                                g: picked.g,
-                                b: picked.b,
-                                a: _colour?.a ?? 1)),
+                        onPicked: (picked) => setState(() {
+                          final was = _colour;
+                          final now = _colour = BridgeColourRgba(
+                              r: picked.r,
+                              g: picked.g,
+                              b: picked.b,
+                              a: _colour?.a ?? 1);
+                          if (widget.suggest case final suggest?
+                              when was != null && _name.text == suggest(was)) {
+                            _name.text = suggest(now);
+                          }
+                        }),
                       ),
                     ),
                   ),

@@ -3021,7 +3021,7 @@
   },
   "fxBypass": "Bypass",
   "@fxBypass": {
-    "description": "Effect controls — a switch on Extract channels that passes the picture through untouched, so the extracted channels can be compared against it."
+    "description": "An effect switched off, ticked while it is: on an effect heading's menu in Effect controls and on its box in the node graph. Also the switch on Extract channels that passes the picture through untouched, so the extracted channels can be compared against it."
   },
   "fxCentreX": "Centre X",
   "@fxCentreX": {
@@ -6867,7 +6867,7 @@
   "@keyPlayOrPause": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyPreComposeTheLayer": "Pre-compose the layer",
+  "keyPreComposeTheLayer": "Precompose the layer",
   "@keyPreComposeTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -7792,6 +7792,14 @@
   "@menuAddMarkerHere": {
     "description": "Timeline: a row of the right-click menu on the time ruler's own ground. It makes a composition marker at the frame under the pointer."
   },
+  "menuPreviousMarker": "Previous marker",
+  "@menuPreviousMarker": {
+    "description": "Composition menu, and Settings → Keymap: moves the playhead back to the nearest composition marker before it, beat markers included."
+  },
+  "menuNextMarker": "Next marker",
+  "@menuNextMarker": {
+    "description": "Composition menu, and Settings → Keymap: moves the playhead on to the nearest composition marker after it, beat markers included."
+  },
   "menuAddToExportQueue": "Add to export queue…",
   "@menuAddToExportQueue": {
     "description": "Menu item."
@@ -8215,7 +8223,7 @@
   "@menuPaste": {
     "description": "Menu item."
   },
-  "menuPreCompose": "Pre-compose…",
+  "menuPreCompose": "Precompose…",
   "@menuPreCompose": {
     "description": "Menu item."
   },
@@ -9014,7 +9022,7 @@
   "@playbackEveryFrame": {
     "description": "Playback setting: show every frame at full resolution, however long it takes."
   },
-  "precompose": "Pre-compose",
+  "precompose": "Precompose",
   "@precompose": {
     "description": "Title and button: put the selected layers inside a new composition."
   },
@@ -9022,7 +9030,7 @@
   "@precomposeAdjustDuration": {
     "description": "Pre-compose option: make the new composition exactly as long as what went into it."
   },
-  "precomposeFailed": "Those layers could not be pre-composed.",
+  "precomposeFailed": "Those layers could not be precomposed.",
   "@precomposeFailed": {
     "description": "Shown when pre-composing did not work."
   },
@@ -10520,10 +10528,6 @@
   "@tipCollapseTransformations": {
     "description": "Tooltip on the Flow switch. One or two words."
   },
-  "tipDisable": "Disable",
-  "@tipDisable": {
-    "description": "Tooltip on the checkbox that switches an effect off. One or two words."
-  },
   "tipDisplayTransform": "Display transform",
   "@tipDisplayTransform": {
     "description": "Tooltip on the Viewer bar's colour-management badge, which reads the display transform the picture is shown through. One or two words."
@@ -10547,10 +10551,6 @@
   "tipBrushPressure": "Pen pressure",
   "@tipBrushPressure": {
     "description": "Tooltip on the toolbar's pressure tick, shown when a painting tool is in hand. Explains what the tick does: on a pen tablet, pressing harder makes a wider mark."
-  },
-  "tipEnable": "Enable",
-  "@tipEnable": {
-    "description": "Tooltip on the checkbox that switches an effect on. One or two words."
   },
   "tipFlowOff": "Flow off",
   "@tipFlowOff": {
@@ -18147,7 +18147,7 @@
   "@menuUngroup": {
     "description": "Right-click menu row on a layer group's header row in the Timeline: takes the group away. The layers themselves stay exactly where they were. One word."
   },
-  "menuPrecomposeGroup": "Pre-compose group",
+  "menuPrecomposeGroup": "Precompose group",
   "@menuPrecomposeGroup": {
     "description": "Right-click menu row on a layer group's header row in the Timeline: packs the layers in the group into a composition of their own, which replaces them with a single layer. Unlike the group itself, this does change how the picture is built."
   },
@@ -19441,10 +19441,6 @@
   "colourPickerNow": "Now",
   "@colourPickerNow": {
     "description": "Colour picker: tooltip on the half of the chip showing the colour as it stands."
-  },
-  "fxMenuEnabled": "Enabled",
-  "@fxMenuEnabled": {
-    "description": "Effect heading's right-click menu: ticked while the effect is on. Clicking switches it on or off."
   },
   "fxMenuMove": "Move",
   "@fxMenuMove": {

@@ -1804,6 +1804,8 @@ Map<String, String> get _built => {
       "Next keyframe": l10n.keyNextKeyframe,
       "Previous edit point": l10n.keyPreviousEditPoint,
       "Next edit point": l10n.keyNextEditPoint,
+      "Previous marker": l10n.menuPreviousMarker,
+      "Next marker": l10n.menuNextMarker,
       "Mark in": l10n.keyMarkIn,
       "Mark out": l10n.keyMarkOut,
       "Go to In": l10n.sourceGoToIn,
@@ -1928,7 +1930,7 @@ Map<String, String> get _built => {
       "Paste the grade onto the selected layers":
           l10n.keyPasteTheGradeOntoTheSelectedLayers,
       "Duplicate the layer": l10n.keyDuplicateTheLayer,
-      "Pre-compose the layer": l10n.keyPreComposeTheLayer,
+      "Precompose the layer": l10n.keyPreComposeTheLayer,
       "Group the selected layers": l10n.keyGroupTheSelectedLayers,
       "Ungroup": l10n.keyUngroup,
       "Give the layer a Retime": l10n.keyGiveTheLayerARetime,

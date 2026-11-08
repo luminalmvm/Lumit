@@ -1185,23 +1185,26 @@ bool _gates(BridgeLayerEntry entry) => switch (entry.info.kind) {
       _ => true,
     };
 
-/// Layer ▸ Matte: gate the selected layers with **the layer above** each of
-/// them, the way After Effects' own menu does.
+/// Layer ▸ Matte: gate the selected layers with another layer's picture.
 ///
-/// Which layer is not asked: the Timeline's dropdown is where an arbitrary one
-/// is chosen (docs/07 §2, item 6.13). What this menu is for is the everyday
-/// case — the shape you just drew above the picture — so the four rows are the
-/// four readings of that layer, and *No matte* takes it off again.
+/// The row under *No matte* names the layer the four kinds will use, and opens
+/// the list of every layer that could be it, numbered as the Timeline's Matte
+/// cell numbers them. Until one is chosen it is the layer already in use, or
+/// else the nearest one above (the shape you just drew over the picture), or
+/// else the nearest below, so the menu is never a dead end on the top layer.
 List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
   final all = ui.model.layers;
+  int at(UuidValue id) =>
+      all.indexWhere((e) => e.layer.internallayerId == id);
 
-  /// The nearest layer above [entry] that has a picture, or null when there
-  /// is none — the top layer of a comp has nothing to be gated by.
-  UuidValue? above(BridgeLayerEntry entry) {
-    final at = all.indexWhere(
-        (e) => e.layer.internallayerId == entry.layer.internallayerId);
-    if (at < 0) return null;
-    for (var i = at - 1; i >= 0; i--) {
+  UuidValue? source(BridgeLayerEntry entry) {
+    if (entry.info.matte case final matte?) return matte.layer;
+    final here = at(entry.layer.internallayerId);
+    if (here < 0) return null;
+    for (final i in [
+      for (var i = here - 1; i >= 0; i--) i,
+      for (var i = here + 1; i < all.length; i++) i,
+    ]) {
       if (_gates(all[i])) return all[i].layer.internallayerId;
     }
     return null;
@@ -1215,9 +1218,9 @@ List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
           ui,
           (entry) => entry.layer.setMatte(
             matte: BridgeMatte(
-                layer: above(entry)!, luma: luma, inverted: inverted),
+                layer: source(entry)!, luma: luma, inverted: inverted),
           ),
-          when: (entry) => above(entry) != null,
+          when: (entry) => source(entry) != null,
         ),
         checked: () {
           final matte = selectedEntries(ui).firstOrNull?.info.matte;
@@ -1227,13 +1230,48 @@ List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
         }(),
       );
 
+  String numbered(BridgeLayerEntry e) =>
+      '${at(e.layer.internallayerId) + 1}  ${e.info.name}';
+  final first = selectedEntries(ui).firstOrNull;
+  final shownAt = switch (first == null ? null : source(first)) {
+    final id? => at(id),
+    null => -1,
+  };
+  final candidates = [
+    for (final e in all)
+      if (_gates(e) && e.layer.internallayerId != first?.layer.internallayerId)
+        e,
+  ];
+
   return [
     MenuEntry(
       l10n.noMatte,
       onSelection(app, ui, (entry) => entry.layer.setMatte(),
           when: (entry) => entry.info.matte != null),
-      checked: selectedEntries(ui).firstOrNull?.info.matte == null,
+      checked: first?.info.matte == null,
     ),
+    if (shownAt >= 0 && candidates.isNotEmpty)
+      MenuEntry.submenu(numbered(all[shownAt]), [
+        // Choosing one keeps the kind already in use, or makes an alpha matte.
+        for (final e in candidates)
+          MenuEntry(
+            numbered(e),
+            onSelection(
+              app,
+              ui,
+              (entry) => entry.layer.setMatte(
+                matte: BridgeMatte(
+                  layer: e.layer.internallayerId,
+                  luma: entry.info.matte?.luma ?? false,
+                  inverted: entry.info.matte?.inverted ?? false,
+                ),
+              ),
+              when: (entry) =>
+                  entry.layer.internallayerId != e.layer.internallayerId,
+            ),
+            checked: first?.info.matte?.layer == e.layer.internallayerId,
+          ),
+      ]),
     MenuEntry.divider(),
     set(l10n.menuMatteAlpha, luma: false, inverted: false),
     set(l10n.menuMatteAlphaInverted, luma: false, inverted: true),
@@ -1242,8 +1280,8 @@ List<MenuEntry> matteRows(LumitState app, LumitUiState ui) {
   ];
 }
 
-/// Layer ▸ Layer styles: the seven Lumit draws (docs/impl/layer-styles.md §6
-/// and §8), in Photoshop's own painting order.
+/// Layer ▸ Layer styles: the ones a menu may offer ([offeredStyles]), in
+/// painting order.
 ///
 /// **Greyed once the layer wears it**, because that is the engine's rule rather
 /// than this menu's opinion: the family is nine named slots and `add_style`

@@ -22,9 +22,7 @@ import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
-import '../shell/layer_settings_frb.dart' show newSolidFrb;
-import '../shell/menu_bar_frb.dart' show pasteSelectionFrb;
-import '../shell/light_settings_dialog.dart';
+import '../shell/menu_bar_frb.dart' show newLayerFrb, pasteSelectionFrb;
 import '../widgets/time_readout.dart';
 import 'graph_channels.dart';
 import 'graph_maths.dart';
@@ -439,14 +437,12 @@ Future<void> showTimelineMoreMenu(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final (action, label, add) in _newLayerKinds(
-                  context, comp, onChanged))
+              for (final (action, label) in _newLayerKinds())
                 MenuRow(
                   key: ValueKey<String>('tl-new-$action'),
                   onPressed: () {
                     dismiss();
-                    add();
-                    onChanged();
+                    newLayerFrb(context, ui, comp, action);
                   },
                   child: MenuLabel(label, action: action),
                 ),
@@ -539,26 +535,15 @@ Future<void> showTimelineMoreMenu(
   }
 }
 
-/// The kinds a new layer can be, each with its keymap action and how to add
-/// it. A Solid and a Light ask their questions first.
-List<(String, String, VoidCallback)> _newLayerKinds(
-        BuildContext context, CompositionReference comp, VoidCallback onChanged) =>
-    [
-      (
-        'layer.new.solid',
-        l10n.menuSolid,
-        () => newSolidFrb(context: context, comp: comp, onDone: onChanged)
-      ),
-      ('layer.new.text', l10n.menuText, comp.addTextLayer),
-      ('layer.new.camera', l10n.menuCamera, comp.addCameraLayer),
-      (
-        'layer.new.light.point',
-        l10n.menuLight,
-        () => newLightFrb(context: context, comp: comp, onDone: onChanged)
-      ),
-      ('layer.new.adjustment', l10n.menuAdjustment, comp.addAdjustmentLayer),
-      ('layer.new.null', l10n.menuNull, comp.addNullLayer),
-      ('layer.new.sequence', l10n.menuSequence, comp.addSequenceLayer),
+/// The kinds a new layer can be, each with its keymap action.
+List<(String, String)> _newLayerKinds() => [
+      ('layer.new.solid', l10n.menuSolid),
+      ('layer.new.text', l10n.menuText),
+      ('layer.new.camera', l10n.menuCamera),
+      ('layer.new.light.point', l10n.menuLight),
+      ('layer.new.adjustment', l10n.menuAdjustment),
+      ('layer.new.null', l10n.menuNull),
+      ('layer.new.sequence', l10n.menuSequence),
     ];
 
 /// **The key commands, at the outline's foot** — the interpolation words and

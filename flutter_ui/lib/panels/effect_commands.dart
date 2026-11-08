@@ -422,10 +422,12 @@ class EffectCommands {
             children: menuGroups([
               // What the effect is doing, first.
               [
+                // Bypass, ticked while off: the word the node box and the
+                // Grade panel use for the same switch.
                 if (!inputs)
-                  row('enabled', l10n.fxMenuEnabled,
+                  row('bypass', l10n.fxBypass,
                       () => setEnabled(context, !info.enabled),
-                      ticked: info.enabled, enabled: !locked),
+                      ticked: !info.enabled, enabled: !locked),
                 if (compositing case final fold?)
                   row(
                     'compositing',

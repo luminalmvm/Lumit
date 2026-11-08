@@ -241,6 +241,9 @@ class TurnsAndDegreesField extends StatefulWidget {
     this.setExpression,
   });
 
+  /// How wide the two boxes stand together, the gap between them included.
+  static const double width = 30 + 3 + 54;
+
   /// The whole turns in an angle, toward zero — so −370° reads as −1 turn and
   /// −10°, which is how it is spoken.
   static double turnsOf(double value) => (value / 360).truncateToDouble();

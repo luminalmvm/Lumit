@@ -1,10 +1,10 @@
 // Running beat detection, and the sentence it leaves on the status line.
 //
-// Three surfaces offer detection (the Audio panel's Generate, the Timeline's
-// more menu, Composition ▸ Detect beats) and all three come through here, so a
-// run started from the menu shows the same card, the same bar and the same
-// words as a run started from the panel. It used to be one function for the
-// sentence alone, and the menu path had no card at all.
+// Every surface that offers detection (the Audio panel's Generate, the
+// Timeline's more menu, Composition ▸ Detect beats and a sound layer's own
+// menu) comes through here, so a run started from a menu shows the same card,
+// the same bar and the same words as a run started from the panel. It used to
+// be one function for the sentence alone, and the menu path had no card at all.
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/shell/splash.dart';
@@ -71,6 +71,18 @@ Future<void> runBeatDetection({
     app.busyProgress.value = null;
   });
 }
+
+/// Composition ▸ Detect beats: the whole comp's sound, with the standard
+/// options. A sound layer's own menu runs this same command.
+Future<void> detectCompBeats(LumitState app, CompositionReference comp) =>
+    runBeatDetection(
+      app: app,
+      comp: comp,
+      options: BridgeBeatOptions.standard(),
+      // The markers land after the menu's own redraw, so the run asks for
+      // another when they do.
+      onFound: (_) => app.notifyDocumentChanged(),
+    );
 
 /// What a detection that placed markers says (the AudioWorkspace board's own
 /// status caption): the confirmed tempo and the count, or the count alone when

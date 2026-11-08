@@ -28,8 +28,6 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
 import 'package:lumit_flutter/panels/retime_commands.dart' show holdHere;
-import 'package:lumit_flutter/shell/layer_settings_frb.dart' show newSolidFrb;
-import 'package:lumit_flutter/shell/light_settings_dialog.dart';
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
@@ -888,29 +886,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           state.toggleRetime(layer);
         }
-      // Layer ▸ New from the keyboard: the same engine call the menu row
-      // makes, on the fronted composition.
-      // A light or a solid asks for its settings first, as the menu row does.
-      case 'layer.new.light.point' || 'layer.new.solid':
-        if (comp == null) {
-          handled = false;
-        } else {
-          (action == 'layer.new.solid' ? newSolidFrb : newLightFrb)(
-            context: context,
-            comp: comp,
-            row: newLayerRow(ui, comp),
-            onDone: state.notifyDocumentChanged,
-          );
-        }
-      // An empty row for clips, picture or sound.
-      case 'layer.new.audio' || 'layer.new.sequence':
-        if (comp == null) {
-          handled = false;
-        } else {
-          insertEmptyLayer(ui, comp, action);
-          state.notifyDocumentChanged();
-        }
-      case 'layer.new.text' ||
+      // Layer ▸ New from the keyboard: the menu row's own call.
+      case 'layer.new.light.point' ||
+            'layer.new.solid' ||
+            'layer.new.audio' ||
+            'layer.new.sequence' ||
+            'layer.new.text' ||
             'layer.new.camera' ||
             'layer.new.adjustment' ||
             'layer.new.null' ||
@@ -918,23 +899,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (comp == null) {
           handled = false;
         } else {
-          // Directly above the selected layer, exactly as the menu row does.
-          final row = newLayerRow(ui, comp);
-          switch (action) {
-            case 'layer.new.text':
-              comp.addTextLayer(row: row);
-            case 'layer.new.camera':
-              comp.addCameraLayer(row: row);
-            case 'layer.new.adjustment':
-              comp.addAdjustmentLayer(row: row);
-            case 'layer.new.null':
-              comp.addNullLayer(row: row);
-            case 'layer.new.card':
-              ui.setSelection([
-                comp.addCardLayer(row: row, frame: ui.playheadFrame.value),
-              ]);
-          }
-          state.notifyDocumentChanged();
+          newLayerFrb(context, ui, comp, action);
         }
       // The Viewer's own magnification and preview resolution (docs/07 §2.2,
       // §15). Both are asked for rather than done here: the magnification
@@ -1235,6 +1200,10 @@ class _LumitAppViewState extends State<LumitAppView> {
           addMarkerFrb(comp, frame: ui.playheadFrame.value);
           state.notifyDocumentChanged();
         }
+      // The marker either side of the playhead, the menu row's own step.
+      case 'marker.prev' || 'marker.next':
+        handled = comp != null &&
+            stepToMarkerFrb(ui, comp, back: action == 'marker.prev');
       // A region over the work area, as Vegas makes one over its time
       // selection. Ahead of the numbered markers, which share the prefix.
       case 'marker.add.region':

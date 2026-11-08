@@ -2136,9 +2136,9 @@ void main() {
           reason: 'the stretch is the map, not a hidden multiplier');
     });
 
-    /// Pre-compose is on the row's own menu as well as the Layer menu, and it
+    /// Precompose is on the row's own menu as well as the Layer menu, and it
     /// is the same dialogue either way (docs/07 §13.4).
-    testWidgets('Pre-compose on the row menu packs the layer', (tester) async {
+    testWidgets('Precompose on the row menu packs the layer', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       await mount(tester, p);
@@ -2149,7 +2149,7 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Pre-compose…'));
+      await tester.tap(find.text('Precompose…'));
       await tester.pumpAndSettle();
 
       await tester.enterText(

@@ -85,6 +85,12 @@ void insertTitle(BuildContext context, LumitUiState ui,
   setPanelVisible(ui.split, Panel.text, true);
   activatePanelTab(ui.split, Panel.text);
   ui.workspace.touch();
+  openTypeEdit(ui, layer);
+}
+
+/// Open [layer]'s words for typing in the Viewer, all of them picked, so a
+/// first key replaces them.
+void openTypeEdit(LumitUiState ui, LayerReference layer) {
   // The Viewer has to have the layer's box before it can open it, and it reads
   // the request as the Type tool arrives, so a Type tool already in hand is
   // put down first.

@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
+import '../state/beats_notice.dart' show detectCompBeats;
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -252,6 +253,16 @@ List<Widget> audioLayerRows({
           ], then: onChanged);
         },
         child: MenuLabel(l10n.audioNormalise, ticked: false),
+      ),
+    // Composition ▸ Detect beats, from the music where a cutter looks for it.
+    if (!isBus)
+      MenuRow(
+        key: const ValueKey<String>('audio-menu-beats'),
+        onPressed: () {
+          closeParent();
+          detectCompBeats(app, comp);
+        },
+        child: MenuLabel(l10n.menuDetectBeats, ticked: false),
       ),
     ...extra,
     const MenuDivider(),

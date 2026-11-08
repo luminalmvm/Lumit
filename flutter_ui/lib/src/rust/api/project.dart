@@ -724,6 +724,14 @@ class ProjectReference {
         that: this,
       );
 
+  /// The name a solid made right now would get, "White solid 3" when the
+  /// project holds two. What New solid puts in its Name field, read off the
+  /// same call that names the solid, so the two cannot disagree.
+  String nextSolidName() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNextSolidName(
+        that: this,
+      );
+
   /// Note that the project is being left on purpose, for the application
   /// quitting. Closing or replacing a project notes it by itself.
   void noteCleanExit() =>

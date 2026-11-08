@@ -89,6 +89,8 @@ impl ActionId {
             "keyframe.next" => "Next keyframe",
             "edit.point.prev" => "Previous edit point",
             "edit.point.next" => "Next edit point",
+            "marker.prev" => "Previous marker",
+            "marker.next" => "Next marker",
             // Keyframes. The plain one acts on the picked property rows, the
             // five named ones on the selected layers.
             "keyframe.toggle" => "Add or remove a keyframe at the playhead",
@@ -231,7 +233,7 @@ impl ActionId {
             "effect.remove.all" => "Remove every effect from the selected layers",
             "grade.copy" => "Copy the layer's grade",
             "grade.paste" => "Paste the grade onto the selected layers",
-            "layer.precompose" => "Pre-compose the layer",
+            "layer.precompose" => "Precompose the layer",
             "layer.group" => "Group the selected layers",
             "layer.ungroup" => "Ungroup",
             "layer.retime.enable" => "Give the layer a Retime",

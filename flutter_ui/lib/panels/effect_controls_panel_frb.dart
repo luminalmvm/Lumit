@@ -1749,7 +1749,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
-  /// The add-a-style popup: the seven, in §2's order, greyed where worn.
+  /// The add-a-style popup: the ones a menu may offer, in §2's order.
   void _addStyleMenu(BuildContext context, LumitUiState ui,
       LayerReference layer, Set<String> worn) {
     final box = context.findRenderObject() as RenderBox?;
@@ -2866,21 +2866,22 @@ class _EffectSection extends StatelessWidget {
               field0: BridgeScalar_Keyframed(:final field0)))
             ...field0,
       ],
-      leading: inputs ? null : LumitTooltip(
-        message: info.enabled ? l10n.tipDisable : l10n.tipEnable,
-        // **A target you can hit** (owner, desk test). The checkbox's own 14px
-        // box is what a settings page wants; here it is the control reached
-        // for most, and it was being missed. The whole stopwatch column, for
-        // the whole height of the heading, switches the effect — and the mark
-        // inside is drawn a step larger so it holds its own beside the
-        // heading's capitals (see `fxEnableHitWidth`), and a drag off it sets
-        // every switch it crosses to what this one just became (item 6.2).
-        child: fxEnableSwitch(
-          id: '$id',
-          on: info.enabled,
-          onChanged: (on) => _commands.setEnabled(context, on),
-        ),
-      ),
+      // **A target you can hit** (owner, desk test). The checkbox's own 14px
+      // box is what a settings page wants; here it is the control reached
+      // for most, and it was being missed. The whole stopwatch column, for
+      // the whole height of the heading, switches the effect, and the mark
+      // inside is drawn a step larger so it holds its own beside the
+      // heading's capitals (see `fxEnableHitWidth`), and a drag off it sets
+      // every switch it crosses to what this one just became (item 6.2).
+      // No tooltip, as on the node box: the tick is the state, and the menu
+      // names it Bypass.
+      leading: inputs
+          ? null
+          : fxEnableSwitch(
+              id: '$id',
+              on: info.enabled,
+              onChanged: (on) => _commands.setEnabled(context, on),
+            ),
       actions: [
         if (onOpenInterface case final open?)
           fxTextAction(
