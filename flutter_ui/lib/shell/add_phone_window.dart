@@ -168,38 +168,47 @@ class _AddPhoneState extends State<_AddPhone> {
             ],
           ),
         ),
+        // The same two acts the picture's menu has, where a footer puts them.
+        dialogFooter(
+          t,
+          keyPrefix: 'add-phone',
+          actions: [
+            HouseButton(
+              key: const ValueKey('add-phone-copy'),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              onPressed: live && _link != null
+                  ? () => unawaited(
+                      Clipboard.setData(ClipboardData(text: _link!)))
+                  : null,
+              child: Text(l10n.reviewCopyLink),
+            ),
+            HouseButton(
+              key: const ValueKey('add-phone-again'),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              onPressed: _asking ? null : () => unawaited(_ask()),
+              child: Text(l10n.phoneCodeNew),
+            ),
+          ],
+        ),
       ],
     );
   }
 
   /// What the square holds while there is no code to scan: one on its way,
-  /// or why there is none and the way to another.
+  /// or why there is none. The footer's New code is the way to another.
   Widget _instead(LumitTheme t) {
     if (_asking) {
       return const SizedBox(width: 18, height: 18, child: SyncRing());
     }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            _error ?? l10n.phoneCodeExpired,
-            key: const ValueKey('add-phone-note'),
-            textAlign: TextAlign.center,
-            style: t.small.copyWith(
-                color: _error == null ? t.textSecondary : t.warning,
-                height: 1.4),
-          ),
-        ),
-        const SizedBox(height: 10),
-        HouseButton(
-          key: const ValueKey('add-phone-again'),
-          small: true,
-          onPressed: () => unawaited(_ask()),
-          child: Text(l10n.phoneCodeNew, style: t.small),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Text(
+        _error ?? l10n.phoneCodeExpired,
+        key: const ValueKey('add-phone-note'),
+        textAlign: TextAlign.center,
+        style: t.small.copyWith(
+            color: _error == null ? t.textSecondary : t.warning, height: 1.4),
+      ),
     );
   }
 }

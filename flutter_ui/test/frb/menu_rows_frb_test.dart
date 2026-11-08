@@ -145,11 +145,13 @@ void main() {
       expect(layer.getBlend(), 2);
 
       await settle(tester, p);
-      await choose(tester, 'Layer', 'Next blending mode');
+      await choose(tester, 'Layer', 'Next blending mode',
+          under: 'Blending mode');
       expect(layer.getBlend(), 3);
 
       await settle(tester, p);
-      await choose(tester, 'Layer', 'Previous blending mode');
+      await choose(tester, 'Layer', 'Previous blending mode',
+          under: 'Blending mode');
       expect(layer.getBlend(), 2);
     });
 

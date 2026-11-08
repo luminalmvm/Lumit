@@ -162,19 +162,22 @@ class _PaletteState extends State<_Palette> {
 
   List<PaletteCommand> get _matches {
     final needle = _query.text.trim();
-    final scored = <(int, int, int)>[];
+    final scored = <(int, int, int, int)>[];
     for (var i = 0; i < widget.commands.length; i++) {
       final label = widget.commands[i].label;
-      final whole = paletteScore(needle, label);
-      if (whole == null) continue;
+      final crumbs = label.split(palettePathSeparator);
       // A menu command is known by its last step, so "solid" ranks
-      // "Layer › New › Solid" as it would rank "Solid", not as a match that
-      // starts fourteen letters in.
-      final leaf =
-          paletteScore(needle, label.split(palettePathSeparator).last) ?? whole;
+      // "Layer › New › Solid" as it would rank "Solid". The steps before it
+      // count only when one of them holds the needle whole, and after every
+      // match on a last step: a subsequence over the whole path had "blur"
+      // finding Blending mode › Subtract.
+      final leaf = paletteScore(needle, crumbs.last);
+      final score = leaf ?? _crumbScore(needle, crumbs);
+      if (score == null) continue;
       final recency = widget.recent.indexOf(label);
       scored.add((
-        leaf < whole ? leaf : whole,
+        leaf == null ? 1 : 0,
+        score,
         recency < 0 ? widget.recent.length : recency,
         i,
       ));
@@ -184,12 +187,25 @@ class _PaletteState extends State<_Palette> {
     // the order the caller listed them in, because the sort keeps no order of
     // its own.
     scored.sort((a, b) {
-      final byScore = a.$1.compareTo(b.$1);
+      final byKind = a.$1.compareTo(b.$1);
+      if (byKind != 0) return byKind;
+      final byScore = a.$2.compareTo(b.$2);
       if (byScore != 0) return byScore;
-      final byRecency = a.$2.compareTo(b.$2);
-      return byRecency != 0 ? byRecency : a.$3.compareTo(b.$3);
+      final byRecency = a.$3.compareTo(b.$3);
+      return byRecency != 0 ? byRecency : a.$4.compareTo(b.$4);
     });
-    return [for (final entry in scored) widget.commands[entry.$3]];
+    return [for (final entry in scored) widget.commands[entry.$4]];
+  }
+
+  /// Where [needle] sits whole in one of [crumbs], or null when it is in
+  /// none of them. Never across two: a path is read a step at a time.
+  static int? _crumbScore(String needle, List<String> crumbs) {
+    final lower = needle.toLowerCase();
+    for (final crumb in crumbs) {
+      final at = crumb.toLowerCase().indexOf(lower);
+      if (at >= 0) return at;
+    }
+    return null;
   }
 
   void _run(PaletteCommand command) {
@@ -250,56 +266,49 @@ class _PaletteState extends State<_Palette> {
     if (position.pixels < bottom) _scroll.jumpTo(bottom);
   }
 
-  /// A group's name over its rows, one row tall so the list stays regular.
+  /// A group's name over its rows. The list's prototype row gives it the
+  /// row's own height, so the list stays regular.
   Widget _heading(LumitTheme t, String name) => Container(
-        height: _rowHeight,
         alignment: AlignmentDirectional.centerStart,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Text(t.kickerCase(name), style: t.kicker),
       );
 
-  /// One line of the list, heading or match, for the prototype and the
-  /// scrolling arithmetic.
-  static const double _rowHeight = 26;
-
-  /// One result row: the mark, the name, the tick, the chord and the badge.
-  /// Under a heading the badge would say the heading again, so it goes.
+  /// One result row: the mark, the name, the tick, the chord and the badge,
+  /// at the height every menu row has. Under a heading the badge would say
+  /// the heading again, so it goes.
   Widget _row(LumitTheme t, PaletteCommand command, {bool selected = false}) {
     final off = command.disabled != null;
     final badged = _query.text.trim().isNotEmpty;
-    return SizedBox(
-      height: _rowHeight,
-      child: MenuRow(
-        selected: selected,
-        onPressed: () => _run(command),
-        child: Row(
-          children: [
-            SizedBox(width: iconSize, child: command.icon),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                command.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: off ? t.body.copyWith(color: t.textDisabled) : null,
-              ),
+    return MenuRow(
+      selected: selected,
+      onPressed: () => _run(command),
+      child: Row(
+        children: [
+          SizedBox(width: iconSize, child: command.icon),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              command.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: off ? t.body.copyWith(color: t.textDisabled) : null,
             ),
-            // After the name, so ticked and unticked names start in line.
-            if (command.ticked) ...[
-              menuTick(true, colour: t.textMuted),
-              const SizedBox(width: 8),
-            ],
-            if (command.disabled ?? command.shortcut case final note?) ...[
-              Text(note,
-                  style:
-                      off ? t.small.copyWith(color: t.textDisabled) : t.mono),
-              const SizedBox(width: 8),
-            ],
-            if (badged)
-              Text(command.category,
-                  style: t.small.copyWith(color: t.textMuted)),
+          ),
+          // After the name, so ticked and unticked names start in line.
+          if (command.ticked) ...[
+            menuTick(true, colour: t.textMuted),
+            const SizedBox(width: 8),
           ],
-        ),
+          if (command.disabled ?? command.shortcut case final note?) ...[
+            Text(note,
+                style: off ? t.small.copyWith(color: t.textDisabled) : t.mono),
+            const SizedBox(width: 8),
+          ],
+          if (badged)
+            Text(command.category,
+                style: t.small.copyWith(color: t.textMuted)),
+        ],
       ),
     );
   }

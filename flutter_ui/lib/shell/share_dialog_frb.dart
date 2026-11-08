@@ -121,13 +121,8 @@ String shareOnlineErrorText(String code) => switch (code) {
   }
   switch (share.versions) {
     case BridgeShareVersions_Movable(:final version):
-      final line = l10n.shareVersionsMovable;
-      return (
-        words: l10n.shareVersionsOlder(version),
-        line: line,
-        said: line,
-        wrong: true,
-      );
+      final words = l10n.shareVersionsOlder(version);
+      return (words: words, line: words, said: words, wrong: true);
     case BridgeShareVersions_HostFirst():
       final line = l10n.shareVersionsHostFirst(shareThisLumit());
       return (
@@ -151,10 +146,7 @@ String shareOnlineErrorText(String code) => switch (code) {
   if (large && !share.writable) {
     return (
       words: l10n.shareOnlineTooLarge,
-      // Only the host can do anything about it.
-      line: hosting
-          ? l10n.shareOnlineTooLargeLineOwn
-          : l10n.shareOnlineTooLargeLine,
+      line: l10n.shareOnlineTooLargeSaid,
       said: l10n.shareOnlineTooLargeSaid,
       wrong: true,
     );
@@ -173,7 +165,7 @@ String shareOnlineErrorText(String code) => switch (code) {
     // Not looking for the server any more: it has said the invite is gone.
     return (
       words: l10n.shareReplaced,
-      line: l10n.shareReplacedLine,
+      line: l10n.shareReplacedSaid,
       said: l10n.shareReplacedSaid,
       wrong: true,
     );
@@ -183,7 +175,7 @@ String shareOnlineErrorText(String code) => switch (code) {
     return large
         ? (
             words: l10n.shareOnlineNearlyLarge,
-            line: l10n.shareOnlineNearlyLargeLine,
+            line: l10n.shareOnlineNearlyLargeSaid,
             said: l10n.shareOnlineNearlyLargeSaid,
             wrong: true,
           )
@@ -206,9 +198,8 @@ String shareOnlineErrorText(String code) => switch (code) {
 
 /// Ask before a project stops being kept online: one question, for its own
 /// window and for the list in Settings. [name] is the project's, where the
-/// asker lists several. [here] is whether a copy of it is on this computer.
-Future<bool> askStopKeeping(BuildContext context,
-        {String? name, bool here = true}) async =>
+/// asker lists several.
+Future<bool> askStopKeeping(BuildContext context, {String? name}) async =>
     await showLumitModal<bool>(
       context: context,
       id: 'share-stop-ask',
@@ -216,7 +207,6 @@ Future<bool> askStopKeeping(BuildContext context,
         title: name == null
             ? l10n.shareOnlineStopTitle
             : l10n.shareOnlineStopTitleNamed(name),
-        body: here ? l10n.shareOnlineStopBody : l10n.shareOnlineStopBodyAway,
         no: l10n.shareOnlineStopNo,
         yes: l10n.settingsOnlineStop,
         keyPrefix: 'share-stop-ask',
@@ -694,7 +684,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         id: 'share-look-ask',
         builder: (close) => _Question(
           title: on ? l10n.shareLookOnTitle : l10n.shareLookOffTitle,
-          body: on ? l10n.shareLookOnBody : l10n.shareLookOffBody(looking),
           no: l10n.cancel,
           yes: on ? l10n.shareLookOnYes : l10n.shareLookOffYes,
           keyPrefix: 'share-look-ask',
@@ -1141,7 +1130,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         id: 'share-forget-ask',
         builder: (close) => _Question(
           title: l10n.shareReturnForgetTitle(copies),
-          body: l10n.shareReturnForgetBody(copies),
           no: l10n.cancel,
           yes: l10n.delete,
           keyPrefix: 'share-forget-ask',
@@ -3555,7 +3543,9 @@ Future<void> showExportAskFrb(BuildContext context, LumitState app,
 /// button is the last in every window, and here that is the careful one.
 class _Question extends StatelessWidget {
   final String title;
-  final String body;
+
+  /// What can't be told from the title. Most questions need nothing.
+  final String? body;
   final String no;
   final String yes;
   final String keyPrefix;
@@ -3564,7 +3554,7 @@ class _Question extends StatelessWidget {
 
   const _Question({
     required this.title,
-    required this.body,
+    this.body,
     required this.no,
     required this.yes,
     required this.keyPrefix,
@@ -3579,9 +3569,9 @@ class _Question extends StatelessWidget {
         keyPrefix: keyPrefix,
         onClose: () => onChoose(false),
         actions: [
-          questionPlain(
+          questionPlain('$keyPrefix-no', no, () => onChoose(false)),
+          questionFilled(
               '$keyPrefix-yes', yes, yesLive ? () => onChoose(true) : null),
-          questionFilled('$keyPrefix-no', no, () => onChoose(false)),
         ],
       );
 }
@@ -3773,9 +3763,9 @@ class _ShowLinkQuestion extends StatelessWidget {
         onClose: () => onChoose(false),
         actions: [
           questionPlain(
-              'share-show-confirm', l10n.shareShowConfirm, () => onChoose(true)),
-          questionFilled(
               'share-show-cancel', l10n.shareKeepHidden, () => onChoose(false)),
+          questionFilled(
+              'share-show-confirm', l10n.shareShowConfirm, () => onChoose(true)),
         ],
       );
 }

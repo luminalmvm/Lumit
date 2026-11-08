@@ -182,14 +182,6 @@ class _ShortcutBodyState extends State<_ShortcutBody> {
                   : t.mono.copyWith(color: t.textPrimary),
             ),
           ),
-          const SizedBox(height: 10),
-          // The factual line the dialogue pattern asks for (§12A.4), and the
-          // rule that would otherwise be a surprise said plainly.
-          Text(
-            l10n.workspaceShortcutSlot(widget.workspace, '${widget.slot}'),
-            key: const ValueKey('workspace-shortcut-summary'),
-            style: t.caption.copyWith(color: t.textMuted),
-          ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,

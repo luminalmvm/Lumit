@@ -1199,12 +1199,44 @@ class _ModifierHintState extends State<_ModifierHint> {
 /// ruler showing which frames are held (`TimelineCacheBar`, and the glossary's
 /// own definition). This measures how full the store is, which is a different
 /// question.
-class CacheMeterFrb extends StatelessWidget {
+class CacheMeterFrb extends StatefulWidget {
   const CacheMeterFrb({super.key});
 
-  /// The three tiers as they stand, read fresh each time: the strip's tick
-  /// and the open detail both ask here.
-  static List<_Tier> _tiers(BuildContext context) {
+  @override
+  State<CacheMeterFrb> createState() => _CacheMeterFrbState();
+}
+
+class _CacheMeterFrbState extends State<CacheMeterFrb> {
+  /// The tiers as last read, on the meter's own tick rather than on every
+  /// rebuild of the line around it: each read takes the engine's lock.
+  late List<_Tier> _tiers = _read();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 500), (_) => _tick());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _tick() {
+    if (!mounted) return;
+    final now = _read();
+    for (var i = 0; i < now.length; i++) {
+      if (now[i].used != _tiers[i].used || now[i].budget != _tiers[i].budget) {
+        setState(() => _tiers = now);
+        return;
+      }
+    }
+  }
+
+  /// The three tiers as they stand.
+  List<_Tier> _read() {
     final ram = cacheStats();
     final vram = vramCacheStats();
     final disk = diskCacheStats();
@@ -1220,20 +1252,21 @@ class CacheMeterFrb extends StatelessWidget {
     ];
   }
 
-  void _open(BuildContext context) {
+  void _open() {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
     showLumitPopup<void>(
       context: context,
       position: box.localToGlobal(Offset.zero),
-      builder: (close) => _CacheDetail(tiers: () => _tiers(context)),
+      // Read fresh for the detail, and the strip follows on its tick.
+      builder: (close) => _CacheDetail(tiers: _read),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final tiers = _tiers(context);
+    final tiers = _tiers;
     final used = tiers.fold<int>(0, (sum, tier) => sum + tier.used);
     return LumitTooltip(
       message: [for (final tier in tiers) '${tier.label} ${tier.words}']
@@ -1243,7 +1276,7 @@ class CacheMeterFrb extends StatelessWidget {
         frameless: true,
         small: true,
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        onPressed: () => _open(context),
+        onPressed: _open,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1275,7 +1308,9 @@ class _Tier {
   final String label;
   final int used;
   final int budget;
-  final VoidCallback clear;
+
+  /// Empty the tier. The disk tier's asks first, so it takes its time.
+  final FutureOr<void> Function() clear;
   const _Tier(this.id, this.label, this.used, this.budget, this.clear);
 
   double get fraction => budget <= 0 ? 0.0 : (used / budget).clamp(0.0, 1.0);
@@ -1333,8 +1368,8 @@ class _CacheDetailState extends State<_CacheDetail> {
                     frameless: true,
                     onPressed: tier.used == 0
                         ? null
-                        : () {
-                            tier.clear();
+                        : () async {
+                            await tier.clear();
                             if (mounted) setState(() {});
                           },
                     child: Text(l10n.clear, style: t.small),

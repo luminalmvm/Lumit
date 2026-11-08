@@ -413,7 +413,10 @@ class _ExportQueueState extends State<_ExportQueue> {
             const SizedBox(width: 10),
             Expanded(child: _statusFace(t, item)),
             const SizedBox(width: 8),
-            Opacity(
+            // Hidden marks take no clicks either.
+            IgnorePointer(
+              ignoring: lit <= 0,
+              child: Opacity(
               opacity: lit > 0 ? 1 : 0,
               child: Row(mainAxisSize: MainAxisSize.min, children: [
             _settingsMark(t, item),
@@ -451,6 +454,7 @@ class _ExportQueueState extends State<_ExportQueue> {
               ),
             ),
               ]),
+              ),
             ),
           ],
         ),

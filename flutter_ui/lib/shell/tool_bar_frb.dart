@@ -53,7 +53,7 @@ import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'menu_bar_frb.dart'
-    show MenuEntry, showMenuEntries, workspaceEntryRows;
+    show MenuEntry, showMenuEntries, userWorkspaceRows, workspaceEntryRows;
 import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import 'window_frame.dart';
 
@@ -158,7 +158,7 @@ class LumitToolBarFrb extends StatelessWidget {
     // Named, so a style can dress the toolbar's buttons apart from others.
     return StylePart(name: 'toolbar', child: GestureDetector(
       onSecondaryTapUp: (d) =>
-          showMenuEntries(context, d.globalPosition, _barRows(ui)),
+          showMenuEntries(context, d.globalPosition, _barRows(context, ui)),
       child: Container(
       height: toolBarHeightFor(t.shape),
       decoration: BoxDecoration(
@@ -295,13 +295,14 @@ class LumitTopLineToolsFrb extends StatelessWidget {
 }
 
 /// The bar's own menu, on its empty stretch and on the rail: where the tools
-/// stand, which Settings also has. Option rows, so the two can be compared
-/// without reopening it.
-List<MenuEntry> _barRows(LumitUiState ui) {
+/// stand, which Settings also has, and a way in for a workspace file. Option
+/// rows, so the positions can be compared without reopening it.
+List<MenuEntry> _barRows(BuildContext context, LumitUiState ui) {
   final settings = ui.workspace.interface;
   return [
     MenuEntry.submenu(l10n.settingsToolBarPosition, [
       for (final (position, label) in [
+        (ToolBarPosition.auto, l10n.styleChoice),
         (ToolBarPosition.top, l10n.toolBarTop),
         (ToolBarPosition.left, l10n.toolBarLeft),
       ])
@@ -311,9 +312,13 @@ List<MenuEntry> _barRows(LumitUiState ui) {
             settings.toolBarPosition = position;
             ui.workspace.settingsChanged();
           },
-          checked: () => settings.toolBarPositionFor(ui.theme.shape) == position,
+          checked: () => settings.toolBarPosition == position,
         ),
     ]),
+    MenuEntry.divider(),
+    // Import, the last of the workspace rows: it belongs to no name on the
+    // strip, so it sits on the strip's ground.
+    userWorkspaceRows(context, context.read<LumitState>(), ui).last,
   ];
 }
 
@@ -401,7 +406,7 @@ class LumitToolRailFrb extends StatelessWidget {
     final pills = t.tokens.roomed;
     return GestureDetector(
       onSecondaryTapUp: (d) =>
-          showMenuEntries(context, d.globalPosition, _barRows(ui)),
+          showMenuEntries(context, d.globalPosition, _barRows(context, ui)),
       child: Container(
       width: toolRailWidth,
       decoration: BoxDecoration(
@@ -1106,7 +1111,8 @@ class _ToolButtonState extends State<_ToolButton> {
       MenuEntry(
           l10n.menuChangeShortcut,
           () => showSettingsWindowFrb(context,
-              initialPage: SettingsPage.shortcuts)),
+              initialPage: SettingsPage.shortcuts,
+              row: _actionFor(widget.group))),
     ]);
   }
 

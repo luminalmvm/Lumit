@@ -688,8 +688,14 @@ class _ExportDialogState extends State<_ExportDialog> {
     final bits = (_caps.video ? _bitrateBps : 0) +
         (_audio && _caps.audio ? _audioRate : 0);
     if (bits <= 0) return line;
-    final gigabytes = bits * seconds / 8 / 1e9;
-    return '$line · ${l10n.exportSummarySize(gigabytes.toStringAsFixed(1))}';
+    // Megabytes under a gigabyte, and nothing at all under a megabyte: an
+    // estimate of nought is no estimate.
+    final megabytes = bits * seconds / 8 / 1e6;
+    if (megabytes < 1) return line;
+    final size = megabytes >= 1000
+        ? l10n.exportSummarySize((megabytes / 1000).toStringAsFixed(1))
+        : l10n.exportSummarySizeMb('${megabytes.round()}');
+    return '$line · $size';
   }
 
   BridgeExportSpec get _spec {
@@ -893,7 +899,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     return switch (section) {
       ExportSection.composition => [
           _qualityLabel(_quality),
-          '$width × $height',
+          l10n.exportReadingSize('$width', '$height'),
         ],
       ExportSection.time => [
           switch (_span) {
@@ -908,14 +914,15 @@ class _ExportDialogState extends State<_ExportDialog> {
           _alphaChannel ? l10n.exportChannelsRgbAlpha : l10n.exportChannelsRgb,
           _depth >= 16 ? l10n.exportDepth16 : l10n.exportDepth8,
           if (_caps.video && _bitrateBps > 0)
-            '${(_bitrateBps / 1e6).round()} Mb/s',
+            l10n.exportReadingVideoRate('${(_bitrateBps / 1e6).round()}'),
         ],
       ExportSection.colour => [_colourSpaceLabel(_colourSpace)],
       ExportSection.audio => _audio && _caps.audio
           ? [
               _sampleRateLabel(_audioSampleRate),
               _audioChannels == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
-              if (_caps.audioBitRate) '${_audioRate ~/ 1000} kb/s',
+              if (_caps.audioBitRate)
+                l10n.exportReadingAudioRate('${_audioRate ~/ 1000}'),
             ]
           : [l10n.off],
       // Nothing to say until somebody has written something in it.
@@ -1092,6 +1099,19 @@ class _ExportDialogState extends State<_ExportDialog> {
                         _setAsDefault();
                       },
                       child: Text(l10n.exportPresetSetDefault),
+                    ),
+                    const MenuDivider(),
+                    // Greyed for a shipped preset, which is not yours to
+                    // delete.
+                    MenuRow(
+                      key: const ValueKey('export-preset-delete-row'),
+                      enabled: _presets
+                          .any((p) => p.name == _preset && !p.readOnly),
+                      onPressed: () {
+                        close(null);
+                        _deletePreset();
+                      },
+                      child: Text(l10n.delete),
                     ),
                   ],
                 );
@@ -1993,9 +2013,10 @@ class _ExportDialogState extends State<_ExportDialog> {
     List<Widget> rows, {
     bool dimmed = false,
   }) {
-    // A warning in a shut fold would never be read.
-    final open = exportOpenSections.contains(section) ||
-        section == ExportSection.composition && _unread.isNotEmpty;
+    // A warning in a shut fold would never be read, so the fold is held
+    // open, and its twirl does nothing until the warning is.
+    final held = section == ExportSection.composition && _unread.isNotEmpty;
+    final open = held || exportOpenSections.contains(section);
     return _why(
       // A dead group answers no pointer, so it says why once for all its
       // rows. Only three things leave a group dead, one per kind of group.
@@ -2013,11 +2034,13 @@ class _ExportDialogState extends State<_ExportDialog> {
         readingAt: exportLabelColumn + exportRowGap,
         open: open,
         dimmed: dimmed,
-        onToggle: () => setState(() {
-          open
-              ? exportOpenSections.remove(section)
-              : exportOpenSections.add(section);
-        }),
+        onToggle: held
+            ? null
+            : () => setState(() {
+                  open
+                      ? exportOpenSections.remove(section)
+                      : exportOpenSections.add(section);
+                }),
         rows: rows,
         key: ValueKey<String>('export-group-${section.name}'),
       ),

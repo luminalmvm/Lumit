@@ -56,7 +56,7 @@ choice.
 | --- | --- |
 | A property's editor | In the dropdown under the text, or the row's right-click menu |
 | **Animation ▸ Add expression** | In the dropdown under the text, at the right |
-| **Window ▸ Expressions** | In the dropdown at the left of the bottom bar |
+| **Window ▸ Panels ▸ Expressions** | In the dropdown at the left of the bottom bar |
 | An Expression box in the node graph | In the same dropdown, under **Edit expression…** |
 
 A new expression starts in Rhai. **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ New expressions
@@ -159,7 +159,7 @@ expressions.
 
 ## Save expressions to use again
 
-**Window ▸ Expressions** opens a panel that keeps expressions between projects.
+**Window ▸ Panels ▸ Expressions** opens a panel that keeps expressions between projects.
 
 - **New** clears the editor. With a property selected that already has an expression, the
   editor starts with it.

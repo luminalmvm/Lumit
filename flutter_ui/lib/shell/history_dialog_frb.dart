@@ -111,7 +111,7 @@ class _HistoryDialogState extends State<_HistoryDialog> {
       children: [
         dialogTitleBar(
           t,
-          title: l10n.menuHistory,
+          title: l10n.historyTitle,
           onClose: widget.onClose,
           keyPrefix: 'history',
         ),

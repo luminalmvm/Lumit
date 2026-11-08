@@ -925,6 +925,35 @@ MenuEntry blendStepRow(LumitState app, LumitUiState ui, {required int by}) {
   );
 }
 
+/// Layer ▸ Reveal ▸: the single-property reveals the Timeline's letter keys
+/// run, each over every selected layer. Greyed with nothing selected.
+List<MenuEntry> revealRows(LumitUiState ui) {
+  final ids = ui.selectedLayerIds;
+  return [
+    for (final (label, action) in [
+      (l10n.transformPosition, 'reveal.position'),
+      (l10n.transformScale, 'reveal.scale'),
+      (l10n.transformRotation, 'reveal.rotation'),
+      (l10n.transformOpacity, 'reveal.opacity'),
+      (l10n.transformAnchorPoint, 'reveal.anchor'),
+      (l10n.workspaceEffects, 'reveal.effects'),
+      (l10n.foldMasks, 'reveal.masks'),
+      (l10n.menuAudio, 'reveal.volume'),
+    ])
+      MenuEntry(
+        label,
+        ids.isEmpty
+            ? null
+            : () {
+                for (final id in ids) {
+                  ui.requestRevealProperty(id, action);
+                }
+              },
+        action: action,
+      ),
+  ];
+}
+
 /// Layer ▸ Lock: the padlock for the whole selection, every layer ending up
 /// as the first one does, the way a switch cell clicked on a selection works.
 MenuEntry lockRow(LumitState app, LumitUiState ui) {

@@ -441,7 +441,18 @@ class _ColourPickerBody extends StatefulWidget {
   State<_ColourPickerBody> createState() => _ColourPickerBodyState();
 }
 
-class _ColourPickerBodyState extends State<_ColourPickerBody> {
+class _ColourPickerBodyState extends State<_ColourPickerBody>
+    implements TextSelectionGestureDetectorBuilderDelegate {
+  /// The hex field, for the press, drag and right-click every field has.
+  final GlobalKey<EditableTextState> _hexKey = GlobalKey();
+  @override
+  GlobalKey<EditableTextState> get editableTextKey => _hexKey;
+  @override
+  bool get forcePressEnabled => false;
+  @override
+  bool get selectionEnabled => true;
+  late final _hexGestures = TextFieldGestures(delegate: this, context: context);
+
   /// The chosen colour, in the scale being edited. Held as three channels
   /// rather than as hue/saturation/value because the channels are what the
   /// parameter stores and what the numbers show — and because a channel above
@@ -796,27 +807,33 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
           const SizedBox(width: 2),
           SizedBox(
             width: 72,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: t.surface0,
-                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                border: Border.all(
-                  color: _hexFocus.hasFocus ? t.accent : t.hairline,
+            // The whole well answers a press, a drag and a right-click, as
+            // every field does.
+            child: _hexGestures.buildGestureDetector(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: t.surface0,
+                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  border: Border.all(
+                    color: _hexFocus.hasFocus ? t.accent : t.hairline,
+                  ),
                 ),
-              ),
-              child: EditableText(
-                controller: _hexController,
-                focusNode: _hexFocus,
-                style: t.bodyPrimary,
-                cursorColor: t.accent,
-                backgroundCursorColor: t.surface2,
-                selectionColor: t.accent.withValues(alpha: 0.5),
-                // Fold a valid hex into the pick as it is typed, without
-                // reformatting the field mid-entry; focus loss then snaps it
-                // to canonical form and commits.
-                onChanged: _onHexTyped,
-                onSubmitted: (_) => _commitHex(),
+                child: EditableText(
+                  key: _hexKey,
+                  controller: _hexController,
+                  focusNode: _hexFocus,
+                  style: t.bodyPrimary,
+                  cursorColor: t.accent,
+                  backgroundCursorColor: t.surface2,
+                  selectionColor: t.accent.withValues(alpha: 0.5),
+                  // Fold a valid hex into the pick as it is typed, without
+                  // reformatting the field mid-entry; focus loss then snaps
+                  // it to canonical form and commits.
+                  onChanged: _onHexTyped,
+                  onSubmitted: (_) => _commitHex(),
+                ),
               ),
             ),
           ),

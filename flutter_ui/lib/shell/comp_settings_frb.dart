@@ -112,7 +112,6 @@ Future<CompositionReference?> duplicateCompositionFrb(
       final pick = await askLumitChoice<bool>(
         context: context,
         title: l10n.duplicateNestedTitle,
-        question: l10n.duplicateNestedQuestion,
         answers: [
           (l10n.duplicateNestedSeparate, true),
           (l10n.duplicateNestedShare, false),

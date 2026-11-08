@@ -489,10 +489,6 @@
   "@settingsOwnTitleBar": {
     "description": "Settings window, Linux only: the switch that replaces the system's title bar with Lumit's menu bar carrying the minimise, maximise and close buttons."
   },
-  "settingsOwnTitleBarNote": "From the next start.",
-  "@settingsOwnTitleBarNote": {
-    "description": "Settings window, Linux only: the line under the title bar switch saying a change shows once Lumit is opened again."
-  },
   "windowMinimise": "Minimise",
   "@windowMinimise": {
     "description": "Screen reader name of the button at the top right of Lumit's window that minimises the window. Use the operating system's own word for it."
@@ -7583,6 +7579,10 @@
       }
     }
   },
+  "menu3d": "3D",
+  "@menu3d": {
+    "description": "Layer menu: the submenu holding the camera, light and model rows."
+  },
   "menu3dLayer": "3D layer",
   "@menu3dLayer": {
     "description": "Menu item."
@@ -7817,7 +7817,7 @@
   "@deleteInUseTitle": {
     "description": "Title of the question asked before deleting Project panel items that compositions still use."
   },
-  "deleteInUseQuestion": "{count, plural, =1{This is used once in your compositions, and that use will be deleted too.} other{This is used {count} times in your compositions, and those uses will be deleted too.}}",
+  "deleteInUseQuestion": "{count, plural, =1{Used once. Delete that too?} other{Used {count} times. Delete those too?}}",
   "@deleteInUseQuestion": {
     "description": "The question asked before deleting Project panel items that compositions still use. A use is a layer, an effect or a node graph box, and each is deleted too.",
     "placeholders": {
@@ -7825,10 +7825,6 @@
         "type": "int"
       }
     }
-  },
-  "duplicateNestedQuestion": "The copy can share the compositions inside this one, so an edit shows in both, or get copies of its own.",
-  "@duplicateNestedQuestion": {
-    "description": "The question asked when duplicating a composition that has other compositions nested in it. Sharing means one nested composition used by both; separate copies means each gets its own."
   },
   "duplicateNestedShare": "Share with the original",
   "@duplicateNestedShare": {
@@ -7900,7 +7896,11 @@
   },
   "menuHistory": "History…",
   "@menuHistory": {
-    "description": "The Edit menu row that opens the History window, and that window's own title."
+    "description": "The Edit menu row that opens the History window."
+  },
+  "historyTitle": "History",
+  "@historyTitle": {
+    "description": "The History window's title."
   },
   "menuImport": "Import…",
   "@menuImport": {
@@ -8389,6 +8389,10 @@
   "@menuWorkspace": {
     "description": "Menu item."
   },
+  "menuPanels": "Panels",
+  "@menuPanels": {
+    "description": "Window menu: the submenu listing every panel, each ticked while it is on screen."
+  },
   "menuZoomIn": "Zoom in",
   "@menuZoomIn": {
     "description": "Menu item."
@@ -8567,7 +8571,7 @@
   "@paletteSetting": {
     "description": "Command palette: the badge at the end of a row that names a Settings page or one setting on it. Choosing the row opens Settings there. Short: it sits in a narrow column."
   },
-  "panelDebug": "Debug View",
+  "panelDebug": "Debug",
   "@panelDebug": {
     "description": "The name of the developer panel, shown only when the debug panel is enabled."
   },
@@ -8805,7 +8809,7 @@
   "@precomposeLinksTitle": {
     "description": "Title of the question asked before pre-composing when a parent or track matte links the chosen layers to layers that stay outside."
   },
-  "precomposeLinksQuestion": "A parent or matte links these layers to others outside. Duplicate them so both sides keep their links?",
+  "precomposeLinksQuestion": "Duplicate the linked layers?",
   "@precomposeLinksQuestion": {
     "description": "The question asked before pre-composing would cut a parent or track matte link. Duplicating copies the layer at the other end of each link, hidden, so the picture stays the same."
   },
@@ -9596,7 +9600,7 @@
   "@settingsHeldByTheGraphicsDriver": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsHelpNowhereToPark": "Nowhere: this machine has no folder Lumit may write to.",
+  "settingsHelpNowhereToPark": "No folder Lumit may write to.",
   "@settingsHelpNowhereToPark": {
     "description": "Settings window: shown where the disk cache folder would be, when there is none."
   },
@@ -9839,10 +9843,6 @@
   "skip": "Skip",
   "@skip": {
     "description": "Button that passes over an optional step."
-  },
-  "sourceAssetNote": "This is an asset — every layer using it changes.",
-  "@sourceAssetNote": {
-    "description": "Warning under a source row: editing this changes it everywhere it is used."
   },
   "sourceInBetweenFrames": "In-between frames",
   "@sourceInBetweenFrames": {
@@ -10122,11 +10122,11 @@
   "@stagePresent": {
     "description": "Name of the render's presenting stage (display-encoding the finished frame and handing it over), shown in the render-time column header's tooltip breakdown. One short lowercase word."
   },
-  "timelineEmpty": "Open a composition, or drop footage here to make one.",
+  "timelineEmpty": "No composition",
   "@timelineEmpty": {
     "description": "Empty state in the Timeline panel."
   },
-  "timelineNoLayers": "No layers yet. Drag footage in, or use Layer > New.",
+  "timelineNoLayers": "No layers",
   "@timelineNoLayers": {
     "description": "One quiet line in the middle of the Timeline's lane area, shown while the open composition has no layers. Layer and New are the menu bar's own names."
   },
@@ -11712,7 +11712,7 @@
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
   },
-  "updateNightlyBody": "Less tested. Projects saved in a nightly may not open in the stable version.",
+  "updateNightlyBody": "Projects saved in a nightly may not open in the stable version.",
   "@updateNightlyBody": {
     "description": "Body of the dialogue asking before updates switch to nightly builds."
   },
@@ -11865,7 +11865,7 @@
       }
     }
   },
-  "updateReady": "{installed}. Lumit {version} is downloaded and installs when Lumit restarts.",
+  "updateReady": "{installed}. Lumit {version} installs on restart.",
   "@updateReady": {
     "description": "Settings window: the update is waiting for a restart.",
     "placeholders": {
@@ -11931,7 +11931,7 @@
   "@updateUnsavedChanges": {
     "description": "Added to an update message when restarting would lose work."
   },
-  "updateUpToDate": "{installed} — the newest there is.",
+  "updateUpToDate": "{installed}",
   "@updateUpToDate": {
     "description": "Settings window: the line under 'This version'. {installed} is a name and version, e.g. 'Lumit 0.4.1'.",
     "placeholders": {
@@ -14098,10 +14098,6 @@
   "@welcomeClearRecent": {
     "description": "Welcome screen: the quiet word beside the Recent heading that empties the whole list. The projects themselves are untouched."
   },
-  "welcomeNoRecent": "No recent projects",
-  "@welcomeNoRecent": {
-    "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
-  },
   "welcomeCopyPath": "Copy path",
   "@welcomeCopyPath": {
     "description": "Right-click menu of a recent project on the Welcome screen: copies where the file is."
@@ -14841,6 +14837,45 @@
     "description": "Export dialog: the footer line’s estimate of the file size, appended to the summary.",
     "placeholders": {
       "size": {
+        "type": "String"
+      }
+    }
+  },
+  "exportSummarySizeMb": "≈ {size} MB",
+  "@exportSummarySizeMb": {
+    "description": "Export dialog: the footer line’s estimate of the file size when it is under a gigabyte.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "exportReadingSize": "{width} × {height}",
+  "@exportReadingSize": {
+    "description": "Export dialog: a shut Composition fold's reading of the output size in pixels.",
+    "placeholders": {
+      "width": {
+        "type": "String"
+      },
+      "height": {
+        "type": "String"
+      }
+    }
+  },
+  "exportReadingVideoRate": "{rate} Mb/s",
+  "@exportReadingVideoRate": {
+    "description": "Export dialog: a shut Picture fold's reading of the video bit rate, in megabits a second.",
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "exportReadingAudioRate": "{rate} kb/s",
+  "@exportReadingAudioRate": {
+    "description": "Export dialog: a shut Audio fold's reading of the audio bit rate, in kilobits a second.",
+    "placeholders": {
+      "rate": {
         "type": "String"
       }
     }
@@ -16694,20 +16729,6 @@
       }
     }
   },
-  "workspaceShortcutSlot": "{workspace} is slot {slot} on the strip. The shortcut follows the slot, so renaming a workspace can move it.",
-  "@workspaceShortcutSlot": {
-    "description": "The factual line under the capture box in the Assign shortcut to this workspace dialogue, saying that the chord is bound to a position rather than to a name.",
-    "placeholders": {
-      "workspace": {
-        "type": "String",
-        "example": "Grading"
-      },
-      "slot": {
-        "type": "String",
-        "example": "3"
-      }
-    }
-  },
   "workspaceSaved": "{name} saved.",
   "@workspaceSaved": {
     "description": "Status-line notice after saving a workspace. {name} is its name.",
@@ -16773,7 +16794,7 @@
   "@workspaceFileUnwritable": {
     "description": "Status-line notice when exporting a workspace failed to write the chosen file."
   },
-  "dropProjectFile": "A Lumit project is opened rather than imported — use File › Open project.",
+  "dropProjectFile": "Projects open from File › Open project.",
   "@dropProjectFile": {
     "description": "Status-line notice after a .lum project file was dragged onto the Project panel from the file manager. It is not opened silently, because opening one replaces the project on screen."
   },
@@ -17180,7 +17201,7 @@
   "@shaderDetachTitle": {
     "description": "Title of the small window offered when the user opens the text editor on a Custom shader that is built from its node graph. The graph is the master copy, so the text cannot be edited until the graph is detached."
   },
-  "shaderDetachBody": "Detaching keeps the compiled text and removes the graph for good.",
+  "shaderDetachBody": "The graph is removed.",
   "@shaderDetachBody": {
     "description": "Body of the detach-graph window: the compiled text of a graph-built Custom shader stays, and the graph goes for good (undo aside)."
   },
@@ -18440,7 +18461,7 @@
   "@settingsAddonsFailedRefused": {
     "description": "Settings window, Addons: shown when the engine turned the install down, or there is nowhere on this machine to keep it."
   },
-  "settingsAddonsFailedRemove": "That addon could not be removed. A runtime that has loaded stays open until Lumit is restarted.",
+  "settingsAddonsFailedRemove": "That addon could not be removed.",
   "@settingsAddonsFailedRemove": {
     "description": "Settings window, Addons: shown when an addon's folder could not be deleted, which is what happens while the model runtime it holds is in use."
   },
@@ -19198,7 +19219,7 @@
       }
     }
   },
-  "shareExtensionBody": "{name} sends the invite to whoever it chooses. They can edit the project and copy its footage until you stop sharing.",
+  "shareExtensionBody": "{name} sends the invite to whoever it chooses.",
   "@shareExtensionBody": {
     "description": "Body of the question asked when an extension wants to share the open project by itself. {name} is the extension's own name.",
     "placeholders": {
@@ -19633,7 +19654,7 @@
   "@shareShowTitle": {
     "description": "Title of the small question that opens when Show is pressed beside a hidden invite link."
   },
-  "shareShowBody": "Anyone who sees this link can join. Keep it off streams and screenshots.",
+  "shareShowBody": "Anyone who sees this link can join.",
   "@shareShowBody": {
     "description": "Body of the question asked before a hidden invite link is shown."
   },
@@ -20271,15 +20292,6 @@
   "@settingsExtensionsMakePackage": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button: pick an extension's folder, then where to save it as one .lfx file to share."
   },
-  "settingsExtensionEffects": "Effects: {names}",
-  "@settingsExtensionEffects": {
-    "description": "Line under an installed extension's row in Settings: the effects it adds, by name, separated by commas.",
-    "placeholders": {
-      "names": {
-        "type": "String"
-      }
-    }
-  },
   "settingsGroupExtensionFolders": "Extension folders",
   "@settingsGroupExtensionFolders": {
     "description": "Section heading on the Addons page of Settings: the folders Lumit looks in for extensions."
@@ -20637,7 +20649,7 @@
   "@proFeatureRelayTitle": {
     "description": "First feature in the Lumit Pro window."
   },
-  "proFeatureRelayBody": "Guests join through Lumit's relay. With no additional setup.",
+  "proFeatureRelayBody": "Guests join through Lumit's relay.",
   "@proFeatureRelayBody": {
     "description": "What the first Lumit Pro feature does. A relay passes a shared project's edits between people who cannot reach each other."
   },
@@ -21749,10 +21761,6 @@
       }
     }
   },
-  "reviewDeleteLinkNote": "Its versions and comments are deleted too.",
-  "@reviewDeleteLinkNote": {
-    "description": "A quiet line under the question asked before a preview is deleted."
-  },
   "reviewDeleteVersionAsk": "Delete version {n}?",
   "@reviewDeleteVersionAsk": {
     "description": "Question before one version of a preview is deleted.",
@@ -21762,21 +21770,9 @@
       }
     }
   },
-  "reviewDeleteVersionNote": "Its comments are deleted too.",
-  "@reviewDeleteVersionNote": {
-    "description": "A quiet line under the question asked before one version of a preview is deleted."
-  },
-  "reviewDeleteVersionCleanNote": "Its comments are deleted too, and the video only link stops working.",
-  "@reviewDeleteVersionCleanNote": {
-    "description": "The same quiet line when the version being deleted is the one the link's video only address shows."
-  },
   "reviewDeleteCommentAsk": "Delete this comment?",
   "@reviewDeleteCommentAsk": {
     "description": "Question before a comment on a preview is deleted."
-  },
-  "reviewDeleteRepliesNote": "Its replies are deleted too.",
-  "@reviewDeleteRepliesNote": {
-    "description": "A quiet line under the question asked before a comment that has replies is deleted."
   },
   "reviewDeleteLikeAsk": "Delete this like?",
   "@reviewDeleteLikeAsk": {
@@ -22132,10 +22128,6 @@
   "@reviewCleanRemoveAsk": {
     "description": "Question before a preview's second address, the one that shows only the video, is taken away."
   },
-  "reviewCleanRemoveNote": "The link stops working at once.",
-  "@reviewCleanRemoveNote": {
-    "description": "A quiet line under the question asked before a preview's video only address is taken away."
-  },
   "reviewNoteLayersChanged": "{count, plural, =1{1 layer changed} other{{count} layers changed}}",
   "@reviewNoteLayersChanged": {
     "description": "Share a preview: part of the line that says what changed since the last version, worked out from the composition. The Project history window counts the same things under Changed.",
@@ -22378,10 +22370,6 @@
   "shareOnlineStopTitle": "Stop keeping this project online?",
   "@shareOnlineStopTitle": {
     "description": "Question asked before a project stops being kept online, in the Shared project window and on the Settings Account page."
-  },
-  "shareOnlineStopBody": "It stays on this computer, and everyone keeps their copy. Edits are no longer shared.",
-  "@shareOnlineStopBody": {
-    "description": "Under the question asked before a project stops being kept online, when a copy of the project is on this computer."
   },
   "shareOnlineStopNo": "Keep online",
   "@shareOnlineStopNo": {
@@ -22644,7 +22632,7 @@
       }
     }
   },
-  "shareRemoveBody": "The invite link changes. Anyone who is away will need the new one.",
+  "shareRemoveBody": "The invite link changes.",
   "@shareRemoveBody": {
     "description": "Under the question asked before the host removes a person from a shared project."
   },
@@ -22660,7 +22648,7 @@
   "@shareHaveInvite": {
     "description": "Shared project window, for a guest whose project cannot be reached: pressing it shows the field a new invite link is pasted into."
   },
-  "shareShowBodyOnline": "Anyone who sees this link can join and edit. Keep it off streams and screenshots.",
+  "shareShowBodyOnline": "Anyone who sees this link can join and edit.",
   "@shareShowBodyOnline": {
     "description": "Under the question asked before the invite link of a project kept online is shown. This link holds no address of the person's computer."
   },
@@ -22787,10 +22775,6 @@
   "@shareVersionsNeedsUpdate": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, when a newer Lumit keeps the project than the one running. Short."
   },
-  "shareVersionsMovable": "Move it forward to edit it here. Anyone on an older Lumit has to update.",
-  "@shareVersionsMovable": {
-    "description": "Shared project window, on the host's computer, under words such as On Lumit 0.5.2: an older Lumit keeps the project than the one running. Beside it is the button Move it forward. It does not name the older version again."
-  },
   "shareVersionsHostFirst": "Waiting for the host to open it in Lumit {version}.",
   "@shareVersionsHostFirst": {
     "description": "Bottom-strip notice and a line in the Shared project window, under the words Waiting for the host, on a guest's computer that runs a newer Lumit than keeps the project. {version} is the Lumit this computer runs, such as 0.7.0.",
@@ -22800,7 +22784,7 @@
       }
     }
   },
-  "shareVersionsHostFirstJoin": "The host has to open this project in Lumit {version} first.",
+  "shareVersionsHostFirstJoin": "Needs Lumit {version} on the host.",
   "@shareVersionsHostFirstJoin": {
     "description": "Join a project page of the Shared project window, when the link leads to a project kept by an older Lumit than this one. {version} is the Lumit this computer runs, such as 0.7.0.",
     "placeholders": {
@@ -22836,7 +22820,7 @@
       }
     }
   },
-  "shareForwardBody": "It is on Lumit {version}. Anyone on an older Lumit has to update to rejoin. This cannot be undone.",
+  "shareForwardBody": "This can't be undone.",
   "@shareForwardBody": {
     "description": "Under the question about moving a project kept online forward. {version} is the older Lumit that keeps it, such as 0.6.0.",
     "placeholders": {
@@ -22888,10 +22872,6 @@
       }
     }
   },
-  "shareOnlineStopBodyAway": "This computer has no file for it. Everyone else keeps their copy, and edits are no longer shared.",
-  "@shareOnlineStopBodyAway": {
-    "description": "Under the question asked before a project stops being kept online, when this computer knows no file for it."
-  },
   "shareActivitySeen": "Seen",
   "@shareActivitySeen": {
     "description": "Activity list of the Shared project window: small legend over the sittings the person has already looked at, under the ones that are new to them. One word."
@@ -22900,7 +22880,7 @@
   "@shareOnlineAwayLine": {
     "description": "Shared project window, under the words Looking for the server, for a project kept online with no connection to Lumit's server. It does not say looking again."
   },
-  "shareVersionsUpdateLine": "Update to Lumit {version} to edit it. Your edits are kept.",
+  "shareVersionsUpdateLine": "Update to Lumit {version} to edit it.",
   "@shareVersionsUpdateLine": {
     "description": "Shared project window, under the words Update needed, when a newer Lumit keeps the project than the one running. Beside it is the button that checks for updates. {version} is a version of Lumit, such as 0.7.0.",
     "placeholders": {
@@ -22913,10 +22893,6 @@
   "@settingsOnlineEnded": {
     "description": "Settings Account page, over the projects the account keeps online: label of a row shown when the account's Lumit Pro has ended. Beside it is the button Lumit Pro. Lumit Pro is a product name: do not translate it."
   },
-  "settingsOnlineEndedHint": "Edits wait on each computer until it is back.",
-  "@settingsOnlineEndedHint": {
-    "description": "Settings Account page, under the label Lumit Pro has ended: what that means for the projects kept online."
-  },
   "shareLinkEdit": "Invite to edit",
   "@shareLinkEdit": {
     "description": "Shared project window, for a project kept online: label of the invite link that lets people change the project. Under it is the one labelled Invite to look."
@@ -22925,7 +22901,7 @@
   "@shareLinkLook": {
     "description": "Shared project window, for a project kept online: label of the second invite link. Whoever joins by it sees the project and the people and can change nothing."
   },
-  "shareShowBodyLook": "Anyone who sees this link can see the project. Keep it off streams and screenshots.",
+  "shareShowBodyLook": "Anyone who sees this link can see the project.",
   "@shareShowBodyLook": {
     "description": "Under the question asked before the invite that can only look is shown. Whoever joins by this link can change nothing."
   },
@@ -22959,15 +22935,6 @@
       }
     }
   },
-  "shareReturnForgetBody": "{count, plural, =1{It is your project as it was before this computer came back.} other{Each is your project as it was before this computer came back.}}",
-  "@shareReturnForgetBody": {
-    "description": "Under the question about deleting the copy or copies: what they are.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "shareLookJoined": "You can look, not edit. Changes made here are undone.",
   "@shareLookJoined": {
     "description": "Bottom-strip notice on the computer of someone who joined a shared project by the invite to look. Said when they join, and again whenever something they change is put back. Every tool still works on their computer, and whatever is changed is undone at once, so this says why."
@@ -22993,10 +22960,6 @@
   "@shareLookOnTitle": {
     "description": "Shared project window, on the host's computer, for a project kept online that has a password: the question asked when the host switches on Invite to look, the link people can see the project by and not change it."
   },
-  "shareLookOnBody": "Either link then shows the project without the password. Editing still needs it.",
-  "@shareLookOnBody": {
-    "description": "Under the question Turn on the invite to look?. With the invite to look on, someone holding the invite to edit can see the project without typing its password, and so can anyone with the invite to look. Editing still needs the password."
-  },
   "shareLookOnYes": "Turn on",
   "@shareLookOnYes": {
     "description": "The answer that switches on Invite to look in the Shared project window. Beside Cancel."
@@ -23004,15 +22967,6 @@
   "shareLookOffTitle": "Turn off the invite to look?",
   "@shareLookOffTitle": {
     "description": "Shared project window, on the host's computer: the question asked when the host switches off Invite to look while someone is looking by it."
-  },
-  "shareLookOffBody": "{count, plural, =1{The person looking now is removed and keeps their copy.} other{The {count} people looking now are removed and keep their copies.}}",
-  "@shareLookOffBody": {
-    "description": "Under the question Turn off the invite to look?. {count} is how many people are in the project by the invite to look right now. Switching it off takes them out of the project. What each has of it stays on their own computer as a project of their own.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
   },
   "shareLookOffYes": "Turn off",
   "@shareLookOffYes": {
@@ -23055,10 +23009,6 @@
   "@shareOnlineNearlyLarge": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project has grown past what Lumit's server stores. Edits still go in for now. Three words at most."
   },
-  "shareOnlineNearlyLargeLine": "It has to get smaller to stay online.",
-  "@shareOnlineNearlyLargeLine": {
-    "description": "Shared project window, under the words Nearly too large, for a project kept online that has grown past what Lumit's server stores. It does not say too large again."
-  },
   "shareOnlineNearlyLargeSaid": "This project is nearly too large to keep online.",
   "@shareOnlineNearlyLargeSaid": {
     "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that has grown past what Lumit's server stores. Edits still go in for now and will stop unless the project gets smaller."
@@ -23066,14 +23016,6 @@
   "shareOnlineTooLarge": "Too large",
   "@shareOnlineTooLarge": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project is too large for Lumit's server and edits have stopped going in. Two words at most."
-  },
-  "shareOnlineTooLargeLine": "Edits made here are kept on this computer.",
-  "@shareOnlineTooLargeLine": {
-    "description": "Shared project window, under the words Too large, on the computer of someone who is not the host. The project is too large for Lumit's server, so what this person changes reaches nobody and stays in their own copy. It does not say too large again."
-  },
-  "shareOnlineTooLargeLineOwn": "Edits made here are kept on this computer. Stop keeping it online to make it smaller.",
-  "@shareOnlineTooLargeLineOwn": {
-    "description": "Shared project window, under the words Too large, on the host's computer. The project is too large for Lumit's server, and it cannot be made smaller while it is kept online. Stop keeping online is a button in the same window."
   },
   "shareOnlineTooLargeSaid": "This project is too large to keep online. Edits made here are kept on this computer.",
   "@shareOnlineTooLargeSaid": {
@@ -23120,10 +23062,6 @@
   "shareReplaced": "Invite replaced",
   "@shareReplaced": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, on a computer that was away when the host made a new invite. Its copy is still part of the project and cannot find it until the new invite is pasted. Two words at most."
-  },
-  "shareReplacedLine": "Edits wait here until the new one is pasted.",
-  "@shareReplacedLine": {
-    "description": "Shared project window, under the words Invite replaced, with the field for a new invite right under it. It does not say the invite was replaced again."
   },
   "shareReplacedSaid": "The host replaced the invite. Edits wait here until the new one is pasted.",
   "@shareReplacedSaid": {

@@ -105,7 +105,7 @@ A glTF, GLB, FBX or OBJ file imports as a **3D model** footage item, with the cu
 row. Its `.bin`, pictures and `.mtl` are found beside it, or by name in the folders next to
 it, and are packed with it. Dropped into a comp it makes a **Model layer** at the centre and
 opens **Model settings**: **Up axis**, **Fit to comp**, and **Units**, the comp pixels for
-each metre of the model, greyed while it is fitted. **Layer ▸ Model settings** opens it again. In a comp with no
+each metre of the model, greyed while it is fitted. **Layer ▸ 3D ▸ Model settings** opens it again. In a comp with no
 lights, the first model also adds an **Ambient light** and a **Key light**.
 
 A `.vdb` file imports the same way and draws through [Smoke and
@@ -134,7 +134,7 @@ stops the camera and the picture at **Hold frame**, and picking Hold starts it a
 Under Hold the picture stays on a model that moves. A point its camera saw at a steep angle
 fades to Base colour once it is seen much more square-on. A projected point takes the shadows
 of other models and no light, with **Accepts shadows** Only or **Holdout** too.
-**Layer ▸ Project from camera** sets every material of the selected Model layers at once: the
+**Layer ▸ 3D ▸ Project from camera** sets every material of the selected Model layers at once: the
 selected Camera layer or the comp's own, or a new one when the comp has none, and the shot that
 camera was solved from, the selected picture, or the nearest picture below. A still holds at
 the playhead and anything else follows it. A row on a 3D layer can't be projected. **Layer
@@ -154,7 +154,7 @@ layer keeps the old model until the new one is ready, or if it won't convert. Ob
 Blender are left out. With no Blender found the row reads **No Blender**; click it to choose one
 in [Settings](/use/settings/#general). Blender 5 and later have no Collada importer. Two Blenders
 run at once, and the rest wait.
-**Edit in Blender**, on the **Layer** menu and the item's right-click menu, opens a `.blend` in
+**Edit in Blender**, under **Layer ▸ 3D** and on the item's right-click menu, opens a `.blend` in
 Blender.
 
 A new Model layer casts shadows, on itself, on other models and on 3D layers, and takes
@@ -191,7 +191,7 @@ A picked part wears a thin box and the 3D handles at its pivot. A drag moves it,
 with the Rotation tool, along the layer's axes, in one undo step. Shift keeps a move to steps
 of 10 and a turn to steps of 15 degrees.
 
-**Layer ▸ Create cameras and lights** makes a Camera or Light layer for each one in the file,
+**Layer ▸ 3D ▸ Create cameras and lights** makes a Camera or Light layer for each one in the file,
 keyed over the layer's span, in one undo step, with Zoom keyed where an FBX or a `.blend` moves
 the lens. They follow the model at the time, and don't change if it changes later. Lights made
 this way take the place of the **Key light** the first model brought, if it hasn't been changed.

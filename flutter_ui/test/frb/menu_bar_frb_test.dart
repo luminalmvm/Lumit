@@ -18,6 +18,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
@@ -28,6 +29,7 @@ import 'package:lumit_flutter/shell/profile_chip.dart' show ProBadge;
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/external_links.dart';
+import 'package:lumit_flutter/widgets/controls.dart' show FloatSurface;
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:provider/provider.dart';
@@ -768,9 +770,15 @@ void main() {
     testWidgets('the Window menu ticks the panels and toggles them',
         (tester) async {
       final p = await mount(tester);
+      // Wide enough for the Panels flyout to sit beside the menu rather than
+      // over it, where it would take the taps meant for the menu.
+      tester.view.physicalSize = const Size(1600, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pump();
       expect(panelsIn(p.uiState.split), contains(Panel.align));
 
-      await choose(tester, 'Window', Panel.align.title);
+      await choose(tester, 'Window', Panel.align.title, under: 'Panels');
       await tester.pump();
       expect(panelsIn(p.uiState.split), isNot(contains(Panel.align)),
           reason: 'the tick came off and the panel went with it');
@@ -785,10 +793,22 @@ void main() {
       expect(panelsIn(p.uiState.split), contains(Panel.align),
           reason: 'and back again, without opening the menu a second time');
 
-      // A row that is not a toggle still closes it.
+      // A row that is not a toggle still closes it. The pointer goes to the
+      // row first, which takes the Panels flyout back off it, as a hand on
+      // a mouse would.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(
+          location: tester.getCenter(find.text('Command palette…')));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Command palette…'));
       await tester.pump();
-      expect(find.text(Panel.align.title), findsNothing,
+      await mouse.removePointer();
+      // In a menu: the panel's own tab is back in the dock by now.
+      expect(
+          find.descendant(
+              of: find.byType(FloatSurface),
+              matching: find.text(Panel.align.title)),
+          findsNothing,
           reason: 'an ordinary command closes the menu as it always did');
       await dismiss(tester);
     });

@@ -31,15 +31,10 @@ Future<void> showTextFieldMenu(
         value.copyWith(selection: TextSelection.collapsed(offset: under)),
         SelectionChangedCause.tap);
   }
-  var canPaste = field.pasteEnabled;
-  if (canPaste) {
-    try {
-      canPaste = await Clipboard.hasStrings();
-    } catch (_) {
-      // A clipboard that won't say keeps the row, and Paste then does nothing.
-    }
-  }
-  if (!context.mounted) return;
+  // Paste is offered without asking the clipboard first: the ask is a round
+  // trip to the system, and a menu that waits on it opens late. With nothing
+  // to paste the row does nothing.
+  final canPaste = field.pasteEnabled;
   final picked = field.textEditingValue.selection;
   final some = picked.isValid && !picked.isCollapsed;
   final text = field.textEditingValue.text;
@@ -526,14 +521,10 @@ class _HouseTextFieldState extends State<HouseTextField>
           : dress(BoxDecoration(
               color: widget.fill ?? t.surface0,
               borderRadius: wellCorners(t),
-              // `animated`, not `accent`: a focused well is the one focus that
-              // means "you are about to change a value" (§3.1, §6.5), and the
-              // drawings draw the focused well's edge in that token.
-              // [DragValueField] has answered focus this way all along; a well
-              // you type into rather than scrub had simply never answered at
-              // all.
+              // The accent, as every field: `animated` is the keyed colour,
+              // and a well edged in it read as a keyed value.
               border: wellBorder(
-                  t, _focus.hasFocus ? t.animated : t.hairline,
+                  t, _focus.hasFocus ? t.accent : t.hairline,
                   lit: _focus.hasFocus),
             ), partStyle(context, t, 'well',
                 states: {if (_focus.hasFocus) 'focus'})),

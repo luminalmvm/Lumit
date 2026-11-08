@@ -132,6 +132,14 @@ class _ThemeEditorState extends State<_ThemeEditor> {
           keyPrefix: 'theme-editor',
           actions: [
             HouseButton(
+              key: const ValueKey('theme-editor-cancel'),
+              onPressed: () {
+                _revert();
+                widget.onClose();
+              },
+              child: Text(l10n.cancel),
+            ),
+            HouseButton(
               key: const ValueKey('theme-editor-save-copy'),
               onPressed: _saveCopy,
               child: Text(l10n.themeSaveACopy),

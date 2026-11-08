@@ -320,13 +320,6 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           ],
         ),
       ),
-      Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text(
-          l10n.sourceAssetNote,
-          style: t.small.copyWith(color: t.textMuted),
-        ),
-      ),
     ];
   }
 

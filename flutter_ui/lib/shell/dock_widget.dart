@@ -278,11 +278,14 @@ class _DockWidgetState extends State<DockWidget> {
     widget.onLayoutChanged();
   }
 
-  /// Close every other pane of [keep]'s group.
+  /// Close every other pane of [keep]'s group. A popped-out pane keeps its
+  /// window, as the row that offers this says.
   void _closeOthers(PaneId keep, DockTabs group) {
     setState(() {
       for (final c in group.children.toList()) {
-        if (c.id != keep) closePane(widget.root, c.id);
+        if (c.id != keep && !_popped.containsKey(c.id)) {
+          closePane(widget.root, c.id);
+        }
       }
     });
     widget.onLayoutChanged();
@@ -306,15 +309,13 @@ class _DockWidgetState extends State<DockWidget> {
   }
 
   /// Give children i and j of [split] the same room, where both panels'
-  /// minimums allow it.
-  void _equalise(DockSplit split, int i, int j) {
+  /// minimums allow it. [extent] is the split's own width or height.
+  void _equalise(DockSplit split, int i, int j, double extent) {
     final sum = split.shares[i] + split.shares[j];
     final each = sum / 2;
     if (split.axis == DockAxis.horizontal) {
-      final box = context.findRenderObject();
-      final width = box is RenderBox ? box.size.width : 0.0;
       final total = split.shares.reduce((a, b) => a + b);
-      final px = each / total * width;
+      final px = each / total * extent;
       if (px < dockMinWidth(split.children[i]) ||
           px < dockMinWidth(split.children[j])) {
         return;
@@ -490,7 +491,7 @@ class _DockWidgetState extends State<DockWidget> {
             });
           },
           onDragEnd: widget.onLayoutChanged,
-          onReset: () => _equalise(split, i, j),
+          onReset: (extent) => _equalise(split, i, j, extent),
         ));
       }
     }
@@ -808,8 +809,8 @@ class _Divider extends StatefulWidget {
   final VoidCallback onDragEnd;
 
   /// Give the two sides the same room again: a double-click, or the seam's
-  /// one menu row.
-  final VoidCallback onReset;
+  /// one menu row. Told the split's own extent, as [onDrag] is.
+  final void Function(double totalExtent) onReset;
 
   const _Divider({
     super.key,
@@ -830,6 +831,13 @@ class _DividerState extends State<_Divider> {
 
   /// When the seam was last clicked, for the second click of a double one.
   DateTime? _lastTap;
+
+  /// The split's own width or height: the row or column the seam sits in.
+  double _extent() {
+    final parent = context.findAncestorRenderObjectOfType<RenderBox>()?.size;
+    if (parent == null) return 0;
+    return widget.horizontal ? parent.width : parent.height;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -879,7 +887,7 @@ class _DividerState extends State<_Divider> {
           final again = _lastTap != null &&
               now.difference(_lastTap!) < const Duration(milliseconds: 350);
           _lastTap = again ? null : now;
-          if (again) widget.onReset();
+          if (again) widget.onReset(_extent());
         },
         onSecondaryTapUp: (d) => showLumitPopup<void>(
           context: context,
@@ -890,7 +898,7 @@ class _DividerState extends State<_Divider> {
                 key: const ValueKey('seam-menu-reset'),
                 onPressed: () {
                   close(null);
-                  widget.onReset();
+                  widget.onReset(_extent());
                 },
                 child: MenuLabel(l10n.resetSplit),
               ),
@@ -903,14 +911,7 @@ class _DividerState extends State<_Divider> {
           widget.onDragEnd();
         },
         onPanCancel: () => setState(() => _dragging = false),
-        onPanUpdate: (d) {
-          final parent =
-              context.findAncestorRenderObjectOfType<RenderBox>()?.size;
-          final extent = parent == null
-              ? 0.0
-              : (widget.horizontal ? parent.width : parent.height);
-          widget.onDrag(d.delta, extent);
-        },
+        onPanUpdate: (d) => widget.onDrag(d.delta, _extent()),
         child: Container(
           width: widget.horizontal ? hit : null,
           height: widget.horizontal ? null : hit,
@@ -1045,41 +1046,50 @@ class _TabGroup extends StatelessWidget {
           // The pill strip scrolls when the group is narrower than its
           // tabs, as egui_tiles' tab bar does, and fades at the end that has
           // more.
-          // The empty end of the strip answers for the fronted tab, so Add
-          // panel is there whether or not the pointer finds a tab.
-          GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onSecondaryTapUp: (d) => _showPaneMenu(
-              context,
-              d.globalPosition,
-              pane: active.id,
-              group: tabs,
-              onClose: onClose,
-              onGroupChanged: onChanged,
-            ),
-            child: _TitleLine(
-              panel: active.id.panel.name,
-              child: EdgeFade(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final i in shown)
-                        _TabPill(
-                          pane: tabs.children[i].id,
-                          title: paneTitle(tabs.children[i].id),
-                          active: i == front,
-                          drag: drag,
-                          onClose: onClose,
-                          group: tabs,
-                          onGroupChanged: onChanged,
-                          onPressed: () {
-                            tabs.active = i;
-                            onChanged();
-                          },
-                        ),
-                    ],
+          _TitleLine(
+            panel: active.id.panel.name,
+            // The empty end of the strip answers for the fronted tab, so
+            // Add panel is there whether or not the pointer finds a tab.
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onSecondaryTapUp: (d) => _showPaneMenu(
+                context,
+                d.globalPosition,
+                pane: active.id,
+                group: tabs,
+                onClose: onClose,
+                onGroupChanged: onChanged,
+              ),
+              // The whole line, so the empty end answers as well as the tabs.
+              child: SizedBox(
+                width: double.infinity,
+                child: Align(
+                  alignment: t.tokens.titleCentred
+                      ? Alignment.center
+                      : AlignmentDirectional.centerStart,
+                  child: EdgeFade(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final i in shown)
+                            _TabPill(
+                              pane: tabs.children[i].id,
+                              title: paneTitle(tabs.children[i].id),
+                              active: i == front,
+                              drag: drag,
+                              onClose: onClose,
+                              group: tabs,
+                              onGroupChanged: onChanged,
+                              onPressed: () {
+                                tabs.active = i;
+                                onChanged();
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1621,18 +1631,22 @@ class _StackGroup extends StatelessWidget {
               ));
               // Always the same widget in the same slot, open or shut, so the
               // panel's State is never thrown away by a twirl. Shut, it is no
-              // height at all and its body is offstage.
+              // height at all and its body is offstage. Clipped to its share,
+              // so a list's last row stops at the header below rather than
+              // running under it.
               children.add(SizedBox(
                 key: ValueKey<PaneId>(pane),
                 height: isOpen ? shared * tabs.shareOf(pane) / total : 0,
-                child: _KeepAlivePane(
-                  visible: isOpen,
-                  builder: (context) => _PaneChrome(
-                    pane: pane,
-                    activePanel: activePanel,
-                    drag: drag,
-                    inCard: true,
-                    child: buildPanel(context, pane),
+                child: ClipRect(
+                  child: _KeepAlivePane(
+                    visible: isOpen,
+                    builder: (context) => _PaneChrome(
+                      pane: pane,
+                      activePanel: activePanel,
+                      drag: drag,
+                      inCard: true,
+                      child: buildPanel(context, pane),
+                    ),
                   ),
                 ),
               ));
@@ -1656,7 +1670,7 @@ class _StackGroup extends StatelessWidget {
                     onResized();
                   },
                   onDragEnd: onChanged,
-                  onReset: () {
+                  onReset: (_) {
                     final each =
                         (tabs.shareOf(pane) + tabs.shareOf(below)) / 2;
                     tabs.shares[pane] = each;

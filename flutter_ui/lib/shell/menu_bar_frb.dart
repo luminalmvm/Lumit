@@ -231,7 +231,6 @@ List<MenuEntry> workspaceEntryRows(
         assignWorkspaceShortcutAction(context, app, ui,
             slot: slot, name: name),
         action: slot <= workspaceSlots ? 'workspace.switch.$slot' : null),
-    rows[4],
   ];
 }
 
@@ -1520,13 +1519,18 @@ List<MenuSection> lumitMenus(
             MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuPreserveTransparency),
-            MenuEntry.submenu(l10n.menuBlendingMode, blendRows(app, ui)),
-            blendStepRow(app, ui, by: 1),
-            blendStepRow(app, ui, by: -1),
+            // The two steps sit under the modes they step through, so the
+            // menu fits a short window.
+            MenuEntry.submenu(l10n.menuBlendingMode, [
+              ...blendRows(app, ui),
+              MenuEntry.divider(),
+              blendStepRow(app, ui, by: 1),
+              blendStepRow(app, ui, by: -1),
+            ]),
             MenuEntry.submenu(l10n.menuTrackMatte, matteRows(app, ui)),
             MenuEntry.submenu(l10n.menuLayerStyles, styleRows(app, ui)),
             MenuEntry.divider(),
-            MenuEntry.todo(l10n.menuReveal),
+            MenuEntry.submenu(l10n.menuReveal, revealRows(ui)),
             // Create ▸ — what a layer can be turned *into*, keeping the layer it
             // was. Each row greys out on a layer it has nothing to make of; the
             // new layer lands directly above the original, where a duplicate
@@ -1552,14 +1556,19 @@ List<MenuSection> lumitMenus(
                         })
                       : null),
             ]),
-            MenuEntry.divider(),
-            cameraSettingsRow(context, app, ui),
-            lightSettingsRow(context, app, ui),
-            modelSettingsRow(context, ui),
-            projectFromCameraRow(app, ui),
-            editInBlenderRow(ui),
-            modelLayersRow(app, ui),
+            // 3D ▸: the camera, light and model rows, under one name so the
+            // menu fits a short window.
+            MenuEntry.submenu(l10n.menu3d, [
+              cameraSettingsRow(context, app, ui),
+              lightSettingsRow(context, app, ui),
+              modelSettingsRow(context, ui),
+              MenuEntry.divider(),
+              projectFromCameraRow(app, ui),
+              editInBlenderRow(ui),
+              modelLayersRow(app, ui),
+            ]),
             MenuEntry.todo(l10n.menuAutoOutline),
+            MenuEntry.divider(),
             // Pre-compose… is live only with a comp open and something selected in
             // it — the menu says so by greying out rather than by failing.
             MenuEntry(
@@ -1750,20 +1759,23 @@ List<MenuSection> lumitMenus(
                       ui.views.active != null &&
                       ui.viewOf(ui.views.active!.engineId) == look,
                 ),
+              MenuEntry.divider(),
+              // Putting the view in front on one of the three keys, under the
+              // views it picks from.
+              MenuEntry.submenu(
+                  l10n.menuAssignViewShortcut(ui.views.active == null
+                      ? ViewerView.activeCamera.title
+                      : ui.viewOf(ui.views.active!.engineId).title),
+                  [
+                    for (var slot = 0; slot < 3; slot++)
+                      MenuEntry(
+                        l10n.menuViewShortcutSlot(
+                            '${slot + 1}', ui.viewSlotOf(slot).title),
+                        comp == null ? null : () => ui.assignViewSlot(slot),
+                        action: 'viewer.3d.assign.${slot + 1}',
+                      ),
+                  ]),
             ]),
-            MenuEntry.submenu(
-                l10n.menuAssignViewShortcut(ui.views.active == null
-                    ? ViewerView.activeCamera.title
-                    : ui.viewOf(ui.views.active!.engineId).title),
-                [
-                  for (var slot = 0; slot < 3; slot++)
-                    MenuEntry(
-                      l10n.menuViewShortcutSlot(
-                          '${slot + 1}', ui.viewSlotOf(slot).title),
-                      comp == null ? null : () => ui.assignViewSlot(slot),
-                      action: 'viewer.3d.assign.${slot + 1}',
-                    ),
-                ]),
             MenuEntry(l10n.menuSwitchToLast3dView,
                 comp == null ? null : ui.switchToLastView,
                 action: 'viewer.3d.last'),
@@ -1903,16 +1915,20 @@ List<MenuSection> lumitMenus(
             // or drops its pane and persists the layout, so a panel you closed stays
             // closed across a restart — and the menu stays open while you do it,
             // because turning three panels on is three ticks, not three trips to
-            // the Window menu.
-            for (final panel in Panel.values)
-              // An extension's panel is listed by the extension, below.
-              if (panel != Panel.extension)
-                MenuEntry.toggle(
-                  panel.title,
-                  () => togglePanel(ui, panel),
-                  action: panelToggleAction(panel),
-                  checked: () => panelVisible(ui.split, panel),
-                ),
+            // the Window menu. Under one row, so the menu fits a short window.
+            MenuEntry.submenu(l10n.menuPanels, [
+              for (final panel in Panel.values)
+                // An extension's panel is listed by the extension, below. The
+                // debug panel is listed once Help has switched it on.
+                if (panel != Panel.extension &&
+                    (panel != Panel.debug || panelVisible(ui.split, panel)))
+                  MenuEntry.toggle(
+                    panel.title,
+                    () => togglePanel(ui, panel),
+                    action: panelToggleAction(panel),
+                    checked: () => panelVisible(ui.split, panel),
+                  ),
+            ]),
             if (!kIsWeb)
               MenuEntry.submenu(l10n.menuExtensions, [
                 for (final extension in ui.extensions.panels)
@@ -3326,7 +3342,7 @@ class _MenuListState extends State<_MenuList> {
 
   /// One row's contents: the tick column where the menu has toggles, the name,
   /// and the chord it answers to on the right. A row for Lumit Pro, to an
-  /// account without it, has the badge in the chord's place, faded to about
+  /// account without it, wears the badge before the chord, faded to about
   /// the chord's weight so a menu of them doesn't shout.
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
@@ -3351,8 +3367,8 @@ class _MenuListState extends State<_MenuList> {
           const Padding(
             padding: EdgeInsetsDirectional.only(start: 16),
             child: Opacity(opacity: 0.6, child: ProBadge()),
-          )
-        else if (shortcut != null)
+          ),
+        if (shortcut != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),
             child: Text(shortcut,

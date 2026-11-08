@@ -7,6 +7,7 @@
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -1052,10 +1053,17 @@ void main() {
       expect(queued.single.compName, 'Scene',
           reason: "the row carries the comp's name as it was at queue time");
 
-      // And the row can be taken off again from the window.
+      // And the row can be taken off again from the window. The mark comes
+      // up with the pointer, so the pointer goes there first.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(
+          location: tester.getCenter(find
+              .byKey(ValueKey<String>('export-queue-item-${queued.single.id}'))));
+      await tester.pumpAndSettle();
       await tester.tap(find
           .byKey(ValueKey<String>('export-queue-drop-${queued.single.id}')));
       await tester.pumpAndSettle();
+      await mouse.removePointer();
       expect(exportQueueList().where((i) => i.path == target), isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));

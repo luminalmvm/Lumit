@@ -433,7 +433,8 @@ Widget dialogFold(
   LumitTheme t, {
   required String title,
   required bool open,
-  required VoidCallback onToggle,
+  /// Null while the fold is held open, so the twirl does not pretend.
+  required VoidCallback? onToggle,
   required List<Widget> rows,
   required double readingAt,
   String reading = '',
@@ -861,7 +862,8 @@ Widget dialogEnter({required VoidCallback onEnter, required Widget child}) =>
 Future<T?> askLumitChoice<T>({
   required BuildContext context,
   required String title,
-  required String question,
+  /// Only where the answers do not say it all.
+  String question = '',
   required List<(String, T)> answers,
   bool stacked = false,
   double width = 360,
@@ -875,10 +877,11 @@ Future<T?> askLumitChoice<T>({
           children: [
             dialogTitleBar(t,
                 title: title, onClose: () => close(null), keyPrefix: 'choice'),
-            Padding(
-              padding: const EdgeInsets.all(dialogPadding),
-              child: Text(question, style: t.body),
-            ),
+            if (question.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(dialogPadding),
+                child: Text(question, style: t.body),
+              ),
             dialogFooter(
               t,
               keyPrefix: 'choice',

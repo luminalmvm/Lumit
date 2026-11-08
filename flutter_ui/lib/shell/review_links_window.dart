@@ -466,8 +466,8 @@ class _ReviewWindowState extends State<_ReviewWindow> {
 
   /// Ask before something that can't be taken back, and give the keys back
   /// to the window once it is answered.
-  Future<bool> _ask(String question, String yes, {String? note}) async {
-    final sure = await askBefore(context, question, yes, note: note);
+  Future<bool> _ask(String question, String yes) async {
+    final sure = await askBefore(context, question, yes);
     if (mounted) _focus.requestFocus();
     return sure && mounted;
   }
@@ -685,37 +685,30 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   }
 
   Future<void> _deleteLink(Review review) async {
-    final sure = await _ask(l10n.reviewDeleteLinkAsk(review.title), l10n.delete,
-        note: l10n.reviewDeleteLinkNote);
+    final sure =
+        await _ask(l10n.reviewDeleteLinkAsk(review.title), l10n.delete);
     if (sure) await _do(() => _reviews.deleteLink(review));
   }
 
   Future<void> _deleteVersion(Review review, ReviewVersion version) async {
-    // The video only address goes with the version it shows.
-    final sure = await _ask(
-        l10n.reviewDeleteVersionAsk(version.n), l10n.delete,
-        note: review.clean != null && review.cleanVersion == version.n
-            ? l10n.reviewDeleteVersionCleanNote
-            : l10n.reviewDeleteVersionNote);
+    final sure =
+        await _ask(l10n.reviewDeleteVersionAsk(version.n), l10n.delete);
     if (!sure) return;
     if (_version == version.n) _version = null;
     await _do(() => _reviews.deleteVersion(review, version));
   }
 
   Future<void> _deleteComment(Review review, ReviewComment comment) async {
-    final replies = _reviews.comments.any((c) => c.parent == comment.id);
     final sure = await _ask(
         comment.reaction == null
             ? l10n.reviewDeleteCommentAsk
             : l10n.reviewDeleteLikeAsk,
-        l10n.delete,
-        note: replies ? l10n.reviewDeleteRepliesNote : null);
+        l10n.delete);
     if (sure) await _do(() => _reviews.deleteComment(review, comment));
   }
 
   Future<void> _removeClean(Review review) async {
-    final sure = await _ask(l10n.reviewCleanRemoveAsk, l10n.reviewRemove,
-        note: l10n.reviewCleanRemoveNote);
+    final sure = await _ask(l10n.reviewCleanRemoveAsk, l10n.reviewRemove);
     if (sure) await _do(() => _reviews.removeClean(review));
   }
 

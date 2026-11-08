@@ -17,6 +17,7 @@ import '../time_readout.dart' show monoSlotWidth;
 import 'base.dart';
 import 'menus.dart';
 import 'popups.dart';
+import 'text_field.dart' show TextFieldGestures;
 import 'value_arithmetic.dart';
 
 /// The **modifier ladder** a value scrub runs on, coarsest first — the study's
@@ -421,6 +422,9 @@ class _DragValueFieldState extends State<DragValueField>
   @override
   GlobalKey<EditableTextState> get editableTextKey => textFieldKey;
 
+  /// The press, drag and right-click of every field, made once.
+  late final _gestures = TextFieldGestures(delegate: this, context: context);
+
   @override
   bool get forcePressEnabled => false;
 
@@ -648,21 +652,21 @@ class _DragValueFieldState extends State<DragValueField>
           decoration: dress(BoxDecoration(
             color: widget.bare ? null : widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.wellRadius),
-            // `animated`, not `accent`: the focused value field is the one
-            // focus that means "you are about to change a value" (§3.1). Drawn
-            // at the resting face's own width so the edge does not move either.
+            // The accent, as every focused field: `animated` is the keyed
+            // colour. Drawn at the resting face's own width so the edge does
+            // not move either.
             border:
-                Border.all(color: _refused ? t.error : t.animated, width: 1),
+                Border.all(color: _refused ? t.error : t.accent, width: 1),
           ), widget.bare
               ? PartStyle.none
               : partStyle(context, t, 'well', states: const {'focus'})),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
-          // text selected nothing. The I-beam says it can be typed in.
+          // text selected nothing. The I-beam says it can be typed in, and a
+          // right-click opens the same menu every field has.
           child: MouseRegion(
             cursor: SystemMouseCursors.text,
-            child: TextSelectionGestureDetectorBuilder(delegate: this)
-              .buildGestureDetector(
+            child: _gestures.buildGestureDetector(
             child: Padding(
               // The resting face's 6 of padding **plus its 1px edge**: a
               // `Container`'s decoration insets its child by the border it
@@ -840,11 +844,8 @@ class _DragValueFieldState extends State<DragValueField>
                         ? t.error
                         : _dragging
                             ? t.accent
-                            // The one focus ring that is `animated` rather
-                            // than `accent`: it means "you are about to change
-                            // a value" (§3.1, §6.5).
                             : _focused
-                                ? t.animated
+                                ? t.accent
                                 : _hover
                                     ? t.hairlineStrong
                                     : t.hairline,

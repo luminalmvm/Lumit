@@ -141,12 +141,22 @@ void reviewRowMenu(BuildContext row, Offset at, List<ReviewMenuItem?> items) {
       : press.dx >= _menuWidth
           ? press.dx - _menuWidth
           : room.clamp(0.0, press.dx);
+  // No rule at either end, and never two together: a row's list leaves a
+  // rule wherever a run of items might have been.
+  final kept = <ReviewMenuItem?>[];
+  for (final item in items) {
+    if (item == null && (kept.isEmpty || kept.last == null)) continue;
+    kept.add(item);
+  }
+  while (kept.isNotEmpty && kept.last == null) {
+    kept.removeLast();
+  }
   unawaited(showMenuAt<void>(
     context: row,
     position: box.localToGlobal(Offset(left, press.dy)),
     width: _menuWidth,
     rows: (close) => [
-      for (final item in items)
+      for (final item in kept)
         if (item case (final id, final words, final run)?)
           MenuRow(
             key: ValueKey<String>('review-menu-$id'),

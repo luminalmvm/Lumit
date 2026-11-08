@@ -496,17 +496,29 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   bool _saysQuery(String title) =>
       _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
 
-  /// Set while a page is built whole for [_found], and the headings that build
-  /// drew, one for each section.
+  /// Set while a page is built whole for [_found]: every row is built, the
+  /// ones whose names say the query are noted in [_matched], and
+  /// [_sections] keeps a section whole or only those, by its name.
   bool _keepEveryRow = false;
-  List<String> _headings = const [];
+  final Set<Widget> _matched = {};
+
+  /// Whether the page being built whole is itself named by the query, which
+  /// keeps all of it.
+  bool _pageNamed = false;
 
   /// A row, or nothing when the search has hidden it.
   Widget? _row(LumitTheme t, String title, Widget control,
       {String description = ''}) {
     if (!_matches(title)) return null;
-    final row = settingsRow(t, title, description, control);
-    if (title != widget.row || _wantedKeyed) return row;
+    final row = _keyed(title, settingsRow(t, title, description, control));
+    if (_keepEveryRow && _saysQuery(title)) _matched.add(row);
+    return row;
+  }
+
+  /// [row] marked as the one the window opened on, when [name] is the row
+  /// asked for: a setting's title, or a shortcut's action.
+  Widget _keyed(String name, Widget row) {
+    if (name != widget.row || _wantedKeyed) return row;
     _wantedKeyed = true;
     return KeyedSubtree(key: _wantedRow, child: row);
   }
@@ -564,14 +576,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     List<(String, List<Widget?>)> sections,
   ) {
     final out = <Widget>[];
-    final headings = <String>[];
     for (final (title, rows) in sections) {
-      final kept = rows.whereType<Widget>().toList();
+      final built = rows.whereType<Widget>();
+      // Built whole for a search: all of a section named by the query, and
+      // otherwise the rows that are.
+      final kept = !_keepEveryRow || _pageNamed || _saysQuery(title)
+          ? built.toList()
+          : built.where(_matched.contains).toList();
       if (kept.isEmpty) continue;
       out.add(settingsSection(t, title, kept, first: out.isEmpty));
-      headings.add(title);
     }
-    _headings = headings;
     return out;
   }
 
@@ -794,27 +808,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// all of a section when it is the section's, and otherwise the rows named
   /// it. So "cache" finds the cache sections, whose rows are Budget and In use.
   List<Widget> _foundOn(SettingsPage page, LumitTheme t, LumitUiState ui) {
+    // The Account page keeps its own rows and answers [_matches] itself.
+    if (page == SettingsPage.account) return _sectionsOf(page, t, ui);
     _keepEveryRow = true;
-    _headings = const [];
-    final whole = _sectionsOf(page, t, ui);
-    final wholeHeadings = _headings;
-    _keepEveryRow = false;
-    if (page != SettingsPage.account && _saysQuery(page.label)) return whole;
-    _headings = const [];
-    final named = _sectionsOf(page, t, ui);
-    final namedHeadings = _headings;
-    // A page that does not build through [_sections] has no headings to read.
-    if (wholeHeadings.length != whole.length ||
-        namedHeadings.length != named.length) {
-      return named;
+    _pageNamed = _saysQuery(page.label);
+    _matched.clear();
+    try {
+      return _sectionsOf(page, t, ui);
+    } finally {
+      _keepEveryRow = false;
     }
-    return [
-      for (final (i, heading) in wholeHeadings.indexed)
-        if (_saysQuery(heading))
-          whole[i]
-        else if (namedHeadings.indexOf(heading) case final at when at >= 0)
-          named[at],
-    ];
   }
 
   /// What a search found: each page's surviving rows, live as they are on the
@@ -1794,7 +1797,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _row(
               t,
               l10n.settingsOwnTitleBar,
-              description: l10n.settingsOwnTitleBarNote,
               HouseToggle(
                 key: const ValueKey<String>('settings-own-title-bar'),
                 value: linuxOwnTitleBar,
@@ -2795,12 +2797,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ],
         ),
-        description: [
-          if (extension.summary.isNotEmpty) extension.summary,
-          if (extension.effects.isNotEmpty)
-            l10n.settingsExtensionEffects(
-                extension.effects.map((e) => e.name).join(', ')),
-        ].join('\n'),
       );
 
   List<Widget?> _extensionRows(LumitTheme t, LumitUiState ui) {
@@ -3322,18 +3318,21 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       for (final group in groups)
         settingsSection(t, group.label, [
           for (final binding in group.bindings)
-            settingsRow(
-              t,
-              binding.description,
-              '',
-              _ChordCell(
-                key: ValueKey('keymap-chord-${binding.context.name}-'
-                    '${binding.action}'),
-                binding: binding,
-                keymap: km,
-                onChanged: () {
-                  if (mounted) setState(() {});
-                },
+            _keyed(
+              binding.action,
+              settingsRow(
+                t,
+                binding.description,
+                '',
+                _ChordCell(
+                  key: ValueKey('keymap-chord-${binding.context.name}-'
+                      '${binding.action}'),
+                  binding: binding,
+                  keymap: km,
+                  onChanged: () {
+                    if (mounted) setState(() {});
+                  },
+                ),
               ),
             ),
         ]),

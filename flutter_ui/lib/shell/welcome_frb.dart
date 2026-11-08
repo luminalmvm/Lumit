@@ -355,11 +355,13 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                   // is the disk cache, because that one throws away a night's
                   // rendering with nothing to undo (shell/cache_confirm_frb);
                   // a list of paths costs a trip to File ▸ Open to rebuild.
-                  _Quiet(
-                    id: 'welcome-clear-recent',
-                    label: l10n.welcomeClearRecent,
-                    onTap: paths.isEmpty ? null : workspace.clearRecentProjects,
-                  ),
+                  // Not drawn with nothing to clear.
+                  if (paths.isNotEmpty)
+                    _Quiet(
+                      id: 'welcome-clear-recent',
+                      label: l10n.welcomeClearRecent,
+                      onTap: workspace.clearRecentProjects,
+                    ),
                 ],
               ),
             ),
@@ -367,6 +369,8 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
           // A Container, not a DecoratedBox: a decoration's border has to
           // *inset* the rows, or the well measures its content and paints its
           // hairline over the first and last row rather than around them.
+          // No well with nothing in it: the heading alone says so.
+          if (paths.isNotEmpty)
           Container(
             key: const ValueKey('welcome-recent-well'),
             decoration: BoxDecoration(
@@ -377,19 +381,6 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (paths.isEmpty)
-                  SizedBox(
-                    key: const ValueKey('welcome-recent-empty'),
-                    height: welcomeRecentRowHeight,
-                    child: Padding(
-                      padding: welcomeRecentRowPadding,
-                      child: Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Text(l10n.welcomeNoRecent, style: t.body),
-                      ),
-                    ),
-                  )
-                else
                   for (var i = 0; i < paths.length; i++)
                     _RecentRow(
                       key: ValueKey<String>('welcome-recent-row-$i'),
@@ -860,13 +851,17 @@ class _RecentRowState extends State<_RecentRow> {
               ),
               const SizedBox(width: welcomeForgetGap),
               if (widget.onForget case final forget?)
-                // Comes up with the pointer. Every row wearing one at rest
-                // read as a list of things to get rid of.
-                Opacity(
-                  opacity: _hover ? 1 : 0,
-                  child: _Forget(
-                    id: 'welcome-recent-close-${widget.index}',
-                    onTap: forget,
+                // Comes up with the pointer, and takes no click until it has.
+                // Every row wearing one at rest read as a list of things to
+                // get rid of.
+                IgnorePointer(
+                  ignoring: !_hover,
+                  child: Opacity(
+                    opacity: _hover ? 1 : 0,
+                    child: _Forget(
+                      id: 'welcome-recent-close-${widget.index}',
+                      onTap: forget,
+                    ),
                   ),
                 )
               else
