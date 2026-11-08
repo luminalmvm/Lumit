@@ -4485,7 +4485,9 @@ impl LayerReference {
     ///
     /// `end_percent` makes it a ramp, running straight from one speed to the
     /// other; leave it equal to `percent` for a constant speed. Negative runs
-    /// the clip backwards.
+    /// the clip backwards. A speed that turns the clip round starts it from
+    /// the far end of what it played, so Reset after Reverse plays the same
+    /// stretch forwards again.
     #[frb(sync)]
     pub fn set_clip_speed(
         &self,
@@ -4509,6 +4511,10 @@ impl LayerReference {
             .map_err(|_| BridgeError::InvalidTime)
         };
         let mut clips = clips.clone();
+        let backwards = clips[index].source_out < clips[index].source_in;
+        if backwards != (percent + end_percent < 0.0) {
+            clips[index].source_in = clips[index].source_out;
+        }
         clips[index] = clips[index].with_ramp(rate(percent)?, rate(end_percent)?);
         self.commit_clips(clips)
     }

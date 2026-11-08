@@ -4517,7 +4517,9 @@ class LayerReference {
   ///
   /// `end_percent` makes it a ramp, running straight from one speed to the
   /// other; leave it equal to `percent` for a constant speed. Negative runs
-  /// the clip backwards.
+  /// the clip backwards. A speed that turns the clip round starts it from
+  /// the far end of what it played, so Reset after Reverse plays the same
+  /// stretch forwards again.
   void setClipSpeed(
           {required UuidValue clip,
           required double percent,

@@ -845,6 +845,9 @@ impl FootageReference {
         path.is_some_and(|path| crate::export::reveal_in_folder(&path.to_string_lossy()))
     }
 
+    /// Where the file is on disk, a path kept relative to the project
+    /// resolved against the project's folder. Whether anything is there is
+    /// [`Self::get_status`]'s question.
     #[frb(sync)]
     pub fn file_path(&self) -> Result<String, BridgeError> {
         let proj = self.project()?;
@@ -853,7 +856,17 @@ impl FootageReference {
         let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(self.id) else {
             return Err(BridgeError::InvalidItem);
         };
-        Ok(footage.media.display_path().to_owned())
+        // Collected back from its parts, so a stored `clips/a.mov` reads with
+        // this system's separators.
+        Ok(Self::stored_path(&proj, footage).map_or_else(
+            || footage.media.display_path().to_owned(),
+            |path| {
+                path.components()
+                    .collect::<PathBuf>()
+                    .to_string_lossy()
+                    .into_owned()
+            },
+        ))
     }
 
     pub fn get_status(&self) -> Result<LumitMediaStatus, BridgeError> {

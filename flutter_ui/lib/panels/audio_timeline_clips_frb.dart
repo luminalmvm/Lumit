@@ -22,6 +22,8 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeScalar_Keyframed, BridgeScalar_Static;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../icons/icons.dart';
@@ -653,8 +655,8 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   void _wantPicture(BridgeClip clip, double left, double width) {
     final id = clip.id.toString();
     // A clip whose sound was detached is heard from the clip that took it,
-    // and draws no wave of its own.
-    if (!clip.audible) {
+    // and draws no wave of its own. A hold plays silence.
+    if (!clip.audible || clipHolds(clip)) {
       _peaks.remove(id);
       _spectra.remove(id);
       _keys.remove(id);
@@ -1095,6 +1097,10 @@ class _AudioClipStripState extends State<AudioClipStrip> {
         Padding(
           padding: const EdgeInsets.only(left: clipEdgeWidth + 3, right: 2),
           child: Row(children: [
+            if (clipHolds(clip)) ...[
+              lumitIcon(LumitIcon.pause, size: _headerIcon, color: t.textPrimary),
+              const SizedBox(width: 2),
+            ],
             // The press goes through the name to the box, so a clip can be
             // taken hold of by it.
             Flexible(
@@ -1229,3 +1235,13 @@ class _SourceStartMark extends CustomPainter {
   @override
   bool shouldRepaint(_SourceStartMark old) => old.colour != colour;
 }
+
+/// Whether [clip] holds one frame: its source time stands still from end to
+/// end, as Freeze frame leaves it.
+bool clipHolds(BridgeClip clip) => switch (clip.retime) {
+      BridgeScalar_Keyframed(:final field0) when clip.retimed =>
+        field0.length > 1 &&
+            field0.every((k) => (k.value - field0.first.value).abs() < 1e-9),
+      BridgeScalar_Static() => clip.retimed,
+      _ => false,
+    };

@@ -9,6 +9,7 @@
 // still works on the same effects, which is where their keyframes are set;
 // a keyed value here takes a key at the playhead, as a keyed row does.
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -34,6 +35,7 @@ import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
+import '../widgets/edge_fade.dart';
 import 'effect_controls_panel_frb.dart' show curveChannelColour;
 import 'effect_param_row_frb.dart'
     show
@@ -114,18 +116,42 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
 
   int _curveChannel = 0;
 
+  /// The height the curve's plot can take with everything else still on
+  /// screen, measured after each layout from the pane's own contents.
+  double _plotRoom = _plotMax;
+  final GlobalKey _content = GlobalKey();
+  double _plot = _plotMax;
+  static const double _plotMax = 260;
+  static const double _plotMin = 120;
+  static const double _listFoot = 8;
+
   /// The look each layer is wearing and the grade it brought, by layer. A look
   /// isn't kept in the document, so this lasts until the grade is touched or
   /// its effects change.
   final Map<UuidValue, (String, List<UuidValue>)> _worn = {};
 
-  /// Whether a white balance pick has opened its undo group, and whether it
-  /// had to add the Temperature effect to preview on.
+  /// Whether a white balance pick has opened its undo group.
   bool _neutralTouched = false;
-  bool _neutralAdded = false;
 
   /// Undo groups opened by a gesture and not yet closed.
   int _touches = 0;
+
+  /// Whether the open gesture added an effect, which a cancel takes back.
+  bool _touchAdded = false;
+
+  /// The open gesture's newest preview, asked for again after a document
+  /// change: the Viewer asks for the document then, and the newer ask would
+  /// stand in front of the preview, the scope with it, until the next move.
+  VoidCallback? _restage;
+  StreamSubscription<void>? _changes;
+
+  @override
+  void initState() {
+    super.initState();
+    _changes = app.onChange.listen((_) {
+      if (_restage != null) scheduleMicrotask(() => _restage?.call());
+    });
+  }
 
   /// Whether the before picture is being held up.
   bool _before = false;
@@ -136,6 +162,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
 
   @override
   void dispose() {
+    _changes?.cancel();
     _editor.clear();
     while (_touches > 0) {
       _touches--;
@@ -325,20 +352,28 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     if (project == null) return;
     project.beginUndoGroup();
     _touched = project;
+    if (_touches == 0) _touchAdded = false;
     _touches++;
   }
 
   void _touchEnd() {
     if (_touches == 0) return;
     _touches--;
+    if (_touches == 0) _restage = null;
     _touched?.endUndoGroup();
   }
 
   /// A gesture that ends with nothing written: the preview it staged goes,
-  /// and the Viewer is asked for the document again.
+  /// and the Viewer is asked for the document again. An effect it added to
+  /// preview on is undone with its step, so nothing is left in the history.
   void _touchCancel() {
     _editor.clear();
     _touchEnd();
+    if (_touches == 0 && _touchAdded) {
+      _touchAdded = false;
+      _touched?.undo();
+      _tell();
+    }
     ui.requestFrame();
   }
 
@@ -360,6 +395,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     } catch (_) {
       return null;
     }
+    if (_touches > 0) _touchAdded = true;
     final handles = layer.getEffects();
     BridgeEffectInstance? added;
     for (final h in handles) {
@@ -397,8 +433,14 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     final comp = ui.selectedComp;
     final id = _ensure(fx);
     if (layer == null || comp == null || id == null) return;
-    _editor.live(comp, layer, id, param, value,
-        frame: ui.playheadFrame.value, scale: ui.viewerScale);
+    final frame = ui.playheadFrame.value;
+    final scale = ui.viewerScale;
+    _restage = () {
+      if (mounted) {
+        _editor.live(comp, layer, id, param, value, frame: frame, scale: scale);
+      }
+    };
+    _restage!();
   }
 
   void _write(GradeFx fx, String param, BridgeEffectValue value) {
@@ -765,16 +807,27 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
                 rows: _groundMenu,
                 child: Container(
                   color: t.surface0,
-                  child: ListView(
-                    primary: false,
-                    padding: const EdgeInsets.only(bottom: 8),
-                    children: [
-                      _balance(t, enabled),
-                      _basics(t, enabled),
-                      _curves(t, enabled),
-                      _look(t, enabled),
-                    ],
-                  ),
+                  child: LayoutBuilder(builder: (context, viewport) {
+                    WidgetsBinding.instance.addPostFrameCallback(
+                        (_) => _fitPlot(viewport.maxHeight));
+                    return EdgeFade(
+                      axis: Axis.vertical,
+                      child: SingleChildScrollView(
+                        primary: false,
+                        padding: const EdgeInsets.only(bottom: _listFoot),
+                        child: Column(
+                          key: _content,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _balance(t, enabled),
+                            _basics(t, enabled),
+                            _curves(t, enabled),
+                            _look(t, enabled),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
                 ),
               ),
             ),
@@ -782,6 +835,15 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
         );
       },
     );
+  }
+
+  /// The curve takes what the other sections leave, so Look stays on screen;
+  /// below its least it keeps that and the pane scrolls.
+  void _fitPlot(double viewport) {
+    final box = _content.currentContext?.findRenderObject() as RenderBox?;
+    if (!mounted || box == null || !box.hasSize) return;
+    final room = viewport - _listFoot - (box.size.height - _plot);
+    if ((room - _plotRoom).abs() > 0.5) setState(() => _plotRoom = room);
   }
 
   Widget _header(LumitTheme t, BridgeLayerInfo? info, bool enabled) =>
@@ -938,7 +1000,6 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     if (!_neutralTouched) {
       _touchStart();
       _neutralTouched = true;
-      _neutralAdded = _instance(fx) == null;
     }
     _liveFloat(fx, 'temperature', solved.temperature);
     _liveFloat(fx, 'tint', solved.tint);
@@ -967,7 +1028,6 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   void _neutralRevert() {
     if (!_neutralTouched) return;
     _neutralTouched = false;
-    if (_neutralAdded) _remove(const [GradeFx.temperature]);
     _touchCancel();
   }
 
@@ -1063,8 +1123,11 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
               final column = channelColumnWidth(labels) + channelColumnGap;
               // Grows with the pane: the curve a colourist draws wants room,
               // and a small square beside long sliders reads as an afterthought.
-              final plot =
-                  (box.maxWidth - column).clamp(48.0, 260.0).toDouble();
+              final plot = _plot = math.min(
+                      box.maxWidth - column,
+                      _plotRoom.clamp(_plotMin, _plotMax).toDouble())
+                  .clamp(48.0, _plotMax)
+                  .toDouble();
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1124,27 +1187,17 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
           child: Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: gradeInset, vertical: 1),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 74,
-                  child: Text(l10n.gradeLookPreset,
-                      style: t.small.copyWith(
-                          color: enabled ? t.textMuted : t.textDisabled)),
-                ),
-                Flexible(
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: LookPicker(
-                      key: const ValueKey('grade-look'),
-                      enabled: enabled,
-                      current: _wornLook,
-                      onSave: enabled && canCopyGrade(ui) ? _saveLook : null,
-                      onPick: _pickLook,
-                    ),
-                  ),
-                ),
-              ],
+            // The picker leads its row: it names the look worn, and the
+            // heading above already says Look.
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: LookPicker(
+                key: const ValueKey('grade-look'),
+                enabled: enabled,
+                current: _wornLook,
+                onSave: enabled && canCopyGrade(ui) ? _saveLook : null,
+                onPick: _pickLook,
+              ),
             ),
           ),
         ),

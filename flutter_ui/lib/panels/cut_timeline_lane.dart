@@ -30,7 +30,8 @@ import 'timeline_extras_frb.dart'
         clipFillAlpha,
         clipFillSelectedAlpha,
         clipWaveColours;
-import 'audio_timeline_clips_frb.dart' show audioClipGainY, audioClipHeader;
+import 'audio_timeline_clips_frb.dart'
+    show audioClipGainY, audioClipHeader, clipHolds;
 import 'waveform_frb.dart';
 
 /// The room a box leaves at the top and foot of its track.
@@ -565,7 +566,9 @@ class CutTrackPainter extends CustomPainter {
           ground: true,
           room: chips,
           from: _glyph(canvas, clip, box,
-              from: clipEdgeWidth + 4, band: header > 0 ? header : null));
+              from: clipEdgeWidth + 4,
+              band: header > 0 ? header : null,
+              ground: true));
       _badges(canvas, clip, badges);
       return;
     }
@@ -643,7 +646,8 @@ class CutTrackPainter extends CustomPainter {
         band: nameBand,
         room: chips,
         ground: strip,
-        from: _glyph(canvas, clip, box, from: from, band: nameBand));
+        from: _glyph(canvas, clip, box,
+            from: from, band: nameBand, ground: strip));
     _badges(canvas, clip, badges);
     _opacityLine(canvas, clip, box);
   }
@@ -788,7 +792,10 @@ class CutTrackPainter extends CustomPainter {
   /// head of the name line of a clip that plays one. Answers where the name
   /// then starts.
   double _glyph(Canvas canvas, BridgeClip clip, Rect box,
-      {required double from, double? band}) {
+      {required double from, double? band, bool ground = false}) {
+    if (clipHolds(clip)) {
+      return _holdMark(canvas, clip, box, from, band, ground: ground);
+    }
     final glyph = compGlyph;
     if (!clip.sourceIsComp || glyph == null || glyph.size.isEmpty) return from;
     final tall = band ?? box.height;
@@ -808,12 +815,48 @@ class CutTrackPainter extends CustomPainter {
     return from + side + 3;
   }
 
+  /// A hold says so before its name: the pause mark, two bars in the name's
+  /// colour, on the name's ground where it has one.
+  double _holdMark(
+      Canvas canvas, BridgeClip clip, Rect box, double from, double? band,
+      {required bool ground}) {
+    final tall = band ?? box.height;
+    final side = min(iconSize, tall - 4);
+    if (box.width - from < side + 12) return from;
+    final name = nameOf(clip.sourceName);
+    final colour = name.text?.style?.color;
+    if (colour == null) return from;
+    final top = box.top + (tall - side) / 2;
+    if (ground) {
+      final y = box.top + (tall - name.height) / 2;
+      canvas.drawRRect(
+          // Square on the right, where the name's own ground carries on.
+          RRect.fromRectAndCorners(
+              Rect.fromLTWH(box.left + from - 3, y, side + 3, name.height),
+              topLeft: Radius.circular(radius),
+              bottomLeft: Radius.circular(radius)),
+          Paint()..color = colours.handleFill.withValues(alpha: 0.75));
+    }
+    final paint = Paint()
+      ..color = colour
+      ..strokeWidth = side * 1.5 / 16
+      ..strokeCap = StrokeCap.round;
+    for (final x in [5.0, 11.0]) {
+      final at = box.left + from + side * x / 16;
+      canvas.drawLine(Offset(at, top + side * 3 / 16),
+          Offset(at, top + side * 13 / 16), paint);
+    }
+    return from + side + 3;
+  }
+
   /// The clip's own sound across its box. The peaks are bucketed on the
   /// clip's placed clock, which starts at its place start, so a slid clip
   /// carries its wave along with nothing refetched.
   void _wave(
       Canvas canvas, BridgeClip clip, Rect box, CutDrag? held, Color label,
       {bool header = true}) {
+    // A hold plays silence.
+    if (clipHolds(clip)) return;
     final summary = peaks[clip.id.toString()];
     if (summary == null || axis.perFrame <= 0 || fps <= 0) return;
     // A head being trimmed moves the box over a wave that stays put, and a

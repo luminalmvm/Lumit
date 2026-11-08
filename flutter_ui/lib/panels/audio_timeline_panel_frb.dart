@@ -437,8 +437,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     }
     final ui = _ui;
     if (ui == null || ui.activePanel != Panel.audioTimeline) return false;
-    // A clip here is the clip it is in the Cut timeline, so the two chords
-    // its menu shows mean the same.
+    // A clip here is the clip it is in the Cut timeline, so the chords its
+    // menu shows mean the same.
+    final comp = ui.selectedComp;
     switch (ui.keymap.actionFor(BridgeKeyContext.cut, event)) {
       case 'cut.add.edit':
         _splitAtPlayhead(ui);
@@ -446,6 +447,17 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       case 'cut.delete.ripple':
         if (_pickedClips.isEmpty) return false;
         _rippleDeletePicked(ui);
+        return true;
+      case 'cut.group' when _pickedClips.length > 1:
+        _groupClips(join: true);
+        return true;
+      case 'cut.ungroup' when _pickedClips.isNotEmpty:
+        _groupClips(join: false);
+        return true;
+      case 'cut.paste.attributes'
+          when _clipsHeld && _pickedClips.isNotEmpty && comp != null:
+        final ids = [for (final (_, c) in _pickedOnTracks()) c.id];
+        _afterCut(_cut(() => comp.cutPasteAttributes(clips: ids)));
         return true;
     }
     if (ui.keymap.actionFor(BridgeKeyContext.timeline, event) !=
@@ -2594,6 +2606,12 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             ),
             child: MenuLabel(l10n.cutTransitionMenu, ticked: false),
           ),
+          // A hold on the sound under the playhead: a length of silence, with
+          // what follows moved later.
+          if (clip != null)
+            row('freeze', l10n.cutFreezeFrame, () {
+              askToFreezeClips(context, [(layer: layer, clip: clip)], at);
+            }, close, enabled: first <= playhead && playhead < last),
           MenuRow(
             key: ValueKey<String>('atl-keep-pitch-${track.id}'),
             onPressed: () {
@@ -2682,11 +2700,6 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               }),
               child: MenuLabel(l10n.audioAddEffect, ticked: false),
             ),
-            // A hold on the sound under the playhead: a length of silence, with
-            // what follows moved later.
-            row('freeze', l10n.cutFreezeFrame, () {
-              askToFreezeClips(context, [(layer: layer, clip: clip)], at);
-            }, close, enabled: first <= playhead && playhead < last),
             if ((picked?.length ?? 0) > 1)
               row('fold', l10n.cutNewCompositionFromSelection, () {
                 CompositionReference? made;
@@ -2733,13 +2746,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                 () => _duplicateClips(comp, picked!), close),
             row('paste-attributes', l10n.cutPasteAttributes, () {
               _afterCut(_cut(() => comp.cutPasteAttributes(clips: ids)));
-            }, close, enabled: _clipsHeld),
+            }, close, action: 'cut.paste.attributes', enabled: _clipsHeld),
             const MenuDivider(),
             row('group', l10n.cutGroup, () => _groupClips(join: true), close,
-                enabled: ids.length > 1),
+                action: 'cut.group', enabled: ids.length > 1),
             if (clip.group != null)
               row('ungroup', l10n.cutUngroup, () => _groupClips(join: false),
-                  close),
+                  close, action: 'cut.ungroup'),
             row('select-to-end', l10n.cutSelectToEnd, () {
               setState(() => _pickedClips = {
                     for (final c in info.clips)

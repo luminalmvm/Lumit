@@ -686,35 +686,41 @@ class _DragValueFieldState extends State<DragValueField>
               // The well hands its child a tight height, and an `EditableText`
               // given one lays its line out at the *top* of it — so the digits
               // rose four and a half pixels the moment the editor opened, on
-              // top of not moving sideways. The `SizedBox` keeps the full
+              // top of not moving sideways. The `Expanded` keeps the full
               // width, which is what the right-hand anchor needs; the `Center`
               // gives the line its natural height and puts it down the middle.
+              // The unit stays beside the digits, so the number still says
+              // what it counts and does not move when the editor opens.
               child: Center(
-                child: SizedBox(
-                  width: double.infinity,
-                  child: EditableText(
-                    key: textFieldKey,
-                    controller: _controller,
-                    focusNode: _focus,
-                    // Mono while focused too — the number must not change
-                    // width between reading it and typing over it (§7.1) —
-                    // the same size as the resting number, so nothing reflows
-                    // on the click.
-                    style: _valueStyle(t).copyWith(color: t.textPrimary),
-                    // The resting face is right-anchored, so the editor is
-                    // too: the digits stay where they were even though the
-                    // reading loses its sign or its unit on the way into the
-                    // field.
-                    textAlign: TextAlign.right,
-                    // A number reads left to right in every language.
-                    textDirection: TextDirection.ltr,
-                    cursorColor: t.accent,
-                    backgroundCursorColor: t.surface2,
-                    selectionColor: t.accent.withValues(alpha: 0.5),
-                    selectionControls: desktopTextSelectionHandleControls,
-                    onSubmitted: (_) => _commitText(submitted: true),
+                child: Row(children: [
+                  Expanded(
+                    child: EditableText(
+                      key: textFieldKey,
+                      controller: _controller,
+                      focusNode: _focus,
+                      // Mono while focused too — the number must not change
+                      // width between reading it and typing over it (§7.1) —
+                      // the same size as the resting number, so nothing reflows
+                      // on the click.
+                      style: _valueStyle(t).copyWith(color: t.textPrimary),
+                      // The resting face is right-anchored, so the editor is
+                      // too: the digits stay where they were even though the
+                      // reading loses its sign on the way into the
+                      // field.
+                      textAlign: TextAlign.right,
+                      // A number reads left to right in every language.
+                      textDirection: TextDirection.ltr,
+                      cursorColor: t.accent,
+                      backgroundCursorColor: t.surface2,
+                      selectionColor: t.accent.withValues(alpha: 0.5),
+                      selectionControls: desktopTextSelectionHandleControls,
+                      onSubmitted: (_) => _commitText(submitted: true),
+                    ),
                   ),
-                ),
+                  if (widget.suffix case final unit?)
+                    Text(unit,
+                        style: _valueStyle(t).copyWith(color: t.textMuted)),
+                ]),
               ),
             ),
           ),

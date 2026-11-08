@@ -373,10 +373,6 @@
   "@gradeSaveLookTitle": {
     "description": "Title of the window that asks what a saved look is called."
   },
-  "gradeLookPreset": "Preset",
-  "@gradeLookPreset": {
-    "description": "Grade panel, Look section: the name of the row that picks a saved look."
-  },
   "gradeLookReplace": "Replace {name}?",
   "@gradeLookReplace": {
     "description": "Asked before a saved look is written over one of the same name.",
