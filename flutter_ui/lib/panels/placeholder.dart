@@ -32,11 +32,13 @@ class PlaceholderPanel extends StatelessWidget {
           lumitIcon(icon, size: 28, color: t.textDisabled),
           const SizedBox(height: 8),
           Text(title, style: t.body),
-          const SizedBox(height: 4),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220),
-            child: Text(hint, style: t.small, textAlign: TextAlign.center),
-          ),
+          if (hint.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
+              child: Text(hint, style: t.small, textAlign: TextAlign.center),
+            ),
+          ],
           if (action case final action?) ...[
             const SizedBox(height: 8),
             action,

@@ -10,7 +10,7 @@ An **expression** is a line of script on a property, calculated every frame.
 ## Put one on a property
 
 1. Right-click the property's value field.
-2. Choose **Set expression**.
+2. Choose **Add expression**.
 
 An editor opens over the row, seeded with the value that was there. The number under the
 text is what the expression comes to at the playhead, and the function names complete as
@@ -28,12 +28,14 @@ shows its value in red.
 **Tab** and **Shift+Tab** do the same in the Expressions panel, the
 **Animation ▸ Add expression** editor and the shader editor.
 
-The row then shows the expression and its value, and a click on either opens the editor
-again. In the Timeline the expression is written along the property's lane, and a click
-there opens the editor across the lane.
+The row then shows the value it gives, and a click on it, or **Edit expression** on its
+right-click menu, opens the editor again. In the Timeline the expression is written along
+the property's lane, and a click there opens the editor across the lane.
 
 **Remove expression**, in the editor and in the row's right-click menu, goes back to a
-plain value. The property keeps the number it was showing. The same menu lists
+plain value. The property keeps the number it was showing. **Convert to keyframes**, beside
+it, puts a keyframe on every frame of the layer in place of the expression, each holding
+the number it came to. The same menu lists
 **JavaScript** and **Rhai**, with the expression's language marked.
 
 **Animation ▸ Add expression** opens the same editor for the property rows selected in the
@@ -42,6 +44,17 @@ Timeline, and puts the expression on every one of them.
 Transform properties and effect parameters both take one. An effect's point takes one on
 each half, and is then drawn as two rows. A colour does not yet, and the menu does not offer
 it there.
+
+## Follow another property
+
+Hover a property row and drag its link mark onto another property row, in any
+panel. The editor opens on the dragged row with a reference to the dropped one, and the
+caret after it. A reference Rhai has no word for, an effect's row, is written in
+JavaScript. A drop on a layer's name in the Timeline writes the layer alone. The editor's
+footer has the same mark: dragged onto a row, the reference lands at the caret.
+
+Without dragging, **Copy link** on the menu of the row to follow, then **Paste link** on the
+row that follows, does the same, for a row in another composition or scrolled out of view.
 
 ## Choose the language
 
@@ -56,11 +69,11 @@ choice.
 | --- | --- |
 | A property's editor | In the dropdown under the text, or the row's right-click menu |
 | **Animation ▸ Add expression** | In the dropdown under the text, at the right |
-| **Window ▸ Expressions** | In the dropdown at the right of the bottom bar |
+| **Window ▸ Panels ▸ Expressions** | In the dropdown at the left of the bottom bar |
 | An Expression box in the node graph | In the same dropdown, under **Edit expression…** |
 
-A new expression starts in Rhai. **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ New expressions
-are written in** changes that. An expression imported from After Effects arrives as JavaScript.
+A new expression starts in JavaScript. **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ New
+expressions are written in** changes that. An expression imported from After Effects arrives as JavaScript.
 
 The text is coloured for the language it is set to, and run in that language whatever it
 says. `7 / 2` is `3` in Rhai and `3.5` in JavaScript.
@@ -159,15 +172,17 @@ expressions.
 
 ## Save expressions to use again
 
-**Window ▸ Expressions** opens a panel that keeps expressions between projects.
+**Window ▸ Panels ▸ Expressions** opens a panel that keeps expressions between projects.
 
 - **New** clears the editor. With a property selected that already has an expression, the
   editor starts with it.
 - **Save** stores the script and its language under the name in the name field. A name
   already in the list is replaced.
-- **Delete** removes the selected entry.
-- **Apply** puts the script on every property row selected in the Timeline, in the language
-  the dropdown shows. Double-clicking an entry does the same.
+- Right-click an entry for **Apply**, **Rename…**, **Duplicate** and **Delete**.
+- **Wiggle**, **Loop**, **Bounce** and **Grow over time** come with Lumit, after your own,
+  in JavaScript. **Duplicate** keeps one as yours to change.
+- **Apply** puts the script on every property row selected in the Timeline, named under the
+  editor, in the language the dropdown shows. Double-clicking an entry does the same.
 - **Export…** writes every saved expression to one file. **Import…** adds a file's
   expressions to yours. A name you already have for a different script or language is kept,
   and the new one gets a number after it.

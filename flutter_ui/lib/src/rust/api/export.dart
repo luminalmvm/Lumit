@@ -113,6 +113,15 @@ List<BridgeExportQueueItem> exportQueueList() =>
 void exportQueueStart() =>
     BridgeLib.instance.api.crateApiExportExportQueueStart();
 
+/// Stop after this one: the running export finishes and nothing after it
+/// starts. [`export_queue_start`] lets the queue run again.
+void exportQueueStopAfter() =>
+    BridgeLib.instance.api.crateApiExportExportQueueStopAfter();
+
+/// Whether the queue will start the next waiting item by itself.
+bool exportQueueGoesOn() =>
+    BridgeLib.instance.api.crateApiExportExportQueueGoesOn();
+
 /// Cancel one item. A running export stops at its next frame and leaves no
 /// half-file; an item still waiting simply leaves the list.
 void exportQueueCancel({required int id}) =>
@@ -420,7 +429,13 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
     /// The encoder actually chosen, which may not be the one asked for.
     required String encoder,
   }) = BridgeExportQueueState_Running;
-  const factory BridgeExportQueueState.done() = BridgeExportQueueState_Done;
+  const factory BridgeExportQueueState.done({
+    /// How long it took to export, in whole seconds.
+    required int seconds,
+
+    /// The file's size, zero for an image sequence.
+    required int bytes,
+  }) = BridgeExportQueueState_Done;
   const factory BridgeExportQueueState.failed({
     required String error,
   }) = BridgeExportQueueState_Failed;

@@ -185,6 +185,24 @@ impl ItemReference {
         Ok(u32::try_from(uses).unwrap_or(u32::MAX))
     }
 
+    /// The layers that show this item, in the order the project holds them:
+    /// a layer whose source it is, or a Sequence layer with a clip of it.
+    #[frb(sync)]
+    pub fn used_by(&self) -> Result<Vec<crate::api::layer::LayerReference>, BridgeError> {
+        use lumit_core::ops::Op;
+        let project = self.project_id();
+        Ok(self
+            .delete_ops()?
+            .into_iter()
+            .filter_map(|op| match op {
+                Op::RemoveLayer { comp, layer } | Op::SetSequenceClips { comp, layer, .. } => {
+                    Some(crate::api::layer::LayerReference::new(project, comp, layer))
+                }
+                _ => None,
+            })
+            .collect())
+    }
+
     #[frb(ignore)]
     fn delete_ops(&self) -> Result<Vec<lumit_core::ops::Op>, BridgeError> {
         let proj = self.project()?;

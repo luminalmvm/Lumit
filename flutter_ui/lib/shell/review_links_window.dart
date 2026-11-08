@@ -466,8 +466,8 @@ class _ReviewWindowState extends State<_ReviewWindow> {
 
   /// Ask before something that can't be taken back, and give the keys back
   /// to the window once it is answered.
-  Future<bool> _ask(String question, String yes, {String? note}) async {
-    final sure = await askBefore(context, question, yes, note: note);
+  Future<bool> _ask(String question, String yes) async {
+    final sure = await askBefore(context, question, yes);
     if (mounted) _focus.requestFocus();
     return sure && mounted;
   }
@@ -685,37 +685,30 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   }
 
   Future<void> _deleteLink(Review review) async {
-    final sure = await _ask(l10n.reviewDeleteLinkAsk(review.title), l10n.delete,
-        note: l10n.reviewDeleteLinkNote);
+    final sure =
+        await _ask(l10n.reviewDeleteLinkAsk(review.title), l10n.delete);
     if (sure) await _do(() => _reviews.deleteLink(review));
   }
 
   Future<void> _deleteVersion(Review review, ReviewVersion version) async {
-    // The video only address goes with the version it shows.
-    final sure = await _ask(
-        l10n.reviewDeleteVersionAsk(version.n), l10n.delete,
-        note: review.clean != null && review.cleanVersion == version.n
-            ? l10n.reviewDeleteVersionCleanNote
-            : l10n.reviewDeleteVersionNote);
+    final sure =
+        await _ask(l10n.reviewDeleteVersionAsk(version.n), l10n.delete);
     if (!sure) return;
     if (_version == version.n) _version = null;
     await _do(() => _reviews.deleteVersion(review, version));
   }
 
   Future<void> _deleteComment(Review review, ReviewComment comment) async {
-    final replies = _reviews.comments.any((c) => c.parent == comment.id);
     final sure = await _ask(
         comment.reaction == null
             ? l10n.reviewDeleteCommentAsk
             : l10n.reviewDeleteLikeAsk,
-        l10n.delete,
-        note: replies ? l10n.reviewDeleteRepliesNote : null);
+        l10n.delete);
     if (sure) await _do(() => _reviews.deleteComment(review, comment));
   }
 
   Future<void> _removeClean(Review review) async {
-    final sure = await _ask(l10n.reviewCleanRemoveAsk, l10n.reviewRemove,
-        note: l10n.reviewCleanRemoveNote);
+    final sure = await _ask(l10n.reviewCleanRemoveAsk, l10n.reviewRemove);
     if (sure) await _do(() => _reviews.removeClean(review));
   }
 
@@ -777,21 +770,23 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   /// The button that turns the window to its other face, for the composition
   /// in front. The one filled action here. Without Lumit Pro it is the way
   /// to that instead.
-  Widget _sendButton(LumitTheme t) {
+  Widget _sendButton(LumitTheme t) => dialogFilledAction(
+        t,
+        key: const ValueKey('review-send'),
+        label: l10n.menuSendForReview,
+        onPressed: _sendPress,
+      );
+
+  VoidCallback? get _sendPress {
     final comp = widget.ui.selectedComp;
-    return dialogFilledAction(
-      t,
-      key: const ValueKey('review-send'),
-      label: l10n.menuSendForReview,
-      onPressed: !widget.ui.account.pro
-          ? () => unawaited(showProWindow(context))
-          : comp == null
-              ? null
-              : () => setState(() {
-                    _sendFor = comp;
-                    _sendInto = null;
-                  }),
-    );
+    return !widget.ui.account.pro
+        ? () => unawaited(showProWindow(context))
+        : comp == null
+            ? null
+            : () => setState(() {
+                  _sendFor = comp;
+                  _sendInto = null;
+                });
   }
 
   String? get _failure =>
@@ -862,34 +857,44 @@ class _ReviewWindowState extends State<_ReviewWindow> {
               children: [
                 SizedBox(
                   width: _listWidth,
-                  child: ReviewScroll(
-                    controller: _listScroll,
-                    ground: t.surface1,
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: _listMargin),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final link in _reviews.links)
-                            Builder(
-                              key: ValueKey<String>('review-row-${link.id}'),
-                              builder: (row) => ReviewLinkRow(
-                                link: link,
-                                chosen: link.id == _chosen,
-                                unseen: _reviews.unseenIn(link) > 0,
-                                moved: _moved.contains(link.id),
-                                // The keys come back to the list with it.
-                                onPick: () {
-                                  _focus.requestFocus();
-                                  setState(() => link.id == _chosen
-                                      ? _at = null
-                                      : _choose(link.id));
-                                },
-                                onMenu: (at) => _linkMenu(row, link, at),
-                              ),
-                            ),
-                        ],
+                  // The ground under the rows has what the list itself can do.
+                  child: Builder(
+                    builder: (list) => GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onSecondaryTapDown: (press) => reviewRowMenu(
+                          list, press.globalPosition, [
+                        ('send', l10n.menuSendForReview, _sendPress),
+                      ]),
+                      child: ReviewScroll(
+                        controller: _listScroll,
+                        ground: t.surface1,
+                        child: Padding(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: _listMargin),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final link in _reviews.links)
+                                Builder(
+                                  key: ValueKey<String>('review-row-${link.id}'),
+                                  builder: (row) => ReviewLinkRow(
+                                    link: link,
+                                    chosen: link.id == _chosen,
+                                    unseen: _reviews.unseenIn(link) > 0,
+                                    moved: _moved.contains(link.id),
+                                    // The keys come back to the list with it.
+                                    onPick: () {
+                                      _focus.requestFocus();
+                                      setState(() => link.id == _chosen
+                                          ? _at = null
+                                          : _choose(link.id));
+                                    },
+                                    onMenu: (at) => _linkMenu(row, link, at),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1081,15 +1086,9 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     // are fine with. A link at the server's ceiling of 2000 wants a list
     // that builds what is in view, and the keys a way to find a row in it.
     return [
-      if (_comp == null && listed.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(l10n.reviewNoComp, style: t.small),
-        ),
       // A reviewer's yes to this version, before what anyone said about it.
       if (version.approvals.isNotEmpty) ...[
-        if (listed.isNotEmpty || _comp == null)
-          Container(height: 1, color: t.hairline),
+        if (listed.isNotEmpty) Container(height: 1, color: t.hairline),
         ReviewApprovedRow(
           key: ValueKey<String>('review-approved-by-${version.n}'),
           approvals: version.approvals,

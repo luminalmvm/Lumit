@@ -303,10 +303,7 @@ fn drawn(
     lt: f64,
     context: &Arc<ExpressionContext>,
 ) -> lumit_gpu::composite::MbSample {
-    let read = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
-    let p = layer
-        .transform
-        .placement_at(lt, !layer.switches.three_d, &read);
+    let p = crate::placement::drawn_placement(layer, lt, context);
     let at = p.flat_position();
     lumit_gpu::composite::MbSample {
         position: (at.0 as f32, at.1 as f32),
@@ -410,6 +407,7 @@ pub fn reparented(
     // A 3D layer keeps its rotations and its Orientation takes the turn, as
     // After Effects does it, unless an expression drives the Orientation.
     let reorient = layer.switches.three_d
+        && tr.orient.is_off()
         && !tr
             .orientation
             .iter()
@@ -443,13 +441,13 @@ pub fn reparented(
     edit(P::PositionY, to.position.1, false, along(1));
     edit(P::ScaleX, sx, false, None);
     edit(P::ScaleY, sy, false, None);
-    if !reorient {
+    if !reorient && tr.orient.is_off() {
         edit(P::Rotation, rz, true, Some(1.0));
     }
     // A 2D layer's hidden 3D values are kept for when it goes 3D again.
     if layer.switches.three_d {
         edit(P::PositionZ, to.z, false, along(2));
-        if !reorient {
+        if !reorient && tr.orient.is_off() {
             edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
             edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
         }
@@ -3089,17 +3087,24 @@ fn comp_walk(
                     .collect::<Vec<_>>()
             })
             .map(|(e, param, self_default)| {
-                if e.effect.match_name == "energy_line" {
-                    return energy_line_path::path(
-                        doc,
-                        comp,
-                        e,
-                        param,
-                        self_default,
-                        layer,
-                        slt,
-                        t_comp,
-                    );
+                match e.effect.match_name.as_str() {
+                    "energy_line" => {
+                        return energy_line_path::path(
+                            doc,
+                            comp,
+                            e,
+                            param,
+                            self_default,
+                            layer,
+                            slt,
+                            t_comp,
+                        );
+                    }
+                    "audio_spectrum" if param == "levels" => {
+                        let layer = layer.map(|l| l.id);
+                        return audio_spectrum_levels::levels(doc, comp, e, layer, slt, t_comp);
+                    }
+                    _ => {}
                 }
                 // The one rule the driver walk also asks, so a wire reads
                 // the path the picture draws.
@@ -3840,7 +3845,12 @@ fn comp_walk(
                     Shown::One { clip, .. } if plays(clip) => Some(shown),
                     Shown::Two {
                         outgoing, incoming, ..
-                    } if plays(outgoing) || plays(incoming) => Some(shown),
+                    } if plays(outgoing)
+                        || plays(incoming)
+                        || incoming.drawn_transition().is_some() =>
+                    {
+                        Some(shown)
+                    }
                     _ => None,
                 }
             }
@@ -3854,12 +3864,9 @@ fn comp_walk(
             // behind the same guard against a comp inside itself.
             //
             // A dissolve with such a clip is mixed on the card, since a comp
-            // has no pixels until it is rendered: the two clips become the
-            // draws of one more Nested, each at its share, the second laid
-            // on the first with `Blend::Plus`. That is the crossfade the
-            // decode worker makes of two footage clips
-            // (`lumit_core::pixels::dissolve_rgba`), and two whole pictures
-            // sum to a whole one.
+            // has no pixels until it is rendered, and so is any transition:
+            // the two clips become the draws of one more Nested
+            // (`crate::overlap`).
             //
             // ponytail: a fade at a lone end is the clip's share of the
             // layer's opacity (`clip_share`), so it comes after the layer's
@@ -3877,10 +3884,30 @@ fn comp_walk(
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 // One clip's picture and its natural size: its comp, or the
                 // footage the worker decoded for this layer.
+                let (outgoing_id, wipe) = match comp_clips {
+                    Some(Shown::Two {
+                        outgoing,
+                        incoming,
+                        gain,
+                        ..
+                    }) => (
+                        Some(outgoing.id),
+                        incoming
+                            .drawn_transition()
+                            .map(|e| (e, (outgoing, incoming), gain)),
+                    ),
+                    _ => (None, None),
+                };
                 let mut picture = |clip: &Clip| -> Option<(DrawSource, (f32, f32))> {
                     let nested_id = match clip.source {
                         ClipSource::Footage(_) => {
-                            let lp = pixels_by_layer.get(&layer.id)?;
+                            let lp = *pixels_by_layer.get(&layer.id)?;
+                            // An outgoing clip beside an incoming one with a
+                            // picture of its own.
+                            let lp = Some(clip.id)
+                                .filter(|id| Some(*id) == outgoing_id)
+                                .and_then(|_| crate::overlap::across(lp))
+                                .unwrap_or(lp);
                             return Some((
                                 DrawSource::Pixels {
                                     rgba: Arc::clone(&lp.rgba),
@@ -3972,40 +3999,20 @@ fn comp_walk(
                         clip_share *= share as f32;
                         (source, size)
                     }
-                    // A dissolve: both, each at its share and fitted about
-                    // the centre of the incoming clip's size, which is the
-                    // layer's across the overlap as it is where two footage
-                    // clips are mixed.
-                    (Some((going, away)), Some((coming, here))) => {
-                        let natural = coming.1;
-                        let part = |(source, size): (DrawSource, (f32, f32)), share: f64, blend| {
-                            let mut draw = read_draw(layer, source, size);
-                            draw.position = (natural.0 * 0.5, natural.1 * 0.5);
-                            let fit =
-                                (natural.0 / size.0.max(1.0)).min(natural.1 / size.1.max(1.0));
-                            draw.scale = (fit * 100.0, fit * 100.0);
-                            draw.opacity = (share * 100.0) as f32;
-                            draw.blend = blend;
-                            draw
-                        };
-                        let mixed = DrawSource::Nested {
-                            width: natural.0 as u32,
-                            height: natural.1 as u32,
-                            background: [0.0, 0.0, 0.0, 0.0],
-                            draws: vec![
-                                part(going, away, lumit_gpu::composite::Blend::Normal),
-                                part(coming, here, lumit_gpu::composite::Blend::Plus),
-                            ],
-                            camera: None,
-                            // A mix has no name of its own. Each comp
-                            // inside it keeps the one it was given above.
-                            key: None,
-                            paint: Vec::new(),
-                            paint_time: lt,
-                            flow: None,
-                        };
-                        (mixed, natural)
-                    }
+                    (Some((going, away)), Some((coming, here))) => match wipe {
+                        Some((effect, clips, gain)) => crate::overlap::wiped(
+                            layer,
+                            comp,
+                            going,
+                            coming,
+                            effect,
+                            clips,
+                            gain,
+                            (lt, frame_lt),
+                            context.clone(),
+                        ),
+                        None => crate::overlap::dissolved(layer, going, away, coming, here, lt),
+                    },
                 };
                 // Paint on the layer is stamped into the picture once it is
                 // rendered, as a Precomp layer's is.
@@ -6186,7 +6193,7 @@ impl GraphLower<'_> {
 /// actually have rather than from the layer: the document holds no size for
 /// footage, so `read_layer` can only guess the comp's, and a clip smaller or
 /// larger than the comp would otherwise land off centre.
-fn read_draw(
+pub(crate) fn read_draw(
     layer: &lumit_core::model::Layer,
     source: DrawSource,
     natural: (f32, f32),
@@ -6904,6 +6911,7 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     }
 }
 
+mod audio_spectrum_levels;
 mod energy_line_path;
 mod moments;
 pub(crate) mod motion_blur;
@@ -9065,6 +9073,7 @@ mod render_below_at_tests {
         graph.graph = Some(CompGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

@@ -71,11 +71,12 @@ import 'package:lumit_flutter/widgets/drag_escape.dart';
 
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
-import 'transform_rows_frb.dart' show read;
+import 'transform_rows_frb.dart' show read, writeTransforms;
 import 'viewer_gizmo.dart' show LayerBox, layerAndDepthAt, layerAtPoint;
 import 'viewer_gizmo_3d.dart'
     show Vec3, compToParent, eulerYxz, rotationMatching;
 import 'viewer_layer_map.dart' show viewerNear;
+import 'viewer_rulers.dart' show viewerRulerBand;
 import 'viewer_tool_cursor.dart';
 import 'viewer_view_cube.dart';
 
@@ -592,6 +593,21 @@ bool cameraFromView(LumitState app, LumitUiState ui) {
   return true;
 }
 
+/// The camera layer the comp looks through at [seconds]: the topmost one
+/// that is switched on and live then, as the engine picks it. Off the read
+/// model, so it costs no bridge call.
+BridgeLayerEntry? activeCameraAt(LumitUiState ui, double seconds) {
+  double at(BridgeRational r) =>
+      r.den.toInt() == 0 ? 0 : r.num.toDouble() / r.den.toDouble();
+  return ui.model.heldLayers
+      .where((e) =>
+          e.info.kind == BridgeLayerKind.camera &&
+          e.info.switches.visible &&
+          seconds >= at(e.info.span.inPoint) &&
+          seconds < at(e.info.span.outPoint))
+      .firstOrNull;
+}
+
 /// Move the comp's active camera to where the active view looks from, as
 /// one undo step that keys what is keyed: Blender's camera to view. A
 /// two-node camera's point of interest goes to the middle of the view's 1:1
@@ -610,16 +626,7 @@ bool cameraToView(LumitState app, LumitUiState ui) {
     // A comp that has gone.
     return false;
   }
-  double seconds(BridgeRational r) =>
-      r.den.toInt() == 0 ? 0 : r.num.toDouble() / r.den.toDouble();
-  final t = rate <= 0 ? 0.0 : frame / rate;
-  final camera = ui.model.heldLayers
-      .where((e) =>
-          e.info.kind == BridgeLayerKind.camera &&
-          e.info.switches.visible &&
-          t >= seconds(e.info.span.inPoint) &&
-          t < seconds(e.info.span.outPoint))
-      .firstOrNull;
+  final camera = activeCameraAt(ui, rate <= 0 ? 0.0 : frame / rate);
   if (camera == null) {
     app.postNotice(l10n.noCameraToMove);
     return false;
@@ -886,7 +893,7 @@ bool writeCameraPose(
           // Nothing else is a camera's placement, so nothing else is asked.
           _ => 0,
         };
-    layer.setTransforms(
+    writeTransforms(layer, tf,
       props: props.toList(),
       values: [
         for (final prop in props)
@@ -1331,17 +1338,26 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
               final models = ui.holdsModels(widget.viewId);
               final display = ui.displayOf(widget.viewId);
               final trouble = ui.modelTrouble.value;
+              final view = ui.viewOf(widget.viewId);
+              // Centred at the top, clear of the selection's name on the
+              // left and the "at" chip on the right, and naming the view
+              // whenever it isn't the comp's own camera.
               return Positioned(
-                top: viewLookInset,
-                left: viewLookInset,
-                child: ViewLookTag(
+                top: viewLookInset +
+                    (ui.viewerOverlays.rulers ? viewerRulerBand : 0),
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: ViewLookTag(
                   look: [
+                    if (view != ViewerView.activeCamera) view.title,
                     if (models && trouble != null) trouble,
                     if (models && display != BridgeModelDisplay.final_)
                       display.title,
                     if (models && ui.facesShown(widget.viewId))
                       l10n.viewerDisplayFaces,
                   ].join(' · '),
+                ),
                 ),
               );
             },

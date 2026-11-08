@@ -8,9 +8,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
@@ -925,6 +927,7 @@ class Outline extends StatelessWidget {
   /// Open or close a Sequence layer's view.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
   final ValueChanged<String> onToggle;
+  final void Function(List<String> paths, bool open)? onFoldPaths;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final ValueChanged<LayerReference> onSelect;
@@ -967,6 +970,7 @@ class Outline extends StatelessWidget {
     required this.keysPickedOn,
     this.onOpenSequence,
     required this.onToggle,
+    this.onFoldPaths,
     required this.playheadFrame,
     required this.onSeek,
     required this.onSelect,
@@ -1022,7 +1026,10 @@ class Outline extends StatelessWidget {
           selection: selection,
           layerId: rows[i].id,
           onEffectDropped: (data) =>
-              data.landOn(rows[i].entry.layer).then((_) => onChanged()),
+              data.landOn(rows[i].entry.layer,
+                  atFrame: Provider.of<LumitUiState>(context, listen: false)
+                      .playheadFrame
+                      .value).then((_) => onChanged()),
           builder: (context, mine) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1067,6 +1074,7 @@ class Outline extends StatelessWidget {
                     playheadFrame: playheadFrame,
                     onSeek: onSeek,
                     onToggle: onToggle,
+                    onFoldPaths: onFoldPaths,
                     onChanged: onChanged,
                     locked: false,
                   ),
@@ -1143,6 +1151,7 @@ class Outline extends StatelessWidget {
                       playheadFrame: playheadFrame,
                       onSeek: onSeek,
                       onToggle: onToggle,
+                      onFoldPaths: onFoldPaths,
                       onChanged: onChanged,
                       locked: rows[i].entry.info.switches.locked,
                     ),

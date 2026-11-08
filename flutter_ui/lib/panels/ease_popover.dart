@@ -26,8 +26,8 @@ import 'graph_clipboard.dart' show easeClipboard;
 import 'key_block.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
-/// The popover's width, from the drawing's 190px face.
-const double easePopoverWidth = 190;
+/// The popover's width, room for every line on one line in any language.
+const double easePopoverWidth = 224;
 
 /// The label column, so the four rows' controls line up under one another —
 /// the drawing's 56.
@@ -335,6 +335,9 @@ class _EasePopoverState extends State<_EasePopover> {
                       ? l10n.easeStaggerTopDown
                       : l10n.easeStaggerBottomUp,
                   style: t.body,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),

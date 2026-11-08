@@ -27,6 +27,8 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import '../widgets/marquee.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_menus.dart';
 
 /// How near a click has to land to take a point, in panel pixels. Generous,
 /// because a dot is a few pixels across and the thing being aimed at is a
@@ -86,6 +88,9 @@ class ViewerTrackLayer extends StatefulWidget {
   /// is a trait so the job can be tested with no asset.
   final List<BridgeTrackPoint> Function(LayerReference layer, int frame)? fetch;
 
+  /// Where a right click away from the cloud goes.
+  final void Function(TapUpDetails)? onPictureMenu;
+
   const ViewerTrackLayer({
     super.key,
     required this.tracked,
@@ -99,6 +104,7 @@ class ViewerTrackLayer extends StatefulWidget {
     required this.selecting,
     required this.onChanged,
     this.fetch,
+    this.onPictureMenu,
   });
 
   @override
@@ -246,6 +252,46 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
     );
   }
 
+  /// The cloud's menu. A point under the pointer joins what's picked, and with
+  /// nothing picked or aimed at the click is the picture's.
+  void _menu(TapUpDetails details) {
+    final hit = _hit(details.localPosition);
+    if (hit == null && _picked.isEmpty) {
+      widget.onPictureMenu?.call(details);
+      return;
+    }
+    if (hit != null && !_picked.contains(hit.track)) {
+      setState(() => _picked.add(hit.track));
+    }
+    showMenuAt<void>(
+      context: context,
+      position: details.globalPosition,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          viewerRow(l10n.trackCreateNull, () => _create(solid: false), close,
+              id: 'viewer-track-menu-null'),
+          viewerRow(l10n.trackCreateSolid, () => _create(solid: true), close,
+              id: 'viewer-track-menu-solid'),
+          viewerRow(l10n.trackCreateCard,
+              () => _create(solid: false, card: true), close,
+              id: 'viewer-track-menu-card'),
+          const MenuDivider(),
+          viewerRow(
+              l10n.menuSelectAll,
+              () => setState(() => _picked
+                ..clear()
+                ..addAll(_points.map((p) => p.track))),
+              close,
+              id: 'viewer-track-menu-all'),
+          viewerRow(l10n.viewerMenuClearSelection,
+              () => setState(_picked.clear), close,
+              id: 'viewer-track-menu-clear'),
+        ];
+      },
+    );
+  }
+
   void _create({required bool solid, bool card = false}) {
     final tracked = widget.tracked;
     if (tracked == null || _picked.isEmpty) return;
@@ -289,11 +335,15 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
           // painter — the painter draws and takes nothing.
           if (widget.selecting)
             Positioned.fill(
-              child: MarqueeSelect(
-                key: const ValueKey('viewer-track-marquee'),
-                onSelect: _marquee,
-                onClear: () => setState(_picked.clear),
-                onTapAt: _tapAt,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onSecondaryTapUp: _menu,
+                child: MarqueeSelect(
+                  key: const ValueKey('viewer-track-marquee'),
+                  onSelect: _marquee,
+                  onClear: () => setState(_picked.clear),
+                  onTapAt: _tapAt,
+                ),
               ),
             ),
           Positioned.fill(

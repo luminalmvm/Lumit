@@ -155,7 +155,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function()? waiting,
     TResult Function(int frame, int total, String encoder)? running,
-    TResult Function()? done,
+    TResult Function(int seconds, int bytes)? done,
     TResult Function(String error)? failed,
     required TResult orElse(),
   }) {
@@ -166,7 +166,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
       case BridgeExportQueueState_Running() when running != null:
         return running(_that.frame, _that.total, _that.encoder);
       case BridgeExportQueueState_Done() when done != null:
-        return done();
+        return done(_that.seconds, _that.bytes);
       case BridgeExportQueueState_Failed() when failed != null:
         return failed(_that.error);
       case _:
@@ -191,7 +191,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
   TResult when<TResult extends Object?>({
     required TResult Function() waiting,
     required TResult Function(int frame, int total, String encoder) running,
-    required TResult Function() done,
+    required TResult Function(int seconds, int bytes) done,
     required TResult Function(String error) failed,
   }) {
     final _that = this;
@@ -201,7 +201,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
       case BridgeExportQueueState_Running():
         return running(_that.frame, _that.total, _that.encoder);
       case BridgeExportQueueState_Done():
-        return done();
+        return done(_that.seconds, _that.bytes);
       case BridgeExportQueueState_Failed():
         return failed(_that.error);
     }
@@ -223,7 +223,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function()? waiting,
     TResult? Function(int frame, int total, String encoder)? running,
-    TResult? Function()? done,
+    TResult? Function(int seconds, int bytes)? done,
     TResult? Function(String error)? failed,
   }) {
     final _that = this;
@@ -233,7 +233,7 @@ extension BridgeExportQueueStatePatterns on BridgeExportQueueState {
       case BridgeExportQueueState_Running() when running != null:
         return running(_that.frame, _that.total, _that.encoder);
       case BridgeExportQueueState_Done() when done != null:
-        return done();
+        return done(_that.seconds, _that.bytes);
       case BridgeExportQueueState_Failed() when failed != null:
         return failed(_that.error);
       case _:
@@ -352,21 +352,78 @@ class _$BridgeExportQueueState_RunningCopyWithImpl<$Res>
 /// @nodoc
 
 class BridgeExportQueueState_Done extends BridgeExportQueueState {
-  const BridgeExportQueueState_Done() : super._();
+  const BridgeExportQueueState_Done(
+      {required this.seconds, required this.bytes})
+      : super._();
+
+  /// How long it took to export, in whole seconds.
+  final int seconds;
+
+  /// The file's size, zero for an image sequence.
+  final int bytes;
+
+  /// Create a copy of BridgeExportQueueState
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeExportQueueState_DoneCopyWith<BridgeExportQueueState_Done>
+      get copyWith => _$BridgeExportQueueState_DoneCopyWithImpl<
+          BridgeExportQueueState_Done>(this, _$identity);
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
-            other is BridgeExportQueueState_Done);
+            other is BridgeExportQueueState_Done &&
+            (identical(other.seconds, seconds) || other.seconds == seconds) &&
+            (identical(other.bytes, bytes) || other.bytes == bytes));
   }
 
   @override
-  int get hashCode => runtimeType.hashCode;
+  int get hashCode => Object.hash(runtimeType, seconds, bytes);
 
   @override
   String toString() {
-    return 'BridgeExportQueueState.done()';
+    return 'BridgeExportQueueState.done(seconds: $seconds, bytes: $bytes)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeExportQueueState_DoneCopyWith<$Res>
+    implements $BridgeExportQueueStateCopyWith<$Res> {
+  factory $BridgeExportQueueState_DoneCopyWith(
+          BridgeExportQueueState_Done value,
+          $Res Function(BridgeExportQueueState_Done) _then) =
+      _$BridgeExportQueueState_DoneCopyWithImpl;
+  @useResult
+  $Res call({int seconds, int bytes});
+}
+
+/// @nodoc
+class _$BridgeExportQueueState_DoneCopyWithImpl<$Res>
+    implements $BridgeExportQueueState_DoneCopyWith<$Res> {
+  _$BridgeExportQueueState_DoneCopyWithImpl(this._self, this._then);
+
+  final BridgeExportQueueState_Done _self;
+  final $Res Function(BridgeExportQueueState_Done) _then;
+
+  /// Create a copy of BridgeExportQueueState
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? seconds = null,
+    Object? bytes = null,
+  }) {
+    return _then(BridgeExportQueueState_Done(
+      seconds: null == seconds
+          ? _self.seconds
+          : seconds // ignore: cast_nullable_to_non_nullable
+              as int,
+      bytes: null == bytes
+          ? _self.bytes
+          : bytes // ignore: cast_nullable_to_non_nullable
+              as int,
+    ));
   }
 }
 

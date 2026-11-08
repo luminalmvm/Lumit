@@ -18,6 +18,8 @@ import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
+import 'question_window.dart';
+import 'review_link_parts.dart' show reviewRowMenu;
 import 'script_dialog_frb.dart';
 import 'package:lumit_flutter/state/platform.dart'
     if (dart.library.js_interop) 'package:lumit_flutter/state/platform_web.dart';
@@ -192,63 +194,19 @@ Future<void> runDroppedScripts(
     }
     final run = await showLumitModal<bool>(
       context: context,
-      builder: (close) =>
-          _RunQuestion(name: _scriptName(path), onChoose: close),
+      builder: (close) => QuestionWindow(
+        title: l10n.scriptRunQuestion(_scriptName(path)),
+        keyPrefix: 'script-drop',
+        onClose: () => close(false),
+        actions: [
+          questionPlain('script-drop-cancel', l10n.cancel, () => close(false)),
+          questionFilled('script-drop-run', l10n.scriptRun, () => close(true)),
+        ],
+      ),
     );
     if (run == true && context.mounted) {
       await runScriptFrb(context, app, ui, path: path);
     }
-  }
-}
-
-class _RunQuestion extends StatelessWidget {
-  final String name;
-  final ValueChanged<bool?> onChoose;
-
-  const _RunQuestion({required this.name, required this.onChoose});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      width: 320,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Text(l10n.scriptRunQuestion(name), style: t.bodyPrimary),
-          ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: const ValueKey('script-drop-cancel'),
-                  small: true,
-                  frameless: true,
-                  onPressed: () => onChoose(false),
-                  child: Text(l10n.cancel, style: t.small),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('script-drop-run'),
-                  small: true,
-                  primary: true,
-                  autofocus: true,
-                  onPressed: () => onChoose(true),
-                  child: Text(l10n.scriptRun),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-      ),
-    );
   }
 }
 
@@ -284,6 +242,14 @@ class _ScriptLogState extends State<_ScriptLog> {
     super.dispose();
   }
 
+  void _copy(String text) =>
+      unawaited(Clipboard.setData(ClipboardData(text: text)));
+
+  void _menu(Offset at, String line) => reviewRowMenu(context, at, [
+        ('script-copy-line', l10n.copyLine, () => _copy(line)),
+        ('script-copy-all', l10n.scriptLogCopy, () => _copy(widget.log.join('\n'))),
+      ]);
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -296,7 +262,7 @@ class _ScriptLogState extends State<_ScriptLog> {
           onClose: widget.onClose,
           keyPrefix: 'script-log',
         ),
-        Flexible(
+        Expanded(
           child: dialogScroller(
             context,
             t,
@@ -306,7 +272,12 @@ class _ScriptLogState extends State<_ScriptLog> {
               controller: _scroll,
               padding: const EdgeInsets.all(dialogPadding),
               itemCount: widget.log.length,
-              itemBuilder: (_, i) => Text(widget.log[i], style: t.mono),
+              itemBuilder: (_, i) => GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onSecondaryTapDown: (press) =>
+                    _menu(press.globalPosition, widget.log[i]),
+                child: Text(widget.log[i], style: t.mono),
+              ),
             ),
           ),
         ),
@@ -314,13 +285,9 @@ class _ScriptLogState extends State<_ScriptLog> {
           t,
           keyPrefix: 'script-log',
           actions: [
-            HouseButton(
-              key: const ValueKey('script-log-copy'),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              onPressed: () => unawaited(Clipboard.setData(
-                  ClipboardData(text: widget.log.join('\n')))),
-              child: Text(l10n.scriptLogCopy),
-            ),
+            questionPlain('script-log-copy', l10n.scriptLogCopy,
+                () => _copy(widget.log.join('\n'))),
+            questionFilled('script-log-close', l10n.close, widget.onClose),
           ],
         ),
       ],

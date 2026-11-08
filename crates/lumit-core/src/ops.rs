@@ -46,10 +46,9 @@ pub enum OpError {
     /// node-graph-comp.md §1.1). A comp is one thing or the other.
     #[error("a node graph has no layers")]
     CompIsNodeGraph,
-    /// [`Op::SetLayerKind`] was pointed at a kind it does not convert. Only
-    /// Solid ⇄ Adjustment flips: those two differ by whether the layer
-    /// has a picture of its own, and nothing else.
-    #[error("only solid and adjustment layers convert to one another")]
+    /// [`Op::SetLayerKind`] was pointed at a kind it does not convert: Solid
+    /// and Adjustment flip, and footage, solid and precomp layers swap sources.
+    #[error("those layer kinds don't convert to one another")]
     KindNotConvertible,
     /// A camera channel was named on a layer that is not a camera
     /// (docs/impl/camera.md §1).
@@ -299,12 +298,9 @@ pub enum Op {
     /// already ask the kind on every frame — so writing `kind` *is* the edit,
     /// with nothing else to keep in step.
     ///
-    /// Exactly invertible, like [`Op::SetSequenceClips`]: apply hands back the
-    /// kind it replaced, so one undo puts the solid's own `def` back rather
-    /// than a fresh one. Any other kind on either side is refused
-    /// ([`OpError::KindNotConvertible`]) — a footage layer has a source and a
-    /// camera has no pixels, and neither becomes an effect container by having
-    /// its kind overwritten.
+    /// Also how a footage, solid or precomp layer takes another source. Exactly
+    /// invertible: apply hands back the kind it replaced. Any other pair is
+    /// refused ([`OpError::KindNotConvertible`]).
     SetLayerKind {
         comp: Uuid,
         layer: Uuid,
@@ -329,6 +325,12 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         follows: bool,
+    },
+    /// How a layer turns by itself ([`crate::orient`]).
+    SetLayerOrient {
+        comp: Uuid,
+        layer: Uuid,
+        orient: crate::orient::Orient,
     },
     /// Mute or unmute a layer's audio (the audible switch).
     SetLayerAudible {
@@ -934,6 +936,7 @@ impl Op {
             Op::SetLayerThreeD { .. } => "3D switch",
             Op::SetSequenceClips { .. } => "Edit clips",
             Op::SetLayerKind { .. } => "Change layer kind",
+            Op::SetLayerOrient { .. } => "Set orient",
             Op::SetLayerAdjustment { .. } => "Adjustment switch",
             Op::SetLayerPitchFollowsSpeed { .. } => "Keep pitch",
             Op::SetLayerAudible { .. } => "Audible switch",
@@ -1049,6 +1052,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerThreeD { comp, layer, .. }
         | Op::SetSequenceClips { comp, layer, .. }
         | Op::SetLayerKind { comp, layer, .. }
+        | Op::SetLayerOrient { comp, layer, .. }
         | Op::SetLayerAdjustment { comp, layer, .. }
         | Op::SetLayerPitchFollowsSpeed { comp, layer, .. }
         | Op::SetLayerAudible { comp, layer, .. }
@@ -1119,6 +1123,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetLayerThreeD { comp, .. }
         | Op::SetSequenceClips { comp, .. }
         | Op::SetLayerKind { comp, .. }
+        | Op::SetLayerOrient { comp, .. }
         | Op::SetLayerAdjustment { comp, .. }
         | Op::SetLayerPitchFollowsSpeed { comp, .. }
         | Op::SetLayerAudible { comp, .. }
@@ -1655,7 +1660,10 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 (&**kind, &l.kind),
                 (LayerKind::Model { item: a, .. }, LayerKind::Model { item: b, .. }) if a == b
             );
-            if !same_model && !(convertible(kind) && convertible(&l.kind)) {
+            if !same_model
+                && !(convertible(kind) && convertible(&l.kind))
+                && !(kind.has_source() && l.kind.has_source())
+            {
                 return Err(OpError::KindNotConvertible);
             }
             let previous = std::mem::replace(&mut l.kind, (**kind).clone());
@@ -1688,6 +1696,11 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 adjustment: previous,
             })
         }
+        Op::SetLayerOrient {
+            comp,
+            layer,
+            orient,
+        } => crate::orient::set(doc, *comp, *layer, *orient),
         Op::SetLayerPitchFollowsSpeed {
             comp,
             layer,

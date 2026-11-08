@@ -4,6 +4,7 @@
 // to one is always a new lens.
 
 import 'dart:async';
+import 'dart:io' show File;
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
@@ -11,15 +12,19 @@ import 'package:uuid/uuid.dart';
 
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/lens.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/dialog_frame.dart';
+import '../shell/theme_name_dialog.dart' show askThemeName;
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'shader_editor.dart' show InstanceHome;
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_menus.dart';
 
 const double lensWindowWidth = 900;
 const double _bodyHeight = 650;
@@ -285,6 +290,51 @@ class _LensWindowState extends State<_LensWindow> {
     }
   }
 
+  /// One of your lenses under a new name, in the same file.
+  Future<void> _renameFile(String path, String was) async {
+    final name =
+        await askThemeName(context, title: l10n.rename, suggested: was, confirm: l10n.rename);
+    if (name == null || name.trim().isEmpty || !mounted) return;
+    try {
+      final lens = await readLens(path: path);
+      await saveUserLens(
+          lens: BridgeLens(
+              name: name.trim(), focalMm: lens.focalMm, rows: lens.rows),
+          path: path);
+      if (!mounted) return;
+      setState(() => _yours = userLenses());
+      if (_source == 'file:$path') await _openFile(path);
+    } catch (_) {
+      if (mounted) setState(() => _said = l10n.lensNotSaved);
+    }
+  }
+
+  /// One of your lenses gone. If it was open, the first built-in takes its
+  /// place.
+  Future<void> _deleteFile(String path) async {
+    try {
+      await File(path).delete();
+    } catch (_) {
+      if (mounted) setState(() => _said = l10n.lensNotSaved);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _yours = userLenses());
+    if (_source == 'file:$path') _openLibrary(widget.model);
+  }
+
+  /// A copy of surface [i], straight after it.
+  void _duplicateRow(int i) {
+    final l = _draft!;
+    if (l.rows.length >= _maxSurfaces) return;
+    _edit(BridgeLens(
+      name: l.name,
+      focalMm: l.focalMm,
+      // One stop: the copy of the stop is plain glass.
+      rows: [...l.rows]..insert(i + 1, _with(l.rows[i], stop: false)),
+    ));
+  }
+
   void _use() {
     final draft = _draft;
     if (draft == null) return;
@@ -348,10 +398,46 @@ class _LensWindowState extends State<_LensWindow> {
 
   Widget _entry(LumitTheme t, String source, String label, VoidCallback onTap) {
     final on = _source == source;
+    final path = source.startsWith('file:') ? source.substring(5) : null;
+    // One of your own, in your lenses folder, rather than a file brought in.
+    final yours = _yours.any((f) => f.path == path);
     return GestureDetector(
       key: ValueKey('lens-entry-$source'),
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onSecondaryTapUp: (d) => showMenuAt<void>(
+        context: context,
+        position: d.globalPosition,
+        rows: (closeWith) {
+          void close() => closeWith(null);
+          // A row that takes this lens opens it first, so the rest of the
+          // window is about the lens it's being done to.
+          Future<void> opened(VoidCallback then) async {
+            onTap();
+            if (path != null) await _openFile(path);
+            if (mounted) then();
+          }
+
+          return [
+            viewerRow(l10n.lensUse, () => opened(_use), close,
+                id: 'lens-menu-use'),
+            viewerRow(l10n.lensSave, () => opened(_save), close,
+                id: 'lens-menu-save'),
+            if (yours) ...[
+              const MenuDivider(),
+              viewerRow(l10n.renameEllipsis, () => _renameFile(path!, label),
+                  close,
+                  id: 'lens-menu-rename'),
+              viewerRow(l10n.projectShowInFolder,
+                  () => revealInFolder(path: path!), close,
+                  id: 'lens-menu-show'),
+              const MenuDivider(),
+              viewerRow(l10n.delete, () => _deleteFile(path!), close,
+                  id: 'lens-menu-delete'),
+            ],
+          ];
+        },
+      ),
       child: Container(
         height: _rowHeight,
         color: on ? t.selectionFill : null,
@@ -589,41 +675,56 @@ class _LensWindowState extends State<_LensWindow> {
           speed: 0.1,
           onChanged: (v) => _setRow(i, apply(v.toDouble())),
         );
-    return SizedBox(
-      height: _rowHeight + 2,
-      child: Row(children: [
-        SizedBox(
-          width: 26,
-          child: Text('${i + 1}', style: t.mono.copyWith(color: t.textMuted)),
-        ),
-        _cell(
-            _widths[0],
-            r.stop
-                ? const SizedBox.shrink()
-                : field(r.radiusMm, -100000, 100000, 3,
-                    (v) => _with(r, radiusMm: v))),
-        _cell(_widths[1],
-            field(r.thicknessMm, 0, 10000, 3, (v) => _with(r, thicknessMm: v))),
-        _cell(_widths[2], field(r.ior, 1, 3, 5, (v) => _with(r, ior: v))),
-        _cell(_widths[3], field(r.abbe, 0, 120, 2, (v) => _with(r, abbe: v))),
-        _cell(_widths[4],
-            field(r.semiApMm, 0.01, 1000, 3, (v) => _with(r, semiApMm: v))),
-        _cell(
-            _widths[5], field(r.coating, 0, 8, 0, (v) => _with(r, coating: v))),
-        _cell(
-            _widths[6],
-            HouseCheckbox(
-              value: r.stop,
-              onChanged: (on) => _setRow(i, _with(r, stop: on)),
-            )),
-        GestureDetector(
-          key: ValueKey('lens-remove-$i'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _removeRow(i),
-          child: glyph.LumitIcon(LumitIcons.close,
-              size: 10, colour: t.textMuted, semanticLabel: l10n.lensRemove),
-        ),
-      ]),
+    final count = _draft!.rows.length;
+    return ViewerRightClick(
+      rows: (close) => [
+        viewerRow(l10n.lensAddSurface,
+            count >= _maxSurfaces ? null : () => _duplicateRow(i), close,
+            id: 'lens-row-add-$i'),
+        viewerRow(l10n.lensStop, () => _setRow(i, _with(r, stop: !r.stop)),
+            close,
+            id: 'lens-row-stop-$i', ticked: r.stop),
+        const MenuDivider(),
+        viewerRow(l10n.lensRemove, count <= 3 ? null : () => _removeRow(i),
+            close,
+            id: 'lens-row-remove-$i'),
+      ],
+      child: SizedBox(
+        height: _rowHeight + 2,
+        child: Row(children: [
+          SizedBox(
+            width: 26,
+            child: Text('${i + 1}', style: t.mono.copyWith(color: t.textMuted)),
+          ),
+          _cell(
+              _widths[0],
+              r.stop
+                  ? const SizedBox.shrink()
+                  : field(r.radiusMm, -100000, 100000, 3,
+                      (v) => _with(r, radiusMm: v))),
+          _cell(_widths[1],
+              field(r.thicknessMm, 0, 10000, 3, (v) => _with(r, thicknessMm: v))),
+          _cell(_widths[2], field(r.ior, 1, 3, 5, (v) => _with(r, ior: v))),
+          _cell(_widths[3], field(r.abbe, 0, 120, 2, (v) => _with(r, abbe: v))),
+          _cell(_widths[4],
+              field(r.semiApMm, 0.01, 1000, 3, (v) => _with(r, semiApMm: v))),
+          _cell(
+              _widths[5], field(r.coating, 0, 8, 0, (v) => _with(r, coating: v))),
+          _cell(
+              _widths[6],
+              HouseCheckbox(
+                value: r.stop,
+                onChanged: (on) => _setRow(i, _with(r, stop: on)),
+              )),
+          GestureDetector(
+            key: ValueKey('lens-remove-$i'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _removeRow(i),
+            child: glyph.LumitIcon(LumitIcons.close,
+                size: 10, colour: t.textMuted, semanticLabel: l10n.lensRemove),
+          ),
+        ]),
+      ),
     );
   }
 }

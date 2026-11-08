@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/grade_clipboard.dart' show copyGrade, pasteGrade;
 import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
 import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
@@ -26,8 +27,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
-import 'package:lumit_flutter/shell/layer_settings_frb.dart' show newSolidFrb;
-import 'package:lumit_flutter/shell/light_settings_dialog.dart';
+import 'package:lumit_flutter/panels/retime_commands.dart' show holdHere;
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
@@ -54,6 +54,7 @@ import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
 import 'package:lumit_flutter/state/keymap.dart' show chordText;
 import 'package:lumit_flutter/state/settings.dart'
     show LoopMode, ToolBarPosition;
@@ -615,6 +616,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         Panel.timeline || Panel.audioTimeline => BridgeKeyContext.timeline,
         Panel.cutTimeline => BridgeKeyContext.cut,
         Panel.effectControls => BridgeKeyContext.effects,
+        Panel.graph => BridgeKeyContext.nodes,
         _ => BridgeKeyContext.global,
       };
 
@@ -854,6 +856,31 @@ class _LumitAppViewState extends State<LumitAppView> {
               ? entry.info.inFrame
               : entry.info.outFrame);
         }
+      case 'layer.retime.hold':
+        holdHere(context, ui);
+      case 'layer.retime.ramp':
+        final ramp = rampRow(context, ui);
+        if (ramp == null) {
+          handled = false;
+        } else {
+          ramp();
+        }
+      // The Effect menu's two rows above its categories.
+      case 'effect.apply.last':
+        final layers = ui.selectedLayers.value;
+        final last = EffectDragData.last;
+        if (layers.isEmpty || last == null) {
+          handled = false;
+        } else {
+          addEffectToLayers(state, ui, layers, last);
+        }
+      case 'effect.remove.all':
+        final layers = ui.selectedLayers.value;
+        if (layers.isEmpty) {
+          handled = false;
+        } else {
+          removeAllEffects(state, layers);
+        }
       case 'layer.retime.enable':
         // Give the selected layer a Retime, or take it away again (docs/04
         // §12). On installs the identity map, so the picture does not move —
@@ -866,29 +893,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           state.toggleRetime(layer);
         }
-      // Layer ▸ New from the keyboard: the same engine call the menu row
-      // makes, on the fronted composition.
-      // A light or a solid asks for its settings first, as the menu row does.
-      case 'layer.new.light.point' || 'layer.new.solid':
-        if (comp == null) {
-          handled = false;
-        } else {
-          (action == 'layer.new.solid' ? newSolidFrb : newLightFrb)(
-            context: context,
-            comp: comp,
-            row: newLayerRow(ui, comp),
-            onDone: state.notifyDocumentChanged,
-          );
-        }
-      // An empty row for clips, picture or sound.
-      case 'layer.new.audio' || 'layer.new.sequence':
-        if (comp == null) {
-          handled = false;
-        } else {
-          insertEmptyLayer(ui, comp, action);
-          state.notifyDocumentChanged();
-        }
-      case 'layer.new.text' ||
+      // Layer ▸ New from the keyboard: the menu row's own call.
+      case 'layer.new.light.point' ||
+            'layer.new.solid' ||
+            'layer.new.audio' ||
+            'layer.new.sequence' ||
+            'layer.new.text' ||
             'layer.new.camera' ||
             'layer.new.adjustment' ||
             'layer.new.null' ||
@@ -896,23 +906,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (comp == null) {
           handled = false;
         } else {
-          // Directly above the selected layer, exactly as the menu row does.
-          final row = newLayerRow(ui, comp);
-          switch (action) {
-            case 'layer.new.text':
-              comp.addTextLayer(row: row);
-            case 'layer.new.camera':
-              comp.addCameraLayer(row: row);
-            case 'layer.new.adjustment':
-              comp.addAdjustmentLayer(row: row);
-            case 'layer.new.null':
-              comp.addNullLayer(row: row);
-            case 'layer.new.card':
-              ui.setSelection([
-                comp.addCardLayer(row: row, frame: ui.playheadFrame.value),
-              ]);
-          }
-          state.notifyDocumentChanged();
+          newLayerFrb(context, ui, comp, action);
         }
       // The Viewer's own magnification and preview resolution (docs/07 §2.2,
       // §15). Both are asked for rather than done here: the magnification
@@ -987,6 +981,11 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = chordText(event) != 'Escape' && ui.switchToLastView();
       case 'viewer.3d.camera':
         handled = ui.backToActiveCamera();
+      case final fixed when fixed.startsWith('viewer.3d.view.'):
+        final look = ViewerView.values.where((v) => v.action == fixed);
+        final view = ui.views.active;
+        handled = look.isNotEmpty && view != null;
+        if (handled) ui.setViewerView(look.first, viewId: view.engineId);
       case 'viewer.3d.look.selected':
         ui.requestViewerCamera(ViewerCameraCommand.lookAtSelected);
       case 'viewer.3d.look.all':
@@ -1129,11 +1128,18 @@ class _LumitAppViewState extends State<LumitAppView> {
         saveVersionFrb(context, state, ui);
       case 'file.import':
         importFootageFrb(context, state);
-      case 'file.export':
+      case 'file.export' || 'export.queue.add':
         if (comp == null) {
           handled = false;
         } else {
           exportFrb(context);
+        }
+      // Composition ▸ Save frame as….
+      case 'comp.frame.save':
+        if (comp == null) {
+          handled = false;
+        } else {
+          saveCompFrameFrb(context, ui, comp);
         }
       case 'comp.new':
         if (project == null) {
@@ -1141,11 +1147,21 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           newCompositionFrb(context, state);
         }
+      case 'comp.settings':
+        if (comp == null) {
+          handled = false;
+        } else {
+          compSettingsFrb(context, state);
+        }
       // Cut, copy and paste. The same three functions the Edit menu's
       // rows call — the chords had no handler at all before, which is why
       // `Ctrl+C` on a selected layer did nothing while the menu row worked.
       case 'edit.copy':
         handled = copySelectionFrb(ui);
+      case 'grade.copy':
+        handled = copyGrade(ui);
+      case 'grade.paste':
+        handled = pasteGrade(state, ui);
       case 'edit.cut':
         handled = cutSelectionFrb(state, ui);
       case 'edit.paste':
@@ -1197,6 +1213,10 @@ class _LumitAppViewState extends State<LumitAppView> {
           addMarkerFrb(comp, frame: ui.playheadFrame.value);
           state.notifyDocumentChanged();
         }
+      // The marker either side of the playhead, the menu row's own step.
+      case 'marker.prev' || 'marker.next':
+        handled = comp != null &&
+            stepToMarkerFrb(ui, comp, back: action == 'marker.prev');
       // A region over the work area, as Vegas makes one over its time
       // selection. Ahead of the numbered markers, which share the prefix.
       case 'marker.add.region':
@@ -1253,11 +1273,25 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else if (ui.sourceView case final view?) {
           ui.markSource(view, markIn: action == 'cut.mark.in');
         }
+      // Shift+I and Shift+O stand the source on its marks.
+      case 'cut.goto.in' || 'cut.goto.out':
+        final view = ui.sourceView;
+        final mark =
+            action == 'cut.goto.in' ? view?.sourceIn : view?.sourceOut;
+        if (view == null || mark == null) {
+          handled = false;
+        } else {
+          ui.seekFootageView(view, mark);
+        }
       // The two ways of putting the marked span down at the playhead.
       case 'cut.insert' || 'cut.overwrite':
         if (ui.sourceView case final view?) {
           ui.placeSource(view, insert: action == 'cut.insert');
         }
+      case 'cut.replace':
+        if (ui.sourceView case final view?) ui.replaceSource(view);
+      case 'cut.fit.fill':
+        if (ui.sourceView case final view?) ui.fitSource(view);
       // The rest of the Cut context's keys act on the Cut timeline's own
       // clips, which the panel answers for on its own key handler; the
       // chord is taken here so nothing else answers it.
@@ -1290,11 +1324,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (layers.isEmpty) {
           handled = false;
         } else {
-          for (final layer in layers) {
-            layer.delete();
-          }
-          ui.clearSelection();
-          state.notifyDocumentChanged();
+          deleteLayersFrb(state, ui, layers);
         }
       // The Animation menu's keyframe rows, pressed from the keyboard. Each
       // is the row itself, so a key and its menu row cannot come to differ,
@@ -1329,7 +1359,11 @@ class _LumitAppViewState extends State<LumitAppView> {
             'layer.order.top' ||
             'layer.order.bottom':
         handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
-      case 'layer.centre' || 'layer.centre.anchor':
+      case 'layer.centre' ||
+            'layer.centre.anchor' ||
+            'layer.fit' ||
+            'layer.fit.width' ||
+            'layer.fit.height':
         handled = MenuEntry.pressAction(transformRows(state, ui), action);
       case 'layer.project.from.camera':
         handled =
@@ -1429,11 +1463,15 @@ bool _pressedOnce(String action) =>
       'layer.unlock.all',
       'layer.centre',
       'layer.centre.anchor',
+      'layer.fit',
+      'layer.fit.width',
+      'layer.fit.height',
       'layer.settings',
       'mask.feather',
       'mask.invert',
       'comp.trim.workarea',
       'marker.add.region',
+      'export.queue.add',
       'export.queue.open',
       'help.open',
       'viewer.controls.toggle',
@@ -1451,7 +1489,7 @@ Future<void> openPresetOrTheme(
     if (layer == null) {
       app.postNotice(l10n.selectALayer);
     } else {
-      await applyPresetFile(app, layer, preset);
+      await applyPresetFile(app, layer, preset, ui.playheadFrame.value);
     }
   }
   final theme = themePathFromArgs(asked);

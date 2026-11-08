@@ -533,6 +533,14 @@ impl LayerReference {
                 edit(&mut clips[index].effects)?;
                 return self.commit_clips(clips);
             }
+            // One instance, carried as a list of at most one, as the Inputs are.
+            InstanceHome::ClipTransition(clip) => {
+                let (mut clips, index) = self.clips_and_index(clip)?;
+                let mut list: Vec<_> = clips[index].transition.take().into_iter().collect();
+                edit(&mut list)?;
+                clips[index].transition = list.into_iter().next();
+                return self.commit_clips(clips);
+            }
             InstanceHome::ModelRows => self.model_rows_op(edit)?,
             // One instance, carried as a list of at most one so the edit
             // closure is the same closure the other three homes take. An edit

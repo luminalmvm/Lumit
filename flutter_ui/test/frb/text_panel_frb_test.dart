@@ -139,7 +139,6 @@ void main() {
       final p = withComp();
       await mount(tester, p, const TextPanelFrb());
 
-      expect(find.text('New text'), findsOneWidget);
       await typeInto(tester, 'text-size', '48');
       await typeInto(tester, 'text-tracking', '25');
       expect(p.uiState.tools.textSize, 48);

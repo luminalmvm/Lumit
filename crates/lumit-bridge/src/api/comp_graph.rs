@@ -484,6 +484,7 @@ pub(crate) fn wiring_into(wiring: BridgeCompWiring, instances: Vec<EffectInstanc
     CompGraph {
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes,
         edges: wiring
             .edges

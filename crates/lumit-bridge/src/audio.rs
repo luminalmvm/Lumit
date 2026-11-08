@@ -50,6 +50,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use uuid::Uuid;
 
 mod engine;
+pub(crate) mod loudness;
 pub(crate) mod mix_peaks;
 
 /// A command for the audio thread — the only code that touches the engine.

@@ -45,7 +45,10 @@ import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show puppetPinCopy;
+import '../shell/theme_name_dialog.dart' show askThemeName;
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_gizmo.dart';
+import 'viewer_menus.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_tool_cursor.dart';
 
@@ -110,6 +113,9 @@ class ViewerPuppetLayer extends StatefulWidget {
 
   final VoidCallback onChanged;
 
+  /// Where a right click away from a pin goes.
+  final ViewerMenuHost menus;
+
   const ViewerPuppetLayer({
     super.key,
     required this.active,
@@ -119,6 +125,7 @@ class ViewerPuppetLayer extends StatefulWidget {
     required this.comp,
     required this.boxes,
     required this.onChanged,
+    required this.menus,
   });
 
   @override
@@ -337,6 +344,7 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapUp: _onTapUp,
+            onSecondaryTapUp: _onSecondaryTapUp,
             onPanStart: _onPanStart,
             onPanUpdate: _onPanUpdate,
             onPanEnd: (_) => _onPanEnd(),
@@ -440,6 +448,48 @@ class _ViewerPuppetLayerState extends State<ViewerPuppetLayer> {
         _ghosts.ghost == null ? l10n.puppetNoMesh : l10n.puppetOutsideMesh,
       );
     }
+  }
+
+  /// A pin's own menu, and the picture's anywhere else.
+  void _onSecondaryTapUp(TapUpDetails details) {
+    final box = _target;
+    final pin = box == null ? null : _pinNear(box, details.localPosition);
+    if (box == null || pin == null) {
+      widget.menus.openPicture?.call(details);
+      return;
+    }
+    void edit(void Function() write) {
+      try {
+        write();
+        widget.onChanged();
+      } catch (_) {
+        // The pin went away under the open menu.
+      }
+    }
+
+    showMenuAt<void>(
+      context: context,
+      position: details.globalPosition,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          viewerRow(l10n.renameEllipsis, () async {
+            final name = await askThemeName(context,
+                title: l10n.rename, suggested: pin.name, confirm: l10n.rename);
+            if (name == null || name.trim().isEmpty) return;
+            edit(() => box.layer
+                .setPuppetPin(pin: puppetPinCopy(pin, name: name.trim())));
+          }, close, id: 'viewer-pin-rename'),
+          const MenuDivider(),
+          viewerRow(l10n.viewerMenuDeletePins,
+              () => edit(() => box.layer.setPuppet(puppet: null)), close,
+              id: 'viewer-pin-delete-all'),
+          viewerRow(l10n.deletePuppetPin,
+              () => edit(() => box.layer.deletePuppetPin(id: pin.id)), close,
+              id: 'viewer-pin-delete'),
+        ];
+      },
+    );
   }
 
   void _onPanStart(DragStartDetails details) {

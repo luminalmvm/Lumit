@@ -19,6 +19,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
@@ -27,9 +28,11 @@ import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show ExpressionTextEditingController;
 import 'graph_channels.dart';
 import 'graph_edits.dart';
+import 'layer_fold_frb.dart' show MaskValue;
+import 'property_link.dart';
 
 /// The narrowest the editor opens, however small the thing it opens over.
-const double _minWidth = 420;
+const double _minWidth = 460;
 
 /// Open the editor over [over], a box in window coordinates.
 ///
@@ -38,7 +41,8 @@ const double _minWidth = 420;
 /// expression, or a plain number when the expression was taken off.
 /// [fresh] is an expression that was only just put there, holding the number
 /// the property had, so it opens selected and the first key typed replaces it.
-/// [held] is what the property holds, when that is not [value].
+/// [held] is what the property holds, when that is not [value]. [decimals]
+/// is how many its value field shows.
 Future<void> showExpressionEditor({
   required BuildContext context,
   required Rect over,
@@ -50,6 +54,7 @@ Future<void> showExpressionEditor({
   bool fresh = false,
   BridgeScalar? held,
   BridgeExpressionRow? row,
+  int decimals = 2,
 }) async {
   final frame =
       Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
@@ -57,13 +62,20 @@ Future<void> showExpressionEditor({
   var draft = value;
   var cancelled = false;
   var removed = false;
+  var converted = false;
+  final ui = Provider.of<LumitUiState>(context, listen: false);
   await showLumitPopup<void>(
     context: context,
     position: over.topLeft,
+    // The footer's link mark is dragged onto rows behind the editor, so the
+    // rows must still feel the pointer while it is up.
+    hoverThrough: true,
     builder: (close) => _ExpressionEditor(
       width: math.max(over.width, _minWidth),
       value: value,
       fresh: fresh,
+      decimals: decimals,
+      layerId: layer.internallayerId,
       sample: (scalar) => sampleScalarWithContext(
           scalar: scalar,
           time: time,
@@ -90,9 +102,20 @@ Future<void> showExpressionEditor({
         removed = true;
         close(null);
       },
+      // An expression only just seeded with the number has nothing to bake.
+      onConvert: fresh
+          ? null
+          : () {
+              converted = true;
+              close(null);
+            },
     ),
   );
-  if (removed) {
+  if (converted) {
+    final keys = expressionAsKeys(ui,
+        expression: draft, comp: comp, layer: layer, held: held, row: row);
+    if (keys != null) onCommit(keys);
+  } else if (removed) {
     // The number the expression was showing, so the picture does not move.
     onCommit(BridgeScalar.static_(sampleScalarWithContext(
         scalar: draft,
@@ -114,6 +137,7 @@ class _ExpressionEditor extends StatefulWidget {
   final double width;
   final BridgeScalar_Expression value;
   final bool fresh;
+  final int decimals;
   final double Function(BridgeScalar_Expression scalar) sample;
 
   /// Why the expression gives no number, or null when it does.
@@ -122,17 +146,24 @@ class _ExpressionEditor extends StatefulWidget {
   final VoidCallback onDone;
   final VoidCallback onCancel;
   final VoidCallback onRemove;
+  final VoidCallback? onConvert;
+
+  /// The layer the expression is on, for the short form of a reference.
+  final UuidValue layerId;
 
   const _ExpressionEditor({
     required this.width,
     required this.value,
     required this.fresh,
+    required this.decimals,
+    required this.layerId,
     required this.sample,
     required this.fault,
     required this.onDraft,
     required this.onDone,
     required this.onCancel,
     required this.onRemove,
+    this.onConvert,
   });
 
   @override
@@ -166,6 +197,21 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
 
   /// The controller also speaks when only the caret moved, which is no change.
   void _changed() => _write(BridgeScalar_Expression(_text.text, _draft.field1));
+
+  /// A reference dropped from the footer's mark: in at the caret, or in place
+  /// of what is selected, with the caret after it.
+  void _insert(String reference) {
+    final v = _text.value;
+    final sel = v.selection.isValid
+        ? v.selection
+        : TextSelection.collapsed(offset: v.text.length);
+    final text = v.text.replaceRange(sel.start, sel.end, reference);
+    _text.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: sel.start + reference.length),
+    );
+    _focus.requestFocus();
+  }
 
   void _write(BridgeScalar_Expression next) {
     if (next == _draft) return;
@@ -220,56 +266,143 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                children: [
-                  // What it comes to, or why it comes to nothing. The engine
-                  // words the reason, and it names the line.
-                  Expanded(
-                    child: fault != null
-                        ? Text(
-                            fault,
-                            key: const ValueKey('expression-editor-fault'),
-                            style: t.small.copyWith(color: t.error),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        : Text(
-                            '= ${widget.sample(_draft).toStringAsPrecision(6)}',
-                            key: const ValueKey('expression-editor-value'),
-                            style: t.mono.copyWith(color: t.textMuted),
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                  ),
-                  HouseButton(
-                    key: const ValueKey('expression-editor-remove'),
-                    small: true,
-                    frameless: true,
-                    onPressed: widget.onRemove,
-                    child: Text(l10n.removeExpression, style: t.small),
-                  ),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    width: 110,
-                    height: 22,
-                    child: ExpressionLanguagePicker(
-                      key: const ValueKey('expression-editor-language'),
-                      value: _draft.field1,
-                      onChanged: (language) {
-                        _write(BridgeScalar_Expression(_text.text, language));
-                        // Back to the text, so Escape still reaches it.
-                        _focus.requestFocus();
-                      },
+              child: LayoutBuilder(builder: (context, box) {
+                // The two words share what the number, the mark and the
+                // language leave, and shorten rather than run off the edge.
+                final words = widget.onConvert == null ? 1 : 2;
+                final room = math.max(40.0,
+                    (box.maxWidth - 56 - 22 - 6 - 110 - 12 * words) / words);
+                Widget word(String text) => ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: room),
+                      child: Text(text,
+                          style: t.small,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis),
+                    );
+                return Row(
+                  children: [
+                    // What it comes to, or why it comes to nothing. The engine
+                    // words the reason, and it names the line.
+                    Expanded(
+                      child: fault != null
+                          ? Text(
+                              fault,
+                              key: const ValueKey('expression-editor-fault'),
+                              style: t.small.copyWith(color: t.error),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : Text(
+                              '= ${widget.sample(_draft).toStringAsFixed(
+                                  widget.decimals)}',
+                              key: const ValueKey('expression-editor-value'),
+                              style: t.mono.copyWith(color: t.textMuted),
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                     ),
-                  ),
-                ],
-              ),
+                    // Dragged onto a property row, the reference lands at
+                    // the caret.
+                    LinkMark(
+                      key: const ValueKey('expression-editor-link'),
+                      always: true,
+                      name: l10n.menuAddExpression,
+                      link: PropertyLink(
+                        layer: widget.layerId,
+                        language: _draft.field1,
+                        insert: _insert,
+                      ),
+                    ),
+                    if (widget.onConvert case final convert?)
+                      HouseButton(
+                        key: const ValueKey('expression-editor-convert'),
+                        small: true,
+                        frameless: true,
+                        onPressed: convert,
+                        child: word(l10n.expressionConvertToKeyframes),
+                      ),
+                    HouseButton(
+                      key: const ValueKey('expression-editor-remove'),
+                      small: true,
+                      frameless: true,
+                      onPressed: widget.onRemove,
+                      child: word(l10n.removeExpression),
+                    ),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      width: 110,
+                      height: 22,
+                      child: ExpressionLanguagePicker(
+                        key: const ValueKey('expression-editor-language'),
+                        value: _draft.field1,
+                        onChanged: (language) {
+                          _write(BridgeScalar_Expression(_text.text, language));
+                          // Back to the text, so Escape still reaches it.
+                          _focus.requestFocus();
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              }),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+/// [expression] as keys, one a frame across [layer]'s span, each holding the
+/// number it comes to there, for Convert to keyframes. Null when the layer is
+/// not in the open composition.
+BridgeScalar? expressionAsKeys(
+  LumitUiState ui, {
+  required BridgeScalar_Expression expression,
+  required CompositionReference comp,
+  required LayerReference layer,
+  BridgeScalar? held,
+  BridgeExpressionRow? row,
+}) {
+  final info = ui.model.byId(layer.internallayerId)?.info;
+  if (info == null) return null;
+  final last = math.max(info.inFrame, info.outFrame - 1);
+  try {
+    return BridgeScalar.keyframed([
+      for (var frame = info.inFrame; frame <= last; frame++)
+        BridgeKeyframe(
+          time: timeOfFrame(comp, frame),
+          value: sampleScalarWithContext(
+              scalar: expression,
+              time: timeOfFrame(comp, frame),
+              layer: layer,
+              held: held ?? expression,
+              row: row),
+          interpIn: const BridgeSideInterp.linear(),
+          interpOut: const BridgeSideInterp.linear(),
+        ),
+    ]);
+  } catch (_) {
+    // The layer or its comp went away under the press.
+    return null;
+  }
+}
+
+/// How many decimals [channel]'s value field shows, which the number its
+/// expression comes to is shown with too.
+int expressionDecimals(GraphChannel channel) {
+  if (channel.param case final param?) {
+    return param.kind is BridgeParamKind_Int ? 0 : 2;
+  }
+  if (channel.maskValue case final value?) {
+    return value == MaskValue.opacity ? 0 : 1;
+  }
+  return switch (channel.prop) {
+    BridgeTransformProp.opacity || BridgeTransformProp.zoom => 0,
+    null => 2,
+    _ => 1,
+  };
 }
 
 /// An expression drawn on one line, in its language's colours.
@@ -329,6 +462,7 @@ class ExpressionLane extends StatelessWidget {
                     comp: comp,
                     layer: channel.entry.layer,
                     row: channel.expressionRow,
+                    decimals: expressionDecimals(channel),
                     onCommit: (next) {
                       commitChannelEdits({channel: next});
                       onChanged();

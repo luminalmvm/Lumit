@@ -84,9 +84,10 @@ void main() {
     /// Click a property's name in Graph mode's own outline — the filtered
     /// animated list (§3.3), whose rows are already flat, so the name is the
     /// whole gesture. A **still** property is not on the Animated list, so
-    /// Show is flipped to All to reach it.
+    /// Show is flipped to All to reach it. The outline's row is the first of
+    /// that name: the graph's list of curves names it too.
     Future<void> pickProperty(WidgetTester tester, String label) async {
-      await tester.tap(find.text(label));
+      await tester.tap(find.text(label).first);
       await tester.pump();
     }
 
@@ -100,15 +101,16 @@ void main() {
     Future<void> mountGraph(WidgetTester tester, dynamic p,
         {bool selectOpacity = true}) async {
       // The outline alone is ~740 px of columns; the default 800×600 test
-      // surface would push the graph pane off screen.
-      tester.view.physicalSize = const Size(1280, 600);
+      // surface would push the graph pane off screen, and a plot under
+      // 560 px folds the graph switch to one word.
+      tester.view.physicalSize = const Size(1440, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(hostPanel(
         child: const TimelinePanelFrb(),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
-        size: const Size(1280, 600),
+        size: const Size(1440, 600),
       ));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
@@ -647,7 +649,7 @@ void main() {
       final frame = p.comp.frameAtTime(time: opacityKeys(p.layer)[1].time);
       final pill = find.byKey(const ValueKey('graph-value-hint'));
       expect(
-          find.descendant(of: pill, matching: find.text('f$frame')),
+          find.descendant(of: pill, matching: find.text('F$frame')),
           findsOneWidget,
           reason: 'the frame alone');
 
@@ -970,7 +972,7 @@ void main() {
       await tester.tap(
           find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
       await tester.pump();
-      await tester.tap(find.text('Retime'));
+      await tester.tap(find.text('Retime').first);
       await tester.pump();
     }
 
@@ -1153,7 +1155,7 @@ void main() {
       await tester.tap(find.text('Transform'));
       await tester.pump();
 
-      await tester.tap(find.text('Opacity'));
+      await tester.tap(find.text('Opacity').first);
       await tester.pump();
       expect(glyph('transform/opacity@opacity'), findsOneWidget);
 
@@ -1161,7 +1163,7 @@ void main() {
       // curves share the pane, on one value scale (the per-curve ranges died
       // with Normalise).
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.text('Position'));
+      await tester.tap(find.text('Position').first);
       await tester.pump();
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       expect(glyph('transform/opacity@opacity'), findsOneWidget,

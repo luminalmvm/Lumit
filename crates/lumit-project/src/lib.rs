@@ -2925,6 +2925,7 @@ mod tests {
         layer.graph = LayerGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             nodes: vec![wiggle],
             edges: vec![
@@ -3083,6 +3084,7 @@ mod tests {
         let wanted = CompGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![read, input, GraphNode::Fx(blur), GraphNode::Fx(wiggle), out],
             edges: vec![
                 GraphEdge {

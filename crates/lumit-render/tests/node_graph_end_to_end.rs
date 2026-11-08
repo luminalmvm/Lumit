@@ -122,6 +122,7 @@ fn graph_comp(name: &str, nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> Compo
     c.graph = Some(CompGraph {
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes,
         edges,
         layout: Vec::new(),
@@ -696,6 +697,7 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
         host.graph = lumit_core::graph::LayerGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle],
@@ -811,6 +813,7 @@ fn a_cycle_through_a_node_graph_box_renders_a_passthrough() {
     comp.graph = Some(CompGraph {
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes: vec![src, box_, o],
         edges: vec![
             wire(src_id, "output", box_id, "input"),

@@ -74,6 +74,8 @@ const _bannedWordIsAnotherSense = {
   'cutSoundOnItsOwnTrack',
   // The Cut and Audio timelines' clip menu, handing a clip back its row's.
   'clipColourFromTrack',
+  // The Cut timeline's menus, picking every clip on the row.
+  'cutSelectTrack',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.
@@ -158,8 +160,12 @@ void main() {
     final arb = _arb();
     final bad = <String>[];
     for (final m in _messages(arb)) {
+      // A plural or select branch such as `=0{Unpacked}` is text, not a
+      // placeholder.
+      final branch = RegExp(r'(=\d+|\b(zero|one|two|few|many|other))\s*$');
       final used = RegExp(r'\{(\w+)\}')
           .allMatches(m.value)
+          .where((x) => !branch.hasMatch(m.value.substring(0, x.start)))
           .map((x) => x.group(1)!)
           .toSet();
       if (used.isEmpty) continue;

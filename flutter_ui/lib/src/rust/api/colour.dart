@@ -7,7 +7,18 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `with_colour`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// The Temperature and Tint that turn the colour `(r, g, b)`, off a picture
+/// showing the `temperature` and `tint` given, grey.
+BridgeWhiteBalance whiteBalanceFor(
+        {required double r,
+        required double g,
+        required double b,
+        required double temperature,
+        required double tint}) =>
+    BridgeLib.instance.api.crateApiColourWhiteBalanceFor(
+        r: r, g: g, b: b, temperature: temperature, tint: tint);
 
 /// One blank in a refusal's sentence, by name: `name` → `FixedFunctionTransform`,
 /// `in_space` → `fancy`. Named rather than positional so a translation may put
@@ -226,4 +237,26 @@ class BridgeColourSummary {
           workingFromConfig == other.workingFromConfig &&
           workingSpace == other.workingSpace &&
           problems == other.problems;
+}
+
+/// What a white balance pick writes: the Temperature effect's two rows.
+class BridgeWhiteBalance {
+  final double temperature;
+  final double tint;
+
+  const BridgeWhiteBalance({
+    required this.temperature,
+    required this.tint,
+  });
+
+  @override
+  int get hashCode => temperature.hashCode ^ tint.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeWhiteBalance &&
+          runtimeType == other.runtimeType &&
+          temperature == other.temperature &&
+          tint == other.tint;
 }

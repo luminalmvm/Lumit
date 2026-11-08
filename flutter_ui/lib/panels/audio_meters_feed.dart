@@ -9,9 +9,9 @@
 // the wells never hear it (the rebuild gates; docs/impl/ui-performance.md
 // WP-2's listenable-inside-a-boundary shape).
 //
-// The peak hold — the line resting above the bar for a few seconds — is
-// computed here, because docs/09 §3.1 makes it the panel's own and because a
-// painter must stay a pure function of the frame it is handed.
+// The peak hold, the line resting above the bar, is computed here, because
+// docs/09 §3.1 makes it the panel's own and because a painter must stay a pure
+// function of the frame it is handed.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -19,10 +19,68 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 
-/// How long the hold line rests on the loudest peak before letting go —
-/// docs/09 §3.1's "a few seconds", and the board's own caption ("peak hold
-/// 3 s").
-const Duration peakHoldTime = Duration(seconds: 3);
+/// How long every meter's hold line rests on the loudest peak before letting
+/// go, in seconds. Nought draws no line, and a negative number holds it until
+/// [resetMeterPeaks]. Set from the person's settings, and shared because a
+/// Mixer and an Audio panel side by side should not disagree about it.
+int meterPeakHoldSeconds = 3;
+
+/// The feeds polling now, for [resetMeterPeaks] to reach.
+final Set<AudioMeterFeed> _running = {};
+
+/// Forget every held peak and put the limiter's light out. The mix is untouched.
+void resetMeterPeaks() {
+  resetAudioClip();
+  for (final feed in _running) {
+    feed._holds.clear();
+    // A parked poll would leave the lines where they are.
+    feed.wake();
+  }
+}
+
+/// Start the master's integrated loudness and its true peak afresh.
+void resetLoudness() {
+  resetAudioLoudness();
+  for (final feed in _running) {
+    feed.wake();
+  }
+}
+
+/// The master's loudness as drawn: short-term and integrated in LUFS, minus
+/// infinity while there is none, and the true peak in dB, rounded to the tenth
+/// the numbers show so a reading that has not moved on screen changes nothing.
+class LoudnessLevels {
+  final double shortTerm, integrated, truePeak;
+
+  const LoudnessLevels({
+    this.shortTerm = double.negativeInfinity,
+    this.integrated = double.negativeInfinity,
+    this.truePeak = double.negativeInfinity,
+  });
+
+  static const LoudnessLevels silence = LoudnessLevels();
+
+  factory LoudnessLevels.of(BridgeAudioLoudness l) {
+    double tenth(double v) => v.isFinite ? (v * 10).roundToDouble() / 10 : v;
+    return LoudnessLevels(
+      shortTerm: tenth(l.shortTerm),
+      integrated: tenth(l.integrated),
+      truePeak: tenth(l.truePeak > 0
+          ? 20 * math.log(l.truePeak) / math.ln10
+          : double.negativeInfinity),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LoudnessLevels &&
+      other.shortTerm == shortTerm &&
+      other.integrated == integrated &&
+      other.truePeak == truePeak;
+
+  @override
+  int get hashCode => Object.hash(shortTerm, integrated, truePeak);
+}
 
 /// One strip's reading, dB-ready: linear amplitudes straight off the tap,
 /// converted where they are drawn.
@@ -109,6 +167,11 @@ class AudioMeterFeed {
   /// changes state, never per tick.
   final ValueNotifier<bool> clipped = ValueNotifier(false);
 
+  /// The master's loudness, its own listenable for the same reason: its
+  /// numbers rebuild when they change, and nothing else does.
+  final ValueNotifier<LoudnessLevels> loudness =
+      ValueNotifier(LoudnessLevels.silence);
+
   Timer? _timer;
   final Map<String, _Hold> _holds = {};
 
@@ -116,6 +179,11 @@ class AudioMeterFeed {
   /// engine. The application never touches it.
   @visibleForTesting
   List<BridgeAudioMeter> Function() read = audioMeters;
+
+  /// What [tick] reads the loudness with, asked only when the engine has a
+  /// master to measure.
+  @visibleForTesting
+  BridgeAudioLoudness Function() readLoudness = audioLoudness;
 
   /// About 30 frames a second: enough for a bar to read as live, and each
   /// tick is one sync crossing that copies a handful of numbers.
@@ -133,6 +201,7 @@ class AudioMeterFeed {
   static const Duration _quiet = Duration(seconds: 1);
 
   void start({Listenable? wake}) {
+    _running.add(this);
     _wake = wake?..addListener(this.wake);
     this.wake();
   }
@@ -144,6 +213,7 @@ class AudioMeterFeed {
   }
 
   void stop() {
+    _running.remove(this);
     _wake?.removeListener(wake);
     _wake = null;
     _timer?.cancel();
@@ -173,6 +243,9 @@ class AudioMeterFeed {
       frame.value = next;
     }
     if (clipped.value != anyClipped) clipped.value = anyClipped;
+    if (strips.containsKey('')) {
+      loudness.value = LoudnessLevels.of(readLoudness());
+    }
     if (strips.values.any((s) => s != StripLevels.silence)) {
       _heard = now;
     } else if (_wake != null && now.difference(_heard) > _quiet) {
@@ -182,10 +255,13 @@ class AudioMeterFeed {
   }
 
   /// A rising peak takes the hold at once; a fallen one keeps it for
-  /// [peakHoldTime] and then lets it drop to the level that is there.
+  /// [meterPeakHoldSeconds] and then lets it drop to the level that is there.
   double _hold(String key, double peak, DateTime now) {
+    final seconds = meterPeakHoldSeconds;
+    if (seconds == 0) return 0;
     final hold = _holds.putIfAbsent(key, _Hold.new);
-    if (peak >= hold.value || now.difference(hold.since) > peakHoldTime) {
+    if (peak >= hold.value ||
+        (seconds > 0 && now.difference(hold.since).inSeconds >= seconds)) {
       hold.value = peak;
       hold.since = now;
     }
@@ -196,5 +272,6 @@ class AudioMeterFeed {
     stop();
     frame.dispose();
     clipped.dispose();
+    loudness.dispose();
   }
 }

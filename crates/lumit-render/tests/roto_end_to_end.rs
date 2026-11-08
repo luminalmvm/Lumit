@@ -264,6 +264,7 @@ fn a_brush_box_in_a_node_graph_cuts_by_the_matte_filed_under_it() {
     graph.graph = Some(CompGraph {
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes: vec![
             GraphNode::Read {
                 id: read,

@@ -76,7 +76,7 @@ pub enum AepError {
     Container(#[from] RifxError),
     /// The container is fine but holds no item tree, so there is no project in
     /// it to speak of.
-    #[error("this After Effects project has no item tree")]
+    #[error("this .aep project has no item tree")]
     NoItemTree,
 }
 

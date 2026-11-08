@@ -22,6 +22,7 @@ import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/theme_swatches.dart';
+import 'dialog_frame.dart';
 
 /// The workspaces offered, in the strip's order.
 const _workspaces = [
@@ -115,173 +116,176 @@ class _FirstRunState extends State<_FirstRun> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final workspace = widget.workspace;
-    return FloatSurface(
-      child: SizedBox.expand(
-        // The look is the workspace's, and each choice here changes it.
-        child: ListenableBuilder(
-          listenable: workspace,
-          builder: (context, _) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                child: Text(l10n.firstRunSetup,
-                    style: t.bodyStrong.copyWith(color: t.textPrimary)),
-              ),
-              // Scrolls when the window is too short for all of it, so no
-              // question is ever out of reach.
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(t.kickerCase(l10n.settingsGroupWorkspace),
-                            style: t.kicker),
-                      ),
-                      // Equal shares, every card as tall as the tallest, so a
-                      // narrow window grows the row down, never sideways.
-                      IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (final preset in _workspaces) ...[
-                              if (preset != _workspaces.first)
-                                const SizedBox(width: 10),
-                              Expanded(
-                                child: _WorkspaceChoice(
-                                  preset: preset,
-                                  chosen: _workspace == preset,
-                                  onTap: () =>
-                                      setState(() => _workspace = preset),
+    return DialogFrame(
+      children: [
+        Expanded(
+          // The look is the workspace's, and each choice here changes it.
+          child: ListenableBuilder(
+            listenable: workspace,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                dialogTitleBar(t,
+                    title: l10n.firstRunSetup,
+                    onClose: () => _answer(null),
+                    keyPrefix: 'first-run'),
+                // Scrolls when the window is too short for all of it, so no
+                // question is ever out of reach.
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(
+                        dialogPadding, 10, dialogPadding, 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 8),
+                          child: Text(t.kickerCase(l10n.settingsGroupWorkspace),
+                              style: t.kicker),
+                        ),
+                        // Equal shares, every card as tall as the tallest, so a
+                        // narrow window grows the row down, never sideways.
+                        IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final preset in _workspaces) ...[
+                                if (preset != _workspaces.first)
+                                  const SizedBox(width: 10),
+                                Expanded(
+                                  child: _WorkspaceChoice(
+                                    preset: preset,
+                                    chosen: _workspace == preset,
+                                    onTap: () =>
+                                        setState(() => _workspace = preset),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Container(height: 1, color: t.hairline),
-                      const SizedBox(height: 14),
-                      _row(
-                        t,
-                        l10n.settingsPageShortcuts,
-                        _Chips<BridgeKeymapPreset>(
-                          id: 'first-run-keys',
-                          options: BridgeKeymapPreset.values,
-                          value: _keys,
-                          recommended: BridgeKeymapPreset.lumit,
-                          label: (keys) => switch (keys) {
-                            BridgeKeymapPreset.lumit => l10n.firstRunLumit,
-                            BridgeKeymapPreset.afterEffects =>
-                              l10n.keymapAfterEffects,
-                            BridgeKeymapPreset.vegas => l10n.firstRunVegasName,
-                          },
-                          onChanged: (keys) => setState(() => _keys = keys),
-                        ),
-                      ),
-                      _row(
-                        t,
-                        l10n.firstRunStyle,
-                        _Chips<ThemeShape>(
-                          id: 'first-run-style',
-                          options: ThemeShape.values,
-                          value: workspace.themeShape,
-                          recommended: ThemeShape.studio,
-                          label: (shape) => switch (shape) {
-                            ThemeShape.studio => l10n.shapeStudio,
-                            ThemeShape.desk => l10n.shapeDesk,
-                            ThemeShape.lantern => l10n.shapeLantern,
-                          },
-                          onChanged: workspace.setShape,
-                        ),
-                      ),
-                      _row(
-                        t,
-                        l10n.settingsColourScheme,
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(
-                              width: 190,
-                              height: _rowControl,
-                              child: BareDropdown<ThemeChoice>(
-                                key: const ValueKey('first-run-scheme'),
-                                value: workspace.themeChoice,
-                                options: workspace.themeChoices,
-                                label: (c) => c.label,
-                                group: (c) => c.group,
-                                onChanged: workspace.choose,
-                                // Hovering a row previews that scheme, on the
-                                // window behind too.
-                                onPreview: workspace.previewChoice,
-                                onPreviewEnd: () =>
-                                    workspace.previewChoice(null),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ThemeSwatchStrip(theme: workspace.theme),
-                          ],
-                        ),
-                      ),
-                      _row(
-                        t,
-                        l10n.settingsLanguage,
-                        SizedBox(
-                          width: 190,
-                          height: _rowControl,
-                          child: BareDropdown<String?>(
-                            key: const ValueKey('first-run-language'),
-                            value: workspace.interface.language,
-                            options: [null, ...languageNames.keys],
-                            // Each language names itself, so the list reads
-                            // the same whichever one is in force.
-                            label: (tag) => tag == null
-                                ? l10n.languageFollowSystem
-                                : languageNames[tag]!,
-                            onChanged: (tag) {
-                              workspace.interface.language = tag;
-                              workspace.settingsChanged();
-                            },
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 18),
+                        Container(height: 1, color: t.hairline),
+                        const SizedBox(height: 14),
+                        _row(
+                          t,
+                          l10n.settingsPageShortcuts,
+                          _Chips<BridgeKeymapPreset>(
+                            id: 'first-run-keys',
+                            options: BridgeKeymapPreset.values,
+                            value: _keys,
+                            recommended: BridgeKeymapPreset.lumit,
+                            label: (keys) => switch (keys) {
+                              BridgeKeymapPreset.lumit => l10n.firstRunLumit,
+                              BridgeKeymapPreset.afterEffects =>
+                                l10n.keymapAfterEffects,
+                              BridgeKeymapPreset.vegas =>
+                                l10n.firstRunVegasName,
+                            },
+                            onChanged: (keys) => setState(() => _keys = keys),
+                          ),
+                        ),
+                        _row(
+                          t,
+                          l10n.firstRunStyle,
+                          _Chips<ThemeShape>(
+                            id: 'first-run-style',
+                            options: ThemeShape.values,
+                            value: workspace.themeShape,
+                            recommended: ThemeShape.studio,
+                            label: (shape) => switch (shape) {
+                              ThemeShape.studio => l10n.shapeStudio,
+                              ThemeShape.desk => l10n.shapeDesk,
+                              ThemeShape.lantern => l10n.shapeLantern,
+                            },
+                            onChanged: workspace.setShape,
+                          ),
+                        ),
+                        _row(
+                          t,
+                          l10n.settingsColourScheme,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 190,
+                                height: _rowControl,
+                                child: BareDropdown<ThemeChoice>(
+                                  key: const ValueKey('first-run-scheme'),
+                                  value: workspace.themeChoice,
+                                  options: workspace.themeChoices,
+                                  label: (c) => c.label,
+                                  group: (c) => c.group,
+                                  onChanged: workspace.choose,
+                                  // Hovering a row previews that scheme, on the
+                                  // window behind too.
+                                  onPreview: workspace.previewChoice,
+                                  onPreviewEnd: () =>
+                                      workspace.previewChoice(null),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ThemeSwatchStrip(theme: workspace.theme),
+                            ],
+                          ),
+                        ),
+                        _row(
+                          t,
+                          l10n.settingsLanguage,
+                          SizedBox(
+                            width: 190,
+                            height: _rowControl,
+                            child: BareDropdown<String?>(
+                              key: const ValueKey('first-run-language'),
+                              value: workspace.interface.language,
+                              options: [null, ...languageNames.keys],
+                              // Each language names itself, so the list reads
+                              // the same whichever one is in force.
+                              label: (tag) => tag == null
+                                  ? l10n.languageFollowSystem
+                                  : languageNames[tag]!,
+                              onChanged: (tag) {
+                                workspace.interface.language = tag;
+                                workspace.settingsChanged();
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                child: Row(
-                  children: [
-                    // The update tick, a smaller question. A page is newest.
-                    if (kIsWeb)
-                      const Spacer()
-                    else ...[
-                      HouseCheckbox(
-                        key: const ValueKey('first-run-auto-update'),
-                        value: _autoUpdate,
-                        onChanged: (on) => setState(() => _autoUpdate = on),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          l10n.settingsAutomaticUpdates,
-                          style: t.small.copyWith(color: t.textMuted),
+                dialogFooter(
+                  t,
+                  keyPrefix: 'first-run',
+                  // The update tick, a smaller question. A page is newest.
+                  leading: kIsWeb
+                      ? null
+                      : GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () =>
+                              setState(() => _autoUpdate = !_autoUpdate),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              HouseCheckbox(
+                                key: const ValueKey('first-run-auto-update'),
+                                value: _autoUpdate,
+                                onChanged: (on) =>
+                                    setState(() => _autoUpdate = on),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(l10n.settingsAutomaticUpdates,
+                                  style: t.body),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                    const SizedBox(width: 12),
+                  actions: [
                     HouseButton(
                       key: const ValueKey('first-run-skip'),
-                      small: true,
-                      frameless: true,
                       onPressed: () => _answer(null),
-                      child: Text(l10n.skip, style: t.small),
+                      child: Text(l10n.skip),
                     ),
-                    const SizedBox(width: 6),
                     HouseButton(
                       key: const ValueKey('first-run-continue'),
                       primary: true,
@@ -291,11 +295,11 @@ class _FirstRunState extends State<_FirstRun> {
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -419,33 +423,28 @@ class _WorkspaceChoice extends StatelessWidget {
       id: 'first-run-workspace-${preset.name}',
       chosen: chosen,
       onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: _drawing.aspectRatio,
-            child: CustomPaint(
-                painter: _WorkspacePainter(preset, t, inner.toDouble())),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(2, 8, 2, 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(preset.title, style: t.bodyPrimary),
-                const SizedBox(height: 2),
-                Text(
-                  switch (preset) {
-                    WorkspacePreset.cut => l10n.firstRunWorkspaceCut,
-                    WorkspacePreset.nodes => l10n.firstRunWorkspaceNodes,
-                    _ => l10n.firstRunWorkspaceEdit,
-                  },
-                  style: t.small.copyWith(color: t.textSecondary),
-                ),
-              ],
+      // The drawing and the name are the card. What it is for is the tip.
+      child: LumitTooltip(
+        message: switch (preset) {
+          WorkspacePreset.cut => l10n.firstRunWorkspaceCut,
+          WorkspacePreset.nodes => l10n.firstRunWorkspaceNodes,
+          _ => l10n.firstRunWorkspaceEdit,
+        },
+        maxWidth: 320,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: _drawing.aspectRatio,
+              child: CustomPaint(
+                  painter: _WorkspacePainter(preset, t, inner.toDouble())),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 8, 2, 2),
+              child: Text(preset.title, style: t.bodyPrimary),
+            ),
+          ],
+        ),
       ),
     );
   }

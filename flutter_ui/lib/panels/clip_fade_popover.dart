@@ -45,6 +45,78 @@ String clipFadeShapeName(String id) => switch (id) {
       _ => l10n.clipFadeSharp,
     };
 
+/// A fade curve drawn small, with its quiet end at the foot. [gain] is what a
+/// fade in plays through, nought to one; a falling fade reads it backwards.
+class FadeCurveGlyph extends StatelessWidget {
+  final double Function(double u) gain;
+  final bool falling;
+  final Color? colour;
+  final double size;
+
+  const FadeCurveGlyph(
+      {super.key,
+      required this.gain,
+      required this.falling,
+      this.colour,
+      this.size = 14});
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+        size: Size.square(size),
+        painter: _FadeGlyphPainter(gain, falling,
+            colour ?? ThemeScope.of(context).theme.textSecondary),
+      );
+}
+
+class _FadeGlyphPainter extends CustomPainter {
+  final double Function(double u) gain;
+  final bool falling;
+  final Color colour;
+
+  const _FadeGlyphPainter(this.gain, this.falling, this.colour);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const inset = 2.0;
+    final w = size.width - inset * 2, h = size.height - inset * 2;
+    final path = Path();
+    for (var i = 0; i <= 20; i++) {
+      final u = i / 20;
+      final x = inset + (falling ? 1 - u : u) * w;
+      final y = inset + (1 - gain(u)) * h;
+      i == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = colour
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FadeGlyphPainter old) =>
+      old.falling != falling || old.colour != colour || old.gain != gain;
+}
+
+/// A shape's row in a fade menu: the tick, the curve as it will fall or rise,
+/// and its name.
+Widget fadeShapeLabel(
+  ({String id, BridgeClipFadeShape shape}) preset, {
+  required bool falling,
+  required bool ticked,
+}) =>
+    Row(children: [
+      menuTick(ticked),
+      FadeCurveGlyph(
+          gain: (u) => clipFadeGain(preset.shape, u), falling: falling),
+      const SizedBox(width: 6),
+      Expanded(child: Text(clipFadeShapeName(preset.id))),
+    ]);
+
 /// Open the fade editor at [position].
 ///
 /// [outgoing] is the shape falling across the join and [incoming] the one
@@ -211,19 +283,6 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              height: t.density.laneRow,
-              decoration: BoxDecoration(
-                color: t.surface2,
-                border: Border(bottom: BorderSide(color: t.hairline)),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(t.kickerCase(l10n.clipFadeShapeTitle),
-                    style: t.kickerOn),
-              ),
-            ),
             // The empty drag handlers put the box in the gesture arena, where
             // the inner member beats an enclosing scroll; the Listener does the
             // work, because it hears the first pointer-down rather than waiting
@@ -255,20 +314,26 @@ class _ClipFadePopoverState extends State<_ClipFadePopover> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_pair) _keepRow(t),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
+                  if (_pair) ...[_keepRow(t), const SizedBox(height: 6)],
+                  // Each preset as the curve it is, its name a tooltip away.
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       for (final preset in clipFadeShapes)
-                        HouseButton(
-                          key: ValueKey<String>('atl-fade-preset-${preset.id}'),
-                          small: true,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          onPressed: () => _pick(preset.shape),
-                          child: Text(clipFadeShapeName(preset.id),
-                              style: t.body.copyWith(color: t.textPrimary)),
+                        LumitTooltip(
+                          message: clipFadeShapeName(preset.id),
+                          child: HouseButton(
+                            key: ValueKey<String>(
+                                'atl-fade-preset-${preset.id}'),
+                            small: true,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            onPressed: () => _pick(preset.shape),
+                            child: FadeCurveGlyph(
+                              gain: (u) => clipFadeGain(preset.shape, u),
+                              falling: _in == null,
+                              colour: t.textPrimary,
+                            ),
+                          ),
                         ),
                     ],
                   ),

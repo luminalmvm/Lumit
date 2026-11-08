@@ -51,13 +51,16 @@ import '../state/motion_paths.dart' show motionPathWith;
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import '../widgets/share_marks.dart';
+import '../shell/menu_bar_frb.dart' show menuEntriesFlyout;
+import '../shell/menu_layer_frb.dart' show transformRows;
+import '../shell/theme_name_dialog.dart' show askThemeName;
 import 'timeline_extras_frb.dart' show DoubleTap, showMenuAt;
 import 'timeline_snap.dart' show snapSuspended;
 import 'viewer_anchor.dart';
 import 'viewer_gizmo_3d.dart';
 import 'viewer_layer_map.dart';
-import 'viewer_overlays.dart'
-    show ViewerOverlayPainter, viewerOverlayToggles, viewerToggleRow;
+import 'viewer_menus.dart';
+import 'viewer_overlays.dart' show ViewerOverlayPainter;
 import 'viewer_shapes.dart' show bezierPath, stillHalfFeather;
 import 'viewer_snap.dart' show snapViewerDrag, viewerSnapTargets;
 import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
@@ -205,6 +208,9 @@ class LayerBox {
   /// back to its first turn the moment the knob was touched.
   final double rotationDegrees;
 
+  /// What the layer's Orient adds to that on the picture, on a flat layer.
+  final double orientDegrees;
+
   /// The layer's puppet, or null on a layer nobody has pinned — which
   /// is most layers. Read from the model with everything else, so drawing the
   /// pins over the picture costs no bridge calls.
@@ -242,6 +248,7 @@ class LayerBox {
     required this.draggable,
     required this.scalable,
     required this.rotationDegrees,
+    this.orientDegrees = 0,
     this.masks = const [],
     this.shapeContents = const [],
     this.pickedItem,
@@ -281,6 +288,7 @@ class LayerBox {
         draggable: draggable,
         scalable: scalable,
         rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+        orientDegrees: orientDegrees,
         masks: masks,
         shapeContents: shapeContents,
         pickedItem: pickedItem,
@@ -309,7 +317,8 @@ class LayerBox {
   /// The same box with the layer turned to [degrees] — the shape a rotation in
   /// flight has, before it is committed.
   LayerBox turnedTo(double degrees) =>
-      copyWith(map: map.turnedTo(degrees), rotationDegrees: degrees);
+      copyWith(
+          map: map.turnedTo(degrees + orientDegrees), rotationDegrees: degrees);
 
   /// The box's four corners in screen space, clockwise from the layer's own
   /// top-left. A rotated layer therefore gives a rotated quad, not an
@@ -487,6 +496,28 @@ class LayerBox {
     return len < 1e-6 ? const Offset(0, -1) : d / len;
   }
 
+  /// Whether [handle] has room on this box as it's drawn. On a small box the
+  /// handles along an edge go first, so they don't pile onto its corners. On a
+  /// sliver its two ends stand in for the corners, and on a tiny box one corner
+  /// stands for them all. What isn't drawn takes no press either.
+  bool showsHandle(GizmoHandle handle) {
+    if (handle == GizmoHandle.anchor) return true;
+    final across = (corners[1] - corners[0]).distance;
+    final down = (corners[3] - corners[0]).distance;
+    const room = gizmoHandleSize * 4;
+    const tiny = gizmoHandleSize * 2;
+    final narrow = across < tiny, flat = down < tiny;
+    if (narrow && flat) return handle == GizmoHandle.bottomRight;
+    return switch (handle) {
+      GizmoHandle.top || GizmoHandle.bottom =>
+        narrow || (!flat && across >= room),
+      GizmoHandle.left || GizmoHandle.right =>
+        flat || (!narrow && down >= room),
+      GizmoHandle.rotate => !narrow,
+      _ => !narrow && !flat,
+    };
+  }
+
   /// The handle under [point], or null when none is. Nearest wins, so two
   /// handles whose slop overlaps on a small box do not fight.
   GizmoHandle? handleHit(Offset point) {
@@ -499,6 +530,7 @@ class LayerBox {
       ...GizmoHandle.scaling,
       GizmoHandle.rotate,
     ]) {
+      if (!showsHandle(handle)) continue;
       final slop = handle == GizmoHandle.anchor
           ? gizmoAnchorSlop / 2
           : gizmoHandleSlop / 2;
@@ -1228,6 +1260,7 @@ BridgeTransform transformWithMotionHandle(
 BridgeTransform _withPosition(
         BridgeTransform tf, BridgeScalar x, BridgeScalar y) =>
     BridgeTransform(
+      orient: tf.orient,
       anchorX: tf.anchorX,
       anchorY: tf.anchorY,
       positionX: x,
@@ -1942,9 +1975,9 @@ class ViewerGizmoLayer extends StatefulWidget {
   /// only the active one answers the arrow keys and a double-click.
   final int? viewId;
 
-  /// Take the picture to a magnification, null for fit: the right-click
-  /// menu's two zoom rows. The panel holds the magnification, so it applies it.
-  final ValueChanged<double?>? onZoom;
+  /// What the picture's menu asks of the panel, and where this layer leaves
+  /// the way to open it for the tools that don't take a right click themselves.
+  final ViewerMenuHost menus;
 
   const ViewerGizmoLayer({
     super.key,
@@ -1958,7 +1991,7 @@ class ViewerGizmoLayer extends StatefulWidget {
     required this.compSize,
     this.showAnchors = false,
     this.viewId,
-    this.onZoom,
+    required this.menus,
     this.cameras = const [],
   });
 
@@ -2066,10 +2099,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
     widget.uiState.alignRequest.addListener(_onAlignRequest);
+    widget.uiState.arrangeRequest.addListener(_onArrangeRequest);
     // Chained, as the panels chain theirs: Delete with path points selected
     // is about the points, and anything else goes on down the chain.
     _priorDeleteClaim = widget.uiState.deleteClaim;
     widget.uiState.deleteClaim = _deleteClaim;
+    widget.menus.openPicture = _openMenu;
   }
 
   /// The rows a drag on the picture writes, for the others in a shared
@@ -2126,9 +2161,11 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   @override
   void dispose() {
     _rest?.cancel();
+    widget.menus.openPicture = null;
     sayInHand(this, const []);
     HardwareKeyboard.instance.removeHandler(_onKey);
     widget.uiState.alignRequest.removeListener(_onAlignRequest);
+    widget.uiState.arrangeRequest.removeListener(_onArrangeRequest);
     if (widget.uiState.deleteClaim == _deleteClaim) {
       widget.uiState.deleteClaim = _priorDeleteClaim;
     }
@@ -2370,7 +2407,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapUp: _onTapUp,
-            onSecondaryTapUp: _onSecondaryTapUp,
+            onSecondaryTapUp: _openMenu,
             onPanStart: _onPanStart,
             onPanUpdate: _onPanUpdate,
             onPanEnd: (_) => _onPanEnd(),
@@ -2485,6 +2522,29 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return any ? Rect.fromLTRB(left, top, right, bottom) : null;
   }
 
+  /// The boxes of the layers a drag can land on: the ones in the picture now,
+  /// less what is being dragged, and less a locked layer or a guide layer.
+  List<Rect> _snapBoxes() {
+    final ui = widget.uiState;
+    if (!ui.tools.snapToLayers) return const [];
+    final dragged = ui.selectedLayerIds;
+    final byId = {
+      for (final e in ui.model.heldLayers) e.layer.internallayerId: e
+    };
+    final t = ui.playheadFrame.value / ui.model.heldFps;
+    double seconds(BridgeRational r) => r.num / r.den;
+    return [
+      for (final box in widget.boxes)
+        if (!box.marker && !dragged.contains(box.id))
+          if (byId[box.id] case final entry?
+              when !entry.info.switches.locked &&
+                  !entry.info.switches.guide &&
+                  t >= seconds(entry.info.span.inPoint) &&
+                  t < seconds(entry.info.span.outPoint))
+            if (_rectOf([box]) case final rect?) rect,
+    ];
+  }
+
   /// The travel the move actually uses, and the lines that took it: the
   /// pointer's own, kept to the axis it has gone furthest along while Shift is
   /// held, then pulled onto the nearest line within the magnet's reach.
@@ -2507,6 +2567,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
     final rect = _selectionRect();
     if (rect == null) return free;
+    final boxes = _snapBoxes();
     List<double> targets(bool vertical) => viewerSnapTargets(
           guides: widget.uiState.guides,
           vertical: vertical,
@@ -2514,6 +2575,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           compSize: widget.compSize,
           grid: tools.snapToGrid,
           divisions: ViewerOverlayPainter.divisions,
+          boxes: boxes,
         );
     return snapViewerDrag(
       box: rect,
@@ -2661,145 +2723,557 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
   }
 
-  // --- The right-click menu ---------------------------------------------------
+  // --- The right-click menus --------------------------------------------------
 
-  /// The picture's own menu: every layer under the pointer by name, which is
-  /// how one hidden under another is reached; Align, while something is
-  /// selected; the two magnifications asked for most; and the view menu's
-  /// switches, the same rows it draws.
-  void _onSecondaryTapUp(TapUpDetails details) {
+  /// A right click on the picture: what's nearest the pointer has its own menu,
+  /// and everything else gets the picture's.
+  void _openMenu(TapUpDetails details) {
     final ui = widget.uiState;
     // The press moved a 3D viewport's view, so it was no click.
     if (ui.viewerNavigated) return;
+    final at = details.localPosition;
+    if (widget.showControls) {
+      if (_pathMenu(details)) return;
+      if (motionKeyAt(_selected, at) case final key?) {
+        _motionKeyMenu(key.box, key.index, details.globalPosition);
+        return;
+      }
+      if (_pick3d(at) != null) {
+        _axesMenu(details.globalPosition);
+        return;
+      }
+    }
     final under = [
       for (final box in widget.boxes)
-        if (box.contains(details.localPosition)) box
+        if (box.contains(at)) box
     ];
+    // The layer on top is the one the click is about, and the menu acts on the
+    // selection, so it joins it unless it's in it already.
+    final top = layerAtPoint(widget.boxes, at, exact: true);
+    if (top != null && !ui.selectedLayerIds.contains(top.id)) {
+      ui.setSelection([top.layer]);
+    }
     final names = {
       for (final entry in ui.model.heldLayers)
         entry.layer.internallayerId: entry.info.name,
     };
-    final picked = ui.selectedLayerIds;
-    final zoom = widget.onZoom;
-    Widget flyout(List<Widget> rows) => FloatSurface(
-          child: IntrinsicWidth(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: rows,
-            ),
-          ),
-        );
-    // The empty tick slot, so every name in the menu starts on one line.
-    Widget named(String text) => Row(children: [menuTick(false), Text(text)]);
-    showMenuAt<void>(
+    showViewerPictureMenu(
       context: context,
-      position: details.globalPosition,
-      rows: (close) => [
-        if (under.isNotEmpty)
-          SubmenuRow(
-            key: const ValueKey('viewer-menu-select'),
-            closeParent: () => close(null),
-            submenu: (dismiss) => flyout([
-              for (final box in under)
-                MenuRow(
-                  key: ValueKey<String>('viewer-select-${box.id}'),
-                  onPressed: () {
-                    dismiss();
-                    ui.setSelection([box.layer]);
-                  },
-                  child: Row(children: [
-                    menuTick(picked.contains(box.id)),
-                    Text(names[box.id] ?? ''),
-                  ]),
+      ui: ui,
+      host: widget.menus,
+      at: details.globalPosition,
+      stageAt: at,
+      layerRows: (close) {
+        final picked = ui.selectedLayerIds;
+        return [
+          if (top != null || picked.isNotEmpty)
+            SubmenuRow(
+              key: const ValueKey('viewer-menu-layer'),
+              closeParent: close,
+              submenu: (dismiss) => viewerLayerFlyout(
+                  context, dismiss, top?.id ?? picked.first),
+              child: MenuLabel(
+                  top == null ? l10n.menuLayer : names[top.id] ?? l10n.menuLayer,
+                  ticked: false),
+            ),
+          // Every layer under the pointer by name, which is how one hidden
+          // under another is reached.
+          if (under.length > 1)
+            viewerSub(
+              l10n.viewerMenuSelect,
+              close,
+              (dismiss) => [
+                for (final box in under)
+                  viewerRow(names[box.id] ?? '',
+                      () => ui.setSelection([box.layer]), dismiss,
+                      id: 'viewer-select-${box.id}',
+                      ticked: ui.selectedLayerIds.contains(box.id)),
+              ],
+              id: 'viewer-menu-select',
+            ),
+          if (picked.isNotEmpty)
+            viewerSub(
+              l10n.viewerMenuAlign,
+              close,
+              (dismiss) => [
+                for (final to in _Align.values)
+                  viewerRow(to.title, () => _align(to.x, to.y), dismiss,
+                      id: 'viewer-align-${to.name}'),
+                const MenuDivider(),
+                viewerSub(
+                  l10n.alignSelection,
+                  dismiss,
+                  (inner) => [
+                    for (final to in _Align.values)
+                      viewerRow(
+                          to.title,
+                          _arrangeable.length < 2
+                              ? null
+                              : () => _alignSelection(to.x, to.y),
+                          inner,
+                          id: 'viewer-align-selection-${to.name}'),
+                  ],
+                  id: 'viewer-align-selection',
                 ),
-            ]),
-            child: named(l10n.viewerMenuSelect),
-          ),
-        if (picked.isNotEmpty)
-          SubmenuRow(
-            key: const ValueKey('viewer-menu-align'),
-            closeParent: () => close(null),
-            submenu: (dismiss) => flyout([
-              for (final to in _Align.values)
-                MenuRow(
-                  key: ValueKey<String>('viewer-align-${to.name}'),
-                  onPressed: () {
-                    dismiss();
-                    _align(to.x, to.y);
-                  },
-                  child: Text(to.title),
-                ),
-            ]),
-            child: named(l10n.viewerMenuAlign),
-          ),
-        if (zoom != null) ...[
-          MenuRow(
-            key: const ValueKey('viewer-menu-fit'),
-            onPressed: () {
-              close(null);
-              zoom(null);
-            },
-            child: named(l10n.menuFit),
-          ),
-          MenuRow(
-            key: const ValueKey('viewer-menu-actual'),
-            onPressed: () {
-              close(null);
-              zoom(1);
-            },
-            // A number, spelled the way the magnification picker spells it.
-            child: named('100%'),
-          ),
-        ],
-        for (final row in [
-          ...viewerOverlayToggles(ui),
-          (
-            key: 'viewer-menu-checkerboard',
-            text: l10n.tipTransparencyGrid,
-            on: ui.viewerGrid,
-            pick: () => ui.setViewerGrid(!ui.viewerGrid),
-          ),
-        ])
-          viewerToggleRow(row, () => close(null)),
-      ],
+                viewerRow(
+                    l10n.alignDistributeAcross,
+                    _arrangeable.length < 3
+                        ? null
+                        : () => _distribute(Axis.horizontal),
+                    dismiss,
+                    id: 'viewer-distribute-across'),
+                viewerRow(
+                    l10n.alignDistributeDown,
+                    _arrangeable.length < 3
+                        ? null
+                        : () => _distribute(Axis.vertical),
+                    dismiss,
+                    id: 'viewer-distribute-down'),
+              ],
+              id: 'viewer-menu-align',
+            ),
+        ];
+      },
     );
   }
 
-  /// Move each selected layer so a point of its box meets the same point of
-  /// the composition, [x] and [y] from 0 to 1 across and down, null for an
-  /// axis left alone. The box is the one the outline draws, so what lines up
-  /// is what is seen. A layer with a keyed position stays where it is, as it
-  /// does under a drag.
-  void _align(double? x, double? y) {
+  /// A path's own menu, when the pointer is on one of its points or its line.
+  /// A point that isn't selected becomes the selection, and one that is keeps
+  /// the others with it, so a row acts on all of them.
+  bool _pathMenu(TapUpDetails details) {
+    final boxes = _editablePointBoxes;
+    final only = _pathBeingEdited;
+    final at = details.localPosition;
+    final point = pathPointAt(boxes, at, only: only);
+    final edge = point == null ? pathEdgeAt(boxes, at, only: only) : null;
+    final box = point?.box ?? edge?.box;
+    final pathId = point?.pathId ?? edge?.path.id;
+    if (box == null || pathId == null) return false;
+    final path = pathsOf(box).where((p) => p.id == pathId).firstOrNull;
+    if (path == null) return false;
+    if (point != null && !_points.contains(point.key)) {
+      setState(() => _points
+        ..clear()
+        ..add(point.key));
+    }
+    final mask = box.masks.where((m) => m.id == pathId).firstOrNull;
+    final item = box.offeredItems.where((i) => i.id == pathId).firstOrNull;
+    final keyed = (mask?.pathKeys.isNotEmpty ?? false) ||
+        (item?.pathKeys.isNotEmpty ?? false);
+    // A rectangle or a star is made from its numbers, and is always closed.
+    final drawn = mask != null || item?.primitive == null;
+    final v = point == null ? null : path.vertices[point.index];
+    final smooth = v != null &&
+        (handleOf(v, HandleSide.arriving).distance > 1e-9 ||
+            handleOf(v, HandleSide.leaving).distance > 1e-9);
+    final name = mask?.name ?? item?.name ?? '';
+    showMenuAt<void>(
+      context: context,
+      position: details.globalPosition,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          if (point != null) ...[
+            viewerRow(l10n.viewerMenuDeletePoints(_points.length),
+                _deletePoints, close,
+                id: 'viewer-point-delete', action: 'edit.delete.selection'),
+            viewerRow(l10n.viewerMenuPointCorner,
+                smooth ? () => _convertPoints(false) : null, close,
+                id: 'viewer-point-corner', ticked: !smooth),
+            viewerRow(l10n.viewerMenuPointSmooth,
+                smooth ? null : () => _convertPoints(true), close,
+                id: 'viewer-point-smooth', ticked: smooth),
+            viewerRow(
+                l10n.viewerMenuFirstPoint,
+                point.index == 0 || keyed || !path.closed
+                    ? null
+                    : () => _rewrite(box, path, mask, order: [
+                          for (var i = 0; i < path.vertices.length; i++)
+                            (point.index + i) % path.vertices.length
+                        ]),
+                close,
+                id: 'viewer-point-first'),
+          ] else if (edge != null)
+            viewerRow(l10n.viewerMenuAddPoint, () {
+              final first = edge.path.keyOf(edge.segment);
+              _commitEdit((_) => (keyOf, vertices, closed) =>
+                  keyOf(edge.segment) == first
+                      ? verticesWithPointAdded(vertices, edge.segment, edge.t)
+                      : null);
+              setState(() => _points
+                ..clear()
+                ..add(edge.path.keyOf(edge.segment + 1)));
+            }, close, id: 'viewer-path-add-point'),
+          const MenuDivider(),
+          viewerRow(
+              l10n.viewerMenuSelectAllPoints,
+              () => setState(() => _points
+                ..clear()
+                ..addAll([
+                  for (var i = 0; i < path.vertices.length; i++) path.keyOf(i)
+                ])),
+              close,
+              id: 'viewer-path-select-all'),
+          if (drawn) ...[
+            viewerRow(l10n.viewerMenuClosePath, () {
+              try {
+                box.layer.setPathClosed(id: pathId, closed: !path.closed);
+                widget.onChanged();
+              } catch (_) {
+                // The path went away under the open menu.
+              }
+            }, close, id: 'viewer-path-close', ticked: path.closed),
+            viewerRow(
+                l10n.viewerMenuReversePath,
+                keyed
+                    ? null
+                    : () => _rewrite(box, path, mask, order: [
+                          for (var i = path.vertices.length - 1; i >= 0; i--) i
+                        ], reversed: true),
+                close,
+                id: 'viewer-path-reverse'),
+          ],
+          const MenuDivider(),
+          viewerRow(l10n.renameEllipsis, () async {
+            final next = await askThemeName(context,
+                title: l10n.rename, suggested: name, confirm: l10n.rename);
+            if (next == null || next.trim().isEmpty) return;
+            _renamePath(box, pathId, next.trim());
+          }, close, id: 'viewer-path-rename'),
+          viewerRow(mask != null ? l10n.deleteMask : l10n.deleteShape, () {
+            _removePath(box, pathId);
+            setState(_points.clear);
+          }, close, id: 'viewer-path-delete'),
+        ];
+      },
+    );
+    return true;
+  }
+
+  /// [path] with its points in [order], [reversed] when it's to run the other
+  /// way, so each point's handles swap ends. A mask's per-point widths follow
+  /// their points.
+  void _rewrite(LayerBox box, PathOnBox path, BridgeMask? mask,
+      {required List<int> order, bool reversed = false}) {
+    final vertices = [
+      for (final i in order)
+        reversed
+            ? BridgeVertex(
+                x: path.vertices[i].x,
+                y: path.vertices[i].y,
+                tanInX: path.vertices[i].tanOutX,
+                tanInY: path.vertices[i].tanOutY,
+                tanOutX: path.vertices[i].tanInX,
+                tanOutY: path.vertices[i].tanInY,
+              )
+            : path.vertices[i]
+    ];
+    try {
+      if (mask != null) {
+        box.layer.setMask(
+          mask: maskWith(mask,
+              vertices: vertices,
+              vertexFeather: mask.vertexFeather.isEmpty
+                  ? null
+                  : [for (final i in order) mask.vertexFeather[i]]),
+          at: widget.comp
+              .timeOfFrame(frame: widget.uiState.playheadFrame.value),
+        );
+        widget.onChanged();
+      } else {
+        final first = path.keyOf(0);
+        _commitEdit((_) => (keyOf, was, closed) =>
+            keyOf(0) == first ? vertices : null);
+      }
+    } catch (_) {
+      // The path went away under the open menu.
+    }
+    // The points have new numbers, so their names no longer mean them.
+    setState(_points.clear);
+  }
+
+  void _renamePath(LayerBox box, UuidValue id, String name) {
+    try {
+      for (final mask in box.masks) {
+        if (mask.id != id) continue;
+        box.layer.setMask(
+            mask: BridgeMask(
+          id: mask.id,
+          name: name,
+          vertices: mask.vertices,
+          closed: mask.closed,
+          inverted: mask.inverted,
+          opacity: mask.opacity,
+          mode: mask.mode,
+          feather: mask.feather,
+          vertexFeather: mask.vertexFeather,
+          expansion: mask.expansion,
+          pathKeys: mask.pathKeys,
+        ));
+      }
+      if (box.offeredItems.any((i) => i.id == id)) {
+        box.layer.setShapeContents(contents: [
+          for (final entry in box.shapeContents)
+            if (entry.kind case BridgeShapeEntryKind_Item(field0: final item)
+                when item.id == id)
+              BridgeShapeEntry(
+                  depth: entry.depth,
+                  kind: BridgeShapeEntryKind.item(
+                      shapeItemWith(item, name: name)))
+            else
+              entry,
+        ]);
+      }
+      widget.onChanged();
+    } catch (_) {
+      // The path went away under the open dialogue.
+    }
+  }
+
+  void _removePath(LayerBox box, UuidValue id) {
+    try {
+      if (box.masks.any((m) => m.id == id)) {
+        box.layer.deleteMask(id: id);
+      } else {
+        box.layer.setShapeContents(contents: [
+          for (final entry in box.shapeContents)
+            if (entry.kind case BridgeShapeEntryKind_Item(field0: final item)
+                when item.id == id)
+              ...const <BridgeShapeEntry>[]
+            else
+              entry,
+        ]);
+      }
+      widget.onChanged();
+    } catch (_) {
+      // The path went away under the open menu.
+    }
+  }
+
+  /// Turn the selected points to corners or to smooth points. One that's
+  /// already what's asked is left alone.
+  void _convertPoints(bool smooth) {
+    final points = _points;
+    _commitEdit((_) => (keyOf, vertices, closed) {
+          var out = vertices;
+          var touched = false;
+          for (var i = 0; i < vertices.length; i++) {
+            if (!points.contains(keyOf(i))) continue;
+            final v = vertices[i];
+            final has = handleOf(v, HandleSide.arriving).distance > 1e-9 ||
+                handleOf(v, HandleSide.leaving).distance > 1e-9;
+            if (has == smooth) continue;
+            out = verticesConverted(out, i, closed);
+            touched = true;
+          }
+          return touched ? out : null;
+        });
+  }
+
+  /// A key on a motion path: going to it and taking it away. Its easing is the
+  /// key menu's, in the Timeline.
+  void _motionKeyMenu(LayerBox box, int index, Offset at) {
+    final key = box.motionPath?.keys[index];
+    if (key == null) return;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          viewerRow(l10n.viewerMenuGoToKey,
+              () => widget.uiState.scrubTo(key.frame), close,
+              id: 'viewer-key-go'),
+          const MenuDivider(),
+          viewerRow(l10n.deleteKey, () => _deleteMotionKey(box, key), close,
+              id: 'viewer-key-delete'),
+        ];
+      },
+    );
+  }
+
+  void _deleteMotionKey(LayerBox box, BridgeMotionKey key) {
+    BridgeScalar without(BridgeScalar was, int? index, double value) {
+      if (index == null || was is! BridgeScalar_Keyframed) return was;
+      final keys = [...was.field0]..removeAt(index);
+      return keys.isEmpty
+          ? BridgeScalar.static_(value)
+          : BridgeScalar.keyframed(keys);
+    }
+
+    try {
+      final tf = box.layer.getTransform();
+      box.layer.setTransforms(
+        props: [
+          if (key.xIndex != null) BridgeTransformProp.positionX,
+          if (key.yIndex != null) BridgeTransformProp.positionY,
+        ],
+        values: [
+          if (key.xIndex != null) without(tf.positionX, key.xIndex, key.x),
+          if (key.yIndex != null) without(tf.positionY, key.yIndex, key.y),
+        ],
+      );
+      widget.onChanged();
+    } catch (_) {
+      // The layer went away under the open menu.
+    }
+  }
+
+  /// The 3D handles: which way they point, and the layer's own Transform rows.
+  void _axesMenu(Offset at) {
+    final tools = widget.uiState.tools;
+    final app = Provider.of<LumitState>(context, listen: false);
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          for (final (axes, text) in [
+            (GizmoAxes.local, l10n.tipLocalAxes),
+            (GizmoAxes.world, l10n.tipWorldAxes),
+            (GizmoAxes.view, l10n.tipViewAxes),
+          ])
+            viewerRow(text, () => tools.axes = axes, close,
+                id: 'viewer-axes-${axes.name}', ticked: tools.axes == axes),
+          const MenuDivider(),
+          SubmenuRow(
+            key: const ValueKey('viewer-axes-transform'),
+            closeParent: close,
+            submenu: (dismiss) =>
+                menuEntriesFlyout(transformRows(app, widget.uiState), dismiss),
+            child: MenuLabel(l10n.menuTransform, ticked: false),
+          ),
+        ];
+      },
+    );
+  }
+
+  /// The selected layers that can be lined up: a box to line up, and a
+  /// Position no expression drives. A keyed one takes a key at the playhead.
+  List<LayerBox> get _arrangeable => [
+        for (final box in _selected)
+          if (!box.marker &&
+              box.transform?.positionX is! BridgeScalar_Expression &&
+              box.transform?.positionY is! BridgeScalar_Expression &&
+              _rectOf([box]) != null)
+            box
+      ];
+
+  /// Move each of [boxes] by what [wanted] asks of its box on screen, as one
+  /// undo step. Seen through a camera a move also changes how big the box
+  /// looks, so a few steps close in on the edge rather than landing near it.
+  void _moveBoxes(List<LayerBox> boxes, Offset Function(Rect rect) wanted) {
     final moves = <(LayerBox, double, double, double?)>[];
-    for (final box in _selected) {
-      if (!box.draggable || _rectOf([box]) == null) continue;
+    for (final box in boxes) {
       var (px, py) = (box.map.px, box.map.py);
-      // Seen through a camera a move also changes how big the box looks, so
-      // a few steps close in on the edge rather than landing near it.
       for (var i = 0; i < (box.map.projected ? 4 : 1); i++) {
         final moved = i == 0
             ? box
             : box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(px, py));
         final rect = _rectOf([moved]);
         if (rect == null) break;
-        // Both measured from the composition's corner, at the view's scale.
-        final scale = box.map.viewScale;
-        final r = rect.shift(-box.map.origin);
-        final frame = widget.compSize * scale;
-        final d = Offset(
-              x == null ? 0 : (frame.width - r.width) * x - r.left,
-              y == null ? 0 : (frame.height - r.height) * y - r.top,
-            ) /
-            scale;
-        final step = moved.map.positionStep(d);
+        final step = moved.map.positionStep(wanted(rect) / box.map.viewScale);
         px += step.dx;
         py += step.dy;
       }
-      moves.add((box, px, py, null));
+      // A layer already where it is wanted makes no undo step.
+      if ((px - box.map.px).abs() > 1e-6 || (py - box.map.py).abs() > 1e-6) {
+        moves.add((box, px, py, null));
+      }
     }
     _place(moves);
+  }
+
+  /// Move each selected layer so a point of its box meets the same point of
+  /// the composition, [x] and [y] from 0 to 1 across and down, null for an
+  /// axis left alone. The box is the one the outline draws, so what lines up
+  /// is what is seen.
+  void _align(double? x, double? y) {
+    final frame = widget.picture;
+    _moveBoxes(
+      _arrangeable,
+      (r) => Offset(
+        x == null ? 0 : frame.left + (frame.width - r.width) * x - r.left,
+        y == null ? 0 : frame.top + (frame.height - r.height) * y - r.top,
+      ),
+    );
+  }
+
+  /// Bring the same point of each selected layer's box together, on the box
+  /// round them all, or on the first picked layer's when Settings says so.
+  void _alignSelection(double? x, double? y) {
+    final boxes = _arrangeable;
+    if (boxes.length < 2) return;
+    final ui = widget.uiState;
+    final first = ui.workspace.interface.alignToFirstPicked
+        ? boxes
+            .where((b) =>
+                b.id == ui.selectedLayers.value.firstOrNull?.internallayerId)
+            .firstOrNull
+        : null;
+    final around = _rectOf(first == null ? boxes : [first])!;
+    _moveBoxes(
+      boxes,
+      (r) => Offset(
+        x == null ? 0 : around.left + (around.width - r.width) * x - r.left,
+        y == null ? 0 : around.top + (around.height - r.height) * y - r.top,
+      ),
+    );
+  }
+
+  /// Space the selected layers' middles evenly between the two outermost, or
+  /// the point [by] of each box, 0 to 1, or with [gaps] or Shift held the gaps
+  /// between their boxes.
+  void _distribute(Axis axis, {double by = 0.5, bool gaps = false}) {
+    final boxes = _arrangeable;
+    if (boxes.length < 3) return;
+    final across = axis == Axis.horizontal;
+    double middle(Rect r) =>
+        across ? r.left + r.width * by : r.top + r.height * by;
+    double extent(Rect r) => across ? r.width : r.height;
+    final rects = {for (final box in boxes) box: _rectOf([box])!};
+    final order = boxes.toList()
+      ..sort((a, b) => middle(rects[a]!).compareTo(middle(rects[b]!)));
+    final wanted = <LayerBox, double>{};
+    final (first, last) = (rects[order.first]!, rects[order.last]!);
+    if (gaps || HardwareKeyboard.instance.isShiftPressed) {
+      final near = across ? first.left : first.top;
+      final far = across ? last.right : last.bottom;
+      final used = rects.values.fold(0.0, (sum, r) => sum + extent(r));
+      final gap = (far - near - used) / (order.length - 1);
+      var at = near;
+      for (final box in order) {
+        final size = extent(rects[box]!);
+        wanted[box] = at + size * by;
+        at += size + gap;
+      }
+    } else {
+      final step = (middle(last) - middle(first)) / (order.length - 1);
+      for (var i = 0; i < order.length; i++) {
+        wanted[order[i]] = middle(first) + step * i;
+      }
+    }
+    final moves = <(LayerBox, double, double, double?)>[];
+    for (final box in order) {
+      final shift = wanted[box]! - middle(rects[box]!);
+      final step = box.map.positionStep(
+          (across ? Offset(shift, 0) : Offset(0, shift)) /
+              box.map.viewScale);
+      moves.add((box, box.map.px + step.dx, box.map.py + step.dy, null));
+    }
+    _place(moves);
+  }
+
+  /// A press in the Align panel's Selection grid. Only the active view answers.
+  void _onArrangeRequest() {
+    final request = widget.uiState.arrangeRequest.value;
+    if (request == null || !mounted || !_activeView) return;
+    if (request.distribute case final axis?) {
+      _distribute(axis, by: request.by, gaps: request.gaps);
+    } else {
+      _alignSelection(request.x, request.y);
+    }
   }
 
   /// A dot on the Align panel. Only the active view answers, or two Viewers
@@ -3820,6 +4294,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         !_activeView) {
       return _priorDeleteClaim?.call() ?? false;
     }
+    return _deletePoints() || (_priorDeleteClaim?.call() ?? false);
+  }
+
+  /// The selected path points go. True when any did.
+  bool _deletePoints() {
+    final ui = widget.uiState;
     final at = widget.comp.timeOfFrame(frame: ui.playheadFrame.value);
     var landed = false;
     List<BridgeVertex> kept(
@@ -3876,9 +4356,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       }
     }
     setState(_points.clear);
-    if (!landed) return _priorDeleteClaim?.call() ?? false;
-    widget.onChanged();
-    return true;
+    if (landed) widget.onChanged();
+    return landed;
   }
 
   /// The Mask feather tool's press: a mask point, or either edge of the soft
@@ -4128,6 +4607,7 @@ BridgeTransform transformWith(
   final camera = tf.camera;
   final depth = tf.depth;
   return BridgeTransform(
+    orient: tf.orient,
     anchorX: put(anchorX, tf.anchorX),
     anchorY: put(anchorY, tf.anchorY),
     positionX: put(positionX, tf.positionX),
@@ -4299,17 +4779,20 @@ class _GizmoPainter extends CustomPainter {
       final moved = _shift(handles);
       final corners = [for (final c in handles.corners) c + moved];
       // The rotation bar first, so the knob's outline draws over it.
-      final top = (corners[0] + corners[1]) / 2;
-      final knob = handles.handleAt(GizmoHandle.rotate) + moved;
-      canvas.drawLine(
-        top,
-        knob,
-        Paint()
-          ..color = accent
-          ..strokeWidth = 1,
-      );
-      _knob(canvas, knob);
+      if (handles.showsHandle(GizmoHandle.rotate)) {
+        final top = (corners[0] + corners[1]) / 2;
+        final knob = handles.handleAt(GizmoHandle.rotate) + moved;
+        canvas.drawLine(
+          top,
+          knob,
+          Paint()
+            ..color = accent
+            ..strokeWidth = 1,
+        );
+        _knob(canvas, knob);
+      }
       for (final handle in GizmoHandle.scaling) {
+        if (!handles.showsHandle(handle)) continue;
         _handle(canvas, handles.handleAt(handle) + moved);
       }
       // The pivot, which is now a handle in its own right: drawn as

@@ -39,6 +39,8 @@ mod lights;
 mod material;
 mod model;
 mod moments;
+mod orient;
+mod overlap_key;
 pub mod pool;
 mod projection;
 pub mod schedule;
@@ -1274,7 +1276,10 @@ fn feed_effect_stack(
                     // for this row alone, and Beat trigger's. Depth points' Camera
                     // row owes the name where its camera is.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
-                        && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
+                        && matches!(
+                            e.effect.match_name.as_str(),
+                            "audio_level" | "beat_trigger" | "audio_spectrum"
+                        )
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
                         .flatten()
@@ -2476,12 +2481,7 @@ fn feed_source(
                     gain,
                     opacity,
                 } => {
-                    h.update(b"seq-dissolve/");
-                    feed_f64(h, gain);
-                    // The clips' own opacity, drawn as the layer's.
-                    if opacity < 1.0 {
-                        feed_f64(h, opacity);
-                    }
+                    overlap_key::feed_overlap(h, outgoing, incoming, gain, opacity, lt);
                     feed_clip(h, outgoing)?;
                     feed_clip(h, incoming)?;
                 }
@@ -2797,6 +2797,7 @@ fn feed_depth(
     lt: f64,
     read: &dyn Fn(&lumit_core::anim::Property) -> f64,
 ) {
+    orient::feed(h, tr, lt);
     let (x, y, z) = tr.orientation_at(lt, read);
     let values = [x, y, z, read(&tr.anchor_z), read(&tr.scale_z)];
     if values != [0.0, 0.0, 0.0, 0.0, 100.0] || tr.after_effects_order {
@@ -3035,6 +3036,7 @@ mod tests {
         let wired = LayerGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![wiggle.clone()],
@@ -4847,6 +4849,7 @@ mod tests {
         comp.graph = Some(CompGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes: vec![
                 GraphNode::Read {
                     id: read,

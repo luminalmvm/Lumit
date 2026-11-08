@@ -22,11 +22,15 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show effectLabelOf;
-import 'viewer_panel_frb.dart' show viewerTagLeft, viewerTagTop;
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_menus.dart' show viewerRow;
+import 'viewer_panel_frb.dart'
+    show viewerChipPlate, viewerTagLeft, viewerTagMaxWidth, viewerTagTop;
 
 /// The name of the point the chip would stop at, or `null` when there is no
 /// single one — nothing picked, a whole run picked, or a pick whose effect this
@@ -39,6 +43,11 @@ import 'viewer_panel_frb.dart' show viewerTagLeft, viewerTagTop;
 /// Read from [LumitUiState.model], which is the frontend's own held copy of the
 /// document, so this is a map lookup and never a call across the bridge.
 String? prefixChipName(LumitUiState ui) {
+  // A box inside a Custom shader names itself by the word its canvas handed
+  // over.
+  if (ui.viewerShaderPoint case final shader?) {
+    return ui.shaderGraphWords[shader.node];
+  }
   // A node graph's box names itself (docs/impl/node-graph-comp.md §4.5). The
   // label rode in with the pick, so this is a field read; a driver, a value
   // Input and the Output make no picture and name no point.
@@ -59,12 +68,60 @@ String? prefixChipName(LumitUiState ui) {
   return null;
 }
 
+/// Whether stopping at the picked point would show anything other than the
+/// finished picture: some enabled effect that draws comes after it. A box on a
+/// node graph or in a shader always counts, since the graph decides that.
+bool prefixChipDiffers(LumitUiState ui) {
+  final point = ui.viewerPrefixPoint;
+  if (point == null || ui.viewerShaderPoint != null) return true;
+  if (ui.viewerGraphPoint != null) return true;
+  final effects = ui.model.byId(point.$1.internallayerId)?.info.effects;
+  if (effects == null) return true;
+  // The Source box stops before every effect.
+  final at = point.$2 == null
+      ? -1
+      : effects.indexWhere((on) => on.id == point.$2);
+  return effects.skip(at + 1).any((on) => on.enabled && !on.audio);
+}
+
 /// The chip itself. Returns a [Positioned], so it goes straight into the
 /// Viewer's stage stack beside the selection tag — one line at the hookup, and
 /// nothing of the Viewer's own layout to disturb.
 class ViewerPrefixChip extends StatelessWidget {
   final LumitUiState uiState;
-  const ViewerPrefixChip({super.key, required this.uiState});
+
+  /// How far the rulers come down from the stage's top.
+  final double top;
+
+  const ViewerPrefixChip({super.key, required this.uiState, this.top = 0});
+
+  void _menu(BuildContext context, Offset at, bool on) {
+    final point = uiState.viewerPrefixPoint;
+    final effect = point?.$2;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        viewerRow(l10n.graphViewHere, () => uiState.setAtSelectedEffect(!on),
+            () => close(null),
+            id: 'viewer-at-view-here', ticked: on),
+        // A layer's point is a box on its graph; a node graph's box is
+        // already on the canvas it was picked on.
+        if (point != null &&
+            uiState.viewerGraphPoint == null &&
+            uiState.viewerShaderPoint == null)
+          viewerRow(
+              l10n.fxMenuRevealGraph,
+              () => uiState.revealBox(
+                  point.$1,
+                  effect == null
+                      ? const BridgeNodeRef.source()
+                      : BridgeNodeRef.effect(effect)),
+              () => close(null),
+              id: 'viewer-at-reveal'),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,17 +139,23 @@ class ViewerPrefixChip extends StatelessWidget {
         // And a node graph's box is picked on its own canvas, which is a third
         // surface with a notifier of its own.
         uiState.compGraphNode,
+        // And a box inside a Custom shader, on the shader's own canvas.
+        uiState.shaderGraphNode,
         uiState.model,
       ]),
       builder: (context, _) {
         final name = prefixChipName(uiState);
-        if (name == null) return const SizedBox.shrink();
         final on = uiState.atSelectedEffect.value;
+        // Off and stopping where the picture already ends, it would change
+        // nothing, so it stays out of the way.
+        if (name == null || (!on && !prefixChipDiffers(uiState))) {
+          return const SizedBox.shrink();
+        }
         return Positioned(
           // Mirrors the selection tag across the picture: the tag says what is
           // selected, the chip says what is being looked at.
           right: viewerTagLeft,
-          top: viewerTagTop,
+          top: viewerTagTop + top,
           child: LumitTooltip(
             message: l10n.tipViewerAtEffect,
             child: HoverMark(
@@ -104,13 +167,18 @@ class ViewerPrefixChip extends StatelessWidget {
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => uiState.setAtSelectedEffect(!on),
+                  // Its own menu, and the press stops here: under the chip is
+                  // the picture, whose menu would pick the layer beneath.
+                  onSecondaryTapUp: (d) => _menu(context, d.globalPosition, on),
                   child: Container(
                     key: const ValueKey('viewer-at-effect'),
-                    constraints: const BoxConstraints(maxWidth: 220),
+                    constraints:
+                        const BoxConstraints(maxWidth: viewerTagMaxWidth),
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    // The selection tag's plate, so the two read as a pair.
                     decoration: BoxDecoration(
-                      border: Border.all(color: ink),
+                      color: t.surface0.withValues(alpha: viewerChipPlate),
                       borderRadius:
                           BorderRadius.circular(t.tokens.controlRadius),
                     ),

@@ -25,6 +25,7 @@ import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'gradient_stops_popover.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart';
 import 'shape_entries.dart';
 import 'timeline_mask_rows_frb.dart';
@@ -123,7 +124,7 @@ class ShapeItemRow extends StatelessWidget {
           },
           child: Text(l10n.shapeConvertToPath),
         ),
-      ...shapeMoveRows(close, item.id, _writeEntries),
+      ...shapeMoveRows(close, layer, item.id, _writeEntries),
     ];
   }
 
@@ -205,13 +206,18 @@ Widget shapeAddSubmenu(VoidCallback close, UuidValue id, List<ShapeAdd> adds,
 
 /// Move up and Move down, swapping the entry with its neighbour at its own
 /// depth. A modifier moved past an item changes what it acts on.
-List<Widget> shapeMoveRows(VoidCallback close, UuidValue id,
-        void Function(List<BridgeShapeEntry> Function(List<BridgeShapeEntry>))
-            write) =>
-    [
+///
+/// An entry already at that end of its list has nowhere to go, so the row greys.
+List<Widget> shapeMoveRows(VoidCallback close, LayerReference layer, UuidValue id,
+    void Function(List<BridgeShapeEntry> Function(List<BridgeShapeEntry>))
+        write) {
+  final now = layer.getShapeContents();
+  return [
+      const MenuDivider(),
       for (final (by, label) in [(-1, l10n.moveUp), (1, l10n.moveDown)])
         MenuRow(
           key: ValueKey<String>('tl-shape-move-${by < 0 ? 'up' : 'down'}-$id'),
+          enabled: !identical(now.moved(id, by), now),
           onPressed: () {
             close();
             write((entries) => entries.moved(id, by));
@@ -219,6 +225,7 @@ List<Widget> shapeMoveRows(VoidCallback close, UuidValue id,
           child: Text(label),
         ),
     ];
+}
 
 /// Which kind of entry a modifier is, in the Add menu's terms.
 ShapeAdd shapeAddOf(BridgeShapeModifier modifier) => switch (modifier.kind) {
@@ -400,7 +407,7 @@ class ShapeModifierRow extends StatelessWidget {
               close, 'tl-shape-expand-${modifier.id}', l10n.shapeExpandCopies,
               (intoLayers) => expandShapeCopies(
                   ui, layer, onChanged, modifier.id, intoLayers)),
-        ...shapeMoveRows(close, modifier.id, _write),
+        ...shapeMoveRows(close, layer, modifier.id, _write),
       ],
     );
   }
@@ -513,7 +520,7 @@ class ShapeGroupRow extends StatelessWidget {
           },
           child: Text(l10n.shapeUngroup),
         ),
-        ...shapeMoveRows(close, group.id, _write),
+        ...shapeMoveRows(close, layer, group.id, _write),
       ],
     );
   }
@@ -750,29 +757,36 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
-      children: [
-        KeyframeControlsFrb(
-          scalars: [_scalar],
-          onWrite: (s) => _write(s.first),
-          comp: widget.comp,
-          onSeek: widget.onSeek,
-          rowKey: _rowKey,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(t.propertyCase(strokeValueLabel(widget.value)),
-              style: t.body, overflow: TextOverflow.ellipsis),
-        ),
-        SizedBox(
-          width: widget.valueColumn.width,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(width: 72, child: _field()),
+    final keys = KeyframeControlsFrb(
+      scalars: [_scalar],
+      onWrite: (s) => _write(s.first),
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+      navigatorApart: true,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: [widget.value == StrokeValue.end ? 100 : 0]),
+      child: Row(
+        children: [
+          keys,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(t.propertyCase(strokeValueLabel(widget.value)),
+                style: t.body, overflow: TextOverflow.ellipsis),
           ),
-        ),
-        SizedBox(width: widget.valueColumn.rightInset),
-      ],
+          if (keys.trailingNavigator case final nav?) nav,
+          SizedBox(
+            width: widget.valueColumn.width,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: 72, child: _field()),
+            ),
+          ),
+          SizedBox(width: widget.valueColumn.rightInset),
+        ],
+      ),
     );
   }
 
@@ -878,29 +892,36 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
-      children: [
-        KeyframeControlsFrb(
-          scalars: [_scalar],
-          onWrite: (s) => _write(s.first),
-          comp: widget.comp,
-          onSeek: widget.onSeek,
-          rowKey: _rowKey,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
-              style: t.body, overflow: TextOverflow.ellipsis),
-        ),
-        SizedBox(
-          width: widget.valueColumn.width,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(width: 72, child: _field()),
+    final keys = KeyframeControlsFrb(
+      scalars: [_scalar],
+      onWrite: (s) => _write(s.first),
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+      navigatorApart: true,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: [textAnimatorDefault(widget.value)]),
+      child: Row(
+        children: [
+          keys,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
+                style: t.body, overflow: TextOverflow.ellipsis),
           ),
-        ),
-        SizedBox(width: widget.valueColumn.rightInset),
-      ],
+          if (keys.trailingNavigator case final nav?) nav,
+          SizedBox(
+            width: widget.valueColumn.width,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: 72, child: _field()),
+            ),
+          ),
+          SizedBox(width: widget.valueColumn.rightInset),
+        ],
+      ),
     );
   }
 
@@ -1197,10 +1218,17 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
-      children: [
-        if (_isPath)
-          PathKeyframesFrb(
+    final keys = KeyframeControlsFrb(
+      scalars: _scalars,
+      onWrite: _writeAll,
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+      navigatorApart: true,
+    );
+    final pathKeys = !_isPath
+        ? null
+        : PathKeyframesFrb(
             keys: widget.item!.pathKeys,
             rowKey: _rowKey,
             onToggleKey: (time) => widget.layer
@@ -1210,15 +1238,12 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             comp: widget.comp,
             onSeek: widget.onSeek,
             onChanged: widget.onChanged,
-          )
-        else
-          KeyframeControlsFrb(
-            scalars: _scalars,
-            onWrite: _writeAll,
-            comp: widget.comp,
-            onSeek: widget.onSeek,
-            rowKey: _rowKey,
-          ),
+            navigatorApart: true,
+          );
+    final RowKeys lead = pathKeys ?? keys;
+    final row = Row(
+      children: [
+        pathKeys ?? keys,
         const SizedBox(width: 4),
         Expanded(
           child: Text(
@@ -1226,6 +1251,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
                   shapeValueLabel(widget.value, stop: widget.stop)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
+        if (lead.trailingNavigator case final nav?) nav,
         SizedBox(
           width: widget.valueColumn.width,
           child: Align(
@@ -1242,6 +1268,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         SizedBox(width: widget.valueColumn.rightInset),
       ],
     );
+    return _isPath
+        ? row
+        : ParamRowMenu(menu: scalarRowMenu(context, keys), child: row);
   }
 
   Widget _field() {

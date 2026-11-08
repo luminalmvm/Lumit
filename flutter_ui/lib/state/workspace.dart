@@ -753,9 +753,11 @@ class Workspace extends ChangeNotifier {
       savedExpressionLanguages[name] ?? BridgeExpressionLanguage.rhai;
 
   /// The language a new expression starts in, wherever one is made: a row's
-  /// Set expression, Animation ▸ Add expression, the Expressions panel's New.
+  /// Set expression, Animation ▸ Add expression, the Expressions panel's New,
+  /// a link. JavaScript until Settings says otherwise, as the starters and a
+  /// link to an effect's row can only be written in it.
   BridgeExpressionLanguage defaultExpressionLanguage =
-      BridgeExpressionLanguage.rhai;
+      BridgeExpressionLanguage.javaScript;
 
   void setDefaultExpressionLanguage(BridgeExpressionLanguage language) {
     defaultExpressionLanguage = language;
@@ -864,6 +866,14 @@ class Workspace extends ChangeNotifier {
   /// The Effect controls panel's keyframe strip: whether it is shown, and
   /// how wide its column is. A preference for the reason the plot size is:
   /// how someone lays the panel out is theirs to keep.
+  /// The ticks Save preset last left: which parts of a layer go in the file.
+  bool presetSaveEffects = true;
+  bool presetSaveKeys = true;
+  bool presetSaveAnimators = true;
+
+  /// Where Normalise puts a sound's loudest sample, in dB.
+  double normaliseTargetDb = -1;
+
   bool fxKeyStrip = true;
   double fxKeyStripWidth = 220;
 
@@ -892,6 +902,11 @@ class Workspace extends ChangeNotifier {
   /// a stagger drag take the layers in.
   int staggerStep = 1;
   LayerStaggerOrder staggerOrder = LayerStaggerOrder.topDown;
+
+  /// How far each layer overlaps the one before it. Above nought the panel
+  /// lays them end to end rather than a step apart.
+  int staggerOverlap = 0;
+  bool staggerCrossfade = false;
 
   /// The Timeline outline's columns: the group order, each group's width and
   /// the groups switched off, as the Timeline wrote them. Null until a column
@@ -1299,6 +1314,11 @@ class Workspace extends ChangeNotifier {
     recompose();
   }
 
+  /// A workspace as a new install has it, never loaded and never drawn, so
+  /// its fields are the shipped defaults. Building the theme would reset the
+  /// look the app is showing, so this one doesn't.
+  Workspace.shipped();
+
   /// Rebuild the theme from the current appearance fields — the single funnel
   /// every Appearance control uses (`Shell::recompose`).
   /// A theme shown but not saved — the customise window's live preview. It
@@ -1655,6 +1675,19 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setPresetSaveParts(
+      {required bool effects, required bool keys, required bool animators}) {
+    presetSaveEffects = effects;
+    presetSaveKeys = keys;
+    presetSaveAnimators = animators;
+    settingsChanged();
+  }
+
+  void setNormaliseTargetDb(double db) {
+    normaliseTargetDb = db;
+    settingsChanged();
+  }
+
   void setFxKeyStrip(bool shown) {
     fxKeyStrip = shown;
     settingsChanged();
@@ -1686,9 +1719,12 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
-  void setStagger({int? step, LayerStaggerOrder? order}) {
+  void setStagger(
+      {int? step, LayerStaggerOrder? order, int? overlap, bool? crossfade}) {
     staggerStep = step ?? staggerStep;
     staggerOrder = order ?? staggerOrder;
+    staggerOverlap = overlap ?? staggerOverlap;
+    staggerCrossfade = crossfade ?? staggerCrossfade;
     settingsChanged();
   }
 
@@ -2209,6 +2245,10 @@ class Workspace extends ChangeNotifier {
         'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
+        'preset_save_effects': presetSaveEffects,
+        'preset_save_keys': presetSaveKeys,
+        'preset_save_animators': presetSaveAnimators,
+        'normalise_target_db': normaliseTargetDb,
         'fx_key_strip': fxKeyStrip,
         'fx_key_strip_width': fxKeyStripWidth,
         'themed_viewer_surround': themedViewerSurround,
@@ -2218,6 +2258,8 @@ class Workspace extends ChangeNotifier {
         'precompose_open_new_comp': precomposeOpenNewComp,
         'stagger_step': staggerStep,
         'stagger_order': staggerOrder.name,
+        'stagger_overlap': staggerOverlap,
+        'stagger_crossfade': staggerCrossfade,
         'timeline_columns': timelineColumns,
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
@@ -2418,8 +2460,9 @@ class Workspace extends ChangeNotifier {
             if (key is String && value == 'javascript')
               key: BridgeExpressionLanguage.javaScript,
       });
-    defaultExpressionLanguage =
-        expressionLanguageOfId(j['default_expression_language']);
+    defaultExpressionLanguage = j['default_expression_language'] == 'rhai'
+        ? BridgeExpressionLanguage.rhai
+        : BridgeExpressionLanguage.javaScript;
     recentColours
       ..clear()
       ..addAll([
@@ -2431,6 +2474,10 @@ class Workspace extends ChangeNotifier {
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     // Absent means a file written before the size could be chosen: medium.
     curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;
+    presetSaveEffects = j['preset_save_effects'] as bool? ?? true;
+    presetSaveKeys = j['preset_save_keys'] as bool? ?? true;
+    presetSaveAnimators = j['preset_save_animators'] as bool? ?? true;
+    normaliseTargetDb = (j['normalise_target_db'] as num?)?.toDouble() ?? -1;
     fxKeyStrip = j['fx_key_strip'] as bool? ?? true;
     fxKeyStripWidth = (j['fx_key_strip_width'] as num?)?.toDouble() ?? 220;
     themedViewerSurround = j['themed_viewer_surround'] == true;
@@ -2441,6 +2488,8 @@ class Workspace extends ChangeNotifier {
     staggerStep = (j['stagger_step'] as num?)?.toInt() ?? 1;
     staggerOrder = LayerStaggerOrder.values.asNameMap()[j['stagger_order']] ??
         LayerStaggerOrder.topDown;
+    staggerOverlap = (j['stagger_overlap'] as num?)?.toInt() ?? 0;
+    staggerCrossfade = j['stagger_crossfade'] as bool? ?? false;
     // Absent means a file written before the columns were kept: the defaults.
     final columns = j['timeline_columns'];
     timelineColumns = columns is Map<String, dynamic> ? columns : null;

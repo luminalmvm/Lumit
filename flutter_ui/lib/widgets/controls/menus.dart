@@ -6,13 +6,16 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../icons/lumit_icon.dart';
 import '../../icons/lumit_icons.dart';
 import '../../l10n/strings.dart';
+import '../../state/ui_state.dart';
 import '../../theme/style_sheet.dart';
 import '../hover_intent.dart';
 import 'base.dart';
+import 'caret.dart';
 import 'motion.dart';
 import 'popups.dart';
 
@@ -37,6 +40,73 @@ Widget menuTick(bool on, {Color? colour}) => SizedBox(
 /// How far a menu's rows stand in from its edge. A row's corner is the
 /// surface's corner less this, so the two curves run parallel.
 const double menuInset = 6;
+
+/// The most room a row's chord may take, so the name keeps the rest.
+const double menuChordWidth = 150;
+
+/// The line between two groups of rows in a menu.
+class MenuDivider extends StatelessWidget {
+  const MenuDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 1,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        color: ThemeScope.of(context).theme.hairline,
+      );
+}
+
+/// A menu row's contents: the name and, on the right, the chord it answers to
+/// in the live keymap, so a right-click menu teaches shortcuts as the menu bar
+/// does. [action] is a keymap action id. An unbound action draws no chord.
+/// [ticked] adds the tick column: pass true or false on a toggle, and false on
+/// its neighbours in a menu that has toggles, so the names line up.
+class MenuLabel extends StatelessWidget {
+  const MenuLabel(this.text,
+      {this.action, this.ticked, this.enabled = true, super.key});
+
+  final String text;
+  final String? action;
+  final bool? ticked;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final colour = enabled ? null : t.textDisabled;
+    final act = action;
+    // Null outside the shell (a bare widget test), where there is no keymap.
+    final chord = act == null
+        ? null
+        : Provider.of<LumitUiState?>(context, listen: false)
+            ?.keymap
+            .chordFor(act);
+    return Row(
+      children: [
+        if (ticked != null) menuTick(ticked!, colour: colour),
+        Expanded(
+          child: Text(text,
+              style: colour == null ? null : t.body.copyWith(color: colour),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ),
+        if (chord != null)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 16),
+            // Capped, so a long chord can never push the row past its menu.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: menuChordWidth),
+              child: Text(chord,
+                  textDirection: TextDirection.ltr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.small.copyWith(color: t.textMuted)),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 /// One row in a dropdown/menu popup.
 class MenuRow extends StatefulWidget {
@@ -728,7 +798,16 @@ class _SubmenuRowState extends State<SubmenuRow> {
       child: Row(
         children: [
           Expanded(child: widget.child),
-          LumitIcon(LumitIcons.expand, colour: t.textMuted),
+          // The same chevron a dropdown wears, pointing the way the flyout
+          // goes; the set's filled triangle outweighed the words beside it.
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 12, end: 2),
+            child: Caret(
+                colour: t.textMuted,
+                direction: Directionality.of(context) == TextDirection.rtl
+                    ? AxisDirection.left
+                    : AxisDirection.right),
+          ),
         ],
       ),
     );
@@ -814,7 +893,7 @@ class _SubmenuRowState extends State<SubmenuRow> {
 class HouseContextMenu extends StatelessWidget {
   const HouseContextMenu({this.child, this.itemBuilder, super.key});
   final Widget? child;
-  final List<MenuRow> Function(void Function() close)? itemBuilder;
+  final List<Widget> Function(void Function() close)? itemBuilder;
 
   @override
   Widget build(BuildContext context) {

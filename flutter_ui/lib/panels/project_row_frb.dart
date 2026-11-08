@@ -29,7 +29,6 @@ import '../widgets/controls.dart';
 import '../widgets/name_direction.dart';
 import '../shell/settings_window_frb.dart' show showSettingsWindowFrb;
 import 'project_columns_frb.dart';
-import 'project_menu_frb.dart';
 import 'timeline_extras_frb.dart' show showLabelPicker;
 
 /// The state badge ("missing"): 14 tall, 4px of padding either side, its text
@@ -271,7 +270,8 @@ class ProjectRowFrb extends StatefulWidget {
   /// A 3D model rather than footage that plays, which wears the cube.
   final bool model;
 
-  /// Whether any composition places this item — the `in use` badge.
+  /// Whether any composition places this item. A file or solid nothing uses
+  /// reads a step quieter than one that is, so the unused stand out as such.
   final bool inUse;
 
   /// This item's proxy, or null where it has none. Null on every kind
@@ -327,9 +327,11 @@ class ProjectRowFrb extends StatefulWidget {
   /// The panel's whole footage selection, read when a drag starts so dragging
   /// any selected row brings the rest with it.
   final List<FootageReference> Function() selectedFootage;
-  final VoidCallback onStartRename;
   final VoidCallback onEndRename;
-  final VoidCallback onFindMissing;
+
+  /// A right press on the row, at this point in the window. The panel holds
+  /// what the menu is about, so the row only says where.
+  final ValueChanged<Offset> onMenu;
 
   /// Make a comp from these items — the panel's own New composition, so a
   /// double-clicked footage item goes through the one funnel every other route
@@ -352,25 +354,6 @@ class ProjectRowFrb extends StatefulWidget {
   /// File these items into this row's folder — the drop gesture. Null on every
   /// kind but a folder, which is what makes a folder row the only drop target.
   final void Function(List<ItemReference> items)? onDropItems;
-
-  /// File this row (and the rest of the selection, when it is part of one) into
-  /// the folder picked from **Move to folder**.
-  final void Function(ItemReference folder) onMoveToFolder;
-
-  /// Select items the row menu has just made, such as the copies Duplicate
-  /// leaves.
-  final void Function(List<ItemReference> items) onPick;
-
-  /// The folders **Move to folder** may offer, read when the menu is raised.
-  /// A function rather than a list because a menu is a gesture: reading the
-  /// tree per rebuild is exactly the chatter the budget test guards against.
-  final List<(String, ItemReference)> Function() folderChoices;
-
-  /// What a command from this row's menu acts on — the panel's own
-  /// `_targets`, which is the whole selection when this row is in it and this
-  /// row alone when it is not. A function for the same reason
-  /// [folderChoices] is: it is read when the menu is raised, never in build.
-  final List<ItemReference> Function() menuTargets;
   final Future<String?> Function()? relinkPicker;
 
   const ProjectRowFrb({
@@ -405,18 +388,13 @@ class ProjectRowFrb extends StatefulWidget {
     required this.loneSelection,
     required this.onSelect,
     required this.selectedFootage,
-    required this.onStartRename,
     required this.onEndRename,
-    required this.onFindMissing,
+    required this.onMenu,
     required this.onNewComposition,
     required this.folderOpen,
     required this.onToggleFolder,
     required this.onLocalEdit,
     required this.onSetLabel,
-    required this.onMoveToFolder,
-    required this.onPick,
-    required this.menuTargets,
-    required this.folderChoices,
     this.onDropItems,
     this.relinkPicker,
   });
@@ -428,19 +406,7 @@ class ProjectRowFrb extends StatefulWidget {
 class _ProjectRowFrbState extends State<ProjectRowFrb> {
   bool _hover = false;
   TextEditingController? _rename;
-  // Escape on the field's own node, ahead of the shortcut system: the
-  // row's editor is a bare EditableText rather than a HouseTextField, so it
-  // wires the same key itself instead of inheriting it.
-  late final FocusNode _renameFocus = FocusNode(onKeyEvent: _onRenameKey);
-
-  KeyEventResult _onRenameKey(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape) {
-      _cancelRename();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
+  final FocusNode _renameFocus = FocusNode();
 
   ItemReference get item => widget.item;
 
@@ -598,31 +564,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
             // is about what is picked, and collapsing four rows to one because the
             // menu was opened would throw the selection away.
             if (!widget.selected) widget.onSelect(SelectMode.replace);
-            showProjectMenuFrb(
-              context: context,
-              item: item,
-              missing: widget.missing,
-              position: d.globalPosition,
-              onFindMissing: widget.onFindMissing,
-              onLocalEdit: widget.onLocalEdit,
-              onStartRename: widget.onStartRename,
-              onSetLabel: widget.onSetLabel,
-              label: widget.label,
-              inherited: widget.inherited,
-              onRelink: item is ItemReference_Footage
-                  ? () => _doRelink((item as ItemReference_Footage).field0)
-                  : null,
-              proxy: widget.proxy,
-              // The same picker seam the relink uses — picking a proxy file
-              // and picking a replacement are the same gesture over the same
-              // dialogue, and tests inject one stub for both.
-              proxyPicker: widget.relinkPicker,
-              // Read here, not in build: raising the menu is a gesture.
-              folders: widget.folderChoices(),
-              onMoveToFolder: widget.onMoveToFolder,
-              onPick: widget.onPick,
-              targets: widget.menuTargets(),
-            );
+            widget.onMenu(d.globalPosition);
           },
           child: Container(
             height: projectRowHeight,
@@ -861,9 +803,8 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
                         color: Color.lerp(
                             widget.missing
                                 ? t.warning
-                                : tag != 0
-                                    ? t.labelColour(tag)
-                                    : tint,
+                                : (tag != 0 ? t.labelColour(tag) : tint)
+                                    .withValues(alpha: _unused ? 0.6 : 1),
                             t.textPrimary,
                             0.35 * lit)!,
                       ),
@@ -876,7 +817,7 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
   }
 
   /// The name, then who else has the composition open, then the quiet
-  /// badges: placed somewhere, read from a proxy, read from a stand-in.
+  /// badges: read from a proxy, read from a stand-in.
   ///
   /// **The name keeps [_nameFloor] of room, or all it needs when that is
   /// less.** It is the one thing on the row that cannot be guessed, and two
@@ -905,10 +846,6 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
           ],
         null => const <(String, String, Color)>[],
       },
-      // Placed somewhere (§12A.3a). Before the missing badge, so a broken
-      // file that is nonetheless *in* a comp reads left to right as "used,
-      // and lost", which is the order those two facts matter in.
-      if (widget.inUse) ('in-use-$id', l10n.projectItemInUse, t.success),
       // Reading from its proxy. **Quiet on purpose**: a proxy is a fact
       // about which file the item is being read from, not something that
       // wants acting on, so it takes the badge family's shape at
@@ -1087,31 +1024,25 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
     );
   }
 
-  /// The label square: always the hues, never the row's current colour — the
-  /// glyph two cells left already wears that, so this stays the mark that
-  /// says "a colour is set here" rather than a second copy of the answer.
-  /// Opens the same eight-colour picker every label control does.
+  /// Nothing places it. A composition doesn't count, as one nothing nests is
+  /// usually the one being made, and a folder has no uses of its own.
+  bool get _unused =>
+      !widget.inUse &&
+      (item is ItemReference_Footage || item is ItemReference_Solid);
+
   Widget _nameOrEditor(LumitTheme t) {
     final controller = _rename;
     if (widget.renaming && controller != null) {
-      return Container(
+      return HouseTextField(
+        key: const ValueKey('rename-field'),
+        controller: controller,
+        focusNode: _renameFocus,
+        width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          color: t.surface0,
-          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-          border: Border.all(color: t.accent),
-        ),
-        child: EditableText(
-          key: const ValueKey('rename-field'),
-          controller: controller,
-          focusNode: _renameFocus,
-          style: t.body,
-          cursorColor: t.accent,
-          backgroundCursorColor: t.surface2,
-          selectionColor: t.accent.withValues(alpha: 0.5),
-          onSubmitted: (_) => _commitRename(),
-          onTapOutside: (_) => _commitRename(),
-        ),
+        style: t.body,
+        onSubmitted: (_) => _commitRename(),
+        onTapOutside: _commitRename,
+        onCancelled: _cancelRename,
       );
     }
     // A folder names a group, and a picked row is the one being talked about:
@@ -1121,7 +1052,9 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
         ? t.textMuted
         : (widget.selected || item is ItemReference_Folder)
             ? t.textPrimary
-            : t.textSecondary;
+            : _unused
+                ? t.textMuted
+                : t.textSecondary;
     return Text(widget.name,
         style: t.body.copyWith(color: colour),
         textDirection: nameDirection(widget.name),
@@ -1157,14 +1090,40 @@ class _ProjectRowFrbState extends State<ProjectRowFrb> {
 }
 
 /// The floating label shown under the pointer while a row is dragged.
-class _DragFeedbackFrb extends StatelessWidget {
+class _DragFeedbackFrb extends StatefulWidget {
   final String name;
   final LumitIcon icon;
   const _DragFeedbackFrb({required this.name, this.icon = LumitIcon.footage});
 
   @override
+  State<_DragFeedbackFrb> createState() => _DragFeedbackFrbState();
+}
+
+class _DragFeedbackFrbState extends State<_DragFeedbackFrb> {
+  bool _replacing = HardwareKeyboard.instance.isAltPressed;
+
+  bool _onKey(KeyEvent _) {
+    final alt = HardwareKeyboard.instance.isAltPressed;
+    if (alt != _replacing) setState(() => _replacing = alt);
+    return false;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final (name, icon) = (widget.name, widget.icon);
     return FloatSurface(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1176,6 +1135,11 @@ class _DragFeedbackFrb extends StatelessWidget {
                 color: icon == LumitIcon.comp ? t.textMuted : t.labelColour(1)),
             const SizedBox(width: 6),
             Text(name, style: t.small),
+            if (_replacing) ...[
+              const SizedBox(width: 8),
+              Text(l10n.menuReplaceSource,
+                  style: t.small.copyWith(color: t.accent)),
+            ],
           ],
         ),
       ),

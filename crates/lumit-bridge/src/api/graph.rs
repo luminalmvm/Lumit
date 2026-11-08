@@ -86,7 +86,7 @@ pub enum BridgeNodeRef {
 
 impl BridgeNodeRef {
     #[frb(ignore)]
-    fn of(node: NodeRef) -> BridgeNodeRef {
+    pub(crate) fn of(node: NodeRef) -> BridgeNodeRef {
         match node {
             NodeRef::Source => BridgeNodeRef::Source,
             NodeRef::Effect(id) => BridgeNodeRef::Effect(id),
@@ -654,10 +654,11 @@ pub(crate) fn wiring_into(
                 members: group.members.into_iter().map(BridgeNodeRef::core).collect(),
             })
             .collect(),
-        // The wiring carries none. Whoever commits it puts the document's
-        // own back.
+        // The wiring carries none of these. Whoever commits it puts the
+        // document's own back ([`LayerGraph::keep_canvas`]).
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         out_unwired: wiring.out_unwired,
     }
 }

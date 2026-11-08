@@ -186,6 +186,9 @@ class _ProfileChipState extends State<ProfileChip> {
       builder: (context, _) {
         final profile = ui.profiles.current;
         final account = ui.account.account;
+        // The name only once there is one: the stand-in for a profile with
+        // none is for the card, where it has a line to sit under.
+        final named = profile.name.trim().isNotEmpty;
         return LumitTooltip(
           message: l10n.profileButtonTip,
           child: HouseButton(
@@ -199,14 +202,16 @@ class _ProfileChipState extends State<ProfileChip> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ProfileAvatar(profile, size: 14, pro: account?.pro ?? false),
-                const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 120),
-                  child: Text(profileName(profile),
-                      style: t.small.copyWith(color: t.textPrimary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ),
+                if (named) ...[
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    child: Text(profile.name.trim(),
+                        style: t.small.copyWith(color: t.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ],
               ],
             ),
           ),

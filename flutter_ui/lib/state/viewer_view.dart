@@ -68,6 +68,21 @@ enum ViewerView {
       this == ViewerView.custom3 ||
       this == ViewerView.free;
 
+  /// The keymap action that switches to this view, where it has one: the
+  /// fixed six and the active camera. The custom views are on the F10 to F12
+  /// shortcuts instead.
+  String? get action => switch (this) {
+        ViewerView.activeCamera => 'viewer.3d.camera',
+        ViewerView.front ||
+        ViewerView.back ||
+        ViewerView.left ||
+        ViewerView.right ||
+        ViewerView.top ||
+        ViewerView.bottom =>
+          'viewer.3d.view.$name',
+        _ => null,
+      };
+
   /// What the picker's row reads.
   String get title => switch (this) {
         ViewerView.activeCamera => l10n.viewerViewActiveCamera,

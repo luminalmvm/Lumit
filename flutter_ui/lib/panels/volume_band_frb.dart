@@ -26,9 +26,10 @@
 // left at the top and right at the bottom, as Vegas draws it. A double-click
 // on a key puts it back to 0 dB or centre, and anywhere else on the line
 // plants one. Right-click a key to type its value, reset or delete it, or the
-// line for a point, the curve of the span under the pointer, Thin, Flip and
-// Reset all, as Vegas's envelope menu has them. An expression's value or a locked layer is
-// not for dragging: the first draws nothing, the second only the line.
+// line for a point, the curve of the span under the pointer, Thin, Flip on pan,
+// Copy, Paste, Reset and the switch that hides it. An expression's value or a
+// locked layer is not for dragging: the first draws nothing, the second only
+// the line.
 
 import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart' show kDoubleTapSlop, kDoubleTapTimeout;
@@ -73,6 +74,42 @@ double volumeBandDbOfY(double y, double height,
 /// Which property a band draws and edits.
 enum BandKind { volume, pan }
 
+/// The line Copy volume or Copy pan took last, for Paste on another track.
+final Map<BandKind, BridgeScalar> _bandClipboard = {};
+
+/// Which rows draw their volume and pan lines: a line shows once asked for or
+/// once its property has keys, and stays away once hidden. The Cut and Audio
+/// timelines keep one each, so a layer answers alike in both.
+class EnvelopesShown {
+  final Set<String> _shown = {};
+  final Set<String> _hidden = {};
+
+  bool of(BridgeLayerEntry entry, String row, BandKind kind) {
+    final key = '${kind.name}:$row';
+    if (_hidden.contains(key)) return false;
+    if (_shown.contains(key)) return true;
+    final info = entry.info;
+    return (kind == BandKind.volume ? info.volumeDb : info.pan)
+        is BridgeScalar_Keyframed;
+  }
+
+  /// Show [kind]'s line on every one of [rows], or hide it on them all when
+  /// each shows it already.
+  void toggle(List<(BridgeLayerEntry, String)> rows, BandKind kind) {
+    final show = !rows.every((r) => of(r.$1, r.$2, kind));
+    for (final (_, row) in rows) {
+      final key = '${kind.name}:$row';
+      if (show) {
+        _shown.add(key);
+        _hidden.remove(key);
+      } else {
+        _hidden.add(key);
+        _shown.remove(key);
+      }
+    }
+  }
+}
+
 /// The layer's Volume (or Pan) as a band over its lane.
 class VolumeBand extends StatefulWidget {
   final BridgeLayerEntry entry;
@@ -94,6 +131,10 @@ class VolumeBand extends StatefulWidget {
 
   final BandKind kind;
 
+  /// Hides the line from its own menu, as the head's switch does, where the
+  /// view can.
+  final VoidCallback? onHide;
+
   const VolumeBand({
     super.key,
     required this.entry,
@@ -105,6 +146,7 @@ class VolumeBand extends StatefulWidget {
     required this.rowHeight,
     required this.onChanged,
     this.kind = BandKind.volume,
+    this.onHide,
   });
 
   @override
@@ -537,12 +579,14 @@ class VolumeBandState extends State<VolumeBand> {
   }
 
   /// Right-click a key to type its value, reset or delete it, or the line for
-  /// a point, the span's curve, Thin, Flip and Reset all.
+  /// a point, the span's curve, Thin, Flip on pan, the clipboard, Reset, and
+  /// the switch that hides it.
   Future<void> _menu(Offset local, Offset global) async {
     final keys = _keys;
     final key = keys.isEmpty ? null : _keyNear(local);
     final span = key == null ? _spanAt(local.dx) : null;
     final current = span == null ? null : _curveOf(keys, span);
+    final changed = keys.isNotEmpty || _staticValue != 0;
     final names = {
       SpeedCurve.linear: l10n.speedCurveLinear,
       SpeedCurve.fast: l10n.speedCurveFast,
@@ -554,27 +598,29 @@ class VolumeBandState extends State<VolumeBand> {
     final picked = await showMenuAt<Object>(
       context: context,
       position: global,
-      width: 170,
+      width: 220,
       rows: (close) => [
         if (key != null) ...[
           MenuRow(
               key: const ValueKey('band-set-point'),
               onPressed: () => close('set'),
-              child: Text(l10n.envelopePointSet)),
+              child: MenuLabel(l10n.envelopePointSet, ticked: false)),
           MenuRow(
               key: const ValueKey('band-reset-point'),
               onPressed: () => close('reset'),
-              child: Text(l10n.envelopePointReset)),
+              child: MenuLabel(l10n.envelopePointReset, ticked: false)),
+          const MenuDivider(),
           MenuRow(
               key: const ValueKey('band-delete-point'),
               onPressed: () => close('delete'),
-              child: Text(l10n.delete)),
+              child: MenuLabel(l10n.delete, ticked: false)),
         ] else ...[
           MenuRow(
               key: const ValueKey('band-add-point'),
               onPressed: () => close('add'),
-              child: Text(l10n.speedPointAdd)),
-          if (span != null)
+              child: MenuLabel(l10n.speedPointAdd, ticked: false)),
+          if (span != null) ...[
+            const MenuDivider(),
             for (final MapEntry(key: curve, value: name) in names.entries)
               MenuRow.option(
                 key: ValueKey<String>('band-curve-${curve.name}'),
@@ -584,19 +630,54 @@ class VolumeBandState extends State<VolumeBand> {
                   Expanded(child: Text(name)),
                 ]),
               ),
+          ],
+          const MenuDivider(),
           if (keys.length > 2)
             MenuRow(
                 key: const ValueKey('band-thin'),
                 onPressed: () => close('thin'),
-                child: Text(l10n.envelopeThin)),
+                child: MenuLabel(l10n.envelopeThin, ticked: false)),
+          // A band at its centre with no points: nothing to flip or reset.
+          if (_pan)
+            MenuRow(
+                key: const ValueKey('band-flip'),
+                enabled: changed,
+                onPressed: () => close('flip'),
+                child: MenuLabel(l10n.envelopeFlipAll,
+                    enabled: changed, ticked: false)),
           MenuRow(
-              key: const ValueKey('band-flip'),
-              onPressed: () => close('flip'),
-              child: Text(l10n.envelopeFlipAll)),
+              key: const ValueKey('band-copy'),
+              onPressed: () => close('copy'),
+              child: MenuLabel(
+                  _pan ? l10n.envelopeCopyPan : l10n.envelopeCopyVolume,
+                  ticked: false)),
+          MenuRow(
+              key: const ValueKey('band-paste'),
+              enabled: _bandClipboard[widget.kind] != null,
+              onPressed: () => close('paste'),
+              child: MenuLabel(
+                  _pan ? l10n.envelopePastePan : l10n.envelopePasteVolume,
+                  enabled: _bandClipboard[widget.kind] != null,
+                  ticked: false)),
           MenuRow(
               key: const ValueKey('band-reset-all'),
+              enabled: changed,
               onPressed: () => close('reset-all'),
-              child: Text(l10n.envelopeResetAll)),
+              child: MenuLabel(
+                  _pan ? l10n.audioResetPan : l10n.audioResetVolume,
+                  enabled: changed,
+                  ticked: false)),
+          if (widget.onHide != null) ...[
+            const MenuDivider(),
+            MenuRow(
+                key: const ValueKey('band-hide'),
+                onPressed: () => close('hide'),
+                child: MenuLabel(
+                    _pan ? l10n.cutPanEnvelope : l10n.cutVolumeEnvelope,
+                    action:
+                        _pan ? 'cut.envelope.pan' : 'cut.envelope.volume',
+                    ticked: true)),
+          ],
         ],
       ],
     );
@@ -625,6 +706,12 @@ class VolumeBandState extends State<VolumeBand> {
         if (keys.isNotEmpty || _staticValue != 0) {
           _write(const BridgeScalar.static_(0));
         }
+      case 'copy':
+        _bandClipboard[widget.kind] = _scalar;
+      case 'paste':
+        if (_bandClipboard[widget.kind] case final line?) _write(line);
+      case 'hide':
+        widget.onHide?.call();
       case final SpeedCurve curve:
         _write(BridgeScalar.keyframed(_withCurve(keys, span!, curve)));
     }

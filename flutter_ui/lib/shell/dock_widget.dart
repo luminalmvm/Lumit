@@ -6,10 +6,16 @@
 // movePanel. Every pane is a drop target, bare ones included. A pane standing
 // alone has no tab, so its title lifts it instead (DockPaneHandle).
 
+import 'dart:math' show max, min;
+
+import 'package:flutter/gestures.dart'
+    show GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/rendering.dart' show RenderOffstage;
 import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
+import '../main.dart' show LumitUiState;
 import '../l10n/strings.dart';
 import '../panels/viewer_strips.dart' show viewerPaneCorners;
 import '../state/dock.dart';
@@ -43,9 +49,9 @@ const double _dragSlop = 6.0;
 /// run out — the width its narrowest useful arrangement lays out at without
 /// overflowing — and `panel_width_sweep_test` is what keeps them honest.
 double panelMinWidth(Panel panel) => switch (panel) {
-      // A row is a twirl, a type mark, a name, its state badges and the
-      // metadata columns still standing at this width; that is what 300 buys.
-      Panel.project => 300,
+      // Its columns give way on their own down to here, so nothing is cut at
+      // the panel's edge above it (`projectMinWidth`).
+      Panel.project => 180,
       // The picture itself will draw at any size, and both strips slide on
       // their own below the width they want, so the Viewer's floor is only
       // about there being a picture worth looking at.
@@ -53,18 +59,18 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // The outline's own columns, before a single lane of time.
       Panel.timeline => 220,
       // A parameter row: its name, its wells and its keyframe marks.
-      Panel.effectControls => 300,
-      // The toolbar's fixed controls measure 551 px in the tests' font,
-      // which is wider than the shipped one: the group, note and saved
-      // groups buttons, save group, the two toggles, the snap magnet and
-      // the view cluster. Below this the floor slides, which is what a
-      // canvas panel wants anyway.
-      Panel.graph => 560,
+      Panel.effectControls => 240,
+      // The toolbar folds into one mark and the canvas draws at any size.
+      Panel.graph => 200,
       Panel.effectsAndPresets => 180,
       Panel.node => 200,
       Panel.scopes => 160,
+      // A primary's name, its track and its number; the wheels stack under
+      // this.
+      Panel.grade => 200,
       Panel.hierarchy => 180,
       Panel.easing => 220,
+      Panel.retime => 220,
       // Two strips and the Master: below that a desk is a list of names.
       Panel.mixer => 190,
       // The Beats section's widest row: a label, the BPM well, Tap and the
@@ -109,6 +115,33 @@ double dockMinWidth(DockNode node) => switch (node) {
               : children.map(dockMinWidth).reduce((a, b) => a > b ? a : b),
     };
 
+/// The height below which a stacked split stops shrinking a panel and takes
+/// the room from a sibling instead. The timelines have one: their header,
+/// their column header and six rows. So does the Audio panel: its meter, a
+/// layer's rows and the Beats row, under its header and a shut panel's.
+/// Everything else scales or scrolls.
+double panelMinHeight(Panel panel) => switch (panel) {
+      Panel.timeline || Panel.audioTimeline || Panel.cutTimeline => 250,
+      Panel.audio => 350,
+      _ => 0,
+    };
+
+/// [dockMinWidth]'s twin down the page: a split is the sum of its children
+/// down, or the tallest of them across.
+double dockMinHeight(DockNode node) => switch (node) {
+      DockPane(:final panel) => panelMinHeight(panel),
+      DockTabs(:final children) => children.isEmpty
+          ? 0
+          : children
+              .map((c) => panelMinHeight(c.panel))
+              .reduce((a, b) => a > b ? a : b),
+      DockSplit(:final axis, :final children) => children.isEmpty
+          ? 0
+          : axis == DockAxis.vertical
+              ? children.map(dockMinHeight).reduce((a, b) => a + b)
+              : children.map(dockMinHeight).reduce((a, b) => a > b ? a : b),
+    };
+
 /// Holds [child] to [minWidth] and slides it sideways when the pane is
 /// narrower than that (§12A.6's ladder, step 5).
 ///
@@ -132,15 +165,18 @@ class PanelFloor extends StatelessWidget {
               box.maxWidth >= minWidth) {
             return child;
           }
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: minWidth,
-              // The height has to be handed over as a number: a panel is a
-              // Column with an Expanded in it, and inside a scroll view the
-              // cross axis arrives loose.
-              height: box.maxHeight,
-              child: child,
+          // Faded at the edge that has more, so a cut panel says it slides.
+          return EdgeFade(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: minWidth,
+                // The height has to be handed over as a number: a panel is a
+                // Column with an Expanded in it, and inside a scroll view the
+                // cross axis arrives loose.
+                height: box.maxHeight,
+                child: child,
+              ),
             ),
           );
         },
@@ -272,6 +308,56 @@ class _DockWidgetState extends State<DockWidget> {
     widget.onLayoutChanged();
   }
 
+  /// Close every other pane of [keep]'s group. A popped-out pane keeps its
+  /// window, as the row that offers this says.
+  void _closeOthers(PaneId keep, DockTabs group) {
+    setState(() {
+      for (final c in group.children.toList()) {
+        if (c.id != keep && !_popped.containsKey(c.id)) {
+          closePane(widget.root, c.id);
+        }
+      }
+    });
+    widget.onLayoutChanged();
+  }
+
+  /// Put [panel] into [beside]'s group, fronted. The Viewer, which may be in
+  /// the arrangement more than once, comes as another pane of it.
+  void _addPanel(Panel panel, {required PaneId beside}) {
+    setState(() {
+      final PaneId made;
+      if (panel == Panel.viewer) {
+        made = addPane(widget.root, panel);
+      } else {
+        setPanelVisible(widget.root, panel, true);
+        made = panel.pane();
+      }
+      movePanel(widget.root, made, beside, DropPosition.stack);
+      widget.activePanel.value = made;
+    });
+    widget.onLayoutChanged();
+  }
+
+  /// Give children i and j of [split] the same room, where both panels'
+  /// minimums allow it. [extent] is the split's own width or height.
+  void _equalise(DockSplit split, int i, int j, double extent) {
+    final sum = split.shares[i] + split.shares[j];
+    final each = sum / 2;
+    if (split.axis == DockAxis.horizontal) {
+      final total = split.shares.reduce((a, b) => a + b);
+      final px = each / total * extent;
+      if (px < dockMinWidth(split.children[i]) ||
+          px < dockMinWidth(split.children[j])) {
+        return;
+      }
+    }
+    setState(() {
+      split.shares[i] = each;
+      split.shares[j] = each;
+    });
+    widget.onLayoutChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -294,14 +380,7 @@ class _DockWidgetState extends State<DockWidget> {
         child: maximised != null &&
                 present.contains(maximised) &&
                 !_popped.containsKey(maximised)
-            ? _PaneChrome(
-                pane: maximised,
-                activePanel: widget.activePanel,
-                drag: _drag,
-                onClose: _closePanel,
-                header: _bareTitle(t, maximised),
-                child: widget.buildPanel(context, maximised),
-              )
+            ? _maximised(context, t, maximised)
             : _buildNode(context, widget.root),
       ),
     );
@@ -327,16 +406,34 @@ class _DockWidgetState extends State<DockWidget> {
                     )),
                   ),
               ]),
-        child: dock,
+        child: _DockScope(dock: this, child: dock),
       ),
     );
   }
 
-  /// The title line a pane standing alone wears. Studio draws none, and
-  /// neither does a panel that draws a header of its own.
+  /// The window filled with [pane]: its whole group when it is in one, so
+  /// the tabs stay to switch between and to double-click back, and the pane
+  /// on its own otherwise.
+  Widget _maximised(BuildContext context, LumitTheme t, PaneId pane) {
+    final group = groupOf(widget.root, pane);
+    if (group != null) {
+      return _buildNode(context, group);
+    }
+    return _PaneChrome(
+      pane: pane,
+      activePanel: widget.activePanel,
+      drag: _drag,
+      onClose: _closePanel,
+      header: _bareTitle(t, pane),
+      child: widget.buildPanel(context, pane),
+    );
+  }
+
+  /// The title line a pane standing alone wears, in every shape: it names the
+  /// pane, lifts it, and takes the right-click for its menu. A panel that
+  /// draws a header of its own has no second one.
   Widget? _bareTitle(LumitTheme t, PaneId pane) {
     final panel = pane.panel;
-    if (t.shape == ThemeShape.studio) return null;
     // These four draw a header line of their own.
     if (panel == Panel.viewer ||
         panel == Panel.timeline ||
@@ -405,11 +502,76 @@ class _DockWidgetState extends State<DockWidget> {
       for (var i = 0; i < split.children.length; i++)
         if (_shown(split.children[i])) i,
     ];
+    return LayoutBuilder(
+      builder: (context, box) {
+        final seams =
+            (shown.length - 1) * _Divider.extentFor(t.tokens.tileGap);
+        final weights = _givenWay(split, shown,
+            (horizontal ? box.maxWidth : box.maxHeight) - seams);
+        final children = _splitChildren(context, t, split, shown, weights);
+        if (!horizontal) return Column(children: children);
+        return Row(
+          // The arrangement is the one the user built, in every language:
+          // the seam drags and the drop sides below are in screen terms.
+          textDirection: TextDirection.ltr,
+          children: children,
+        );
+      },
+    );
+  }
+
+  /// The least a child of [split] can be drawn at along the split.
+  double _least(DockSplit split, DockNode child) =>
+      split.axis == DockAxis.horizontal
+          ? dockMinWidth(child)
+          : dockMinHeight(child);
+
+  /// What each shown child of a split is drawn at along [room]: its share,
+  /// except that a child smaller than its panels' least is grown to it, the
+  /// room coming off the sibling with the most to spare above its own. Only
+  /// the drawing gives way; the shares the user dragged stay as they were,
+  /// and a bigger window puts them back.
+  List<double> _givenWay(DockSplit split, List<int> shown, double room) {
+    final total = shown.fold<double>(0, (sum, i) => sum + split.shares[i]);
+    if (total <= 0 || !room.isFinite || room <= 0) {
+      return [for (final i in shown) split.shares[i]];
+    }
+    final width = [for (final i in shown) split.shares[i] / total * room];
+    final least = [for (final i in shown) _least(split, split.children[i])];
+    for (var k = 0; k < width.length; k++) {
+      var short = least[k] - width[k];
+      while (short > 0.5) {
+        var giver = -1;
+        var spare = 0.5;
+        for (var j = 0; j < width.length; j++) {
+          if (j != k && width[j] - least[j] > spare) {
+            giver = j;
+            spare = width[j] - least[j];
+          }
+        }
+        // Nothing left to give: the panel slides inside its pane instead.
+        if (giver < 0) break;
+        final take = short < spare ? short : spare;
+        width[giver] -= take;
+        width[k] += take;
+        short -= take;
+      }
+    }
+    return width;
+  }
+
+  /// A split's children and the seams between them, each child weighted by
+  /// [weights] where given, else by its share.
+  List<Widget> _splitChildren(BuildContext context, LumitTheme t,
+      DockSplit split, List<int> shown, List<double>? weights) {
+    final horizontal = split.axis == DockAxis.horizontal;
     final children = <Widget>[];
     for (final (k, i) in shown.indexed) {
       children.add(Expanded(
-        // Flex is integer; scale the share up to keep precision.
-        flex: (split.shares[i] * 10000).round().clamp(1, 1 << 30),
+        // Flex is integer; scale the weight up to keep precision.
+        flex: ((weights?[k] ?? split.shares[i]) * 10000)
+            .round()
+            .clamp(1, 1 << 30),
         child: _buildNode(context, split.children[i]),
       ));
       if (k < shown.length - 1) {
@@ -424,14 +586,11 @@ class _DockWidgetState extends State<DockWidget> {
             });
           },
           onDragEnd: widget.onLayoutChanged,
+          onReset: (extent) => _equalise(split, i, j, extent),
         ));
       }
     }
-    // The arrangement is the one the user built, in every language: the seam
-    // drags and the drop sides below are in screen terms.
-    return horizontal
-        ? Row(textDirection: TextDirection.ltr, children: children)
-        : Column(children: children);
+    return children;
   }
 
   /// Move the boundary between child i and child j, the next one drawn, by
@@ -449,18 +608,13 @@ class _DockWidgetState extends State<DockWidget> {
     final b = split.shares[j] - deltaShare;
     if (a < minShare || b < minShare) return;
     // **The seam stops at the panels' own minimums.** Every panel declares a
-    // minimum, and the dock will not shrink it past that. Across a horizontal
-    // split that minimum is a width, so the drag is refused rather than
-    // clamped — a seam that slid on while the panel underneath stopped moving
-    // was how a panel ended up narrower than anything it could draw.
-    if (split.axis == DockAxis.horizontal) {
-      final aPx = a / total * totalExtent;
-      final bPx = b / total * totalExtent;
-      if (aPx < dockMinWidth(split.children[i]) ||
-          bPx < dockMinWidth(split.children[j])) {
-        return;
-      }
-    }
+    // minimum, and the dock will not shrink it past that, so the drag is
+    // refused rather than clamped: a seam that slid on while the panel
+    // underneath stopped moving was how a panel ended up smaller than
+    // anything it could draw. Growing one already under its least is fine.
+    final shrunk = deltaShare > 0 ? j : i;
+    final shrunkPx = (deltaShare > 0 ? b : a) / total * totalExtent;
+    if (shrunkPx < _least(split, split.children[shrunk])) return;
     split.shares[i] = a;
     split.shares[j] = b;
   }
@@ -740,13 +894,22 @@ class _Divider extends StatefulWidget {
   /// move.
   final VoidCallback onDragEnd;
 
+  /// Give the two sides the same room again: a double-click, or the seam's
+  /// one menu row. Told the split's own extent, as [onDrag] is.
+  final void Function(double totalExtent) onReset;
+
   const _Divider({
     super.key,
     required this.horizontal,
     required this.gap,
     required this.onDrag,
     required this.onDragEnd,
+    required this.onReset,
   });
+
+  /// How far apart a seam holds the panes either side: the token's gap, or a
+  /// comfortable 7 px to grab where the gap is a hairline.
+  static double extentFor(double gap) => gap < 7.0 ? 7.0 : gap;
 
   @override
   State<_Divider> createState() => _DividerState();
@@ -755,6 +918,16 @@ class _Divider extends StatefulWidget {
 class _DividerState extends State<_Divider> {
   bool _hover = false;
   bool _dragging = false;
+
+  /// When the seam was last clicked, for the second click of a double one.
+  DateTime? _lastTap;
+
+  /// The split's own width or height: the row or column the seam sits in.
+  double _extent() {
+    final parent = context.findAncestorRenderObjectOfType<RenderBox>()?.size;
+    if (parent == null) return 0;
+    return widget.horizontal ? parent.width : parent.height;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -777,7 +950,7 @@ class _DividerState extends State<_Divider> {
             : idle;
     // The visible gap keeps the token width; the hit area is padded to a
     // comfortable 7 px so a 1 px hairline is still grabbable.
-    final hit = widget.gap < 7.0 ? 7.0 : widget.gap;
+    final hit = _Divider.extentFor(widget.gap);
     // **The whole seam is painted, not just the hairline in it** (owner, desk
     // test). The hit padding is layout, so the panes stand `hit` apart whatever
     // the token says — and only `gap` of that was ever painted, leaving 3 px of
@@ -797,20 +970,38 @@ class _DividerState extends State<_Divider> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        // Timed by hand, as a tab's double-click is: a double-tap recogniser
+        // keeps a timer running after every click.
+        onTap: () {
+          final now = DateTime.now();
+          final again = _lastTap != null &&
+              now.difference(_lastTap!) < const Duration(milliseconds: 350);
+          _lastTap = again ? null : now;
+          if (again) widget.onReset(_extent());
+        },
+        onSecondaryTapUp: (d) => showLumitPopup<void>(
+          context: context,
+          position: d.globalPosition,
+          builder: (close) => FloatSurface(
+            child: IntrinsicWidth(
+              child: MenuRow(
+                key: const ValueKey('seam-menu-reset'),
+                onPressed: () {
+                  close(null);
+                  widget.onReset(_extent());
+                },
+                child: MenuLabel(l10n.resetSplit),
+              ),
+            ),
+          ),
+        ),
         onPanStart: (_) => setState(() => _dragging = true),
         onPanEnd: (_) {
           setState(() => _dragging = false);
           widget.onDragEnd();
         },
         onPanCancel: () => setState(() => _dragging = false),
-        onPanUpdate: (d) {
-          final parent =
-              context.findAncestorRenderObjectOfType<RenderBox>()?.size;
-          final extent = parent == null
-              ? 0.0
-              : (widget.horizontal ? parent.width : parent.height);
-          widget.onDrag(d.delta, extent);
-        },
+        onPanUpdate: (d) => widget.onDrag(d.delta, _extent()),
         child: Container(
           width: widget.horizontal ? hit : null,
           height: widget.horizontal ? null : hit,
@@ -852,7 +1043,7 @@ class _TitleLine extends StatelessWidget {
       height: t.density.headerStrip,
       decoration: dress(BoxDecoration(color: roomed ? t.surface1 : t.surface2),
           partStyle(context, t, 'header', inside: panel)),
-      padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 0),
+      padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 10),
       child: Row(
         children: [
           if (dot) ...[
@@ -942,35 +1133,13 @@ class _TabGroup extends StatelessWidget {
       active.id.panel.name,
       Column(
         children: [
-          // The pill strip scrolls when the group is narrower than its
-          // tabs, as egui_tiles' tab bar does, and fades at the end that has
-          // more.
-          _TitleLine(
-            panel: active.id.panel.name,
-            child: EdgeFade(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final i in shown)
-                      _TabPill(
-                        pane: tabs.children[i].id,
-                        title: paneTitle(tabs.children[i].id),
-                        active: i == front,
-                        drag: drag,
-                        onClose: onClose,
-                        group: tabs,
-                        onGroupChanged: onChanged,
-                        onPressed: () {
-                          tabs.active = i;
-                          onChanged();
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ),
+          _TabStrip(
+            tabs: tabs,
+            shown: shown,
+            front: front,
+            drag: drag,
+            onClose: onClose,
+            onChanged: onChanged,
           ),
           // Two requirements meet here, each once lost to the other. Panel
           // state, scroll offsets, twirl-downs, survives a tab switch, so a
@@ -1013,6 +1182,300 @@ class _TabGroup extends StatelessWidget {
   }
 }
 
+/// A tab's width less its name, in each shape: what [_TabPill] puts round the
+/// word.
+double _tabChrome(LumitTheme t) {
+  // The always-there border, one either side.
+  const border = 2.0;
+  if (t.tokens.actionRadius == ShapeTokens.stadium) {
+    return t.tokens.pillInset * 2 + 16 + border;
+  }
+  // Desk's 10 of margin either side, or the flush shapes' 2 of margin and 8
+  // of padding.
+  return 20 + border;
+}
+
+/// A tab group's strip. A group narrower than its tabs first takes width from
+/// the tabs behind the fronted one, each name fading where it is cut, down to
+/// its first word and two letters of the next. Past that the strip scrolls:
+/// the wheel moves it, and a mark at its end lists every tab of the group.
+/// The whole line, its margins included, takes the group's right-click.
+class _TabStrip extends StatefulWidget {
+  final DockTabs tabs;
+
+  /// The tabs not popped out, by index into the group.
+  final List<int> shown;
+  final int front;
+  final _DragController drag;
+  final void Function(PaneId) onClose;
+  final VoidCallback onChanged;
+
+  const _TabStrip({
+    required this.tabs,
+    required this.shown,
+    required this.front,
+    required this.drag,
+    required this.onClose,
+    required this.onChanged,
+  });
+
+  @override
+  State<_TabStrip> createState() => _TabStripState();
+}
+
+class _TabStripState extends State<_TabStrip> {
+  final ScrollController _scroll = ScrollController();
+
+  /// Whether the strip holds more than it shows, as its last layout found.
+  /// Worked out from the names' widths rather than from the scroll view, so
+  /// the mark that appears cannot change the answer that put it there.
+  bool _cut = false;
+
+  /// Each name's width as measured, by its words and style, so a dock
+  /// redrawing every frame measures nothing twice.
+  final Map<(String, TextStyle, TextScaler), double> _words = {};
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// The plain wheel moves the strip sideways, as it would a list.
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    if (position.maxScrollExtent <= 0 || event.scrollDelta.dx != 0) return;
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      _scroll.jumpTo((position.pixels + event.scrollDelta.dy)
+          .clamp(0.0, position.maxScrollExtent));
+    });
+  }
+
+  void _front(int i) {
+    widget.tabs.active = i;
+    widget.onChanged();
+  }
+
+  double _word(LumitTheme t, TextStyle ambient, int i, TextScaler scaler) =>
+      _measure(t, ambient, i, scaler,
+          t.kickerCase(paneTitle(widget.tabs.children[i].id)));
+
+  /// The least of tab [i]'s name drawn before the strip scrolls: its first
+  /// word and two letters of the next, clear of the fade after them, so no
+  /// two tabs cut to the same few letters. A one-word name stays whole.
+  double _least(LumitTheme t, TextStyle ambient, int i, TextScaler scaler) {
+    final name = t.kickerCase(paneTitle(widget.tabs.children[i].id));
+    final parts = name.split(' ');
+    if (parts.length < 2) return _word(t, ambient, i, scaler);
+    final kept = '${parts[0]} ${parts[1].substring(0, min(2, parts[1].length))}';
+    if (kept.length >= name.length) return _word(t, ambient, i, scaler);
+    // The fade covers an ellipsis' width at the cut.
+    return _measure(t, ambient, i, scaler, '$kept…');
+  }
+
+  double _measure(LumitTheme t, TextStyle ambient, int i, TextScaler scaler,
+      String words) {
+    // Over the ambient style, as the tab's own Text is drawn.
+    final style = ambient.merge(i == widget.front ? t.kickerOn : t.kicker);
+    return _words.putIfAbsent((words, style, scaler), () {
+      final painter = TextPainter(
+        text: TextSpan(text: words, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    });
+  }
+
+  /// How wide each tab behind the front one may draw its name, by index, in
+  /// [room], and whether even then the strip is cut. The narrowest keep
+  /// their names and the rest share what is left alike, none below its
+  /// [_least]; empty when every tab fits whole.
+  (Map<int, double>, bool) _fit(
+      LumitTheme t, TextStyle ambient, double room, TextScaler scaler) {
+    final words = {
+      for (final i in widget.shown) i: _word(t, ambient, i, scaler)
+    };
+    final rest = [
+      for (final i in widget.shown)
+        if (i != widget.front) i
+    ]..sort((a, b) => words[a]!.compareTo(words[b]!));
+    // A pixel short, so rounding never tips a strip that fits into scrolling.
+    var left = room -
+        widget.shown.length * _tabChrome(t) -
+        (words[widget.front] ?? 0) -
+        1;
+    if (rest.fold<double>(0, (sum, i) => sum + words[i]!) <= left) {
+      return (const {}, false);
+    }
+    final least = {
+      for (final i in rest) i: min(words[i]!, _least(t, ambient, i, scaler))
+    };
+    if (rest.fold<double>(0, (sum, i) => sum + least[i]!) > left) {
+      return (
+        {
+          for (final i in rest)
+            if (words[i]! > least[i]!) i: least[i]!,
+        },
+        true
+      );
+    }
+    // Each name draws at the cap, or whole if shorter, or its least if
+    // longer: the widest cap that fits, found by halving.
+    double drawn(int i, double cap) => min(words[i]!, max(least[i]!, cap));
+    var lo = 0.0;
+    var hi = rest.fold<double>(0, (m, i) => max(m, words[i]!));
+    for (var k = 0; k < 20; k++) {
+      final cap = (lo + hi) / 2;
+      if (rest.fold<double>(0, (sum, i) => sum + drawn(i, cap)) <= left) {
+        lo = cap;
+      } else {
+        hi = cap;
+      }
+    }
+    return (
+      {
+        for (final i in rest)
+          if (words[i]! > drawn(i, lo)) i: drawn(i, lo),
+      },
+      false
+    );
+  }
+
+  /// Every tab of the group under the mark, the fronted one ticked.
+  void _list(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox) return;
+    showLumitPopup<void>(
+      context: context,
+      position: box.localToGlobal(Offset(0, box.size.height)),
+      builder: (close) => FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _tabRows(widget.tabs, widget.shown, widget.front,
+                () => close(null), _front),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final active = widget.tabs.children[widget.front];
+    final scaler = MediaQuery.textScalerOf(context);
+    void menu(BuildContext context, Offset at, PaneId pane) => _showPaneMenu(
+          context,
+          at,
+          pane: pane,
+          group: widget.tabs,
+          onClose: widget.onClose,
+          onGroupChanged: widget.onChanged,
+          listTabs: _cut,
+        );
+    // The empty end of the strip and its margins answer for the fronted
+    // tab, so Add panel is there whether or not the pointer finds a tab.
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onSecondaryTapUp: (d) => menu(context, d.globalPosition, active.id),
+      child: _TitleLine(
+        panel: active.id.panel.name,
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final ambient = DefaultTextStyle.of(context).style;
+            var (caps, cut) = _fit(t, ambient, box.maxWidth, scaler);
+            // Cut even at a few letters a name: the strip scrolls, and the
+            // mark that lists the rest takes its room from the strip.
+            if (cut) {
+              caps = _fit(t, ambient, box.maxWidth - _tabMarkWidth, scaler).$1;
+            }
+            _cut = cut;
+            final strip = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final i in widget.shown)
+                  _TabPill(
+                    pane: widget.tabs.children[i].id,
+                    title: paneTitle(widget.tabs.children[i].id),
+                    active: i == widget.front,
+                    word: caps[i],
+                    drag: widget.drag,
+                    onMenu: menu,
+                    onPressed: () => _front(i),
+                  ),
+              ],
+            );
+            return SizedBox(
+              width: double.infinity,
+              child: Align(
+                alignment: t.tokens.titleCentred
+                    ? Alignment.center
+                    : AlignmentDirectional.centerStart,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Listener(
+                        onPointerSignal: _wheel,
+                        child: EdgeFade(
+                          // A strip of tabs never stretches at its ends, on
+                          // any system.
+                          child: ScrollConfiguration(
+                            behavior: ScrollConfiguration.of(context)
+                                .copyWith(overscroll: false),
+                            child: SingleChildScrollView(
+                              controller: _scroll,
+                              scrollDirection: Axis.horizontal,
+                              child: strip,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (cut)
+                      OverflowMark(
+                        buttonKey: const ValueKey('dock-tabs-more'),
+                        tooltip: l10n.tipDockMoreTabs,
+                        width: _tabMarkWidth,
+                        height: t.density.headerStrip,
+                        onOpen: _list,
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// The mark at a cut strip's end.
+const double _tabMarkWidth = 24;
+
+/// A row for each of [shown], the fronted one ticked, which fronts its tab.
+List<Widget> _tabRows(DockTabs tabs, List<int> shown, int front,
+        VoidCallback close, void Function(int) pick) =>
+    [
+      for (final i in shown)
+        MenuRow(
+          key: ValueKey<String>('dock-tabs-${tabs.children[i].id.panel.name}'),
+          onPressed: () {
+            close();
+            pick(i);
+          },
+          child: MenuLabel(paneTitle(tabs.children[i].id), ticked: i == front),
+        ),
+    ];
+
 /// A tab body that is mounted always, built only while visible.
 ///
 /// While visible it rebuilds normally. While hidden it returns the widget
@@ -1051,11 +1514,13 @@ class _TabPill extends StatefulWidget {
   final bool active;
   final VoidCallback onPressed;
   final _DragController drag;
-  final void Function(PaneId) onClose;
 
-  /// The group this tab is in, and what to call once its menu has changed it.
-  final DockTabs group;
-  final VoidCallback onGroupChanged;
+  /// How wide the name may draw, where the strip is short of room, or null
+  /// for all of it.
+  final double? word;
+
+  /// The tab's right-click menu, opened at a point.
+  final void Function(BuildContext context, Offset at, PaneId pane) onMenu;
 
   const _TabPill({
     required this.pane,
@@ -1063,9 +1528,8 @@ class _TabPill extends StatefulWidget {
     required this.active,
     required this.onPressed,
     required this.drag,
-    required this.onClose,
-    required this.group,
-    required this.onGroupChanged,
+    required this.onMenu,
+    this.word,
   });
 
   @override
@@ -1074,6 +1538,27 @@ class _TabPill extends StatefulWidget {
 
 class _TabPillState extends State<_TabPill> {
   bool _hover = false;
+
+  /// When the tab was last clicked, for the second click of a double one.
+  DateTime? _lastTap;
+
+  /// A click fronts the tab at once, and a second within the double-click
+  /// time fills the window with it, or puts the arrangement back. Timed by
+  /// hand rather than with a double-tap recogniser, which would hold every
+  /// single click back while it waited for a second.
+  void _tap() {
+    final now = DateTime.now();
+    final again = _lastTap != null &&
+        now.difference(_lastTap!) < const Duration(milliseconds: 350);
+    _lastTap = again ? null : now;
+    if (!again) {
+      widget.onPressed();
+      return;
+    }
+    final maximised = _DockScope.of(context)?.widget.maximised;
+    if (maximised == null) return;
+    maximised.value = maximised.value == widget.pane ? null : widget.pane;
+  }
 
   @override
   void initState() {
@@ -1146,7 +1631,22 @@ class _TabPillState extends State<_TabPill> {
     // front tab changed.
     final style =
         (widget.active ? t.kickerOn : t.kicker).copyWith(color: textColour);
-    final label = Text(t.kickerCase(widget.title), style: style);
+    final word = widget.word;
+    // A name cut short fades where it stops, and says the whole of itself on
+    // hover.
+    final label = word == null
+        ? Text(t.kickerCase(widget.title), style: style)
+        : LumitTooltip(
+            message: widget.title,
+            child: SizedBox(
+              width: word,
+              child: Text(t.kickerCase(widget.title),
+                  style: style,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade),
+            ),
+          );
     // The fill stands off the tab's slot by the shape's pill inset on every
     // side, its corner the outer one less the inset, so the margin is the
     // same the whole way round. Desk's rule spans the word alone, so the word
@@ -1202,15 +1702,9 @@ class _TabPillState extends State<_TabPill> {
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: GestureDetector(
-          onTap: widget.onPressed,
-          onSecondaryTapUp: (d) => _showPaneMenu(
-            context,
-            d.globalPosition,
-            pane: widget.pane,
-            group: widget.group,
-            onClose: widget.onClose,
-            onGroupChanged: widget.onGroupChanged,
-          ),
+          onTap: _tap,
+          onSecondaryTapUp: (d) =>
+              widget.onMenu(context, d.globalPosition, widget.pane),
           // While this pill is the dragged one, it paints nothing but keeps
           // its footprint — egui leaves the gap while the ghost floats free.
           child: AnimatedBuilder(
@@ -1227,11 +1721,13 @@ class _TabPillState extends State<_TabPill> {
   }
 }
 
-/// A panel's right-click menu, on its tab, its header in a stack or its own
-/// title when it stands alone: close the panel, and how the group it is in is
-/// drawn. A pane standing alone has no group, so it gets the close and no more.
+/// A panel's right-click menu, on its tab, its header in a stack, its own
+/// title when it stands alone, and the empty end of its strip: the panel's
+/// own commands (close, close the others, pop out, fill the window), what
+/// to add beside it, how the group it is in is drawn, and the way back to
+/// the workspace. A pane standing alone has no group, so those rows go.
 ///
-/// The Viewer's also has Pop out, which puts it in a window of its own.
+/// Only the Viewer pops out: the engine draws into one window today.
 void _showPaneMenu(
   BuildContext context,
   Offset position, {
@@ -1239,10 +1735,29 @@ void _showPaneMenu(
   required void Function(PaneId) onClose,
   DockTabs? group,
   VoidCallback? onGroupChanged,
+  bool listTabs = false,
 }) {
+  final dock = _DockScope.of(context);
   final popOut = pane.panel == Panel.viewer
       ? context.getInheritedWidgetOfExactType<_PopOutScope>()?.popOut
       : null;
+  // Null outside the shell (a bare widget test), where there is no workspace
+  // to reset.
+  final ui = Provider.of<LumitUiState?>(context, listen: false);
+  final others = group == null || dock == null
+      ? const <PaneId>[]
+      : [
+          for (final c in group.children)
+            if (c.id != pane && !dock._popped.containsKey(c.id)) c.id,
+        ];
+  final maximised = dock?.widget.maximised;
+  // A strip too narrow for its tabs lists them first, as its mark does.
+  final shown = !listTabs || group == null
+      ? const <int>[]
+      : [
+          for (var i = 0; i < group.children.length; i++)
+            if (!(dock?._popped.containsKey(group.children[i].id) ?? false)) i,
+        ];
   showLumitPopup<void>(
     context: context,
     position: position,
@@ -1252,14 +1767,34 @@ void _showPaneMenu(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (shown.length > 1) ...[
+              ..._tabRows(
+                  group!,
+                  shown,
+                  shown.contains(group.active) ? group.active : shown.first,
+                  () => close(null), (i) {
+                group.active = i;
+                onGroupChanged?.call();
+              }),
+              const MenuDivider(),
+            ],
             MenuRow(
               key: const ValueKey('tab-menu-close'),
               onPressed: () {
                 close(null);
                 onClose(pane);
               },
-              child: Text(l10n.closePanel),
+              child: MenuLabel(l10n.closePanel, ticked: false),
             ),
+            if (others.isNotEmpty)
+              MenuRow(
+                key: const ValueKey('tab-menu-close-others'),
+                onPressed: () {
+                  close(null);
+                  dock!._closeOthers(pane, group!);
+                },
+                child: MenuLabel(l10n.closeOtherPanels, ticked: false),
+              ),
             if (popOut != null)
               MenuRow(
                 key: const ValueKey('tab-menu-pop-out'),
@@ -1267,12 +1802,32 @@ void _showPaneMenu(
                   close(null);
                   popOut(pane);
                 },
-                child: Text(l10n.popOutPanel),
+                child: MenuLabel(l10n.popOutPanel, ticked: false),
               ),
-            if (group != null)
+            if (maximised != null)
+              MenuRow(
+                key: const ValueKey('tab-menu-maximise'),
+                onPressed: () {
+                  close(null);
+                  maximised.value = maximised.value == pane ? null : pane;
+                },
+                child: MenuLabel(l10n.maximisePanel,
+                    action: 'panel.maximise',
+                    ticked: maximised.value == pane),
+              ),
+            if (dock != null) ...[
+              const MenuDivider(),
+              SubmenuRow(
+                key: const ValueKey('tab-menu-add'),
+                closeParent: () => close(null),
+                submenu: (dismiss) => _addPanelMenu(dock, pane, dismiss),
+                child: MenuLabel(l10n.addPanel, ticked: false),
+              ),
+            ],
+            if (group != null) ...[
+              const MenuDivider(),
               MenuRow(
                 key: const ValueKey('tab-menu-stacked'),
-                selected: group.stacked,
                 onPressed: () {
                   close(null);
                   group.stacked = !group.stacked;
@@ -1283,29 +1838,107 @@ void _showPaneMenu(
                   }
                   onGroupChanged?.call();
                 },
-                child: Text(l10n.panelGroupStacked),
+                child: MenuLabel(l10n.panelGroupStacked, ticked: group.stacked),
               ),
-            if (group != null && group.stacked)
+              if (group.stacked)
+                MenuRow(
+                  key: const ValueKey('tab-menu-solo'),
+                  onPressed: () {
+                    close(null);
+                    group.solo = !group.solo;
+                    // Turning it on keeps the panel that was clicked and
+                    // shuts the rest, which is what the setting now means.
+                    if (group.solo && group.isOpen(pane)) {
+                      group.setOpen(pane, true);
+                    } else if (group.solo && group.open.length > 1) {
+                      group.setOpen(group.open.first, true);
+                    }
+                    onGroupChanged?.call();
+                  },
+                  child: MenuLabel(l10n.panelGroupSolo, ticked: group.solo),
+                ),
+            ],
+            if (ui != null) ...[
+              const MenuDivider(),
               MenuRow(
-                key: const ValueKey('tab-menu-solo'),
-                selected: group.solo,
+                key: const ValueKey('tab-menu-reset'),
                 onPressed: () {
                   close(null);
-                  group.solo = !group.solo;
-                  // Turning it on keeps the panel that was clicked and shuts
-                  // the rest, which is what the setting now means.
-                  if (group.solo && group.isOpen(pane)) {
-                    group.setOpen(pane, true);
-                  } else if (group.solo && group.open.length > 1) {
-                    group.setOpen(group.open.first, true);
-                  }
-                  onGroupChanged?.call();
+                  ui.resetLayout();
                 },
-                child: Text(l10n.panelGroupSolo),
+                child: MenuLabel(l10n.menuResetWorkspace, ticked: false),
               ),
+            ],
           ],
         ),
       ),
+    ),
+  );
+}
+
+/// Every panel in the groups the workspaces fall into: the Edit five, colour,
+/// nodes, sound, the Cut timeline, type, and the rest. Window ▸ Panels and
+/// Add panel both list them so. An extension's panel is listed by the
+/// extension; the debug panel once Help has switched it on in [root].
+List<List<Panel>> panelGroups(DockNode root) {
+  const named = [
+    [
+      Panel.project,
+      Panel.viewer,
+      Panel.timeline,
+      Panel.effectControls,
+      Panel.effectsAndPresets,
+    ],
+    [Panel.scopes, Panel.grade],
+    [Panel.graph, Panel.node],
+    [Panel.mixer, Panel.audio, Panel.audioTimeline],
+    [Panel.cutTimeline],
+    [Panel.text, Panel.paragraph],
+  ];
+  final placed = {for (final group in named) ...group, Panel.extension};
+  if (!panelVisible(root, Panel.debug)) placed.add(Panel.debug);
+  return [
+    ...named,
+    [
+      for (final panel in Panel.values)
+        if (!placed.contains(panel)) panel
+    ],
+  ];
+}
+
+/// The panels not on screen, each a row that puts it into [beside]'s group,
+/// in Window ▸ Panels' groups. The Viewer is always offered: a second one is
+/// another pane of it.
+Widget _addPanelMenu(_DockWidgetState dock, PaneId beside, VoidCallback dismiss) {
+  final present = panelsIn(dock.widget.root).toSet();
+  final groups = [
+    for (final group in panelGroups(dock.widget.root))
+      [
+        for (final panel in group)
+          if (panel != Panel.debug &&
+              (panel == Panel.viewer || !present.contains(panel)))
+            panel,
+      ],
+  ].where((group) => group.isNotEmpty).toList();
+  return FloatSurface(
+    width: 220,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, group) in groups.indexed) ...[
+          if (i > 0) const MenuDivider(),
+          for (final panel in group)
+            MenuRow(
+              key: ValueKey<String>('tab-menu-add-${panel.name}'),
+              onPressed: () {
+                dismiss();
+                dock._addPanel(panel, beside: beside);
+              },
+              child: MenuLabel(panel.title),
+            ),
+        ],
+      ],
     ),
   );
 }
@@ -1403,18 +2036,22 @@ class _StackGroup extends StatelessWidget {
               ));
               // Always the same widget in the same slot, open or shut, so the
               // panel's State is never thrown away by a twirl. Shut, it is no
-              // height at all and its body is offstage.
+              // height at all and its body is offstage. Clipped to its share,
+              // so a list's last row stops at the header below rather than
+              // running under it.
               children.add(SizedBox(
                 key: ValueKey<PaneId>(pane),
                 height: isOpen ? shared * tabs.shareOf(pane) / total : 0,
-                child: _KeepAlivePane(
-                  visible: isOpen,
-                  builder: (context) => _PaneChrome(
-                    pane: pane,
-                    activePanel: activePanel,
-                    drag: drag,
-                    inCard: true,
-                    child: buildPanel(context, pane),
+                child: ClipRect(
+                  child: _KeepAlivePane(
+                    visible: isOpen,
+                    builder: (context) => _PaneChrome(
+                      pane: pane,
+                      activePanel: activePanel,
+                      drag: drag,
+                      inCard: true,
+                      child: buildPanel(context, pane),
+                    ),
                   ),
                 ),
               ));
@@ -1438,6 +2075,13 @@ class _StackGroup extends StatelessWidget {
                     onResized();
                   },
                   onDragEnd: onChanged,
+                  onReset: (_) {
+                    final each =
+                        (tabs.shareOf(pane) + tabs.shareOf(below)) / 2;
+                    tabs.shares[pane] = each;
+                    tabs.shares[below] = each;
+                    onChanged();
+                  },
                 ));
               }
             }
@@ -1666,10 +2310,13 @@ class _PaneChrome extends StatelessWidget {
             //
             // A style's own edge is drawn here too, for the same reason: over
             // the content, a fill inside can't cover it where the corner curves.
+            // The keyboard's home wears a quiet accent edge: at full
+            // strength it boxed the Viewer in the Cut arrangement like a
+            // selection, and the edge is a mark, not a choice.
             foregroundDecoration: BoxDecoration(
               border: Border.all(
                 color: active == pane
-                    ? t.accent
+                    ? t.accent.withValues(alpha: 0.55)
                     : edged.borderWidth == 0
                         ? t.accent.withValues(alpha: 0)
                         : edged.borderColour ?? t.accent.withValues(alpha: 0),
@@ -1877,6 +2524,19 @@ class _DropPainter extends CustomPainter {
 /// Workspace holds the presets, the reset and the per-panel toggles. A pane
 /// that is alone in its slot is lifted by its own title (`DockPaneHandle`),
 /// which sits in the panel's header strip rather than floating over its content.
+
+/// The dock itself, for the menus of the panes in it: what they close, add
+/// and fill the window with.
+class _DockScope extends InheritedWidget {
+  final _DockWidgetState dock;
+  const _DockScope({required this.dock, required super.child});
+
+  static _DockWidgetState? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_DockScope>()?.dock;
+
+  @override
+  bool updateShouldNotify(_DockScope old) => old.dock != dock;
+}
 
 /// Pop out, for the menus of the panes in this dock.
 class _PopOutScope extends InheritedWidget {

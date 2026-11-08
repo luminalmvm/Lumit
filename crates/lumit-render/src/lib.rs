@@ -82,6 +82,7 @@ pub mod model_extract;
 pub mod model_layer;
 pub mod model_material;
 pub mod model_motion;
+mod overlap;
 pub mod passes;
 mod placed;
 pub mod placement;

@@ -1645,19 +1645,20 @@ pub fn gamma_matted(rgba: &mut [f32], gamma: f32, mix: f32, matte: &[f32]) {
 
 /// Temperature (docs/08 §3.20): a warm/cool white-balance shift as a
 /// per-channel gain in scene-linear light — red by `gain_r`, blue by
-/// `gain_b`, green and alpha untouched. Like Exposure, a per-channel scalar
+/// `gain_b`, green and alpha untouched here (the tint rides on the green
+/// gain in [`temperature_matted`]). Like Exposure, a per-channel scalar
 /// scales premultiplied colour consistently (straight × gain, then × the
 /// unchanged alpha), so there is no unpremultiply round trip — unlike the
 /// affine Contrast/Saturation grades, whose − pivot offset breaks that
 /// commutation. The gains are computed host-side (in the resolve step) so
 /// the CPU reference and the WGSL kernel multiply by the identical numbers
-/// (§1.6). Gains `(1.0, 1.0)` (Temperature 0) short-circuit the whole
+/// (§1.6). Gains of 1.0 all round (Temperature 0) short-circuit the whole
 /// effect — the bit-exact neutral point (the WGSL twin matches); Mix 0 is
 /// likewise the identity. Purely continuous (a linear per-channel scale),
 /// so it is safe under the §1.6 fp16 ULP oracle; highlights are never
 /// clipped (§2.1).
 pub fn temperature(rgba: &mut [f32], gain_r: f32, gain_b: f32, mix: f32) {
-    temperature_matted(rgba, gain_r, gain_b, 0.0, mix, &[]);
+    temperature_matted(rgba, [gain_r, 1.0, gain_b], 0.0, 0.0, mix, &[]);
 }
 
 /// The two channel gains for a Temperature of `t` (the slider ÷ 100, clamped
@@ -1669,34 +1670,46 @@ pub fn temperature_gains(t: f32) -> (f32, f32) {
     ((1.0 + 0.75 * t).max(0.0), (1.0 - 0.75 * t).max(0.0))
 }
 
+/// The green gain for a Tint of `k` (the slider ÷ 100, clamped to ±2):
+/// `1 − 0.75·k` floored at 0, so positive goes magenta and negative green.
+#[must_use]
+pub fn tint_gain(k: f32) -> f32 {
+    (1.0 - 0.75 * k).max(0.0)
+}
+
 /// [`temperature`] driven by a matte (docs/08 §2.6): each pixel's
-/// matte strength `k` scales its **Temperature toward 0**, and the two gains
-/// are rebuilt from `t·k` ([`temperature_gains`]) — not lerped, because the
-/// blue gain floors at 0 past ±133 and a lerp of a floored gain is not the
-/// gain of a smaller temperature. `gain_r`/`gain_b` stay the host's and are
-/// what an unmatted pixel multiplies by; `t` is only read under a matte, which
-/// keeps the empty-matte path byte-identical.
+/// matte strength `k` scales its **Temperature and Tint toward 0**, and the
+/// three gains are rebuilt from `t·k` and `tint·k` ([`temperature_gains`],
+/// [`tint_gain`]), not lerped, because a gain floors at 0 past ±133 and a
+/// lerp of a floored gain is not the gain of a smaller temperature. `gains`
+/// are the host's (red, green, blue) and are what an unmatted pixel multiplies
+/// by; `t` and `tint` are only read under a matte, which keeps the empty-matte
+/// path byte-identical.
 pub fn temperature_matted(
     rgba: &mut [f32],
-    gain_r: f32,
-    gain_b: f32,
+    gains: [f32; 3],
     t: f32,
+    tint: f32,
     mix: f32,
     matte: &[f32],
 ) {
-    if gain_r == 1.0 && gain_b == 1.0 {
+    if gains == [1.0, 1.0, 1.0] {
         return; // neutral: bit-exact identity (the WGSL twin matches)
     }
     let matted = !matte.is_empty();
     for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
-        let (gain_r, gain_b) = if matted {
-            temperature_gains(t * matte_strength(matte, i * 4))
+        let [gain_r, gain_g, gain_b] = if matted {
+            let k = matte_strength(matte, i * 4);
+            let (r, b) = temperature_gains(t * k);
+            [r, tint_gain(tint * k), b]
         } else {
-            (gain_r, gain_b)
+            gains
         };
         let sr = px[0] * gain_r;
+        let sg = px[1] * gain_g;
         let sb = px[2] * gain_b;
         px[0] = px[0] * (1.0 - mix) + sr * mix;
+        px[1] = px[1] * (1.0 - mix) + sg * mix;
         px[2] = px[2] * (1.0 - mix) + sb * mix;
     }
 }

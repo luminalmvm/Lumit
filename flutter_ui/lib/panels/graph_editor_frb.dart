@@ -28,6 +28,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:provider/provider.dart';
@@ -44,6 +45,7 @@ import 'graph_maths.dart';
 import 'key_block.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
+import 'timeline_key_lane_frb.dart' show channelKeyMenuRows, keyMenuWidth;
 import 'timeline_snap.dart';
 import 'graph_channels.dart';
 import 'graph_clipboard.dart';
@@ -51,7 +53,11 @@ import 'graph_edits.dart';
 import 'graph_key_fields.dart';
 import 'graph_lens_guides.dart';
 import 'graph_painters.dart';
+import 'effect_param_row_frb.dart' show defaultEffectValue;
+import 'graph_curve_list.dart';
 import 'key_ease_fields.dart';
+import 'retime_commands.dart'
+    show askToRamp, canFreezeAt, freezeAtPlayhead, retimeTargets;
 import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
 
 // The pane was one file; it is now six. Everything the pane's callers and its
@@ -61,6 +67,8 @@ export 'graph_clipboard.dart';
 export 'graph_edits.dart';
 export 'graph_key_fields.dart';
 export 'graph_painters.dart';
+
+part 'graph_menus.dart';
 
 /// How wide a keyframe's grab target is, and a tangent handle's. Both are
 /// bigger than the glyph they carry: these are small marks that must be
@@ -168,6 +176,28 @@ class GraphEditorFrb extends StatefulWidget {
   /// horizontal scroll are the Timeline's own, shared with the lane view.
   final void Function(PointerScrollEvent event, double contentX) onWheelTime;
 
+  /// What the pane's menus reach for that the Timeline holds: the lens and whose
+  /// curves are drawn, the framing, the magnet, the key clipboard and the Ease
+  /// popover. Null leaves the row disabled, as in a test that builds it alone.
+  final GraphScope scope;
+  final ValueChanged<GraphLens>? onLens;
+  final ValueChanged<GraphScope>? onScope;
+  final VoidCallback? onToggleAutoFit;
+  final VoidCallback? onToggleMagnet;
+  final VoidCallback? onToggleBreakHandles;
+  final VoidCallback? onFrame;
+  final VoidCallback? onFrameAll;
+  final VoidCallback? onCopyKeys;
+  final VoidCallback? onPasteKeys;
+  final ValueChanged<Offset>? onOpenEase;
+
+  /// Set when there are no curves and the layer in hand could have a Retime:
+  /// the empty plot offers it rather than saying what to do.
+  final VoidCallback? onEnableRetime;
+
+  /// What the empty plot says, where it is not the usual.
+  final String? emptyHint;
+
   const GraphEditorFrb({
     super.key,
     required this.comp,
@@ -194,6 +224,19 @@ class GraphEditorFrb extends StatefulWidget {
     required this.onSelectionChanged,
     required this.onChanged,
     required this.onWheelTime,
+    this.scope = GraphScope.selected,
+    this.onLens,
+    this.onScope,
+    this.onToggleAutoFit,
+    this.onToggleMagnet,
+    this.onToggleBreakHandles,
+    this.onFrame,
+    this.onFrameAll,
+    this.onCopyKeys,
+    this.onPasteKeys,
+    this.onOpenEase,
+    this.onEnableRetime,
+    this.emptyHint,
   });
 
   @override
@@ -484,6 +527,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void initState() {
     super.initState();
     rowValueDrag.addListener(_rowDragChanged);
+    hiddenCurves.addListener(_rowDragChanged);
     _probeRates();
     widget.hScroll?.addListener(_scrolled);
   }
@@ -549,7 +593,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   // rate is changed, or a layer given other footage, keeps the old guide
   // until the Timeline is opened again. Key it by rate and source if it bites.
   void _probeRates() {
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       if (!channel.retime) continue;
       final id = channel.entry.layer.internallayerId.toString();
       if (_everyFrame.containsKey(id)) continue;
@@ -582,7 +626,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final rows = _keyDrag == null && _boxDrag == null && _handleDrag == null
         ? const <String>[]
         : {
-            for (final channel in widget.channels)
+            for (final channel in _channels)
               if (!_dashed(channel)) channel.path
           }.toList();
     if (rows.isNotEmpty &&
@@ -597,11 +641,15 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void dispose() {
     sayInHand(this, const []);
     rowValueDrag.removeListener(_rowDragChanged);
+    hiddenCurves.removeListener(_rowDragChanged);
     widget.hScroll?.removeListener(_scrolled);
     _preview.cancel();
     _escape.dispose();
     super.dispose();
   }
+
+  /// The curve the pointer is on in the list, drawn heavier than the rest.
+  String? _litCurve;
 
   /// When and where the pane was last clicked, for spotting a double-click
   /// (see [_tapPane]).
@@ -715,21 +763,27 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// every key when fewer than two moments are picked. Null when there is no
   /// stretch to show. With auto-fit off the values are framed on it here,
   /// since nothing else will.
-  (double, double)? fitSelection() {
+  (double, double)? fitSelection({bool everything = false}) {
     final picked = <double>{}, all = <double>{};
-    for (final c in widget.channels) {
+    for (final c in _channels) {
       for (var i = 0; i < c.keys.length; i++) {
         final t = rationalSeconds(c.keys[i].time);
         all.add(t);
         if (widget.selectedKeys.contains('${c.id}#$i')) picked.add(t);
       }
     }
-    final times = picked.length > 1 ? picked : all;
-    if (times.length < 2) return null;
+    final one = picked.length == 1 && !everything;
+    final times = picked.isNotEmpty && !everything ? picked : all;
+    if (times.length < 2 && !one) return null;
     var t0 = times.first, t1 = times.first;
     for (final t in times) {
       if (t < t0) t0 = t;
       if (t > t1) t1 = t;
+    }
+    // One key has no span of its own, so it gets a second of air round it.
+    if (one) {
+      t0 -= 0.5;
+      t1 += 0.5;
     }
     if (!widget.autoFit) {
       setState(() => _manual[widget.lens] = _fitRange((t0, t1)));
@@ -753,15 +807,37 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     setState(() => _manual[widget.lens] = (lo + shift, hi + shift));
   }
 
+  /// The curves on show: every channel but the ones put away in the list.
+  List<GraphChannel> get _channels {
+    final hidden = hiddenCurves.value;
+    if (hidden.isEmpty) return widget.channels;
+    return [
+      for (final c in widget.channels)
+        if (!hidden.contains(c.id)) c,
+    ];
+  }
+
+  bool get _anyHidden =>
+      widget.channels.any((c) => hiddenCurves.value.contains(c.id));
+
+  /// A typed or flattened handle is a new length, so the one remembered from
+  /// its last drag no longer describes it.
+  void _forgetHandleLengths(GraphChannel channel, int index) {
+    final key = channel.keys[index];
+    _handleLenPx
+      ..remove(_handleLenKey(channel, key, true))
+      ..remove(_handleLenKey(channel, key, false));
+  }
+
   List<List<BridgeKeyframe>> get _channelKeys =>
-      [for (final c in widget.channels) c.keys];
+      [for (final c in _channels) c.keys];
 
   /// The stretch of time actually on screen, in seconds — or null when the pane
   /// is not inside a scroll view (a test builds it alone) and everything is.
   (double, double)? get _visibleSeconds {
     final c = widget.hScroll;
-    if (c == null || !c.hasClients) return null;
-    final width = c.position.viewportDimension;
+    if (!_scrollLaidOut) return null;
+    final width = c!.position.viewportDimension;
     if (width <= 0) return null;
     return (_secondsOfX(c.offset), _secondsOfX(c.offset + width));
   }
@@ -783,7 +859,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (window == null) return _channelKeys;
     final (t0, t1) = window;
     return [
-      for (final channel in widget.channels)
+      for (final channel in _channels)
         () {
           final keys = channel.keys;
           if (keys.isEmpty) return keys;
@@ -808,6 +884,17 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     ];
   }
 
+  /// What the axis numbers are in, where every curve agrees and the unit is
+  /// short enough to sit in the gutter beside them. Distances go without.
+  String get _axisUnit {
+    if (_channels.isEmpty || widget.lens == GraphLens.acceleration) return '';
+    if (_channels.every(isEnvelope)) return l10n.unitSymbolPercent;
+    if (widget.lens != GraphLens.value) return '';
+    final unit = graphChannelUnit(_channels.first);
+    if (unit == null || unit == l10n.unitSymbolPx) return '';
+    return _channels.every((c) => graphChannelUnit(c) == unit) ? unit : '';
+  }
+
   /// Which reading [channel] draws in. Everything follows the view's lens
   /// except a mask's **shape**, which has no value to plot and so
   /// draws its rate of change in the value lens.
@@ -821,7 +908,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   bool isEnvelope(GraphChannel channel) =>
       widget.vegas && channel.retime && widget.lens == GraphLens.speed;
 
-  bool get _anyEnvelope => widget.channels.any(isEnvelope);
+  bool get _anyEnvelope => _channels.any(isEnvelope);
 
   /// Whether [channel] is shown without being picked, and so draws dashed.
   bool _dashed(GraphChannel channel) =>
@@ -832,13 +919,13 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   (double, double) _fitRange([(double, double)? window]) {
     final keys = _channelKeysWithin(window ?? _visibleSeconds);
     // Only shapes on screen means only speeds on screen.
-    final allPaths = widget.channels.isNotEmpty &&
-        widget.channels.every((c) => c.isPath);
+    final allPaths = _channels.isNotEmpty &&
+        _channels.every((c) => c.isPath);
     if (widget.lens == GraphLens.value && !allPaths) {
       return fitValueRange(
         keys,
         [
-          for (final c in widget.channels)
+          for (final c in _channels)
             if (c.isStatic) c.staticValue,
         ],
       );
@@ -857,11 +944,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // the speed view has always put unlike units on one axis (px/s beside
     // %/s), so this is not a new compromise, just a wider one.
     final envelope = fitEnvelopeRange([
-      for (final c in widget.channels)
+      for (final c in _channels)
         if (isEnvelope(c)) c.keys
     ]);
     final others = [
-      for (final c in widget.channels)
+      for (final c in _channels)
         if (!isEnvelope(c)) c.keys
     ];
     if (others.isEmpty) return envelope;
@@ -872,20 +959,27 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     );
   }
 
+  /// Whether the Timeline's scroll view has measured itself yet. The graph can
+  /// come up in the same frame as the view it sits in, as it does when the
+  /// Retiming workspace opens, and then there is nothing to read until layout.
+  bool get _scrollLaidOut {
+    final c = widget.hScroll;
+    return c != null &&
+        c.hasClients &&
+        c.position.hasPixels &&
+        c.position.hasViewportDimension;
+  }
+
   /// The Timeline's horizontal scroll offset, or zero before the view has been
   /// laid out (and in tests, which build the pane on its own).
-  double get _viewportLeft {
-    final c = widget.hScroll;
-    return c != null && c.hasClients ? c.offset : 0;
-  }
+  double get _viewportLeft => _scrollLaidOut ? widget.hScroll!.offset : 0;
 
   /// How wide that viewport is. Falls back to the pane's own width for a test
   /// that builds the pane with no scroll view around it — where the canvas
   /// *is* the viewport.
-  double _viewportWidth(double paneWidth) {
-    final c = widget.hScroll;
-    return c != null && c.hasClients ? c.position.viewportDimension : paneWidth;
-  }
+  double _viewportWidth(double paneWidth) => _scrollLaidOut
+      ? widget.hScroll!.position.viewportDimension
+      : paneWidth;
 
   (double, double) _range() {
     final frozen = _frozen;
@@ -1022,7 +1116,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void _applyMarquee(
       Rect rect, (double, double) range, double height, bool additive) {
     if (!additive) widget.selectedKeys.clear();
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       final keys = channel.keys;
       for (var i = 0; i < keys.length; i++) {
         final x = widget.axis.xOf(keyFrame(keys[i], widget.fps));
@@ -1078,8 +1172,15 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         widget.axis.frameAtExact(local.dx) / (widget.fps <= 0 ? 1 : widget.fps);
     GraphChannel? nearest;
     var best = within;
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       final keys = channel.keys;
+      // An envelope draws nothing past its own ends, so nothing is there to hit.
+      if (isEnvelope(channel) &&
+          keys.isNotEmpty &&
+          (seconds < rationalSeconds(keys.first.time) ||
+              seconds > rationalSeconds(keys.last.time))) {
+        continue;
+      }
       final double drawn;
       if (lensOf(channel) == GraphLens.value) {
         drawn = channel.isStatic
@@ -1090,8 +1191,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       } else {
         drawn = channel.isStatic
             ? 0
-            : evaluateKeysSpeed(keys, seconds) *
-                (isEnvelope(channel) ? 100 : 1);
+            : isEnvelope(channel)
+                ? envelopeSpeedAt(keys, seconds)
+                : evaluateKeysSpeed(keys, seconds);
       }
       final d = (_yOf(drawn, range, height) - local.dy).abs();
       if (d < best) {
@@ -1113,11 +1215,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final frame = widget.magnet
         ? widget.axis.frameAt(local.dx).toDouble()
         : widget.axis.frameAtExact(local.dx);
-    final seconds = frame / (widget.fps <= 0 ? 1 : widget.fps);
-
     final channel = _curveAt(local, range, height);
-    if (channel == null) return;
+    if (channel != null) _plantAtFrame(channel, frame);
+  }
 
+  /// The key [_addKeyAt] plants, at [frame] on [channel]. Nothing when it has
+  /// one there already.
+  void _plantAtFrame(GraphChannel channel, double frame) {
+    final seconds = frame / (widget.fps <= 0 ? 1 : widget.fps);
     final keys = channel.keys;
     final taken = {for (final k in keys) keyFrame(k, widget.fps).round()};
     if (taken.contains(frame.round())) return;
@@ -1313,7 +1418,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final id = drag.grabbedId.substring(0, cut);
     final index = int.tryParse(drag.grabbedId.substring(cut + 1));
     if (index == null) return null;
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       if (channel.id != id) continue;
       if (index < 0 || index >= channel.keys.length) return null;
       return keyFrame(channel.keys[index], widget.fps);
@@ -1382,7 +1487,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   (Map<GraphChannel, BridgeScalar>, Set<String>) _editsFor(_KeyMove move) {
     final edits = <GraphChannel, BridgeScalar>{};
     final newSelection = <String>{};
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       final keys = channel.keys;
       final movedIdx = <int>{};
       for (var i = 0; i < keys.length; i++) {
@@ -1504,7 +1609,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     var top = double.infinity, bottom = -double.infinity;
     var first = double.infinity, last = -double.infinity;
     var count = 0;
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       final keys = _shownKeys(channel);
       for (var i = 0; i < keys.length; i++) {
         if (!widget.selectedKeys.contains('${channel.id}#$i')) continue;
@@ -1673,7 +1778,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // A handle on a selected key takes the same handle of every other selected
     // key with it. A speed dot moves its key as well, so it goes alone.
     if (!dotOnly && widget.selectedKeys.contains('${channel.id}#$index')) {
-      for (final c in widget.channels) {
+      for (final c in _channels) {
         for (var i = 0; i < c.keys.length; i++) {
           if (c.id == channel.id && i == index) continue;
           if (!widget.selectedKeys.contains('${c.id}#$i')) continue;
@@ -2057,9 +2162,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       if ((keyFrame(keys[i], widget.fps) - frame).abs() < 1e-9) return null;
     }
     final at = timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
-    if (isEnvelope(drag.channel)) {
-      return moveEnvelopePoint(keys, drag.index, at);
-    }
     // An **envelope** point keeps its speed and re-integrates. A key's stored
     // tangent is a speed; its span's chord is an average. Move a key in time
     // and the chord changes while the tangent stays put, so a span that was
@@ -2409,7 +2511,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     required int inPercent,
     required int outPercent,
   }) {
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       if (channel.id != channelId) continue;
       final keys = channel.keys;
       if (index < 0 || index >= keys.length) return null;
@@ -2601,7 +2703,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// [_applyKeyFields] does.
   void _applySpeedPoint(String channelId, int index,
       {required double percent, required double frame}) {
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       if (channel.id != channelId) continue;
       var keys = channel.keys;
       if (index < 0 || index >= keys.length) return;
@@ -2637,7 +2739,18 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       unit: graphChannelUnit(channel),
     );
     if (asked == null || asked.isEmpty) return;
-    _applyKeyEase(channel.id, index, asked);
+    // A row acts on all that's picked, and typed numbers are new lengths for
+    // their handles, so the lengths remembered from the last drag go.
+    for (final c in _channels) {
+      for (var i = 0; i < c.keys.length; i++) {
+        if (widget.selectedKeys.contains('${c.id}#$i')) {
+          _forgetHandleLengths(c, i);
+        }
+      }
+    }
+    applyKeyEaseToSelection(
+        channels: _channels, selectedKeys: widget.selectedKeys, ease: asked);
+    widget.onChanged();
   }
 
   /// The readout pill's box: the same numbers in a small popover that writes
@@ -2666,7 +2779,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// leaves the other exactly as it was - which is what makes the two handles
   /// independent from here, whatever they were before.
   void _applyKeyEase(String channelId, int index, KeyEase edit) {
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       if (channel.id != channelId) continue;
       final keys = channel.keys;
       if (index < 0 || index >= keys.length) return;
@@ -2684,173 +2797,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     }
   }
 
-  // --- menus ---------------------------------------------------------------
-
-  /// The key's right-click menu. [side] is the speed-lens dot it was opened
-  /// on, or null for the value lens's one key.
-  Future<void> _showKeyMenu(GraphChannel channel, int index, Offset position,
-      {bool? side}) async {
-    if (isEnvelope(channel)) {
-      await _showSpeedPointMenu(channel, index, position);
-      return;
-    }
-    final picked = await showLumitPopup<String>(
-      context: context,
-      position: position,
-      builder: (close) => FloatSurface(
-        width: 170,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            MenuRow(
-                onPressed: () => close('linear'), child: Text(l10n.easeLinear)),
-            MenuRow(onPressed: () => close('ease'), child: Text(l10n.easeEasy)),
-            MenuRow(onPressed: () => close('hold'), child: Text(l10n.easeHold)),
-            MenuRow(
-                key: const ValueKey<String>('graph-key-menu-speed'),
-                onPressed: () => close('speed'),
-                // An envelope point has one speed and no influence, so its
-                // row opens the box that types that speed.
-                child: Text(isEnvelope(channel)
-                    ? l10n.menuSetSpeed
-                    : l10n.menuKeyframeSpeed)),
-            MenuRow(
-                onPressed: () => close('copyEase'),
-                child: Text(l10n.keyMenuCopyEase)),
-            if (easeClipboard.isNotEmpty)
-              MenuRow(
-                  onPressed: () => close('pasteEase'),
-                  child: Text(l10n.keyMenuPasteEase)),
-            MenuRow(
-                onPressed: () => close('join'),
-                child: Text(l10n.keyMenuJoinHandles)),
-            MenuRow(
-                onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
-          ],
-        ),
-      ),
-    );
-    if (picked == null) return;
-    final id = '${channel.id}#$index';
-    if (picked == 'delete') {
-      _deleteSelection(fallback: id);
-      return;
-    }
-    final keys = widget.selectedKeys.contains(id) ? widget.selectedKeys : {id};
-    if (picked == 'copyEase') {
-      copySelectedEase(channels: widget.channels, selectedKeys: keys);
-      return;
-    }
-    if (!mounted) return;
-    if (picked == 'pasteEase' || picked == 'join') {
-      if (picked == 'join') {
-        joinHandlesOnSelection(channels: widget.channels, selectedKeys: keys);
-      } else {
-        pasteEaseOnSelection(
-          project: Provider.of<LumitState>(context, listen: false).project,
-          channels: widget.channels,
-          selectedKeys: keys,
-        );
-      }
-      widget.onChanged();
-      return;
-    }
-    if (picked == 'speed') {
-      if (isEnvelope(channel)) {
-        await _openKeyFields(channel, index, position);
-        return;
-      }
-      await _openKeySpeed(channel, index, side: side);
-      return;
-    }
-    final targets =
-        widget.selectedKeys.contains(id) ? widget.selectedKeys : {id};
-    applyInterpToSelection(
-      channels: widget.channels,
-      selectedKeys: targets,
-      side: switch (picked) {
-        'linear' => const BridgeSideInterp.linear(),
-        'hold' => const BridgeSideInterp.hold(),
-        _ => easyEase,
-      },
-    );
-    widget.onChanged();
-  }
-
-  /// A speed point's menu: type its speed, put it back to 100%, choose the
-  /// curve the speed takes to the next point, or delete it. The easing rows
-  /// a key has would bend the envelope out of the shape its points describe.
-  Future<void> _showSpeedPointMenu(
-      GraphChannel channel, int index, Offset position) async {
-    final keys = channel.keys;
-    final current =
-        index + 1 < keys.length ? speedCurveOf(keys[index].interpOut) : null;
-    final names = {
-      SpeedCurve.linear: l10n.speedCurveLinear,
-      SpeedCurve.fast: l10n.speedCurveFast,
-      SpeedCurve.slow: l10n.speedCurveSlow,
-      SpeedCurve.smooth: l10n.speedCurveSmooth,
-      SpeedCurve.sharp: l10n.speedCurveSharp,
-      SpeedCurve.hold: l10n.speedCurveHold,
-    };
-    final picked = await showLumitPopup<Object>(
-      context: context,
-      position: position,
-      builder: (close) => FloatSurface(
-        width: 170,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            MenuRow(
-                key: const ValueKey<String>('graph-key-menu-speed'),
-                onPressed: () => close('speed'),
-                child: Text(l10n.menuSetSpeed)),
-            MenuRow(
-                onPressed: () => close('reset'),
-                child: Text(l10n.speedPointReset)),
-            if (current != null)
-              for (final MapEntry(key: curve, value: name) in names.entries)
-                MenuRow.option(
-                  key: ValueKey<String>('graph-speed-curve-${curve.name}'),
-                  onPressed: () => close(curve),
-                  child: Row(children: [
-                    menuTick(curve == current),
-                    Expanded(child: Text(name)),
-                  ]),
-                ),
-            MenuRow(
-                onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
-          ],
-        ),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    switch (picked) {
-      case 'speed':
-        await _openKeyFields(channel, index, position);
-      case 'reset':
-        _applySpeedPoint(channel.id, index,
-            percent: 100, frame: keyFrame(keys[index], widget.fps));
-      case 'delete':
-        _deleteSelection(fallback: '${channel.id}#$index');
-      case final SpeedCurve curve:
-        commitChannelEdits({
-          channel: BridgeScalar.keyframed(setEnvelopeCurve(keys, index, curve)),
-        });
-        widget.onChanged();
-    }
-  }
-
-  /// Delete the selected keys (or [fallback] when none) — the last key of a
-  /// curve leaves a static value holding what it held.
-  void _deleteSelection({String? fallback}) {
-    final targets = widget.selectedKeys.isNotEmpty
-        ? widget.selectedKeys
-        : {if (fallback != null) fallback};
+  /// Delete the selected keys. The last key of a curve leaves a static value
+  /// holding what it held.
+  void _deleteSelection() {
     final wrote = deleteKeysFromChannels(
-        channels: widget.channels, selectedKeys: targets);
+        channels: _channels, selectedKeys: widget.selectedKeys);
     if (!wrote) return;
     widget.selectedKeys.clear();
     widget.onSelectionChanged();
@@ -2910,10 +2861,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   builder: (context, _) => ClipRect(
                     child: CustomPaint(
                       painter: _GraphPainter(
-                        channels: widget.channels,
-                        dashed: [for (final c in widget.channels) _dashed(c)],
+                        channels: _channels,
+                        dashed: [for (final c in _channels) _dashed(c)],
                         shownKeys: [
-                          for (final c in widget.channels)
+                          for (final c in _channels)
                             _shownKeys(c, painting: true)
                         ],
                         lens: widget.lens,
@@ -2932,8 +2883,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         viewportWidth: _viewportWidth(constraints.maxWidth),
                         gutterFill: t.surface0.withValues(alpha: 0.85),
                         vegas: widget.vegas,
+                        lit: _litCurve,
+                        unit: _axisUnit,
                         guides: {
-                          for (final c in widget.channels)
+                          for (final c in _channels)
                             if (_guideOf(c) case final speed?) speed,
                         },
                         guideLabel:
@@ -2949,7 +2902,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                             drag.speed,
                           _ => null,
                         },
-                        lit: t.textPrimary,
+                        caughtColour: t.textPrimary,
                       ),
                     ),
                   ),
@@ -2974,15 +2927,20 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   ),
                 ),
               Positioned.fill(
-                child: MarqueeSelect(
-                  key: const ValueKey('graph-marquee'),
-                  onSelect: (rect, additive) =>
-                      _applyMarquee(rect, range, height, additive),
-                  onTapAt: (local) => _tapPane(local, range, height),
-                  onClear: () {},
-                  claim: (local) => _claimCentre(local, range, height),
-                  onClaimedMove: _moveCentre,
-                  onClaimedEnd: _commitCentreDrag,
+                child: GestureDetector(
+                  key: const ValueKey('graph-plot'),
+                  behavior: HitTestBehavior.translucent,
+                  onSecondaryTapDown: (d) => _showPaneMenu(d, range, height),
+                  child: MarqueeSelect(
+                    key: const ValueKey('graph-marquee'),
+                    onSelect: (rect, additive) =>
+                        _applyMarquee(rect, range, height, additive),
+                    onTapAt: (local) => _tapPane(local, range, height),
+                    onClear: () {},
+                    claim: (local) => _claimCentre(local, range, height),
+                    onClaimedMove: _moveCentre,
+                    onClaimedEnd: _commitCentreDrag,
+                  ),
                 ),
               ),
               // The selection transform box (§6.2). Above the marquee, so its
@@ -3074,23 +3032,79 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                 ),
               // Over the live pane rather than instead of it, so the grid and
               // the axis stay readable behind the invitation to fill them.
-              if (widget.channels.isEmpty)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Center(
-                      child: Text(
-                        l10n.graphEditorEmpty,
-                        style: t.small,
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+              // Held to the view rather than to the start of time, since the
+              // canvas is as wide as the comp.
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: widget.hScroll ?? const AlwaysStoppedAnimation(0),
+                  builder: (context, _) => Stack(
+                    children: _pinned(t, height, constraints.maxWidth),
                   ),
                 ),
+              ),
             ],
           ),
         );
       },
     );
+  }
+
+  /// What stays put as the Timeline scrolls: the list of curves, or with no
+  /// curves the one short thing the plot has to say.
+  List<Widget> _pinned(LumitTheme t, double height, double paneWidth) {
+    final left = _viewportLeft;
+    final width = _viewportWidth(paneWidth);
+    if (widget.channels.isEmpty) {
+      final enable = widget.onEnableRetime;
+      return [
+        Positioned(
+          left: left,
+          width: width,
+          top: 0,
+          bottom: 0,
+          child: enable == null
+              ? IgnorePointer(
+                  child: Center(
+                    child: Text(widget.emptyHint ?? l10n.graphEditorEmpty,
+                        key: const ValueKey('graph-empty'),
+                        style: t.small.copyWith(color: t.textMuted)),
+                  ),
+                )
+              : Center(
+                  child: LumitTooltip(
+                    message: l10n.menuEnableRetime,
+                    action: 'layer.retime.enable',
+                    child: HouseButton(
+                      key: const ValueKey('graph-enable-retime'),
+                      onPressed: enable,
+                      child: Text(l10n.menuEnableRetime),
+                    ),
+                  ),
+                ),
+        ),
+      ];
+    }
+    return [
+      Positioned(
+        left: left + 8,
+        top: 8,
+        child: GraphCurveList(
+          channels: widget.channels,
+          dashed: _dashed,
+          lit: _litCurve,
+          maxHeight: height - 16,
+          onHover: (id) => setState(() => _litCurve = id),
+          onToggle: (c) {
+            final hidden = hiddenCurves.value;
+            _setHidden(hidden.contains(c.id)
+                ? ({...hidden}..remove(c.id))
+                : {...hidden, c.id});
+          },
+          onSolo: _solo,
+          onMenu: _showCurveListMenu,
+        ),
+      ),
+    ];
   }
 
   /// The **selection transform box** (§6.2, docs/07 §5.3): the same hairline
@@ -3331,7 +3345,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final index = int.tryParse(id.substring(hash + 1));
     if (index == null) return const [];
     final channelId = id.substring(0, hash);
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       if (channel.id != channelId) continue;
       // An envelope point has its own box. This pill's ease box would write
       // curved sides, and an envelope's are always the chord.
@@ -3381,7 +3395,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   List<Widget> _otherKeyRings(
       LumitTheme t, (double, double) range, double height) {
     final out = <Widget>[];
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       for (var i = 0; i < channel.keys.length; i++) {
         final colours = widget.otherKeys['${channel.id}#$i'];
         if (colours == null) continue;
@@ -3414,7 +3428,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   List<Widget> _keyHandles(
       LumitTheme t, (double, double) range, double height) {
     final out = <Widget>[];
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       final keys = channel.keys;
       for (var i = 0; i < keys.length; i++) {
         final id = '${channel.id}#$i';
@@ -3579,7 +3593,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   // ([HandleRing]), so the dot's colours live where the dot is drawn.
   List<Widget> _tangentHandles((double, double) range, double height) {
     final out = <Widget>[];
-    for (final channel in widget.channels) {
+    for (final channel in _channels) {
       final keys = _shownKeys(channel);
       for (var i = 0; i < keys.length; i++) {
         for (final isOut in const [true, false]) {
@@ -3608,6 +3622,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   'graph-handle-${channel.id}#$i-${isOut ? 'out' : 'in'}'),
               behavior: HitTestBehavior.opaque,
               supportedDevices: dragDevices,
+              onSecondaryTapDown: (d) =>
+                  _showHandleMenu(channel, i, isOut, d.globalPosition),
               onPanStart: (_) =>
                   _startHandleDrag(channel, i, isOut, false, range, height),
               onPanUpdate: (d) {
@@ -3759,10 +3775,15 @@ class _GraphPainter extends CustomPainter {
   final Set<double> guides;
   final TextStyle? guideLabel;
 
-  /// The guide a dragged point is sitting on, drawn [lit] while it does: the
-  /// snap is seen as well as felt.
+  /// The guide a dragged point is sitting on, drawn [caughtColour] while it
+  /// does: the snap is seen as well as felt.
   final double? caughtGuide;
-  final Color? lit;
+  final Color? caughtColour;
+
+  /// The channel the pointer is on in the curve list, drawn heavier than the
+  /// rest, and what the axis numbers are in where they all agree.
+  final String? lit;
+  final String unit;
 
   const _GraphPainter({
     required this.channels,
@@ -3783,7 +3804,9 @@ class _GraphPainter extends CustomPainter {
     this.guides = const {},
     this.guideLabel,
     this.caughtGuide,
+    this.caughtColour,
     this.lit,
+    this.unit = '',
   });
 
   double _yOf(double v, (double, double) range, Size size) {
@@ -3794,7 +3817,7 @@ class _GraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    _paintGrid(canvas, size);
+    if (channels.isNotEmpty) _paintGrid(canvas, size);
     _paintGuides(canvas, size);
     final f = fps <= 0 ? 1.0 : fps;
     for (var c = 0; c < channels.length; c++) {
@@ -3803,15 +3826,17 @@ class _GraphPainter extends CustomPainter {
       // A Retime drawn as the Vegas envelope reads in per cent, so its curve
       // is scaled onto the same axis as its points.
       final envelope = vegas && channel.retime && lens == GraphLens.speed;
-      final speedScale = envelope ? 100.0 : 1.0;
       // **A shape draws its rate of change in the value lens too**: a path
       // has no value to plot, so the value view would otherwise be an empty
       // pane for a property that is plainly animating.
       final chLens =
           channel.isPath && lens == GraphLens.value ? GraphLens.speed : lens;
+      final colour = palette[channel.colourIndex % palette.length];
       final paint = Paint()
-        ..color = palette[channel.colourIndex % palette.length]
-        ..strokeWidth = 1.4
+        ..color = lit == null || lit == channel.id
+            ? colour
+            : colour.withValues(alpha: 0.35)
+        ..strokeWidth = lit == channel.id ? 2.2 : 1.4
         ..style = PaintingStyle.stroke;
 
       if (channel.scalar is! BridgeScalar_Expression) {
@@ -3859,14 +3884,20 @@ class _GraphPainter extends CustomPainter {
           }
         }
       } else {
-        for (var x = 0.0; x <= size.width; x += step) {
+        // An envelope has nothing to say past its own ends, where a flat tail
+        // at nought would read as a freeze that is not there.
+        final from = envelope ? axis.xOf(keyFrame(keys.first, f)) : 0.0;
+        final to = envelope ? axis.xOf(keyFrame(keys.last, f)) : size.width;
+        for (var x = from; x <= to; x += step) {
           final seconds = axis.frameAtExact(x) / f;
           // The line is held inside the parameter's hard range (M28's
           // leftover, [GraphChannel.drawnValueAt]). Unbounded channels — a
           // transform, a mask value, the Retime — clamp nothing.
           final v = switch (chLens) {
             GraphLens.value => channel.drawnValueAt(keys, seconds),
-            GraphLens.speed => evaluateKeysSpeed(keys, seconds) * speedScale,
+            GraphLens.speed => envelope
+                ? envelopeSpeedAt(keys, seconds)
+                : evaluateKeysSpeed(keys, seconds),
             GraphLens.acceleration => evaluateKeysAcceleration(keys, seconds),
           };
           final point = Offset(x, _yOf(v, range, size));
@@ -3900,7 +3931,7 @@ class _GraphPainter extends CustomPainter {
         }
       }
     }
-    _paintGutter(canvas, size);
+    if (channels.isNotEmpty) _paintGutter(canvas, size);
   }
 
   /// A flat line at [y], dashed over the view alone when [dash] is set, since
@@ -3943,7 +3974,7 @@ class _GraphPainter extends CustomPainter {
     for (final speed in guides) {
       final y = _yOf(speed, range, size);
       if (y < 0 || y > size.height) continue;
-      paint.color = speed == caughtGuide ? lit ?? faint : faint;
+      paint.color = speed == caughtGuide ? caughtColour ?? faint : faint;
       final right = viewportLeft + viewportWidth - graphGutterWidth;
       for (var x = (viewportLeft / 10).floor() * 10.0; x < right; x += 10) {
         canvas.drawLine(Offset(x, y), Offset(x + 6, y), paint);
@@ -3980,7 +4011,7 @@ class _GraphPainter extends CustomPainter {
     for (final v in values) {
       final y = _yOf(v, range, size);
       final text = TextPainter(
-        text: TextSpan(text: gridLabel(v, step), style: label),
+        text: TextSpan(text: '${gridLabel(v, step)}$unit', style: label),
         textDirection: TextDirection.ltr,
       )..layout();
       text.paint(canvas,
@@ -4022,7 +4053,7 @@ class _HandlesPainter extends CustomPainter {
       ..color = colour.withValues(alpha: 0.8)
       ..strokeWidth = 1;
     final widget = state.widget;
-    for (final channel in widget.channels) {
+    for (final channel in state._channels) {
       final keys = state._shownKeys(channel);
       for (var i = 0; i < keys.length; i++) {
         for (final isOut in const [true, false]) {

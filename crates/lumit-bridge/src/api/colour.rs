@@ -352,3 +352,29 @@ impl FootageReference {
             .map_err(BridgeError::OpError)
     }
 }
+
+/// What a white balance pick writes: the Temperature effect's two rows.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeWhiteBalance {
+    pub temperature: f64,
+    pub tint: f64,
+}
+
+/// The Temperature and Tint that turn the colour `(r, g, b)`, off a picture
+/// showing the `temperature` and `tint` given, grey.
+#[frb(sync)]
+pub fn white_balance_for(
+    r: f32,
+    g: f32,
+    b: f32,
+    temperature: f32,
+    tint: f32,
+) -> BridgeWhiteBalance {
+    let (temperature, tint) =
+        lumit_core::fx::effects::temperature::neutral_for([r, g, b], (temperature, tint));
+    BridgeWhiteBalance {
+        temperature: f64::from(temperature),
+        tint: f64::from(tint),
+    }
+}

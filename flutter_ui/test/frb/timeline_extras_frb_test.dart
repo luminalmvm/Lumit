@@ -103,7 +103,7 @@ void main() {
           find.byKey(ValueKey<String>('tl-tab-close-${p.comp.internalid}')));
       await tester.pump();
       expect(p.uiState.selectedComp, isNull);
-      expect(find.textContaining('Open a composition'), findsOneWidget);
+      expect(find.text('No composition'), findsOneWidget);
     });
 
     /// **The bridge error where the Timeline should be.** Pre-compose, step

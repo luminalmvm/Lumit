@@ -26,6 +26,7 @@ import '../widgets/controls.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart' show flowPath, hasFlow;
 
 /// The Flow section for [layer], or nothing when its flow switch is off.
@@ -291,26 +292,30 @@ class FlowRowsFrb extends StatelessWidget {
       onChanged();
     }
 
-    return fxTwoColumnRow(
-      context: context,
-      keyframeControls: KeyframeControlsFrb(
-        scalars: [rate],
-        onWrite: write,
-        comp: comp,
-        onSeek: onSeek,
-        rowKey: 'flow-input-rate',
-        // This row only ever draws in the Effect controls panel, on its fixed
-        // columns.
-        fixedColumns: true,
-      ),
-      lane: FxKeyLane(
-          rowKey: 'flow-input-rate', scalars: [rate], onWrite: write),
-      name: Text(t.propertyCase(l10n.flowInputRate),
-          style: t.body, overflow: TextOverflow.ellipsis),
-      control: FlowRateControl(
-        shown: shown,
-        fieldWidth: _cellWidth,
-        onRate: writeRate,
+    final keys = KeyframeControlsFrb(
+      scalars: [rate],
+      onWrite: write,
+      comp: comp,
+      onSeek: onSeek,
+      rowKey: 'flow-input-rate',
+      // This row only ever draws in the Effect controls panel, on its fixed
+      // columns.
+      fixedColumns: true,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys),
+      child: fxTwoColumnRow(
+        context: context,
+        keyframeControls: keys,
+        lane: FxKeyLane(
+            rowKey: 'flow-input-rate', scalars: [rate], onWrite: write),
+        name: Text(t.propertyCase(l10n.flowInputRate),
+            style: t.body, overflow: TextOverflow.ellipsis),
+        control: FlowRateControl(
+          shown: shown,
+          fieldWidth: _cellWidth,
+          onRate: writeRate,
+        ),
       ),
     );
   }

@@ -517,7 +517,7 @@ fn parse<R: Read + Seek>(
 ) -> Result<PsdDocument, MediaError> {
     r.seek(0)?;
     if &r.array::<4>()? != b"8BPS" {
-        return Err(bad("not a Photoshop document"));
+        return Err(bad("not a PSD file"));
     }
     if r.u16()? != 1 {
         return Err(bad("the large document format (PSB) is not read"));
@@ -1830,7 +1830,7 @@ mod tests {
             edit(&mut bytes);
             matches!(structure(&bytes), Err(MediaError::Psd(_)))
         };
-        assert!(refused(&|b| b[0] = b'X'), "not a Photoshop document");
+        assert!(refused(&|b| b[0] = b'X'), "not a PSD file");
         assert!(refused(&|b| b[5] = 2), "PSB");
         assert!(refused(&|b| b[23] = 32), "32 bit");
         assert!(refused(&|b| b[25] = 4), "CMYK");

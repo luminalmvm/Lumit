@@ -1,11 +1,10 @@
 // The Effects & presets panel, on the flutter_rust_bridge API.
 //
 // Every built-in effect under its category heading, filtered by a search field,
-// with the selected layer's `.lumfx` save and load beneath. An effect applies by
-// double-click — to every selected layer, as the Effect menu does — or by
-// dragging it, which carries an `EffectDragData`: onto a layer's row or bar in
-// the Timeline, or onto the Effect controls panel, where it lands on that
-// panel's one layer.
+// with the selected layer's `.lumfx` save and load beside it. An effect applies
+// by double-click or from its menu, to every selected layer, or by dragging it,
+// which carries an `EffectDragData`: onto a layer's row or bar in the Timeline,
+// or onto the Effect controls panel, where it lands on that panel's one layer.
 //
 // The list comes from `listEffects`, so the panel never holds a copy of what
 // effects exist. Adding a built-in to the engine puts it here with no Dart
@@ -48,9 +47,12 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/presets.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/settings_account.dart' show askBefore;
@@ -58,9 +60,13 @@ import '../shell/theme_name_dialog.dart';
 import '../state/dock.dart' show Panel;
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
+import '../state/external_links.dart' show effectManualUrl, openExternalLink;
 import '../state/file_dialogs.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'effect_param_row_frb.dart' show byEffectLabel;
+import 'expressions_panel_frb.dart' show panelBar;
+import 'preset_save.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 class EffectsPresetsPanelFrb extends StatefulWidget {
@@ -244,6 +250,12 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     for (final effects in grouped.values) {
       effects.sort(byEffectLabel);
     }
+    _categories = grouped.keys.toList();
+    final anyFavourite = (widget.effectsLister ?? listEffects)()
+            .any((e) => ui.workspace.isFavouriteEffect(e.name)) ||
+        _presets.any((p) =>
+            ui.workspace.isFavouriteEffect(_presetFavouriteKey(p.name)));
+    if (!anyFavourite) _favouritesOnly = false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -252,9 +264,13 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           height: 26,
           color: t.surface1,
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Row(
+          child: panelBar(
+            least: 140,
+            child: Row(
             children: [
               // The star by the search box narrows the list to the favourites.
+              // Nothing to narrow to until something is starred, and starring
+              // the last one off lets go of it.
               LumitTooltip(
                 message: l10n.tipFavouritesOnly,
                 child: HouseButton(
@@ -262,11 +278,16 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                   frameless: true,
                   small: true,
                   padding: const EdgeInsets.all(1),
-                  onPressed: () =>
-                      setState(() => _favouritesOnly = !_favouritesOnly),
+                  onPressed: anyFavourite
+                      ? () => setState(() => _favouritesOnly = !_favouritesOnly)
+                      : null,
                   child: lumitIcon(LumitIcon.star,
                       size: iconSize,
-                      color: _favouritesOnly ? t.accent : t.textMuted),
+                      color: !anyFavourite
+                          ? t.textDisabled
+                          : _favouritesOnly
+                              ? t.accent
+                              : t.textMuted),
                 ),
               ),
               const SizedBox(width: 4),
@@ -275,11 +296,28 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                   key: const ValueKey('fx-search'),
                   controller: _search,
                   focusNode: _searchFocus,
-                  hint: l10n.searchEffectsAndPresets,
+                  hint: l10n.search,
                   width: 160,
                 ),
               ),
+              const SizedBox(width: 4),
+              // This panel isn't rebuilt when the selection moves.
+              ValueListenableBuilder<List<LayerReference>>(
+                valueListenable: ui.selectedLayers,
+                builder: (context, layers, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _barButton(t, 'preset-load', l10n.loadPresetEllipsis,
+                        LumitIcons.import,
+                        layers.isEmpty ? null : () => _load(layers)),
+                    _barButton(t, 'preset-save', l10n.savePresetEllipsis,
+                        LumitIcons.export,
+                        layers.isEmpty ? null : () => _save(layers)),
+                  ],
+                ),
+              ),
             ],
+          ),
           ),
         ),
         Expanded(
@@ -296,65 +334,191 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                 : grouped.isEmpty && presetRows.isEmpty) {
               return Center(child: Text(l10n.noEffectsMatch, style: t.small));
             }
-            if (_favouritesOnly) {
-              return ListView(
+            // The ground under the rows has a menu of its own.
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onSecondaryTapDown: (d) => _groundMenu(d.globalPosition, ui),
+              child: EdgeFade(
+                axis: Axis.vertical,
+                reach: 16,
+                child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                children: favouriteRows,
-              );
-            }
-            return ListView(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              children: [
-                ...favouriteRows,
-                ...presetRows,
-                for (final entry in grouped.entries) ...[
-                  _heading(
-                    t,
-                    group: entry.key,
-                    label: headings[entry.key] ?? entry.key,
-                    open: _isOpen(entry.key, needle),
-                  ),
-                  if (_isOpen(entry.key, needle))
-                    for (final effect in entry.value)
-                      _EffectRow(
-                        key: ValueKey<String>('fx-item-${effect.name}'),
-                        effect: effect,
-                        onApply: () => _apply(ui, effect.name),
-                        favourite: ui.workspace.isFavouriteEffect(effect.name),
-                        onToggleFavourite: () => _star(ui, effect.name),
-                        onCatalogueChanged: () => setState(() {}),
-                      ),
-                ],
-              ],
+                children: _favouritesOnly
+                    ? favouriteRows
+                    : [
+                        ...favouriteRows,
+                        ...presetRows,
+                        for (final entry in grouped.entries) ...[
+                          _heading(
+                            t,
+                            group: entry.key,
+                            label: headings[entry.key] ?? entry.key,
+                            open: _isOpen(entry.key, needle),
+                          ),
+                          if (_isOpen(entry.key, needle))
+                            for (final effect in entry.value)
+                              _EffectRow(
+                                key: ValueKey<String>('fx-item-${effect.name}'),
+                                effect: effect,
+                                onApply: () => _apply(ui, effect.name),
+                                canApply: () => _canApply(ui),
+                                favourite:
+                                    ui.workspace.isFavouriteEffect(effect.name),
+                                onToggleFavourite: () => _star(ui, effect.name),
+                                onCatalogueChanged: () => setState(() {}),
+                              ),
+                        ],
+                      ],
+              ),
+              ),
             );
           }),
-        ),
-        _PresetBar(
-          layers: ui.selectedLayers.value,
-          savePicker: widget.savePicker,
-          loadPicker: widget.loadPicker,
-          onChanged: _refreshPresets,
         ),
       ],
     );
   }
 
-  /// Apply to the primary layer only, as the Effect menu and the effects
-  /// console do. With nothing selected it does nothing.
-  /// Onto the clip picked in the Cut timeline when there is one, else the
-  /// primary layer.
+  /// A small mark on the bar at the panel's top, greyed when it can do nothing.
+  Widget _barButton(LumitTheme t, String key, String tip, String icon,
+          VoidCallback? onPressed) =>
+      LumitTooltip(
+        message: tip,
+        child: HouseButton(
+          key: ValueKey<String>(key),
+          frameless: true,
+          small: true,
+          padding: const EdgeInsets.all(1),
+          onPressed: onPressed,
+          child: glyph.LumitIcon(icon,
+              size: iconSize,
+              colour: onPressed == null ? t.textDisabled : t.textMuted),
+        ),
+      );
+
+  /// Whether anything would take an effect: a clip picked in the Cut timeline,
+  /// or a selected layer.
+  bool _canApply(LumitUiState ui) =>
+      ui.cutClip.value != null || ui.selectedLayers.value.isNotEmpty;
+
+  /// Onto the clip picked in the Cut timeline when there is one, else every
+  /// selected layer. With nothing selected it does nothing.
   Future<void> _apply(LumitUiState ui, String name) =>
       _land(ui, EffectDragData(name, name));
 
   Future<void> _land(LumitUiState ui, EffectDragData data) async {
     final clip = ui.cutClip.value;
-    final layer = clip?.layer ?? ui.selectedLayer.value;
-    if (layer == null) return;
-    await data.landOn(layer, clip: clip?.clip);
+    final layers =
+        clip != null ? [clip.layer] : List.of(ui.selectedLayers.value);
+    if (layers.isEmpty) return;
+    final app = Provider.of<LumitState>(context, listen: false);
+    final project = layers.length > 1 ? app.project : null;
+    project?.beginUndoGroup();
+    try {
+      for (final layer in layers) {
+        await data.landOn(layer,
+            clip: clip?.clip, atFrame: ui.playheadFrame.value);
+      }
+    } finally {
+      project?.endUndoGroup();
+    }
     if (!mounted) return;
-    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    app.notifyDocumentChanged();
     ui.model.refresh();
     setState(() {});
+  }
+
+  /// Every category heading drawn, for Collapse all.
+  List<String> _categories = const [];
+
+  /// Open every heading.
+  void _expandAll() => setState(_shut.clear);
+
+  /// Shut every heading, the groups in the library among them.
+  void _collapseAll() => setState(() => _shut
+    ..addAll(_categories)
+    ..add(_favouritesKey)
+    ..add(_presetsKey)
+    ..addAll(_groups.map((g) => '$_groupKey$g')));
+
+  List<Widget> _foldRows(void Function(void Function()) run) => [
+        MenuRow(
+          key: const ValueKey('fx-expand-all'),
+          enabled: _shut.isNotEmpty,
+          onPressed: () => run(_expandAll),
+          child: MenuLabel(l10n.expandAll, enabled: _shut.isNotEmpty),
+        ),
+        MenuRow(
+          key: const ValueKey('fx-collapse-all'),
+          onPressed: () => run(_collapseAll),
+          child: Text(l10n.collapseAll),
+        ),
+      ];
+
+  /// The menu on the panel's ground.
+  void _groundMenu(Offset at, LumitUiState ui) {
+    final layers = ui.selectedLayers.value;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        void run(void Function() act) {
+          close(null);
+          act();
+        }
+
+        return [
+          MenuRow(
+            key: const ValueKey('fx-ground-new-group'),
+            onPressed: () => run(() => _newGroup('')),
+            child: Text(l10n.presetNewGroup),
+          ),
+          MenuRow(
+            key: const ValueKey('fx-ground-save'),
+            enabled: layers.isNotEmpty,
+            onPressed: () => run(() => _save(layers)),
+            child: MenuLabel(l10n.savePresetEllipsis, enabled: layers.isNotEmpty),
+          ),
+          MenuRow(
+            key: const ValueKey('fx-ground-load'),
+            enabled: layers.isNotEmpty,
+            onPressed: () => run(() => _load(layers)),
+            child: MenuLabel(l10n.loadPresetEllipsis, enabled: layers.isNotEmpty),
+          ),
+          const MenuDivider(),
+          ..._foldRows(run),
+        ];
+      },
+    );
+  }
+
+  /// The engine hands back the text; choosing where it goes is the picker's job
+  /// and writing it is Dart's, so the engine never opens a file dialogue. The
+  /// dialogue starts in the preset library folder, so a plain save lands where
+  /// the listing will find it. Save takes the first selected layer, the primary.
+  Future<void> _save(List<LayerReference> layers) async {
+    final picker = widget.savePicker;
+    await saveLayerPreset(context, _boundUi!, layers.first,
+        picker: picker == null ? null : (_) => picker());
+  }
+
+  Future<void> _load(List<LayerReference> layers) async {
+    final path = await (widget.loadPicker ?? pickPresetToOpen)();
+    if (path == null) return;
+    if (!File(path).existsSync()) return;
+    final String text;
+    try {
+      text = await readEffectPreset(path: path);
+    } catch (_) {
+      return;
+    }
+    try {
+      layers.first.pasteEffects(
+          text: text, atFrame: _boundUi!.playheadFrame.value);
+    } catch (_) {
+      // Not a preset: the picker will take any file, so this is a normal
+      // thing for a user to do and not something to shout about.
+    }
+    _refreshPresets();
   }
 
   /// A heading and its twirl: the whole strip is the target, the way the
@@ -377,9 +541,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           key: ValueKey<String>('fx-group-$group'),
           behavior: HitTestBehavior.opaque,
           onTap: () => _toggle(group),
-          onSecondaryTapDown: library == null
-              ? null
-              : (d) => _groupMenu(d.globalPosition, library),
+          onSecondaryTapDown: (d) =>
+              _groupMenu(d.globalPosition, group, open, library),
           child: Padding(
             padding: EdgeInsetsDirectional.fromSTEB(
                 4 + depth * _indent, depth == 0 ? 6 : 2, 10, 2),
@@ -416,89 +579,152 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     );
   }
 
-  /// The menu on a group, or on the saved-preset heading for the top of the
-  /// library.
-  void _groupMenu(Offset at, String group) {
+  /// The menu on a heading: folding, for all of them, and for a heading over
+  /// saved presets what [library] names, empty for the top of the library. The
+  /// presets that come with Lumit aren't in the library, so their group can't be
+  /// renamed or deleted.
+  void _groupMenu(Offset at, String key, bool open, String? library) {
+    final layers =
+        Provider.of<LumitUiState>(context, listen: false).selectedLayers.value;
+    final folder = library == null ? null : _libraryFolder(library);
+    final own = folder != null && library!.isNotEmpty && folder.existsSync();
     showMenuAt<void>(
       context: context,
       position: at,
-      rows: (close) => [
-        MenuRow(
-          key: const ValueKey('preset-group-new'),
-          onPressed: () {
-            close(null);
-            _newGroup(group);
-          },
-          child: Text(l10n.presetNewGroup),
-        ),
-        if (group.isNotEmpty) ...[
+      rows: (close) {
+        void run(void Function() act) {
+          close(null);
+          act();
+        }
+
+        return [
+          if (library != null) ...[
+            MenuRow(
+              key: const ValueKey('preset-group-new'),
+              onPressed: () => run(() => _newGroup(library)),
+              child: Text(l10n.presetNewGroup),
+            ),
+            if (library.isEmpty) ...[
+              MenuRow(
+                key: const ValueKey('preset-group-save'),
+                enabled: layers.isNotEmpty,
+                onPressed: () => run(() => _save(layers)),
+                child: MenuLabel(l10n.savePresetEllipsis,
+                    enabled: layers.isNotEmpty),
+              ),
+              MenuRow(
+                key: const ValueKey('preset-group-load'),
+                enabled: layers.isNotEmpty,
+                onPressed: () => run(() => _load(layers)),
+                child: MenuLabel(l10n.loadPresetEllipsis,
+                    enabled: layers.isNotEmpty),
+              ),
+            ],
+            if (own)
+              MenuRow(
+                key: const ValueKey('preset-group-rename'),
+                onPressed: () => run(() => _renameGroup(library)),
+                child: Text(l10n.renameEllipsis),
+              ),
+            if (folder != null && folder.existsSync())
+              MenuRow(
+                key: const ValueKey('preset-group-reveal'),
+                onPressed: () =>
+                    run(() => revealInFolder(path: folder.path)),
+                child: Text(l10n.projectShowInFolder),
+              ),
+            const MenuDivider(),
+          ],
           MenuRow(
-            key: const ValueKey('preset-group-rename'),
-            onPressed: () {
-              close(null);
-              _renameGroup(group);
-            },
-            child: Text(l10n.renameEllipsis),
+            key: const ValueKey('fx-toggle'),
+            onPressed: () => run(() => _toggle(key)),
+            child: Text(open ? l10n.collapse : l10n.expand),
           ),
-          MenuRow(
-            key: const ValueKey('preset-group-delete'),
-            onPressed: () {
-              close(null);
-              _deleteGroup(group);
-            },
-            child: Text(l10n.delete),
-          ),
-        ],
-      ],
+          ..._foldRows(run),
+          if (own) ...[
+            const MenuDivider(),
+            MenuRow(
+              key: const ValueKey('preset-group-delete'),
+              onPressed: () => run(() => _deleteGroup(library)),
+              child: Text(l10n.delete),
+            ),
+          ],
+        ];
+      },
     );
   }
 
-  /// The menu on a saved preset: the groups it can move to.
-  void _presetMenu(Offset at, BridgePresetInfo preset) {
+  /// A group's folder in the user's library, which need not exist.
+  Directory? _libraryFolder(String group) {
+    final library = presetsDirPath();
+    if (library == null) return null;
+    return Directory(group.isEmpty
+        ? library
+        : '$library${Platform.pathSeparator}'
+            '${group.replaceAll('/', Platform.pathSeparator)}');
+  }
+
+  /// The menu on a saved preset.
+  void _presetMenu(Offset at, LumitUiState ui, BridgePresetInfo preset) {
+    final own = isOwnPreset(preset);
+    final canApply = _canApply(ui);
+    final favourite =
+        ui.workspace.isFavouriteEffect(_presetFavouriteKey(preset.name));
     showMenuAt<void>(
       context: context,
       position: at,
-      rows: (close) => [
-        SubmenuRow(
-          key: const ValueKey('preset-move-to'),
-          closeParent: () => close(null),
-          submenu: (dismiss) => FloatSurface(
-            width: 220,
-            // A big library has dozens of groups, so the list scrolls.
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 400),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final group in ['', ..._groups])
-                      MenuRow(
-                        key: ValueKey<String>('preset-move-to-$group'),
-                        selected: group == preset.group,
-                        onPressed: () {
-                          dismiss();
-                          _changeLibrary(() =>
-                              movePreset(path: preset.path, group: group));
-                        },
-                        child: Padding(
-                          padding: EdgeInsetsDirectional.only(
-                              start: '/'.allMatches(group).length * _indent),
-                          child: Text(
-                              group.isEmpty
-                                  ? l10n.savedPresets
-                                  : group.substring(group.lastIndexOf('/') + 1),
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+      width: 220,
+      rows: (close) {
+        void run(void Function() act) {
+          close(null);
+          act();
+        }
+
+        return [
+          MenuRow(
+            key: const ValueKey('preset-apply'),
+            enabled: canApply,
+            onPressed: () => run(() => _applyPreset(ui, preset)),
+            child: MenuLabel(l10n.effectAddToSelected,
+                enabled: canApply, ticked: false),
           ),
-          child: Text(l10n.presetMoveTo),
-        ),
-      ],
+          MenuRow(
+            key: const ValueKey('preset-favourite'),
+            onPressed: () =>
+                run(() => _star(ui, _presetFavouriteKey(preset.name))),
+            child: MenuLabel(l10n.tipFavourite, ticked: favourite),
+          ),
+          const MenuDivider(),
+          if (own)
+            MenuRow(
+              key: const ValueKey('preset-rename'),
+              onPressed: () => run(() => renamePreset(context, ui, preset)),
+              child: MenuLabel(l10n.renameEllipsis, ticked: false),
+            ),
+          MenuRow(
+            key: const ValueKey('preset-reveal'),
+            onPressed: () => run(() => revealInFolder(path: preset.path)),
+            child: MenuLabel(l10n.projectShowInFolder, ticked: false),
+          ),
+          if (own)
+            presetMoveToRow(
+              preset: preset,
+              groups: _groups,
+              indent: _indent,
+              closeParent: () => close(null),
+              onMove: (group) => _changeLibrary(
+                  () => movePreset(path: preset.path, group: group)),
+            ),
+          if (own) ...[
+            const MenuDivider(),
+            MenuRow(
+              key: const ValueKey('preset-delete'),
+              onPressed: () => run(() => deletePreset(context, ui, preset)),
+              child: MenuLabel(l10n.delete, ticked: false),
+            ),
+          ],
+        ];
+      },
     );
   }
 
@@ -594,6 +820,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             key: ValueKey<String>('fav-item-${effect.name}'),
             effect: effect,
             onApply: () => _apply(ui, effect.name),
+            canApply: () => _canApply(ui),
             favourite: true,
             onToggleFavourite: () => _star(ui, effect.name),
             onCatalogueChanged: () => setState(() {}),
@@ -602,6 +829,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           _PresetRow(
             key: ValueKey<String>('fav-preset-${_presetId(preset)}'),
             preset: preset,
+            onMenu: (at) => _presetMenu(at, ui, preset),
             onApply: () => _applyPreset(ui, preset),
             favourite: true,
             onToggleFavourite: () =>
@@ -659,7 +887,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             key: ValueKey<String>('preset-item-${_presetId(preset)}'),
             preset: preset,
             indent: depth * _indent,
-            onMenu: (at) => _presetMenu(at, preset),
+            onMenu: (at) => _presetMenu(at, ui, preset),
             onApply: () => _applyPreset(ui, preset),
             favourite: ui.workspace
                 .isFavouriteEffect(_presetFavouriteKey(preset.name)),
@@ -750,6 +978,7 @@ Widget _libraryRow(
   required VoidCallback onToggleFavourite,
   required VoidCallback onApply,
   required String starKey,
+  bool keyed = false,
 }) {
   final t = ThemeScope.of(context).theme;
   return HoverFill(
@@ -779,6 +1008,15 @@ Widget _libraryRow(
                 ),
               ),
             ),
+            if (keyed)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: LumitTooltip(
+                  message: l10n.presetHasKeys,
+                  child: glyph.LumitIcon(LumitIcons.selectedKey,
+                      size: 10, colour: t.textMuted),
+                ),
+              ),
           ],
         ),
       ),
@@ -849,6 +1087,7 @@ class _PresetRow extends StatelessWidget {
         child: Padding(
           padding: EdgeInsetsDirectional.only(start: indent),
           child: _libraryRow(
+            keyed: preset.keyed,
             context,
             label: preset.name,
             favourite: favourite,
@@ -870,12 +1109,12 @@ const String _ofxNamespace = 'ofx';
 /// VST3, which the browser has no reason to tell apart.
 const String _audioNamespace = 'audio';
 
-/// And the one an effect an extension carries has (`NAMESPACE_LFX`).
-const String _lfxNamespace = 'lfx';
-
 class _EffectRow extends StatelessWidget {
   final BridgeEffectInfo effect;
   final VoidCallback onApply;
+
+  /// Whether a layer or a clip is there to take it, asked as the menu opens.
+  final bool Function() canApply;
   final bool favourite;
   final VoidCallback onToggleFavourite;
 
@@ -886,22 +1125,26 @@ class _EffectRow extends StatelessWidget {
     super.key,
     required this.effect,
     required this.onApply,
+    required this.canApply,
     required this.favourite,
     required this.onToggleFavourite,
     required this.onCatalogueChanged,
   });
 
-  /// Where an effect says where it came from (docs/12 §2.6): a small provenance
-  /// tag, in the context menu and nowhere else, so a plugin's row in the list is
-  /// otherwise identical to a built-in's.
-  ///
-  /// A plugin's menu carries one command with it, because the tag would
-  /// otherwise be a fact with nothing to do: switching the plugin off is the
-  /// preference docs/12 §2.6 asks for, and this is where a person is already
-  /// looking when they wonder what a plugin is doing in their list.
+  /// The effect's own commands. What isn't Lumit's own says where it came from
+  /// (docs/12 §2.6), in the context menu and nowhere else, so a plugin's row in
+  /// the list is otherwise identical to a built-in's, and a plugin can be
+  /// switched off there.
   void _menu(BuildContext context, Offset at) {
     final audio = effect.namespace == _audioNamespace;
     final plugin = effect.namespace == _ofxNamespace || audio;
+    final applies = canApply();
+    final manual = effectManualUrl(
+      name: effect.name,
+      category: effect.category,
+      label: effect.label,
+      namespace: effect.namespace,
+    );
     showLumitPopup<void>(
       context: context,
       position: at,
@@ -911,23 +1154,51 @@ class _EffectRow extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-                child: Text(
-                  audio
-                      ? l10n.effectFromAudioPlugin
-                      : plugin
-                          ? l10n.effectFromPlugin
-                          : effect.namespace == _lfxNamespace
-                              ? l10n.effectFromExtension
-                              : l10n.effectBuiltIn,
-                  key: ValueKey<String>('fx-provenance-${effect.name}'),
-                  style: ThemeScope.of(context)
-                      .theme
-                      .small
-                      .copyWith(color: ThemeScope.of(context).theme.textMuted),
-                ),
+              MenuRow(
+                key: ValueKey<String>('fx-apply-${effect.name}'),
+                enabled: applies,
+                onPressed: () {
+                  close(null);
+                  onApply();
+                },
+                child: MenuLabel(l10n.effectAddToSelected,
+                    enabled: applies, ticked: false),
               ),
+              MenuRow(
+                key: ValueKey<String>('fx-favourite-${effect.name}'),
+                onPressed: () {
+                  close(null);
+                  onToggleFavourite();
+                },
+                child: MenuLabel(l10n.tipFavourite, ticked: favourite),
+              ),
+              if (manual case final page?)
+                MenuRow(
+                  key: ValueKey<String>('fx-manual-${effect.name}'),
+                  onPressed: () {
+                    close(null);
+                    openExternalLink(page);
+                  },
+                  child: MenuLabel(l10n.effectManualPage, ticked: false),
+                ),
+              if (effect.namespace != 'builtin') ...[
+                const MenuDivider(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(26, 4, 10, 4),
+                  child: Text(
+                    audio
+                        ? l10n.effectFromAudioPlugin
+                        : plugin
+                            ? l10n.effectFromPlugin
+                            : l10n.effectFromExtension,
+                    key: ValueKey<String>('fx-provenance-${effect.name}'),
+                    style: ThemeScope.of(context)
+                        .theme
+                        .small
+                        .copyWith(color: ThemeScope.of(context).theme.textMuted),
+                  ),
+                ),
+              ],
               if (plugin)
                 MenuRow(
                   key: ValueKey<String>('fx-disable-${effect.name}'),
@@ -950,7 +1221,7 @@ class _EffectRow extends StatelessWidget {
                     }
                     onCatalogueChanged();
                   },
-                  child: Text(l10n.switchPluginOff),
+                  child: MenuLabel(l10n.switchPluginOff, ticked: false),
                 ),
             ],
           ),
@@ -986,100 +1257,5 @@ class _EffectRow extends StatelessWidget {
       ),
       child: row,
     );
-  }
-}
-
-/// Save the selected layer's stack as a `.lumfx`, or load one onto it.
-class _PresetBar extends StatelessWidget {
-  /// Every picked layer. **Save** and **Load** both take the first, the
-  /// primary layer, the way every other add here does.
-  final List<LayerReference> layers;
-  final Future<String?> Function()? savePicker;
-  final Future<String?> Function()? loadPicker;
-  final VoidCallback onChanged;
-
-  const _PresetBar({
-    required this.layers,
-    required this.savePicker,
-    required this.loadPicker,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    final target = layers.isEmpty ? null : layers.first;
-
-    return Container(
-      height: 26,
-      color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      // Scrolls sideways when docked narrow rather than striping (the
-      // Timeline toolbar's answer).
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            HouseButton(
-              key: const ValueKey('preset-save'),
-              small: true,
-              frameless: true,
-              onPressed: target == null ? null : () => _save(target),
-              child: Text(l10n.savePresetEllipsis, style: t.small),
-            ),
-            const SizedBox(width: 6),
-            HouseButton(
-              key: const ValueKey('preset-load'),
-              small: true,
-              frameless: true,
-              onPressed: target == null ? null : _load,
-              child: Text(l10n.loadPresetEllipsis, style: t.small),
-            ),
-            if (target == null) ...[
-              const SizedBox(width: 16),
-              Text(l10n.selectALayer,
-                  style: t.small.copyWith(color: t.textMuted)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// The engine hands back the text; choosing where it goes is the picker's job
-  /// and writing it is Dart's, so the engine never opens a file dialogue. The
-  /// dialogue starts in the preset library folder, so a plain save lands
-  /// where the listing above will find it.
-  Future<void> _save(LayerReference target) async {
-    final picker = savePicker;
-    final path = picker != null
-        ? await picker()
-        : await pickPresetSaveLocation('preset.lumfx',
-            initialDirectory: presetsDirPath());
-    if (path == null) return;
-    // The preset's display name is its file's stem, matching the egui frontend.
-    final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
-    File(path).writeAsStringSync(target.savePreset(name: name));
-    onChanged();
-  }
-
-  Future<void> _load() async {
-    final path = await (loadPicker ?? pickPresetToOpen)();
-    if (path == null) return;
-    final file = File(path);
-    if (!file.existsSync()) return;
-    final String text;
-    try {
-      text = await readEffectPreset(path: path);
-    } catch (_) {
-      return;
-    }
-    try {
-      layers.first.loadPreset(text: text);
-    } catch (_) {
-      // Not a preset: the picker will take any file, so this is a normal
-      // thing for a user to do and not something to shout about.
-    }
-    onChanged();
   }
 }

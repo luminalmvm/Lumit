@@ -764,6 +764,7 @@ fn a_node_graph_effects_demands_join_the_layers_window() {
     let graph = CompGraph {
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         edges: vec![
             wire(&provided, OUTPUT_PORT.id, &echo, INPUT_PORT.id),
             wire(&echo, OUTPUT_PORT.id, &out, INPUT_PORT.id),
@@ -1456,7 +1457,7 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(v.packed(), (1.0, 1.0, 1.0));
+    assert_eq!(v.packed(), ([1.0, 1.0, 1.0], 1.0));
     // The range widens to ±150 slider / ±200 hard, with the stronger
     // ±0.75·k gain. +100 packs to gains (1.75, 0.25): red boosted, blue
     // cut hard. −100 is the mirror (0.25, 1.75). The effect owns the gain
@@ -1479,7 +1480,7 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
     }
     let warm: effects::temperature::Temperature =
         resolve_migrated(&[warm], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(warm.packed(), (1.75, 0.25, 1.0));
+    assert_eq!(warm.packed(), ([1.75, 1.0, 0.25], 1.0));
     // At the +200 hard extreme the blue gain would be 1 − 1.5 = −0.5; the
     // pack floors it at 0 (never a negative channel), red at 2.5.
     let mut hot = e.clone();
@@ -1490,7 +1491,7 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
     }
     let hot: effects::temperature::Temperature =
         resolve_migrated(&[hot], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(hot.packed(), (2.5, 0.0, 1.0));
+    assert_eq!(hot.packed(), ([2.5, 1.0, 0.0], 1.0));
     let mut cool = e;
     for p in &mut cool.params {
         if p.id == "temperature" {
@@ -1499,7 +1500,7 @@ fn temperature_instantiates_resolves_and_warms_and_cools() {
     }
     let cool: effects::temperature::Temperature =
         resolve_migrated(&[cool], 0.0, 1000.0, 1.0, &MarkerContext::NONE);
-    assert_eq!(cool.packed(), (0.25, 1.75, 1.0));
+    assert_eq!(cool.packed(), ([0.25, 1.0, 1.75], 1.0));
     // The CPU reference: neutral gains are the bit-exact identity; a warm
     // shift (gains 1.5 / 0.5) boosts red and cuts blue, green and alpha
     // untouched; Mix 0 is the identity at any gains.
@@ -6380,8 +6381,9 @@ fn every_derived_spatial_id_is_one_the_effect_actually_derives() {
         }
     }
     assert_eq!(
-        declaring, 6,
-        "Scanlines, the two flares, Transform points, Energy line and Depth points are the six today"
+        declaring, 7,
+        "Scanlines, the two flares, Transform points, Energy line, Audio spectrum and Depth \
+         points are the seven today"
     );
 }
 
@@ -6761,6 +6763,12 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
+            ("audio_spectrum", "from_x"),
+            ("audio_spectrum", "from_y"),
+            ("audio_spectrum", "to_x"),
+            ("audio_spectrum", "to_y"),
+            ("audio_spectrum", "height"),
+            ("audio_spectrum", "thickness"),
             ("energy_line", "start_x"),
             ("energy_line", "start_y"),
             ("energy_line", "end_x"),

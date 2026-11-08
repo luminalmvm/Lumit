@@ -11,7 +11,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:provider/provider.dart';
 
@@ -19,16 +18,19 @@ import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/dock_widget.dart' show DockPaneHandle;
+import '../shell/project_settings_frb.dart' show showProjectSettingsFrb;
 import '../state/settings.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show ViewerLook;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_menus.dart';
 
 /// The magnifications the picker offers. `null` means fit-to-panel, which is
 /// the default and the only one that changes as the panel is resized.
-const List<double?> _zoomSteps = [null, 0.25, 0.5, 1.0, 2.0, 4.0];
+const List<double?> viewerZoomSteps = [null, 0.25, 0.5, 1.0, 2.0, 4.0];
 
 /// The Viewer's two strips are the same height as every other panel header and
 /// bottom bar (§12A.6): 22, whichever density is set.
@@ -93,6 +95,11 @@ Widget viewerBarMark({
   required VoidCallback? onPressed,
   required String tip,
   String? action,
+  // A painted mark in place of the glyph, for what the set can't say.
+  Widget? face,
+  // Whether Desk draws it as a round key, as it does the deck's. The ways of
+  // looking stay bare marks, like the pickers among them.
+  bool keyed = true,
 }) =>
     LumitTooltip(
       message: tip,
@@ -108,7 +115,7 @@ Widget viewerBarMark({
           builder: (context, lit) {
             final t = ThemeScope.of(context).theme;
             // Desk draws the deck's marks as round keys on the plate.
-            final key = t.shape == ThemeShape.desk;
+            final key = keyed && t.shape == ThemeShape.desk;
             return Container(
               width: key ? viewerDeskKey : viewerBarIconSize,
               height: key ? viewerDeskKey : viewerStripHeight - 2 * viewerMarkEdge,
@@ -122,7 +129,8 @@ Widget viewerBarMark({
                     )
                   : null,
               child: Center(
-                child: lumitIcon(icon, size: viewerBarIconSize, color: colour),
+                child: face ??
+                    lumitIcon(icon, size: viewerBarIconSize, color: colour),
               ),
             );
           },
@@ -211,10 +219,18 @@ class ViewerHeader extends StatelessWidget {
   final bool viewport;
   final int? viewId;
 
+  /// The composition this header heads, quietly beside the panel's own name.
+  final String? name;
+
+  /// What the pickers' right clicks open.
+  final ViewerMenuHost? host;
+
   const ViewerHeader({
     super.key,
     this.viewport = false,
     this.viewId,
+    this.name,
+    this.host,
     required this.zoom,
     required this.shownScale,
     required this.look,
@@ -248,20 +264,36 @@ class ViewerHeader extends StatelessWidget {
               style: t.kickerOn,
               maxLines: 1,
               overflow: TextOverflow.ellipsis);
+          // A tight strip gives up the composition's name first: the tabs say
+          // it too.
+          final named =
+              name != null && constraints.maxWidth >= _headerMinimum;
           // Lantern puts a small accent dot before the title; the other
           // shapes draw the word alone.
-          final title = t.tokens.headerDot
-              ? Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration:
-                        BoxDecoration(color: t.accent, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 6),
-                  word,
-                ])
-              : word;
+          final title = Row(mainAxisSize: MainAxisSize.min, children: [
+            if (t.tokens.headerDot) ...[
+              Container(
+                width: 6,
+                height: 6,
+                decoration:
+                    BoxDecoration(color: t.accent, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Flexible(child: word),
+            if (named && name!.isNotEmpty) ...[
+              const SizedBox(width: viewerBarGap),
+              Flexible(
+                child: Text(
+                  name!,
+                  key: const ValueKey('viewer-comp-name'),
+                  style: t.small.copyWith(color: t.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ]);
           final pickers = viewerPickers(
             viewId: viewId,
             zoom: zoom,
@@ -270,6 +302,7 @@ class ViewerHeader extends StatelessWidget {
             showToneMap: showToneMap,
             onToneMap: onToneMap,
             onZoom: onZoom,
+            host: host,
           );
           if (constraints.maxWidth >= _headerMinimum) {
             // Lantern centres the title on the strip, with the pickers still
@@ -298,18 +331,55 @@ class ViewerHeader extends StatelessWidget {
               ...pickers,
             ]);
           }
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+          // Narrower still, the zoom stays and the other pickers fold into
+          // one mark, as the bar's ways of looking do.
+          if (constraints.maxWidth < _headerFolds) {
+            return Row(
               children: [
-                DockPaneHandle(child: title),
-                const SizedBox(width: _headerGatheredGap),
-                ...pickers,
+                Expanded(
+                  child: DockPaneHandle(
+                    child: Align(alignment: Alignment.centerLeft, child: title),
+                  ),
+                ),
+                pickers.first,
+                const SizedBox(width: viewerHeaderGap),
+                OverflowMark(
+                  buttonKey: const ValueKey('viewer-header-overflow'),
+                  width: viewerBarIconSize,
+                  height: viewerStripHeight - 2 * viewerMarkEdge,
+                  onOpen: (context) => _openFolded(context, pickers.sublist(2)),
+                ),
               ],
+            );
+          }
+          return EdgeFade(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DockPaneHandle(child: title),
+                  const SizedBox(width: _headerGatheredGap),
+                  ...pickers,
+                ],
+              ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// The folded pickers in a floating strip under their mark: the very same
+  /// widgets, so nothing here can drift from the header.
+  void _openFolded(BuildContext context, List<Widget> pickers) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox) return;
+    showLumitPopup<void>(
+      context: context,
+      position: box.localToGlobal(Offset(0, box.size.height + 2)),
+      builder: (close) => FloatSurface(
+        child: Row(mainAxisSize: MainAxisSize.min, children: pickers),
       ),
     );
   }
@@ -317,24 +387,14 @@ class ViewerHeader extends StatelessWidget {
 
 /// Below this the header strip stops spreading and starts scrolling: the three
 /// pickers at their own widths, the panel's name, and air between them.
-const double _headerMinimum = 360;
+const double _headerMinimum = 440;
+
+/// Below this the pickers past the zoom fold into one mark.
+const double _headerFolds = 360;
 
 /// What stands between the name and the pickers once the strip is sliding and
 /// there is no free space left to hold them apart.
 const double _headerGatheredGap = 24;
-
-/// Which route frames take from the engine to the Viewer, in words — the
-/// quality picker's tooltip, where the two playback behaviours are chosen.
-///
-/// The bridge is asked once and kept — it reports what this build compiled to,
-/// and it was asked for in a `build()` that runs for each frame of playback.
-/// The wording is a getter over that answer, so it follows the language.
-final BridgeViewerTransport _transport = viewerTransport();
-String get _transportName => switch (_transport) {
-      BridgeViewerTransport.sharedTexture => l10n.transportSharedTexture,
-      BridgeViewerTransport.dmaBuf => l10n.transportDmaBuf,
-      BridgeViewerTransport.readBack => l10n.transportReadBack,
-    };
 
 /// The three pickers the drawing puts at the header's right-hand end, 6 apart.
 ///
@@ -352,29 +412,43 @@ List<Widget> viewerPickers({
   bool quality = true,
   // The view whose tier the quality picker shows, or the one in front.
   int? viewId,
+  ViewerMenuHost? host,
 }) =>
     [
       // The picture's scale. The face hugs its own label: "Fit" and "400%"
       // are different widths, and a common box left a gap that read as a
       // missing control.
-      BareDropdown<int>(
-        key: const ValueKey('viewer-zoom'),
-        dense: true,
-        // -1: a wheel zoom between the listed steps; the face then reads the
-        // true percentage and the menu still offers the steps.
-        value: _zoomSteps.indexOf(zoom),
-        options: [for (var i = 0; i < _zoomSteps.length; i++) i],
-        label: (i) => i == -1
-            ? '${(shownScale * 100).round()}%'
-            : _zoomSteps[i] == null
-                ? l10n.menuFit
-                : '${(_zoomSteps[i]! * 100).round()}%',
-        onChanged: (i) => onZoom(_zoomSteps[i]),
+      _rightClick(
+        host,
+        (ui, host, close) => viewerZoomRows(ui, host, close),
+        BareDropdown<int>(
+          key: const ValueKey('viewer-zoom'),
+          dense: true,
+          // -1: a wheel zoom between the listed steps; the face then reads the
+          // true percentage and the menu still offers the steps.
+          value: viewerZoomSteps.indexOf(zoom),
+          options: [for (var i = 0; i < viewerZoomSteps.length; i++) i],
+          label: (i) => i == -1
+              ? '${(shownScale * 100).round()}%'
+              : viewerZoomSteps[i] == null
+                  ? l10n.menuFit
+                  : '${(viewerZoomSteps[i]! * 100).round()}%',
+          // Fit is a rule, so the face also says what it comes to. This is the
+          // one place the picture's magnification is read.
+          face: zoom == null
+              ? _ZoomFace(percent: '${(shownScale * 100).round()}%')
+              : null,
+          onChanged: (i) => onZoom(viewerZoomSteps[i]),
+        ),
       ),
       const SizedBox(width: viewerHeaderGap),
       if (quality) ...[
-        _QualityDropdown(
-            key: const ValueKey('viewer-resolution'), viewId: viewId),
+        _rightClick(
+          host,
+          (ui, host, close) => viewerQualityRows(ui, viewId: viewId),
+          _QualityDropdown(
+              key: const ValueKey('viewer-resolution'), viewId: viewId),
+        ),
         const SizedBox(width: viewerHeaderGap),
         const ViewerSpeedPicker(),
         const SizedBox(width: viewerHeaderGap),
@@ -387,6 +461,46 @@ List<Widget> viewerPickers({
       ),
     ];
 
+/// [picker], whose right click opens [rows] at the pointer. Just the picker in a
+/// bare test of a strip, where there's no panel to ask.
+Widget _rightClick(
+  ViewerMenuHost? host,
+  List<Widget> Function(LumitUiState, ViewerMenuHost, VoidCallback) rows,
+  Widget picker,
+) =>
+    host == null
+        ? picker
+        : Builder(
+            builder: (context) => ViewerRightClick(
+              rows: (close) => rows(
+                  Provider.of<LumitUiState>(context, listen: false), host, close),
+              child: picker,
+            ),
+          );
+
+/// The zoom picker's face at Fit: the word, and its number beside it.
+class _ZoomFace extends StatelessWidget {
+  final String percent;
+  const _ZoomFace({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Flexible(
+      child: Text.rich(
+        TextSpan(children: [
+          TextSpan(
+              text: '${l10n.menuFit} ', style: TextStyle(color: t.textMuted)),
+          TextSpan(text: percent),
+        ]),
+        key: const ValueKey('viewer-zoom-percent'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
 /// The Viewer's playback speeds, as how many times slower than the comp.
 const playbackSlows = [1, 2, 4];
 
@@ -398,15 +512,30 @@ class ViewerSpeedPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
+    final t = ThemeScope.of(context).theme;
     return LumitTooltip(
       message: l10n.viewerSpeed,
-      child: BareDropdown<int>(
-        key: const ValueKey('viewer-speed'),
-        dense: true,
-        value: ui.playbackSlow,
-        options: playbackSlows,
-        label: (slow) => l10n.viewerSpeedTimes(1 / slow),
-        onChanged: ui.setPlaybackSlow,
+      child: ViewerRightClick(
+        rows: (close) => viewerSpeedRows(ui, close),
+        child: BareDropdown<int>(
+          key: const ValueKey('viewer-speed'),
+          dense: true,
+          value: ui.playbackSlow,
+          options: playbackSlows,
+          label: (slow) => l10n.viewerSpeedTimes(1 / slow),
+          // The comp's own rate is what's usual, so it draws quietly and a
+          // slowed preview stands out.
+          face: Flexible(
+            child: Text(
+              l10n.viewerSpeedTimes(1 / ui.playbackSlow),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: ui.playbackSlow == 1 ? t.textMuted : t.warning),
+            ),
+          ),
+          onChanged: ui.setPlaybackSlow,
+        ),
       ),
     );
   }
@@ -432,13 +561,7 @@ class _QualityDropdown extends StatelessWidget {
     final ui = Provider.of<LumitUiState>(context);
     final adaptive = ui.workspace.performance.playback == PlaybackMode.adaptive;
     return LumitTooltip(
-      // Which route frames take to get here rides in the tooltip: a build
-      // without a zero-copy path copies every pixel down and uploads it
-      // again, which is the difference between playback feeling immediate and
-      // feeling heavy, so it is worth being able to read off the screen.
-      message: adaptive
-          ? l10n.tipPlaybackAdaptive(_transportName)
-          : l10n.tipPlaybackEveryFrame(_transportName),
+      message: adaptive ? l10n.playbackAdaptive : l10n.playbackEveryFrame,
       child: Builder(
         builder: (context) => dropdownButton(
           t: t,
@@ -457,15 +580,22 @@ class _QualityDropdown extends StatelessWidget {
     showMenuAt<void>(
       context: context,
       position: box.localToGlobal(Offset(0, box.size.height + 2)),
-      // **Every row here is an option row**: both halves of this menu
-      // change the picture in front of you, and picking one is usually
-      // comparing it with the last. So the menu stays until the pointer
-      // leaves it, and the ticks are redrawn in place — which is what the
-      // builder is for, since a row that stays has to be able to change its
-      // mind about which one is ticked.
-      rows: (close) => [
-        StatefulBuilder(
-          builder: (context, redraw) => Column(
+      rows: (close) => viewerQualityRows(ui, viewId: viewId),
+    );
+  }
+}
+
+/// The quality picker's rows.
+///
+/// **Every row here is an option row**: both halves of this menu change the
+/// picture in front of you, and picking one is usually comparing it with the
+/// last. So the menu stays until the pointer leaves it, and the ticks are
+/// redrawn in place, which is what the builder is for.
+List<Widget> viewerQualityRows(LumitUiState ui, {int? viewId}) => [
+      StatefulBuilder(
+        builder: (context, redraw) {
+          final t = ThemeScope.of(context).theme;
+          return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -477,11 +607,12 @@ class _QualityDropdown extends StatelessWidget {
                     ui.setPreviewResolution(resolution, viewId: viewId);
                     redraw(() {});
                   },
-                  child: Row(children: [
-                    menuTick(resolution ==
-                        ui.previewResolutionOf(viewId ?? ui.activeViewId)),
-                    Text(resolution.title),
-                  ]),
+                  child: MenuLabel(
+                    resolution.title,
+                    action: resolution.action,
+                    ticked: resolution ==
+                        ui.previewResolutionOf(viewId ?? ui.activeViewId),
+                  ),
                 ),
               _menuHeading(t, l10n.viewerQualityPlayback),
               for (final mode in PlaybackMode.values)
@@ -492,22 +623,20 @@ class _QualityDropdown extends StatelessWidget {
                     ui.workspace.touch();
                     redraw(() {});
                   },
-                  child: Row(children: [
-                    // Read live rather than from the face the menu opened
-                    // with: a row that stays open outlives it.
-                    menuTick(mode == ui.workspace.performance.playback),
-                    Text(mode == PlaybackMode.adaptive
+                  // Read live rather than from the face the menu opened with:
+                  // a row that stays open outlives it.
+                  child: MenuLabel(
+                    mode == PlaybackMode.adaptive
                         ? l10n.playbackAdaptiveShort
-                        : l10n.playbackEveryFrame),
-                  ]),
+                        : l10n.playbackEveryFrame,
+                    ticked: mode == ui.workspace.performance.playback,
+                  ),
                 ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-}
+          );
+        },
+      ),
+    ];
 
 /// A heading over a run of menu rows — the same aside a grouped dropdown draws.
 Widget _menuHeading(LumitTheme t, String text) => Padding(
@@ -559,22 +688,51 @@ class _ColourDropdown extends StatelessWidget {
     final summary = ui.colourSummary;
     final engaged = look.stops != 0 || look.toneMap;
     final name = _faceName(summary, ui.colourView);
+    // One transform and nothing to say about it is no choice: the name alone,
+    // with the same menu behind it for the way to the project's colour.
+    if (summary.displays.isEmpty &&
+        !showToneMap &&
+        ui.colourView == null &&
+        (summary.path.isEmpty || summary.loaded)) {
+      return LumitTooltip(
+        message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
+        child: Builder(
+          builder: (context) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _open(context, t, ui, summary),
+            onSecondaryTapUp: (d) =>
+                _openAt(context, t, ui, summary, d.globalPosition),
+            child: Text(
+              engaged ? l10n.viewerDisplayTransformPreview(name) : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.small.copyWith(color: engaged ? t.accent : t.textMuted),
+            ),
+          ),
+        ),
+      );
+    }
     return LumitTooltip(
       message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
       child: Builder(
-        builder: (context) => dropdownButton(
-          t: t,
-          dense: true,
-          onPressed: () => _open(context, t, ui, summary),
-          face: dropdownFace(
-            t,
-            '',
-            face: Flexible(
-              child: Text(
-                engaged ? l10n.viewerDisplayTransformPreview(name) : name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: engaged ? t.accent : null),
+        builder: (context) => GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapUp: (d) =>
+              _openAt(context, t, ui, summary, d.globalPosition),
+          child: dropdownButton(
+            t: t,
+            dense: true,
+            onPressed: () => _open(context, t, ui, summary),
+            face: dropdownFace(
+              t,
+              '',
+              face: Flexible(
+                child: Text(
+                  engaged ? l10n.viewerDisplayTransformPreview(name) : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: engaged ? t.accent : null),
+                ),
               ),
             ),
           ),
@@ -599,7 +757,14 @@ class _ColourDropdown extends StatelessWidget {
       BridgeColourSummary summary) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
+    _openAt(context, t, ui, summary,
+        box.localToGlobal(Offset(0, box.size.height + 2)));
+  }
+
+  void _openAt(BuildContext context, LumitTheme t, LumitUiState ui,
+      BridgeColourSummary summary, Offset at) {
     final view = ui.colourView;
+    final project = Provider.of<LumitState>(context, listen: false).project;
     final problem = summary.path.isEmpty || summary.loaded
         ? null
         : colourProblem(summary.problem, {
@@ -608,7 +773,7 @@ class _ColourDropdown extends StatelessWidget {
             summary.problemEnglish;
     showMenuAt<void>(
       context: context,
-      position: box.localToGlobal(Offset(0, box.size.height + 2)),
+      position: at,
       rows: (close) => [
         // The built-in transform: the no-config face, and where a view is in
         // force this is how to come back to it.
@@ -685,6 +850,21 @@ class _ColourDropdown extends StatelessWidget {
               Text(l10n.viewerColourToneMap),
             ]),
           ),
+        // Where the working space and the config are set.
+        if (project != null) ...[
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('viewer-colour-settings'),
+            onPressed: () {
+              close(null);
+              showProjectSettingsFrb(context, project);
+            },
+            child: Row(children: [
+              menuTick(false),
+              Text(l10n.menuProjectSettings),
+            ]),
+          ),
+        ],
       ],
     );
   }

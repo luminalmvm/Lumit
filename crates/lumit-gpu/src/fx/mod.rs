@@ -10,6 +10,7 @@
 
 use crate::GpuContext;
 
+pub mod audio_spectrum;
 pub mod blur;
 pub mod colour;
 pub mod common;
@@ -73,6 +74,7 @@ pub struct FxEngine {
     sprite_flare: sprite_flare::LazySpriteFlare,
     /// Energy line, compiled in the background as the engine starts.
     energy_line: energy_line::LazyEnergyLine,
+    audio_spectrum: audio_spectrum::LazyAudioSpectrum,
     /// The mesh pass, built the first time a model is drawn.
     pub(crate) mesh: std::sync::OnceLock<crate::mesh::MeshFx>,
     /// The Environment light's passes, built the first time a comp has one.

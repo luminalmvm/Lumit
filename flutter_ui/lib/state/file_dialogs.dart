@@ -208,6 +208,19 @@ Future<String?> pickFlareSaveLocation(String suggestedName) async {
   return '$path.flare';
 }
 
+/// Where to write a frame as a picture, or null when cancelled.
+Future<String?> pickFrameSaveLocation(String suggestedName) async {
+  final path = (await getSaveLocation(
+    acceptedTypeGroups: [
+      XTypeGroup(label: 'PNG', extensions: const ['png']),
+    ],
+    suggestedName: '$suggestedName.png',
+  ))
+      ?.path;
+  if (path == null || path.toLowerCase().endsWith('.png')) return path;
+  return '$path.png';
+}
+
 /// Pick a file of easing shapes to import, or null when cancelled.
 Future<String?> pickEasingsToOpen() async =>
     (await openFile(acceptedTypeGroups: [_easingsGroup()]))?.path;

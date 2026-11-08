@@ -1205,7 +1205,7 @@ impl Carrier {
                     true
                 }
                 Some(QueueRowState::Waiting) => true,
-                Some(QueueRowState::Done) => {
+                Some(QueueRowState::Done { .. }) => {
                     if let Ok(mut made) = self.made.lock() {
                         made.insert(job, doing.path.clone());
                     }

@@ -30,7 +30,7 @@ If you aren't used to all of Lumit's keybinds, an After Effects keymap
 preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Shortcuts**.
 Choosing **After Effects** under **Shortcuts** on the first run loads it.
 
-Whole projects come across too. **File ▸ Import ▸ After Effects project…**, and a
+Whole projects come across too. **File ▸ Import .aep project…**, and a
 report will appear telling you what was carried across with or without adjustments.
 Common third-party effects become the maker's own OFX plugin when it is installed. See
 [Importing](/use/importing/).

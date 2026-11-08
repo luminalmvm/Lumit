@@ -11,6 +11,7 @@ import 'package:lumit_flutter/panels/timeline_razor.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/orient.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
@@ -58,6 +59,7 @@ void main() {
         clipFrames: const [],
         clips: const [],
         transform: BridgeTransform(
+          orient: BridgeOrient.off,
           anchorX: const BridgeScalar.static_(0),
           anchorY: const BridgeScalar.static_(0),
           positionX: const BridgeScalar.static_(0),

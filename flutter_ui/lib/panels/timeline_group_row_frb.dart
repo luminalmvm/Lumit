@@ -517,40 +517,74 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
     );
   }
 
-  Future<void> _menu(BuildContext context, Offset position) async {
-    final picked = await showMenuAt<String>(
-      context: context,
-      position: position,
-      width: 200,
-      rows: (close) => [
+  void _menu(BuildContext context, Offset position) => showGroupMenuFrb(
+        context,
+        position,
+        header: widget.header,
+        actions: widget.actions,
+        onRename: () =>
+            setState(() => _rename = TextEditingController(text: _group.name)),
+      );
+}
+
+/// The group's menu, on its header row and on its bar: its name, the two
+/// folds out of it, and its colour. [onRename] starts the inline rename, which
+/// only the header row has.
+Future<void> showGroupMenuFrb(
+  BuildContext context,
+  Offset position, {
+  required GroupHeader header,
+  required GroupActions actions,
+  VoidCallback? onRename,
+}) async {
+  final group = header.group;
+  final picked = await showMenuAt<String>(
+    context: context,
+    position: position,
+    width: 200,
+    rows: (close) => [
+      if (onRename != null)
         MenuRow(
             key: const ValueKey('tl-group-menu-rename'),
             onPressed: () => close('rename'),
-            child: Text(l10n.menuRenameGroup)),
-        MenuRow(
-            key: const ValueKey('tl-group-menu-ungroup'),
-            onPressed: () => close('ungroup'),
-            child: Text(l10n.menuUngroup)),
-        // The heavy fold, one click from the light one. A group is
-        // organisation; this is the same set of layers packed into a comp of
-        // their own, which is what "collapse it all into a single layer"
-        // actually means — and it is the existing precompose road, not a
-        // second one.
-        MenuRow(
-            key: const ValueKey('tl-group-menu-precompose'),
-            onPressed: () => close('precompose'),
-            child: Text(l10n.menuPrecomposeGroup)),
-      ],
-    );
-    if (!mounted) return;
-    switch (picked) {
-      case 'rename':
-        setState(() => _rename = TextEditingController(text: _group.name));
-      case 'ungroup':
-        widget.actions.onUngroup(_group);
-      case 'precompose':
-        widget.actions.onPrecompose(_group);
-    }
+            child: MenuLabel(l10n.menuRenameGroup, action: 'layer.rename')),
+      MenuRow(
+          key: const ValueKey('tl-group-menu-select'),
+          onPressed: () => close('select'),
+          child: Text(l10n.menuSelectAll)),
+      const MenuDivider(),
+      MenuRow(
+          key: const ValueKey('tl-group-menu-ungroup'),
+          onPressed: () => close('ungroup'),
+          child: MenuLabel(l10n.menuUngroup, action: 'layer.ungroup')),
+      // The heavy fold, one click from the light one: the same set of layers
+      // packed into a comp of their own, through the precompose road.
+      MenuRow(
+          key: const ValueKey('tl-group-menu-precompose'),
+          onPressed: () => close('precompose'),
+          child: MenuLabel(l10n.menuPrecomposeGroup,
+              action: 'layer.precompose')),
+      const MenuDivider(),
+      MenuRow(
+          key: const ValueKey('tl-group-menu-label'),
+          onPressed: () => close('label'),
+          child: Text(l10n.menuLabelColour)),
+    ],
+  );
+  if (picked == null || !context.mounted) return;
+  switch (picked) {
+    case 'rename':
+      onRename?.call();
+    case 'select':
+      actions.onSelect(group);
+    case 'ungroup':
+      actions.onUngroup(group);
+    case 'precompose':
+      actions.onPrecompose(group);
+    case 'label':
+      final colour =
+          await showLabelPicker(context, position, keyPrefix: 'tl-group-label');
+      if (colour != null) actions.onLabel(group, colour);
   }
 }
 
@@ -607,6 +641,13 @@ class _GroupBarState extends State<GroupBar> {
             child: GestureDetector(
               key: ValueKey<String>('tl-group-bar-${widget.header.id}'),
               behavior: HitTestBehavior.opaque,
+              // The header's menu, on the bar too. Choosing the band first,
+              // so what the menu does is what the bar shows chosen.
+              onSecondaryTapUp: (d) {
+                widget.actions.onSelect(g);
+                showGroupMenuFrb(context, d.globalPosition,
+                    header: widget.header, actions: widget.actions);
+              },
               onHorizontalDragUpdate: (d) {
                 _dx += d.delta.dx;
                 setState(() => _delta = widget.framesOfDx(_dx));

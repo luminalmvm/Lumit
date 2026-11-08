@@ -39,6 +39,7 @@ pub mod model_part;
 /// Occlusion culling: the full-frame opaque layer that hides what is under it.
 pub mod occlusion;
 pub mod ops;
+pub mod orient;
 pub mod paint;
 pub mod pixels;
 /// The planes tier's document half: which effects ask a model for a plane of
@@ -47,6 +48,7 @@ pub mod planes;
 /// Flow on a Precomp layer: the two nested frames a moment sits between.
 pub mod precomp_flow;
 pub mod preset;
+pub mod preset_parts;
 /// Puppet: the mesh over a layer's own silhouette and the as-rigid-as-possible
 /// deformer over it.
 pub mod puppet;

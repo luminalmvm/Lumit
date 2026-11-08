@@ -10,47 +10,44 @@ the **Audio timeline** across the bottom. All three show the active composition.
 
 ## Audio panel
 
-The Audio panel has three sections down a column.
+The Audio panel holds the output's levels, the selected layer's sound and **Beats**, down a
+column.
 
 ### Levels
 
-Two bars meter the composition's output, left and right. Each draws its loudness, its peak
-behind it, and a hold line that rests on the loudest peak for 3 seconds. The number beside
-a bar is its peak in dB.
+Two bars meter the composition's output, left and right, over a scale in dB. Each draws its
+average level, its peak behind it, and a hold line that rests on the loudest peak. The number
+beside a bar is its peak in dB.
 
-The **Clip** lamp lights when the limiter has held the mix back. Clicking it puts it out.
+A lamp lights under the numbers when the limiter has held the mix back. Clicking it puts it
+out.
 
-### Beats
+Under the scale, the output's loudness:
 
-The Beats section places a [beat marker](/use/markers/) on each beat it finds.
+- **S**: short-term loudness, the last three seconds, in LUFS.
+- **I**: integrated loudness, everything played since it was reset, in LUFS. Clicking it
+  resets it.
+- **TP**: the loudest true peak since then, in dB.
 
-- **Source**: **This comp** listens to the composition's mix. The list also names each layer
-  that makes a sound.
-- **Sensitivity**: from 0 to 100, 50 by default. Higher finds more beats.
-- **Range**: **Whole comp**, or **Work area** for only the beats inside the work area.
-- **Min spacing**: a beat closer than this to a louder one is dropped, in milliseconds.
-  120 by default; 0 keeps every beat.
-- **BPM**: the tempo the beats are snapped to. At 0 the detection estimates it and the well
-  reads **Auto**; any other value reads **Grid on**. After a run the well shows the tempo used.
-- **Tap**: each press is a beat. The tempo is the median gap of the last nine presses, held
-  between 30 and 300 BPM. A pause of two seconds starts the count again.
-- **‹** and **›**: move the markers the next run places 10 ms earlier or later. The total
-  shows beside them.
-- **Generate beat markers**: replaces the composition's beat markers with a new set.
-- **Clear generated**: removes the beat markers and keeps the ones placed by hand.
+They follow ITU-R BS.1770 and EBU R128. Loading another composition starts them again.
+Played slowed down, nothing is measured.
 
-The status line says how many markers were placed, and the tempo when there is one. A run
-with nothing sounding in the source is refused, and the status line says so.
+Right-click the bars, or any meter in the Mixer:
+
+- **Peak hold ▸**: **Off**, **3 s**, **10 s** or **Until reset**. 3 s by default.
+- **Reset peaks**: clears the hold lines and puts the limiter's lamps out.
+- **Reset loudness**: starts the integrated loudness and true peak again.
 
 ### Selected layer
 
-The section shows the first selected layer, by name.
+The first selected layer's name, then its sound. With no layer selected the section is gone.
+Right-click the name for the [same menu as a track head](#audio-timeline).
 
 - **Volume**: from −60 to +12 dB, with a stopwatch.
-- **Pan**: from −100 (left) to 100 (right), with a stopwatch, a dial and a readout of **C**,
-  **L** or **R**.
-- **Fade in** and **Fade out**: the length of the fade at each end, in seconds, and its shape:
-  **Ease**, **Lin** or **Exp**. A fade is two Volume keyframes. A length of 0 removes it.
+- **Pan**: from −100 (left) to 100 (right), with a stopwatch and a dial.
+- **Fade in** and **Fade out**: the length of the fade at each end, in seconds, and its shape
+  as three curves: **Ease**, **Linear** or **Exponential**. A fade is two Volume keyframes. A
+  curve on an end with no fade makes one half a second long. A length of 0 removes it.
 - **Drive with audio…**: lists the free number parameters on the layer's effects. Picking one
   wires [Audio level](/effects/drivers/audio-level/), Remap and Smooth into it, in the
   [node graph](/use/nodes/), as one undo step.
@@ -62,32 +59,70 @@ The section shows the first selected layer, by name.
 effects.* **Lower behind…** with no other layer says *No other layer to lower this one
 behind.* A chain the layer refuses says *The audio chain could not be built on this layer.*
 
-A layer with no sound reads *This layer makes no sound.* and keeps only the two buttons.
+A layer with no sound keeps only the two buttons.
+
+### Beats
+
+**Generate beat markers** on the heading places a [beat marker](/use/markers/) on each beat
+it finds, replacing the composition's beat markers with a new set. The twirl opens what it
+uses.
+
+- **Source**: **This comp** listens to the composition's mix. The list also names each layer
+  that makes a sound.
+- **Sensitivity**: from 0 to 100, 50 by default. Higher finds more beats.
+- **Range**: **Whole comp**, or **Work area** for only the beats inside the work area.
+- **Min spacing**: a beat closer than this to a louder one is dropped, in milliseconds.
+  120 by default; 0 keeps every beat.
+- **BPM**: the tempo the beats are snapped to. At 0 the detection estimates it and the well
+  reads **Auto**. After a run the well shows the tempo used.
+- **Tap**: each press is a beat. The tempo is the median gap of the last nine presses, held
+  between 30 and 300 BPM. A pause of two seconds starts the count again.
+- **‹** and **›**: with a tempo set, move the markers the next run places 10 ms earlier or
+  later. The total shows beside them.
+- **Clear generated**: removes the beat markers and keeps the ones placed by hand. Shown
+  while there are any.
+
+The status line says how many markers were placed, and the tempo when there is one. A run
+with nothing sounding in the source is refused, and the status line says so.
 
 ## Mixer
 
 The Mixer has a strip for each layer of the composition that makes a sound, in layer order,
-and a **Master** strip at the right. Pressing anywhere on a strip selects its layer. With no
-layer that makes a sound the panel says so. The mouse wheel scrolls the strips sideways.
+and a **Master** strip at the right. Pressing anywhere on a strip selects its layer, and Ctrl
+or Shift adds it to the selection. With no layer that makes a sound the panel reads **No
+sound**. The mouse wheel scrolls the strips sideways.
 
 Each layer strip carries, top to bottom:
 
 | Part | What it does |
 | --- | --- |
-| Name | Underlined in the layer's label colour. |
-| **FX** chip | The number of audio effects switched on in the layer's stack. |
+| Name | Underlined in the layer's label colour. Double-click renames the layer. |
+| Output | The bus the layer goes to, when it does not go to the master. |
 | Pan dial | Drag up or down to pan. Double-click centres it. Its tooltip reads **C**, **L** or **R**. |
 | Fader | Drag up or down to set Volume. Double-click returns it to 0 dB. |
 | Meters | Left and right, on the fader's scale. |
-| dB well | The fader's value. |
-| Mute, **S** | The layer's audible and solo switches. |
+| dB well | The fader's value. Click to type one. |
+| Mute, **S**, **fx** | The layer's audible, solo and effects switches. **fx** shows when audio effects are switched on in the layer's stack. |
 
 The fader's scale runs from silence at the bottom to +6 dB at the top, with 0 dB three
-quarters of the way up. Values up to +12 dB are typed in the Audio panel. A fader or dial on
-an animated Volume or Pan sets the keyframe at the playhead.
+quarters of the way up. Values up to +12 dB are typed in the dB well. A fader or dial on an
+animated Volume or Pan sets the keyframe at the playhead.
 
 The Master strip's fader sets the gain of the whole mix. Its **LIM** lamp lights when the
-limiter has held the mix back, and clicking it puts it out.
+limiter has held the mix back, and clicking it puts it out. The loudness stands beside its
+meter while the Mixer has room, and the integrated loudness alone under its dB well when it
+does not.
+
+Right-click:
+
+| On | Commands |
+| --- | --- |
+| Strip | The [track head's menu](#audio-timeline). It acts on every selected strip when the strip is one of them. |
+| Fader | **Reset volume**, **Set level…**, and **Add keyframe** or **Remove keyframe** at the playhead. |
+| Pan dial | **Reset pan**, **Set pan…**, **Full left**, **Full right**, and **Add keyframe** or **Remove keyframe**. |
+| Meters | **Peak hold ▸**, **Reset peaks**, **Reset loudness**. |
+| Master | **Reset volume**, **Set level…**, **Peak hold ▸**, **Reset peaks**, **Reset loudness**. |
+| Empty ground | **Insert audio layer**, **Insert bus**, **Unmute all**, **Clear solos**, **Reset all faders**. |
 
 ## Audio timeline
 
@@ -95,49 +130,99 @@ The Audio timeline lists the layers of the composition that make a sound, as **t
 over the same time as the [Timeline](/panels/timeline/). It keeps its own zoom, scroll and
 twirls.
 
-The outline's columns are **#**, **Track** and **Lane**. Each track carries mute, solo and
-effects switches, a twirl, its number, its label colour and its name.
+Each track carries mute, solo and effects switches, a twirl, its number, its label colour and
+its name.
 
 - The twirl opens the track's **Volume** row and its **Effects**.
 - **Search tracks** lists only the tracks whose names contain what is typed.
 - `Enter` renames the selected track while the panel is active.
-- The **Lane** chip switches the track's lane between **Wave** and **Spectral**.
+- The switch at the right of a track's head, shown with the pointer on the head, changes its
+  lane between **Wave** and **Spectral**.
 - Drag the lower edge of a track to make it two to eight rows tall. Double-click the edge to
   put it back to two.
-- Right-click the empty ground under the tracks for **Insert audio layer**, an empty track
-  above the selected one, or at the bottom.
 
-A layer with a picture as well as sound is drawn faded and cannot be worked on here. Its
-**Detach audio** button moves its sound to an Audio layer of its own and mutes the original,
-which leaves the list.
+Pressing a head selects its track, and Ctrl or Shift adds it to the selection. Right-click a
+head for the commands below. They act on every selected track when the track is one of them.
+
+| Command | What it does |
+| --- | --- |
+| **Rename** | Turns the name into a field. |
+| **Mute**, **Solo**, **Bypass effects**, **Lock** | The track's switches. |
+| **Reset volume**, **Reset pan** | Back to 0 dB, and to the centre. On an animated row, at the playhead. |
+| **Volume envelope**, **Pan envelope** | Shows or hides the line across the track, as in the [Cut timeline](/use/cutting/#envelopes). `Shift`+`V` and `Shift`+`P` do the same on the selected tracks. |
+| **Lane ▸** | **Wave** or **Spectral**. |
+| **Select layer** | Selects every clip on the track. |
+| **Move up**, **Move down** | Moves the track past its neighbour. |
+| **Minimise all tracks** | Back to two rows, every track. |
+| **Reset height** | Back to two rows, when a track's edge has been dragged. |
+| **Output ▸**, **Send to ▸** | Where the sound goes. Not on a bus. |
+| **Detach audio** | Moves the sound of a layer with a picture to an Audio layer of its own. |
+| **Add audio effect ▸** | Adds to the track's stack. |
+| **Duplicate**, **Label colour ▸**, **Delete** | As on any layer. |
+
+Right-click the column header for **Lane ▸** on every track and **Reset all heights**.
+
+Right-click the empty ground under the tracks for **Insert audio layer**, **Insert bus**,
+**Paste**, **Select all** and **Add marker here**. With no tracks, **Insert audio layer** is
+on the lane. A new track goes above the selected one, or at the bottom.
+
+A layer with a picture as well as sound is drawn faded. Its menu has **Rename**, **Detach
+audio**, **Lock** and **Delete**. Its **Detach audio** switch moves its sound to an Audio layer
+of its own and mutes the original, which leaves the list.
 
 ### Clips
 
 An Audio layer is a track of one clip until the first edit on it turns it into a
 [Sequence layer](/use/sequence-layers/) of clips.
-Clicking a clip selects it and its track. The body of a clip drags it along its track or to
-another, and either edge trims it.
+Clicking a clip selects it and its track, and Ctrl or Shift adds it to the selection. The body
+of a clip drags it along its track or to another, and either edge trims it.
+
+With the pointer on a clip, its effects switch, add-effect button and twirl show beside its
+name, with its gain line when it is at 0 dB.
 
 With the pointer on a track, each clip shows a handle at its top corners. Dragging one sets
 the length of the fade at that end, and dragging it back to the corner removes the fade.
 
-Right-click a clip:
+Right-click a clip. The commands act on every selected clip when the clip is one of them.
 
 | Command | What it does |
 | --- | --- |
-| **Fade in ▸**, **Fade out ▸** | Sets the shape of the fade: **Linear**, **Fast**, **Slow**, **Smooth** or **Sharp**. |
-| **Split at playhead** | Cuts the clip at the playhead. |
+| **Split** | Cuts the clip at the playhead. `Ctrl`+`K` does it too. Disabled with the playhead off the clip. |
+| **Trim to playhead ▸** | Brings the clip's start or end to the playhead, with or without closing the room. |
+| **Transition ▸** | **Fade in ▸** or **Fade out ▸** sets the shape of the fade: **Linear**, **Fast**, **Slow**, **Smooth** or **Sharp**. |
+| **Normalise** | Sets each clip's gain so its loudest sample lands at **Normalise to** in [Settings](/use/settings/#audio), −1 dB unless changed. Each by its own loudest sample, as one undo step. On a track's head, every clip on it. A layer that is one file sets its Volume, with a key at the playhead if keyed. |
+| **Normalise loudness ▸** | Sets each clip's gain so its measured loudness lands at −14, −16 or −23 LUFS. On a track's head, every clip on it. |
+| **Reset gain** | Puts each clip's gain back at 0 dB. Disabled while none is off 0 dB. |
+| **Keep pitch** | Whether the track's sound keeps its pitch when it plays faster or slower. |
+| **Lane ▸** | **Wave** or **Spectral**. |
+| **Bypass effects** | Switches off the clip's effects, when it has any. |
+| **Add audio effect ▸** | Adds to the clip's stack. |
+| **Take ▸** | Picks a take, or deletes the one showing, when the clip has several. |
 | **Audio streams ▸**, **Split audio streams**, **Merge audio streams** | As on a layer, when the clip's file has more than one [audio stream](/use/audio/#audio-streams). |
+| **New composition from clip** | Makes a composition of the clip and opens it. |
+| **Cut**, **Copy**, **Paste**, **Duplicate** | **Paste** places at the playhead, on this track. **Duplicate** places a copy after the clip, or past the end of the track where something is in the way. |
+| **Paste attributes** | Puts the copied clip's effects, levels, fades and speed on the selected clips. |
+| **Group**, **Ungroup** | Joins two or more selected clips, or lets one go. |
+| **Select to end** | Selects this clip and those after it on the track. |
+| **Select layer** | Selects every clip on the track. |
+| **Clip colour ▸** | The track's colour, or one of the label colours. |
 | **Delete clip** | Removes the clip and leaves a gap. |
+| **Ripple delete** | Removes the clip and moves what follows back. `Shift`+`Delete` does it too. |
+
+An Audio layer not yet cut has **Split**, **Transition ▸**, **Keep pitch**, **Lane ▸**,
+**Clip colour ▸** and **Delete**.
+
+Right-click a gap on a track for **Paste**, **Select all**, **Close gap** and **Add marker
+here**.
 
 Right-click a fade, or an overlap between two clips, for the same five shapes and
-**Custom…**, which opens the **Fade shape** editor. A shape picked on an overlap goes on
-both sides of it.
+**Custom…**, which opens the fade editor. A shape picked on an overlap goes on both sides of
+it. **Remove fade in** or **Remove fade out** takes away a fade with no overlap.
 
-Right-click a keyframe for **Linear**, **Easy ease**, **Hold**, **Copy ease**, **Paste ease**
-and **Delete key**.
+Right-click a keyframe for the [menu every keyframe has](/use/keyframes/), less **Ease…**.
 
-`Delete` removes the selected keyframes, or the selected clip when no keyframe is selected.
+`Delete` removes the selected keyframes, or the selected clips when no keyframe is selected.
+`Ctrl+X`, `Ctrl+C` and `Ctrl+V` cut, copy and paste them.
 
 ## Related
 

@@ -16,6 +16,7 @@ import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:provider/provider.dart';
 
 import 'frb_test_support.dart';
@@ -96,7 +97,7 @@ void main() {
     });
 
     testWidgets(
-        'right-clicking opens the hidden tools, and picking one arms it'
+        'right-clicking opens the tool\'s menu, and picking one arms it'
         ' and sticks to the button', (tester) async {
       final p = await mount(tester);
       final shape = find.byKey(const ValueKey('tool-shape'));
@@ -104,8 +105,8 @@ void main() {
       await tester.tapAt(tester.getCenter(shape), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
 
-      final star = find.byKey(const ValueKey('tool-flyout-shapeStar'));
-      expect(star, findsOneWidget, reason: 'the flyout lists the whole group');
+      final star = find.byKey(const ValueKey('menu-row-Star'));
+      expect(star, findsOneWidget, reason: 'the menu lists the whole group');
 
       await tester.tap(star);
       await tester.pumpAndSettle();
@@ -135,17 +136,12 @@ void main() {
           tester.getRect(find.byKey(const ValueKey('workspace-user-Grading')));
       expect(saved.left, greaterThan(last.left));
 
-      // And it is the one ticked, because saving switches to what was saved.
-      final tick = (tester
-              .widget<Container>(find
-                  .descendant(
-                    of: find.byKey(const ValueKey('workspace-user-Grading')),
-                    matching: find.byType(Container),
-                  )
-                  .last)
-              .foregroundDecoration as BoxDecoration?)
-          ?.border as Border?;
-      expect(tick?.bottom.color, LumitTheme.dark().accent);
+      // And it is the one fronted, because saving switches to what was saved.
+      final button = tester.widget<HouseButton>(find.descendant(
+        of: find.byKey(const ValueKey('workspace-user-Grading')),
+        matching: find.byType(HouseButton),
+      ));
+      expect(button.active, isTrue);
 
       await tester.tap(find.byKey(const ValueKey('workspace-edit')));
       await tester.pump();

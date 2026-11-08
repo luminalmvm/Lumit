@@ -13,6 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
 import '../l10n/strings.dart';
+import '../theme/theme.dart' show ShapeTokens;
 import '../widgets/controls.dart';
 import 'graph_key_fields.dart' show keyFieldRow;
 import 'graph_channels.dart';
@@ -239,45 +240,101 @@ class GraphLensSwitch extends StatelessWidget {
   final GraphLens lens;
   final ValueChanged<GraphLens> onLens;
 
-  const GraphLensSwitch({super.key, required this.lens, required this.onLens});
+  /// A plot too narrow for the pill: the graph in force as one word, which
+  /// opens the three.
+  final bool compact;
+
+  const GraphLensSwitch(
+      {super.key,
+      required this.lens,
+      required this.onLens,
+      this.compact = false});
+
+  static final _lenses = [
+    ('graph-lens-value', GraphLens.value),
+    ('graph-lens-speed', GraphLens.speed),
+    ('graph-lens-acceleration', GraphLens.acceleration),
+  ];
+
+  static String _word(GraphLens lens) => switch (lens) {
+        GraphLens.value => l10n.clipboardValueColumn,
+        GraphLens.speed => l10n.graphSpeed,
+        GraphLens.acceleration => l10n.graphAcceleration,
+      };
+
+  static String _tip(GraphLens lens) => switch (lens) {
+        GraphLens.value => l10n.tipValueGraph,
+        GraphLens.speed => l10n.tipSpeedGraph,
+        GraphLens.acceleration => l10n.tipAccelerationGraph,
+      };
+
+  /// The three graphs, the one in force ticked.
+  void _menu(BuildContext context, Offset at) => showMenuAt<void>(
+        context: context,
+        position: at,
+        rows: (close) => [
+          for (final (keyName, which) in _lenses)
+            MenuRow(
+              key: ValueKey<String>('$keyName-row'),
+              onPressed: () {
+                close(null);
+                onLens(which);
+              },
+              child: MenuLabel(_tip(which), ticked: lens == which),
+            ),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Segment(
+    return GestureDetector(
       key: const ValueKey<String>('graph-lens-switch'),
-      children: [
-        for (final (keyName, which, label, tip) in [
-          (
-            'graph-lens-value',
-            GraphLens.value,
-            l10n.clipboardValueColumn,
-            l10n.tipValueGraph
-          ),
-          (
-            'graph-lens-speed',
-            GraphLens.speed,
-            l10n.graphSpeed,
-            l10n.tipSpeedGraph
-          ),
-          (
-            'graph-lens-acceleration',
-            GraphLens.acceleration,
-            l10n.graphAcceleration,
-            l10n.tipAccelerationGraph
-          ),
-        ])
-          LumitTooltip(
-            message: tip,
-            child: SegmentOption(
-              key: ValueKey<String>(keyName),
-              active: lens == which,
-              onTap: () => onLens(which),
-              child: Text(t.kickerCase(label),
-                  style: lens == which ? t.kickerOn : t.kicker),
+      onSecondaryTapUp: (d) => _menu(context, d.globalPosition),
+      child: compact
+          ? Builder(
+              builder: (context) => GestureDetector(
+                key: const ValueKey<String>('graph-lens-compact'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  final box = context.findRenderObject();
+                  if (box is! RenderBox) return;
+                  _menu(context,
+                      box.localToGlobal(Offset(0, box.size.height + 2)));
+                },
+                child: Container(
+                  height: Segment.height,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: t.surface0,
+                    borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(t.kickerCase(_word(lens)), style: t.kickerOn),
+                      const SizedBox(width: 6),
+                      Caret(colour: t.textMuted),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : Segment(
+              children: [
+                for (final (keyName, which) in _lenses)
+                  LumitTooltip(
+                    message: _tip(which),
+                    child: SegmentOption(
+                      key: ValueKey<String>(keyName),
+                      active: lens == which,
+                      onTap: () => onLens(which),
+                      child: Text(t.kickerCase(_word(which)),
+                          style: lens == which ? t.kickerOn : t.kicker),
+                    ),
+                  ),
+              ],
             ),
-          ),
-      ],
     );
   }
 }

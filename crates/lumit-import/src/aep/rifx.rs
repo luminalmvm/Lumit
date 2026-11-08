@@ -37,10 +37,10 @@ pub const MAX_DEPTH: u32 = 64;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RifxError {
     /// The file does not begin with `RIFX`.
-    #[error("not an After Effects project: the file does not start with RIFX")]
+    #[error("not an .aep project: the file does not start with RIFX")]
     NotRifx,
     /// The form type is not `Egg!` — a RIFX that is not an `.aep`.
-    #[error("not an After Effects project: form type is {found}, not Egg!")]
+    #[error("not an .aep project: form type is {found}, not Egg!")]
     WrongForm { found: String },
     /// A header or body ran off the end of the bytes it was read from.
     #[error("truncated: {what} wanted {wanted} bytes but only {available} remain")]

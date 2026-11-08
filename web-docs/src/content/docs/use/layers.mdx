@@ -61,16 +61,35 @@ The **Stagger** panel starts the selected layers one after another. **Layer ▸ 
 layers…** opens it. Locked layers stay put.
 
 - **Offset per layer**: how many frames each layer starts after the one before it.
+- **Overlap**: above 0, the layers lie end to end instead, each starting this many frames
+  before the one before it ends. The offset is not read.
+- **Crossfade**: writes straight Opacity keys across each overlap, on whichever layer is higher
+  in the stack.
 - **Order**: **Top down**, **Bottom up**, **Order clicked** or **Random**. Order clicked
   follows the order the layers were added to the selection. Random shuffles again each time.
 - **Stagger**: the first layer starts on the earliest in point among them, and each one
-  after it starts later by the offset.
-- **Line up**: every layer starts on that earliest in point.
+  after it starts later by the offset, or end to end with an overlap.
+- **Line up**: every layer starts on that earliest in point. With Crossfade ticked, each
+  also fades in and out over the Overlap at both ends.
 
 Hold `Ctrl+Alt` and drag a selected layer's bar to stagger by hand: `Cmd+Option` on macOS,
 `Ctrl+Shift` on Linux. The drag follows the panel's order. The first layer stays put, the
 bar under the pointer follows it, and the ones between are spaced evenly. With the first
 layer's bar in hand, the last layer moves the whole distance.
+
+## Replace a layer's source
+
+**Replace source**, on the row menu and the **Layer** menu, points the selected layers at
+another item of the project, or at a file with **Choose…**. `Alt`+drag an item from the Project
+panel onto a layer's row or bar does the same.
+
+Footage, solid and precomp layers take each other's sources. The transform, keys, masks, effects
+and markers stay, and the anchor point keeps its place on the picture. A name that was the
+old source's follows the new one. A layer that becomes a solid loses its Retime, and the status
+line says so.
+
+The menu offers only what the layers can take: a picture for a picture layer, sound for a
+sound layer, and never a composition that contains them.
 
 ## Copy and paste
 
@@ -90,25 +109,38 @@ composition still contains that layer.
 
 ## The row menu
 
-Right-click a layer's row in the Timeline outline, or its bar, for the row menu. Its commands
-act on every selected layer and skip locked ones.
+Right-click a layer's row in the Timeline outline, its bar or its row in the Hierarchy for the
+row menu. A layer
+outside the selection is selected first. Its commands act on every selected layer and grey
+out on locked ones. Each row shows its shortcut where it has one.
 
 | Item | Does |
 | --- | --- |
-| **Duplicate** | Duplicates the layers. |
-| **Accepts lights** | Whether Light layers shade the layer. |
-| **Bring forward**, **Send backward** | Moves the layers one place up or down the stack. |
+| **Open** | Fronts the composition a Precomp layer draws. |
+| **Rename**, **Layer settings…** | Renames the layer in place; opens its settings. |
+| **Expand**, **Expand all**, **Collapse all** | In the Hierarchy: opens or shuts Precomp layers in the tree. |
+| **Effect ▸** | The Effect menu, onto the layer. |
+| **Audio ▸** | **Detach audio** moves the layer's sound onto an Audio layer directly below it and mutes the layer. **Keep pitch** holds the pitch of retimed sound. On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, **Split audio streams** and **Merge audio streams**. |
+| **Retime ▸** | **Enable Retime** or **Disable Retime**, **Stretch…** and **Freeze frame at playhead**. See [Retime](/use/retime/). Not on Sequence layers. |
+| **Markers ▸** | **Add at playhead** and **Delete all markers**. |
+| **Create ▸** | Shapes or points from a text layer, shapes from a vector file, one layer per shape. On the layers that have something to make. |
 | **Convert to sequence layer**, **Convert to footage layer** | Turns a Footage layer into a [Sequence layer](/use/sequence-layers/), and back. A Sequence layer of several clips refuses. |
-| **Detach audio** | Moves the layer's sound onto an Audio layer directly below it, and mutes the layer. Not on Audio layers. |
-| **Audio streams ▸**, **Split audio streams**, **Merge audio streams** | On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, each stream onto a layer of its own, and back onto one. |
-| **Enable Retime** or **Disable Retime**, **Stretch…**, **Freeze frame at playhead** | See [Retime](/use/retime/). Not on Sequence layers. |
-| **Pre-compose…** | See [Compositions](/use/compositions/#nest-one-composition-in-another). |
-| **Stagger layers…** | See [Stagger](#stagger). With several layers selected. |
 | **Copy sequence shape**, **Paste sequence shape** | On Sequence layers. See [Sequence layers](/use/sequence-layers/). |
+| **Cut**, **Copy**, **Paste**, **Duplicate**, **Split layer** | The Edit menu's commands. |
+| **Trim to work area** | Pulls the layers' ends in to the work area. |
+| **Arrange ▸** | **Bring to front**, **Bring forward**, **Send backward** and **Send to back**. |
+| **Parent ▸**, **Blending mode ▸**, **Matte ▸** | The layer's parent, blend mode and matte, ticked at the one in force. |
+| **Label colour…** | The label colour picker. |
+| **Hidden**, **Lock** | The visibility and lock switches. |
+| **Switches ▸** | **Solo**, **Shy**, **Guide**, **3D layer**, **Accepts lights** and **Flow**. |
+| **Select similar ▸** | Selects every layer of the same kind, or with the same label colour. |
+| **Group layers** or **Ungroup** | Folds the selected layers under a group header, or takes them out of their group. |
+| **Precompose…** | See [Compositions](/use/compositions/#nest-one-composition-in-another). |
+| **Stagger layers…** | See [Stagger](#stagger). With several layers selected. |
+| **Reveal in Project panel** | Selects the layer's footage or composition in the Project panel. |
 | **Delete** | Deletes the layers. |
-| **Delete all markers** | Removes the layers' markers. Only on a layer with markers. |
 
-On a locked layer the menu leaves out the commands that edit it.
+The same menu opens on a layer's bar.
 
 ## Label colours
 
@@ -189,7 +221,7 @@ The export dialogue can be told to write guide layers anyway.
 
 **Layer ▸ New ▸ Light…** opens **Light settings**, where the light's name, type and options
 are set before it is made. A new light stands in front of the composition, aimed at its
-centre; an area light starts at a fifth of the composition. **Layer ▸ Light settings** opens
+centre; an area light starts at a fifth of the composition. **Layer ▸ 3D ▸ Light settings** opens
 the window again for the selected light. A keyframed option reads **animated** there and is
 left alone. The first 3D model dropped into a composition with no lights brings an
 **Ambient light** and a **Key light** with it.
@@ -199,8 +231,8 @@ else. A layer takes light on its front, so a floor lies flat at X rotation -90. 
 it shades is per layer: **Accepts lights**, on by default, in a 3D
 layer's **Material options** and on the layer's right-click menu in the Timeline.
 
-A light adds to the picture, so a layer no light reaches is left as it is. **Like After
-Effects**, under **Lights** in Composition settings, lights a layer from black instead,
+A light adds to the picture, so a layer no light reaches is left as it is. **Lights start
+from black**, under **Lights** in Composition settings, lights a layer from black instead,
 with the ambient lights as its base, and leaves 2D layers unlit. It lights the picture as
 the screen shows it, as After Effects does without **Linearize working space**. A
 composition imported from After Effects has it on, in linear light if the project was

@@ -24,6 +24,7 @@ import '../l10n/strings.dart';
 import '../state/file_dialogs.dart' show pickOcioConfig;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 import 'pro_window.dart' show writtenBytes;
 import 'settings_rows.dart';
 
@@ -49,7 +50,7 @@ String _roomLabel(int frames) => switch (frames) {
       _ => l10n.graphRoomMost,
     };
 
-const Size _windowSize = Size(560, 420);
+const double _windowWidth = 560;
 
 Future<void> showProjectSettingsFrb(
   BuildContext context,
@@ -61,7 +62,6 @@ Future<void> showProjectSettingsFrb(
     showLumitModal<void>(
       context: context,
       id: 'project-settings',
-      initialSize: _windowSize,
       builder: (close) => _ProjectSettingsWindow(
         project: project,
         configPicker: configPicker ?? pickOcioConfig,
@@ -121,44 +121,42 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      child: SizedBox.expand(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 10, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                      child: Text(l10n.projectSettings, style: t.bodyPrimary)),
-                  HouseButton(
-                    key: const ValueKey('project-settings-close'),
-                    small: true,
-                    // The window's only action: Enter closes it.
-                    primary: true,
-                    autofocus: true,
-                    onPressed: widget.onClose,
-                    child: Text(l10n.done),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                children: [..._rendering(t), ..._colourGroup(t)],
-              ),
+    return DialogFrame(
+      width: _windowWidth,
+      children: [
+        dialogTitleBar(t,
+            title: l10n.projectSettings,
+            onClose: widget.onClose,
+            keyPrefix: 'project-settings'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [..._rendering(t, first: true), ..._colourGroup(t)],
+          ),
+        ),
+        dialogFooter(
+          t,
+          keyPrefix: 'project-settings',
+          actions: [
+            HouseButton(
+              key: const ValueKey('project-settings-done'),
+              // Every change here is an edit already made, so there is nothing
+              // for a filled button to commit. Enter closes it.
+              autofocus: true,
+              onPressed: widget.onClose,
+              child: Text(l10n.close),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
   /// Rendering: the settings that change what the composition looks like, and
   /// so are the same for the preview and the export.
-  List<Widget> _rendering(LumitTheme t) {
+  List<Widget> _rendering(LumitTheme t, {bool first = false}) {
     final project = widget.project;
     final set = project.antiAliasing();
     final inUse = project.antiAliasingInUse();
@@ -167,7 +165,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
     final largest = largestPicture();
     final room = project.graphRoom();
     return [
-      settingsSection(t, l10n.settingsGroupRendering, [
+      settingsSection(t, l10n.settingsGroupRendering, first: first, [
         settingsRow(
           t,
           l10n.settingsColourDepth,
