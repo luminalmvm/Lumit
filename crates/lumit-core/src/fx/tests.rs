@@ -11376,7 +11376,7 @@ fn clone_to_points_places_the_clone_rows() {
 /// corner pixel goes, the middle of an edge stays.
 #[test]
 fn clone_deformer_rounds_outward_corners() {
-    use effects::clone_deformer::rounded;
+    use effects::clone_deformer::round::rounded;
     let (w, h) = (40u32, 40u32);
     let alpha: Vec<f32> = (0..w * h)
         .map(|i| {
