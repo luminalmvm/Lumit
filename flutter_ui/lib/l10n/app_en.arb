@@ -2160,38 +2160,6 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "Footage arrives as a layer. Retime graphs show source time.",
-  "@firstRunAfterEffects": {
-    "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAfterEffectsShortcuts": "Use the After Effects shortcuts",
-  "@firstRunAfterEffectsShortcuts": {
-    "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
-  "firstRunCut": "Footage arrives on Sequence layers, in the Cut workspace.",
-  "@firstRunCut": {
-    "description": "First run: what choosing Premiere Pro or Resolve habits does. Sequence layer and Cut (the workspace) are Lumit product terms."
-  },
-  "firstRunCutName": "Premiere Pro or Resolve",
-  "@firstRunCutName": {
-    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
-  },
-  "firstRunTitle": "Editing style",
-  "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
-  },
-  "firstRunVegas": "Video arrives as a Sequence layer. Retime graphs show speed.",
-  "@firstRunVegas": {
-    "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
-  },
-  "firstRunVegasRetimeOnly": "Retime graph only",
-  "@firstRunVegasRetimeOnly": {
-    "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
-  },
-  "firstRunVegasShortcuts": "Use the Vegas shortcuts",
-  "@firstRunVegasShortcuts": {
-    "description": "First-run screen: a tick on the Vegas card that loads the Vegas keyboard shortcuts as well. Off by default."
-  },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
     "description": "First run: the name of the other editor offered. A product name — leave it as it is."
@@ -19960,17 +19928,37 @@
   },
   "firstRunSetup": "Set up Lumit",
   "@firstRunSetup": {
-    "description": "Title of the screen shown the first time Lumit opens, over its five questions."
+    "description": "Title of the screen shown the first time Lumit opens, over its questions."
   },
   "firstRunStyle": "Style",
   "@firstRunStyle": {
-    "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
+    "description": "First-run screen: the name of the row that picks one of the three interface styles, Studio, Desk and Lantern."
   },
   "firstRunContinue": "Continue",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
   },
-  "shareAway": "The host cannot be reached.",
+  "firstRunLumit": "Lumit",
+  "@firstRunLumit": {
+    "description": "First-run screen: Lumit's own shortcuts, the first of three choices beside After Effects and Vegas. The product name, so leave it as it is."
+  },
+  "firstRunRecommended": "Recommended",
+  "@firstRunRecommended": {
+    "description": "First-run screen: a quiet word after Lumit's own default in a row of choices, such as the Lumit shortcuts or the Studio style. It is the one to keep unless you want another. One word."
+  },
+  "firstRunWorkspaceEdit": "Animate layers and effects",
+  "@firstRunWorkspaceEdit": {
+    "description": "First-run screen: under the Edit workspace's card, what it is for. Short."
+  },
+  "firstRunWorkspaceCut": "Cut footage on tracks",
+  "@firstRunWorkspaceCut": {
+    "description": "First-run screen: under the Cut workspace's card, what it is for. Tracks are the rows of the Cut timeline. Short."
+  },
+  "firstRunWorkspaceNodes": "Wire effects as nodes",
+  "@firstRunWorkspaceNodes": {
+    "description": "First-run screen: under the Nodes workspace's card, what it is for: effects drawn as boxes joined by wires. Short."
+  },
+  "shareAway": "The host cannot be reached. Keep working, and your changes are merged when it is back.",
   "@shareAway": {
     "description": "Bottom-strip notice in a shared project, shown to a guest when the connection to the host (the person sharing the project) drops. The guest can carry on editing."
   },

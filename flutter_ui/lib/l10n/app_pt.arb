@@ -3457,21 +3457,9 @@
   "@firstMask": {
     "description": "Effect controls: the default entry of a mask picker, meaning whichever mask is first on the layer rather than one named mask."
   },
-  "firstRunAfterEffects": "A gravação chega como camada. Os gráficos de Retime mostram o tempo de origem.",
-  "@firstRunAfterEffects": {
-    "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
-  },
-  "firstRunAfterEffectsShortcuts": "Usar os atalhos do After Effects",
-  "@firstRunAfterEffectsShortcuts": {
-    "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
-  },
   "firstRunContinue": "Continuar",
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
-  },
-  "firstRunCutName": "Premiere Pro ou Resolve",
-  "@firstRunCutName": {
-    "description": "First run: the name of the third card, the two editors it is for. Product names, so leave them as they are."
   },
   "firstRunSetup": "Configurar o Lumit",
   "@firstRunSetup": {
@@ -3481,25 +3469,9 @@
   "@firstRunStyle": {
     "description": "First-run screen: heading over the three interface styles, Studio, Desk and Lantern, each shown as a small drawing of the window."
   },
-  "firstRunTitle": "Estilo de edição",
-  "@firstRunTitle": {
-    "description": "First-run screen: heading over its first question, whose three answers are After Effects, Vegas, and Premiere Pro or Resolve."
-  },
-  "firstRunVegas": "O vídeo chega como camada de sequência. Os gráficos de Retime mostram a velocidade.",
-  "@firstRunVegas": {
-    "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
-  },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
     "description": "First run: the name of the other editor offered. A product name — leave it as it is."
-  },
-  "firstRunVegasRetimeOnly": "Alterar só o gráfico de Retime padrão",
-  "@firstRunVegasRetimeOnly": {
-    "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
-  },
-  "firstRunVegasShortcuts": "Usar os atalhos do Vegas",
-  "@firstRunVegasShortcuts": {
-    "description": "First-run screen: a tick on the Vegas card that loads the Vegas keyboard shortcuts as well. Off by default."
   },
   "flowAlwaysOn": "Ativado sempre",
   "@flowAlwaysOn": {
