@@ -146,13 +146,10 @@ pub struct RotoSettings {
     /// channel costs about as much as fifty pixels of travel.
     pub gamma: f32,
     /// The guided filter's window radius in source pixels, and the half-width
-    /// of the band its answer is allowed into.
+    /// of the band round the edge its answer is allowed into.
     pub guide_radius: u32,
     /// The guided filter's regulariser: bigger is smoother and flatter.
     pub guide_eps: f32,
-    /// The refine band: the filter's answer replaces the matte where
-    /// `|α_raw − ½|` is under this, dilated by [`guide_radius`](Self::guide_radius).
-    pub band: f32,
     /// Warped seeds are taken only from pixels whose flow confidence reaches
     /// this. Below it, nothing is seeded and the pixel is re-decided from the
     /// frame's own colours.
@@ -165,7 +162,6 @@ impl Default for RotoSettings {
             gamma: 50.0,
             guide_radius: 8,
             guide_eps: 1e-3,
-            band: 0.45,
             confidence_floor: 0.5,
         }
     }
