@@ -14,7 +14,6 @@
 // exception to "an action runs on all of them", and every other field here is
 // that layer's own identity too.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
@@ -29,6 +28,7 @@ import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 
 /// Show the layer's settings. Completes with whether anything was applied, so
 /// the caller can redraw only when there is something to redraw.
@@ -94,6 +94,7 @@ Future<void> newSolidFrb({
     id: 'layer-settings',
     builder: (close) => _LayerSettingsBody(
       name: '',
+      fresh: true,
       definition: BridgeSolidDef(
           name: '',
           colour: _lastColour,
@@ -137,11 +138,15 @@ class _LayerSettingsBody extends StatefulWidget {
   final void Function(String, BridgeSolidDef?) onConfirm;
   final VoidCallback onCancel;
 
+  /// A solid that does not exist yet: the window is New solid, not its settings.
+  final bool fresh;
+
   const _LayerSettingsBody({
     required this.name,
     required this.definition,
     required this.onConfirm,
     required this.onCancel,
+    this.fresh = false,
   });
 
   @override
@@ -182,123 +187,122 @@ class _LayerSettingsBodyState extends State<_LayerSettingsBody> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final solid = widget.definition != null;
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (_, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey != LogicalKeyboardKey.enter &&
-            event.logicalKey != LogicalKeyboardKey.numpadEnter) {
-          return KeyEventResult.ignored;
-        }
-        _confirm();
-        return KeyEventResult.handled;
-      },
-      child: FloatSurface(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(l10n.menuLayerSettings, style: t.bodyPrimary),
-            ),
-            _row(
-              t,
-              label: l10n.name,
-              child: HouseTextField(
-                key: const ValueKey('layer-settings-name'),
-                controller: _name,
-                width: double.infinity,
-                autofocus: true,
-                onSubmitted: (_) => _confirm(),
-              ),
-            ),
-            if (solid) ...[
-              const SizedBox(height: 8),
-              _row(
-                t,
-                label: l10n.sourceSolidSize,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DragValueField(
-                        key: const ValueKey('layer-settings-width'),
-                        value: _width,
-                        min: 1,
-                        max: 16384,
-                        decimals: 0,
-                        onChanged: (v) => setState(() => _width = v.round()),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: DragValueField(
-                        key: const ValueKey('layer-settings-height'),
-                        value: _height,
-                        min: 1,
-                        max: 16384,
-                        decimals: 0,
-                        onChanged: (v) => setState(() => _height = v.round()),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              _row(
-                t,
-                label: l10n.sourceSolidColour,
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  // A solid's colour is chosen as a **display** colour, so the
-                  // picker's channels read 0—255 — the same reading the
-                  // source card's own swatch opens with.
-                  child: ColourSwatchButton(
-                    key: const ValueKey('layer-settings-colour'),
-                    colour: PickedColour(
-                            _colour?.r ?? 0, _colour?.g ?? 0, _colour?.b ?? 0)
-                        .clipped,
-                    onPicked: (picked) => setState(() => _colour =
-                        BridgeColourRgba(
-                            r: picked.r,
-                            g: picked.g,
-                            b: picked.b,
-                            a: _colour?.a ?? 1)),
+    return dialogEnter(
+      onEnter: _confirm,
+      child: DialogFrame(
+        width: 400,
+        children: [
+          dialogTitleBar(t,
+              title: widget.fresh ? l10n.newSolidTitle : l10n.layerSettingsTitle,
+              onClose: widget.onCancel,
+              keyPrefix: 'layer-settings'),
+          Padding(
+            padding: dialogBodyPadding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _row(
+                  t,
+                  label: l10n.name,
+                  child: HouseTextField(
+                    key: const ValueKey('layer-settings-name'),
+                    controller: _name,
+                    width: double.infinity,
+                    autofocus: true,
+                    onSubmitted: (_) => _confirm(),
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: const ValueKey('layer-settings-confirm'),
-                  primary: true,
-                  onPressed: _confirm,
-                  child: Text(l10n.apply),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('layer-settings-cancel'),
-                  onPressed: widget.onCancel,
-                  child: Text(l10n.cancel),
-                ),
+                if (solid) ...[
+                  _row(
+                    t,
+                    label: l10n.sourceSolidSize,
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: _sizeWell,
+                          height: dialogControlHeight,
+                          child: DragValueField(
+                            key: const ValueKey('layer-settings-width'),
+                            value: _width,
+                            min: 1,
+                            max: 16384,
+                            decimals: 0,
+                            onChanged: (v) =>
+                                setState(() => _width = v.round()),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('×', style: dialogMono(t)),
+                        ),
+                        SizedBox(
+                          width: _sizeWell,
+                          height: dialogControlHeight,
+                          child: DragValueField(
+                            key: const ValueKey('layer-settings-height'),
+                            value: _height,
+                            min: 1,
+                            max: 16384,
+                            decimals: 0,
+                            onChanged: (v) =>
+                                setState(() => _height = v.round()),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _row(
+                    t,
+                    label: l10n.sourceSolidColour,
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      // A solid's colour is chosen as a **display** colour, so
+                      // the picker's channels read 0-255, the same reading the
+                      // source card's own swatch opens with.
+                      child: ColourSwatchButton(
+                        key: const ValueKey('layer-settings-colour'),
+                        colour: PickedColour(_colour?.r ?? 0, _colour?.g ?? 0,
+                                _colour?.b ?? 0)
+                            .clipped,
+                        onPicked: (picked) => setState(() => _colour =
+                            BridgeColourRgba(
+                                r: picked.r,
+                                g: picked.g,
+                                b: picked.b,
+                                a: _colour?.a ?? 1)),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
-          ],
-        ),
+          ),
+          dialogFooter(
+            t,
+            keyPrefix: 'layer-settings',
+            actions: [
+              HouseButton(
+                key: const ValueKey('layer-settings-cancel'),
+                onPressed: widget.onCancel,
+                child: Text(l10n.cancel),
+              ),
+              HouseButton(
+                key: const ValueKey('layer-settings-confirm'),
+                primary: true,
+                onPressed: _confirm,
+                child: Text(widget.fresh ? l10n.create : l10n.apply),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  /// Label left, control right — the dialogue pattern's row.
   Widget _row(LumitTheme t, {required String label, required Widget child}) =>
-      Row(
-        children: [
-          SizedBox(width: 110, child: Text(label, style: t.small)),
-          Expanded(child: child),
-        ],
-      );
+      dialogRow(t, label, child, labelColumn: 90);
 }
+
+/// A solid's width and height, each wide enough for 16384.
+const double _sizeWell = 84;

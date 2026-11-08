@@ -303,9 +303,15 @@ class _SignInState extends State<_SignIn> {
     return DialogFrame(
       width: signInWidth,
       children: [
+        // The strip names the page, so the page has no heading of its own.
         dialogTitleBar(
           t,
-          title: l10n.signInTitle,
+          title: switch (_page) {
+            _Page.create => l10n.signInCreateHeading,
+            _Page.code => l10n.signInCodeHeading,
+            _Page.reset => l10n.signInResetHeading,
+            _ => l10n.signInHeading,
+          },
           onClose: () => widget.close(false),
           keyPrefix: 'sign-in',
         ),
@@ -327,17 +333,6 @@ class _SignInState extends State<_SignIn> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      switch (_page) {
-                        _Page.create => l10n.signInCreateHeading,
-                        _Page.code => l10n.signInCodeHeading,
-                        _Page.reset => l10n.signInResetHeading,
-                        _ => l10n.signInHeading,
-                      },
-                      key: const ValueKey('sign-in-heading'),
-                      textAlign: TextAlign.center,
-                      style: t.heading,
-                    ),
                     // Only the pages that have something to say: where the
                     // code went, or that the browser is waiting.
                     if (switch (_page) {
@@ -347,15 +342,15 @@ class _SignInState extends State<_SignIn> {
                       _ => null,
                     }
                         case final words?) ...[
-                      const SizedBox(height: 6),
                       Text(
                         words,
+                        key: const ValueKey('sign-in-lead'),
                         textAlign: TextAlign.center,
                         style: t.small
                             .copyWith(color: t.textSecondary, height: 1.4),
                       ),
+                      const SizedBox(height: 16),
                     ],
-                    const SizedBox(height: 16),
                     if (config == null && !_asked)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 18),

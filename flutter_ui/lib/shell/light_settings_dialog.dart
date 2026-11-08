@@ -29,8 +29,6 @@ import 'camera_settings_dialog.dart'
         cameraLabelColumn,
         cameraRowGap,
         cameraRowHeight,
-        cameraSectionKicker,
-        cameraSectionTop,
         cameraWell,
         staticCameraValue;
 import 'dialog_frame.dart';
@@ -333,7 +331,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
             ],
           ),
         ),
-        _section(t, l10n.lightOptions, [
+        dialogSection(t, l10n.lightOptions, [
           if (kind == BridgeLightKind.environment) ...[
             _row(
                 t,
@@ -586,35 +584,5 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
         labelColumn: cameraLabelColumn,
         gap: cameraRowGap,
         minHeight: cameraRowHeight,
-      );
-
-  /// A named group of rows, on the Camera settings dialog's pattern.
-  Widget _section(LumitTheme t, String title, List<Widget> rows) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(height: 1, color: t.hairline),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                dialogPadding, cameraSectionTop, dialogPadding, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: cameraSectionKicker,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 4),
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Text(t.kickerCase(title), style: t.kicker),
-                    ),
-                  ),
-                ),
-                ...rows,
-              ],
-            ),
-          ),
-        ],
       );
 }

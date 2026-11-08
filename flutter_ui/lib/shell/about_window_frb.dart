@@ -5,6 +5,7 @@
 // The boot log is here rather than in the Debug panel because the first line of
 // it *is* the version, and the rest is what someone pastes into a bug report.
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:lumit_flutter/src/rust/api/shell.dart';
@@ -12,6 +13,8 @@ import 'package:lumit_flutter/src/rust/api/shell.dart';
 import '../l10n/strings.dart';
 import '../state/updates.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
+import 'wordmark.dart';
 
 Future<void> showAboutWindowFrb(BuildContext context) => showLumitModal<void>(
       context: context,
@@ -48,40 +51,60 @@ class _AboutWindow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return FloatSurface(
+    final log = bootLog();
+    return DialogFrame(
       width: 420,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(l10n.menuAboutLumit, style: t.bodyPrimary),
+      children: [
+        dialogTitleBar(t,
+            title: l10n.menuAboutLumit, onClose: onClose, keyPrefix: 'about'),
+        Padding(
+          padding: const EdgeInsets.all(dialogPadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  LumitWordmark(height: 22, ground: t.surface1),
+                  const SizedBox(width: 8),
+                  Text(versionFromBootLine(lumitVersion()) ?? '',
+                      style: dialogMono(t)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(l10n.aboutBlurb, style: t.body),
+              if (log.length > 1) const SizedBox(height: 10),
+              for (final line in log.skip(1))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(line, style: dialogMono(t)),
+                ),
+            ],
           ),
-          Text(lumitVersion(), style: t.small),
-          const SizedBox(height: 8),
-          Text(
-            l10n.aboutBlurb,
-            style: t.small,
-          ),
-          const SizedBox(height: 10),
-          for (final line in bootLog().skip(1))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(line, style: t.small),
-            ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: HouseButton(
-              key: const ValueKey('about-close'),
-              small: true,
+        ),
+        dialogFooter(
+          t,
+          keyPrefix: 'about',
+          // The boot log is what goes in a bug report.
+          leading: log.isEmpty
+              ? null
+              : HouseButton(
+                  key: const ValueKey('about-copy'),
+                  onPressed: () =>
+                      Clipboard.setData(ClipboardData(text: log.join('\n'))),
+                  child: Text(l10n.menuCopy),
+                ),
+          actions: [
+            HouseButton(
+              key: const ValueKey('about-done'),
+              autofocus: true,
               onPressed: onClose,
-              child: Text(l10n.close, style: t.small),
+              child: Text(l10n.close),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 }

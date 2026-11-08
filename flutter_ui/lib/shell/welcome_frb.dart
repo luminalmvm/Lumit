@@ -21,17 +21,21 @@
 // start work, in the two places somebody can be standing when they have not
 // started yet.
 
+import 'dart:async';
 import 'dart:io' hide Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
 import '../panels/placeholder.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../state/account.dart' show CloudError;
 import '../state/backup.dart';
 import '../state/external_links.dart';
@@ -398,6 +402,8 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                         widget.onDone();
                       },
                       onForget: () => workspace.forgetProject(paths[i]),
+                      onMenu: (at) => _recentMenu(
+                          app, workspace, paths[i], at),
                     ),
               ],
             ),
@@ -405,6 +411,52 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
         ],
       ),
     );
+  }
+
+  /// A recent project's menu.
+  void _recentMenu(
+      LumitState app, Workspace workspace, String path, Offset at) {
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('welcome-menu-open'),
+          onPressed: () {
+            close(null);
+            app.openProject(path);
+            widget.onDone();
+          },
+          child: Text(l10n.welcomeOpenProject),
+        ),
+        if (!kIsWeb)
+          MenuRow(
+            key: const ValueKey('welcome-menu-reveal'),
+            onPressed: () {
+              close(null);
+              revealInFolder(path: path);
+            },
+            child: Text(l10n.projectShowInFolder),
+          ),
+        MenuRow(
+          key: const ValueKey('welcome-menu-copy-path'),
+          onPressed: () {
+            close(null);
+            Clipboard.setData(ClipboardData(text: path));
+          },
+          child: Text(l10n.welcomeCopyPath),
+        ),
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('welcome-menu-forget'),
+          onPressed: () {
+            close(null);
+            workspace.forgetProject(path);
+          },
+          child: Text(l10n.welcomeForgetProject),
+        ),
+      ],
+    ));
   }
 
   /// Backed-up projects that are not among the recents, in the recents' own
@@ -699,6 +751,9 @@ class _RecentRow extends StatefulWidget {
   /// Null for a row there is nothing to forget about.
   final VoidCallback? onForget;
 
+  /// A right press on the row, at where it landed. Null for a row with no menu.
+  final ValueChanged<Offset>? onMenu;
+
   /// For a row that is not a file on this machine, a backed-up project: what
   /// it is called, the line under that, and its picture.
   final String? name, detail;
@@ -712,6 +767,7 @@ class _RecentRow extends StatefulWidget {
     required this.last,
     required this.onOpen,
     this.onForget,
+    this.onMenu,
     this.name,
     this.detail,
     this.picture,
@@ -739,6 +795,9 @@ class _RecentRowState extends State<_RecentRow> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onOpen,
+        onSecondaryTapDown: widget.onMenu == null
+            ? null
+            : (press) => widget.onMenu!(press.globalPosition),
         child: Container(
           height:
               widget.last ? welcomeRecentRowHeight : welcomeRecentRowHeight + 1,
@@ -801,9 +860,14 @@ class _RecentRowState extends State<_RecentRow> {
               ),
               const SizedBox(width: welcomeForgetGap),
               if (widget.onForget case final forget?)
-                _Forget(
-                  id: 'welcome-recent-close-${widget.index}',
-                  onTap: forget,
+                // Comes up with the pointer. Every row wearing one at rest
+                // read as a list of things to get rid of.
+                Opacity(
+                  opacity: _hover ? 1 : 0,
+                  child: _Forget(
+                    id: 'welcome-recent-close-${widget.index}',
+                    onTap: forget,
+                  ),
                 )
               else
                 const SizedBox(width: welcomeForgetColumnWidth),

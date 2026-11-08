@@ -60,6 +60,8 @@ colorspaces:
 
 void main() {
   setUpAll(initEngineForTests);
+  // The rows these tests reach live inside the Export window's folds.
+  setUp(() => exportOpenSections.addAll(ExportSection.values));
 
   late Directory dir;
   setUp(() => dir = Directory.systemTemp.createTempSync('lumit-ocio-ui'));

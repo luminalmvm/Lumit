@@ -2,9 +2,11 @@
 // `package:flutter/scheduler.dart` re-exports `FrameTiming` but not it.
 import 'dart:ui' show FramePhase;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
+
+import '../l10n/strings.dart';
 
 /// The frame-rate readout in the Debug View.
 ///
@@ -109,38 +111,29 @@ class _PerformanceMonitorState extends State<PerformanceMonitor> {
   Widget build(BuildContext context) {
     final theme = ThemeScope.of(context).theme;
 
+    // The label quiet and the figure bright, unless the figure is the news.
+    Widget reading(String label, double rate, double ms) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: theme.small),
+            const SizedBox(width: 6),
+            Text(rate.toStringAsFixed(0),
+                style: theme.mono.copyWith(
+                    color: ms > 17 ? msToColor(ms) : theme.textPrimary)),
+          ],
+        );
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
-          spacing: 10,
+          spacing: 12,
           children: [
-            Row(
-              children: [
-                Text(
-                  "FPS: ",
-                  style: theme.mono,
-                ),
-                Text(
-                  fps.toStringAsFixed(0),
-                  style: theme.mono.copyWith(color: msToColor(frameTime)),
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                Text(
-                  "Avg: ",
-                  style: theme.mono,
-                ),
-                Text(
-                  average.toStringAsFixed(0),
-                  style:
-                      theme.mono.copyWith(color: msToColor(averageFrameTime)),
-                ),
-              ],
-            )
+            reading(l10n.debugFps, fps, frameTime),
+            reading(l10n.debugAverage, average, averageFrameTime),
           ],
         ),
+        const SizedBox(height: 6),
         SizedBox(
           height: 50,
           child: Row(

@@ -61,8 +61,11 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
@@ -101,33 +104,14 @@ const double exportLabelColumnPaired = 78;
 const EdgeInsets exportBodyPadding = EdgeInsets.fromLTRB(14, 10, 14, 12);
 const double exportColumnGap = 20;
 
-/// The room the frame's own bands take: the title strip, the tab row, the
-/// preset strip and the footer, plus a little air — what the body has to fit
+/// The room the frame's own bands take: the title strip and the footer, plus a
+/// little air: what the body has to fit
 /// inside when the window is short.
-const double exportChromeHeight = 229;
+const double exportChromeHeight = 116;
 
 const double exportButtonWidth = 72;
 const double exportNumberWell = 56;
 const double exportSizeWell = 64;
-
-/// The preset strip: its own band under the tab row, 8 above a 22px control
-/// and 8 below it, over a hairline — chrome above the scroll, exactly as the
-/// tab row is (the owner's ruling).
-///
-/// **Two lines at rest**: the list with *Edit* and *Save as…*, and
-/// *Set as default* under them. Three buttons will not stand beside a 220px
-/// list in the 600 the strip has — the third overflowed by 118 — and the
-/// drawing's own numbers win over the band's height, which is how a collision
-/// like this is settled. A further line of the same 22 and 8 appears while a
-/// preset is being named, which is why this is the *resting* height rather
-/// than the band's only one.
-const double exportPresetStrip = 68;
-const double exportPresetStripGap = 8;
-
-/// The preset list itself. 220 in the 502 the strip has after its label column
-/// leaves the three buttons their content width and air after them, so none of
-/// *Edit*, *Save as…* or *Set as default* is ever cut.
-const double exportPresetDropdown = 220;
 
 /// The three destination policies the export defaults store knows, by the
 /// engine's own names. Here rather than in the Settings window because the
@@ -205,13 +189,6 @@ const double exportResampleWidth = 80;
 /// typed, and it sits where the eye already looks for the name of a row.
 const double exportMetadataNameWidth = exportLabelColumn;
 
-/// How long a section's box stays lit after its tab is clicked.
-const Duration exportSectionFlash = Duration(milliseconds: 600);
-
-/// How far below the body's top edge a group's own top may be and still count
-/// as the section you are looking at.
-const double exportSpyBias = 24;
-
 /// The AAC rates offered, bits per second. 320 leads because it is the
 /// delivery-preset rate (docs/06 §7.5); the rest are the customary steps down.
 const List<int> _audioRates = [320000, 256000, 192000, 128000];
@@ -220,9 +197,12 @@ const List<int> _audioRates = [320000, 256000, 192000, 128000];
 /// image sequence of one frame, which the span already says.
 enum ExportOutputType { video, imageSequence, audioOnly }
 
-/// A section of the page, and the tab that names it. The Composition group has
-/// no tab of its own — it reads as part of Output, which is the group above it.
-enum ExportSection { output, time, picture, colour, audio, metadata }
+/// A part of the window that folds away, under what every export needs.
+enum ExportSection { composition, time, picture, colour, audio, metadata }
+
+/// Which folds stand open. For the session, not the window: somebody who works
+/// in Audio finds it where they left it.
+final Set<ExportSection> exportOpenSections = {};
 
 /// How much of the composition to write.
 enum _Span { workArea, wholeComp, custom }
@@ -354,16 +334,7 @@ class _ExportDialog extends StatefulWidget {
 }
 
 class _ExportDialogState extends State<_ExportDialog> {
-  // ---- where the reader is -------------------------------------------------
-
-  ExportSection _section = ExportSection.output;
-  ExportSection? _flash;
-  Timer? _flashTimer;
   final ScrollController _scroll = ScrollController();
-  final GlobalKey _bodyKey = GlobalKey();
-  final Map<ExportSection, GlobalKey> _sectionKeys = {
-    for (final section in ExportSection.values) section: GlobalKey(),
-  };
 
   // ---- what is being asked for ---------------------------------------------
 
@@ -595,7 +566,6 @@ class _ExportDialogState extends State<_ExportDialog> {
     }
     _seedDestination(defaults);
     _recompute();
-    _scroll.addListener(_spy);
     try {
       _lacking = widget.comp.shareLacking();
       _unread = widget.comp.unreadModels();
@@ -655,7 +625,6 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   @override
   void dispose() {
-    _flashTimer?.cancel();
     _waitTimer?.cancel();
     _scroll.dispose();
     _presetName.dispose();
@@ -824,21 +793,6 @@ class _ExportDialogState extends State<_ExportDialog> {
           onClose: widget.onClose,
           keyPrefix: 'export',
         ),
-        dialogTabs<ExportSection>(
-          t,
-          tabs: [
-            (ExportSection.output, l10n.exportGroupOutput),
-            (ExportSection.time, l10n.exportGroupTime),
-            (ExportSection.picture, l10n.exportGroupPicture),
-            (ExportSection.colour, l10n.exportGroupColour),
-            (ExportSection.audio, l10n.exportGroupAudio),
-            (ExportSection.metadata, l10n.exportGroupMetadata),
-          ],
-          current: _section,
-          onPick: _goToSection,
-          keyPrefix: 'export',
-        ),
-        _presetStrip(t),
         // Vertical metrics never squish (§12A.6): when the window is too short
         // for every group, the body scrolls rather than the rows shrinking.
         ConstrainedBox(
@@ -847,22 +801,24 @@ class _ExportDialogState extends State<_ExportDialog> {
                 .clamp(exportRowHeight, 4000),
           ),
           child: SingleChildScrollView(
-            key: _bodyKey,
             controller: _scroll,
-            child: Padding(
-              padding: exportBodyPadding,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                // The drawing sets 10 between groups, and each group holds 8 of
-                // its own above it for the kicker notched into its top edge.
-                children: [
-                  for (final (index, group) in _groups(t).indexed) ...[
-                    if (index > 0) const SizedBox(height: dialogGroupGap),
-                    group,
-                  ],
-                ],
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_lacking.isNotEmpty)
+                  Padding(
+                    padding: exportBodyPadding,
+                    child: _footageGroup(t),
+                  ),
+                _essentials(t),
+                _compositionGroup(t),
+                _timeGroup(t),
+                _pictureGroup(t),
+                _colourGroup(t),
+                _audioGroup(t),
+                _metadataGroup(t),
+              ],
             ),
           ),
         ),
@@ -924,283 +880,226 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  /// Somewhere to write, and a spec the format will actually carry. A refusal
-  /// stands in the footer where the summary was, so the reason is read before
-  /// the button is missed.
-  bool get _canQueue => _path != null && _check.isEmpty && _waiting == null;
+  /// A spec the format will actually carry. A refusal stands in the footer
+  /// where the summary was, so the reason is read before the button is missed.
+  /// Somewhere to write is not asked for here: with none chosen yet, pressing
+  /// the button asks.
+  bool get _canQueue => _check.isEmpty && _waiting == null;
 
-  /// The page, in the order it reads. Composition follows Output and belongs to
-  /// its tab; every other group is a section of its own.
-  List<Widget> _groups(LumitTheme t) => [
-        if (_lacking.isNotEmpty) _footageGroup(t),
-        _section_(ExportSection.output, _outputGroup(t)),
-        _compositionGroup(t),
-        _section_(ExportSection.time, _timeGroup(t)),
-        _section_(ExportSection.picture, _pictureGroup(t)),
-        _section_(ExportSection.colour, _colourGroup(t)),
-        _section_(ExportSection.audio, _audioGroup(t)),
-        _section_(ExportSection.metadata, _metadataGroup(t)),
-      ];
-
-  /// One section of the page: it carries the key the tab scrolls to, and it
-  /// claims the tab strip the moment anything inside it is touched.
-  Widget _section_(ExportSection section, Widget group) => KeyedSubtree(
-        key: _sectionKeys[section],
-        child: Listener(
-          onPointerDown: (_) {
-            if (_section != section) setState(() => _section = section);
+  /// What a shut fold says it holds.
+  String _foldReading(ExportSection section) {
+    final (width, height) = _outputSize;
+    final (start, end) = _range;
+    return switch (section) {
+      ExportSection.composition => [
+          _qualityLabel(_quality),
+          '$width × $height',
+        ],
+      ExportSection.time => [
+          switch (_span) {
+            _Span.workArea => l10n.exportSpanWorkArea('$_workStart', '$_workEnd'),
+            _Span.wholeComp => l10n.exportSpanWholeComp,
+            _Span.custom => l10n.custom,
           },
-          child: group,
-        ),
-      );
-
-  // ---- where the reader is -------------------------------------------------
-
-  /// The tab strip follows the page: the section in force is the last one whose
-  /// top has passed the body's own top edge.
-  void _spy() {
-    final body = _bodyKey.currentContext?.findRenderObject();
-    if (body is! RenderBox) return;
-    final top = body.localToGlobal(Offset.zero).dy;
-    ExportSection current = ExportSection.values.first;
-    for (final section in ExportSection.values) {
-      final box = _sectionKeys[section]?.currentContext?.findRenderObject();
-      if (box is! RenderBox) continue;
-      if (box.localToGlobal(Offset.zero).dy - top <= exportSpyBias) {
-        current = section;
-      }
-    }
-    if (current != _section) setState(() => _section = current);
-  }
-
-  /// Clicking a tab: scroll its section into view when it is not already fully
-  /// visible, and light its box for a moment so the eye lands on it.
-  void _goToSection(ExportSection section) {
-    setState(() {
-      _section = section;
-      _flash = section;
-    });
-    _flashTimer?.cancel();
-    _flashTimer = Timer(exportSectionFlash, () {
-      if (mounted) setState(() => _flash = null);
-    });
-    final target = _sectionKeys[section]?.currentContext;
-    if (target == null || _fullyVisible(target)) return;
-    // A still scroll jumps there.
-    final scroll = ThemeScope.of(context).motion.scroll;
-    Scrollable.ensureVisible(
-      target,
-      duration: scroll.duration,
-      curve: scroll.curve,
-    );
-  }
-
-  /// Whether a section's whole box is inside the body's window. A section
-  /// already in front of the reader is not worth moving the page for.
-  bool _fullyVisible(BuildContext target) {
-    final body = _bodyKey.currentContext?.findRenderObject();
-    final box = target.findRenderObject();
-    if (body is! RenderBox || box is! RenderBox) return true;
-    final top = body.localToGlobal(Offset.zero).dy;
-    final boxTop = box.localToGlobal(Offset.zero).dy;
-    return boxTop >= top - 0.5 &&
-        boxTop + box.size.height <= top + body.size.height + 0.5;
+          '${_formatRate(_rate)} ${l10n.unitFps}',
+          _timecode(end - start, _rate),
+        ],
+      ExportSection.picture => [
+          _alphaChannel ? l10n.exportChannelsRgbAlpha : l10n.exportChannelsRgb,
+          _depth >= 16 ? l10n.exportDepth16 : l10n.exportDepth8,
+          if (_caps.video && _bitrateBps > 0)
+            '${(_bitrateBps / 1e6).round()} Mb/s',
+        ],
+      ExportSection.colour => [_colourSpaceLabel(_colourSpace)],
+      ExportSection.audio => _audio && _caps.audio
+          ? [
+              _sampleRateLabel(_audioSampleRate),
+              _audioChannels == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
+              if (_caps.audioBitRate) '${_audioRate ~/ 1000} kb/s',
+            ]
+          : [l10n.off],
+      // Nothing to say until somebody has written something in it.
+      ExportSection.metadata => [
+          for (final field in _metadata)
+            if (field.value.text.isNotEmpty) field.value.text,
+        ],
+    }.join(' · ');
   }
 
   // ---- the groups ----------------------------------------------------------
 
-  Widget _outputGroup(LumitTheme t) => _group(
-        t,
-        ExportSection.output,
-        l10n.exportGroupOutput,
-        [
-          _row(
-            t,
-            l10n.exportType,
-            Row(children: [
-              for (final type in ExportOutputType.values)
-                if (_formats.any((f) => f.type == type)) _typeChip(t, type),
-            ]),
-          ),
-          _columns(
-            _row(
-              t,
-              l10n.exportFormat,
-              dialogDropdown<_Format>(
-                t,
-                id: 'export-format',
-                value: _format,
-                options: _formats.where((f) => f.type == _format.type).toList(),
-                label: (f) => f.label,
-                onChanged: _setFormat,
-              ),
-            ),
-            null,
-          ),
-          _row(
-            t,
-            l10n.exportWriteTo,
-            Row(children: [
-              Expanded(
-                child: _well(
-                  t,
-                  _path == null ? l10n.exportNotChosen : _leaf(_path!),
-                  key: const ValueKey('export-path'),
-                  tone: t.textMuted,
-                  tip: _path,
-                ),
-              ),
-              // A page has no folders: the browser asks where as it starts.
-              if (!kIsWeb) ...[
-                const SizedBox(width: 6),
-                // A floor rather than a width: a longer word for Browse grows
-                // the button instead of wrapping.
-                ConstrainedBox(
-                  constraints: const BoxConstraints(
-                      minWidth: exportButtonWidth,
-                      minHeight: dialogControlHeight,
-                      maxHeight: dialogControlHeight),
-                  child: HouseButton(
-                    key: const ValueKey('export-choose'),
-                    onPressed: _choose,
-                    child: Text(l10n.exportBrowse, style: t.body),
-                  ),
-                ),
-              ],
-            ]),
-          ),
-          // The drawing's dropdown is two ticks instead: *when done* is two
-          // independent answers, and a long export left running wants the
-          // sound and the folder both.
-          _row(
-            t,
-            l10n.exportWhenDone,
-            Row(children: [
-              _tick(t, 'export-make-a-noise', l10n.exportMakeANoise,
-                  _makeANoise, (on) => _edit(() => _makeANoise = on)),
-              const SizedBox(width: 16),
-              _tick(t, 'export-open-folder', l10n.exportOpenFolder, _openFolder,
-                  (on) => _edit(() => _openFolder = on)),
-            ]),
-          ),
-        ],
-      );
-
-  /// **The preset strip: chrome above the scroll, not a row inside Output.** A
-  /// preset sets and saves every section of this dialog, so it belongs to the
-  /// whole page rather than to one group of it — and the strip gives
-  /// *Save as…* its content width, which is what the 173px column it used to
-  /// share never could.
-  ///
-  /// It is not a tab: it sits under the tab row, above the body, and the
-  /// scroll-spy neither reads it nor is read by it.
-  Widget _presetStrip(LumitTheme t) => Container(
+  /// What every export needs, on show with nothing to open: the preset, what
+  /// to write, where, and what to do after.
+  Widget _essentials(LumitTheme t) => Padding(
         key: const ValueKey('export-preset-strip'),
-        // No rule under the strip (owner): standing outside every section
-        // already says it is global. The extra 12 is the groups' own inner
-        // inset, so Preset's label and controls share the exact left edges
-        // of every row below it.
-        padding: const EdgeInsetsDirectional.fromSTEB(
-            dialogPadding + 12, exportPresetStripGap, dialogPadding, 0),
+        padding: const EdgeInsets.symmetric(
+            horizontal: dialogPadding, vertical: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _stripRow(
+            _row(
               t,
               l10n.exportPreset,
-              [
-                SizedBox(
-                  width: exportPresetDropdown,
-                  height: dialogControlHeight,
-                  child: BareDropdown<String>(
-                    key: const ValueKey('export-preset'),
-                    value: _preset,
-                    options: ['', ..._presets.map((p) => p.name)],
-                    label: (p) => p.isEmpty ? l10n.custom : p,
-                    onChanged: _applyPreset,
+              Row(children: [
+                Expanded(
+                  child: SizedBox(
+                    height: dialogControlHeight,
+                    child: BareDropdown<String>(
+                      key: const ValueKey('export-preset'),
+                      value: _preset,
+                      options: ['', ..._presets.map((p) => p.name)],
+                      label: (p) => p.isEmpty ? l10n.custom : p,
+                      onChanged: _applyPreset,
+                    ),
                   ),
                 ),
-                _stripButton(t, 'export-preset-edit', l10n.exportPresetEdit,
-                    _editPreset),
+                const SizedBox(width: 6),
                 _stripButton(t, 'export-preset-save-as',
                     l10n.exportPresetSaveAs, () => _nameAPreset('')),
-              ],
-            ),
-            // *Set as default* stands with the preset controls because it is
-            // one of them: what it remembers is the preset in force. On its
-            // own line because three buttons will not stand beside a 220px
-            // list in 600, and under the list rather than beside the label
-            // because it acts on what is above it. It reads as in-force when
-            // the preset showing is already the default, which is how a press
-            // that saved says so.
-            _stripRow(
-              t,
-              '',
-              [
-                _stripButton(t, 'export-preset-set-default',
-                    l10n.exportPresetSetDefault, _setAsDefault,
-                    active: _preset == _defaultPreset),
-              ],
+                const SizedBox(width: 6),
+                _presetMore(t),
+              ]),
             ),
             // Naming a preset: the one line *Edit* and *Save as…* both open,
             // because saving over a name and renaming into it are the same act
-            // (the store replaces a preset of that name in its own row). It
-            // opens **in this strip**, under the list it is naming.
+            // (the store replaces a preset of that name in its own row).
             if (_naming)
-              _stripRow(
+              _row(
                 t,
                 l10n.exportPresetName,
-                [
-                  // The field is the one control on this line that may give
-                  // ground: a saved preset's row carries a fourth button
-                  // (*Delete*), and 220 of field plus four buttons is eight
-                  // pixels more than the strip has. The buttons keep their
-                  // content width — that was the whole of the fix — so the
-                  // field takes the difference and the list above it stays the
-                  // one the eye measures against.
-                  Flexible(
-                    child: SizedBox(
-                      width: exportPresetDropdown,
-                      child: HouseTextField(
-                        key: const ValueKey('export-preset-name'),
-                        controller: _presetName,
-                        width: exportPresetDropdown,
-                        autofocus: true,
-                        fill: t.surface0,
-                        onSubmitted: (_) => _savePreset(),
-                      ),
+                Row(children: [
+                  Expanded(
+                    child: HouseTextField(
+                      key: const ValueKey('export-preset-name'),
+                      controller: _presetName,
+                      width: double.infinity,
+                      autofocus: true,
+                      fill: t.surface0,
+                      onSubmitted: (_) => _savePreset(),
                     ),
                   ),
+                  const SizedBox(width: 6),
                   _stripButton(t, 'export-preset-save', l10n.save, _savePreset),
-                  if (_presets.any((p) => p.name == _preset && !p.readOnly))
+                  if (_presets.any((p) => p.name == _preset && !p.readOnly)) ...[
+                    const SizedBox(width: 6),
                     _stripButton(
                         t, 'export-preset-delete', l10n.delete, _deletePreset),
+                  ],
+                  const SizedBox(width: 6),
                   _stripButton(t, 'export-preset-cancel', l10n.cancel,
                       () => setState(() => _naming = false)),
-                ],
+                ]),
               ),
+            _row(
+              t,
+              l10n.exportFormat,
+              Row(children: [
+                for (final type in ExportOutputType.values)
+                  if (_formats.any((f) => f.type == type)) _typeChip(t, type),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: dialogDropdown<_Format>(
+                    t,
+                    id: 'export-format',
+                    value: _format,
+                    options:
+                        _formats.where((f) => f.type == _format.type).toList(),
+                    label: (f) => f.label,
+                    onChanged: _setFormat,
+                  ),
+                ),
+              ]),
+            ),
+            _row(
+              t,
+              l10n.exportWriteTo,
+              Row(children: [
+                Expanded(
+                  child: _well(
+                    t,
+                    _path == null ? l10n.exportNotChosen : _leaf(_path!),
+                    key: const ValueKey('export-path'),
+                    tone: t.textMuted,
+                    tip: _path,
+                  ),
+                ),
+                // A page has no folders: the browser asks where as it starts.
+                if (!kIsWeb) ...[
+                  const SizedBox(width: 6),
+                  // A floor rather than a width: a longer word for Browse grows
+                  // the button instead of wrapping.
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(
+                        minWidth: exportButtonWidth,
+                        minHeight: dialogControlHeight,
+                        maxHeight: dialogControlHeight),
+                    child: HouseButton(
+                      key: const ValueKey('export-choose'),
+                      onPressed: _choose,
+                      child: Text(l10n.exportBrowse, style: t.body),
+                    ),
+                  ),
+                ],
+              ]),
+            ),
+            // *When done* is two independent answers: a long export left
+            // running wants the sound and the folder both.
+            _row(
+              t,
+              l10n.exportWhenDone,
+              Row(children: [
+                _tick(t, 'export-make-a-noise', l10n.exportMakeANoise,
+                    _makeANoise, (on) => _edit(() => _makeANoise = on)),
+                const SizedBox(width: 16),
+                _tick(t, 'export-open-folder', l10n.exportOpenFolder,
+                    _openFolder, (on) => _edit(() => _openFolder = on)),
+              ]),
+            ),
           ],
         ),
       );
 
-  /// One line of the strip: a label in the body's own 100px column so the
-  /// strip and the rows under it share a left edge, then the controls, each
-  /// standing 8 after the last and no wider than its own content.
-  Widget _stripRow(LumitTheme t, String label, List<Widget> controls) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: exportPresetStripGap),
-        child: SizedBox(
-          height: dialogControlHeight,
-          child: Row(children: [
-            SizedBox(
-                width: exportLabelColumn, child: Text(label, style: t.body)),
-            const SizedBox(width: exportRowGap),
-            for (final (index, control) in controls.indexed) ...[
-              if (index > 0) const SizedBox(width: exportPresetStripGap),
-              control,
-            ],
-          ]),
+  /// The preset's quieter acts, behind the three dots.
+  Widget _presetMore(LumitTheme t) => LumitTooltip(
+        message: l10n.exportPresetMore,
+        child: Builder(
+          builder: (context) => SizedBox(
+            width: dialogControlHeight,
+            height: dialogControlHeight,
+            child: HouseButton(
+              key: const ValueKey('export-preset-more'),
+              padding: EdgeInsets.zero,
+              onPressed: () {
+                final box = context.findRenderObject()! as RenderBox;
+                showMenuAt<void>(
+                  context: context,
+                  position: box.localToGlobal(Offset(0, box.size.height + 2)),
+                  rows: (close) => [
+                    MenuRow(
+                      key: const ValueKey('export-preset-edit'),
+                      onPressed: () {
+                        close(null);
+                        _editPreset();
+                      },
+                      child: Text(l10n.exportPresetEdit),
+                    ),
+                    MenuRow(
+                      key: const ValueKey('export-preset-set-default'),
+                      selected: _preset == _defaultPreset,
+                      onPressed: () {
+                        close(null);
+                        _setAsDefault();
+                      },
+                      child: Text(l10n.exportPresetSetDefault),
+                    ),
+                  ],
+                );
+              },
+              child: glyph.LumitIcon(LumitIcons.more,
+                  size: 12, colour: t.textSecondary),
+            ),
+          ),
         ),
       );
 
@@ -1232,7 +1131,7 @@ class _ExportDialogState extends State<_ExportDialog> {
     final dim = !_picture;
     return _group(
       t,
-      ExportSection.output,
+      ExportSection.composition,
       l10n.exportGroupComposition,
       [
         if (_unread.isNotEmpty)
@@ -1650,7 +1549,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             dimmed: dim,
           ),
         ),
-        ..._gifRows(t, dim),
+        if (_caps.gif) ..._gifRows(t, dim),
         _row(
           t,
           l10n.exportResize,
@@ -1891,7 +1790,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       [
         _row(
           t,
-          l10n.exportGroupAudio,
+          l10n.exportAudioRowLabel,
           Row(children: [
             SizedBox(
               width: exportAudioSourceWidth,
@@ -2093,26 +1992,37 @@ class _ExportDialogState extends State<_ExportDialog> {
     String title,
     List<Widget> rows, {
     bool dimmed = false,
-  }) =>
-      _why(
-        // A dead group answers no pointer, so it says why once for all its
-        // rows. Only three things leave a group dead, one per kind of group.
-        !dimmed
-            ? null
-            : switch (section) {
-                ExportSection.audio => l10n.tipExportNoSound,
-                ExportSection.metadata => l10n.tipExportNoMetadata,
-                _ => l10n.tipExportNoPicture,
-              },
-        dialogGroup(
-          t,
-          title,
-          rows,
-          key: ValueKey<String>('export-group-${title.toLowerCase()}'),
-          highlighted: _flash == section,
-          dimmed: dimmed,
-        ),
-      );
+  }) {
+    // A warning in a shut fold would never be read.
+    final open = exportOpenSections.contains(section) ||
+        section == ExportSection.composition && _unread.isNotEmpty;
+    return _why(
+      // A dead group answers no pointer, so it says why once for all its
+      // rows. Only three things leave a group dead, one per kind of group.
+      !dimmed
+          ? null
+          : switch (section) {
+              ExportSection.audio => l10n.tipExportNoSound,
+              ExportSection.metadata => l10n.tipExportNoMetadata,
+              _ => l10n.tipExportNoPicture,
+            },
+      dialogFold(
+        t,
+        title: title,
+        reading: dimmed ? '' : _foldReading(section),
+        readingAt: exportLabelColumn + exportRowGap,
+        open: open,
+        dimmed: dimmed,
+        onToggle: () => setState(() {
+          open
+              ? exportOpenSections.remove(section)
+              : exportOpenSections.add(section);
+        }),
+        rows: rows,
+        key: ValueKey<String>('export-group-${section.name}'),
+      ),
+    );
+  }
 
   Widget _row(LumitTheme t, String label, Widget control,
           {double labelColumn = exportLabelColumn, bool dimmed = false}) =>
@@ -2744,6 +2654,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// not take — is shown in the footer where the summary was, rather than
   /// swallowed.
   Future<void> _queue({required bool start}) async {
+    if (_path == null) await _choose();
+    if (!mounted) return;
     var path = _path;
     if (path == null) return;
     // A sequence's frames were never in the Save dialogue's question, so its

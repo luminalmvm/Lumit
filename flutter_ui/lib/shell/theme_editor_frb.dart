@@ -17,15 +17,19 @@
 // spec (docs/15-DESIGN §2.1/§11) because a grade cannot be judged against a
 // tinted surround — the one place the interface's own taste has to give way.
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../theme/custom_theme.dart';
 import '../theme/theme.dart';
 import '../theme/theme_tokens.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
+import 'settings_rows.dart';
 import 'theme_name_dialog.dart';
 
 /// Open the editor over [ui]'s current theme. Returns when it closes.
@@ -33,6 +37,8 @@ Future<void> showThemeEditorFrb(BuildContext context, LumitUiState ui) =>
     showLumitModal<void>(
       context: context,
       id: 'theme-editor',
+      initialSize: const Size(460, 560),
+      minSize: const Size(360, 300),
       builder: (close) => _ThemeEditor(ui: ui, onClose: () => close(null)),
     );
 
@@ -97,106 +103,115 @@ class _ThemeEditorState extends State<_ThemeEditor> {
     final t = ThemeScope.of(context).theme;
     final groups = themeTokenGroups;
 
-    return FloatSurface(
-      width: 560,
-      child: SizedBox(
-        height: 520,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 10, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.ui.workspace.customThemeName == null
-                          ? l10n.themeEditorTitle
-                          : l10n.themeEditorTitleNamed(
-                              '${widget.ui.workspace.customThemeName}'),
-                      style: t.bodyPrimary,
-                    ),
-                  ),
-                  HouseButton(
-                    key: const ValueKey('theme-editor-save-copy'),
-                    small: true,
-                    frameless: true,
-                    onPressed: _saveCopy,
-                    child: Text(l10n.themeSaveACopy),
-                  ),
-                  const SizedBox(width: 6),
-                  HouseButton(
-                    key: const ValueKey('theme-editor-save'),
-                    small: true,
-                    onPressed: _save,
-                    child: Text(l10n.save),
-                  ),
-                  const SizedBox(width: 6),
-                  HouseButton(
-                    key: const ValueKey('theme-editor-close'),
-                    small: true,
-                    frameless: true,
-                    onPressed: _close,
-                    child: Text(l10n.close),
-                  ),
-                ],
-              ),
+    return DialogFrame(
+      children: [
+        dialogTitleBar(
+          t,
+          title: l10n.themeEditorTitle,
+          subject: widget.ui.workspace.customThemeName ?? '',
+          onClose: _close,
+          keyPrefix: 'theme-editor',
+        ),
+        Expanded(
+          child: ListView(
+            key: const ValueKey('theme-editor-body'),
+            padding: EdgeInsets.zero,
+            children: [
+              for (final (i, group) in groups.indexed)
+                settingsSection(t, group, first: i == 0, [
+                  for (final token
+                      in themeTokens.where((token) => token.group == group))
+                    _tokenRow(t, token),
+                ]),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        dialogFooter(
+          t,
+          keyPrefix: 'theme-editor',
+          actions: [
+            HouseButton(
+              key: const ValueKey('theme-editor-save-copy'),
+              onPressed: _saveCopy,
+              child: Text(l10n.themeSaveACopy),
             ),
-            Container(height: 1, color: t.hairline),
-            Expanded(
-              child: ListView(
-                key: const ValueKey('theme-editor-body'),
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-                children: [
-                  for (final group in groups) ...[
-                    Padding(
-                      padding: const EdgeInsetsDirectional.fromSTEB(2, 6, 0, 4),
-                      child: Text(group,
-                          style: t.small.copyWith(color: t.textMuted)),
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: t.surface1,
-                        borderRadius:
-                            BorderRadius.circular(t.tokens.floatRadius),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final token in themeTokens
-                              .where((token) => token.group == group))
-                            _tokenRow(t, token),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+            HouseButton(
+              key: const ValueKey('theme-editor-save'),
+              primary: true,
+              onPressed: _save,
+              child: Text(l10n.save),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
   Widget _tokenRow(LumitTheme t, ThemeToken token) {
     final colour = _colours[token.key] ?? token.read(_baseTheme());
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      child: Row(
-        children: [
-          Expanded(child: Text(token.label, style: t.body)),
-          const SizedBox(width: 12),
-          _Swatch(
-            key: ValueKey('theme-token-${token.key}'),
-            colour: colour,
-            onPicked: (picked) {
-              _colours[token.key] = picked;
-              _preview();
-            },
-          ),
-        ],
+    return settingsRow(
+      t,
+      token.label,
+      '',
+      GestureDetector(
+        onSecondaryTapDown: (press) =>
+            _tokenMenu(token, colour, press.globalPosition),
+        child: _Swatch(
+          key: ValueKey('theme-token-${token.key}'),
+          colour: colour,
+          onPicked: (picked) {
+            _colours[token.key] = picked;
+            _preview();
+          },
+        ),
       ),
+    );
+  }
+
+  /// One colour's menu: move it between rows, or back to the theme underneath.
+  Future<void> _tokenMenu(ThemeToken token, Color colour, Offset at) async {
+    final pasted = parseHex(
+        (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim() ?? '');
+    if (!mounted) return;
+    void set(Color c) {
+      _colours[token.key] = c;
+      _preview();
+    }
+
+    final base = token.read(_baseTheme());
+    await showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('theme-token-copy'),
+          onPressed: () {
+            close(null);
+            Clipboard.setData(ClipboardData(text: formatHex(colour)));
+          },
+          child: Text(l10n.menuCopy),
+        ),
+        MenuRow(
+          key: const ValueKey('theme-token-paste'),
+          enabled: pasted != null,
+          onPressed: () {
+            close(null);
+            if (pasted != null) set(pasted);
+          },
+          child: Text(l10n.menuPaste),
+        ),
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('theme-token-reset'),
+          enabled: colour != base,
+          onPressed: () {
+            close(null);
+            set(base);
+          },
+          child: Text(l10n.reset),
+        ),
+      ],
     );
   }
 
@@ -252,45 +267,11 @@ class _ThemeEditorState extends State<_ThemeEditor> {
       widget.onClose();
       return;
     }
-    final keep = await showLumitModal<bool>(
+    final keep = await askLumitChoice<bool>(
       context: context,
-      builder: (close) => FloatSurface(
-        width: 340,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(l10n.themeSaveChanges,
-                  style: ThemeScope.of(context).theme.body),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  HouseButton(
-                    key: const ValueKey('theme-editor-discard'),
-                    small: true,
-                    frameless: true,
-                    onPressed: () => close(false),
-                    child: Text(l10n.discard),
-                  ),
-                  const SizedBox(width: 6),
-                  HouseButton(
-                    key: const ValueKey('theme-editor-save-on-close'),
-                    small: true,
-                    // The default action: Enter keeps the work.
-                    primary: true,
-                    autofocus: true,
-                    onPressed: () => close(true),
-                    child: Text(l10n.save),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+      title: l10n.themeEditorTitle,
+      question: l10n.themeSaveChanges,
+      answers: [(l10n.discard, false), (l10n.save, true)],
     );
     if (!mounted || keep == null) return; // Dismissed: stay in the editor.
     if (keep) {

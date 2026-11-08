@@ -33,6 +33,8 @@ import 'frb_test_support.dart';
 
 void main() {
   setUpAll(initEngineForTests);
+  // The rows these tests reach live inside the Export window's folds.
+  setUp(() => exportOpenSections.addAll(ExportSection.values));
 
   group('Command palette ranking', () {
     test('a subsequence matches, and an absent letter does not', () {
@@ -878,6 +880,8 @@ void main() {
 
       // A built-in refuses to be edited rather than opening a field that
       // cannot be used.
+      await tester.tap(find.byKey(const ValueKey('export-preset-more')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
       await tester.pumpAndSettle();
       expect(find.textContaining('built-in'), findsOneWidget);
@@ -903,6 +907,8 @@ void main() {
           reason: 'the preset carried the format it was saved with');
 
       // And it can be taken off the list again.
+      await tester.tap(find.byKey(const ValueKey('export-preset-more')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-delete')));
@@ -942,6 +948,8 @@ void main() {
       await pick('export-audio-sample-rate', '44.100 kHz');
       await pick('export-audio-layout', 'Mono');
 
+      await tester.ensureVisible(find.byKey(const ValueKey('export-preset-save-as')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('export-preset-save-as')));
       await tester.pumpAndSettle();
       await tester.enterText(

@@ -22,6 +22,7 @@ import '../l10n/strings.dart';
 import '../state/timecode.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'review_link_parts.dart' show reviewRowMenu;
 
 const double bringCompositionWidth = 460;
 const double _rowHeight = 28;
@@ -240,6 +241,9 @@ class _PickerState extends State<_Picker> {
                           chosen: comp == chosen,
                           onChoose: () => setState(() => _chosen = comp),
                           onConfirm: () => widget.close(comp),
+                          confirm: widget.earlierSave
+                              ? l10n.backupBringBackConfirm
+                              : l10n.importCompConfirm,
                         ),
                     ],
                   ),
@@ -279,12 +283,16 @@ class _CompRow extends StatefulWidget {
   final bool chosen;
   final VoidCallback onChoose, onConfirm;
 
+  /// What confirming is called in this window.
+  final String confirm;
+
   const _CompRow(
       {super.key,
       required this.comp,
       required this.chosen,
       required this.onChoose,
-      required this.onConfirm});
+      required this.onConfirm,
+      required this.confirm});
 
   @override
   State<_CompRow> createState() => _CompRowState();
@@ -315,6 +323,12 @@ class _CompRowState extends State<_CompRow> {
         // click is not waited for before the row lights.
         onTapDown: (_) => widget.onChoose(),
         onDoubleTap: widget.onConfirm,
+        onSecondaryTapDown: (press) {
+          widget.onChoose();
+          reviewRowMenu(context, press.globalPosition, [
+            ('bring-menu-confirm', widget.confirm, widget.onConfirm),
+          ]);
+        },
         child: Container(
           height: _rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: dialogPadding),

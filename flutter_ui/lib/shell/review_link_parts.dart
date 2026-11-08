@@ -141,7 +141,6 @@ void reviewRowMenu(BuildContext row, Offset at, List<ReviewMenuItem?> items) {
       : press.dx >= _menuWidth
           ? press.dx - _menuWidth
           : room.clamp(0.0, press.dx);
-  final t = ThemeScope.of(row).theme;
   unawaited(showMenuAt<void>(
     context: row,
     position: box.localToGlobal(Offset(left, press.dy)),
@@ -151,23 +150,15 @@ void reviewRowMenu(BuildContext row, Offset at, List<ReviewMenuItem?> items) {
         if (item case (final id, final words, final run)?)
           MenuRow(
             key: ValueKey<String>('review-menu-$id'),
+            enabled: run != null,
             onPressed: () {
               close(null);
               run?.call();
             },
-            child: Text(words,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: run == null
-                    ? t.body.copyWith(color: t.textDisabled)
-                    : null),
+            child: MenuLabel(words, enabled: run != null),
           )
         else
-          Container(
-            height: 1,
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            color: t.hairline,
-          ),
+          const MenuDivider(),
     ],
   ));
 }
@@ -437,9 +428,8 @@ class ReviewLinkRow extends StatelessWidget {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     final newest = link.versions.last;
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+    return HoverMark(
+      builder: (context, lit) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onPick,
         onSecondaryTapDown: (press) => onMenu(press.globalPosition),
@@ -451,7 +441,7 @@ class ReviewLinkRow extends StatelessWidget {
           height: reviewLinkRowHeight,
           padding: EdgeInsetsDirectional.only(start: chosen ? 10 : 12, end: 12),
           decoration: BoxDecoration(
-            color: chosen ? t.surface2 : null,
+            color: chosen ? t.surface2 : t.surface2.withValues(alpha: lit),
             border: chosen
                 ? Border(left: BorderSide(color: t.accent, width: 2))
                 : null,
@@ -790,6 +780,7 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
         ),
       if (c.picture != null && widget.onPicture != null)
         ('picture', l10n.reviewShowPicture, widget.onPicture),
+      if (widget.timecode != null) null,
       if (widget.onResolve case final resolve?)
         (
           'resolve',
@@ -797,9 +788,16 @@ class _ReviewCommentRowState extends State<ReviewCommentRow> {
           resolve,
         ),
       if (widget.onReply case final reply?) ('reply', l10n.reviewReply, reply),
+      if (widget.timecode != null) null,
+      if (c.text.isNotEmpty)
+        (
+          'copy-text',
+          l10n.copyText,
+          () => unawaited(Clipboard.setData(ClipboardData(text: c.text))),
+        ),
       if (widget.onCopyLink case final copy?)
         ('copy', l10n.reviewCopyCommentLink, copy),
-      if (widget.timecode != null) null,
+      null,
       ('delete', l10n.delete, widget.onDelete),
     ]);
   }

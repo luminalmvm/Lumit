@@ -13,7 +13,6 @@
 // the impossible combination too; this is the same rule said early enough to
 // keep the dialogue honest.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -25,7 +24,7 @@ import '../main.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
-import 'dialog_frame.dart' show askLumitChoice;
+import 'dialog_frame.dart';
 
 /// Show the dialogue and, on confirm, precompose. Returns when it closes.
 ///
@@ -193,119 +192,84 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // The dialogue takes focus when it opens, and `Enter` is Pre-compose
-    // wherever that focus sits — the button at the bottom is the
-    // default action, so the keyboard should be able to say yes without first
-    // having to find it. Typing a name is one click into the field.
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (_, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey != LogicalKeyboardKey.enter &&
-            event.logicalKey != LogicalKeyboardKey.numpadEnter) {
-          return KeyEventResult.ignored;
-        }
-        _confirm();
-        return KeyEventResult.handled;
-      },
-      child: _body(t),
-    );
-  }
-
-  Widget _body(LumitTheme t) {
-    return FloatSurface(
-      width: 440,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return dialogEnter(
+      onEnter: _confirm,
+      child: DialogFrame(
+        width: 420,
         children: [
+          dialogTitleBar(t,
+              title: l10n.precompose,
+              onClose: widget.onCancel,
+              keyPrefix: 'precompose'),
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              l10n.precompose,
-              style: t.bodyPrimary,
-              textAlign: TextAlign.center,
-            ),
-          ),
-          // The label and its field share one line: the name is short, and a
-          // wrapped label beside a box reads as two questions rather than one.
-          Row(
-            children: [
-              Text(l10n.precomposeNewName, style: t.small, softWrap: false),
-              const SizedBox(width: 8),
-              Expanded(
-                child: HouseTextField(
-                  key: const ValueKey('precompose-name'),
-                  controller: _name,
-                  width: double.infinity,
-                  onSubmitted: (_) => _confirm(),
+            padding: dialogBodyPadding,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                dialogRow(
+                  t,
+                  l10n.name,
+                  HouseTextField(
+                    key: const ValueKey('precompose-name'),
+                    controller: _name,
+                    width: double.infinity,
+                    onSubmitted: (_) => _confirm(),
+                  ),
+                  labelColumn: 60,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _choice(
-            t,
-            key: 'precompose-leave',
-            selected: !_moveAttributes,
-            enabled: _single,
-            onPick: () => setState(() => _moveAttributes = false),
-            label: l10n.precomposeLeave(widget.parentCompName),
-          ),
-          const SizedBox(height: 12),
-          _choice(
-            t,
-            key: 'precompose-move',
-            selected: _moveAttributes,
-            enabled: true,
-            onPick: () => setState(() => _moveAttributes = true),
-            label: l10n.precomposeMove,
-          ),
-          const SizedBox(height: 14),
-          // Indented under the choices above: it qualifies the new composition
-          // they make, rather than standing beside them as a third choice.
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: 22),
-            child: _check(
-              t,
-              key: 'precompose-adjust-duration',
-              value: _adjustDuration,
-              onChanged: (v) => setState(() => _adjustDuration = v),
-              label: l10n.precomposeAdjustDuration,
+                const SizedBox(height: 8),
+                _choice(
+                  t,
+                  key: 'precompose-leave',
+                  selected: !_moveAttributes,
+                  enabled: _single,
+                  onPick: () => setState(() => _moveAttributes = false),
+                  label: l10n.precomposeLeave(widget.parentCompName),
+                ),
+                const SizedBox(height: 8),
+                _choice(
+                  t,
+                  key: 'precompose-move',
+                  selected: _moveAttributes,
+                  enabled: true,
+                  onPick: () => setState(() => _moveAttributes = true),
+                  label: l10n.precomposeMove,
+                ),
+                const SizedBox(height: 12),
+                _check(
+                  t,
+                  key: 'precompose-adjust-duration',
+                  value: _adjustDuration,
+                  onChanged: (v) => setState(() => _adjustDuration = v),
+                  label: l10n.precomposeAdjustDuration,
+                ),
+                const SizedBox(height: 8),
+                _check(
+                  t,
+                  key: 'precompose-open-new-comp',
+                  value: _openNewComp,
+                  onChanged: (v) => setState(() => _openNewComp = v),
+                  label: l10n.precomposeOpenNew,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          _check(
+          dialogFooter(
             t,
-            key: 'precompose-open-new-comp',
-            value: _openNewComp,
-            onChanged: (v) => setState(() => _openNewComp = v),
-            label: l10n.precomposeOpenNew,
-          ),
-          if (_refusal != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                _refusal!,
-                key: const ValueKey('precompose-refusal'),
-                style: t.small.copyWith(color: t.textMuted),
+            keyPrefix: 'precompose',
+            summary: _refusal ?? '',
+            actions: [
+              HouseButton(
+                key: const ValueKey('precompose-cancel'),
+                onPressed: widget.onCancel,
+                child: Text(l10n.cancel),
               ),
-            ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
               HouseButton(
                 key: const ValueKey('precompose-confirm'),
                 primary: true,
                 onPressed: _confirm,
                 child: Text(l10n.precompose),
-              ),
-              const SizedBox(width: 8),
-              HouseButton(
-                key: const ValueKey('precompose-cancel'),
-                onPressed: widget.onCancel,
-                child: Text(l10n.cancel),
               ),
             ],
           ),
@@ -341,8 +305,8 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
               Expanded(
                 child: Text(
                   label,
-                  style: t.small.copyWith(
-                    color: enabled ? t.textPrimary : t.textMuted,
+                  style: t.body.copyWith(
+                    color: enabled ? t.textPrimary : t.textDisabled,
                   ),
                 ),
               ),
@@ -372,9 +336,8 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(label,
-                    style: t.small.copyWith(
-                        color:
-                            Color.lerp(t.small.color, t.textPrimary, lit))),
+                    style: t.body.copyWith(
+                        color: Color.lerp(t.body.color, t.textPrimary, lit))),
               ),
             ],
           ),

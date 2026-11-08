@@ -11,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../icons/lumit_icon.dart' as glyph;
@@ -179,15 +180,16 @@ class _BackupsState extends State<_Backups> {
 
   /// Everything there is to do with [project], for its card's own menu and
   /// for a right click. Open comes first: it is what the window is for.
-  List<Widget> _menu(LumitTheme t, BackupProject project, VoidCallback close) {
+  List<Widget> _menu(BackupProject project, VoidCallback close) {
     MenuRow row(String id, String label, VoidCallback then) => MenuRow(
           key: ValueKey<String>('backups-$id-${project.id}'),
           onPressed: () {
             close();
             then();
           },
-          child: Text(label),
+          child: MenuLabel(label),
         );
+    final here = _backup.localPath(project.id);
     return [
       row('open', l10n.backupCardOpen, () => unawaited(_open(project))),
       row(
@@ -195,30 +197,37 @@ class _BackupsState extends State<_Backups> {
           l10n.backupMenuHistory,
           () => unawaited(showProjectHistory(context,
               of: project.id == _backup.id ? null : project))),
+      const MenuDivider(),
+      if (here != null)
+        row('reveal', l10n.projectShowInFolder,
+            () => revealInFolder(path: here)),
       row('rename', l10n.renameEllipsis, () => unawaited(_rename(project))),
-      backupMenuRule(t),
+      const MenuDivider(),
       row('delete', l10n.backupDelete, () => unawaited(_delete(project))),
     ];
   }
 
   void _showMenu(BackupProject project, Offset at) {
-    final t = ThemeScope.of(context).theme;
     unawaited(showMenuAt<void>(
       context: context,
       position: at,
-      rows: (close) => _menu(t, project, () => close(null)),
+      rows: (close) => _menu(project, () => close(null)),
     ));
   }
 
-  /// The one line the window has to say when it has no cards to show, with
-  /// the way to ask again when the line is that the server was not reached.
-  /// Null while there are cards, or the list is on its way.
-  (String, VoidCallback?)? _line(List<BackupProject> all) {
+  /// The one line the window has to say when it has no cards to show, and the
+  /// way to ask again when the line is that the server was not reached. Null
+  /// while there are cards, or the list is on its way.
+  (String, String?, VoidCallback?)? _line(List<BackupProject> all) {
     if (all.isNotEmpty) return null;
     if (_backup.listError case final error?) {
-      return (backupErrorText(error), () => unawaited(_backup.refresh()));
+      return (
+        backupErrorText(error),
+        l10n.backupTryAgain,
+        () => unawaited(_backup.refresh()),
+      );
     }
-    return _backup.listed ? (l10n.backupNothing, null) : null;
+    return _backup.listed ? (l10n.backupNothing, null, null) : null;
   }
 
   @override
@@ -282,10 +291,10 @@ class _BackupsState extends State<_Backups> {
             trailing: [if (all.length > 8) _searchBox(t)],
           ),
         if (line != null)
-          backupLine(t, line.$1, retry: line.$2)
+          backupLine(t, line.$1, action: line.$2, onAction: line.$3)
         else if (all.isEmpty)
           backupWaiting
-        else ...[
+        else
           Entrance(
             spec: _listedAtOpen
                 ? MotionSpec.still
@@ -293,16 +302,6 @@ class _BackupsState extends State<_Backups> {
             rise: ThemeScope.of(context).motion.revealRise,
             child: _grid(t, all),
           ),
-          // Said once, where a project is about to be relied on.
-          Container(
-            padding: const EdgeInsets.fromLTRB(_edge, 9, _edge, 10),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: t.hairline)),
-            ),
-            child: Text(l10n.backupFootageNote,
-                key: const ValueKey('backups-footage'), style: t.small),
-          ),
-        ],
       ],
     );
   }
@@ -457,23 +456,24 @@ class _CardState extends State<_Card> {
                             child: FittedText(project.name,
                                 t.bodyPrimary.copyWith(fontSize: 12)),
                           ),
-                          Builder(
-                            builder: (button) => HouseButton(
-                              key: ValueKey<String>(
-                                  'backups-more-${project.id}'),
-                              frameless: true,
-                              small: true,
-                              padding: EdgeInsets.zero,
-                              onPressed: () {
-                                final box = button.findRenderObject();
-                                if (box is! RenderBox) return;
-                                widget.onMenu(box.localToGlobal(
-                                    Offset(0, box.size.height)));
-                              },
-                              child: glyph.LumitIcon(LumitIcons.more,
-                                  size: 14,
-                                  colour:
-                                      _hover ? t.textSecondary : t.textMuted),
+                          Visibility.maintain(
+                            visible: _hover,
+                            child: Builder(
+                              builder: (button) => HouseButton(
+                                key: ValueKey<String>(
+                                    'backups-more-${project.id}'),
+                                frameless: true,
+                                small: true,
+                                padding: EdgeInsets.zero,
+                                onPressed: () {
+                                  final box = button.findRenderObject();
+                                  if (box is! RenderBox) return;
+                                  widget.onMenu(box.localToGlobal(
+                                      Offset(0, box.size.height)));
+                                },
+                                child: glyph.LumitIcon(LumitIcons.more,
+                                    size: 14, colour: t.textSecondary),
+                              ),
                             ),
                           ),
                         ],

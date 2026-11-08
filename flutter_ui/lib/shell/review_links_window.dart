@@ -777,21 +777,23 @@ class _ReviewWindowState extends State<_ReviewWindow> {
   /// The button that turns the window to its other face, for the composition
   /// in front. The one filled action here. Without Lumit Pro it is the way
   /// to that instead.
-  Widget _sendButton(LumitTheme t) {
+  Widget _sendButton(LumitTheme t) => dialogFilledAction(
+        t,
+        key: const ValueKey('review-send'),
+        label: l10n.menuSendForReview,
+        onPressed: _sendPress,
+      );
+
+  VoidCallback? get _sendPress {
     final comp = widget.ui.selectedComp;
-    return dialogFilledAction(
-      t,
-      key: const ValueKey('review-send'),
-      label: l10n.menuSendForReview,
-      onPressed: !widget.ui.account.pro
-          ? () => unawaited(showProWindow(context))
-          : comp == null
-              ? null
-              : () => setState(() {
-                    _sendFor = comp;
-                    _sendInto = null;
-                  }),
-    );
+    return !widget.ui.account.pro
+        ? () => unawaited(showProWindow(context))
+        : comp == null
+            ? null
+            : () => setState(() {
+                  _sendFor = comp;
+                  _sendInto = null;
+                });
   }
 
   String? get _failure =>
@@ -862,34 +864,44 @@ class _ReviewWindowState extends State<_ReviewWindow> {
               children: [
                 SizedBox(
                   width: _listWidth,
-                  child: ReviewScroll(
-                    controller: _listScroll,
-                    ground: t.surface1,
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: _listMargin),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final link in _reviews.links)
-                            Builder(
-                              key: ValueKey<String>('review-row-${link.id}'),
-                              builder: (row) => ReviewLinkRow(
-                                link: link,
-                                chosen: link.id == _chosen,
-                                unseen: _reviews.unseenIn(link) > 0,
-                                moved: _moved.contains(link.id),
-                                // The keys come back to the list with it.
-                                onPick: () {
-                                  _focus.requestFocus();
-                                  setState(() => link.id == _chosen
-                                      ? _at = null
-                                      : _choose(link.id));
-                                },
-                                onMenu: (at) => _linkMenu(row, link, at),
-                              ),
-                            ),
-                        ],
+                  // The ground under the rows has what the list itself can do.
+                  child: Builder(
+                    builder: (list) => GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onSecondaryTapDown: (press) => reviewRowMenu(
+                          list, press.globalPosition, [
+                        ('send', l10n.menuSendForReview, _sendPress),
+                      ]),
+                      child: ReviewScroll(
+                        controller: _listScroll,
+                        ground: t.surface1,
+                        child: Padding(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: _listMargin),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final link in _reviews.links)
+                                Builder(
+                                  key: ValueKey<String>('review-row-${link.id}'),
+                                  builder: (row) => ReviewLinkRow(
+                                    link: link,
+                                    chosen: link.id == _chosen,
+                                    unseen: _reviews.unseenIn(link) > 0,
+                                    moved: _moved.contains(link.id),
+                                    // The keys come back to the list with it.
+                                    onPick: () {
+                                      _focus.requestFocus();
+                                      setState(() => link.id == _chosen
+                                          ? _at = null
+                                          : _choose(link.id));
+                                    },
+                                    onMenu: (at) => _linkMenu(row, link, at),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1081,15 +1093,9 @@ class _ReviewWindowState extends State<_ReviewWindow> {
     // are fine with. A link at the server's ceiling of 2000 wants a list
     // that builds what is in view, and the keys a way to find a row in it.
     return [
-      if (_comp == null && listed.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(l10n.reviewNoComp, style: t.small),
-        ),
       // A reviewer's yes to this version, before what anyone said about it.
       if (version.approvals.isNotEmpty) ...[
-        if (listed.isNotEmpty || _comp == null)
-          Container(height: 1, color: t.hairline),
+        if (listed.isNotEmpty) Container(height: 1, color: t.hairline),
         ReviewApprovedRow(
           key: ValueKey<String>('review-approved-by-${version.n}'),
           approvals: version.approvals,

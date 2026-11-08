@@ -352,25 +352,30 @@ class AccountSettings extends StatelessWidget {
     final profiles = ui.profiles;
     final pro = ui.account.pro;
     final current = profiles.current;
-    Widget toggle(String id, bool value, ValueChanged<bool> set) => IgnorePointer(
-          ignoring: !pro,
-          child: Opacity(
-            opacity: pro ? 1 : 0.4,
-            child: HouseToggle(
-              key: ValueKey<String>('settings-sync-$id'),
-              value: value,
-              onChanged: set,
-            ),
-          ),
+    Widget toggle(String id, bool value, ValueChanged<bool> set) => HouseToggle(
+          key: ValueKey<String>('settings-sync-$id'),
+          value: value,
+          onChanged: set,
         );
     return [
       _row(
         t,
         l10n.settingsSyncOn,
-        toggle('on', current.sync, profiles.setSync),
-        description: pro ? '' : l10n.settingsSyncNeedsPro,
+        // Without Pro there is nothing for it or the rows under it to do, and
+        // the tip says why.
+        pro
+            ? toggle('on', current.sync, profiles.setSync)
+            : LumitTooltip(
+                message: l10n.settingsSyncNeedsPro,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: 0.4,
+                    child: toggle('on', false, profiles.setSync),
+                  ),
+                ),
+              ),
       ),
-      if (current.sync)
+      if (pro && current.sync)
         for (final group in ProfileGroup.values)
           _row(
             t,
@@ -459,18 +464,26 @@ class _BackupRow extends StatelessWidget {
         return settingsRow(
           t,
           l10n.backupSettingsOn,
-          pro ? '' : l10n.backupNeedsPro,
-          IgnorePointer(
-            ignoring: !pro,
-            child: Opacity(
-              opacity: pro ? 1 : 0.4,
-              child: HouseToggle(
-                key: const ValueKey('settings-backup-on'),
-                value: backup.on,
-                onChanged: backup.setOn,
-              ),
-            ),
-          ),
+          '',
+          pro
+              ? HouseToggle(
+                  key: const ValueKey('settings-backup-on'),
+                  value: backup.on,
+                  onChanged: backup.setOn,
+                )
+              : LumitTooltip(
+                  message: l10n.backupNeedsPro,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.4,
+                      child: HouseToggle(
+                        key: const ValueKey('settings-backup-on'),
+                        value: false,
+                        onChanged: backup.setOn,
+                      ),
+                    ),
+                  ),
+                ),
         );
       },
     );
@@ -626,12 +639,10 @@ class _KeptOnlineState extends State<_KeptOnline> {
                     horizontal: settingsRowPadding),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: settingsLabelColumn,
+                    Expanded(
                       child: Text(l10n.settingsOnlineUnnamed,
                           style: t.body.copyWith(color: t.textMuted)),
                     ),
-                    const Spacer(),
                     control,
                   ],
                 ),

@@ -63,11 +63,6 @@ const double compLabelColumn = 110;
 const double compRowGap = 12;
 const double compRowHeight = 30;
 
-/// A section: the rule above it, the 4 of air the drawing leaves under that,
-/// and the kicker band over the rows.
-const double compSectionKicker = 24;
-const double compSectionTop = 4;
-
 /// The widths the drawing gives this dialog's wells and its rate list.
 const double compSizeWell = 80;
 const double compDurationWell = 120;
@@ -475,17 +470,17 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
             ],
           ),
         ),
-        _section(t, l10n.compGroupFrame, [
+        dialogSection(t, l10n.compGroupFrame, [
           _row(t, l10n.size, _sizeRow(t)),
           _row(t, l10n.frameRate, _rateRow(t)),
           _row(t, l10n.duration, _durationRow(t)),
           _row(t, l10n.compBackground, _backgroundRow(t)),
         ]),
-        _section(t, l10n.compGroupMotionBlur, [
+        dialogSection(t, l10n.compGroupMotionBlur, [
           _row(t, l10n.compShutterAngle, _shutterRow(t)),
         ]),
         if (_likeAfterEffects case final on?)
-          _section(t, l10n.compGroupLights, [
+          dialogSection(t, l10n.compGroupLights, [
             _row(
                 t,
                 l10n.compLightsLikeAfterEffects,
@@ -773,38 +768,6 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         labelColumn: compLabelColumn,
         gap: compRowGap,
         minHeight: compRowHeight,
-      );
-
-  /// A named group of rows: a rule, the drawing's 4 of air, a kicker band, and
-  /// the rows under it. The Settings pages' shape rather than the Export
-  /// dialog's box — this drawing separates its sections with a line.
-  Widget _section(LumitTheme t, String title, List<Widget> rows) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(height: 1, color: t.hairline),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                dialogPadding, compSectionTop, dialogPadding, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: compSectionKicker,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 4),
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Text(t.kickerCase(title), style: t.kicker),
-                    ),
-                  ),
-                ),
-                ...rows,
-              ],
-            ),
-          ),
-        ],
       );
 
   Color get _backgroundColour => Color.fromARGB(

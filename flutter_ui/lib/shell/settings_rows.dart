@@ -6,16 +6,12 @@
 // questions in the same voice, and two windows that look alike should be alike
 // because they share the drawing, not because someone kept them in step.
 //
-// **The drawing decides the shape**. A row is a label in a fixed 190px
-// column, a 12px gap, and its control at the *start* of what is left — not
-// pushed to the right edge, which is what these rows used to do. A section is a
-// kicker over its rows with a rule and a little air above it, and no card
-// around them: the drawing separates sections with a line, not with a box.
-//
-// The one exception is a button. A row with something to report and a button
-// to change it (Settings ▸ Account) gives the button as `actions`, which sit
-// at the row's end, so a page's buttons line up in one column whatever the
-// values beside them say.
+// A row is its name at one edge and its control at the other, so a page's
+// controls stand in one column down the far edge and the row uses the width it
+// has. A section is a kicker over its rows with a rule and a little air above
+// it, and no card around them.
+
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +22,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../state/files.dart' if (dart.library.js_interop) '../state/files_web.dart'
     show forgetUnused, storageUsed;
+import 'dialog_frame.dart' show FittedText;
 import 'settings_account.dart' show askBefore;
 
 /// A row's height, and the numbers that make it up (docs/15 §12A.4/§12A.6: a
@@ -36,9 +33,11 @@ const double settingsRowHeight = 30;
 /// The inset every row and section header takes from the page's edges.
 const double settingsRowPadding = 16;
 
-/// The label column, and the gap between it and the control beside it.
-const double settingsLabelColumn = 190;
+/// The least a row's name keeps, the gap beside it, and what a row sets aside
+/// for each button after its control.
+const double settingsLabelMin = 130;
 const double settingsRowGap = 12;
+const double settingsActionAllowance = 80;
 
 /// A section's kicker band: 12 above the label, its 14px line, 4 below.
 const double settingsSectionHeaderHeight = 30;
@@ -85,16 +84,13 @@ Widget settingsSection(
 
 /// One row: what it is on the left, its control beside it.
 ///
-/// [description] is for a line the row has to *report* — where the cache
-/// folder is, what the last update check found — and it runs the full width
-/// under the row rather than wrapping inside the label column, because a path
-/// squeezed into 190px is a path nobody can read. Rows with nothing to report
-/// pass an empty string and measure exactly [settingsRowHeight]; the help
-/// sentences these rows used to carry are gone with the drawing that had no
-/// room for them.
+/// [description] is for a line the row has to *report*, such as where the cache
+/// folder is or what the last update check found. It runs the full width under
+/// the row, because a path squeezed beside the name is a path nobody can read.
+/// Rows with nothing to report pass an empty string and measure exactly
+/// [settingsRowHeight]. It never explains the setting.
 ///
-/// [actions] are buttons, at the row's end. [control] is then what they act
-/// on, a value read off the account or a field, and stays at the start.
+/// [actions] are buttons, after the control, which is then what they act on.
 Widget settingsRow(
   LumitTheme t,
   String title,
@@ -102,40 +98,53 @@ Widget settingsRow(
   Widget control, {
   List<Widget> actions = const [],
 }) =>
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: settingsRowHeight),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: settingsRowPadding),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: settingsLabelColumn,
-                  child: Text(title, style: t.body),
+    HoverFill(
+      faint: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: settingsRowHeight),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: settingsRowPadding),
+              child: LayoutBuilder(
+                builder: (context, box) => Row(
+                  children: [
+                    Expanded(child: FittedText(title, t.body, lines: 2)),
+                    const SizedBox(width: settingsRowGap),
+                    // As wide as it wants, short of crowding the name out. A
+                    // control that fills what it is given, a path well, takes
+                    // all of this.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: math.max(
+                              0,
+                              box.maxWidth -
+                                  settingsLabelMin -
+                                  settingsRowGap -
+                                  actions.length * settingsActionAllowance)),
+                      child: control,
+                    ),
+                    for (final (i, action) in actions.indexed) ...[
+                      SizedBox(width: i == 0 ? settingsRowGap : 8),
+                      action,
+                    ],
+                  ],
                 ),
-                const SizedBox(width: settingsRowGap),
-                Expanded(
-                  child: Align(alignment: AlignmentDirectional.centerStart, child: control),
-                ),
-                for (final (i, action) in actions.indexed) ...[
-                  SizedBox(width: i == 0 ? settingsRowGap : 8),
-                  action,
-                ],
-              ],
+              ),
             ),
           ),
-        ),
-        if (description.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                settingsRowPadding, 0, settingsRowPadding, 6),
-            child:
-                Text(description, style: t.small.copyWith(color: t.textMuted)),
-          ),
-      ],
+          if (description.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  settingsRowPadding, 0, settingsRowPadding, 6),
+              child: Text(description,
+                  style: t.small.copyWith(color: t.textMuted)),
+            ),
+        ],
+      ),
     );
 
 /// A size in bytes, in megabytes or, from one up, gigabytes.

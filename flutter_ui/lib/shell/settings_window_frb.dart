@@ -81,7 +81,7 @@ import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
-import 'dialog_frame.dart' show dialogSurface;
+import 'dialog_frame.dart' show dialogFooter, dialogSurface;
 import 'extension_install_frb.dart';
 import 'export_dialog_frb.dart'
     show
@@ -123,15 +123,18 @@ const Size settingsWindowSize = Size(760, 520);
 /// Below this the sidebar and the widest setting row stop fitting side by side.
 const Size settingsMinSize = Size(560, 380);
 
-/// The title strip, and the footer under the page. §12A.4's dialog title strip
-/// is 30; the footer is 8 above a 26px button and 8 below it, over a hairline.
+/// The title strip.
 const double settingsTitleStrip = 30;
-const double settingsFooterHeight = 43;
-const double settingsFooterButton = 26;
+
+/// As wide as a page's rows go. A window pulled wider than this keeps its rows
+/// together in the middle rather than leaving a name a long way from its
+/// control.
+const double settingsPageMeasure = 720;
 
 /// The sidebar, and one page's entry in it.
 const double settingsSidebarWidth = 160;
 const double settingsNavRow = 24;
+const double settingsNavGroupGap = 12;
 
 /// The tick down the left edge of the page being shown, and the inset the
 /// label gives up to it.
@@ -148,6 +151,9 @@ const double settingsCloseGlyph = 12;
 /// narrow one for a single word.
 const double _ddWide = 180;
 const double _ddNarrow = 120;
+
+/// How much room the scheme row needs before its swatch strip joins it.
+const double _schemeWithStrip = 340;
 
 /// The scale row's track and its well.
 const double _scaleTrack = 160;
@@ -166,16 +172,21 @@ const double _gutterEnds = 8;
 /// One page in the sidebar.
 enum SettingsPage {
   general,
-  account,
   appearance,
+  shortcuts,
   timeline,
   viewer,
   audio,
   autosave,
   export,
-  addons,
   previewAndCache,
-  shortcuts;
+  addons,
+  account;
+
+  /// A page the sidebar stands a little apart from the one above: how you work,
+  /// the panels, what gets written, and what comes from outside.
+  bool get startsGroup =>
+      this == timeline || this == autosave || this == addons;
 
   /// The name in the sidebar. A getter rather than a constructor argument
   /// because an enum constant is built once, at start-up, and the language can
@@ -471,10 +482,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   // ---- the search ----------------------------------------------------------
 
-  /// Whether a row called [title] survives the search. Rows are matched on
-  /// their own names only: a search that also read the section kickers would
-  /// keep every row under "Theme" for the word *theme*, which is a page, not a
-  /// result.
+  /// Whether a row called [title] survives the search.
   bool _matches(String title) {
     if (kIsWeb && settingsNotInPage.contains(title)) return false;
     // [settingsRowNames] is asking what the rows are called, not for the rows.
@@ -482,8 +490,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       names.add(title);
       return false;
     }
-    return _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
+    return _keepEveryRow || _saysQuery(title);
   }
+
+  bool _saysQuery(String title) =>
+      _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
+
+  /// Set while a page is built whole for [_found], and the headings that build
+  /// drew, one for each section.
+  bool _keepEveryRow = false;
+  List<String> _headings = const [];
 
   /// A row, or nothing when the search has hidden it.
   Widget? _row(LumitTheme t, String title, Widget control,
@@ -548,11 +564,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     List<(String, List<Widget?>)> sections,
   ) {
     final out = <Widget>[];
+    final headings = <String>[];
     for (final (title, rows) in sections) {
       final kept = rows.whereType<Widget>().toList();
       if (kept.isEmpty) continue;
       out.add(settingsSection(t, title, kept, first: out.isEmpty));
+      headings.add(title);
     }
+    _headings = headings;
     return out;
   }
 
@@ -673,12 +692,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// lists rows from all of them.
   bool _marked(SettingsPage page) => _page == page && !_everywhere;
 
-  Widget _sidebar(LumitTheme t) => Padding(
-        padding: const EdgeInsets.only(top: 8),
+  Widget _sidebar(LumitTheme t) => SingleChildScrollView(
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final page in SettingsPage.shown)
+            for (final page in SettingsPage.shown) ...[
+              if (page.startsGroup) const SizedBox(height: settingsNavGroupGap),
               // The highlight a menu's rows take, under the page's own mark:
               // the page in force draws its fill over it.
               HoverFill(
@@ -713,43 +733,35 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ),
                 ),
               ),
+            ],
           ],
         ),
       );
 
-  Widget _footer(LumitTheme t, LumitUiState ui) => Container(
-        key: const ValueKey('settings-footer'),
-        height: settingsFooterHeight,
-        decoration: BoxDecoration(
-          color: t.surface2,
-          border: Border(top: BorderSide(color: t.hairline)),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            const Spacer(),
-            SizedBox(
-              height: settingsFooterButton,
-              child: HouseButton(
+  /// Everything here applies as it is changed, so the footer's only act on the
+  /// settings is to put a page back, kept apart from the way out. A search has
+  /// no one page to reset, and two pages have nothing that ships with a value.
+  Widget _footer(LumitTheme t, LumitUiState ui) => dialogFooter(
+        t,
+        keyPrefix: 'settings',
+        leading: _everywhere ||
+                _page == SettingsPage.account ||
+                _page == SettingsPage.addons
+            ? null
+            : HouseButton(
                 key: const ValueKey('settings-reset-page'),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                // A search across the pages has no one page to reset.
-                onPressed: _everywhere ? null : () => _resetPage(ui),
+                onPressed: () => _resetPage(ui),
                 child: Text(l10n.settingsResetPage),
               ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              height: settingsFooterButton,
-              child: HouseButton(
-                key: const ValueKey('settings-close-button'),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                onPressed: widget.onClose,
-                child: Text(l10n.close),
-              ),
-            ),
-          ],
-        ),
+        actions: [
+          HouseButton(
+            key: const ValueKey('settings-close-button'),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            onPressed: widget.onClose,
+            child: Text(l10n.close),
+          ),
+        ],
       );
 
   List<Widget> _sectionsOf(SettingsPage page, LumitTheme t, LumitUiState ui) =>
@@ -774,7 +786,35 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       accountSettingsRows().forEach(_matches);
       return const [];
     }
+    if (!accountSettingsRows().any(_matches)) return const [];
     return [AccountSettings(ui: ui, matches: _matches)];
+  }
+
+  /// What a search keeps of [page]: all of it when the word is the page's name,
+  /// all of a section when it is the section's, and otherwise the rows named
+  /// it. So "cache" finds the cache sections, whose rows are Budget and In use.
+  List<Widget> _foundOn(SettingsPage page, LumitTheme t, LumitUiState ui) {
+    _keepEveryRow = true;
+    _headings = const [];
+    final whole = _sectionsOf(page, t, ui);
+    final wholeHeadings = _headings;
+    _keepEveryRow = false;
+    if (page != SettingsPage.account && _saysQuery(page.label)) return whole;
+    _headings = const [];
+    final named = _sectionsOf(page, t, ui);
+    final namedHeadings = _headings;
+    // A page that does not build through [_sections] has no headings to read.
+    if (wholeHeadings.length != whole.length ||
+        namedHeadings.length != named.length) {
+      return named;
+    }
+    return [
+      for (final (i, heading) in wholeHeadings.indexed)
+        if (_saysQuery(heading))
+          whole[i]
+        else if (namedHeadings.indexOf(heading) case final at when at >= 0)
+          named[at],
+    ];
   }
 
   /// What a search found: each page's surviving rows, live as they are on the
@@ -783,7 +823,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   List<Widget> _found(LumitTheme t, LumitUiState ui) => [
         for (final page in SettingsPage.shown)
           if (page != SettingsPage.shortcuts)
-            if (_sectionsOf(page, t, ui) case final sections
+            if (_foundOn(page, t, ui) case final sections
                 when sections.isNotEmpty) ...[
               ColoredBox(
                 color: t.surface2,
@@ -834,19 +874,26 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ? MotionSpec.still
                   : ThemeScope.of(context).motion.reveal,
               rise: ThemeScope.of(context).motion.revealRise,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ...sections,
-                  if (sections.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(l10n.settingsNoMatches,
-                          key: const ValueKey('settings-no-matches'),
-                          style: t.small.copyWith(color: t.textMuted)),
-                    ),
-                  const SizedBox(height: 8),
-                ],
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxWidth: settingsPageMeasure),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ...sections,
+                      if (sections.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(l10n.settingsNoMatches,
+                              key: const ValueKey('settings-no-matches'),
+                              style: t.small.copyWith(color: t.textMuted)),
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -1064,25 +1111,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ],
         ),
         (
-          l10n.settingsGroupSharing,
-          [
-            _row(
-              t,
-              l10n.settingsShareUpLimit,
-              _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
-                  (limit) => ui.workspace.setShareLimits(up: limit)),
-            ),
-            _row(
-              t,
-              l10n.settingsShareDownLimit,
-              _shareLimit(
-                  'settings-share-down-limit',
-                  ui.workspace.shareDownLimit,
-                  (limit) => ui.workspace.setShareLimits(down: limit)),
-            ),
-          ],
-        ),
-        (
           l10n.settingsGroupWorkspace,
           [
             // Off means Lumit opens straight into the shell; the Viewer
@@ -1135,19 +1163,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ),
               description: ui.workspace.projectTemplate,
             ),
-            // Converted once into the preset library, so the Effects &
-            // presets panel lists them beside Lumit's own.
-            _row(
-              t,
-              l10n.settingsAfterEffectsPresets,
-              HouseButton(
-                key: const ValueKey('settings-import-ffx'),
-                small: true,
-                onPressed: () => _importFfxPresets(ui),
-                child: Text(l10n.menuImport, style: t.small),
-              ),
-              description: _ffxMessage ?? '',
-            ),
             _row(
               t,
               l10n.settingsPanelLayout,
@@ -1158,6 +1173,85 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 child: Text(l10n.menuResetWorkspace, style: t.small),
               ),
             ),
+          ],
+        ),
+        // The same updater the Help menu drives, seen from the other side: one
+        // service, two views, so they can never disagree about whether a check
+        // is running or an update is waiting.
+        (
+          l10n.settingsGroupUpdates,
+          [
+            _flag(t, 'settings-auto-update', l10n.settingsAutomaticUpdates,
+                value: ui.workspace.autoUpdate,
+                set: ui.workspace.setAutoUpdate),
+            _flag(t, 'settings-nightly', l10n.settingsNightlyBuilds,
+                value: ui.updates.followsNightly,
+                set: (on) => _setNightly(ui, on)),
+            // A nightly's own icon, or the regular one. Only a nightly has
+            // both to choose between.
+            if (ui.updates.runningNightly && appIconCanChange)
+              _flag(t, 'settings-nightly-icon', l10n.settingsNightlyIcon,
+                  value: ui.workspace.nightlyIcon, set: (on) {
+                ui.workspace.setNightlyIcon(on);
+                ui.applyAppIcon();
+              }),
+            // The whole row watches the service, not just its button: the line
+            // under it is the part that says what was found, and a stale
+            // sentence beside a live button would be worse than either alone.
+            if (_matches(l10n.settingsThisVersion))
+              ListenableBuilder(
+                listenable: ui.updates,
+                builder: (context, _) => settingsRow(
+                  t,
+                  l10n.settingsThisVersion,
+                  _updateStatusLine(ui),
+                  HouseButton(
+                    key: const ValueKey('settings-check-updates'),
+                    small: true,
+                    onPressed: ui.updates.busy
+                        ? null
+                        : () => pressUpdateRow(
+                              context,
+                              updates: ui.updates,
+                              notice: context.read<LumitState>().postNotice,
+                              projectIsDirty: () =>
+                                  context
+                                      .read<LumitState>()
+                                      .project
+                                      ?.isDirty() ??
+                                  false,
+                              saveProject: () => saveProjectFrb(
+                                  context.read<LumitState>(), ui,
+                                  leaving: true),
+                            ),
+                    child: Text(ui.updates.menuLabel, style: t.small),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        (
+          l10n.settingsGroupSharing,
+          [
+            _row(
+              t,
+              l10n.settingsShareUpLimit,
+              _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
+                  (limit) => ui.workspace.setShareLimits(up: limit)),
+            ),
+            _row(
+              t,
+              l10n.settingsShareDownLimit,
+              _shareLimit(
+                  'settings-share-down-limit',
+                  ui.workspace.shareDownLimit,
+                  (limit) => ui.workspace.setShareLimits(down: limit)),
+            ),
+          ],
+        ),
+        (
+          l10n.settingsGroupConnections,
+          [
             _row(
               t,
               l10n.settingsDiscordStatus,
@@ -1184,6 +1278,55 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ui.workspace.setLiveEndpoint(on);
               ui.applyLiveEndpoint();
             }),
+            // Converted once into the preset library, so the Effects &
+            // presets panel lists them beside Lumit's own.
+            _row(
+              t,
+              l10n.settingsAfterEffectsPresets,
+              HouseButton(
+                key: const ValueKey('settings-import-ffx'),
+                small: true,
+                onPressed: () => _importFfxPresets(ui),
+                child: Text(l10n.menuImport, style: t.small),
+              ),
+              description: _ffxMessage ?? '',
+            ),
+            // Picked here, or the one found on the machine. Clear goes back
+            // to looking.
+            _row(
+              t,
+              l10n.settingsBlender,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-blender'),
+                    small: true,
+                    onPressed: () async {
+                      final path = await pickProgram();
+                      if (path == null || !mounted) return;
+                      _chooseBlender(ui, path);
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.blenderPath.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-blender-clear'),
+                      small: true,
+                      onPressed: () => _chooseBlender(ui, ''),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              ),
+              description: switch ((_blenderLooked, _blender)) {
+                (false, _) => '',
+                (true, null) => l10n.settingsBlenderNotFound,
+                (true, final found?) =>
+                  l10n.settingsBlenderFound(found.version, found.path),
+              },
+            ),
           ],
         ),
         (
@@ -1252,102 +1395,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ),
           ],
         ),
-        (
-          l10n.settingsGroup3dModels,
-          [
-            // Picked here, or the one found on the machine. Clear goes back
-            // to looking.
-            _row(
-              t,
-              l10n.settingsBlender,
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  HouseButton(
-                    key: const ValueKey('settings-blender'),
-                    small: true,
-                    onPressed: () async {
-                      final path = await pickProgram();
-                      if (path == null || !mounted) return;
-                      _chooseBlender(ui, path);
-                    },
-                    child: Text(l10n.chooseEllipsis, style: t.small),
-                  ),
-                  if (ui.workspace.blenderPath.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    HouseButton(
-                      key: const ValueKey('settings-blender-clear'),
-                      small: true,
-                      onPressed: () => _chooseBlender(ui, ''),
-                      child: Text(l10n.clear, style: t.small),
-                    ),
-                  ],
-                ],
-              ),
-              description: switch ((_blenderLooked, _blender)) {
-                (false, _) => '',
-                (true, null) => l10n.settingsBlenderNotFound,
-                (true, final found?) =>
-                  l10n.settingsBlenderFound(found.version, found.path),
-              },
-            ),
-          ],
-        ),
-        // The same updater the Help menu drives, seen from the other side: one
-        // service, two views, so they can never disagree about whether a check
-        // is running or an update is waiting.
-        (
-          l10n.settingsGroupUpdates,
-          [
-            _flag(t, 'settings-auto-update', l10n.settingsAutomaticUpdates,
-                value: ui.workspace.autoUpdate,
-                set: ui.workspace.setAutoUpdate),
-            _flag(t, 'settings-nightly', l10n.settingsNightlyBuilds,
-                value: ui.updates.followsNightly,
-                set: (on) => _setNightly(ui, on)),
-            // A nightly's own icon, or the regular one. Only a nightly has
-            // both to choose between.
-            if (ui.updates.runningNightly && appIconCanChange)
-              _flag(t, 'settings-nightly-icon', l10n.settingsNightlyIcon,
-                  value: ui.workspace.nightlyIcon, set: (on) {
-                ui.workspace.setNightlyIcon(on);
-                ui.applyAppIcon();
-              }),
-            // The whole row watches the service, not just its button: the line
-            // under it is the part that says what was found, and a stale
-            // sentence beside a live button would be worse than either alone.
-            if (_matches(l10n.settingsThisVersion))
-              ListenableBuilder(
-                listenable: ui.updates,
-                builder: (context, _) => settingsRow(
-                  t,
-                  l10n.settingsThisVersion,
-                  _updateStatusLine(ui),
-                  HouseButton(
-                    key: const ValueKey('settings-check-updates'),
-                    small: true,
-                    onPressed: ui.updates.busy
-                        ? null
-                        : () => pressUpdateRow(
-                              context,
-                              updates: ui.updates,
-                              notice: context.read<LumitState>().postNotice,
-                              projectIsDirty: () =>
-                                  context
-                                      .read<LumitState>()
-                                      .project
-                                      ?.isDirty() ??
-                                  false,
-                              saveProject: () => saveProjectFrb(
-                                  context.read<LumitState>(), ui,
-                                  leaving: true),
-                            ),
-                    child: Text(ui.updates.menuLabel, style: t.small),
-                  ),
-                ),
-              ),
-          ],
-        ),
       ]);
 
   /// Change channel, asking first on the way in: a nightly can save a project
@@ -1404,7 +1451,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(
             t,
             l10n.settingsColourScheme,
-            Row(
+            // The strip goes first when the window is narrow: the name is the
+            // setting, and the strip only shows it.
+            LayoutBuilder(builder: (context, box) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _dropdown<ThemeChoice>(
@@ -1422,16 +1471,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   onPreview: ui.workspace.previewChoice,
                   onPreviewEnd: () => ui.workspace.previewChoice(null),
                 ),
-                const SizedBox(width: 8),
-                // What the selection actually looks like, beside its name.
-                // The drawing leaves the rest of the row empty and this is
-                // what it is for.
-                ThemeSwatchStrip(
-                  key: const ValueKey('settings-theme-swatches'),
-                  theme: ui.workspace.theme,
-                ),
+                if (box.maxWidth >= _schemeWithStrip) ...[
+                  const SizedBox(width: 8),
+                  // What the selection actually looks like, beside its name.
+                  ThemeSwatchStrip(
+                    key: const ValueKey('settings-theme-swatches'),
+                    theme: ui.workspace.theme,
+                  ),
+                ],
               ],
-            ),
+            )),
           ),
           // Scheme, then the two rows about *your* theme, then the two dials
           // that tune whichever one is in force. The order is the order the
@@ -1516,7 +1565,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 HouseButton(
                   key: const ValueKey('settings-styles-folder'),
                   small: true,
-                  frameless: true,
                   // The style in use, picked out, or the folder itself.
                   onPressed: () => revealInFolder(
                       path: switch (ui.workspace.activeStyle) {
@@ -1780,7 +1828,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             t,
             l10n.settingsIconsFolder,
             Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -1795,6 +1843,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     IconStyle.folder ?? '',
                     key: const ValueKey('settings-icons-folder'),
                     style: t.small.copyWith(color: t.textMuted),
+                    textAlign: TextAlign.end,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1975,7 +2024,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ui.workspace.settingsChanged();
         });
     final unit = t.mono.copyWith(fontSize: 10, color: t.textMuted);
-    return Row(
+    return LayoutBuilder(builder: (context, box) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         HouseSlider(
@@ -1984,7 +2033,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           min: 75,
           max: 200,
           step: 5,
-          width: _scaleTrack,
+          // The track gives way when the window is narrow.
+          width: (box.maxWidth - _scaleWell - 40).clamp(40.0, _scaleTrack),
           showValue: false,
           commitOnRelease: true,
           onChanged: set,
@@ -2004,21 +2054,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ),
         const SizedBox(width: 8),
         Text(l10n.unitSymbolPercent, style: unit),
-        const SizedBox(width: 8),
-        // The one thing in the row that may be shortened: the window is
-        // resizable, and at the drawing's own width this row fills the column
-        // to the pixel — the note gets the 107-odd the drawing leaves it, and
-        // **wraps onto the two lines the drawing draws**.
-        //
-        // It used to carry `overflow: TextOverflow.ellipsis`, which is not the
-        // "shorten it" this needed: an ellipsis with no line limit puts the
-        // whole phrase on one line and cuts it off, so the note read "applies
-        // on rele…" instead of wrapping. Wrapping is the shortening.
-        Flexible(
-          child: Text(l10n.settingsAppliesOnRelease, style: unit),
-        ),
       ],
-    );
+    ));
   }
 
   // ---- Your themes ---------------------------------------------------------
@@ -2060,7 +2097,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         HouseButton(
           key: const ValueKey('settings-theme-delete'),
           small: true,
-          frameless: true,
           onPressed: custom == null
               ? null
               : () => setState(() {

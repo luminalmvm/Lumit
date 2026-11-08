@@ -46,8 +46,9 @@ import '../widgets/share_marks.dart';
 import 'dialog_frame.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'pro_window.dart';
+import 'question_window.dart';
 import 'profile_chip.dart';
-import 'review_link_parts.dart' show reviewRowMenu;
+import 'review_link_parts.dart' show ReviewMenuItem, reviewRowMenu;
 import 'project_history_window.dart'
     show backupDay, backupSize, backupTime;
 import 'settings_window_frb.dart';
@@ -59,7 +60,7 @@ import 'package:lumit_flutter/state/platform.dart'
 
 /// The width both take, the column their labels sit in, and how tall the list
 /// of conflicts and the list of footage grow before they scroll.
-const double shareDialogWidth = 400;
+const double shareDialogWidth = 460;
 const double _labelColumn = 100;
 const double _conflictListHeight = 320;
 
@@ -80,6 +81,10 @@ const int _activityShown = 12;
 /// every such line in the window starts its words at one edge.
 const double _leadGlyph = 14;
 const double _leadGap = 6;
+
+/// How wide a glyph to press is, and the room one takes inside a field.
+const double _glyphTarget = 22;
+const double _fieldEye = 22;
 
 /// The room the title strip, the footer and the edges of the window take,
 /// which the body of a project kept online is kept inside of.
@@ -362,6 +367,7 @@ Widget _field(
   VoidCallback? onSubmitted,
   TextStyle? style,
   bool obscure = false,
+  double endRoom = 0,
 }) =>
     SizedBox(
       height: dialogControlHeight,
@@ -369,7 +375,7 @@ Widget _field(
         key: ValueKey<String>(id),
         controller: controller,
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: EdgeInsets.fromLTRB(8, 0, 8 + endRoom, 0),
         fill: t.surface0,
         style: style,
         hint: hint,
@@ -491,9 +497,6 @@ class _ShareDialogState extends State<_ShareDialog> {
   String? _projectId;
   String? _keptKey;
 
-  /// This time's invite is the one handed out last time.
-  bool _sameInvite = false;
-
   /// Whether sharing asks the router to open the port.
   late bool _outside;
 
@@ -524,9 +527,6 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// Lumit's server is being asked something that has not come back: to
   /// keep the project, to take someone out, or to stop keeping it.
   bool _busy = false;
-
-  /// The invite of a project kept online was replaced by taking someone out.
-  bool _newLink = false;
 
   /// The invite in hand wants a password with it. Read when the link is,
   /// and never in a build.
@@ -750,6 +750,7 @@ class _ShareDialogState extends State<_ShareDialog> {
       ..addListener(_readInvite);
     _newInvite.addListener(_readInvite);
     _password.addListener(_redraw);
+    _note.addListener(_redraw);
     _readInvite();
     _outside = _prefs.shareOutside;
     String limit(int kilobytes) => kilobytes == 0 ? '' : '$kilobytes';
@@ -930,7 +931,6 @@ class _ShareDialogState extends State<_ShareDialog> {
       // Kept until sharing is stopped, so the same project shared again after
       // a restart is found by the invite people already hold.
       if (_projectId case final id?) _prefs.setShareHosted(id, '$port/$key');
-      _sameInvite = key == _keptKey;
       _keptKey = key;
       _password.clear();
     }
@@ -1184,7 +1184,6 @@ class _ShareDialogState extends State<_ShareDialog> {
     setState(() {
       _link = _linkNow();
       _keptKey = key ?? _keptKey;
-      _sameInvite = false;
     });
   }
 
@@ -1227,7 +1226,6 @@ class _ShareDialogState extends State<_ShareDialog> {
       _busy = false;
       _removing = null;
       _error = error;
-      _newLink = _newLink || error == null;
     });
     _readLink();
   }
@@ -1448,35 +1446,49 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
-  /// A link, hidden until the person asks to see it. While it is hidden it
-  /// is not drawn, read out or selectable: the well holds only ink, and the
-  /// room the link takes up. [shown] is for a link with a Show of its own.
-  Widget _linkWell(LumitTheme t, String id, String link, {bool? shown}) =>
+  /// A link in its well on one line, hidden until the person asks to see it.
+  /// While it is hidden it is not drawn, read out or selectable: the well
+  /// holds only ink. It scrolls when shown, and Copy link takes the whole of
+  /// it.
+  Widget _linkField(LumitTheme t, String id, String link, {required bool shown}) =>
       Container(
-        padding: const EdgeInsets.all(8),
+        height: dialogControlHeight,
+        alignment: AlignmentDirectional.centerStart,
+        clipBehavior: Clip.hardEdge,
         decoration: BoxDecoration(
           color: t.surface0,
-          borderRadius: BorderRadius.circular(t.tokens.wellRadius),
+          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
         ),
         child: _Veil(
-          shown: shown ?? _shown,
-          lineHeight: (t.mono.fontSize ?? 11) * (t.mono.height ?? 1.3),
-          builder: (hidden) => hidden == 0
-              ? SelectableText(
-                  link,
-                  key: ValueKey<String>(id),
-                  style: t.mono,
-                  selectionColor: t.accent.withValues(alpha: 0.5),
-                )
-              : ExcludeSemantics(
-                  child: IgnorePointer(
-                    child: Opacity(
-                      opacity: 1 - hidden,
-                      child: Text(link,
-                          key: ValueKey<String>(id), style: t.mono),
+          shown: shown,
+          inset: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          builder: (hidden) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: hidden == 0
+                  ? SelectableText(
+                      link,
+                      key: ValueKey<String>(id),
+                      style: t.mono,
+                      maxLines: 1,
+                      selectionColor: t.accent.withValues(alpha: 0.5),
+                    )
+                  : ExcludeSemantics(
+                      child: IgnorePointer(
+                        child: Opacity(
+                          opacity: 1 - hidden,
+                          child: Text(link,
+                              key: ValueKey<String>(id),
+                              style: t.mono,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.clip),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+            ),
+          ),
         ),
       );
 
@@ -1489,15 +1501,17 @@ class _ShareDialogState extends State<_ShareDialog> {
     required bool shown,
     String? hint,
     VoidCallback? onSubmitted,
+    double endRoom = 0,
   }) =>
       _Veil(
         shown: shown,
-        inset: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        inset: EdgeInsets.fromLTRB(8, 4, 8 + endRoom, 4),
         // Dots under the ink, so what is typed is never laid out while it
         // is hidden, not even see-through.
         builder: (hidden) => _field(t, id, controller,
             hint: hint,
             onSubmitted: onSubmitted,
+            endRoom: endRoom,
             obscure: !shown,
             style: hidden == 0
                 ? null
@@ -1505,45 +1519,65 @@ class _ShareDialogState extends State<_ShareDialog> {
                     color: t.textPrimary.withValues(alpha: 1 - hidden))),
       );
 
+  /// The eye that shows or hides what is in a field or a well.
+  Widget _eye(LumitTheme t, String id, bool shown, VoidCallback? onTap) =>
+      _glyphButton(
+        t,
+        id,
+        null,
+        shown ? l10n.shareHideLink : l10n.shareShowLink,
+        onTap,
+        icon: shown ? LumitIcon.eye : LumitIcon.eyeClosed,
+      );
+
+  /// A hidden field with its eye inside its far end.
+  Widget _eyedField(
+    LumitTheme t,
+    String id,
+    TextEditingController controller, {
+    required bool shown,
+    required String eyeId,
+    required VoidCallback onEye,
+    String? hint,
+    VoidCallback? onSubmitted,
+  }) =>
+      Stack(
+        alignment: AlignmentDirectional.centerEnd,
+        children: [
+          _veiledField(t, id, controller,
+              shown: shown,
+              hint: hint,
+              onSubmitted: onSubmitted,
+              endRoom: _fieldEye),
+          // Nothing to show in an empty field.
+          if (controller.text.isNotEmpty)
+            SizedBox(
+              width: _fieldEye,
+              child: _eye(t, eyeId, shown && _shownOrPassword(id), onEye),
+            ),
+        ],
+      );
+
   /// The password row: the field, hidden like a link once something is in
-  /// it, and a button that shows it. A password is the person's own to
-  /// look at, so this one does not ask first.
+  /// it, and an eye that shows it. A password is the person's own to look at,
+  /// so this one does not ask first.
   Widget _passwordRow(LumitTheme t, String hint, VoidCallback onSubmitted) =>
       dialogRow(
         t,
         l10n.sharePassword,
-        Row(
-          children: [
-            Expanded(
-              child: _veiledField(t, 'share-password', _password,
-                  shown: _passwordShown || _password.text.isEmpty,
-                  hint: hint,
-                  onSubmitted: onSubmitted),
-            ),
-            const SizedBox(width: 8),
-            HouseButton(
-              key: const ValueKey('share-password-show'),
-              small: true,
-              onPressed: () => setState(() => _passwordShown = !_passwordShown),
-              child: Text(
-                  _passwordShown ? l10n.shareHideLink : l10n.shareShowLink,
-                  style: t.small),
-            ),
-          ],
-        ),
+        _eyedField(t, 'share-password', _password,
+            shown: _passwordShown || _password.text.isEmpty,
+            eyeId: 'share-password-show',
+            onEye: () => setState(() => _passwordShown = !_passwordShown),
+            hint: hint,
+            onSubmitted: onSubmitted),
         labelColumn: _labelColumn,
       );
 
-  Widget _showButton(LumitTheme t, {bool look = false}) => HouseButton(
-        key: ValueKey<String>(look ? 'share-show-look' : 'share-show'),
-        small: true,
-        onPressed: () => _toggleShown(look: look),
-        child: Text(
-            (look ? _shownLook : _shown)
-                ? l10n.shareHideLink
-                : l10n.shareShowLink,
-            style: t.small),
-      );
+  /// Whether the field called [id] is being shown by its eye, and not merely
+  /// because there is nothing in it to hide.
+  bool _shownOrPassword(String id) =>
+      id == 'share-password' ? _passwordShown : _shown;
 
   /// A tick box with what it means beside it.
   Widget _tick(LumitTheme t, String id, String text, bool on,
@@ -1650,7 +1684,6 @@ class _ShareDialogState extends State<_ShareDialog> {
           _limitRow(t, l10n.shareUpLimit, 'share-up-limit', _upLimit),
         ],
         _limitRow(t, l10n.shareDownLimit, 'share-down-limit', _downLimit),
-        _line(t, l10n.shareLimitHint),
       ];
 
   /// The footage crossing just now, each way, and how far along it is.
@@ -1683,16 +1716,10 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// to listen and how people far away get in.
   List<Widget> _startRows(LumitTheme t) => [
         _nameRow(t, _start),
-        _line(t, l10n.shareHostHint),
         _passwordRow(
             t,
             _keptPassword ? l10n.sharePasswordKept : l10n.sharePasswordNone,
             _start),
-        _line(
-            t,
-            _online && _ui.account.pro
-                ? l10n.sharePasswordHintOnline
-                : l10n.sharePasswordHint),
         _cloudRow(t),
         _onlineRow(t),
         _advancedFold(t),
@@ -1730,15 +1757,14 @@ class _ShareDialogState extends State<_ShareDialog> {
                 hint: l10n.shareRelayExample, onSubmitted: _start),
             labelColumn: _labelColumn,
           ),
-          _line(t, l10n.shareRelayHint),
           ..._footageRows(t),
         ],
         if (_error case final error?) _line(t, error, warning: true),
       ];
 
-  /// One of Lumit Pro's two ways to share: a tick for an account with Pro,
-  /// and for anyone else what Pro would do here and the way to it. [off] is
-  /// a row the other tick has left with no part to play.
+  /// One of Lumit Pro's two ways to share: a tick for an account with Pro, and
+  /// for anyone else the badge, which leads to Lumit Pro. What it does is said
+  /// on hover. [off] is a row the other tick has left with no part to play.
   Widget _proRow(LumitTheme t, String id, String label,
           {required String use,
           required String pro,
@@ -1747,44 +1773,39 @@ class _ShareDialogState extends State<_ShareDialog> {
           bool off = false}) =>
       ListenableBuilder(
         listenable: _ui.account,
-        builder: (context, _) => dialogRow(
-          t,
-          label,
-          _ui.account.pro
-              ? IgnorePointer(
-                  ignoring: off,
-                  child: Opacity(
-                    opacity: off ? 0.4 : 1,
-                    child: Row(
-                      children: [
-                        HouseCheckbox(
+        builder: (context, _) => LumitTooltip(
+          message: _ui.account.pro ? use : pro,
+          maxWidth: 320,
+          child: dialogRow(
+            t,
+            label,
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: _ui.account.pro
+                  ? IgnorePointer(
+                      ignoring: off,
+                      child: Opacity(
+                        opacity: off ? 0.4 : 1,
+                        child: HouseCheckbox(
                           key: ValueKey<String>(id),
                           value: value && !off,
                           onChanged: onChanged,
                         ),
-                        const SizedBox(width: 6),
-                        Expanded(child: Text(use, style: t.small)),
-                      ],
-                    ),
-                  ),
-                )
-              : Row(
-                  children: [
-                    Expanded(
-                      child: Text(pro,
-                          style: t.small.copyWith(color: t.textMuted)),
-                    ),
-                    const SizedBox(width: 8),
-                    HouseButton(
+                      ),
+                    )
+                  : HouseButton(
                       key: ValueKey<String>('$id-pro'),
                       small: true,
+                      frameless: true,
+                      padding: EdgeInsets.zero,
                       onPressed: () => unawaited(showProWindow(context)),
-                      child: Text(l10n.shareCloudSee, style: t.small),
+                      child: ProBadge(
+                          preview: _ui.account.config?.preview ?? false),
                     ),
-                  ],
-                ),
-          labelColumn: _labelColumn,
-          dimmed: off && _ui.account.pro,
+            ),
+            labelColumn: _labelColumn,
+            dimmed: off && _ui.account.pro,
+          ),
         ),
       );
 
@@ -1832,32 +1853,25 @@ class _ShareDialogState extends State<_ShareDialog> {
                 HouseButton(
                   key: ValueKey<String>('share-friend-join-${invite.id}'),
                   small: true,
-                  primary: true,
                   onPressed: _joining ? null : () => _joinFromFriend(invite),
-                  child: Text(l10n.shareJoin),
+                  child: Text(l10n.shareJoin, style: t.small),
                 ),
               ],
             ),
             labelColumn: _labelColumn,
           ),
         _nameRow(t, _join),
+        // What was pasted is hidden like any other link, and still takes a
+        // paste over it.
         dialogRow(
           t,
           l10n.shareLink,
-          Row(
-            children: [
-              Expanded(
-                // What was pasted is hidden like any other link, and still
-                // takes a paste over it.
-                child: _veiledField(t, 'share-join-invite', _joinInvite,
-                    shown: _shown || _joinInvite.text.isEmpty,
-                    hint: l10n.shareLinkPaste,
-                    onSubmitted: _join),
-              ),
-              const SizedBox(width: 8),
-              _showButton(t),
-            ],
-          ),
+          _eyedField(t, 'share-join-invite', _joinInvite,
+              shown: _shown || _joinInvite.text.isEmpty,
+              eyeId: 'share-show',
+              onEye: () => _toggleShown(),
+              hint: l10n.shareLinkPaste,
+              onSubmitted: _join),
           labelColumn: _labelColumn,
         ),
         // What came of the link, under the link.
@@ -1904,16 +1918,12 @@ class _ShareDialogState extends State<_ShareDialog> {
 
   /// A sentence about what is in the way, with the one thing to press about
   /// it at its end.
-  Widget _actionLine(LumitTheme t, String text, Widget? action,
-          {bool wrong = true}) =>
-      Padding(
+  Widget _actionLine(LumitTheme t, String text, Widget? action) => Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Row(
           children: [
             Expanded(
-              child: Text(text,
-                  style: t.small.copyWith(
-                      color: wrong ? t.warning : t.textSecondary)),
+              child: Text(text, style: t.small.copyWith(color: t.warning)),
             ),
             if (action != null) ...[const SizedBox(width: 8), action],
           ],
@@ -1948,69 +1958,121 @@ class _ShareDialogState extends State<_ShareDialog> {
     if (relay == BridgeShareRelayed.unreachable) {
       return _line(t, l10n.shareRelayDown, warning: true);
     }
-    return _line(
-        t,
-        share.reach is BridgeShareReach_Off
-            ? l10n.shareOpenLocalOff
-            : l10n.shareOpenLocal,
-        warning: true);
+    return _line(t, l10n.shareOpenLocalOff, warning: true);
   }
 
   /// While hosting: the link to send, and who it works for.
   List<Widget> _inviteRows(LumitTheme t, ShareState share) => [
-        dialogRow(
-          t,
-          l10n.shareLink,
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              _showButton(t),
-              const SizedBox(width: 8),
-              Builder(
-                builder: (button) => HouseButton(
-                  key: const ValueKey('share-send-friend'),
-                  small: true,
-                  onPressed: () => unawaited(_pickFriend(button)),
-                  child: Text(l10n.shareSendToFriend, style: t.small),
-                ),
-              ),
-              const SizedBox(width: 8),
-              HouseButton(
-                key: const ValueKey('share-copy'),
-                small: true,
-                primary: true,
-                onPressed: _copy,
-                child: Text(l10n.shareCopyLink),
-              ),
-            ],
-          ),
-          labelColumn: _labelColumn,
-        ),
-        // On a line of its own: a link is far longer than a row's control.
-        _linkWell(t, 'share-invite', _link ?? ''),
-        if (_sameInvite) _line(t, l10n.shareSameInvite),
-        if (_keptPassword) _line(t, l10n.sharePasswordSet),
+        _linkRow(t,
+            look: false,
+            label: l10n.shareLink,
+            link: _link ?? '',
+            lead: share.others.isEmpty,
+            after: _keptPassword ? [_lock(t, l10n.sharePasswordSet)] : const []),
         _reachLine(t, share),
         _advancedFold(t),
         if (_advanced) ...[
           const SizedBox(height: 4),
-          dialogRow(
-            t,
-            l10n.shareAddress,
-            _field(t, 'share-address', _address),
-            labelColumn: _labelColumn,
+          LumitTooltip(
+            message: l10n.shareAddressHint,
+            child: dialogRow(
+              t,
+              l10n.shareAddress,
+              _field(t, 'share-address', _address),
+              labelColumn: _labelColumn,
+            ),
           ),
-          _line(t, l10n.shareAddressHint),
           ..._footageRows(t),
         ],
         const SizedBox(height: dialogGroupGap),
       ];
 
+  /// The lock on an invite that wants a password as well, which says so on
+  /// hover.
+  Widget _lock(LumitTheme t, String says) => Padding(
+        padding: const EdgeInsetsDirectional.only(start: 6),
+        child: LumitTooltip(
+          key: const ValueKey('share-invite-locked'),
+          message: says,
+          child: lumitIcon(LumitIcon.lock, size: 12, color: t.textSecondary),
+        ),
+      );
+
+  /// One invite on one row: its name, what stands before it, the well, what
+  /// stands after it, and the way to show it, send it and copy it. Copy is
+  /// the filled button with [lead]: the thing to do while nobody else is here.
+  /// A right click has all of it.
+  Widget _linkRow(LumitTheme t,
+      {required bool look,
+      required String label,
+      required String link,
+      bool lead = false,
+      List<Widget> before = const [],
+      List<Widget> after = const []}) {
+    final shown = look ? _shownLook : _shown;
+    final id = look ? 'share-invite-look' : 'share-invite';
+    return Builder(
+      builder: (row) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onSecondaryTapDown: (press) =>
+            reviewRowMenu(row, press.globalPosition, [
+          ('link-copy', l10n.shareCopyLink, () => _copy(look: look)),
+          ('link-friend', l10n.shareSendToFriend,
+              () => unawaited(_pickFriend(row, look: look))),
+          null,
+          (
+            'link-show',
+            shown ? l10n.shareHideLink : l10n.shareShowLink,
+            () => _toggleShown(look: look),
+          ),
+        ]),
+        child: dialogRow(
+          t,
+          label,
+          Row(
+            children: [
+              ...before,
+              Expanded(
+                child: KeyedSubtree(
+                  key: ValueKey<String>('$id-veiled'),
+                  child: _linkField(t, id, link, shown: shown),
+                ),
+              ),
+              ...after,
+              const SizedBox(width: 4),
+              _eye(t, look ? 'share-show-look' : 'share-show', shown,
+                  () => _toggleShown(look: look)),
+              Builder(
+                builder: (button) => _glyphButton(
+                  t,
+                  look ? 'share-send-friend-look' : 'share-send-friend',
+                  LumitIcons.comment,
+                  l10n.shareSendToFriend,
+                  () => unawaited(_pickFriend(button, look: look)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              HouseButton(
+                key: ValueKey<String>(look ? 'share-copy-look' : 'share-copy'),
+                small: true,
+                primary: lead,
+                onPressed: () => _copy(look: look),
+                child: Text(l10n.shareCopyLink, style: lead ? null : t.small),
+              ),
+            ],
+          ),
+          labelColumn: _labelColumn,
+        ),
+      ),
+    );
+  }
+
   /// While a guest: what wants doing about a host out of reach, and about
   /// conflicts a merge left.
   List<Widget> _guestRows(LumitTheme t, ShareState share) => [
         if (share.away) ...[
-          Text(l10n.shareAway, style: t.small.copyWith(color: t.warning)),
+          Text(l10n.shareHostUnreachable,
+              style: t.small.copyWith(color: t.warning)),
           const SizedBox(height: 6),
           ..._reinviteRows(t),
           if (_error case final error?) _line(t, error, warning: true),
@@ -2036,7 +2098,6 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// is opened in another run of Lumit.
   Widget _droppedRow(LumitTheme t, ShareState share) {
     final copies = share.returnCopies;
-    final why = copies.indexWhere((copy) => copy.refused > 0);
     return Column(
       key: const ValueKey('share-dropped'),
       mainAxisSize: MainAxisSize.min,
@@ -2053,7 +2114,6 @@ class _ShareDialogState extends State<_ShareDialog> {
                 what: copy.dropped,
                 copy: copy,
                 index: index,
-                why: index == why,
                 several: copies.length > 1),
       ],
     );
@@ -2064,14 +2124,13 @@ class _ShareDialogState extends State<_ShareDialog> {
   /// project from just before it ([copy]). It wears the mark the window's
   /// first line wears in trouble, since a dot there is a person. With
   /// nothing dropped it is only the way back, which the engine keeps when
-  /// conflicts were held too. [why] says once why changes are dropped, and
-  /// with [several] the copies are told apart by when each was written.
+  /// conflicts were held too. With [several] the copies are told apart by
+  /// when each was written.
   Widget _returnRow(LumitTheme t,
       {required int refused,
       required List<BridgeShareDropped> what,
       BridgeShareReturnCopy? copy,
       int index = 0,
-      bool why = true,
       bool several = false}) {
     final quiet = t.small.copyWith(color: t.textMuted);
     final lost = refused > 0;
@@ -2101,11 +2160,6 @@ class _ShareDialogState extends State<_ShareDialog> {
                         : l10n.shareReturnCopyKept(1),
                     style: lost ? t.body.copyWith(color: t.warning) : t.body,
                     overflow: TextOverflow.ellipsis),
-                if (lost && why)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 1, bottom: 2),
-                    child: Text(l10n.shareDroppedWhy, style: quiet),
-                  ),
                 // Each as the step it was, then what it was to.
                 for (final (at, one) in what.indexed)
                   Text.rich(
@@ -2173,54 +2227,56 @@ class _ShareDialogState extends State<_ShareDialog> {
   }
 
   /// A small glyph to press at the end of a row, with what it does on hover.
-  Widget _glyphButton(LumitTheme t, String id, String mark, String says,
-          VoidCallback onTap,
-          {Color? colour}) =>
+  /// [mark] is one of the set's, or [icon] one of the panels'.
+  Widget _glyphButton(LumitTheme t, String id, String? mark, String says,
+          VoidCallback? onTap,
+          {Color? colour, LumitIcon? icon}) =>
       LumitTooltip(
         message: says,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
+        child: HoverMark(
+          builder: (context, lit) => GestureDetector(
             key: ValueKey<String>(id),
             behavior: HitTestBehavior.opaque,
             onTap: onTap,
             child: SizedBox(
-              width: dialogCloseGlyph + 10,
+              width: _glyphTarget,
               height: _listRow - 2,
-              child: Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: glyph.LumitIcon(
-                  mark,
-                  size: dialogCloseGlyph,
-                  colour: colour ?? t.textMuted,
-                  semanticLabel: says,
-                ),
+              child: Center(
+                child: icon != null
+                    ? lumitIcon(icon,
+                        size: 13,
+                        color: Color.lerp(
+                            colour ?? t.textMuted, t.textPrimary, lit)!)
+                    : glyph.LumitIcon(
+                        mark!,
+                        size: dialogCloseGlyph,
+                        colour:
+                            Color.lerp(colour ?? t.textMuted, t.textPrimary, lit),
+                        semanticLabel: says,
+                      ),
               ),
             ),
           ),
         ),
       );
 
-  /// Where someone away pastes a new invite to look by. `show` is off where
-  /// the window already has the button that unveils it.
-  List<Widget> _reinviteRows(LumitTheme t, {bool show = true}) => [
+  /// Where someone away pastes a new invite to look by.
+  List<Widget> _reinviteRows(LumitTheme t) => [
         dialogRow(
           t,
           l10n.shareNewInvite,
           Row(
             children: [
+              // A pasted invite is a link like the one joined by, and is
+              // hidden the same way.
               Expanded(
-                // A pasted invite is a link like the one joined by, and is
-                // hidden the same way.
-                child: _veiledField(t, 'share-reinvite', _newInvite,
+                child: _eyedField(t, 'share-reinvite', _newInvite,
                     shown: _shown || _newInvite.text.isEmpty,
+                    eyeId: 'share-show',
+                    onEye: () => _toggleShown(),
                     onSubmitted: _reinvite),
               ),
               const SizedBox(width: 8),
-              if (show) ...[
-                _showButton(t),
-                const SizedBox(width: 8),
-              ],
               HouseButton(
                 key: const ValueKey('share-reconnect'),
                 small: true,
@@ -2286,7 +2342,7 @@ class _ShareDialogState extends State<_ShareDialog> {
           ),
           const SizedBox(width: _leadGap),
           Expanded(
-            child: Text(l10n.shareOnlineLine,
+            child: Text(l10n.shareStatusOnline,
                 key: const ValueKey('share-online-line'),
                 style: t.small.copyWith(color: t.textSecondary),
                 overflow: TextOverflow.ellipsis),
@@ -2308,66 +2364,30 @@ class _ShareDialogState extends State<_ShareDialog> {
                 key: const ValueKey('share-online-in-step'),
                 style: t.small.copyWith(color: t.textSecondary)),
           ] else
-            Text(trouble.words,
-                key: const ValueKey('share-online-trouble'),
-                style: t.small.copyWith(
-                    color: trouble.wrong ? t.warning : t.textSecondary)),
+            // What is behind the word is there for whoever stops on it.
+            LumitTooltip(
+              message: trouble.line,
+              maxWidth: 320,
+              child: Text(trouble.words,
+                  key: const ValueKey('share-online-trouble'),
+                  style: t.small.copyWith(
+                      color: trouble.wrong ? t.warning : t.textSecondary)),
+            ),
         ],
       ),
-      // What is in the way, under the word for it: quiet, never the word
-      // again, and with the one thing to do about it at its end.
+      // The one thing to do about what is in the way, under the word for it.
       if (trouble != null && !share.forwarding)
-        _actionLine(
-          t,
-          trouble.line,
-          switch (share.versions) {
-            // Asked again here, since it cannot be taken back. Not on a
-            // machine that can only look: the server would refuse it.
-            BridgeShareVersions_Movable() when !hosting => null,
-            BridgeShareVersions_Movable(:final version) => HouseButton(
-                key: const ValueKey('share-forward'),
-                small: true,
-                onPressed: () async {
-                  if (await askForward(context, version) && mounted) {
-                    unawaited(widget.app.moveForward());
-                  }
-                },
-                child: Text(l10n.shareForwardYes, style: t.small),
-              ),
-            BridgeShareVersions_Update() => _updateButton(t),
-            BridgeShareVersions_HostFirst() => null,
-            null
-                when !share.writable &&
-                    hosting &&
-                    !(share.online?.tooLarge ?? false) =>
-              HouseButton(
-                key: const ValueKey('share-online-pro'),
-                small: true,
-                onPressed: () => unawaited(showProWindow(context)),
-                child: Text(l10n.shareCloudSee, style: t.small),
-              ),
-            // Only the host makes a new invite, so only the others can
-            // need one, and seldom: nothing is wrong with an invite
-            // because a line is down.
-            null when lost && !_reinviteOpen && !share.replaced => MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  key: const ValueKey('share-have-invite'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => setState(() => _reinviteOpen = true),
-                  child: Text(l10n.shareHaveInvite,
-                      style: t.small.copyWith(color: t.textMuted)),
-                ),
-              ),
-            null => null,
-          },
-          wrong: false,
-        ),
+        if (_troubleAction(t, share, hosting, lost) case final action?)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Align(
+                alignment: AlignmentDirectional.centerEnd, child: action),
+          ),
       // Where the new invite goes: asked for, or needed at once because
       // the old one was replaced.
       if (lost && (_reinviteOpen || share.replaced)) ...[
         const SizedBox(height: 6),
-        ..._reinviteRows(t, show: false),
+        ..._reinviteRows(t),
       ],
       if (_error case final error?) _line(t, error, warning: true),
       const SizedBox(height: 4),
@@ -2377,7 +2397,7 @@ class _ShareDialogState extends State<_ShareDialog> {
       // Neither is offered once the host has replaced them: what this copy
       // holds opens nothing.
       if (!looking && !share.replaced)
-        ..._onlineLink(t, share,
+        _onlineLink(t, share,
             look: false,
             label: lookLink.isEmpty ? l10n.shareLink : l10n.shareLinkEdit,
             link: link,
@@ -2385,7 +2405,7 @@ class _ShareDialogState extends State<_ShareDialog> {
             half: lookOn && lookLink.isNotEmpty,
             lockRoom: _linkLocked),
       if (lookLink.isNotEmpty && !share.replaced)
-        ..._onlineLink(t, share,
+        _onlineLink(t, share,
             look: true,
             label: l10n.shareLinkLook,
             link: lookLink,
@@ -2393,7 +2413,6 @@ class _ShareDialogState extends State<_ShareDialog> {
             on: looking || lookOn,
             turns: hosting,
             lockRoom: _linkLocked && !looking),
-      if (_newLink) _line(t, l10n.shareOnlineNewLink),
       if (share.held > 0) ...[
         const SizedBox(height: 6),
         _conflictsRow(t, share),
@@ -2413,22 +2432,63 @@ class _ShareDialogState extends State<_ShareDialog> {
     ];
   }
 
-  /// One invite of a project kept online on one line, veiled as a pasted
-  /// one is: the one that edits, or with [look] the one that can only look.
-  /// Its whole length is only drawn when it is asked for.
+  /// What can be done about what is in the way of a project kept online, or
+  /// null when it is only to be waited out.
+  Widget? _troubleAction(
+          LumitTheme t, ShareState share, bool hosting, bool lost) =>
+      switch (share.versions) {
+        // Asked again here, since it cannot be taken back. Not on a machine
+        // that can only look: the server would refuse it.
+        BridgeShareVersions_Movable() when !hosting => null,
+        BridgeShareVersions_Movable(:final version) => HouseButton(
+            key: const ValueKey('share-forward'),
+            small: true,
+            onPressed: () async {
+              if (await askForward(context, version) && mounted) {
+                unawaited(widget.app.moveForward());
+              }
+            },
+            child: Text(l10n.shareForwardYes, style: t.small),
+          ),
+        BridgeShareVersions_Update() => _updateButton(t),
+        BridgeShareVersions_HostFirst() => null,
+        null
+            when !share.writable &&
+                hosting &&
+                !(share.online?.tooLarge ?? false) =>
+          HouseButton(
+            key: const ValueKey('share-online-pro'),
+            small: true,
+            onPressed: () => unawaited(showProWindow(context)),
+            child: Text(l10n.shareCloudSee, style: t.small),
+          ),
+        // Only the host makes a new invite, so only the others can need one,
+        // and seldom: nothing is wrong with an invite because a line is down.
+        null when lost && !_reinviteOpen && !share.replaced => HouseButton(
+            key: const ValueKey('share-have-invite'),
+            small: true,
+            frameless: true,
+            onPressed: () => setState(() => _reinviteOpen = true),
+            child: Text(l10n.shareHaveInvite,
+                style: t.small.copyWith(color: t.textMuted)),
+          ),
+        null => null,
+      };
+
+  /// One invite of a project kept online on one row: the one that edits, or
+  /// with [look] the one that can only look.
   ///
-  /// With [lockRoom] a password is set, and the row says how it stands to
-  /// it: a lock for the invite that needs it as well ([locked]), and a tag
-  /// for the one that needs none, which nobody should have to read off a
-  /// missing lock.
+  /// With [lockRoom] a password is set, and the row says how it stands to it:
+  /// a lock for the invite that needs it as well ([locked]), and a tag for the
+  /// one that needs none, which nobody should have to read off a missing lock.
   ///
-  /// The invite that can only look is off until the host turns it on, and
-  /// [on] says which it is. Off, it opens nothing, so there is no link to
-  /// show or copy. With [turns] this machine is the host's and has the
-  /// switch. Everyone else reads which it is. While it is on, the invite
-  /// that edits shows the project without its password, and its lock is on
-  /// changing alone ([half]), which a tag beside the lock says.
-  List<Widget> _onlineLink(LumitTheme t, ShareState share,
+  /// The invite that can only look is off until the host turns it on, and [on]
+  /// says which it is. Off, it opens nothing, so there is no link to show or
+  /// copy. With [turns] this machine is the host's and has the switch.
+  /// Everyone else reads which it is. While it is on, the invite that edits
+  /// shows the project without its password, and its lock is on changing alone
+  /// ([half]), which a tag beside the lock says.
+  Widget _onlineLink(LumitTheme t, ShareState share,
       {required bool look,
       required String label,
       required String link,
@@ -2437,106 +2497,38 @@ class _ShareDialogState extends State<_ShareDialog> {
       bool locked = false,
       bool half = false,
       bool lockRoom = false}) {
-    final shown = look ? _shownLook : _shown;
-    final id = look ? 'share-invite-look' : 'share-invite';
-    // Copying the invite that edits is the thing to do while nobody else
-    // is here, and an ordinary button once someone is.
-    final lead = !look && share.others.isEmpty;
-    // A password is set and this invite needs none.
-    final open = lockRoom && !locked;
     final turn = HouseToggle(
         key: const ValueKey('share-look-on'), value: on, onChanged: _turnLook);
     if (!on) {
-      return [
-        dialogRow(
-          t,
-          label,
-          Row(children: [turns ? turn : _tag(t, l10n.off)]),
-          labelColumn: _labelColumn,
-        ),
-      ];
-    }
-    return [
-      dialogRow(
+      return dialogRow(
         t,
         label,
-        Row(
-          children: [
-            if (turns) ...[turn, const SizedBox(width: 8)],
-            Expanded(
-              // An invite that needs no password says so where its veil
-              // would be: with the switch on the row there is not room for
-              // both, and the buttons already say there is a link.
-              child: shown || open
-                  ? Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: open ? _tag(t, l10n.shareLinkNoPassword) : null)
-                  : Container(
-                      key: ValueKey<String>('$id-veiled'),
-                      height: dialogControlHeight,
-                      decoration: BoxDecoration(
-                        color: t.surface0,
-                        borderRadius:
-                            BorderRadius.circular(t.tokens.controlRadius),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 7),
-                          lumitIcon(LumitIcon.eyeClosed,
-                              size: 12, color: t.textMuted),
-                          Expanded(
-                            child: _Veil(
-                              shown: false,
-                              inset: const EdgeInsets.fromLTRB(6, 4, 8, 4),
-                              builder: (_) => const SizedBox.expand(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-            if (locked)
-              Padding(
-                padding: const EdgeInsetsDirectional.only(start: 6),
-                child: LumitTooltip(
-                  key: const ValueKey('share-invite-locked'),
-                  message:
-                      half ? l10n.sharePasswordSetEdit : l10n.sharePasswordSet,
-                  child:
-                      lumitIcon(LumitIcon.lock, size: 12, color: t.textSecondary),
-                ),
-              ),
-            if (locked && half)
-              Padding(
-                padding: const EdgeInsetsDirectional.only(start: 4),
-                child: _tag(t, l10n.shareLinkLockEdit),
-              ),
-            const SizedBox(width: 8),
-            _showButton(t, look: look),
-            const SizedBox(width: 8),
-            Builder(
-              builder: (button) => HouseButton(
-                key: ValueKey<String>(
-                    look ? 'share-send-friend-look' : 'share-send-friend'),
-                small: true,
-                onPressed: () => unawaited(_pickFriend(button, look: look)),
-                child: Text(l10n.shareSendToFriend, style: t.small),
-              ),
-            ),
-            const SizedBox(width: 8),
-            HouseButton(
-              key: ValueKey<String>(look ? 'share-copy-look' : 'share-copy'),
-              small: true,
-              primary: lead,
-              onPressed: () => _copy(look: look),
-              child: Text(l10n.shareCopyLink, style: lead ? null : t.small),
-            ),
-          ],
-        ),
+        Row(children: [turns ? turn : _tag(t, l10n.off)]),
         labelColumn: _labelColumn,
-      ),
-      if (shown) _linkWell(t, id, link, shown: shown),
-    ];
+      );
+    }
+    return _linkRow(
+      t,
+      look: look,
+      label: label,
+      link: link,
+      lead: !look && share.others.isEmpty,
+      before: [if (turns) ...[turn, const SizedBox(width: 8)]],
+      after: [
+        if (locked)
+          _lock(t, half ? l10n.sharePasswordSetEdit : l10n.sharePasswordSet),
+        if (locked && half)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 4),
+            child: _tag(t, l10n.shareLinkLockEdit),
+          ),
+        if (lockRoom && !locked)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 6),
+            child: _tag(t, l10n.shareLinkNoPassword),
+          ),
+      ],
+    );
   }
 
   /// Who changed what and the notes people left, newest first: what a
@@ -2559,7 +2551,7 @@ class _ShareDialogState extends State<_ShareDialog> {
           HouseButton(
             key: const ValueKey('share-note-send'),
             small: true,
-            onPressed: _sendNote,
+            onPressed: _note.text.trim().isEmpty ? null : _sendNote,
             child: Text(l10n.shareNoteSend, style: t.small),
           ),
         ],
@@ -2734,52 +2726,74 @@ class _ShareDialogState extends State<_ShareDialog> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           );
-    return Padding(
-      key: ValueKey<String>('share-note-${note.id}'),
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _whoRow(t, share,
-              name: note.name,
-              mine: note.mine,
-              at: note.at,
-              waiting: note.waiting,
-              // Its writer may take it down, and the host anyone's.
-              action: note.mine || _hosting(share)
-                  ? _glyphButton(
-                      t,
-                      'share-note-down-${note.id}',
-                      LumitIcons.close,
-                      l10n.shareNoteTakeDown,
-                      () => unawaited(_takeDown(note)))
-                  : null),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: personDiscSize + 8, top: 1),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(note.text,
-                    style: t.small.copyWith(
-                        color: note.mine ? t.textSecondary : t.textPrimary)),
-                if (place != null && comp?.comp == null)
-                  place
-                else if (place != null)
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      key: ValueKey<String>('share-note-go-${note.id}'),
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _goToNote(note),
-                      child: place,
-                    ),
-                  ),
-              ],
-            ),
+    final mayTakeDown = note.mine || _hosting(share);
+    return HoverMark(
+      cursor: MouseCursor.defer,
+      builder: (row, lit) => GestureDetector(
+        key: ValueKey<String>('share-note-${note.id}'),
+        behavior: HitTestBehavior.translucent,
+        onSecondaryTapDown: (press) =>
+            reviewRowMenu(row, press.globalPosition, [
+          if (comp?.comp != null)
+            ('note-go', l10n.shareNoteGo, () => _goToNote(note)),
+          ('note-copy', l10n.copyText, () => unawaited(
+              Clipboard.setData(ClipboardData(text: note.text)))),
+          if (mayTakeDown) ...[
+            null,
+            ('note-down', l10n.shareNoteTakeDown,
+                () => unawaited(_takeDown(note))),
+          ],
+        ]),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _whoRow(t, share,
+                  name: note.name,
+                  mine: note.mine,
+                  at: note.at,
+                  waiting: note.waiting,
+                  // Its writer may take it down, and the host anyone's.
+                  action: mayTakeDown
+                      ? Visibility.maintain(
+                          visible: lit > 0,
+                          child: _glyphButton(
+                              t,
+                              'share-note-down-${note.id}',
+                              LumitIcons.close,
+                              l10n.shareNoteTakeDown,
+                              () => unawaited(_takeDown(note))),
+                        )
+                      : null),
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: personDiscSize + 8, top: 1),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(note.text,
+                        style: t.small.copyWith(
+                            color: note.mine ? t.textSecondary : t.textPrimary)),
+                    if (place != null && comp?.comp == null)
+                      place
+                    else if (place != null)
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          key: ValueKey<String>('share-note-go-${note.id}'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _goToNote(note),
+                          child: place,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2793,31 +2807,50 @@ class _ShareDialogState extends State<_ShareDialog> {
       for (final comp in sitting.comps)
         if (comp.name.isNotEmpty) comp,
     ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _whoRow(t, share,
-              name: sitting.name, mine: sitting.mine, at: sitting.ended),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: personDiscSize + 8, top: 1),
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(l10n.shareActivityEdits(sitting.edits), style: quiet),
-                for (final comp in comps.take(3)) ...[
-                  Text('  ·  ', style: quiet),
-                  _compName(t, comp, quiet: sitting.mine),
-                ],
-                if (comps.length > 3)
-                  Text(' ${l10n.shareActivityMore(comps.length - 3)}',
-                      style: quiet),
-              ],
-            ),
+    return Builder(
+      builder: (row) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onSecondaryTapDown: comps.every((comp) => comp.comp == null)
+            ? null
+            : (press) => reviewRowMenu(row, press.globalPosition, [
+                  for (final comp in comps)
+                    if (comp.comp case final open?)
+                      (
+                        'sitting-open-${comp.id}',
+                        l10n.shareOpenComp(comp.name),
+                        () {
+                          _ui.setSelectedComp(open);
+                          widget.onClose();
+                        },
+                      ),
+                ]),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _whoRow(t, share,
+                  name: sitting.name, mine: sitting.mine, at: sitting.ended),
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: personDiscSize + 8, top: 1),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(l10n.shareActivityEdits(sitting.edits), style: quiet),
+                    for (final comp in comps.take(3)) ...[
+                      Text('  ·  ', style: quiet),
+                      _compName(t, comp, quiet: sitting.mine),
+                    ],
+                    if (comps.length > 3)
+                      Text(' ${l10n.shareActivityMore(comps.length - 3)}',
+                          style: quiet),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2989,56 +3022,67 @@ class _ShareDialogState extends State<_ShareDialog> {
     final kind = move.original ? 'original' : 'standin';
     final moving = move.stage == MoveStage.working && move.total > 0;
     final failed = move.stage == MoveStage.failed;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: _listRow - 2,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                    move.original
-                        ? l10n.shareOnlineOriginal(move.name)
-                        : move.name,
-                    style: t.small,
-                    overflow: TextOverflow.ellipsis),
+    return Builder(
+      builder: (row) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onSecondaryTapDown: (press) =>
+            reviewRowMenu(row, press.globalPosition, [
+          if (failed)
+            ('move-retry', l10n.shareOnlineRetry, () => footage.retry(move)),
+          ('move-cancel', l10n.cancel, () => footage.cancel(move)),
+        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: _listRow - 2,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                        move.original
+                            ? l10n.shareOnlineOriginal(move.name)
+                            : move.name,
+                        style: t.small,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
+                  // Which way it is going, so sending and fetching are told
+                  // apart by more than a word.
+                  glyph.LumitIcon(
+                      move.sending ? LumitIcons.export : LumitIcons.import,
+                      size: 12,
+                      colour: failed ? t.warning : t.textMuted),
+                  const SizedBox(width: 4),
+                  // Figures of one width, so the words keep still as it counts.
+                  Text(state,
+                      style: t.small.copyWith(
+                          color: failed ? t.warning : t.textMuted,
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                  if (failed)
+                    _glyphButton(
+                        t,
+                        'share-move-retry-${move.key}-$kind',
+                        LumitIcons.reset,
+                        l10n.shareOnlineRetry,
+                        () => footage.retry(move)),
+                  _glyphButton(t, 'share-move-cancel-${move.key}-$kind',
+                      LumitIcons.close, l10n.cancel, () => footage.cancel(move)),
+                ],
               ),
-              const SizedBox(width: 8),
-              // Which way it is going, so sending and fetching are told
-              // apart by more than a word.
-              glyph.LumitIcon(
-                  move.sending ? LumitIcons.export : LumitIcons.import,
-                  size: 12,
-                  colour: failed ? t.warning : t.textMuted),
-              const SizedBox(width: 4),
-              // Figures of one width, so the words keep still as it counts.
-              Text(state,
-                  style: t.small.copyWith(
-                      color: failed ? t.warning : t.textMuted,
-                      fontFeatures: const [FontFeature.tabularFigures()])),
-              if (failed)
-                _glyphButton(
-                    t,
-                    'share-move-retry-${move.key}-$kind',
-                    LumitIcons.reset,
-                    l10n.shareOnlineRetry,
-                    () => footage.retry(move)),
-              _glyphButton(t, 'share-move-cancel-${move.key}-$kind',
-                  LumitIcons.close, l10n.cancel, () => footage.cancel(move)),
-            ],
-          ),
+            ),
+            // Always its two pixels, so a file starting to move shifts nothing.
+            SizedBox(
+              height: 2,
+              child: moving
+                  ? HouseProgressBar(
+                      fraction: move.done / move.total, height: 2, fill: proSweep)
+                  : null,
+            ),
+          ],
         ),
-        // Always its two pixels, so a file starting to move shifts nothing.
-        SizedBox(
-          height: 2,
-          child: moving
-              ? HouseProgressBar(
-                  fraction: move.done / move.total, height: 2, fill: proSweep)
-              : null,
-        ),
-      ],
+      ),
     );
   }
 
@@ -3087,6 +3131,8 @@ class _ShareDialogState extends State<_ShareDialog> {
               onRemove: !hosting || person.me || (online && share.away)
                   ? null
                   : () => unawaited(_askRemove(person)),
+              onMenu: (row, at) => _personMenu(row, at, share, person,
+                  mayRemove: hosting && !(online && share.away)),
             ),
           if (share.others.isEmpty)
             SizedBox(
@@ -3101,6 +3147,42 @@ class _ShareDialogState extends State<_ShareDialog> {
         ],
       ),
     ]);
+  }
+
+  /// All there is to do about [person]: their composition, following them, and
+  /// for the host taking them out.
+  void _personMenu(BuildContext row, Offset at, ShareState share,
+      BridgeSharePerson person,
+      {required bool mayRemove}) {
+    final stale = share.outOfStep && !person.me;
+    final followed = _ui.following.value == person.id;
+    final comp = stale || person.me ? null : person.comp;
+    final name = _compOf(person);
+    final items = <ReviewMenuItem?>[
+      if (comp != null && name != null)
+        ('person-open', l10n.shareOpenComp(name), () {
+          _ui.setSelectedComp(comp);
+          widget.onClose();
+        }),
+      if (!person.me && !stale)
+        (
+          'person-follow',
+          followed ? l10n.shareFollowStop : l10n.shareFollow(person.name),
+          () {
+            _ui.follow(followed ? null : person.id);
+            if (!followed) widget.onClose();
+          },
+        ),
+      if (mayRemove && !person.me) ...[
+        null,
+        (
+          'person-remove',
+          l10n.shareRemove,
+          _busy ? null : () => unawaited(_askRemove(person)),
+        ),
+      ],
+    ];
+    if (items.isNotEmpty) reviewRowMenu(row, at, items);
   }
 
   /// Whether [person] is the host, which is all the "host" tag on a row
@@ -3129,7 +3211,7 @@ class _ShareDialogState extends State<_ShareDialog> {
 Widget _tag(LumitTheme t, String word) => Text(
       t.kickerCase(word),
       style: t.mono.copyWith(
-          fontSize: dialogMonoSize, letterSpacing: 0.6, color: t.textDisabled),
+          fontSize: dialogMonoSize, letterSpacing: 0.6, color: t.textMuted),
     );
 
 /// One person on the list: their colour and name, what they are to the
@@ -3155,6 +3237,9 @@ class _PersonRow extends StatefulWidget {
   final String? comp;
   final VoidCallback? onOpenComp, onFollow, onRemove;
 
+  /// Their own menu, from this row at a place on the screen.
+  final void Function(BuildContext row, Offset at) onMenu;
+
   const _PersonRow({
     super.key,
     required this.person,
@@ -3169,6 +3254,7 @@ class _PersonRow extends StatefulWidget {
     required this.removing,
     required this.busy,
     required this.onRemove,
+    required this.onMenu,
   });
 
   @override
@@ -3200,120 +3286,125 @@ class _PersonRowState extends State<_PersonRow> {
       child: MouseRegion(
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
-        child: SizedBox(
-          height: _listRow,
-          child: Row(
-            children: [
-              PersonDisc(
-                  colour: person.colour,
-                  name: person.name,
-                  letters: widget.letters,
-                  stale: stale),
-              const SizedBox(width: 8),
-              // Who, with what they are set apart from it.
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(person.name,
-                          style: stale
-                              ? t.body.copyWith(color: t.textDisabled)
-                              : t.body,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    if (person.me) ...[
-                      const SizedBox(width: 6),
-                      _tag(t, l10n.shareYou),
-                    ],
-                    if (widget.host) ...[
-                      const SizedBox(width: 8),
-                      _tag(t, l10n.shareHostTag),
-                    ],
-                    if (widget.look) ...[
-                      const SizedBox(width: 8),
-                      _tag(t, l10n.shareLookTag),
-                    ],
-                    // Straight after the name it is about. Anywhere nearer
-                    // the composition it reads as removing that. There for
-                    // the keyboard always, and for the eye only when the
-                    // row is pointed at.
-                    if (remove != null) ...[
-                      const SizedBox(width: 12),
-                      IgnorePointer(
-                        ignoring: !pointed,
-                        child: Opacity(
-                          opacity: pointed ? 1 : 0,
-                          child: HouseButton(
-                            key: ValueKey<String>('share-remove-${person.id}'),
-                            frameless: true,
-                            small: true,
-                            padding: EdgeInsets.zero,
-                            onPressed: widget.busy ? null : remove,
-                            child: Text(
-                                widget.removing
-                                    ? l10n.shareRemoving
-                                    : l10n.shareRemove,
-                                style: t.small.copyWith(color: t.textMuted)),
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapDown: (press) =>
+              widget.onMenu(context, press.globalPosition),
+          child: SizedBox(
+            height: _listRow,
+            child: Row(
+              children: [
+                PersonDisc(
+                    colour: person.colour,
+                    name: person.name,
+                    letters: widget.letters,
+                    stale: stale),
+                const SizedBox(width: 8),
+                // Who, with what they are set apart from it.
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(person.name,
+                            style: stale
+                                ? t.body.copyWith(color: t.textDisabled)
+                                : t.body,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      if (person.me) ...[
+                        const SizedBox(width: 6),
+                        _tag(t, l10n.shareYou),
+                      ],
+                      if (widget.host) ...[
+                        const SizedBox(width: 8),
+                        _tag(t, l10n.shareHostTag),
+                      ],
+                      if (widget.look) ...[
+                        const SizedBox(width: 8),
+                        _tag(t, l10n.shareLookTag),
+                      ],
+                      // Straight after the name it is about. Anywhere nearer
+                      // the composition it reads as removing that. There for
+                      // the keyboard always, and for the eye only when the
+                      // row is pointed at.
+                      if (remove != null) ...[
+                        const SizedBox(width: 12),
+                        IgnorePointer(
+                          ignoring: !pointed,
+                          child: Opacity(
+                            opacity: pointed ? 1 : 0,
+                            child: HouseButton(
+                              key: ValueKey<String>('share-remove-${person.id}'),
+                              frameless: true,
+                              small: true,
+                              padding: EdgeInsets.zero,
+                              onPressed: widget.busy ? null : remove,
+                              child: Text(
+                                  widget.removing
+                                      ? l10n.shareRemoving
+                                      : l10n.shareRemove,
+                                  style: t.small.copyWith(color: t.textMuted)),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              // Where, which opens it.
-              if (place != null) ...[
-                const SizedBox(width: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 120),
-                  child: switch (widget.onOpenComp) {
-                    null => place,
-                    final open => MouseRegion(
-                        cursor: SystemMouseCursors.click,
-                        child: GestureDetector(
-                          key: ValueKey<String>('share-where-${person.id}'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: open,
-                          child: place,
-                        ),
-                      ),
-                  },
-                ),
-              ],
-              // Following: quiet until the row is pointed at, and theirs
-              // while it is on.
-              SizedBox(
-                width: 22,
-                child: follow == null
-                    ? null
-                    : LumitTooltip(
-                        message: widget.followed
-                            ? l10n.shareFollowStop
-                            : l10n.shareFollow(person.name),
-                        child: MouseRegion(
+                // Where, which opens it.
+                if (place != null) ...[
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    child: switch (widget.onOpenComp) {
+                      null => place,
+                      final open => MouseRegion(
                           cursor: SystemMouseCursors.click,
                           child: GestureDetector(
-                            key: ValueKey<String>('share-follow-${person.id}'),
+                            key: ValueKey<String>('share-where-${person.id}'),
                             behavior: HitTestBehavior.opaque,
-                            onTap: follow,
-                            child: SizedBox(
-                              height: _listRow,
-                              child: Align(
-                                alignment: AlignmentDirectional.centerEnd,
-                                child: lumitIcon(
-                                  LumitIcon.eye,
-                                  size: 14,
-                                  color: widget.followed || _hover
-                                      ? colour
-                                      : t.textSecondary.withValues(alpha: 0.4),
+                            onTap: open,
+                            child: place,
+                          ),
+                        ),
+                    },
+                  ),
+                ],
+                // Following: quiet until the row is pointed at, and theirs
+                // while it is on.
+                SizedBox(
+                  width: 22,
+                  child: follow == null
+                      ? null
+                      : LumitTooltip(
+                          message: widget.followed
+                              ? l10n.shareFollowStop
+                              : l10n.shareFollow(person.name),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              key: ValueKey<String>('share-follow-${person.id}'),
+                              behavior: HitTestBehavior.opaque,
+                              onTap: follow,
+                              child: SizedBox(
+                                height: _listRow,
+                                child: Align(
+                                  alignment: AlignmentDirectional.centerEnd,
+                                  child: lumitIcon(
+                                    LumitIcon.eye,
+                                    size: 14,
+                                    color: widget.followed || _hover
+                                        ? colour
+                                        : t.textSecondary.withValues(alpha: 0.4),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -3460,7 +3551,8 @@ Future<void> showExportAskFrb(BuildContext context, LumitState app,
   app.share.answerExport(ask.job, yes: yes == true);
 }
 
-/// A small question with two answers, the careful one the default.
+/// A small question with two answers, the careful one the default. The filled
+/// button is the last in every window, and here that is the careful one.
 class _Question extends StatelessWidget {
   final String title;
   final String body;
@@ -3481,50 +3573,17 @@ class _Question extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      width: 380,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Text(title, style: t.bodyPrimary),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(body, style: t.small.copyWith(color: t.textMuted)),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: ValueKey<String>('$keyPrefix-no'),
-                  small: true,
-                  primary: true,
-                  autofocus: true,
-                  onPressed: () => onChoose(false),
-                  child: Text(no),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: ValueKey<String>('$keyPrefix-yes'),
-                  small: true,
-                  onPressed: yesLive ? () => onChoose(true) : null,
-                  child: Text(yes, style: t.small),
-                ),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) => QuestionWindow(
+        title: title,
+        body: body,
+        keyPrefix: keyPrefix,
+        onClose: () => onChoose(false),
+        actions: [
+          questionPlain(
+              '$keyPrefix-yes', yes, yesLive ? () => onChoose(true) : null),
+          questionFilled('$keyPrefix-no', no, () => onChoose(false)),
         ],
-      ),
-    );
-  }
+      );
 }
 
 // --- Showing a link -------------------------------------------------------
@@ -3544,17 +3603,14 @@ const Duration _inkLoop = Duration(seconds: 7);
 /// Showing it lets the ink lift away as the thing itself comes up.
 ///
 /// [builder] is told how hidden the thing is, from 0 for shown to 1, and
-/// has to draw nothing of it at 1. [lineHeight] lays the ink in lines that
-/// tall, for something that wraps. [inset] keeps the ink off a field's edge.
+/// has to draw nothing of it at 1. [inset] keeps the ink off a field's edge.
 class _Veil extends StatelessWidget {
   final bool shown;
-  final double? lineHeight;
   final EdgeInsets inset;
   final Widget Function(double hidden) builder;
 
   const _Veil({
     required this.shown,
-    this.lineHeight,
     this.inset = EdgeInsets.zero,
     required this.builder,
   });
@@ -3579,7 +3635,6 @@ class _Veil extends StatelessWidget {
                 padding: inset,
                 child: _Ink(
                   amount: hidden,
-                  lineHeight: lineHeight,
                   colour: theme.theme.textSecondary,
                   // The drift is a loop, so only Full plays it.
                   still: !theme.motion.carries,
@@ -3596,13 +3651,11 @@ class _Veil extends StatelessWidget {
 /// still takes a click and a paste.
 class _Ink extends StatefulWidget {
   final double amount;
-  final double? lineHeight;
   final Color colour;
   final bool still;
 
   const _Ink({
     required this.amount,
-    required this.lineHeight,
     required this.colour,
     required this.still,
   });
@@ -3634,7 +3687,6 @@ class _InkState extends State<_Ink> with SingleTickerProviderStateMixin {
             painter: _InkPainter(
               loop: _loop,
               amount: widget.amount,
-              lineHeight: widget.lineHeight,
               colour: widget.colour,
             ),
           ),
@@ -3645,13 +3697,11 @@ class _InkState extends State<_Ink> with SingleTickerProviderStateMixin {
 class _InkPainter extends CustomPainter {
   final Animation<double> loop;
   final double amount;
-  final double? lineHeight;
   final Color colour;
 
   _InkPainter({
     required this.loop,
     required this.amount,
-    required this.lineHeight,
     required this.colour,
   }) : super(repaint: loop);
 
@@ -3666,31 +3716,24 @@ class _InkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final lines = lineHeight == null
-        ? 1
-        : math.max(1, (size.height / lineHeight!).round());
-    final line = size.height / lines;
     // The ink sits where the letters would, not edge to edge of the line.
-    final band = math.min(line * 0.6, 11.0);
+    final band = math.min(size.height * 0.6, 11.0);
+    final middle = size.height / 2;
     final each = (size.width * band / _inkRoom).round().clamp(8, 1500);
     final phase = loop.value;
     // Three weights of speck, each brightening and dimming in its own time.
     final specks = List.generate(3, (_) => <double>[]);
-    for (var row = 0; row < lines; row++) {
-      final middle = line * (row + 0.5);
-      for (var i = 0; i < each; i++) {
-        final speck = row * 7919 + i;
-        final turn = 2 * math.pi * (phase * (1 + speck % 2) + _unit(speck, 3));
-        // Going, each speck lifts by its own amount and spreads.
-        final going = (1 - amount) * (2 + 6 * _unit(speck, 4));
-        specks[speck % 3]
-          ..add(_unit(speck, 1) * size.width +
-              math.cos(turn) * (_inkDrift + going * 0.5))
-          ..add(middle +
-              (_unit(speck, 2) - 0.5) * band +
-              math.sin(turn) * _inkDrift * 0.6 -
-              going);
-      }
+    for (var speck = 0; speck < each; speck++) {
+      final turn = 2 * math.pi * (phase * (1 + speck % 2) + _unit(speck, 3));
+      // Going, each speck lifts by its own amount and spreads.
+      final going = (1 - amount) * (2 + 6 * _unit(speck, 4));
+      specks[speck % 3]
+        ..add(_unit(speck, 1) * size.width +
+            math.cos(turn) * (_inkDrift + going * 0.5))
+        ..add(middle +
+            (_unit(speck, 2) - 0.5) * band +
+            math.sin(turn) * _inkDrift * 0.6 -
+            going);
     }
     for (final (weight, points) in specks.indexed) {
       final glow = 0.5 + 0.5 * math.sin(2 * math.pi * (phase + weight / 3));
@@ -3705,9 +3748,7 @@ class _InkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_InkPainter old) =>
-      old.amount != amount ||
-      old.lineHeight != lineHeight ||
-      old.colour != colour;
+      old.amount != amount || old.colour != colour;
 }
 
 /// Asked before a hidden link is shown: what it gives away, and to whom.
@@ -3721,56 +3762,22 @@ class _ShowLinkQuestion extends StatelessWidget {
       {required this.online, this.look = false, required this.onChoose});
 
   @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      width: 380,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Text(l10n.shareShowTitle, style: t.bodyPrimary),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-                look
-                    ? l10n.shareShowBodyLook
-                    : online
-                        ? l10n.shareShowBodyOnline
-                        : l10n.shareShowBody,
-                style: t.small.copyWith(color: t.textMuted)),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  key: const ValueKey('share-show-cancel'),
-                  small: true,
-                  primary: true,
-                  autofocus: true,
-                  onPressed: () => onChoose(false),
-                  child: Text(l10n.shareKeepHidden),
-                ),
-                const SizedBox(width: 8),
-                HouseButton(
-                  key: const ValueKey('share-show-confirm'),
-                  small: true,
-                  onPressed: () => onChoose(true),
-                  child: Text(l10n.shareShowConfirm, style: t.small),
-                ),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) => QuestionWindow(
+        title: l10n.shareShowTitle,
+        body: look
+            ? l10n.shareShowBodyLook
+            : online
+                ? l10n.shareShowBodyOnline
+                : l10n.shareShowBody,
+        keyPrefix: 'share-show-ask',
+        onClose: () => onChoose(false),
+        actions: [
+          questionPlain(
+              'share-show-confirm', l10n.shareShowConfirm, () => onChoose(true)),
+          questionFilled(
+              'share-show-cancel', l10n.shareKeepHidden, () => onChoose(false)),
         ],
-      ),
-    );
-  }
+      );
 }
 
 // --- Conflicts ------------------------------------------------------------
@@ -3821,6 +3828,35 @@ class _ConflictsDialogState extends State<_ConflictsDialog> {
     setState(() => _rows = left);
   }
 
+  /// Settle every one the same way.
+  void _chooseAll({required bool mine}) {
+    final share = widget.app.share;
+    var refused = 0;
+    // Settling one moves the rest up a place, so it is always the first.
+    for (var left = share.conflicts().length; left > 0; left--) {
+      refused += share.resolve(0, mine: mine);
+    }
+    if (refused > 0) {
+      widget.app.postNotice(l10n.shareResolveRefused(refused), error: true);
+    }
+    widget.onClose();
+  }
+
+  void _menu(BuildContext row, Offset at, int index) =>
+      reviewRowMenu(row, at, [
+        ('conflict-mine', l10n.shareKeepMine, () => _choose(index, mine: true)),
+        (
+          'conflict-theirs',
+          l10n.shareKeepTheirs,
+          () => _choose(index, mine: false),
+        ),
+        null,
+        ('conflict-all-mine', l10n.shareKeepAllMine,
+            () => _chooseAll(mine: true)),
+        ('conflict-all-theirs', l10n.shareKeepAllTheirs,
+            () => _chooseAll(mine: false)),
+      ]);
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -3834,7 +3870,6 @@ class _ConflictsDialogState extends State<_ConflictsDialog> {
           keyPrefix: 'conflicts',
         ),
         _body([
-          Text(l10n.shareConflictsIntro, style: t.body),
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: _conflictListHeight),
             child: SingleChildScrollView(
@@ -3868,13 +3903,7 @@ class _ConflictsDialogState extends State<_ConflictsDialog> {
               ),
           },
           actions: [
-            HouseButton(
-              key: const ValueKey('conflicts-close'),
-              small: true,
-              primary: true,
-              onPressed: widget.onClose,
-              child: Text(l10n.close),
-            ),
+            questionFilled('conflicts-close', l10n.close, widget.onClose),
           ],
         ),
       ],
@@ -3882,45 +3911,51 @@ class _ConflictsDialogState extends State<_ConflictsDialog> {
   }
 
   /// One conflict: the step, where it was and how much, and the two answers.
-  Widget _row(LumitTheme t, int index, BridgeShareConflict conflict) =>
-      Padding(
-        padding: const EdgeInsets.only(top: 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(engineLabel(conflict.step),
-                      style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
-                  Text(
-                    [
-                      conflict.item,
-                      conflict.layer,
-                      l10n.shareConflictEdits(conflict.edits),
-                    ].nonNulls.join(' · '),
-                    style: t.small.copyWith(color: t.textMuted),
-                    overflow: TextOverflow.ellipsis,
+  Widget _row(LumitTheme t, int index, BridgeShareConflict conflict) => Builder(
+        builder: (row) => GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapDown: (press) =>
+              _menu(row, press.globalPosition, index),
+          child: Padding(
+            padding: EdgeInsets.only(top: index == 0 ? 0 : 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(engineLabel(conflict.step),
+                          style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
+                      Text(
+                        [
+                          conflict.item,
+                          conflict.layer,
+                          l10n.shareConflictEdits(conflict.edits),
+                        ].nonNulls.join(' · '),
+                        style: t.small.copyWith(color: t.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: ValueKey<String>('conflicts-mine-$index'),
+                  small: true,
+                  onPressed: () => _choose(index, mine: true),
+                  child: Text(l10n.shareKeepMine, style: t.small),
+                ),
+                const SizedBox(width: 6),
+                HouseButton(
+                  key: ValueKey<String>('conflicts-theirs-$index'),
+                  small: true,
+                  onPressed: () => _choose(index, mine: false),
+                  child: Text(l10n.shareKeepTheirs, style: t.small),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            HouseButton(
-              key: ValueKey<String>('conflicts-mine-$index'),
-              small: true,
-              onPressed: () => _choose(index, mine: true),
-              child: Text(l10n.shareKeepMine, style: t.small),
-            ),
-            const SizedBox(width: 6),
-            HouseButton(
-              key: ValueKey<String>('conflicts-theirs-$index'),
-              small: true,
-              onPressed: () => _choose(index, mine: false),
-              child: Text(l10n.shareKeepTheirs, style: t.small),
-            ),
-          ],
+          ),
         ),
       );
 }

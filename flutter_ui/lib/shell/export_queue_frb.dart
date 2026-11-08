@@ -47,8 +47,10 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/middle_ellipsis.dart';
 import 'dialog_frame.dart';
 import 'export_dialog_frb.dart';
 import 'export_pick_frb.dart';
@@ -213,7 +215,9 @@ class _ExportQueueState extends State<_ExportQueue> {
         ),
         dialogFooter(
           t,
-          summary: l10n.exportQueueSummary('$waiting', '$done'),
+          summary: _items.isEmpty
+              ? ''
+              : l10n.exportQueueSummary('$waiting', '$done'),
           keyPrefix: 'export-queue',
           actions: [
             HouseButton(
@@ -383,27 +387,35 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   /// One item: what it is, where it goes, how it is getting on, and the mark
   /// that takes it off the list.
-  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => SizedBox(
+  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => GestureDetector(
+      onSecondaryTapDown: (press) => _showMenu(t, item, press.globalPosition),
+      // The row's marks come up with the pointer. A row that is doing nothing
+      // only says what it is.
+      child: HoverMark(
+        cursor: MouseCursor.defer,
+        builder: (context, lit) => SizedBox(
         height: exportQueueRow,
         child: Row(
           key: ValueKey<String>('export-queue-item-${item.id}'),
           children: [
             SizedBox(
               width: 140,
-              child: Text(item.compName,
-                  style: t.body, overflow: TextOverflow.ellipsis),
+              child: FittedText(item.compName, t.body),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
+              child: MiddleEllipsis(
                 _leaf(item.path),
                 style: dialogMono(t),
-                overflow: TextOverflow.ellipsis,
+                tip: item.path,
               ),
             ),
             const SizedBox(width: 10),
-            Flexible(flex: 2, child: _statusFace(t, item)),
+            Expanded(child: _statusFace(t, item)),
             const SizedBox(width: 8),
+            Opacity(
+              opacity: lit > 0 ? 1 : 0,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
             _settingsMark(t, item),
             LumitTooltip(
               message: item.state is BridgeExportQueueState_Running
@@ -438,9 +450,103 @@ class _ExportQueueState extends State<_ExportQueue> {
                 ),
               ),
             ),
+              ]),
+            ),
           ],
         ),
-      );
+      ),
+      ),
+    );
+
+  /// A row's menu: what can be done with it as it stands, Remove last.
+  void _showMenu(LumitTheme t, BridgeExportQueueItem item, Offset at) {
+    final comp = _comps[item.comp.toString()];
+    final running = item.state is BridgeExportQueueState_Running;
+    final waiting = item.state is BridgeExportQueueState_Waiting;
+    final done = item.state is BridgeExportQueueState_Done;
+    final index = _items.indexOf(item);
+    Widget row(String id, String label, VoidCallback? press,
+            void Function(VoidCallback) run) =>
+        MenuRow(
+          key: ValueKey<String>('export-queue-menu-$id'),
+          enabled: press != null,
+          onPressed: () {
+            if (press != null) run(press);
+          },
+          child: Text(label),
+        );
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        void run(VoidCallback act) {
+          close(null);
+          act();
+          _refresh();
+        }
+
+        return [
+          if (done && !kIsWeb)
+            row('open', l10n.tipOpenFolder,
+                () => revealInFolder(path: item.path), run),
+          if (waiting)
+            row(
+                'settings',
+                l10n.exportQueueSettingsEllipsis,
+                comp == null
+                    ? null
+                    : () => showExportDialogFrb(
+                        context: context, comp: comp, queued: item.id),
+                run),
+          // Asks the composition as it is now, so a comp since deleted cannot.
+          if (!running)
+            row('duplicate', l10n.menuDuplicate,
+                comp == null ? null : () => _duplicate(comp, item), run),
+          if (done || item.state is BridgeExportQueueState_Failed)
+            row('again', l10n.exportQueueAgain,
+                comp == null ? null : () => _again(comp, item), run),
+          if (waiting && _items.length > 1) ...[
+            const MenuDivider(),
+            row('top', l10n.moveToTop, index == 0 ? null : () => _move(index, 0),
+                run),
+            row(
+                'bottom',
+                l10n.moveToBottom,
+                index == _items.length - 1
+                    ? null
+                    : () => _move(index, _items.length - 1),
+                run),
+          ],
+          const MenuDivider(),
+          row(
+              'remove',
+              running ? l10n.exportCancel : l10n.exportQueueRemove,
+              () => running
+                  ? exportQueueCancel(id: item.id)
+                  : exportQueueRemove(id: item.id),
+              run),
+        ];
+      },
+    ));
+  }
+
+  /// Another row with the same settings, writing to a file of its own.
+  void _duplicate(CompositionReference comp, BridgeExportQueueItem item) {
+    final spec = exportQueueSpec(id: item.id);
+    if (spec == null) return;
+    comp.queueExport(
+        spec: spec,
+        path: exportFreePath(path: item.path, codec: item.codec),
+        start: false);
+  }
+
+  /// A finished or failed row, queued again over its own file.
+  void _again(CompositionReference comp, BridgeExportQueueItem item) {
+    final spec = exportQueueSpec(id: item.id);
+    if (spec == null) return;
+    comp.queueExport(spec: spec, path: item.path, start: false);
+    exportQueueRemove(id: item.id);
+  }
 
   /// The mark that opens a waiting item's settings in the export dialogue.
   /// Kept as an empty space on every other row, so the columns stay put.

@@ -12,13 +12,12 @@ queue does the writing.
 
 ## Export a composition
 
-<Shot file="export.png" caption="The export dialogue, on the Output tab." eager/>
+<Shot file="export.png" caption="The export dialogue." eager/>
 
 1. Front the composition, or select it in the Project panel.
 2. Choose **File ▸ Export**, or press `Ctrl+Alt+M`.
 3. Pick a preset, or set the fields yourself.
-4. Choose where to write with **Browse**.
-5. Press **Export**.
+4. Press **Export**. If you have not chosen where to write with **Browse**, it asks.
 
 **Composition ▸ Add to export queue** (`Ctrl+M`) opens the same dialogue. **Export** sets
 the queue running; **Add to queue** leaves the item waiting for you to start it.
@@ -29,13 +28,14 @@ first: **Overwrite**, **Keep both**, which writes `name_2`, `name_3` and so on, 
 
 ## The dialogue
 
-The dialogue is a single scrolling page. The tab row at the top follows whichever section
-you have scrolled to, and clicking a tab scrolls that section into view.
+The top of the dialogue holds the preset, the format (video, image sequence or audio only),
+where to write, and whether to make a noise or open the folder when it finishes. The rest
+folds away under it. A shut section reads out what it is set to, and one you open stays open
+until you close Lumit.
 
 | Section | What it holds |
 | --- | --- |
-| **Output** | Video, image sequence or audio only; the format; where to write; and whether to make a noise or open the folder when it finishes. |
-| **Composition** | Quality, resolution, whether effects and solo switches are honoured, proxies, guide layers, the disk cache and colour depth. Part of the Output tab. |
+| **Composition** | Quality, resolution, whether effects and solo switches are honoured, proxies, guide layers, the disk cache and colour depth. |
 | **Time** | The span, the frame rate, and overrides for motion blur and Retime blend. |
 | **Picture** | Channels and alpha, depth, bit rate, resize, crop, and the resampler. |
 | **Colour** | The space the file is written and tagged in. |
@@ -62,7 +62,8 @@ A **preset** fills in every section at once.
 | **Vertical 1080×1920p60** | H.264 for shorts and reels. |
 
 Those five ship with Lumit and cannot be changed. **Save as…** stores the settings in
-force under a name of your own; **Edit** renames the one showing, and offers to delete it.
+force under a name of your own. The three dots beside it hold **Edit**, which renames the
+one showing and offers to delete it, and **Set as default**.
 Your presets live with the application rather than with the project.
 
 **Set as default** remembers the preset and format showing as what the dialogue opens on
@@ -146,6 +147,8 @@ from, what it is writing, and how it is progressing: *Waiting*, the frame it is 
   failed cannot be picked up.
 - **The × on a row** cancels it while it is writing.
 - **Click a finished row** to open the folder its file was written to.
+- **Right-click a row** for **Open folder**, **Settings…**, **Duplicate**, **Queue again**,
+  **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it.
 
 An item's settings are captured the moment it is queued, so working on the project 
 afterwards does not impact the export.

@@ -6,6 +6,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:qr/qr.dart';
@@ -19,6 +20,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'profile_chip.dart' show SyncRing;
+import 'review_link_parts.dart' show reviewRowMenu;
 import 'sign_in_window.dart' show cloudErrorText;
 
 /// The side of the square the code is drawn in.
@@ -47,6 +49,7 @@ class _AddPhone extends StatefulWidget {
 
 class _AddPhoneState extends State<_AddPhone> {
   QrImage? _code;
+  String? _link;
   DateTime? _expires;
   String? _error;
   bool _asking = false;
@@ -89,6 +92,7 @@ class _AddPhoneState extends State<_AddPhone> {
       setState(() {
         _code = QrImage(QrCode.fromData(
             data: code.url, errorCorrectLevel: QrErrorCorrectLevel.M));
+        _link = code.url;
         _expires = code.expires;
       });
     } on CloudError catch (e) {
@@ -112,42 +116,55 @@ class _AddPhoneState extends State<_AddPhone> {
           keyPrefix: 'add-phone',
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
+          padding: const EdgeInsets.all(dialogPadding + 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
-                  child: SizedBox.square(
-                    dimension: _square,
-                    child: live
-                        ? CustomPaint(
-                            key: const ValueKey('add-phone-code'),
-                            painter: _QrPainter(_code!, t.qrInk, t.qrPaper))
-                        : ColoredBox(
-                            color: t.surface2,
-                            child: Center(child: _instead(t)),
-                          ),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onSecondaryTapDown: (press) =>
+                      reviewRowMenu(context, press.globalPosition, [
+                    if (_link case final link? when live)
+                      (
+                        'phone-copy',
+                        l10n.reviewCopyLink,
+                        () => unawaited(
+                            Clipboard.setData(ClipboardData(text: link))),
+                      ),
+                    (
+                      'phone-new',
+                      l10n.phoneCodeNew,
+                      _asking ? null : () => unawaited(_ask()),
+                    ),
+                  ]),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+                    child: SizedBox.square(
+                      dimension: _square,
+                      child: live
+                          ? CustomPaint(
+                              key: const ValueKey('add-phone-code'),
+                              painter: _QrPainter(_code!, t.qrInk, t.qrPaper))
+                          : ColoredBox(
+                              color: t.surface2,
+                              child: Center(child: _instead(t)),
+                            ),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              if (live)
+              if (live) ...[
+                const SizedBox(height: 12),
                 Text(
                   l10n.phoneCodeLeft('${left.inMinutes}:'
                       '${(left.inSeconds % 60).toString().padLeft(2, '0')}'),
                   key: const ValueKey('add-phone-left'),
                   textAlign: TextAlign.center,
-                  style: t.mono,
+                  style: t.mono.copyWith(color: t.textSecondary),
                 ),
-              const SizedBox(height: 6),
-              Text(
-                l10n.phoneAddScan,
-                textAlign: TextAlign.center,
-                style: t.small.copyWith(color: t.textSecondary, height: 1.4),
-              ),
+              ],
             ],
           ),
         ),
