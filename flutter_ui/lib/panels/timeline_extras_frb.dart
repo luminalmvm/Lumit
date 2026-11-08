@@ -354,8 +354,9 @@ class CompTabsFrb extends StatelessWidget {
   }
 }
 
-/// Lantern's segmented pill: a well track with the options inside it, the
-/// one in force filled a step lighter and inset by the pill margin.
+/// A segmented pill: a well track with the options inside it, the one in
+/// force filled a step lighter and inset by the pill margin. Its corners are
+/// the shape's action corners, so it is a capsule only under Lantern.
 class Segment extends StatelessWidget {
   final List<Widget> children;
   const Segment({super.key, required this.children});
@@ -371,7 +372,7 @@ class Segment extends StatelessWidget {
       padding: EdgeInsets.all(t.tokens.pillInset),
       decoration: BoxDecoration(
         color: t.surface0,
-        borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+        borderRadius: BorderRadius.circular(t.tokens.actionRadius),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: children),
     );
@@ -402,7 +403,9 @@ class SegmentOption extends StatelessWidget {
           decoration: BoxDecoration(
             // The one not in force comes half way to it under the pointer.
             color: active ? t.surface2 : t.surface2.withValues(alpha: 0.5 * lit),
-            borderRadius: BorderRadius.circular(ShapeTokens.stadium),
+            // The track's corner less the inset, so the margin holds round it.
+            borderRadius: BorderRadius.circular(
+                max(0.0, t.tokens.actionRadius - t.tokens.pillInset)),
           ),
           child: child,
         ),
