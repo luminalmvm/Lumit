@@ -136,6 +136,10 @@ class BareDropdown<T> extends StatelessWidget {
   /// reader hunting for a name they know exists.
   final String? Function(T)? disabledReason;
 
+  /// A word on what an option does, shown on it while the list is open, or
+  /// null for none.
+  final String? Function(T)? note;
+
   /// Called with the option under the pointer while the list is open, so it
   /// can be shown before it's picked. The colour scheme list uses it to draw
   /// the interface in the hovered scheme. Only [onChanged] picks anything.
@@ -158,6 +162,7 @@ class BareDropdown<T> extends StatelessWidget {
     this.face,
     this.dense = false,
     this.disabledReason,
+    this.note,
     this.onPreview,
     this.onPreviewEnd,
   });
@@ -223,13 +228,16 @@ class BareDropdown<T> extends StatelessWidget {
                         ),
                       )
                     else
-                      MenuRow(
-                        selected: options[i] == value,
-                        onPressed: () => close([options[i]]),
-                        onEnter: onPreview == null
-                            ? null
-                            : () => onPreview!(options[i]),
-                        child: Text(label(options[i])),
+                      _noted(
+                        note?.call(options[i]),
+                        MenuRow(
+                          selected: options[i] == value,
+                          onPressed: () => close([options[i]]),
+                          onEnter: onPreview == null
+                              ? null
+                              : () => onPreview!(options[i]),
+                          child: Text(label(options[i])),
+                        ),
                       ),
                   ],
                 ],
@@ -242,6 +250,9 @@ class BareDropdown<T> extends StatelessWidget {
     onPreviewEnd?.call();
     if (picked != null) onChanged!(picked.single);
   }
+
+  static Widget _noted(String? note, Widget row) =>
+      note == null ? row : LumitTooltip(message: note, child: row);
 }
 
 /// Options at or above this count get [BareSearchDropdown] instead of the

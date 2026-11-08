@@ -120,6 +120,7 @@ fn comp_of(name: &str, layers: Vec<Layer>) -> Composition {
 fn graph_comp(name: &str, nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> Composition {
     let mut c = comp_of(name, Vec::new());
     c.graph = Some(CompGraph {
+        widths: Vec::new(),
         notes: Vec::new(),
         ties: Vec::new(),
         looks: Default::default(),
@@ -695,6 +696,7 @@ fn a_graphs_inputs_reach_it_from_the_host_and_from_the_graph_above() {
         let wiggle_id = wiggle.id;
         let target = host.effects[0].id;
         host.graph = lumit_core::graph::LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             looks: Default::default(),
@@ -811,6 +813,7 @@ fn a_cycle_through_a_node_graph_box_renders_a_passthrough() {
     let (src, box_, o) = (read(red), GraphNode::Fx(inst), output());
     let (src_id, box_id, o_id) = (src.id(), box_.id(), o.id());
     comp.graph = Some(CompGraph {
+        widths: Vec::new(),
         notes: Vec::new(),
         ties: Vec::new(),
         looks: Default::default(),

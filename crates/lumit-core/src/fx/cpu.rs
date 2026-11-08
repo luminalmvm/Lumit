@@ -2232,9 +2232,35 @@ pub struct GradientParams {
     /// alpha, and the alpha itself left alone — which is the whole difference
     /// between the two, and why there is one kernel rather than two.
     pub clip_to_alpha: bool,
+    /// How many of `mid` are in use, 0..=3: colours between `c0` and `c1`,
+    /// scene-linear rgb with the place along the ramp (0..1, ascending) in
+    /// the last lane.
+    pub mids: u32,
+    pub mid: [[f32; 4]; 3],
 }
 
-/// Gradient (docs/08 §3.35): a linear or radial two-colour ramp with optional
+/// The ramp's colour at `t` (0..1): `c0`, the colours in use from `mid`,
+/// then `c1`, each mixed with the next by how far between them `t` is.
+#[must_use]
+pub fn gradient_ramp(p: &GradientParams, t: f32) -> [f32; 3] {
+    let (mut at, mut from) = (0.0f32, p.c0);
+    for m in p.mid.iter().take(p.mids.min(3) as usize) {
+        let to = [m[0], m[1], m[2]];
+        if t <= m[3] {
+            let k = if m[3] > at {
+                (t - at) / (m[3] - at)
+            } else {
+                1.0
+            };
+            return std::array::from_fn(|c| from[c] + (to[c] - from[c]) * k);
+        }
+        (at, from) = (m[3], to);
+    }
+    let k = if at < 1.0 { (t - at) / (1.0 - at) } else { 1.0 };
+    std::array::from_fn(|c| from[c] + (p.c1[c] - from[c]) * k)
+}
+
+/// Gradient (docs/08 §3.35): a linear or radial ramp with optional
 /// scatter — a **generator**, so it replaces the frame edge to edge and writes
 /// opaque alpha. Interpolation is in the working space (scene-linear, §2.1), so
 /// the ramp is photometrically even and can drive another effect's matte. Mix 0
@@ -2258,8 +2284,9 @@ pub fn gradient(rgba: &mut [f32], w: u32, h: u32, p: &GradientParams) {
             // "this ramp at this coverage", so the overlay works on
             // premultiplied values with no round trip, exactly as `fill` does.
             let cover = if p.clip_to_alpha { rgba[i + 3] } else { 1.0 };
+            let ramp = gradient_ramp(p, t);
             for c in 0..3 {
-                let g = (p.c0[c] + (p.c1[c] - p.c0[c]) * t) * cover;
+                let g = ramp[c] * cover;
                 rgba[i + c] = rgba[i + c] * (1.0 - p.mix) + g * p.mix;
             }
             if !p.clip_to_alpha {

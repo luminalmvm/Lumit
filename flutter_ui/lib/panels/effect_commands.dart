@@ -105,10 +105,7 @@ class EffectCommands {
   /// Every row this instance draws: those its effect declares, then those its
   /// own state derives. The Inputs are only the graph's own rows.
   List<BridgeParamInfo> get rows => relistedRows(
-        [
-          if (!inputs) ...cachedListParameters(info.name),
-          ...info.derivedParams,
-        ],
+        inputs ? info.derivedParams : instanceParameters(info),
         info.rowOptions,
       );
 

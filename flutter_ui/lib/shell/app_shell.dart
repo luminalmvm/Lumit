@@ -1408,6 +1408,8 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.setViewerLayerControls(!ui.viewerLayerControls);
       case 'viewer.snap.grid.toggle':
         ui.tools.snapToGrid = !ui.tools.snapToGrid;
+      case 'path.points.transform':
+        ui.requestPointsTurn();
       // A panel put up or taken down, as its tick in the Window menu does.
       case final id when id.startsWith('panel.toggle.'):
         final panel = Panel.values
@@ -1476,6 +1478,7 @@ bool _pressedOnce(String action) =>
       'help.open',
       'viewer.controls.toggle',
       'viewer.snap.grid.toggle',
+      'path.points.transform',
     }.contains(action);
 
 /// A preset or a theme double-clicked, as Lumit starts or while it runs. The

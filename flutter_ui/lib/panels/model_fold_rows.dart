@@ -49,6 +49,7 @@ BridgeEffectInstanceInfo? partRowsOf(
           hiddenRows: u.hiddenRows,
           disabledRows: u.disabledRows,
           rowOptions: u.rowOptions,
+          rowLabels: u.rowLabels,
           nodeGraphComp: u.nodeGraphComp,
         ),
       null => null,

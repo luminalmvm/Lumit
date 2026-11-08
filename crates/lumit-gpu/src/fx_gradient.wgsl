@@ -1,5 +1,5 @@
-// Gradient (docs/08-EFFECTS.md §3.35): a linear or radial two-colour ramp with
-// scatter. Mirrors lumit_core::fx::cpu::gradient op-for-op (§1.6: the CPU is
+// Gradient (docs/08-EFFECTS.md §3.35): a linear or radial ramp of two to five
+// colours, with scatter. Mirrors lumit_core::fx::cpu::gradient op-for-op (§1.6: the CPU is
 // the oracle).
 //
 // A generator: it replaces the frame edge to edge and writes opaque alpha, so
@@ -20,7 +20,8 @@ struct Params {
     seed: u32,
     radial: u32,            // 0 linear, 1 radial
     clip_to_alpha: u32,     // 1 = clip to the layer's coverage, keep its alpha
-    _pad1: u32,
+    mids: u32,              // colours in between in use, 0..3
+    mid: array<vec4<f32>, 3>, // rgb, w = place along the ramp
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -53,6 +54,30 @@ fn hash01(channel: u32, x: i32, y: i32, z: i32) -> f32 {
     return f32(h >> 8u) / 16777216.0;
 }
 
+// == lumit_core::fx::cpu::gradient_ramp: Start colour, the colours in
+// between that are in use, End colour.
+fn ramp(t: f32) -> vec3<f32> {
+    var at = 0.0;
+    var prev = p.c0.rgb;
+    for (var k = 0u; k < min(p.mids, 3u); k = k + 1u) {
+        let m = p.mid[k];
+        if (t <= m.w) {
+            var f = 1.0;
+            if (m.w > at) {
+                f = (t - at) / (m.w - at);
+            }
+            return prev + (m.rgb - prev) * f;
+        }
+        at = m.w;
+        prev = m.rgb;
+    }
+    var f = 1.0;
+    if (at < 1.0) {
+        f = (t - at) / (1.0 - at);
+    }
+    return prev + (p.c1.rgb - prev) * f;
+}
+
 @compute @workgroup_size(8, 8)
 fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -83,7 +108,7 @@ fn gradient(@builtin(global_invocation_id) gid: vec3<u32>) {
         cover = o.a;
         outa = o.a;
     }
-    let g = (p.c0.rgb + (p.c1.rgb - p.c0.rgb) * tc) * cover;
+    let g = ramp(tc) * cover;
     let outv = o.rgb * (1.0 - p.mix_amt) + g * p.mix_amt;
     textureStore(dst, xy, vec4<f32>(outv, outa));
 }

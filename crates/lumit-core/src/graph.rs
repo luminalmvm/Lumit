@@ -170,6 +170,11 @@ pub struct LayerGraph {
     /// with no entry is auto-placed by the panel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layout: Vec<(NodeRef, [f64; 2])>,
+    /// The boxes dragged wider or narrower by an edge, in canvas units.
+    /// Presentation state beside [`Self::layout`]: a box with no entry keeps
+    /// the panel's own width.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub widths: Vec<(NodeRef, f64)>,
     /// The nodes whose `E` badge is on — grown to show one socket per
     /// parameter (§1.4). Presentation state, beside [`Self::layout`] rather
     /// than on the instance, so a *derived* effect node can carry it without
@@ -403,6 +408,7 @@ impl LayerGraph {
         self.nodes.is_empty()
             && self.edges.is_empty()
             && self.layout.is_empty()
+            && self.widths.is_empty()
             && self.exposed.is_empty()
             && self.groups.is_empty()
             && self.notes.is_empty()
@@ -485,6 +491,7 @@ impl LayerGraph {
             source_stands && destination_stands && flows_down_the_stack(e, effects)
         });
         self.layout.retain(|(node, _)| !gone(node));
+        self.widths.retain(|(node, _)| !gone(node));
         self.exposed.retain(|node| !gone(node));
         // A group loses the members the stack removed, and a group that has
         // lost all of them goes with them: a wash around nothing is not a

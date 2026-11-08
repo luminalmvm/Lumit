@@ -12,6 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show shapeItemWith;
+import 'package:lumit_flutter/panels/shape_entries.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:uuid/uuid.dart';
 
@@ -57,16 +59,22 @@ void main() {
         gradientEndOpacity: const BridgeScalar.static_(100),
         gradientStops: const [],
         combine: 0,
+        hidden: false,
+        fillHidden: false,
+        strokeHidden: false,
         pathKeys: const [],
         taper: null,
       )));
 
   /// A repeater entry stepping [copies] times by [stepX].
-  BridgeShapeEntry repeater(double copies, double stepX) => BridgeShapeEntry(
+  BridgeShapeEntry repeater(double copies, double stepX, {bool own = false}) =>
+      BridgeShapeEntry(
       depth: 0,
       kind: BridgeShapeEntryKind.modifier(BridgeShapeModifier(
         id: UuidValue.fromString(const Uuid().v4()),
         name: 'Repeater',
+        hidden: false,
+        own: own,
         kind: BridgeShapeModifierKind.repeat(BridgeShapeRepeater(
           copies: BridgeScalar.static_(copies),
           offset: const BridgeScalar.static_(0),
@@ -112,6 +120,35 @@ void main() {
         const Size(50, 10));
     // Above the art, it acts on nothing.
     expect(shapeContentsBounds([repeater(3, 20), item(square)]),
+        const Size(10, 10));
+  });
+
+  test('an item''s own repeater grows its box alone; a global one grows all',
+      () {
+    final a = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
+    final b = [corner(0, 20), corner(10, 20), corner(10, 30), corner(0, 30)];
+    // The first item's own repeater: three copies of it, the second alone.
+    expect(shapeContentsBounds([item(a), repeater(3, 20, own: true), item(b)]),
+        const Size(50, 30));
+    // After the second item, its own repeater does not reach the first.
+    expect(shapeContentsBounds([item(a), item(b), repeater(3, 20, own: true)]),
+        const Size(50, 30));
+    final global = [item(a), item(b), repeater(2, 0, own: true), repeater(3, 20)];
+    expect(global.globalStart, 3, reason: 'only the last is global');
+  });
+
+  test('an outline whose eye is off takes no room, as the engine has it', () {
+    final square = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
+    final stroked = item(square, stroked: true, strokeWidth: 4);
+    expect(shapeContentsBounds([stroked]), const Size(14, 14));
+    final kind = stroked.kind as BridgeShapeEntryKind_Item;
+    expect(
+        shapeContentsBounds([
+          BridgeShapeEntry(
+              depth: 0,
+              kind: BridgeShapeEntryKind.item(
+                  shapeItemWith(kind.field0, strokeHidden: true)))
+        ]),
         const Size(10, 10));
   });
 }

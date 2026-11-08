@@ -145,9 +145,19 @@ bool textIsAnimated(BridgeTextDocument document) =>
 /// hands a shape item's keys over on.
 Rect? shapeContentsRect(List<BridgeShapeEntry> contents, {double t = 0}) {
   double? minX, minY, maxX, maxY;
+  // Inside a group whose eye is off: nothing in it is drawn, so nothing in
+  // it is measured, as the engine has it.
+  int? off;
   for (final (index, entry) in contents.indexed) {
+    if (off != null && entry.depth > off) continue;
+    off = null;
+    if (entry.kind case BridgeShapeEntryKind_Group(:final field0)
+        when field0.hidden) {
+      off = entry.depth;
+    }
     if (entry.kind is! BridgeShapeEntryKind_Item) continue;
     final item = (entry.kind as BridgeShapeEntryKind_Item).field0;
+    if (item.hidden) continue;
     final own = _boxOf(_controlPoints(item));
     if (own == null) continue;
     // The modifiers acting on this item, in the order they apply: the
@@ -191,7 +201,8 @@ Rect? shapeContentsRect(List<BridgeShapeEntry> contents, {double t = 0}) {
     }
     // Half the outline sits outside the path.
     final half =
-        (item.stroke != null ? evaluateScalar(item.strokeWidth, t) / 2 : 0.0) +
+        (item.stroke != null && !item.strokeHidden
+                ? evaluateScalar(item.strokeWidth, t) / 2 : 0.0) +
             margin;
     final (ix0, iy0, ix1, iy1) =
         (box.$1 - half, box.$2 - half, box.$3 + half, box.$4 + half);

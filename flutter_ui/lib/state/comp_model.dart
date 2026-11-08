@@ -83,6 +83,13 @@ class CompModel extends ChangeNotifier {
     return m == null ? (60, 1) : (m.fpsNum, m.fpsDen);
   }
 
+  /// The frame the comp's clock reads at its first frame: its Start
+  /// timecode. Every clock face adds it to the frame it shows.
+  int get startFrame {
+    _freshen();
+    return _model?.startFrame.toInt() ?? 0;
+  }
+
   /// Whether the comp's master motion-blur shutter is on — what the
   /// Timeline's master button draws. Writes go through
   /// `CompositionReference.setMotionBlurEnabled`.

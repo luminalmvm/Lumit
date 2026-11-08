@@ -164,6 +164,7 @@ void main() {
           ),
           effects: const [],
           styles: const [],
+          drivers: const [],
           collapseForced: false,
           label: 0,
           masks: const [],

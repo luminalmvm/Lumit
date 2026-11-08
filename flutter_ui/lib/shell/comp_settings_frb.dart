@@ -136,6 +136,7 @@ Future<bool> showCompSettingsFrb({
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
   final was = comp.lightingLikeAfterEffects();
+  BridgeRational? start;
   final applied = await showLumitModal<bool>(
     context: context,
     id: 'comp-settings',
@@ -144,6 +145,8 @@ Future<bool> showCompSettingsFrb({
       confirm: l10n.save,
       initial: comp.getSettings(),
       lightsLikeAfterEffects: was,
+      initialStart: comp.getStartTimecode(),
+      onStart: (s) => start = s,
       onConfirm: (settings, likeAfterEffects) {
         // **The playhead keeps its moment, not its number.** A frame count
         // means nothing without the rate it was counted at, so the time under
@@ -165,6 +168,7 @@ Future<bool> showCompSettingsFrb({
             comp.setLightingLikeAfterEffects(on_: likeAfterEffects ?? false);
           }
           comp.setSettings(settings: settings);
+          if (start case final s?) comp.setStartTimecode(start: s);
         });
         if (at != null) {
           ui.playheadFrame.value = comp.nearestFrameAtTime(time: at);
@@ -303,6 +307,11 @@ class _CompSettingsBody extends StatefulWidget {
   final void Function(BridgeCompSettings, bool?) onConfirm;
   final VoidCallback onCancel;
 
+  /// The comp's Start timecode, and where the one typed goes before
+  /// [onConfirm]. Null hides the row, for a comp not made yet.
+  final BridgeRational? initialStart;
+  final void Function(BridgeRational)? onStart;
+
   /// Whether the comp lights its layers as After Effects does. Null hides the
   /// row, for a node graph, which has no layers to light.
   final bool? lightsLikeAfterEffects;
@@ -314,6 +323,8 @@ class _CompSettingsBody extends StatefulWidget {
     required this.onConfirm,
     required this.onCancel,
     this.lightsLikeAfterEffects,
+    this.initialStart,
+    this.onStart,
   });
 
   @override
@@ -324,6 +335,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
   late final TextEditingController _name;
   late final TextEditingController _fps;
   late final TextEditingController _duration;
+  late final TextEditingController _start;
   late int _width;
   late int _height;
   late List<double> _background;
@@ -348,6 +360,11 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       ..addListener(() => setState(() {}));
     _duration = TextEditingController(
         text: timecodeOfDuration(s.duration, s.fpsNum, s.fpsDen));
+    _start = TextEditingController(
+        text: timecodeOfDuration(
+            widget.initialStart ?? const BridgeRational(num: 0, den: 1),
+            s.fpsNum,
+            s.fpsDen));
     _width = s.width;
     _height = s.height;
     _background = List<double>.from(s.background);
@@ -361,6 +378,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     _name.dispose();
     _fps.dispose();
     _duration.dispose();
+    _start.dispose();
     super.dispose();
   }
 
@@ -401,6 +419,16 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
     final duration = frames != null
         ? secondsOfFrames(frames, rate.$1, rate.$2)
         : parseDurationHms(_duration.text) ?? widget.initial.duration;
+    // The Start timecode reads the same way; one that cannot be read keeps
+    // the one there was.
+    if (widget.onStart case final onStart?) {
+      final at = framesOfTimecode(_start.text, rate.$1, rate.$2);
+      onStart(at != null
+          ? secondsOfFrames(at, rate.$1, rate.$2)
+          : parseDurationHms(_start.text) ??
+              widget.initialStart ??
+              const BridgeRational(num: 0, den: 1));
+    }
     widget.onConfirm(BridgeCompSettings(
       name: _name.text.trim().isEmpty ? widget.initial.name : _name.text.trim(),
       width: _width,
@@ -472,6 +500,8 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         dialogSection(t, l10n.compGroupFrame, [
           _row(t, l10n.size, _sizeRow(t)),
           _row(t, l10n.frameRate, _rateRow(t)),
+          if (widget.initialStart != null)
+            _row(t, l10n.compStartTimecode, _startRow(t)),
           _row(t, l10n.duration, _durationRow(t)),
           _row(t, l10n.compBackground, _backgroundRow(t)),
         ]),
@@ -643,6 +673,25 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
             label: (s) => s,
             onChanged: (picked) => setState(() => _fps.text = picked),
             width: compRateList,
+          ),
+        ],
+      );
+
+  /// The Start timecode: the time the comp's first frame reads, typed as
+  /// `HH:MM:SS:FF` at the rate above, like the duration.
+  Widget _startRow(LumitTheme t) => Row(
+        children: [
+          SizedBox(
+            width: compDurationWell,
+            height: dialogControlHeight,
+            child: HouseTextField(
+              key: const ValueKey('comp-start-timecode'),
+              controller: _start,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              fill: t.surface0,
+              onSubmitted: (_) => _confirm(),
+            ),
           ),
         ],
       );

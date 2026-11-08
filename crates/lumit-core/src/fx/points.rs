@@ -1003,7 +1003,7 @@ impl PointsStream {
 
     /// The same points in another order: place `k` takes the point that was
     /// at `order[k]`.
-    fn reorder(&mut self, order: &[usize]) {
+    pub(crate) fn reorder(&mut self, order: &[usize]) {
         fn pick<T: Copy>(v: &mut Vec<T>, order: &[usize]) {
             *v = order.iter().filter_map(|i| v.get(*i).copied()).collect();
         }
@@ -1633,6 +1633,13 @@ pub struct PointsSchedule {
     /// What a Particulate with Trails on draws its kept picture from. `None`
     /// everywhere else.
     pub trails: Option<trails::Trails>,
+    /// For a Clone deformer: the copies the Clone to points above stamped, as
+    /// outlines, px@comp. Only the first Vector deformer under a Clone to
+    /// points of Shape layers has them. Folded into the frame key.
+    pub clone_shapes: Option<std::sync::Arc<crate::fx::effects::clone_deformer::CloneShapes>>,
+    /// For a Clone deformer: its Boolean layer's outline. Folded into the
+    /// frame key.
+    pub boolean_shape: Option<std::sync::Arc<crate::fx::effects::clone_deformer::BooleanShape>>,
 }
 
 /// One letter of a Text layer as it is laid out, in the layer's own px. A
@@ -2318,7 +2325,7 @@ pub fn wants_carriage(sig: crate::fx::registry::Signature) -> bool {
 /// one test the builder and the walk both ask, so their slots line up.
 #[must_use]
 pub fn wants_carriage_of(def: &dyn crate::fx::registry::EffectDef) -> bool {
-    wants_carriage(def.signature()) || def.reads_text_layer()
+    wants_carriage(def.signature()) || def.reads_text_layer() || def.reads_clone_shapes()
 }
 
 /// A mask path in the raster the frame is being drawn at.
@@ -2341,6 +2348,68 @@ pub fn scale_path(poly: &MaskPolyline, px_scale: f32) -> MaskPolyline {
         feather: poly.feather * k,
         expansion: poly.expansion * k,
         corners: poly.corners.clone(),
+    }
+}
+
+/// The path a points effect on `owner` follows on `target` at comp time `t`:
+/// its shapes' outline after any modifiers, or else its first mask, in
+/// `owner`'s pixels at composition scale. `target` may be `owner` itself.
+/// Empty when it has neither, or is turned edge-on to `owner`.
+#[must_use]
+pub fn layer_path(
+    comp: &crate::model::Composition,
+    owner: &crate::model::Layer,
+    target: &crate::model::Layer,
+    t: f64,
+    context: &crate::expression::ExpressionContext,
+) -> MaskPolyline {
+    use crate::model::LayerKind;
+    let lt = crate::time::layer_time(t, target.start_offset.0);
+    let line = match &target.kind {
+        LayerKind::Shape { contents } => crate::shape::outline_at(contents, lt),
+        _ => crate::mask::mask_path_at(&target.masks, None, true, lt),
+    };
+    if target.id == owner.id || line.is_empty() {
+        return line;
+    }
+    // Where both layers sit in the comp's space, as Collide with reads it.
+    let read = crate::expression::space::reader(context, comp.id, t);
+    let world = |l: &crate::model::Layer| {
+        crate::expression::space::space(&context.document, comp, l, t, &read).world
+    };
+    let Some(back) = world(owner).invert() else {
+        return MaskPolyline::default();
+    };
+    let to_owner = world(target).within(&back);
+    let points: Vec<[f32; 2]> = line
+        .points
+        .iter()
+        .map(|p| {
+            let (x, y, _) = to_owner.point((f64::from(p[0]), f64::from(p[1]), 0.0));
+            [x as f32, y as f32]
+        })
+        .collect();
+    if points.iter().flatten().any(|v| !v.is_finite()) {
+        return MaskPolyline::default();
+    }
+    // Measured again in the new place, keeping the steps with no length that
+    // join one path of a run to the next.
+    let mut arc = Vec::with_capacity(points.len());
+    for i in 0..points.len() {
+        let step = match i {
+            0 => 0.0,
+            _ if line.arc[i] <= line.arc[i - 1] => 0.0,
+            _ => {
+                let (a, b) = (points[i - 1], points[i]);
+                (b[0] - a[0]).hypot(b[1] - a[1])
+            }
+        };
+        arc.push(arc.last().copied().unwrap_or(0.0) + step);
+    }
+    MaskPolyline {
+        points,
+        arc,
+        ..line
     }
 }
 
@@ -2451,14 +2520,31 @@ pub fn draw_stream_blended(
     sprite: Option<Sprite<'_>>,
     blend: u32,
 ) {
+    let fit = SpriteFit::default();
+    draw_stream_fit_blended(rgba, w, h, s, tails, style, sprite, &fit, blend);
+}
+
+/// [`draw_stream_blended`], with a say in how a sprite sits on its point.
+/// Clone to points' reference draw for Copy blend.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_stream_fit_blended(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    fit: &SpriteFit,
+    blend: u32,
+) {
     if blend == 0 {
-        draw_stream(rgba, w, h, s, tails, style, sprite);
+        draw_stream_fit(rgba, w, h, s, tails, style, sprite, fit);
         return;
     }
     // ponytail: a frame-sized layer from the heap. This is the CPU oracle,
     // which only the tests draw with; the card's pass takes its own.
     let mut layer = vec![0.0f32; rgba.len()];
-    let fit = SpriteFit::default();
     stamp(
         &mut layer,
         w,
@@ -2467,7 +2553,7 @@ pub fn draw_stream_blended(
         tails,
         style,
         sprite,
-        &fit,
+        fit,
         &|dst, src| {
             let b = [dst[0], dst[1], dst[2], dst[3]];
             dst.copy_from_slice(&blend_over(blend, b, src));

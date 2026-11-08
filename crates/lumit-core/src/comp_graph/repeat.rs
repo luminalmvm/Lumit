@@ -272,6 +272,7 @@ impl CompGraph {
             nodes,
             edges,
             layout: Vec::new(),
+            widths: Vec::new(),
             exposed: Vec::new(),
             groups: Vec::new(),
             notes: Vec::new(),

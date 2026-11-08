@@ -838,6 +838,12 @@ class BridgeLayerInfo {
   /// carrying it here free.
   final List<BridgeEffectInstanceInfo> styles;
 
+  /// The drivers on the layer's Node graph, the same shape as
+  /// [`Self::effects`], for the Timeline's Drivers heading: read with the
+  /// rest of the drawing data rather than asked for per redraw. Empty on
+  /// nearly every layer.
+  final List<BridgeEffectInstanceInfo> drivers;
+
   /// A placed node graph's **Inputs** (docs/impl/node-graph-comp.md §5.3):
   /// the `node_graph` instance bound to the comp this Precomp layer places,
   /// with its Inputs copy refreshed from the live graph as every clone's is.
@@ -1009,6 +1015,7 @@ class BridgeLayerInfo {
     required this.axisModes,
     required this.effects,
     required this.styles,
+    required this.drivers,
     this.graphInputs,
     this.materials,
     this.modelRows,
@@ -1056,6 +1063,7 @@ class BridgeLayerInfo {
       axisModes.hashCode ^
       effects.hashCode ^
       styles.hashCode ^
+      drivers.hashCode ^
       graphInputs.hashCode ^
       materials.hashCode ^
       modelRows.hashCode ^
@@ -1105,6 +1113,7 @@ class BridgeLayerInfo {
           axisModes == other.axisModes &&
           effects == other.effects &&
           styles == other.styles &&
+          drivers == other.drivers &&
           graphInputs == other.graphInputs &&
           materials == other.materials &&
           modelRows == other.modelRows &&
@@ -2202,6 +2211,12 @@ class BridgeShapeItem {
   /// modifiers of the item that starts it.
   final int combine;
 
+  /// The eyes: the item's own, and its fill's and outline's. Off leaves
+  /// that part out of the picture and keeps it.
+  final bool hidden;
+  final bool fillHidden;
+  final bool strokeHidden;
+
   /// This item's **shape** keys — empty when its path does not animate.
   /// Composition time, carried out by the layer's start offset
   /// exactly as a mask's path keys cross.
@@ -2241,6 +2256,9 @@ class BridgeShapeItem {
     required this.gradientEndOpacity,
     required this.gradientStops,
     required this.combine,
+    required this.hidden,
+    required this.fillHidden,
+    required this.strokeHidden,
     required this.pathKeys,
     this.taper,
     this.primitive,
@@ -2268,6 +2286,9 @@ class BridgeShapeItem {
       gradientEndOpacity.hashCode ^
       gradientStops.hashCode ^
       combine.hashCode ^
+      hidden.hashCode ^
+      fillHidden.hashCode ^
+      strokeHidden.hashCode ^
       pathKeys.hashCode ^
       taper.hashCode ^
       primitive.hashCode;
@@ -2297,6 +2318,9 @@ class BridgeShapeItem {
           gradientEndOpacity == other.gradientEndOpacity &&
           gradientStops == other.gradientStops &&
           combine == other.combine &&
+          hidden == other.hidden &&
+          fillHidden == other.fillHidden &&
+          strokeHidden == other.strokeHidden &&
           pathKeys == other.pathKeys &&
           taper == other.taper &&
           primitive == other.primitive;

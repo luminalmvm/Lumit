@@ -3685,6 +3685,11 @@ Future<void> showRulerMenu(
   ValueChanged<bool>? onStep,
 }) async {
   if (setWork == null && addMarker == null) return;
+  // The Composition menu's Trim comp to work area, here too, beside the
+  // work area it trims to; greyed when the comp has none.
+  final trim = setWork == null
+      ? null
+      : trimCompAction(Provider.of<LumitState>(context, listen: false), comp);
   final picked = await showMenuAt<String>(
     context: context,
     position: at,
@@ -3712,6 +3717,11 @@ Future<void> showRulerMenu(
             enabled: comp.getWorkArea() != null,
             onPressed: () => close('work-clear'),
             child: Text(l10n.workAreaClear)),
+        MenuRow(
+            key: const ValueKey('tl-ruler-trim-comp'),
+            enabled: trim != null,
+            onPressed: () => close('trim-comp'),
+            child: Text(l10n.menuTrimCompToWorkArea)),
       ],
       if (extra != null) ...extra(() => close(null)),
     ],
@@ -3724,6 +3734,8 @@ Future<void> showRulerMenu(
       onStep?.call(picked == 'prev');
     case 'work-clear':
       setWork?.call(null);
+    case 'trim-comp':
+      trim?.call();
     case _:
       // A comp with no frames has no valid span: it keeps the one it has.
       try {

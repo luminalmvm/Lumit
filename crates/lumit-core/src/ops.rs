@@ -858,6 +858,13 @@ pub enum Op {
     /// window simply hangs off the end, exactly as §5.1's invariant already
     /// allows, and sliding it back brings it into the window again.
     /// That is AE's behaviour and the only one that loses nothing.
+    /// Set a composition's **Start timecode**: the time its first frame
+    /// reads ([`crate::model::Composition::start_timecode`]). Only the clock
+    /// it shows moves; nothing inside the comp is retimed.
+    SetCompStart {
+        comp: Uuid,
+        start: CompTime,
+    },
     TrimCompToWorkArea {
         comp: Uuid,
     },
@@ -1002,6 +1009,7 @@ impl Op {
             Op::SetCompSettings { .. } => "Composition settings",
             Op::SetCompLighting { .. } => "Set lighting",
             Op::SetSolidDef { .. } => "Edit solid",
+            Op::SetCompStart { .. } => "Composition settings",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
             // Unreachable: the loop above leaves no batch behind.
@@ -2698,6 +2706,15 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
         // document: the batch's inverse is exact and its all-or-nothing
         // rollback is the one already written, so a command that reshapes a
         // whole comp adds no new way for the document to go wrong.
+        Op::SetCompStart { comp, start } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = c.start_timecode();
+            c.set_start_timecode(*start);
+            Ok(Op::SetCompStart {
+                comp: *comp,
+                start: previous,
+            })
+        }
         Op::TrimCompToWorkArea { comp } => {
             let batch = trim_comp_to_work_area(doc, *comp)?;
             apply(doc, &batch)
@@ -2787,6 +2804,15 @@ fn trim_comp_to_work_area(doc: &Document, comp: Uuid) -> Result<Op, OpError> {
             frame_rate: c.frame_rate,
             duration,
             background: c.background,
+        },
+        // The clock keeps reading what it read: the comp's first frame is
+        // now the work area's, so the Start timecode moves on by as much.
+        Op::SetCompStart {
+            comp,
+            start: c
+                .start_timecode()
+                .add_dur(back)
+                .map_err(|_| OpError::InvalidSpan)?,
         },
     ];
     for l in &c.layers {

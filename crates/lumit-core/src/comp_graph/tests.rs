@@ -64,6 +64,7 @@ fn built(nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> CompGraph {
         nodes,
         edges,
         layout: Vec::new(),
+        widths: Vec::new(),
         exposed: Vec::new(),
         groups: Vec::new(),
     }

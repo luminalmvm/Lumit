@@ -1196,6 +1196,8 @@ impl Eval<'_> {
         enum Producer {
             Grid(Box<PointsStream>),
             AlongPath(super::effects::points_along_path::PointsAlongPath),
+            Contours(super::effects::contour_points::ContourPoints),
+            Crossings(super::effects::intersection_points::IntersectionPoints),
             Particulate {
                 points: Box<points::PointsParams>,
                 window_frames: i64,
@@ -1222,6 +1224,15 @@ impl Eval<'_> {
                 ))),
                 "points_along_path" => Some(Producer::AlongPath(
                     super::effects::points_along_path::PointsAlongPath::read(params),
+                )),
+                "math_points" => Some(Producer::Grid(Box::new(
+                    super::effects::math_points::MathPoints::read(params).stream(self.projection),
+                ))),
+                "contour_points" => Some(Producer::Contours(
+                    super::effects::contour_points::ContourPoints::read(params),
+                )),
+                "intersection_points" => Some(Producer::Crossings(
+                    super::effects::intersection_points::IntersectionPoints::read(params),
                 )),
                 "audio_spectrum" => Some(Producer::Grid(Box::new(
                     super::effects::audio_spectrum::stream(
@@ -1299,6 +1310,16 @@ impl Eval<'_> {
             } => (points, window_frames),
             Producer::AlongPath(along) => {
                 let stream = Rc::new(along.stream(&path, self.projection));
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+            Producer::Contours(contours) => {
+                let stream = Rc::new(contours.stream(&path, self.projection));
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+            Producer::Crossings(crossings) => {
+                let stream = Rc::new(crossings.stream(&path, self.projection));
                 self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
                 return Some(stream);
             }

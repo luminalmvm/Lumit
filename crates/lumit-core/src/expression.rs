@@ -1042,6 +1042,7 @@ mod tests {
             },
         };
         let graph = CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             looks: Default::default(),

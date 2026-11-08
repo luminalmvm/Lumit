@@ -82,6 +82,7 @@ BridgeLayerEntry entry({required BridgeScalar volumeDb}) {
       ),
       effects: const [],
       styles: const [],
+      drivers: const [],
       label: 0,
       masks: const [],
       paint: const [],

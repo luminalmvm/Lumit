@@ -1852,6 +1852,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // A 3D shape's are what it is, so they start open.
     final startsClosed = material &&
         (info.materials!.length > 3 || fx.name == 'geometry_options');
+    // A Clone deformer reads the Clone to points above it, which is in the
+    // stack rather than on its card.
+    final vectorReason =
+        !style && !inputs && !material && fx.name == 'clone_deformer'
+            ? cloneVectorReason(info.effects, index, ui.model.layers)
+            : null;
     final open =
         startsClosed ? _shut.contains('fx-${fx.id}') : _isOpen('fx-${fx.id}');
     if (open) _everOpen.add(fx.id);
@@ -1859,7 +1865,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     final renaming = _renamingEffect == fx.id;
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
-    final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
+    final params = instanceParameters(fx);
     // The row filter: a heading that holds the text keeps every row, a card
     // with no row that does is left out altogether.
     final needle = _filter.needle;
@@ -1902,6 +1908,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         ],
         fx.nodeGraphComp,
         info.trackCorrected,
+        vectorReason,
         graphName,
         open,
         drawsRows,
@@ -1932,6 +1939,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       ],
       card: () => _EffectSection(
         info: fx,
+        vectorReason: vectorReason,
         graphName: graphName,
         style: style,
         inputs: inputs,
@@ -2597,6 +2605,11 @@ class _EffectSection extends StatelessWidget {
   final UuidValue? clip;
   final LayerReference layer;
 
+  /// For a Clone deformer, why its Vector mode cannot be picked here, or null
+  /// where it can ([cloneVectorReason]). Read by the panel, which holds the
+  /// stack.
+  final ({String tip, String why})? vectorReason;
+
   /// Rows this subject doesn't show, on top of what the instance itself hides.
   final Set<String> hideRows;
 
@@ -2696,6 +2709,7 @@ class _EffectSection extends StatelessWidget {
     this.hideRows = const {},
     required this.layer,
     required this.allLayers,
+    this.vectorReason,
     required this.comp,
     required this.playheadFrame,
     required this.onSeek,
@@ -2971,7 +2985,17 @@ class _EffectSection extends StatelessWidget {
         // not doing anything (docs/12 §1, §2.3). An effect that is behaving
         // draws none of this.
         if (effectBadgeRow(context,
-                id: '$id', reason: info.badgeReason, detail: info.badgeDetail)
+                id: '$id',
+                // A Clone deformer set to Vector that cannot read outlines here
+                // says so, and why, as the effects that cannot run do.
+                reason: info.badgeReason ??
+                    (vectorReason != null &&
+                            info.values.any((v) =>
+                                v.id == 'mode' &&
+                                v.value == const BridgeEffectValue.choice(1))
+                        ? 'clone_vector_reads_picture'
+                        : null),
+                detail: info.badgeDetail ?? vectorReason?.why)
             case final badge?)
           badge,
         if (displayAt(playheadFrame) != null)
@@ -3157,6 +3181,7 @@ class _EffectSection extends StatelessWidget {
       ...disabledParams(info.name, shown),
       ...info.disabledRows,
     };
+    final whyDisabled = disabledReasons(info.name, shown);
 
     // The uniform Matte row and the Mix row: a Layer picker carries its Channel
     // and Invert beside it, a Mix slider its Blend, and no rider gets a row of
@@ -3192,6 +3217,11 @@ class _EffectSection extends StatelessWidget {
         onWritePair: onWritePair,
         twoColumn: true,
         enabled: !disabled.contains(param.id),
+        disabledReason: whyDisabled[param.id],
+        optionNote: (i) => optionNoteOf(info.name, param.id, i),
+        optionReason: info.name == 'clone_deformer' && param.id == 'mode'
+            ? (i) => i == 1 ? vectorReason?.tip : null
+            : null,
         offBecause: waitsForSimulate(info.name, param.id, shown)
             ? l10n.fxNeedsSimulate
             : null,

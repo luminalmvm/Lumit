@@ -212,5 +212,50 @@ void main() {
       layer.setEffects(effects: again);
       expect(graphChannels(layers: [entryOf(p)], selected: [x, y]).length, 2);
     });
+
+    /// A Node graph driver's keyed row is a curve as an effect's is, so F9
+    /// on its keys eases them, written back into the graph.
+    testWidgets('an ease reaches a driver keyed in the Node graph',
+        (tester) async {
+      final p = withComp();
+      final layer = solid(p);
+      final id = layer.internallayerId.toString();
+      BridgeKeyframe key(int seconds, double value) => BridgeKeyframe(
+            time: BridgeRational(num: seconds, den: 1),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      layer.addEffect(name: 'stagger');
+      final drivers = layer.getGraphDrivers();
+      final driverId = drivers.single.id();
+      drivers.single.setValue(
+          id: 'ease_out',
+          value: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(0, 0), key(1, 80)])));
+      layer.setEffects(effects: drivers);
+
+      final row = '${driverPath(id, driverId.toString())}/ease_out';
+      final channels = graphChannels(layers: [entryOf(p)], selected: [row]);
+      expect(channels.length, 1, reason: 'the driver row is a curve');
+
+      const eased =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.5));
+      applyInterpToSelection(
+        channels: channels,
+        selectedKeys: {'${channels.single.id}#0', '${channels.single.id}#1'},
+        side: eased,
+      );
+
+      final info = layer.getGraphDrivers().single.getInfo();
+      final scalar = (info.values.firstWhere((v) => v.id == 'ease_out').value
+              as BridgeEffectValue_Float)
+          .field0;
+      final keys = (scalar as BridgeScalar_Keyframed).field0;
+      expect(keys.first.interpOut, eased);
+      expect(keys.last.interpIn, eased);
+      expect(layer.getEffects(), isEmpty,
+          reason: 'the driver stayed in the graph');
+    });
   });
 }

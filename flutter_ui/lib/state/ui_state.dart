@@ -2746,6 +2746,13 @@ class LumitUiState extends ChangeNotifier {
   void requestAlign(Offset at, {required bool anchor}) =>
       alignRequest.value = (++_alignRequests, anchor: anchor, at: at);
 
+  /// Ctrl+Shift+T in the Viewer: put a box round the picked path points to
+  /// turn them, or take it away. The Viewer answers, since the points are
+  /// its own.
+  final ValueNotifier<int> pointsTurnRequest = ValueNotifier(0);
+
+  void requestPointsTurn() => pointsTurnRequest.value++;
+
   /// The selection lined up with itself or spaced out, for the Align panel.
   /// [x] and [y] are the point of each box to bring together, 0 to 1, null for
   /// an axis left alone; [distribute] the axis to space them along, by the

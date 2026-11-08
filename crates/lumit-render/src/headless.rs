@@ -5003,6 +5003,7 @@ mod tests {
             8,
             8,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 looks: Default::default(),
@@ -5853,6 +5854,7 @@ mod tests {
         }
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(id) {
             c.graph = Some(CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 looks: Default::default(),
@@ -6796,6 +6798,7 @@ mod tests {
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.effects = vec![blur];
                 l.graph = LayerGraph {
+                    widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
                     looks: Default::default(),
@@ -7902,6 +7905,7 @@ mod tests {
             if let Some(enabled) = graph {
                 remap.enabled = enabled;
                 l.graph = LayerGraph {
+                    widths: Vec::new(),
                     notes: Vec::new(),
                     ties: Vec::new(),
                     looks: Default::default(),
@@ -8606,6 +8610,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 looks: Default::default(),
@@ -8658,6 +8663,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 looks: Default::default(),
@@ -8722,6 +8728,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                widths: Vec::new(),
                 notes: Vec::new(),
                 ties: Vec::new(),
                 looks: Default::default(),
@@ -8814,6 +8821,7 @@ mod tests {
         let sampler_id = sampler.id;
 
         let graph = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             looks: Default::default(),
@@ -9086,13 +9094,75 @@ mod tests {
         let wired = build(true);
         let cut = build(false);
         let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
-            r.render_rgba(doc, *comp_id, 0, 1.0)
+            r.render_rgba(doc, *comp_id, 15, 1.0)
                 .expect("the export path renders")
                 .0
         };
         let webbed = frame_of(&wired);
         assert_ne!(webbed, frame_of(&cut), "Scatter's points drew no lines");
         assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
+    }
+
+    /// **A Time loop shows its source at the loop's moment.** The source
+    /// darkens over its first second and is hidden; the base layer loops its
+    /// first half second. Frame 20 is frame 5 again, and with the loop off the
+    /// source does not show.
+    #[test]
+    fn a_time_loop_shows_its_source_at_the_loops_moment() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let build = |looped: bool| {
+            use lumit_core::model::EffectValue;
+            let (mut doc, comp_id, _) = matrix_base(32, 16, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let mut darken = lumit_core::fx::builtins::instantiate("exposure").unwrap();
+            for p in &mut darken.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(ramp(0.0, -6.0, 1));
+                }
+            }
+            comp.layers[0].effects = vec![darken];
+            comp.layers[0].switches.visible = false;
+            let mut time_loop = lumit_core::fx::builtins::instantiate("time_loop").unwrap();
+            for p in &mut time_loop.params {
+                match p.id.as_str() {
+                    "source" => p.value = EffectValue::Layer(Some(top)),
+                    "duration" => p.value = EffectValue::Float(Property::fixed(0.5)),
+                    _ => {}
+                }
+            }
+            time_loop.enabled = looped;
+            comp.layers[1].effects = vec![time_loop];
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let mut frame = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid), f: u64| {
+            r.render_rgba(doc, *comp_id, f, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let looped = build(true);
+        assert_eq!(
+            frame(&looped, 20),
+            frame(&looped, 5),
+            "a lap later, the same picture"
+        );
+        assert_ne!(
+            frame(&looped, 5),
+            frame(&looped, 10),
+            "the source moves within a lap"
+        );
+        let plain = build(false);
+        assert_ne!(
+            frame(&plain, 5),
+            frame(&looped, 5),
+            "the loop lays the source over"
+        );
     }
 
     /// **A stamp shown at another moment is rendered at that moment.**
@@ -9151,6 +9221,102 @@ mod tests {
             frame_of(&in_order),
             "two renders of one frame differ"
         );
+    }
+
+    /// **A lattice drawn at half resolution is the same lattice, smaller.**
+    /// The Viewer draws a drag at a reduced resolution, so a size that missed
+    /// the raster factor showed dots of the wrong size until the drag ended.
+    #[test]
+    fn a_lattice_keeps_its_size_at_half_resolution() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (128u32, 64u32);
+        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.0, 0.0, 0.0, 1.0]));
+        let comp = doc.comp_mut(comp_id).unwrap();
+        let mut grid = lumit_core::fx::builtins::instantiate("grid").unwrap();
+        for p in &mut grid.params {
+            let v = match p.id.as_str() {
+                "position_x" => 64.0,
+                "position_y" => 32.0,
+                "spacing_x" => 32.0,
+                "spacing_y" => 24.0,
+                "size" => 12.0,
+                "columns" => 3.0,
+                "rows" => 2.0,
+                "planes" => 1.0,
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+        }
+        comp.layers[0].effects = vec![grid];
+        let doc = DocumentStore::new(doc).snapshot();
+        let lit = |scale: f32, r: &mut HeadlessRenderer| {
+            let (px, w, h) = r.render_rgba(&doc, comp_id, 0, scale).expect("renders");
+            let n = px.chunks(4).filter(|c| c[0] > 128).count();
+            (n, w, h)
+        };
+        let (full, fw, fh) = lit(1.0, &mut r);
+        let (half, hw, hh) = lit(0.5, &mut r);
+        eprintln!("DEBUG full {full} ({fw}x{fh}) half {half} ({hw}x{hh})");
+        assert!(full > 0, "the lattice drew nothing");
+        let ratio = half as f32 * 4.0 / full as f32;
+        assert!(
+            (0.7..1.3).contains(&ratio),
+            "half resolution drew {ratio} of the area"
+        );
+
+        // Stamped: a small white layer cloned onto the lattice of a full-frame
+        // one, at a half and a quarter.
+        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.0, 0.0, 0.0, 1.0]));
+        let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([1.0, 1.0, 1.0, 1.0]));
+        let comp = doc.comp_mut(comp_id).unwrap();
+        let (mut effects, graph) = cloned_lattice(cw, ch, top);
+        for p in &mut effects[0].params {
+            let v = match p.id.as_str() {
+                "spacing_x" => 32.0,
+                "spacing_y" => 24.0,
+                // A copy is its layer where it sits in the comp, so at 100
+                // each is the white layer at its own size.
+                "size" => 100.0,
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+        }
+        for p in &mut effects[1].params {
+            if p.id == "scale" {
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(150.0));
+            }
+        }
+        let l = &mut comp.layers[1];
+        l.effects = effects;
+        l.graph = graph;
+        // The source hidden, so only the stamps are lit, and in the middle
+        // of the comp: a copy carries the layer's place, so moved out of
+        // frame it would take the copies with it.
+        let t = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+        t.switches.visible = false;
+        t.transform.position_x = Property::fixed(f64::from(cw) * 0.5);
+        t.transform.position_y = Property::fixed(f64::from(ch) * 0.5);
+        let doc = DocumentStore::new(doc).snapshot();
+        let lit = |scale: f32, r: &mut HeadlessRenderer| {
+            let (px, _, _) = r.render_rgba(&doc, comp_id, 0, scale).expect("renders");
+            px.chunks(4).filter(|c| c[0] > 128).count() as f32 / (scale * scale)
+        };
+        let full = lit(1.0, &mut r);
+        assert!(full > 0.0, "the stamps drew nothing");
+        for scale in [0.5, 0.25] {
+            let ratio = lit(scale, &mut r) / full;
+            eprintln!("DEBUG stamps at {scale}: {ratio}");
+            assert!(
+                (0.7..1.3).contains(&ratio),
+                "stamps at {scale} drew {ratio} of the area"
+            );
+        }
     }
 
     /// **Clone pictures made inside the walk reach the stamps.**
@@ -9257,7 +9423,7 @@ mod tests {
         let off = build(1, true);
         let cut = build(0, false);
         let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::model::Document>, Uuid)| {
-            r.render_rgba(doc, *comp_id, 0, 1.0)
+            r.render_rgba(doc, *comp_id, 15, 1.0)
                 .expect("the export path renders")
                 .0
         };

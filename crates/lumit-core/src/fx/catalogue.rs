@@ -33,8 +33,8 @@ use super::drivers::{
     remap::{Remap, RemapDef},
     ring_wave::{RingWave, RingWaveDef},
     siceliot::{
-        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, ValueNoise,
-        ValueNoiseDef,
+        Oscillator, OscillatorDef, Random, RandomDef, Stagger, StaggerDef, TimeNode, TimeNodeDef,
+        ValueNode, ValueNodeDef, ValueNoise, ValueNoiseDef,
     },
     smooth::{Smooth, SmoothDef},
     split::{Split, SplitDef},
@@ -83,11 +83,13 @@ use super::effects::{
     channel_blur::{ChannelBlur, ChannelBlurDef},
     checkbox_control::{CheckboxControl, CheckboxControlDef},
     chromatic_aberration::{ChromaticAberration, ChromaticAberrationDef},
+    clone_deformer::{CloneDeformer, CloneDeformerDef},
     clone_to_points::{CloneToPoints, CloneToPointsDef},
     colour_balance::{ColourBalance, ColourBalanceDef},
     colour_control::{ColourControl, ColourControlDef},
     combine_channels::{CombineChannels, CombineChannelsDef},
     connect_points::{ConnectPoints, ConnectPointsDef},
+    contour_points::{ContourPoints, ContourPointsDef},
     contrast::{Contrast, ContrastDef},
     corner_pin::{CornerPin, CornerPinDef},
     crop::{Crop, CropDef},
@@ -120,6 +122,7 @@ use super::effects::{
     grid::{Grid, GridDef},
     hue_saturation::{HueSaturation, HueSaturationDef},
     hue_shift::{HueShift, HueShiftDef},
+    intersection_points::{IntersectionPoints, IntersectionPointsDef},
     invert::{Invert, InvertDef},
     iris_wipe::{IrisWipe, IrisWipeDef},
     jolt::{Jolt, JoltDef},
@@ -133,6 +136,7 @@ use super::effects::{
     linear_wipe::{LinearWipe, LinearWipeDef},
     luma_fade::{LumaFade, LumaFadeDef},
     lut::{Lut, LutDef},
+    math_points::{MathPoints, MathPointsDef},
     matte_key::{MatteKey, MatteKeyDef},
     median::{Median, MedianDef},
     merge::{Merge, MergeDef},
@@ -182,6 +186,7 @@ use super::effects::{
     sharpen_simple::{SharpenSimple, SharpenSimpleDef},
     slider_control::{SliderControl, SliderControlDef},
     smoke::{Smoke, SmokeDef},
+    sort_points::{SortPoints, SortPointsDef},
     spherize::{Spherize, SpherizeDef},
     split_channels::{SplitChannels, SplitChannelsDef},
     sprite_flare::{SpriteFlare, SpriteFlareDef},
@@ -193,6 +198,7 @@ use super::effects::{
     texturize::{Texturize, TexturizeDef},
     threshold::{Threshold, ThresholdDef},
     tile::{Tile, TileDef},
+    time_loop::{TimeLoop, TimeLoopDef},
     time_offset::{TimeOffset, TimeOffsetDef},
     timewarp::{Timewarp, TimewarpDef},
     tint::{Tint, TintDef},
@@ -307,11 +313,18 @@ crate::catalogue![
     ScatterDef => Scatter,
     EmitFromImageDef => EmitFromImage,
     PointsAlongPathDef => PointsAlongPath,
+    // Points laid out by a formula, on the pieces of a path, and where
+    // paths cross.
+    MathPointsDef => MathPoints,
+    ContourPointsDef => ContourPoints,
+    IntersectionPointsDef => IntersectionPoints,
     TextToPointsDef => TextToPoints,
     TrackPointsDef => TrackPoints,
     // The consumers, after the producers they read: the
     // stack effects that take a points wire rather than hand one out.
     CloneToPointsDef => CloneToPoints,
+    // What Clone to points drew, changed as one group.
+    CloneDeformerDef => CloneDeformer,
     TrailDef => Trail,
     ConnectPointsDef => ConnectPoints,
     PointsFieldDef => PointsField,
@@ -326,7 +339,10 @@ crate::catalogue![
     RelaxPointsDef => RelaxPoints,
     FlowPointsDef => FlowPoints,
     BakePointsDef => BakePoints,
+    SortPointsDef => SortPoints,
     EchoDef => Echo,
+    // Another layer, a stretch of it played over and over.
+    TimeLoopDef => TimeLoop,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,
     MotionBlurDef => MotionBlur,
@@ -526,4 +542,8 @@ crate::catalogue![
     OscillatorDef => Oscillator,
     ValueNoiseDef => ValueNoise,
     RingWaveDef => RingWave,
+    // One number to wire into many parameters, and the clock itself: the
+    // two convenience drivers, the same for every copy.
+    ValueNodeDef => ValueNode,
+    TimeNodeDef => TimeNode,
 ];

@@ -75,6 +75,7 @@ pub(crate) fn op_scope(op: &lumit_core::ops::Op) -> (Option<Uuid>, Option<Uuid>,
         // Trimming and cropping are comp settings plus the layers they move,
         // so they report the widest scope the settings do.
         Op::SetCompSettings { comp, .. }
+        | Op::SetCompStart { comp, .. }
         | Op::TrimCompToWorkArea { comp }
         | Op::CropCompToRegion { comp, .. } => (Some(*comp), None, true),
 

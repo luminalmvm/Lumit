@@ -36,6 +36,7 @@ fn wiggle_into_blur() -> (LayerGraph, Vec<EffectInstance>) {
             nodes: vec![wiggle],
             edges: vec![edge],
             layout: vec![(NodeRef::Source, [0.0, 0.0])],
+            widths: Vec::new(),
             exposed: Vec::new(),
             groups: Vec::new(),
         },
@@ -224,6 +225,9 @@ fn a_graph_round_trips_through_json() {
     graph
         .layout
         .push((NodeRef::Driver(graph.nodes[0].id), [12.5, -3.0]));
+    graph
+        .widths
+        .push((NodeRef::Driver(graph.nodes[0].id), 240.0));
     graph.edges.push(Edge {
         from: OutputRef::SourceMatte,
         to: InputRef::Matte {

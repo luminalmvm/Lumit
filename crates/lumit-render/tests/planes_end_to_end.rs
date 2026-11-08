@@ -464,6 +464,7 @@ fn graph_cutting(size: u32) -> (Arc<Document>, Uuid, Uuid) {
 
     let mut comp = comp_of(Vec::new());
     comp.graph = Some(CompGraph {
+        widths: Vec::new(),
         notes: Vec::new(),
         ties: Vec::new(),
         looks: Default::default(),

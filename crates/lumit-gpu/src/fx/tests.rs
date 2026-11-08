@@ -7321,6 +7321,9 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
     let mut degenerate = base;
     degenerate.end_x = 0.0;
     degenerate.end_y = 0.0;
+    let mut three = base;
+    three.colours = 1;
+    three.colour_2 = [1.0, 0.35, 0.0, 1.0];
 
     for (name, gradient, mix) in [
         ("linear", base, 1.0f32),
@@ -7328,6 +7331,7 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
         ("scattered", scattered, 1.0),
         ("hdr", hdr, 1.0),
         ("degenerate", degenerate, 1.0),
+        ("three colours", three, 1.0),
         ("mixed", base, 0.6),
         ("mix-zero", base, 0.0),
     ] {
@@ -7346,6 +7350,8 @@ fn wgsl_gradient_matches_the_cpu_oracle() {
             seed: p.seed,
             mix: p.mix,
             clip_to_alpha: p.clip_to_alpha,
+            mids: p.mids,
+            mid: p.mid,
         };
 
         let mut cpu = img.clone();

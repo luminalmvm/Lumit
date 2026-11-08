@@ -467,11 +467,16 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Grid,
     &Scatter,
     &CloneToPoints,
+    &CloneDeformer,
     &Trail,
     &ConnectPoints,
     &PointsField,
     &EmitFromImage,
     &PointsAlongPath,
+    &MathPoints,
+    &TimeLoop,
+    &ContourPoints,
+    &IntersectionPoints,
     &TrackPoints,
     &TextToPoints,
     &LabelPoints,
@@ -483,6 +488,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &PointsModifier("relax_points"),
     &PointsModifier("flow_points"),
     &PointsModifier("bake_points"),
+    &PointsModifier("sort_points"),
     // The seven layer styles that render (docs/impl/layer-styles.md §8).
     // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
     // have no pass here, so an instance of one resolves to an op this table
@@ -1510,6 +1516,8 @@ impl GpuEffect for Gradient {
                 seed: g.seed,
                 mix: g.mix,
                 clip_to_alpha: g.clip_to_alpha,
+                mids: g.mids,
+                mid: g.mid,
             },
         )
     }
@@ -3041,6 +3049,8 @@ impl GpuEffect for StyleGradientOverlay {
                 seed: d.seed,
                 mix: d.mix,
                 clip_to_alpha: d.clip_to_alpha,
+                mids: d.mids,
+                mid: d.mid,
             },
         )
     }
@@ -5285,7 +5295,23 @@ impl GpuEffect for CloneToPoints {
         ) else {
             return tex.clone();
         };
-        let stamps = inst.stamps(&stream, of);
+        // The effect's own input has no size of its own, so it takes the
+        // frame's.
+        let frame = [w as f32 / px_scale.max(1e-6), h as f32 / px_scale.max(1e-6)];
+        let mut stamps = inst.stamps(&stream, of);
+        if inst.distribution == lumit_core::fx::effects::clone_to_points::DIST_LAYOUT {
+            // Each copy's length along the line is its picture's.
+            let unit = |i: usize| {
+                let which = stamps.index_of(i) as usize;
+                let size = pictures
+                    .get(which)
+                    .and_then(Option::as_ref)
+                    .map_or(frame, |picture| picture.size.unwrap_or(frame));
+                inst.fit(size, px_scale).unit
+            };
+            let units: Vec<[f32; 2]> = (0..stamps.len()).map(unit).collect();
+            inst.laid_out(&mut stamps, |i| units.get(i).copied().unwrap_or([1.0; 2]));
+        }
         let points = draw_points_of(&stamps);
         // The camera, in the raster this frame is drawn at —
         // `None` on a 2D layer, where it is not the identity matrix but no
@@ -5294,9 +5320,6 @@ impl GpuEffect for CloneToPoints {
             .schedule()
             .and_then(|c| c.projection)
             .map(|proj| proj.rescaled(px_scale));
-        // The effect's own input has no size of its own, so it takes the
-        // frame's.
-        let frame = [w as f32 / px_scale.max(1e-6), h as f32 / px_scale.max(1e-6)];
         // One draw per run of neighbours that share a picture, so the stamps
         // still go down in the stream's one order whichever layer each takes.
         //
@@ -5335,7 +5358,80 @@ impl GpuEffect for CloneToPoints {
             }
             from = to;
         }
-        fx.points_draw_runs(ctx, tex, w, h, &runs)
+        fx.points_draw_blended(ctx, tex, w, h, &runs, inst.copy_blend)
+    }
+}
+
+/// Clone deformer: the copies a Clone to points above drew, aligned or cut as
+/// one group.
+///
+/// Nothing here decides anything — `CloneDeformer::apply` does it, on the
+/// picture read back. What this settles is the picture, the Boolean layer's
+/// picture at this raster, and the outlines the builder laid beside the op.
+///
+/// ponytail: a read back and an upload per frame. Move the cut and the
+/// shift into a kernel, with the outlines as coverage, if a profile shows it.
+struct CloneDeformer;
+impl GpuEffect for CloneDeformer {
+    fn match_name(&self) -> &'static str {
+        lumit_core::fx::effects::clone_deformer::MATCH_NAME
+    }
+    fn run(
+        &self,
+        _fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::clone_deformer::{CloneDeformer as D, Reads};
+        let inst = D::read(p);
+        let k = D::px_scale_of(p);
+        let Ok(mut rgba) = lumit_gpu::fx::common::readback_linear_f32(ctx, tex, w, h) else {
+            return tex.clone();
+        };
+        // The Boolean layer's picture, centred on this raster where it came
+        // at another size.
+        let other = aux.layer_input().and_then(|t| {
+            let (ow, oh) = (t.width(), t.height());
+            let read = lumit_gpu::fx::common::readback_linear_f32(ctx, t, ow, oh).ok()?;
+            if (ow, oh) == (w, h) {
+                return Some(read);
+            }
+            let (dx, dy) = (
+                (i64::from(w) - i64::from(ow)) / 2,
+                (i64::from(h) - i64::from(oh)) / 2,
+            );
+            let mut out = vec![0.0; (w * h * 4) as usize];
+            for y in 0..i64::from(oh) {
+                for x in 0..i64::from(ow) {
+                    let (tx, ty) = (x + dx, y + dy);
+                    if tx < 0 || ty < 0 || tx >= i64::from(w) || ty >= i64::from(h) {
+                        continue;
+                    }
+                    let from = ((y * i64::from(ow) + x) * 4) as usize;
+                    let to = ((ty * i64::from(w) + tx) * 4) as usize;
+                    out[to..to + 4].copy_from_slice(&read[from..from + 4]);
+                }
+            }
+            Some(out)
+        });
+        let sched = aux.schedule();
+        let grow = sched.map_or([0.0; 2], |s| [s.grow[0] as f32, s.grow[1] as f32]);
+        let reads = Reads {
+            copies: sched
+                .and_then(|s| s.clone_shapes.as_deref())
+                .map(|c| &c.copies[..]),
+            other: other.as_deref(),
+            boolean: sched.and_then(|s| s.boolean_shape.as_deref()),
+            result: sched
+                .and_then(|s| s.clone_shapes.as_deref())
+                .and_then(|c| c.result.as_deref()),
+        };
+        inst.apply(&mut rgba, w, h, k, grow, &reads);
+        lumit_gpu::fx::common::upload_linear_f32(ctx, &rgba, w, h)
     }
 }
 
@@ -5856,7 +5952,12 @@ impl GpuEffect for TypeFill {
         if words.is_empty() || mix <= 0.0 || w == 0 || h == 0 {
             return tex.clone();
         }
-        let bands = inst.row_bands(h as f32, px_scale);
+        // Columns lays the words out in a frame turned on its side: the
+        // rows below run down the picture, and each box is turned back at
+        // the end, so the words stand upright one under another.
+        let down = inst.direction == 1;
+        let (lw, lh) = if down { (h, w) } else { (w, h) };
+        let bands = inst.row_bands(lh as f32, px_scale);
         // The region along the middle of each row, 0..1 a pixel; unset, all
         // of it.
         let region = aux
@@ -5866,9 +5967,67 @@ impl GpuEffect for TypeFill {
             .map(|l| &l.tex)
             .filter(|t| t.width() == w && t.height() == h)
             .and_then(|t| lumit_gpu::fx::common::readback_linear_f32(ctx, t, w, h).ok());
+        // The region as the layout reads it: turned on its side for Columns.
+        let laid: Option<Vec<f32>> = region.as_ref().map(|px| {
+            if !down {
+                return px.clone();
+            }
+            let (w, h) = (w as usize, h as usize);
+            let mut out = vec![0.0f32; w * h * 4];
+            for y in 0..w {
+                for x in 0..h {
+                    let from = (x * w + y) * 4;
+                    let to = (y * h + x) * 4;
+                    out[to..to + 4].copy_from_slice(&px[from..from + 4]);
+                }
+            }
+            out
+        });
+        // From here to the boxes, `w`, `h` and `region` are the layout's.
+        let (ow, oh, picture_region) = (w, h, region);
+        let (w, h, region) = (lw, lh, laid);
         let luminance = inst.region_from == 1;
+        let read = |px: &[f32], at: usize| -> f32 {
+            let t = px.get(at..at + 4).unwrap_or(&[0.0; 4]);
+            if luminance {
+                (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)
+            } else {
+                t[3].clamp(0.0, 1.0)
+            }
+        };
+        // Fit piece: how far down each row's band the region reaches, a pixel
+        // column at a time, over the whole band rather than its middle.
+        let reach: Vec<Vec<Option<[f32; 2]>>> = if inst.fit_piece {
+            bands
+                .iter()
+                .map(|band| {
+                    // A row Row open has not opened yet holds nothing.
+                    if band[1] - band[0] < 1.0 {
+                        return vec![None; w as usize];
+                    }
+                    let rows =
+                        (band[0].max(0.0) as usize)..(band[1].ceil() as usize).min(h as usize);
+                    (0..w as usize)
+                        .map(|x| {
+                            let Some(px) = &region else {
+                                return Some(*band);
+                            };
+                            let inside = |y: &usize| {
+                                inst.coverage(read(px, (y * w as usize + x) * 4)) >= 0.5
+                            };
+                            let top = rows.clone().find(inside)?;
+                            let bottom = rows.clone().rev().find(inside)?;
+                            Some([top as f32, bottom as f32 + 1.0])
+                        })
+                        .collect()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let free: Vec<Vec<[f32; 2]>> = bands
             .iter()
+            .filter(|_| !inst.fit_piece)
             .map(|band| {
                 let y = (((band[0] + band[1]) * 0.5) as u32).min(h - 1) as usize;
                 let samples: Vec<f32> = match &region {
@@ -5891,13 +6050,20 @@ impl GpuEffect for TypeFill {
         // Each word laid out once at about the rows' height, trimmed to its
         // letters: its natural width a px of height, and the drawing that
         // is stretched into its boxes.
-        let row = bands.first().map_or(0.0, |b| b[1] - b[0]).max(1.0);
+        // The tallest row: with Row open the first may still be flat.
+        let row = bands
+            .iter()
+            .map(|b| b[1] - b[0])
+            .fold(0.0f32, f32::max)
+            .max(1.0);
         let sizes: Vec<f32> = words
             .iter()
             .map(|word| {
                 let probe = word_drawing(doc, px_scale, 1.0, word).trimmed();
-                let k = if probe.height > 0 {
-                    px_scale * row / probe.height as f32
+                // A row holds a word as tall as it; a column as wide as it.
+                let across = if down { probe.width } else { probe.height };
+                let k = if across > 0 {
+                    px_scale * row / across as f32
                 } else {
                     px_scale
                 };
@@ -5913,7 +6079,26 @@ impl GpuEffect for TypeFill {
             .iter()
             .map(|d| d.width as f32 / d.height.max(1) as f32)
             .collect();
-        let pieces = inst.pieces(&bands, &free, &natural, w as f32, px_scale);
+        // How long each word is along its row or column, a px of the other
+        // way: down a column an upright word is its height over its width.
+        let along: Vec<f32> = if down {
+            natural.iter().map(|n| 1.0 / n.max(1e-3)).collect()
+        } else {
+            natural.clone()
+        };
+        let mut pieces = if inst.fit_piece {
+            inst.fit_pieces(&reach, &along, w as f32, px_scale)
+        } else {
+            inst.pieces(&bands, &free, &along, w as f32, px_scale)
+        };
+        // Back from the frame on its side: each box turned to the picture.
+        if down {
+            for piece in &mut pieces {
+                let [x0, y0, x1, y1] = piece.rect;
+                piece.rect = [y0, x0, y1, x1];
+            }
+        }
+        let (w, h, region) = (ow, oh, picture_region);
         // Each word is set again as wide as its boxes want it, in quarter
         // octaves, so a wide column gets wide letters instead of a smear.
         let step = |piece: &lumit_core::fx::effects::type_fill::Piece| -> i32 {
@@ -5934,8 +6119,13 @@ impl GpuEffect for TypeFill {
         let placed: Vec<Placed<'_>> = pieces
             .iter()
             .filter_map(|piece| {
-                Placed::boxed(wide.get(&(piece.word, step(piece)))?, piece.rect, None)
-                    .map(|p| p.clipped_x(piece.clip))
+                Placed::boxed(wide.get(&(piece.word, step(piece)))?, piece.rect, None).map(|p| {
+                    if down {
+                        p.clipped_y(piece.clip)
+                    } else {
+                        p.clipped_x(piece.clip)
+                    }
+                })
             })
             .collect();
         if placed.is_empty() {
@@ -5943,8 +6133,12 @@ impl GpuEffect for TypeFill {
         }
         let mut px = composite(&placed, [0, 0], [i64::from(w), i64::from(h)]);
         // The region cuts the words pixel by pixel: the rows read it only
-        // along their middle, and a curved edge crosses a tall row.
-        if let Some(region) = &region {
+        // along their middle, and a curved edge crosses a tall row. Fit piece
+        // keeps every word whole, unless Clip to region cuts them at the edge.
+        if let Some(region) = region
+            .as_ref()
+            .filter(|_| !inst.fit_piece || inst.clip_to_region)
+        {
             for (out, t) in px.chunks_exact_mut(4).zip(region.chunks_exact(4)) {
                 let v = if luminance {
                     (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]).clamp(0.0, 1.0)
@@ -6004,6 +6198,156 @@ impl GpuEffect for AddGrain {
                 mix: g.mix,
             },
         )
+    }
+}
+
+/// A stream worked out on the host, drawn through the shared points draw in
+/// `style` under the comp's camera, as Grid's is.
+#[allow(clippy::too_many_arguments)]
+fn draw_host_stream(
+    fx: &FxEngine,
+    ctx: &GpuContext,
+    tex: &Tex,
+    w: u32,
+    h: u32,
+    stream: &lumit_core::fx::points::PointsStream,
+    style: lumit_core::fx::points::DrawStyle,
+    projection: Option<lumit_core::fx::points::Projection>,
+) -> Tex {
+    let points = draw_points_of(stream);
+    fx.points_draw(
+        ctx,
+        tex,
+        w,
+        h,
+        None,
+        &lumit_gpu::fx::points_draw::PointsDrawOp {
+            points: &points,
+            feather: style.feather,
+            mix: style.mix,
+            projection: projection.map(|proj| proj.m),
+            field: lumit_gpu::fx::points_draw::FieldTest::None,
+            seed: 0,
+            mode: 0,
+            sprite: None,
+        },
+    )
+}
+
+/// Math points: a formula worked out on the host, as Grid's lattice is.
+struct MathPoints;
+impl GpuEffect for MathPoints {
+    fn match_name(&self) -> &'static str {
+        "math_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::math_points::MathPoints as M;
+        let inst = M::read(p);
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(M::px_scale_of(p)));
+        let stream = inst.stream(projection.unwrap_or_default());
+        draw_host_stream(fx, ctx, tex, w, h, &stream, inst.draw_style(), projection)
+    }
+}
+
+/// Contour points: the pieces of the mask's or the shapes' flattened line,
+/// worked out on the host, as Points along path is.
+struct ContourPoints;
+impl GpuEffect for ContourPoints {
+    fn match_name(&self) -> &'static str {
+        "contour_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::contour_points::ContourPoints as C;
+        let inst = C::read(p);
+        let px_scale = C::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        let path = lumit_core::fx::points::scale_path(&path_of(aux), px_scale);
+        let stream = inst.stream(&path, projection.unwrap_or_default());
+        draw_host_stream(fx, ctx, tex, w, h, &stream, inst.draw_style(), projection)
+    }
+}
+
+/// Intersection points: where the mask's or the shapes' flattened line
+/// crosses itself, worked out on the host, as Points along path is.
+struct IntersectionPoints;
+impl GpuEffect for IntersectionPoints {
+    fn match_name(&self) -> &'static str {
+        "intersection_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::intersection_points::IntersectionPoints as I;
+        let inst = I::read(p);
+        let px_scale = I::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        let path = lumit_core::fx::points::scale_path(&path_of(aux), px_scale);
+        let stream = inst.stream(&path, projection.unwrap_or_default());
+        draw_host_stream(fx, ctx, tex, w, h, &stream, inst.draw_style(), projection)
+    }
+}
+
+/// Time loop: its Source layer at the loop's moments, made by the builder,
+/// faded together while a crossfade runs and laid over the picture.
+struct TimeLoop;
+impl GpuEffect for TimeLoop {
+    fn match_name(&self) -> &'static str {
+        "time_loop"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::time_loop::TimeLoop as L;
+        let pictures = aux.layer_inputs();
+        let picture = |k: usize| pictures.get(k).and_then(Option::as_ref).map(|l| &l.tex);
+        // No source, or none at that moment: the picture passes through.
+        let Some(now) = picture(0) else {
+            return tex.clone();
+        };
+        let mix = (L::read(p).mix / 100.0).clamp(0.0, 1.0);
+        let share = p.float(L::DERIVED_NEXT_SHARE, 0.0);
+        fx.time_loop(ctx, tex, now, picture(1), share, w, h, mix)
     }
 }
 
@@ -6822,12 +7166,32 @@ mod tests {
         // cell, so the cell is empty above and below it, hung off-centre from
         // its point with its corners rounded.
         let inst = lumit_core::fx::effects::clone_to_points::CloneToPoints {
+            distribution: 0,
+            dist_count: 10,
+            dist_columns: 5,
+            dist_rows: 5,
+            dist_spacing_x: 120.0,
+            dist_spacing_y: 120.0,
+            path_layer: false,
+            dist_align: true,
+            dist_length: 100.0,
+            dist_travel: 0.0,
+            dist_offset: 0.0,
+            dist_direction: 0,
+            dist_spacing: 20.0,
+            dist_position_x: 960.0,
+            dist_position_y: 540.0,
             clone_layer: true,
             clone_layer_2: false,
             clone_layer_3: false,
             clone_layer_4: false,
+            clone_layer_5: false,
+            clone_layer_6: false,
+            clone_layer_7: false,
+            clone_layer_8: false,
             choose_by: 0,
             choose_name: Default::default(),
+            layer_index: 0.0,
             seed: 0,
             time_offset: 0,
             time_name: Default::default(),
@@ -6842,12 +7206,17 @@ mod tests {
             cell_width: 40.0,
             cell_height: 24.0,
             scale: 700.0,
+            scale_x: 100.0,
+            scale_y: 100.0,
             rotation: 25.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
             anchor_x: 20.0,
             anchor_y: 80.0,
             corner_radius: 6.0,
             opacity: 80.0,
             tint: 100.0,
+            copy_blend: 0,
             depth_sort: true,
             max_clones: 20_000,
             mix: 100.0,
@@ -6939,6 +7308,58 @@ mod tests {
         let twice =
             lumit_gpu::fx::common::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
+
+        // Copy blend, over a picture and split into two runs, so the second
+        // run's stamps meet the first's: Add as the card blends it, and
+        // Multiply, Screen and Difference through the tiles.
+        let ground: Vec<f32> = (0..w * h).flat_map(|_| [0.2, 0.1, 0.05, 1.0]).collect();
+        let tex = lumit_gpu::fx::common::upload_linear_f32(&ctx, &ground, w, h);
+        let half = points.len() / 2;
+        let split = [
+            (
+                lumit_gpu::fx::points_draw::PointsDrawOp {
+                    points: &points[..half],
+                    ..op
+                },
+                runs[0].1,
+            ),
+            (
+                lumit_gpu::fx::points_draw::PointsDrawOp {
+                    points: &points[half..],
+                    ..op
+                },
+                runs[0].1,
+            ),
+        ];
+        for blend in [6u32, 2, 8, 18] {
+            let mut cpu = ground.clone();
+            lumit_core::fx::points::draw_stream_fit_blended(
+                &mut cpu,
+                w,
+                h,
+                &stamps,
+                &[],
+                &style,
+                Some(lumit_core::fx::points::Sprite {
+                    rgba: &sprite_px,
+                    w: 8,
+                    h: 8,
+                }),
+                &fit,
+                blend,
+            );
+            assert_ne!(cpu, ground, "blend {blend} drew nothing");
+            let out = fx.points_draw_blended(&ctx, &tex, w, h, &split, blend);
+            let gpu =
+                lumit_gpu::fx::common::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let worst = cpu
+                .iter()
+                .zip(&gpu)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            eprintln!("copy blend {blend}: worst |Δ| {worst:.3e}");
+            assert!(worst < 2e-2, "copy blend {blend}: worst |Δ| {worst}");
+        }
     }
 
     // ---------------------------------------------- Points field

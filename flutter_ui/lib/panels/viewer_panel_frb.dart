@@ -644,14 +644,19 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// any switch anywhere was clicked. The read model carries each layer's
   /// source now, so the list below is a walk over data already in hand
   /// (docs/impl/ui-performance.md §4.5).
-  ({BridgeCompSettings settings, BridgeCompSize size})? _facts;
+  ({BridgeCompSettings settings, BridgeCompSize size, int start})? _facts;
 
-  ({BridgeCompSettings settings, BridgeCompSize size})? _factsOf(
+  ({BridgeCompSettings settings, BridgeCompSize size, int start})? _factsOf(
       CompositionReference comp) {
     final held = _facts;
     if (held != null) return held;
     try {
-      return _facts = (settings: comp.getSettings(), size: comp.getSize());
+      return _facts = (
+        settings: comp.getSettings(),
+        size: comp.getSize(),
+        // The frame the clock reads at the first frame: the Start timecode.
+        start: comp.frameAtTime(time: comp.getStartTimecode()),
+      );
     } catch (_) {
       // Deleted a moment ago. The shell fronts another comp once the
       // engine's change arrives; until then there is nothing to show.
@@ -843,6 +848,8 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           playing: playing,
           playhead: ui.playheadFrame,
           settings: settings,
+          // The clock reads from the comp's Start timecode, held with its facts.
+          startFrame: facts.start,
           comp: comp,
           compSize: facts.size,
           tier: tier,

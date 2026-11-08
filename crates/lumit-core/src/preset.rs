@@ -942,6 +942,7 @@ mod tests {
         let blur = crate::fx::builtins::instantiate("blur").unwrap();
         let (a, b, c, d) = (wiggle.id, smooth.id, outside.id, blur.id);
         let graph = LayerGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             looks: Default::default(),
@@ -1122,6 +1123,7 @@ mod tests {
         };
         let members = vec![read.id(), blur.id(), out.id()];
         let graph = CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             looks: Default::default(),

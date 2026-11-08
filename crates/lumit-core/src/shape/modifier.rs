@@ -50,6 +50,9 @@ pub struct ShapeGroup {
     pub name: String,
     #[serde(deserialize_with = "read_entries")]
     pub entries: Vec<ShapeEntry>,
+    /// Switched off by its eye: nothing in the group is drawn.
+    #[serde(default, skip_serializing_if = "super::is_shown")]
+    pub hidden: bool,
     /// Unknown fields from newer Lumit versions, preserved on load/save.
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -63,6 +66,7 @@ impl ShapeGroup {
             id: Uuid::now_v7(),
             name: name.into(),
             entries,
+            hidden: false,
             extra: serde_json::Map::new(),
         }
     }
@@ -73,6 +77,14 @@ impl ShapeGroup {
 pub struct ShapeModifier {
     pub id: Uuid,
     pub name: String,
+    /// Switched off by its eye: the art is drawn as if the modifier were not
+    /// there, its numbers kept for when it comes back.
+    #[serde(default, skip_serializing_if = "super::is_shown")]
+    pub hidden: bool,
+    /// Acts on its own piece of art alone, the nearest one above it, rather
+    /// than on everything above it in its group. Added from an item's Add.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own: bool,
     #[serde(flatten)]
     pub kind: ModifierKind,
 }
@@ -406,31 +418,67 @@ fn lower<'a>(entries: &'a [ShapeEntry], outer: &[&'a ShapeModifier], out: &mut V
         // The modifiers after this entry in its group, then the ones after
         // the group outside.
         let below = || {
-            entries[i + 1..]
-                .iter()
-                .filter_map(|e| match e {
-                    ShapeEntry::Modifier(m) => Some(m),
-                    _ => None,
-                })
+            acting_after(&entries[i + 1..])
+                .into_iter()
+                .filter(|m| !m.hidden)
                 .chain(outer.iter().copied())
                 .collect::<Vec<_>>()
         };
         match entry {
+            // An item whose eye is off is not drawn, and one combined into
+            // it draws on its own.
+            ShapeEntry::Item(item) if item.hidden => {}
             ShapeEntry::Item(item) => out.push(Lowered {
                 item,
                 mods: below(),
-                joins: item.combine != 0 && i > 0 && matches!(entries[i - 1], ShapeEntry::Item(_)),
+                joins: item.combine != 0
+                    && i > 0
+                    && matches!(&entries[i - 1], ShapeEntry::Item(above) if !above.hidden),
             }),
+            ShapeEntry::Group(group) if group.hidden => {}
             ShapeEntry::Group(group) => lower(&group.entries, &below(), out),
             ShapeEntry::Modifier(_) => {}
         }
     }
 }
 
-/// Every piece of art in `entries`, groups opened, in list order.
+/// The modifiers in `rest`, the entries after a piece of art, that act on
+/// that art: every one, except that an [`own`](ShapeModifier::own) modifier
+/// only reaches back to the art right above it. Art combined into the one
+/// above is drawn as one with it, so it does not end the reach.
+#[must_use]
+pub fn acting_after(rest: &[ShapeEntry]) -> Vec<&ShapeModifier> {
+    let mut mine = true;
+    let mut out = Vec::new();
+    for (i, e) in rest.iter().enumerate() {
+        match e {
+            ShapeEntry::Modifier(m) if mine || !m.own => out.push(m),
+            ShapeEntry::Modifier(_) => {}
+            ShapeEntry::Item(item)
+                if item.combine != 0 && (i == 0 || matches!(rest[i - 1], ShapeEntry::Item(_))) => {}
+            _ => mine = false,
+        }
+    }
+    out
+}
+
+/// Every piece of art in `entries`, groups opened, in list order, whether
+/// its eye is on or off.
 #[must_use]
 pub fn items(entries: &[ShapeEntry]) -> Vec<&ShapeItem> {
-    lowered(entries).into_iter().map(|l| l.item).collect()
+    let mut out = Vec::new();
+    every_item(entries, &mut out);
+    out
+}
+
+fn every_item<'a>(entries: &'a [ShapeEntry], out: &mut Vec<&'a ShapeItem>) {
+    for entry in entries {
+        match entry {
+            ShapeEntry::Item(item) => out.push(item),
+            ShapeEntry::Group(group) => every_item(&group.entries, out),
+            ShapeEntry::Modifier(_) => {}
+        }
+    }
 }
 
 /// The piece of art `id` names, wherever it sits.
@@ -660,6 +708,8 @@ impl LegacyMods {
                 id: lifted_id(item, kind.label()),
                 name: kind.label().into(),
                 kind,
+                hidden: false,
+                own: false,
             });
         };
         if let Some(smooth) = self.smooth {
@@ -760,6 +810,7 @@ fn lifted(wire: Vec<Wire>) -> Vec<ShapeEntry> {
             id,
             name,
             entries,
+            hidden: false,
             extra: serde_json::Map::new(),
         }));
     }

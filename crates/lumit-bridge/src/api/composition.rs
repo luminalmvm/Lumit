@@ -226,6 +226,9 @@ pub enum BridgeGroupSwitch {
 #[frb(non_opaque)]
 pub struct BridgeCompModel {
     pub duration_frames: i64,
+    /// The frame the comp's clock reads at its first frame: its Start
+    /// timecode at its own rate. Every clock face adds it; nothing else does.
+    pub start_frame: i64,
     /// The comp's rate as a plain number, for panels that map seconds to
     /// pixels (the waveform lane) without a bridge call per paint.
     pub fps: f64,
@@ -486,6 +489,39 @@ impl CompositionReference {
         })
     }
 
+    /// The comp's **Start timecode**: the time its first frame reads, as
+    /// exact rational seconds. Zero unless set.
+    #[frb(sync)]
+    pub fn get_start_timecode(&self) -> Result<BridgeRational, BridgeError> {
+        let start = self.composition()?.start_timecode();
+        Ok(BridgeRational {
+            num: start.0.num(),
+            den: start.0.den(),
+        })
+    }
+
+    /// Set the Start timecode, one undo step. Only the clock moves: nothing
+    /// in the comp is retimed.
+    #[frb(sync)]
+    pub fn set_start_timecode(&self, start: BridgeRational) -> Result<(), BridgeError> {
+        let comp = self.composition()?;
+        let start = lumit_core::time::Rational::new(start.num, start.den)
+            .map(lumit_core::time::CompTime)
+            .map_err(|_| BridgeError::InvalidFrameRate)?;
+        if start == comp.start_timecode() {
+            return Ok(());
+        }
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::ops::Op::SetCompStart {
+                comp: comp.id,
+                start,
+            })
+            .map(|_| ())
+            .map_err(BridgeError::OpError)
+    }
+
     /// Whether the comp's lights fall as After Effects' do, lighting a layer
     /// from black, rather than adding to the picture.
     #[frb(sync)]
@@ -587,6 +623,7 @@ impl CompositionReference {
             fps: comp.frame_rate.fps(),
             fps_num: comp.frame_rate.num(),
             fps_den: comp.frame_rate.den(),
+            start_frame: comp.frame_rate.frame_at(comp.start_timecode()),
             motion_blur_enabled: comp.motion_blur.enabled,
             background: comp.background.0,
             is_node_graph: comp.graph.is_some(),

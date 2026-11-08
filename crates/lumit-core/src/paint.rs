@@ -538,7 +538,11 @@ fn fill_coverage(
         let row = (y as usize) * (w as usize);
         coverage[row + x0 as usize..=row + x1 as usize].fill(0);
     }
-    for (cx, cy, pressure) in dabs(&points, &pressures, radius) {
+    // The dabs are walked in layer units, so on a raster drawn larger than the
+    // layer (a shape layer scaled up) the radius they are spaced by is the
+    // layer's, or they would stand apart and scallop the edge. On a smaller
+    // raster the raster's radius is the smaller, and keeps them close.
+    for (cx, cy, pressure) in dabs(&points, &pressures, radius.min(radius / scale.max(1e-9))) {
         // Nothing pressed is nothing drawn — the stylus lifted, or a tablet
         // reporting a zero on the way down.
         if pressure <= 0.0 {
@@ -889,6 +893,26 @@ mod tests {
     fn rgb_at(rgba: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
         let i = ((y * w + x) as usize) * 4;
         [rgba[i], rgba[i + 1], rgba[i + 2]]
+    }
+
+    /// A stroke drawn on a raster ten times its layer's size (a shape layer
+    /// scaled up) keeps an even edge: dabs spaced by the raster's radius stood
+    /// apart in layer units and scalloped it.
+    #[test]
+    fn a_stroke_drawn_large_keeps_an_even_edge() {
+        let (w, h) = (800u32, 200u32);
+        let mut rgba = raster(w, h, [0, 0, 0, 0]);
+        let mut stroke = PaintStroke::new("Line", vec![(5.0, 10.0), (75.0, 10.0)]);
+        stroke.width = 2.0;
+        apply_strokes(&mut rgba, w, h, 80.0, 20.0, &[stroke], 0.0);
+        // Just inside the brush's edge, all along: a scallop leaves gaps there.
+        for x in 80..720 {
+            assert!(
+                alpha_at(&rgba, w, x, 92) > 200,
+                "the edge dipped at x={x} ({})",
+                alpha_at(&rgba, w, x, 92)
+            );
+        }
     }
 
     #[test]

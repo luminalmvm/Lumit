@@ -149,7 +149,7 @@ pub const FLOW_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHOL
     match_name = "flow_points",
     label = "Flow points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A point may be carried anywhere.
     roi = FullFrame,

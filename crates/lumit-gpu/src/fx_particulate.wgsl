@@ -1237,6 +1237,9 @@ fn pt_cover(q: vec2<f32>, v: VsOut) -> vec4<f32> {
 @group(2) @binding(5) var<storage, read_write> scan: array<u32>;
 // Either layer, read by the pass that lays it over the picture.
 @group(2) @binding(6) var layer_tex: texture_2d<f32>;
+// What the tiles start from: the copies already laid by an earlier run of
+// Clone to points, or one clear pixel when there is none.
+@group(2) @binding(7) var tile_base: texture_2d<f32>;
 
 const PREP: u32 = 5u;
 const TILE: u32 = 16u;
@@ -1540,6 +1543,10 @@ fn pt_tile(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) 
             }
             let q = vec2<f32>(px) + vec2<f32>(0.5, 0.5);
             var acc = vec4<f32>(0.0);
+            let base = textureDimensions(tile_base);
+            if (px.x < base.x && px.y < base.y) {
+                acc = textureLoad(tile_base, vec2<i32>(px), 0);
+            }
             for (var k = start; k < end; k = k + 1u) {
                 let at = pairs_src[k].y * PREP;
                 var v: VsOut;

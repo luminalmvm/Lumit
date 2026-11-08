@@ -668,6 +668,12 @@ pub enum FxCategory {
     /// Gradient, Noise, Fractal noise. Three of the four never read the incoming
     /// picture at all, which is why none of the other six describes them.
     Generate,
+    /// The effects that make, change or use a **stream of points**: Grid,
+    /// Scatter, Pick points, Sort distribution, Clone to points, Label points
+    /// and their kin. Filed under Generate they were most of that heading;
+    /// here they are found together, as Cavalry keeps its distributions and
+    /// duplicators together.
+    Points,
     Stylise,
     Temporal,
     /// The effects that **remove** the picture progressively, so a cut can be
@@ -734,6 +740,7 @@ impl FxCategory {
             FxCategory::Colour => "Colour",
             FxCategory::Distortion => "Distortion",
             FxCategory::Generate => "Generate",
+            FxCategory::Points => "Points",
             FxCategory::Stylise => "Stylise",
             FxCategory::Temporal => "Temporal",
             FxCategory::Transition => "Transition",
@@ -771,11 +778,12 @@ impl FxCategory {
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 13] = [
+    pub const ALL: [FxCategory; 14] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
         FxCategory::Generate,
+        FxCategory::Points,
         FxCategory::Stylise,
         FxCategory::Temporal,
         FxCategory::Transition,

@@ -525,6 +525,13 @@ pub trait EffectDef: Sync + Send + 'static {
         false
     }
 
+    /// Whether this effect reads the copies a Clone to points above it
+    /// stamped, as outlines, and a layer's outline, which ride in the
+    /// carriage the points effects get (the Clone deformer).
+    fn reads_clone_shapes(&self) -> bool {
+        false
+    }
+
     /// What this entry produces and consumes. Every effect is
     /// [`Signature::Image`] with neither half filled; a driver declares its
     /// output ports, a points producer declares its Points output beside its
@@ -777,6 +784,10 @@ pub struct RowState {
     pub disabled: Vec<&'static str>,
     /// Choice rows whose list is not the schema's, with the list to draw.
     pub options: Vec<(&'static str, Vec<String>)>,
+    /// Rows drawn under another name, with the name to draw: the row and its
+    /// value are the same, only what it does has turned (Type fill's rows
+    /// read as columns when its Direction is Columns).
+    pub labels: Vec<(&'static str, &'static str)>,
 }
 
 /// What an effect wrote while it was pressed, or in answer to an edit.

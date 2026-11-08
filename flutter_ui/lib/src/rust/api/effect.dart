@@ -15,8 +15,8 @@ import 'roto.dart';
 import 'shader_fault.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `on_picture`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `bundle_name`, `catalogue`, `clamp_animation`, `core_unit`, `core`, `derived_params_of`, `document_for`, `driven_value`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `on_picture`, `own_slot`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -930,6 +930,9 @@ class BridgeEffectInstanceInfo {
   /// draw in place of the schema's.
   final List<BridgeRowOptions> rowOptions;
 
+  /// The rows drawn under another name right now, with that name.
+  final List<BridgeRowLabel> rowLabels;
+
   /// The node graph this instance applies (docs/impl/node-graph-comp.md
   /// §4.4), and `None` for every other effect.
   ///
@@ -953,6 +956,7 @@ class BridgeEffectInstanceInfo {
     required this.hiddenRows,
     required this.disabledRows,
     required this.rowOptions,
+    required this.rowLabels,
     this.nodeGraphComp,
   });
 
@@ -971,6 +975,7 @@ class BridgeEffectInstanceInfo {
       hiddenRows.hashCode ^
       disabledRows.hashCode ^
       rowOptions.hashCode ^
+      rowLabels.hashCode ^
       nodeGraphComp.hashCode;
 
   @override
@@ -991,6 +996,7 @@ class BridgeEffectInstanceInfo {
           hiddenRows == other.hiddenRows &&
           disabledRows == other.disabledRows &&
           rowOptions == other.rowOptions &&
+          rowLabels == other.rowLabels &&
           nodeGraphComp == other.nodeGraphComp;
 }
 
@@ -1675,6 +1681,29 @@ class BridgeRational {
           runtimeType == other.runtimeType &&
           num == other.num &&
           den == other.den;
+}
+
+/// A row drawn under another name (`RowState::labels`): Type fill's rows
+/// when its Direction is Columns.
+class BridgeRowLabel {
+  final String id;
+  final String label;
+
+  const BridgeRowLabel({
+    required this.id,
+    required this.label,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ label.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeRowLabel &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          label == other.label;
 }
 
 /// One choice row's list, as its plugin has it now.

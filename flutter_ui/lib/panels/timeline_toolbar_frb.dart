@@ -107,6 +107,8 @@ class Toolbar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final (fpsNum, fpsDen) = model.fpsExact;
     final lastFrame = model.durationFrames - 1;
+    // The clock reads from the comp's Start timecode; the frame count does not.
+    final start = model.startFrame;
     return Container(
       key: const ValueKey('tl-toolbar'),
       height: t.density.timelineChromeRow + t.density.navigatorBand,
@@ -138,14 +140,18 @@ class Toolbar extends StatelessWidget {
                     TimeReadout(
                       key: const ValueKey('tl-timecode'),
                       frame: frame,
-                      format: (f) => timecodeOfRate(f, fpsNum, fpsDen),
+                      format: (f) => timecodeOfRate(f + start, fpsNum, fpsDen),
                       widthChars: timecodeChars(fpsNum, fpsDen),
                       // The clock is the row's first fact and reads at full
                       // strength; the frame count beside it is the same moment
                       // said again, so it stays muted (§12A.1).
                       style:
                           t.mono.copyWith(fontSize: 11, color: t.textPrimary),
-                      parse: (text) => framesOfTimecode(text, fpsNum, fpsDen),
+                      parse: (text) => switch (
+                          framesOfTimecode(text, fpsNum, fpsDen)) {
+                        final f? => f - start,
+                        null => null,
+                      },
                       onCommit: onSeek,
                       minFrame: 0,
                       maxFrame: lastFrame,

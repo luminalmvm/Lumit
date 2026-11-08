@@ -47,6 +47,8 @@ pub enum BridgeShapeEntryKind {
 pub struct BridgeShapeGroup {
     pub id: Uuid,
     pub name: String,
+    /// Its eye is off: nothing in it is drawn.
+    pub hidden: bool,
 }
 
 /// A modifier entry: it acts on every item above it in its group, in list
@@ -57,6 +59,10 @@ pub struct BridgeShapeModifier {
     pub id: Uuid,
     pub name: String,
     pub kind: BridgeShapeModifierKind,
+    /// Its eye is off: the art is drawn as if it were not there.
+    pub hidden: bool,
+    /// Acts on the item right above it alone, not on everything above it.
+    pub own: bool,
 }
 
 /// The modifiers there are. An offset carries its amount in layer pixels
@@ -174,6 +180,8 @@ impl BridgeShapeModifier {
         Self {
             id: m.id,
             name: m.name.clone(),
+            hidden: m.hidden,
+            own: m.own,
             kind: match &m.kind {
                 ModifierKind::Repeat(r) => BridgeShapeModifierKind::Repeat(BridgeShapeRepeater {
                     copies: at(&r.copies),
@@ -312,6 +320,8 @@ impl BridgeShapeModifier {
             id: self.id,
             name: self.name.clone(),
             kind,
+            hidden: self.hidden,
+            own: self.own,
         })
     }
 }
@@ -337,6 +347,7 @@ pub(crate) fn read_entries(entries: &[ShapeEntry], offset: Rational) -> Vec<Brid
                 ShapeEntry::Group(g) => BridgeShapeEntryKind::Group(BridgeShapeGroup {
                     id: g.id,
                     name: g.name.clone(),
+                    hidden: g.hidden,
                 }),
             };
             out.push(BridgeShapeEntry { depth, kind });
@@ -426,6 +437,7 @@ pub(crate) fn write_entries(
                         id: g.id,
                         name: g.name.clone(),
                         entries: Vec::new(),
+                        hidden: g.hidden,
                         extra: was_groups
                             .iter()
                             .find(|p| p.id == g.id)

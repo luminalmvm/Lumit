@@ -314,6 +314,7 @@ impl ActionId {
             "viewer.preview.always" => "Always preview this view",
             "viewer.controls.toggle" => "Show or hide the layer controls",
             "viewer.snap.grid.toggle" => "Turn snapping to the grid on or off",
+            "path.points.transform" => "Turn the picked path points",
             "viewer.3d.slot.1" => "Switch to 3D view shortcut 1",
             "viewer.3d.slot.2" => "Switch to 3D view shortcut 2",
             "viewer.3d.slot.3" => "Switch to 3D view shortcut 3",

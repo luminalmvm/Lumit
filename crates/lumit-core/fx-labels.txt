@@ -30,6 +30,7 @@ Add to picked
 Add up
 Adjust time by
 Age
+Align
 Align to motion
 Align to path
 Alignment
@@ -43,11 +44,14 @@ Alpha
 Alpha bias
 Alpha blur
 Alpha from
+Alternate rows
 Altitude
 Ambient
 Amorphous
 Amount
 Amplitude
+Amplitude x
+Amplitude y
 Analyse
 Anamorphic squeeze
 Anchor
@@ -156,6 +160,8 @@ Blues
 Blur
 Blur & sharpen
 Blur size
+Boolean
+Boolean layer
 Border
 Both
 Both ways
@@ -230,14 +236,20 @@ Clearance
 Clip
 Clip black
 Clip rollback
+Clip to region
 Clip white
 Clock
 Clockwise
+Clone deformer
 Clone index
 Clone layer
 Clone layer 2
 Clone layer 3
 Clone layer 4
+Clone layer 5
+Clone layer 6
+Clone layer 7
+Clone layer 8
 Clone to points
 Closed
 Coat
@@ -250,7 +262,11 @@ Collision
 Colour
 Colour 1
 Colour 2
+Colour 2 position
 Colour 3
+Colour 3 position
+Colour 4
+Colour 4 position
 Colour A
 Colour B
 Colour balance
@@ -268,6 +284,9 @@ Colour noise
 Colour overlay
 Colour ramp
 Colour variation
+Colours
+Column mix
+Column widths
 Columns
 Combine
 Combine channels
@@ -287,6 +306,7 @@ Connect points
 Connections
 Constant
 Constant length
+Contour points
 Contrast
 Controls
 Conversion
@@ -296,6 +316,7 @@ Cooling filter (82)
 Cooling filter (LBB)
 Copies
 Copy
+Copy blend
 Core
 Core colour
 Core distortion
@@ -309,6 +330,7 @@ Corner segments
 Corner x
 Corner y
 Corners
+Cosine
 Count
 Count nested inputs
 Crackle
@@ -319,6 +341,7 @@ Crop bottom
 Crop left
 Crop right
 Crop top
+Crossfade Bastiuni
 Crystal Archive paper
 Curl noise
 Curve
@@ -344,7 +367,10 @@ Deep blue
 Deep emerald
 Deep red
 Deep yellow
+Deform
+Deformer
 Delay
+Denominator
 Density
 Density layer
 Depth
@@ -484,7 +510,9 @@ Extract channels
 Extrusion depth
 F-stop
 Fade
+Fade curve
 Fade in
+Fade length
 Fade out
 Fade power
 Falloff
@@ -518,7 +546,9 @@ Fire core
 Fish
 Fisheye
 Fit cell
+Fit piece
 Fit to size
+Five
 Flag
 Flare options
 Flash
@@ -550,6 +580,7 @@ Forking
 Format
 Forward
 Forwards
+Four
 Fractal influence
 Fractal noise
 Fractal type
@@ -559,6 +590,8 @@ Frames
 Free
 Freeze
 Frequency
+Frequency x
+Frequency y
 Friction
 From
 From group
@@ -616,6 +649,7 @@ Green from
 Green phase
 Greens
 Grid
+Grid height
 Grid size
 Grid size x
 Grid size y
@@ -704,6 +738,8 @@ Intensity
 Interlace offset
 Interlayer
 Interpolation
+Intersect
+Intersection points
 Interval
 Inverse
 Invert
@@ -738,6 +774,7 @@ Laser
 Latitude
 Layer
 Layer in to out
+Layer index
 Layer knocks out shadow
 Layer out
 Layer points
@@ -834,6 +871,7 @@ Mask/Path
 Master
 Material
 Math
+Math points
 Matte
 Matte inverted
 Matte key
@@ -984,6 +1022,7 @@ Parts
 Pass
 Passes
 Path
+Path layer
 Path overlap
 Paths
 Pattern
@@ -993,16 +1032,20 @@ Per clone
 Per-axis wobble
 Perlin
 Persistence
+Petals
 Phase
 Phase from
 Phase offset
 Phase per copy
+Phase x
+Phase y
 Phaser
 Photo filter
 Pick
 Pick points
 Picked
 Picked and the rest
+Piece scale
 Pillow emboss
 Pin layer
 Pin light
@@ -1039,6 +1082,7 @@ Points C
 Points D
 Points along path
 Points field
+Points input
 Points layer
 Points sample
 Polar coordinates
@@ -1088,6 +1132,7 @@ Random rate
 Random span offsets
 Randomness
 Range
+Raster
 Rate
 Ratio
 Ray traced
@@ -1129,6 +1174,7 @@ Repeat
 Repeat edge pixels
 Repeat end
 Repeat start
+Repeat words
 Replace colour
 Replace method
 Reset interval
@@ -1157,6 +1203,7 @@ Roll
 Roll speed
 Rolloff
 Room size
+Rose
 Rotation
 Rotation amount
 Rotation frequency
@@ -1171,8 +1218,12 @@ Roto brush
 Roughen
 Roughen edges
 Roughness
+Round corners
 Roundness
 Row gap
+Row open
+Row shift
+Row stagger
 Rows
 Rows/columns jitter
 Rubber
@@ -1188,7 +1239,9 @@ Scale
 Scale height
 Scale sizes
 Scale width
+Scale x
 Scale x %
+Scale y
 Scale y %
 Scanlines
 Scatter
@@ -1206,6 +1259,7 @@ Screen softness
 Scribble
 Second input
 Second tint
+Seconds
 Seed
 Seed from
 Segment
@@ -1239,6 +1293,7 @@ Shift per row
 Shift x
 Shift y
 Show points
+Shuffle
 Shutter
 Shutter angle
 Shutter phase
@@ -1253,6 +1308,7 @@ Single layer, straw
 Size
 Size by
 Size from
+Size from area
 Size from width
 Size jitter
 Size over life
@@ -1281,6 +1337,7 @@ Softness
 Solar
 Sort
 Sort by
+Sort distribution
 Source
 Source alpha
 Source blue
@@ -1371,6 +1428,7 @@ Sub scaling
 Sub settings
 Sub-steps
 Subtract
+Subtract from layer
 Super 16
 Super 35
 Super 8
@@ -1400,6 +1458,7 @@ Thickness
 Thickness max
 Thickness min
 This comp
+Three
 Threshold
 Threshold softness
 Tile
@@ -1408,6 +1467,7 @@ Tile centre y
 Tile height
 Tile width
 Time
+Time loop
 Time offset
 Time samples
 Time since last
@@ -1444,6 +1504,7 @@ Transition
 Transition width
 Transmission
 Transparent
+Travel
 Tremolo
 Triangle
 Triangles
@@ -1458,10 +1519,12 @@ Turbulent
 Turbulent displace
 Turn
 Turn points
+Turns
 Twirl
 Twist
 Twitch frequency
 Twitchy
+Two
 Two colours
 Two layer, magenta
 Two points
@@ -1475,6 +1538,8 @@ Uncoated
 Underwater
 Uniform
 Uniform scaling
+Union
+Units
 Unsharp mask
 Up
 Upper left x
@@ -1498,6 +1563,7 @@ Value noise
 Variation
 Vary by
 Vary points
+Vector
 Vector blur
 Vector scale
 Vectors from
@@ -1541,6 +1607,8 @@ Wave speed
 Wave type
 Wave warp
 Wave width
+Wave x
+Wave y
 Waveform
 Wavelength
 Waves

@@ -395,12 +395,15 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
                       // colour of its own — it cuts — so a drag on a selected
                       // layer previews in the accent instead of promising a fill
                       // that will never appear.
-                      fill: art
-                          ? colourOf(widget.uiState.tools.fill)
-                          : widget.accent
-                              .withValues(alpha: _carrying == null ? 1 : 0),
-                      stroke:
-                          art ? colourOf(widget.uiState.tools.stroke) : null,
+                      fill: !art
+                          ? widget.accent
+                              .withValues(alpha: _carrying == null ? 1 : 0)
+                          : widget.uiState.tools.fillOn
+                              ? colourOf(widget.uiState.tools.fill)
+                              : const Color(0x00000000),
+                      stroke: art && widget.uiState.tools.strokeOn
+                          ? colourOf(widget.uiState.tools.stroke)
+                          : null,
                       strokeWidth: art
                           ? widget.uiState.tools.strokeWidth * space.screenScale
                           : 0,
@@ -610,8 +613,10 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
       // A shape tool draws a closed figure; the Pen's path is closed when
       // it came back to its first point.
       closed: closed,
-      fill: stillColour(tools.fillRgba),
-      stroke: tools.strokeWidth > 0 ? stillColour(tools.strokeRgba) : null,
+      fill: tools.fillOn ? stillColour(tools.fillRgba) : null,
+      stroke: tools.strokeOn && tools.strokeWidth > 0
+          ? stillColour(tools.strokeRgba)
+          : null,
       strokeWidth: BridgeScalar.static_(tools.strokeWidth),
       opacity: const BridgeScalar.static_(100),
       // Solid, until somebody dashes it.
@@ -628,6 +633,9 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
       gradientEndOpacity: const BridgeScalar.static_(100),
       gradientStops: const [],
       combine: 0,
+      hidden: false,
+      fillHidden: false,
+      strokeHidden: false,
       pathKeys: const [],
       primitive: primitive,
     );

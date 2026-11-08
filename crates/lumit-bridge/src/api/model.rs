@@ -542,6 +542,17 @@ impl LayerReference {
                 return self.commit_clips(clips);
             }
             InstanceHome::ModelRows => self.model_rows_op(edit)?,
+            // The whole graph rewritten with only its nodes changed, as
+            // `set_graph` commits it: one op, one undo step.
+            InstanceHome::Drivers => {
+                let mut graph = self.item()?.graph;
+                edit(&mut graph.nodes)?;
+                lumit_core::ops::Op::SetLayerGraph {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    graph: Box::new(graph),
+                }
+            }
             // One instance, carried as a list of at most one so the edit
             // closure is the same closure the other three homes take. An edit
             // that empties the list clears the Inputs, which is what removing

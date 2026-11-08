@@ -918,7 +918,7 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
         let Ok(project) = project.read() else {
             return;
         };
-        (project.store.snapshot(), project.store.revision())
+        project.store.snapshot_and_revision()
     };
     // The bar shows what the active view will be served, so its frames are
     // named the way that view's are, under its look.
@@ -1759,7 +1759,7 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             state.fill_exhausted = true;
             return;
         };
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The fill banks what the Viewer will ask for, and while the chip is on
     // that is the cut picture — a fill under the other name would be work
@@ -3599,7 +3599,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let Ok(document) = document.read() else {
                 return;
             };
-            (document.store.snapshot(), document.store.revision())
+            document.store.snapshot_and_revision()
         };
         // An edit landed while the run was going. The frames banked ahead
         // were made from the document as it was, so all but the one about to
@@ -4076,7 +4076,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The pre-roll names the frames it is about to ask the disk for, so it has
     // to name them under the picture the run will actually play.
@@ -4399,7 +4399,7 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
         // whichever view was latched, and a drag fronts the view it is in
         // before it stages anything (docs/impl/multi-viewer.md §2.1). So the
         // whole preview lane collapses together, as it always did.
-        WorkerRequest::RenderCompWithPreview(_) => DrainClass::PictureNewestWins(u32::MAX),
+        WorkerRequest::RenderCompWithPreview(_) => DrainClass::PictureNewestWins(PREVIEW_LANE),
     }
 }
 
@@ -4427,6 +4427,9 @@ enum DrainClass {
     /// against a frame).
     Sample,
 }
+
+/// The lane every drag preview shares, whichever view it is in.
+const PREVIEW_LANE: u32 = u32::MAX;
 
 /// Take everything queued and keep what its class says to keep.
 ///
@@ -4463,6 +4466,17 @@ fn drain_to_newest<T>(
             }
             DrainClass::PictureKeepAll => kept.push(item),
             DrainClass::PictureNewestWins(view) => {
+                // A frame of the view being worked in, asked after a drag
+                // preview, is the frame the drag ended on: the preview is
+                // older than it, and run after it (the active view goes
+                // first) it would leave the drag's last, reduced picture on
+                // screen until the playhead moved.
+                if view == priority && view != PREVIEW_LANE {
+                    if let Some(at) = newest_wins.iter().position(|(v, _)| *v == PREVIEW_LANE) {
+                        newest_wins.remove(at);
+                        superseded += 1;
+                    }
+                }
                 match newest_wins.iter_mut().find(|(v, _)| *v == view) {
                     Some(slot) => {
                         slot.1 = item;
@@ -4902,9 +4916,28 @@ fn render_comp_with_preview(
             .time_of_frame(req.frame as i64)
             .ok()
             .map(|t| t.0);
-        if let lumit_core::model::LayerKind::Shape { contents } = &mut comp.layers[index].kind {
+        let layer = &mut comp.layers[index];
+        if let lumit_core::model::LayerKind::Shape { contents } = &mut layer.kind {
             if let Ok(written) = crate::api::shape::write_entries(&items, contents, offset, at) {
+                // The position follows the art's corner, as the commit's
+                // does, or a growing stroke slides the art while it is
+                // dragged and jumps back on release.
+                let shift = match (
+                    lumit_core::shape::contents_bounds(contents, 0.0),
+                    lumit_core::shape::contents_bounds(&written, 0.0),
+                ) {
+                    (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
+                    _ => (0.0, 0.0),
+                };
                 *contents = written;
+                for (property, delta) in [
+                    (&mut layer.transform.position_x, shift.0),
+                    (&mut layer.transform.position_y, shift.1),
+                ] {
+                    if let lumit_core::anim::Animation::Static(value) = &mut property.animation {
+                        *value += delta;
+                    }
+                }
             }
         }
     }
@@ -4989,7 +5022,7 @@ fn trace_scope(
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
     // The picture that view shows: through its own 3D view, and the chip.
     // The kept copy, which playback has usually made already.
@@ -5153,7 +5186,7 @@ fn sample_pixels(
     let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        (document.store.snapshot(), document.store.revision())
+        document.store.snapshot_and_revision()
     };
 
     let layer_alone = req.layer.is_some();
@@ -5723,7 +5756,7 @@ mod tests {
         let (document, revision) = {
             let document = state.project.state().expect("state");
             let document = document.read().expect("read");
-            (document.store.snapshot(), document.store.revision())
+            document.store.snapshot_and_revision()
         };
         state.renderer.sync_colour(&document);
         let quality = super::still_quality(1.0);
@@ -6565,6 +6598,30 @@ mod tests {
             "each view keeps its newest, in the order the views first asked"
         );
         assert_eq!(superseded, 5);
+    }
+
+    /// **A drag's last preview never lands on the frame it ended on.** The
+    /// active view's picture runs first, so a preview queued before it ran
+    /// after it and left the drag's reduced picture on screen.
+    #[test]
+    fn the_active_views_frame_supersedes_an_older_drag_preview() {
+        let (tx, rx) = channel();
+        tx.send(Req::Adaptive(2, super::PREVIEW_LANE)).unwrap();
+        tx.send(Req::Adaptive(3, 0)).unwrap();
+        drop(tx);
+        let (pictures, _, _, superseded) =
+            drain_to_newest(Req::Adaptive(1, super::PREVIEW_LANE), &rx, classify, 0);
+        assert_eq!(pictures, vec![Req::Adaptive(3, 0)]);
+        assert_eq!(superseded, 2);
+        // A preview asked after the frame is newer, and still runs.
+        let (tx, rx) = channel();
+        tx.send(Req::Adaptive(5, super::PREVIEW_LANE)).unwrap();
+        drop(tx);
+        let (pictures, _, _, _) = drain_to_newest(Req::Adaptive(4, 0), &rx, classify, 0);
+        assert_eq!(
+            pictures,
+            vec![Req::Adaptive(4, 0), Req::Adaptive(5, super::PREVIEW_LANE)]
+        );
     }
 
     /// The bug this policy exists to fix: during playback the Viewer asks for a

@@ -59,7 +59,7 @@ import 'graph_value_row.dart';
 import 'effect_param_row_frb.dart'
     show
         cachedListParameterGroups,
-        cachedListParameters,
+        instanceParameters,
         defaultEffectValue,
         disabledParams,
         isDefaultEffectValue,
@@ -330,6 +330,13 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   /// Canvas positions, staged: a drag moves this map and the release commits.
   Map<String, Offset> _positions = {};
 
+  /// The widths edge drags gave boxes, by key.
+  Map<String, double> _widths = {};
+
+  /// A box edge in hand, and the edge the pointer is resting on.
+  GraphEdgeDrag? _edgeDrag;
+  bool _edgeHover = false;
+
   /// **The picked boxes**, by key, in the order they were picked. The anchor,
   /// the box picked last, is what the Node panel and the Viewer chip follow.
   final Map<String, UuidValue> _selection = {};
@@ -552,7 +559,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           params[key] = compBoxRows(
             info.name,
             relistedRows(
-              [...cachedListParameters(info.name), ...info.derivedParams],
+              instanceParameters(info),
               info.rowOptions,
             ),
             {for (final v in info.values) v.id: v.value},
@@ -590,6 +597,11 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         for (final p
             in graph?.wiring.layout ?? const <BridgeCompNodePosition>[])
           compNodeKey(p.node): Offset(p.x, p.y),
+      };
+      _widths = {
+        for (final p
+            in graph?.wiring.layout ?? const <BridgeCompNodePosition>[])
+          if (p.width case final w?) compNodeKey(p.node): w,
       };
       // A box that has gone leaves the pick; the rest of the pick stands.
       if (_selection.keys.any((k) => !_byKey.containsKey(k))) {
@@ -653,7 +665,11 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       layout: [
         for (final e in _positions.entries)
           if (_byKey[e.key]?.id ?? pending[e.key] case final id?)
-            BridgeCompNodePosition(node: id, x: e.value.dx, y: e.value.dy),
+            BridgeCompNodePosition(
+                node: id,
+                x: e.value.dx,
+                y: e.value.dy,
+                width: _widths[e.key]),
       ],
       exposed: exposed ?? w.exposed,
       groups: groups ?? w.groups,
@@ -770,11 +786,14 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         open: open,
         params: [for (final p in rows) p.id],
         kickers: open ? held?.kickers ?? const {} : const {},
-        width: node.kind == BridgeCompNodeKind.output
+        width: graphBoxWidth(
+            node.kind == BridgeCompNodeKind.output
             ? graphOutNodeWidth
             : rows.isEmpty
                 ? graphNodeWidth
                 : graphNodeOpenWidth,
+            _widths[key],
+            open: rows.isNotEmpty),
         foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
         colour: _colours[key] ?? 0,
         collapsed: _folded.contains(key),
@@ -1307,6 +1326,17 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         if (!targets.containsKey(compNodeKey(e))) e,
       if (on) ...targets.values,
     ]));
+  }
+
+  /// M on the canvas: the picked Fx boxes are bypassed, or brought back when
+  /// the last one picked already is. Only an Fx box has a bypass.
+  void _mutePicked() {
+    for (final key in _selection.keys.toList().reversed) {
+      final node = _byKey[key];
+      if (node == null || node.kind != BridgeCompNodeKind.fx) continue;
+      _toggleBypass(key, node.enabled);
+      return;
+    }
   }
 
   /// Bypass, on the staged instance: one `setNodeGraph`, one undo step
@@ -2029,6 +2059,16 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         unless: socket != null)) {
       return;
     }
+    // **A box's left or right edge drags its width**, as on the layer
+    // canvas; a socket on the edge still wins the press.
+    if (socket == null && event.buttons == kPrimaryMouseButton) {
+      if (graphEdgeAt(layout, at, _zoom) case final edge?) {
+        setState(() => _edgeDrag = GraphEdgeDrag(
+            edge.box.key, edge.left, at.dx, edge.box.rect,
+            open: edge.box.hasControls));
+        return;
+      }
+    }
     // The right button asks a socket rather than pulling on it.
     if (socket != null && event.buttons == kSecondaryMouseButton) {
       _socketMenu(socket, event.position);
@@ -2148,6 +2188,14 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
   void _move(PointerMoveEvent event, GraphLayout layout) {
     final at = _toCanvas(event.localPosition);
+    if (_edgeDrag case final edge?) {
+      final next = edge.at(at.dx);
+      setState(() {
+        _widths[edge.key] = next.width;
+        _positions[edge.key] = Offset(next.x, edge.from.top);
+      });
+      return;
+    }
     if (_flight case final flight?) {
       setState(() {
         flight.to = at;
@@ -2190,6 +2238,16 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     final at = _toCanvas(event.localPosition);
     final moved = _pressAt == null ||
         (event.localPosition - _pressAt!).distance > graphDragSlop;
+
+    if (_edgeDrag case final edge?) {
+      // A box's new width, kept with its position: one commit, one undo step.
+      setState(() => _edgeDrag = null);
+      if (moved) {
+        _positions.putIfAbsent(edge.key, () => edge.from.topLeft);
+        _commit(_wiringNow());
+      }
+      return;
+    }
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
@@ -2518,6 +2576,10 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           _deleteSelected();
           return KeyEventResult.handled;
         }
+        if (node.hasPrimaryFocus && graphMuteKey(event)) {
+          _mutePicked();
+          return KeyEventResult.handled;
+        }
         if (node.hasPrimaryFocus &&
             groupKey(event) == KeyEventResult.handled) {
           return KeyEventResult.handled;
@@ -2573,8 +2635,13 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           onPointerDown: (e) => _down(e, layout),
           onPointerMove: (e) => _move(e, layout),
           onPointerUp: (e) => _up(e, layout),
-          onPointerHover: (e) =>
-              tieHover(_toCanvas(e.localPosition), _wiresOf(layout)),
+          onPointerHover: (e) {
+            final at = _toCanvas(e.localPosition);
+            tieHover(at, _wiresOf(layout));
+            final edge = layout.socketAt(at) == null &&
+                graphEdgeAt(layout, at, _zoom) != null;
+            if (edge != _edgeHover) setState(() => _edgeHover = edge);
+          },
           onPointerSignal: _wheel,
           behavior: HitTestBehavior.opaque,
           child: tieCursorRegion(GraphCutFade(
@@ -2696,6 +2763,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         ),
       ),
       handPanLayer(_ui!.tools, t, (d) => setState(() => _pan += d)),
+      graphEdgeCursor(_edgeHover || _edgeDrag != null),
         ],
       ),
     );

@@ -33,6 +33,7 @@ void main() {
     double viewScale = 1,
     List<BridgeMask> masks = const [],
     List<BridgeShapeEntry> shapeContents = const [],
+    UuidValue? pickedItem,
     Offset artOrigin = Offset.zero,
     BridgeMotionPath? motionPath,
     ViewerDepth? depth,
@@ -63,6 +64,7 @@ void main() {
         masks: masks,
         shapeContents: shapeContents,
         artOrigin: artOrigin,
+        pickedItem: pickedItem,
         motionPath: motionPath,
       );
 
@@ -156,6 +158,9 @@ void main() {
         gradientEndOpacity: const BridgeScalar.static_(100),
         gradientStops: const [],
         combine: 0,
+        hidden: false,
+        fillHidden: false,
+        strokeHidden: false,
         pathKeys: const [],
         taper: null,
       );
@@ -326,10 +331,12 @@ void main() {
       // A 60x60 layer at (300, 200) anchored in its middle: its origin is at
       // (270, 170) on screen. The art is the same square, drawn at (120, 80) —
       // so its first point is the layer's origin and nowhere else.
+      final item = squareShape(left: 120, top: 80, side: 60);
       final b = box(
         size: const Size(60, 60),
-        shapeContents: contentsOf(squareShape(left: 120, top: 80, side: 60)),
+        shapeContents: contentsOf(item),
         artOrigin: const Offset(120, 80),
+        pickedItem: item.id,
       );
       final points = pathPointsOf(b);
       expect(points.first.at, const Offset(270, 170));
@@ -337,6 +344,23 @@ void main() {
           reason: 'the far corner of the art is the far corner of the box');
       expect(b.corners.first, points.first.at,
           reason: 'which is the whole point: the box and the points agree');
+    });
+
+    /// **A shape's points wait for its Path row**: until that row is picked a
+    /// click on the art is a click on the layer, and picking another row of
+    /// the item does not offer them either.
+    test('are offered only while the Path row is picked', () {
+      final item = squareShape(left: 120, top: 80, side: 60);
+      final layer = UuidValue.fromString(const Uuid().v4());
+      final b = box(shapeContents: contentsOf(item));
+      expect(pathPointsOf(b), isEmpty);
+      final path = '$layer/contents/${item.id}/path';
+      expect(pickedShapeItem([path], layer), item.id);
+      expect(pathBeingEdited([path]), (layer, item.id));
+      final other = '$layer/contents/${item.id}/opacity';
+      expect(pickedShapeItem([other], layer), isNull);
+      expect(pathBeingEdited([other]), isNull);
+      expect(pathBeingEdited(['$layer/contents/${item.id}']), isNull);
     });
 
     test('a point added to a curved edge leaves the curve where it was', () {
@@ -578,6 +602,57 @@ void main() {
             reason: 'jumped at $i degrees');
         last = now;
       }
+    });
+  });
+
+  /// **Ctrl+Shift+T turns the picked points on screen**: about the middle of
+  /// the box round them, the handles turned with them, and each point taken
+  /// back into its own layer, so a turned and scaled layer turns as it looks.
+  group('pointsTurned', () {
+    test('turns two mask points a quarter turn about their box', () {
+      final b = box(rotation: 30, scale: 50, masks: [squareMask()]);
+      final mask = b.masks.single;
+      final keys = {
+        maskPointKey(b.id, mask.id, 0),
+        maskPointKey(b.id, mask.id, 1),
+      };
+      final before = pathPointsOf(b);
+      final rect = pickedPointsBox([b], keys)!;
+      final c = rect.center;
+      final turned = maskEdited(b, mask, pointsTurned(b, keys, c, math.pi / 2))!;
+      final after = pathPointsOf(box(rotation: 30, scale: 50, masks: [turned]));
+      for (final i in [0, 1]) {
+        final d = before[i].at - c;
+        final want = c + Offset(-d.dy, d.dx);
+        expect((after[i].at - want).distance, lessThan(1e-6));
+      }
+      expect(after[2].at, before[2].at, reason: 'a point not picked stays');
+    });
+
+    test('turns shape art and its handles', () {
+      final item = squareShape(left: 120, top: 80, side: 60);
+      final b = box(
+        size: const Size(60, 60),
+        shapeContents: contentsOf(item),
+        artOrigin: const Offset(120, 80),
+        pickedItem: item.id,
+      );
+      final keys = {
+        for (var i = 0; i < 4; i++) shapePointKey(b.id, item.id, i),
+      };
+      final c = pickedPointsBox([b], keys)!.center;
+      final contents = shapeContentsEdited(b, pointsTurned(b, keys, c, math.pi))!;
+      final turned = (contents.single.kind as BridgeShapeEntryKind_Item).field0;
+      // Half a turn about the square's middle: each corner lands on the
+      // opposite one.
+      expect(turned.vertices[0].x, closeTo(item.vertices[2].x, 1e-6));
+      expect(turned.vertices[0].y, closeTo(item.vertices[2].y, 1e-6));
+    });
+
+    test('needs two points for a box', () {
+      final b = box(masks: [squareMask()]);
+      expect(pickedPointsBox([b], {maskPointKey(b.id, b.masks.single.id, 0)}),
+          isNull);
     });
   });
 }

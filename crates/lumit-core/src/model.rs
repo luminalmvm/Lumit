@@ -2777,6 +2777,31 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
 }
 
 impl Composition {
+    /// The key the comp's **Start timecode** is kept under in [`Self::extra`].
+    pub const START_TIMECODE_KEY: &'static str = "start_timecode";
+
+    /// **Start timecode**: the time the comp's first frame reads in the
+    /// Timeline and the Viewer, zero unless set (AE: Start Timecode). Only what
+    /// the clock shows: every time inside the comp still counts from its first
+    /// frame. Kept in [`Self::extra`], so a Lumit that does not know it keeps
+    /// it and a project saved without it reads zero.
+    #[must_use]
+    pub fn start_timecode(&self) -> CompTime {
+        self.extra
+            .get(Self::START_TIMECODE_KEY)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or(CompTime::ZERO)
+    }
+
+    /// Set the Start timecode; zero takes the entry away.
+    pub fn set_start_timecode(&mut self, start: CompTime) {
+        if start == CompTime::ZERO {
+            self.extra.remove(Self::START_TIMECODE_KEY);
+        } else if let Ok(v) = serde_json::to_value(start) {
+            self.extra.insert(Self::START_TIMECODE_KEY.to_owned(), v);
+        }
+    }
+
     /// Every effect instance this composition holds, wherever it sits: on a
     /// layer's stack, among its styles, in its graph, on a clip, on a group's
     /// header, or as a box of the composition's own node graph.
@@ -3611,7 +3636,32 @@ pub fn placement(layer: &Layer, t: f64, read: &Read<'_>) -> Placement {
         out.rotation_deg = crate::camera::look_at(out.position, (x, y, z), out.rotation_deg)
             .unwrap_or(out.rotation_deg);
     }
+    let (dx, dy) = art_shift(layer, lt);
+    out.anchor.0 -= dx;
+    out.anchor.1 -= dy;
     out
+}
+
+/// How far a Shape layer's art has moved at layer time `lt` from where it is
+/// at the head of the layer, px: (0, 0) for every other kind.
+///
+/// A Shape layer's picture is its art's own box, and its Position is that
+/// box's corner at the head of the layer (an edit of the art moves the
+/// Position with it). A path or a parametric shape keyed to move takes the
+/// box with it, so the picture is set down that much further on: the anchor
+/// is read that much less, in the layer's own pixels.
+#[must_use]
+pub fn art_shift(layer: &Layer, lt: f64) -> (f64, f64) {
+    let LayerKind::Shape { contents } = &layer.kind else {
+        return (0.0, 0.0);
+    };
+    match (
+        crate::shape::contents_bounds(contents, lt),
+        crate::shape::contents_bounds(contents, 0.0),
+    ) {
+        (Some((x, y, _, _)), Some((x0, y0, _, _))) => (x - x0, y - y0),
+        _ => (0.0, 0.0),
+    }
 }
 
 /// What a layer's expressions in `comp` read at comp time `t`, the whole

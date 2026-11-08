@@ -83,7 +83,7 @@ pub const TRACK_POINTS_GROUPS: &[ParamGroup] = &[
     match_name = "track_points",
     label = "Track points",
     version = 1,
-    category = Generate,
+    category = Points,
     cost = Moderate,
     // A track may be anywhere, and the discs are drawn over the whole picture.
     roi = FullFrame,

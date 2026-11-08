@@ -86,6 +86,9 @@ pub struct CompGraph {
     /// persist and travel, and a box with no entry is auto-placed by the panel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layout: Vec<(Uuid, [f64; 2])>,
+    /// The boxes dragged wider or narrower by an edge, as the layer graph's.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub widths: Vec<(Uuid, f64)>,
     /// The boxes twirled open to show every socket. Presentation state, so it
     /// changes no picture and reaches no frame key.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -588,6 +591,7 @@ impl CompGraph {
     pub fn new_with_output() -> CompGraph {
         let id = Uuid::now_v7();
         CompGraph {
+            widths: Vec::new(),
             notes: Vec::new(),
             ties: Vec::new(),
             looks: Default::default(),

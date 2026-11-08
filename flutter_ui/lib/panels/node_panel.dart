@@ -1286,8 +1286,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // Effect controls.
     final params = [
       for (final p in [
-        ...cachedListParameters(picked.info.name),
-        ...picked.info.derivedParams,
+        ...instanceParameters(picked.info),
       ])
         if (_filter.matches(engineLabel(p.label))) p,
     ];

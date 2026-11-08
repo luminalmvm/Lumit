@@ -320,8 +320,8 @@ impl FxEngine {
                 "fx-particulate-scene-scan",
                 (u64::from(SCAN_HEAD) + u64::from(len) + u64::from(len.div_ceil(SCAN_BLOCK))) * 4,
             );
-            // The tiles' own picture and particle rows, which the sort never
-            // reads.
+            // The tiles' own picture, particle rows and base, which the sort
+            // never reads.
             let dummy = storage("", 0);
             let picture = ctx.device.create_texture(&wgpu::TextureDescriptor {
                 label: None,
@@ -331,6 +331,16 @@ impl FxEngine {
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba16Float,
                 usage: U::STORAGE_BINDING,
+                view_formats: &[],
+            });
+            let base = ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d::default(),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: U::TEXTURE_BINDING,
                 view_formats: &[],
             });
             let blend = &self.particulate_blend;
@@ -362,6 +372,10 @@ impl FxEngine {
                         wgpu::BindGroupEntry {
                             binding: 5,
                             resource: scan.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 7,
+                            resource: wgpu::BindingResource::TextureView(&view_of(&base)),
                         },
                     ],
                 })

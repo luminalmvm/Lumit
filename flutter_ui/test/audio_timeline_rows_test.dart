@@ -100,6 +100,7 @@ void main() {
         ),
         effects: const [],
         styles: const [],
+        drivers: const [],
         label: 0,
         masks: const [],
         paint: const [],
@@ -274,6 +275,7 @@ void main() {
       hiddenRows: const [],
       disabledRows: const [],
       rowOptions: const [],
+      rowLabels: const [],
     );
     final sound = BridgeClip(
       id: clipId,

@@ -1569,9 +1569,17 @@
   "@fxTechnique": {
     "description": "A Bevel and emboss layer style's Technique parameter: how the edge profile is found."
   },
+  "fxUnits": "Units",
+  "@fxUnits": {
+    "description": "Effect controls — a menu on the Time driver (Siceliot): whether it counts in Seconds or in Frames."
+  },
+  "fxSeconds": "Seconds",
+  "@fxSeconds": {
+    "description": "An option on the Time driver's Units menu: count the time in seconds."
+  },
   "fxTime": "Time",
   "@fxTime": {
-    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock. Also how far behind the sound Delay's first repeat lands."
+    "description": "Effect controls — a control on Beam and Radio waves: how far the effect has got, keyframed rather than read from the clock. Also how far behind the sound Delay's first repeat lands. Also the Time driver (Siceliot): the current time, in Seconds or Frames, times Speed plus Offset."
   },
   "fxTopToBottom": "Top to bottom",
   "@fxTopToBottom": {
@@ -3307,6 +3315,34 @@
   "@fxCloneLayer4": {
     "description": "Effect controls — a control on Clone to points: a fourth layer to stamp."
   },
+  "fxCloneLayer5": "Clone layer 5",
+  "@fxCloneLayer5": {
+    "description": "Effect controls — a control on Clone to points: a fifth layer to stamp."
+  },
+  "fxCloneLayer6": "Clone layer 6",
+  "@fxCloneLayer6": {
+    "description": "Effect controls — a control on Clone to points: a sixth layer to stamp."
+  },
+  "fxCloneLayer7": "Clone layer 7",
+  "@fxCloneLayer7": {
+    "description": "Effect controls — a control on Clone to points: a seventh layer to stamp."
+  },
+  "fxCloneLayer8": "Clone layer 8",
+  "@fxCloneLayer8": {
+    "description": "Effect controls — a control on Clone to points: an eighth layer to stamp."
+  },
+  "fxLayerIndex": "Layer index",
+  "@fxLayerIndex": {
+    "description": "Effect controls — a control and a Choose by option on Clone to points: which layer each point takes, counted from 0; a driver wired in picks one per copy."
+  },
+  "fxScaleX": "Scale x",
+  "@fxScaleX": {
+    "description": "Effect controls — a control on Clone to points: each stamp's width, per cent; a driver wired in gives every copy its own."
+  },
+  "fxScaleY": "Scale y",
+  "@fxScaleY": {
+    "description": "Effect controls — a control on Clone to points: each stamp's height, per cent; a driver wired in gives every copy its own."
+  },
   "fxMoreLayers": "More layers",
   "@fxMoreLayers": {
     "description": "Effect controls — a group heading on Clone to points, over the extra layers to stamp and how each point chooses between them."
@@ -3966,6 +4002,38 @@
   "fxColour2": "Colour 2",
   "@fxColour2": {
     "description": "Effect controls — a control on RGB split."
+  },
+  "fxColour2Position": "Colour 2 position",
+  "@fxColour2Position": {
+    "description": "Effect controls — a control on Gradient: where Colour 2 sits along the ramp, per cent."
+  },
+  "fxColour3Position": "Colour 3 position",
+  "@fxColour3Position": {
+    "description": "Effect controls — a control on Gradient: where Colour 3 sits along the ramp, per cent."
+  },
+  "fxCopyBlend": "Copy blend",
+  "@fxCopyBlend": {
+    "description": "Effect controls — a control on Clone to points: the blend mode the copies use with each other where they overlap, from the same list as a layer's blend mode."
+  },
+  "fxColour4Position": "Colour 4 position",
+  "@fxColour4Position": {
+    "description": "Effect controls — a control on Gradient: where Colour 4 sits along the ramp, per cent."
+  },
+  "fxTwo": "Two",
+  "@fxTwo": {
+    "description": "Effect controls — a Colours option on Gradient: two colours."
+  },
+  "fxThree": "Three",
+  "@fxThree": {
+    "description": "Effect controls — a Colours option on Gradient: three colours."
+  },
+  "fxFour": "Four",
+  "@fxFour": {
+    "description": "Effect controls — a Colours option on Gradient: four colours."
+  },
+  "fxFive": "Five",
+  "@fxFive": {
+    "description": "Effect controls — a Colours option on Gradient: five colours."
   },
   "fxColour3": "Colour 3",
   "@fxColour3": {
@@ -5786,6 +5854,74 @@
   "fxCutWords": "Cut words",
   "@fxCutWords": {
     "description": "Effect controls — a checkbox on Type fill: keep each word at its column's width and let the region's edge cut it, instead of stretching it."
+  },
+  "fxColumnWidths": "Column widths",
+  "@fxColumnWidths": {
+    "description": "Effect controls — a text row on Type fill: how wide each word's column is, as numbers between bars, shares of the width."
+  },
+  "fxFitPiece": "Fit piece",
+  "@fxFitPiece": {
+    "description": "Effect controls — a checkbox on Type fill: give every piece of the region its own whole word, fitted to the piece across and down."
+  },
+  "fxPieceScale": "Piece scale",
+  "@fxPieceScale": {
+    "description": "Effect controls — a slider on Type fill: how much of its piece a word fills with Fit piece, per cent."
+  },
+  "fxGridHeight": "Grid height",
+  "@fxGridHeight": {
+    "description": "Effect controls — a slider on Type fill: how tall the rows stand together, centred in the frame; 0 is the frame height."
+  },
+  "fxGridWidth": "Grid width",
+  "@fxGridWidth": {
+    "description": "Effect controls — Type fill's Grid height when its Direction is Columns: how wide the columns stand together, centred in the frame."
+  },
+  "fxColumnGap": "Column gap",
+  "@fxColumnGap": {
+    "description": "Effect controls — Type fill's Row gap when its Direction is Columns: the room between the columns."
+  },
+  "fxColumnOpen": "Column open",
+  "@fxColumnOpen": {
+    "description": "Effect controls — Type fill's Row open when its Direction is Columns: how far each column has opened out of a thin line."
+  },
+  "fxColumnStagger": "Column stagger",
+  "@fxColumnStagger": {
+    "description": "Effect controls — Type fill's Row stagger when its Direction is Columns: how far apart the columns open, the middle one first."
+  },
+  "fxColumnShift": "Column shift",
+  "@fxColumnShift": {
+    "description": "Effect controls — Type fill's Row shift when its Direction is Columns: how far every column slides up or down, wrapping round."
+  },
+  "fxAlternateColumns": "Alternate columns",
+  "@fxAlternateColumns": {
+    "description": "Effect controls — Type fill's Alternate rows when its Direction is Columns: every other column slides the other way."
+  },
+  "fxRepeatWords": "Repeat words",
+  "@fxRepeatWords": {
+    "description": "Effect controls — a counter on Type fill: how many times the list of Words is set one after another in every row."
+  },
+  "fxColumnMix": "Column mix",
+  "@fxColumnMix": {
+    "description": "Effect controls — a slider on Type fill: how far the columns go from the words' own widths (0 %) to Column widths (100 %)."
+  },
+  "fxClipToRegion": "Clip to region",
+  "@fxClipToRegion": {
+    "description": "Effect controls — a checkbox on Type fill: with Fit piece, cut the words where the region stops, so none reaches past its edge."
+  },
+  "fxRowOpen": "Row open",
+  "@fxRowOpen": {
+    "description": "Effect controls — a slider on Type fill: how open the rows are, per cent; each row grows out of a flat line through its middle."
+  },
+  "fxRowStagger": "Row stagger",
+  "@fxRowStagger": {
+    "description": "Effect controls — a slider on Type fill: how far apart the rows open, per cent; the middle row first, the outer rows last."
+  },
+  "fxRowShift": "Row shift",
+  "@fxRowShift": {
+    "description": "Effect controls — a slider on Type fill: how far every row slides sideways, in pixels; the words wrap round, so it scrolls without end."
+  },
+  "fxAlternateRows": "Alternate rows",
+  "@fxAlternateRows": {
+    "description": "Effect controls — a checkbox on Type fill: every other row slides the other way."
   },
   "fxRowGap": "Row gap",
   "@fxRowGap": {
@@ -11399,6 +11535,14 @@
   "@shapeOpAdd": {
     "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it can be given, such as Twist."
   },
+  "shapeGlobalAdd": "Global add",
+  "@shapeGlobalAdd": {
+    "description": "Button on a shape layer's Contents heading in the Timeline, opening the modifiers that can be added to act on every shape in the layer."
+  },
+  "shapeGlobalModifiers": "Global modifiers",
+  "@shapeGlobalModifiers": {
+    "description": "Timeline heading at the bottom of a shape layer's Contents, folding the modifiers that act on every shape in the layer."
+  },
   "shapeOpRemove": "Remove",
   "@shapeOpRemove": {
     "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it has, to take one off."
@@ -11858,6 +12002,19 @@
   "toolStroke": "Stroke",
   "@toolStroke": {
     "description": "Toolbar options strip — label beside the shape outline colour swatch."
+  },
+  "toolSolidColour": "Solid colour",
+  "@toolSolidColour": {
+    "description": "Toolbar options strip — the menu a shape tool's Fill or Stroke label opens: draw it in the swatch's colour (the other row is None)."
+  },
+  "tipSwatchKind": "{label} type",
+  "@tipSwatchKind": {
+    "description": "Tooltip on a shape tool's Fill or Stroke label, which opens Solid colour / None. {label} is the label, already translated.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
   },
   "toolTypeHorizontal": "Horizontal type",
   "@toolTypeHorizontal": {
@@ -15553,6 +15710,10 @@
   "compBackground": "Background",
   "@compBackground": {
     "description": "New composition / Composition settings dialog: row label: the colour behind everything in the composition."
+  },
+  "compStartTimecode": "Start timecode",
+  "@compStartTimecode": {
+    "description": "Composition settings — the row for the time the comp's first frame reads in the Timeline and the Viewer (AE: Start Timecode)."
   },
   "compDurationReading": "{frames} frames · {seconds} s",
   "@compDurationReading": {
@@ -20338,6 +20499,10 @@
   "@keyShowOrHideTheLayerControls": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyTurnThePickedPathPoints": "Turn the picked path points",
+  "@keyTurnThePickedPathPoints": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyTurnSnappingToTheGridOnOrOff": "Turn snapping to the grid on or off",
   "@keyTurnSnappingToTheGridOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -25087,6 +25252,129 @@
   "@fxPosition5": {
     "description": "Effect controls: a control on Conical gradient."
   },
+  "fxPointsInput": "Points input",
+  "@fxPointsInput": {
+    "description": "Effect controls — an option of Distribution on Clone to points: stamp the points wired in."
+  },
+  "fxPathLayer": "Path layer",
+  "@fxPathLayer": {
+    "description": "Effect controls — a control on Clone to points: the layer whose path the copies are spread along."
+  },
+  "fxDeform": "Deform",
+  "@fxDeform": {
+    "description": "Effect controls — a control and a heading on Points along path: moves the points off the path along its normal."
+  },
+  "fxCloneDeformer": "Clone deformer",
+  "@fxCloneDeformer": {
+    "description": "Effect name: changes the copies a Clone to points above it drew, as one group."
+  },
+  "fxDeformer": "Deformer",
+  "@fxDeformer": {
+    "description": "Effect controls — a control on Clone deformer: what is done to the copies (Align or Boolean)."
+  },
+  "fxAlign": "Align",
+  "@fxAlign": {
+    "description": "Effect controls — an option and a heading on Clone deformer: line the copies' bounds up on a point."
+  },
+  "fxBoolean": "Boolean",
+  "@fxBoolean": {
+    "description": "Effect controls — an option and a heading on Clone deformer: cut the copies with a layer."
+  },
+  "fxBooleanLayer": "Boolean layer",
+  "@fxBooleanLayer": {
+    "description": "Effect controls — a control on Clone deformer: the layer the copies are cut with."
+  },
+  "fxUnion": "Union",
+  "@fxUnion": {
+    "description": "Effect controls — an Operation on Clone deformer: adds the layer to the copies."
+  },
+  "fxIntersect": "Intersect",
+  "@fxIntersect": {
+    "description": "Effect controls — an Operation on Clone deformer: keeps only where the copies and the layer both are."
+  },
+  "fxRaster": "Raster",
+  "@fxRaster": {
+    "description": "Effect controls — a Mode on Clone deformer: reads the picture's pixels."
+  },
+  "fxVector": "Vector",
+  "@fxVector": {
+    "description": "Effect controls — a Mode on Clone deformer: reads the Shape layers' paths."
+  },
+  "fxRoundCorners": "Round corners",
+  "@fxRoundCorners": {
+    "description": "Effect controls — an option and a heading on Clone deformer: rounds the copies' outward corners."
+  },
+  "fxSubtractFromLayer": "Subtract from layer",
+  "@fxSubtractFromLayer": {
+    "description": "Effect controls — an Operation on Clone deformer: cuts the copies out of the layer, in the layer's colours."
+  },
+  "fxTravel": "Travel",
+  "@fxTravel": {
+    "description": "Effect controls — a control on Clone to points' Path distribution: slides the copies along the path."
+  },
+  "tipCloneModeRaster": "Any layer",
+  "@tipCloneModeRaster": {
+    "description": "Tooltip on the Raster option of Clone deformer's Mode."
+  },
+  "tipCloneModeVector": "Shape layers",
+  "@tipCloneModeVector": {
+    "description": "Tooltip on the Vector option of Clone deformer's Mode."
+  },
+  "tipVectorNeedsClones": "Needs clones",
+  "@tipVectorNeedsClones": {
+    "description": "Hover reason on Clone deformer's Vector option when there is no Clone to points right above it."
+  },
+  "tipVectorNeedsShapes": "Needs shapes",
+  "@tipVectorNeedsShapes": {
+    "description": "Hover reason on Clone deformer's Vector option when a layer the Clone to points copies is not a Shape layer."
+  },
+  "badgeCloneVectorReadsPicture": "Vector reads the picture here, as Raster does.",
+  "@badgeCloneVectorReadsPicture": {
+    "description": "Effect controls, above a Clone deformer's rows: its Mode is Vector but it cannot read outlines here. The reason is written beneath."
+  },
+  "whyVectorNoClone": "Needs a Clone to points right above, with only Clone deformers between",
+  "@whyVectorNoClone": {
+    "description": "Why Clone deformer's Vector mode cannot be chosen: there is no Clone to points above it."
+  },
+  "whyVectorNotShapes": "Needs Shape layers as the cloned layers",
+  "@whyVectorNotShapes": {
+    "description": "Why Clone deformer's Vector mode cannot be chosen: a layer the Clone to points copies is not a Shape layer."
+  },
+  "tipGreyedWhenIs": "Needs {option}",
+  "@tipGreyedWhenIs": {
+    "description": "Tooltip on a greyed effect control: it only works while another control is on one option.",
+    "placeholders": {"control": {"type": "String"}, "option": {"type": "String"}}
+  },
+  "tipGreyedUnlessIs": "Set {control}",
+  "@tipGreyedUnlessIs": {
+    "description": "Tooltip on a greyed effect control: it does nothing while another control is on this option.",
+    "placeholders": {"control": {"type": "String"}, "option": {"type": "String"}}
+  },
+  "tipGreyedWhenOn": "Needs {control}",
+  "@tipGreyedWhenOn": {
+    "description": "Tooltip on a greyed effect control: it only works while a switch is on.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedWhenOff": "Without {control}",
+  "@tipGreyedWhenOff": {
+    "description": "Tooltip on a greyed effect control: it only works while a switch is off.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedLayerSet": "Pick {control}",
+  "@tipGreyedLayerSet": {
+    "description": "Tooltip on a greyed effect control: it only works once a layer is picked in another control.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedLayerUnset": "Clear {control}",
+  "@tipGreyedLayerUnset": {
+    "description": "Tooltip on a greyed effect control: it does nothing while a layer is picked in another control.",
+    "placeholders": {"control": {"type": "String"}}
+  },
+  "tipGreyedNought": "Zero {control}",
+  "@tipGreyedNought": {
+    "description": "Tooltip on a greyed effect control: it only works while another number is nought.",
+    "placeholders": {"control": {"type": "String"}}
+  },
   "fxSweepGradient": "Sweep gradient",
   "@fxSweepGradient": {
     "description": "Effect name: the Sweep gradient effect, one of the effects that come with Lumit."
@@ -25278,6 +25566,98 @@
   "fxCurveLeft": "Curve left",
   "@fxCurveLeft": {
     "description": "Effect controls: a control on Four point warp."
+  },
+  "fxSortDistribution": "Sort distribution",
+  "@fxSortDistribution": {
+    "description": "Effect name: a points effect (Cavalry's Sort and Shuffle) that puts a stream's points in another order, or shuffles them."
+  },
+  "fxMathPoints": "Math points",
+  "@fxMathPoints": {
+    "description": "Effect name: a points effect that lays out points by a formula (waves, a rose, a spiral)."
+  },
+  "fxRose": "Rose",
+  "@fxRose": {
+    "description": "Effect controls — a Shape on Math points: a rose curve of petals."
+  },
+  "fxWaveX": "Wave x",
+  "@fxWaveX": {
+    "description": "Effect controls — Math points: the wave the points follow across."
+  },
+  "fxWaveY": "Wave y",
+  "@fxWaveY": {
+    "description": "Effect controls — Math points: the wave the points follow down."
+  },
+  "fxAmplitudeX": "Amplitude x",
+  "@fxAmplitudeX": {
+    "description": "Effect controls — Math points: how far the wave across reaches."
+  },
+  "fxAmplitudeY": "Amplitude y",
+  "@fxAmplitudeY": {
+    "description": "Effect controls — Math points: how far the wave down reaches."
+  },
+  "fxFrequencyX": "Frequency x",
+  "@fxFrequencyX": {
+    "description": "Effect controls — Math points: how many times the wave across runs."
+  },
+  "fxFrequencyY": "Frequency y",
+  "@fxFrequencyY": {
+    "description": "Effect controls — Math points: how many times the wave down runs."
+  },
+  "fxPhaseX": "Phase x",
+  "@fxPhaseX": {
+    "description": "Effect controls — Math points: where the wave across starts."
+  },
+  "fxPhaseY": "Phase y",
+  "@fxPhaseY": {
+    "description": "Effect controls — Math points: where the wave down starts."
+  },
+  "fxPetals": "Petals",
+  "@fxPetals": {
+    "description": "Effect controls — Math points' Rose: the petals, over Denominator."
+  },
+  "fxDenominator": "Denominator",
+  "@fxDenominator": {
+    "description": "Effect controls — Math points' Rose: what Petals is divided by."
+  },
+  "fxTurns": "Turns",
+  "@fxTurns": {
+    "description": "Effect controls — Math points' Spiral: how many times it winds round."
+  },
+  "fxCosine": "Cosine",
+  "@fxCosine": {
+    "description": "Effect controls — a wave on Math points."
+  },
+  "fxContourPoints": "Contour points",
+  "@fxContourPoints": {
+    "description": "Effect name: a points effect that puts one point on each closed piece of a path."
+  },
+  "fxSizeFromArea": "Size from area",
+  "@fxSizeFromArea": {
+    "description": "Effect controls — Contour points: each point as big as its piece."
+  },
+  "fxIntersectionPoints": "Intersection points",
+  "@fxIntersectionPoints": {
+    "description": "Effect name: a points effect that puts a point where paths cross."
+  },
+  "fxShuffle": "Shuffle",
+  "@fxShuffle": {
+    "description": "Effect controls — a Sort by on Sort points: the points in an order of their own dice."
+  },
+  "fxTimeLoop": "Time loop",
+  "@fxTimeLoop": {
+    "description": "Effect name: plays a stretch of another layer over and over."
+  },
+  "fxCrossfadeBastiuni": "Crossfade Bastiuni",
+  "@fxCrossfadeBastiuni": {
+    "description": "Effect controls — a Type on Time loop: each lap fades from the next one in, with no cut. Bastiuni is a name; keep it."
+  },
+  "fxFadeLength": "Fade length",
+  "@fxFadeLength": {
+    "description": "Effect controls — Time loop: how long each lap fades in from the next."
+  },
+  "fxFadeCurve": "Fade curve",
+  "@fxFadeCurve": {
+    "description": "Effect controls — Time loop: the fade at an even pace or eased."
   },
   "fxFilm": "Film",
   "@fxFilm": {

@@ -85,6 +85,9 @@ class GraphBox {
 
   String get key => card.key;
 
+  /// Whether the box draws a control on any row, which an open box does.
+  bool get hasControls => rows.any((r) => r.param != null);
+
   Offset? socket(String portId, bool isInput) {
     if (collapsed) {
       final ports = isInput ? inputs : outputs;
@@ -294,6 +297,10 @@ class GraphNodeCard extends StatelessWidget {
   /// own row, on the box. Null on a canvas whose rows are sockets alone.
   final Widget Function(String param)? paramRow;
 
+  /// The value a wired parameter row reads, drawn dimmed at the row's right
+  /// beside the port name. Null where the row shows no value.
+  final Widget? Function(String param)? drivenValue;
+
   /// What the box draws under its rows, in the room its layout left: a Custom
   /// shader's picture of its inner graph. A press on it is its own.
   final Widget? foot;
@@ -314,6 +321,7 @@ class GraphNodeCard extends StatelessWidget {
     required this.onRenamed,
     required this.onRenameCancelled,
     this.paramRow,
+    this.drivenValue,
     this.foot,
     this.snap,
   });
@@ -594,6 +602,9 @@ class GraphNodeCard extends StatelessWidget {
     final control = row.param != null && !(input?.wired ?? false)
         ? paramRow?.call(row.param!)
         : null;
+    final driven = row.param != null && (input?.wired ?? false)
+        ? drivenValue?.call(row.param!)
+        : null;
     // Hit-tested past its edge, as the card is: the socket sits half outside.
     return GraphBoxStack(
       children: [
@@ -613,6 +624,13 @@ class GraphNodeCard extends StatelessWidget {
                         t.small.copyWith(color: portColour(t, input.portType)),
                     overflow: TextOverflow.ellipsis),
               ),
+            ),
+          ),
+        if (driven != null)
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.only(right: graphRowInset),
+              child: Align(alignment: Alignment.centerRight, child: driven),
             ),
           ),
         // Its name, unless a control has the row: the words would sit on top of
