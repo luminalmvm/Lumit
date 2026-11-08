@@ -20,6 +20,7 @@ import '../shell/menu_bar_frb.dart' show MenuEntry;
 import '../shell/menu_layer_frb.dart' show onSelection;
 import '../state/comp_time.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
+import 'transform_rows_frb.dart' show writeTransforms;
 import 'viewer_layer_map.dart';
 import 'viewer_stage.dart' show parentMatrix;
 
@@ -127,7 +128,7 @@ void _fit(
   final anchor = map.parentToScreen(px, py);
   final middle = Offset(size.width / 2, size.height / 2);
   final place = map.parentOf(middle - (box.center - anchor) * k);
-  entry.layer.setTransforms(
+  writeTransforms(entry.layer, tf,
     props: const [
       BridgeTransformProp.scaleX,
       BridgeTransformProp.scaleY,

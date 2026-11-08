@@ -1436,7 +1436,7 @@ List<MenuSection> lumitMenus(
                 project == null ? null : () => app.newNodeGraph(context)),
             MenuEntry.divider(),
             MenuEntry(l10n.compositionSettingsEllipsis,
-                comp == null ? null : () => _compSettings(context, app),
+                comp == null ? null : () => compSettingsFrb(context, app),
                 action: 'comp.settings'),
             MenuEntry(
                 l10n.menuDuplicateComposition,
@@ -3043,7 +3043,8 @@ bool stepToMarkerFrb(LumitUiState ui, CompositionReference comp,
   return true;
 }
 
-Future<void> _compSettings(BuildContext context, LumitState app) async {
+/// The open composition's settings, from the menu row or its key.
+Future<void> compSettingsFrb(BuildContext context, LumitState app) async {
   final comp = context.read<LumitUiState>().selectedComp;
   if (comp == null) return;
   final applied = await showCompSettingsFrb(context: context, comp: comp);

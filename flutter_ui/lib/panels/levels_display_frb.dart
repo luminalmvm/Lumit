@@ -317,10 +317,14 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     };
     asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
       for (final e in fresh.entries) {
-        if (!_driven(e.key)) {
-          widget.onWrite(widget.effectId, _id(e.key),
-              BridgeEffectValue.float(BridgeScalar.static_(e.value)));
+        final now = _scalarOf(e.key);
+        // A number already at rest makes no undo step.
+        if (_driven(e.key) ||
+            (now is BridgeScalar_Static && now.field0 == e.value)) {
+          continue;
         }
+        widget.onWrite(widget.effectId, _id(e.key),
+            BridgeEffectValue.float(BridgeScalar.static_(e.value)));
       }
     });
   }

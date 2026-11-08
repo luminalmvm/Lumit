@@ -688,7 +688,8 @@ Future<void> showMarkerMenuFrb({
       // A colour chip: the palette index after the colon, or nothing for the
       // plain marker grey.
       final colour = int.tryParse(picked.substring(picked.indexOf(':') + 1));
-      change((m) => m.withColour(colour));
+      // The colour it already has makes no undo step.
+      if (colour != marker.colour) change((m) => m.withColour(colour));
   }
 }
 

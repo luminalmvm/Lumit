@@ -3147,7 +3147,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                   onPick: (label) {
                 dismiss();
                 try {
-                  layer.setLabel(label: label);
+                  // The colour it already has makes no undo step.
+                  if (layer.getLabel() != label) layer.setLabel(label: label);
                 } catch (_) {}
                 Provider.of<LumitState>(context, listen: false)
                     .notifyDocumentChanged();

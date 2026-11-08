@@ -1396,7 +1396,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         if (read(widget.transform, p) is BridgeScalar_Expression) p,
     ];
     void writeAll(List<double> values) {
-      widget.layer.setTransforms(
+      writeTransforms(widget.layer, widget.transform,
         props: props,
         values: [
           for (final (i, p) in props.indexed)
@@ -1432,9 +1432,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               : () {
                   final fresh = freshTransform(_ui, placed);
                   if (!props.every(fresh.containsKey)) return;
-                  widget.layer.setTransforms(props: props, values: [
-                    for (final p in props) BridgeScalar.static_(fresh[p]!),
-                  ]);
+                  writeTransforms(widget.layer, widget.transform,
+                      props: props,
+                      values: [
+                        for (final p in props) BridgeScalar.static_(fresh[p]!),
+                      ]);
                   widget.onChanged();
                 },
       canReset: !canDefault ||
@@ -1721,7 +1723,7 @@ void showTransformMenu(BuildContext context, Offset at, LayerReference layer,
                     for (final axis in group.axes)
                       if (copied.containsKey(axis.prop)) axis.prop,
                 ];
-                target.layer.setTransforms(
+                writeTransforms(target.layer, target.info.transform,
                   props: props,
                   values: [for (final p in props) copied[p]!],
                 );
@@ -1810,6 +1812,23 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
         tf.material?.lightTransmission ?? _noChannel,
       BridgeTransformProp.reflection => tf.material?.reflection ?? _noChannel,
     };
+
+/// [values] written to [props] of [layer], unless its transform [tf] holds them
+/// already: a command that would move nothing makes no undo step.
+void writeTransforms(LayerReference layer, BridgeTransform tf,
+    {required List<BridgeTransformProp> props,
+    required List<BridgeScalar> values}) {
+  bool same(BridgeScalar a, BridgeScalar b) =>
+      a is BridgeScalar_Static && b is BridgeScalar_Static
+          ? (a.field0 - b.field0).abs() < 1e-4
+          : a == b;
+  for (var i = 0; i < props.length; i++) {
+    if (!same(read(tf, props[i]), values[i])) {
+      layer.setTransforms(props: props, values: values);
+      return;
+    }
+  }
+}
 
 /// A copy of `tf` with one property replaced — what the preview renders.
 ///

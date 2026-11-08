@@ -71,7 +71,7 @@ import 'package:lumit_flutter/widgets/drag_escape.dart';
 
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
-import 'transform_rows_frb.dart' show read;
+import 'transform_rows_frb.dart' show read, writeTransforms;
 import 'viewer_gizmo.dart' show LayerBox, layerAndDepthAt, layerAtPoint;
 import 'viewer_gizmo_3d.dart'
     show Vec3, compToParent, eulerYxz, rotationMatching;
@@ -893,7 +893,7 @@ bool writeCameraPose(
           // Nothing else is a camera's placement, so nothing else is asked.
           _ => 0,
         };
-    layer.setTransforms(
+    writeTransforms(layer, tf,
       props: props.toList(),
       values: [
         for (final prop in props)

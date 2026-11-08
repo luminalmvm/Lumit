@@ -313,7 +313,9 @@ List<Widget> audioLayerRows({
       submenu: (dismiss) => FloatSurface(
         child: labelChips(theme, keyPrefix: 'audio-menu-label', onPick: (label) {
           dismiss();
-          each((t) => t.layer.setLabel(label: label));
+          each((t) {
+            if (t.layer.getLabel() != label) t.layer.setLabel(label: label);
+          });
         }),
       ),
       child: MenuLabel(l10n.tipLabelColour, ticked: false),

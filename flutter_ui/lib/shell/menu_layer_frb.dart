@@ -40,7 +40,8 @@ import '../panels/shape_entries.dart';
 import '../panels/timeline_mask_rows_frb.dart'
     show maskModeLabel, maskWith, pickedMasks;
 import '../panels/transform_rows_frb.dart'
-    show TransformSection, hasThreeDSwitch, read, transformGroups;
+    show TransformSection, hasThreeDSwitch, read, transformGroups,
+        writeTransforms;
 import '../panels/viewer_layer_map.dart' show panBehindPosition;
 import 'camera_settings_dialog.dart';
 import 'model_settings_dialog.dart';
@@ -530,7 +531,7 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
           ? null
           : onSelection(app, ui, (entry) {
               final settings = comp.getSettings();
-              entry.layer.setTransforms(
+              writeTransforms(entry.layer, entry.info.transform,
                 props: const [
                   BridgeTransformProp.positionX,
                   BridgeTransformProp.positionY,
@@ -572,7 +573,7 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
                   scaleYPercent: still(tf.scaleY),
                   rotationDegrees: still(tf.rotation),
                 );
-                entry.layer.setTransforms(
+                writeTransforms(entry.layer, tf,
                   props: const [
                     BridgeTransformProp.anchorX,
                     BridgeTransformProp.anchorY,
@@ -628,8 +629,12 @@ List<MenuEntry> _orientRows(LumitState app, LumitUiState ui) {
         kind: first?.info.kind ?? BridgeLayerKind.footage))
       MenuEntry(
         orientLabel(orient),
-        onSelection(app, ui, (e) => e.layer.setOrient(orient: orient),
-            when: can),
+        onSelection(app, ui, (e) {
+          // The one it has already makes no undo step.
+          if (e.info.transform.orient != orient) {
+            e.layer.setOrient(orient: orient);
+          }
+        }, when: can),
         checked: first?.info.transform.orient == orient,
       ),
   ];

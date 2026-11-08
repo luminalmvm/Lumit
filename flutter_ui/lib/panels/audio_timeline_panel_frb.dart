@@ -356,7 +356,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     _ui?.activePane.removeListener(_onActivePanel);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _rename?.dispose();
-    _releaseKeys();
+    _releaseKeys(closing: true);
     _zoomMotion.dispose();
     _vOutline.dispose();
     _vLane.dispose();
@@ -595,7 +595,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     ui.easingApply.value = _applyEasing;
   }
 
-  void _releaseKeys() {
+  void _releaseKeys({bool closing = false}) {
     final ui = _ui;
     if (ui == null || !_claimed) return;
     _claimed = false;
@@ -605,9 +605,17 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     if (ui.cutClaim == _cutClaim) ui.cutClaim = _heldCut;
     if (ui.copyClaim == _copyClaim) ui.copyClaim = _heldCopy;
     if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _heldPaste;
-    if (ui.easingApply.value == _applyEasing) {
-      ui.easingApply.value = _heldEasing;
+    void ease() {
+      if (ui.easingApply.value == _applyEasing) {
+        ui.easingApply.value = _heldEasing;
+      }
     }
+
+    // Closing, after the frame: the Easing panel listens, and can't be asked
+    // to rebuild while the tree is being taken down.
+    closing
+        ? WidgetsBinding.instance.addPostFrameCallback((_) => ease())
+        : ease();
   }
 
   /// Whether the keys are this panel's to answer. The Timeline asks a claim it

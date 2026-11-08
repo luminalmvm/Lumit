@@ -43,6 +43,8 @@ void replaceLayerSources(LumitState app, List<BridgeLayerEntry> targets,
   asOneUndoStep(app.project, () {
     for (final entry in targets) {
       try {
+        // The source it already has makes no undo step.
+        if (entry.layer.getSourceItem()?.equals(item: item) ?? false) continue;
         // A solid has no time to remap, so a swap to one takes the Retime.
         if (entry.layer.setSourceItem(item: item) &&
             item is ItemReference_Solid &&

@@ -2014,7 +2014,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb>
   /// Tag every selected item, or untag them with 0, as one undo step.
   void _setLabel(ItemReference item, int label) {
     eachInOneUndo(Provider.of<LumitState>(context, listen: false),
-        _targets(item), (target) => target.setLabel(label: label));
+        _targets(item), (target) {
+      // The colour it already has makes no undo step.
+      if (target.label() != label) target.setLabel(label: label);
+    });
     _documentChanged();
   }
 

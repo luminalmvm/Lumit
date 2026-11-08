@@ -25,7 +25,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
-import 'layer_fold_frb.dart' show hasFlow;
+import 'layer_fold_frb.dart' show asOneUndoStep, hasFlow;
 import 'light_rows_frb.dart' show feedsEnvironment;
 import 'property_link.dart' show LinkDrop;
 import 'timeline_extras_frb.dart';
@@ -1007,14 +1007,17 @@ class _OutlineRowState extends State<OutlineRow> {
       onTapDown: (d) async {
         final picked = await showLabelPicker(context, d.globalPosition,
             keyPrefix: 'tl-label');
-        if (picked == null) return;
-        // Every selected layer, the Project panel's `_setLabel` being
-        // the reference: one call each, because one call is what the engine's
-        // op is. A label is one of the three writes a locked layer still
-        // takes, so nothing is skipped.
-        for (final target in _menuTargets()) {
-          target.layer.setLabel(label: picked);
-        }
+        if (picked == null || !context.mounted) return;
+        // Every selected layer, as one undo step, the Project panel's
+        // `_setLabel` being the reference. A label is one of the three writes
+        // a locked layer still takes, so nothing is skipped.
+        asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
+            () {
+          for (final target in _menuTargets()) {
+            if (target.layer.getLabel() == picked) continue;
+            target.layer.setLabel(label: picked);
+          }
+        });
         widget.onChanged();
       },
       child: HoverMark(

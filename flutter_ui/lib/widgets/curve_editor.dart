@@ -234,6 +234,7 @@ class _CurveEditorState extends State<CurveEditor> {
     // The two ends are never removed, as a drag off the plot does not either.
     final middle = near > 0 && near < points.length - 1;
     final bent = !curveIsIdentity(points);
+    final asText = points.map((p) => p.join(' ')).join(', ');
     showLumitPopup<void>(
       context: context,
       position: global,
@@ -287,8 +288,7 @@ class _CurveEditorState extends State<CurveEditor> {
                   key: const ValueKey('curve-menu-copy'),
                   onPressed: () {
                     done();
-                    Clipboard.setData(ClipboardData(
-                        text: points.map((p) => p.join(' ')).join(', ')));
+                    Clipboard.setData(ClipboardData(text: asText));
                   },
                   child: MenuLabel(l10n.curveCopy, ticked: ticks),
                 ),
@@ -297,6 +297,8 @@ class _CurveEditorState extends State<CurveEditor> {
                   onPressed: () async {
                     done();
                     final data = await Clipboard.getData(Clipboard.kTextPlain);
+                    // The curve it already has makes no undo step.
+                    if (data?.text == asText) return;
                     final parsed = _pointsIn(data?.text ?? '');
                     if (parsed != null && mounted) widget.onCommit(parsed);
                   },

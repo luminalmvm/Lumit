@@ -1147,6 +1147,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         } else {
           newCompositionFrb(context, state);
         }
+      case 'comp.settings':
+        if (comp == null) {
+          handled = false;
+        } else {
+          compSettingsFrb(context, state);
+        }
       // Cut, copy and paste. The same three functions the Edit menu's
       // rows call — the chords had no handler at all before, which is why
       // `Ctrl+C` on a selected layer did nothing while the menu row worked.

@@ -242,7 +242,8 @@ List<MenuEntry> layerMenuEntries(
       asOneUndoStep(app.project, () {
         for (final e in entries) {
           try {
-            e.layer.setLabel(label: picked);
+            // The colour it already has makes no undo step.
+            if (e.layer.getLabel() != picked) e.layer.setLabel(label: picked);
           } catch (_) {}
         }
       });

@@ -259,7 +259,8 @@ List<Widget> paramCopyRows(
         close();
         final data = await Clipboard.getData(Clipboard.kTextPlain);
         final text = data?.text;
-        if (text == null) return;
+        // The value the row already has makes no undo step.
+        if (text == null || (edit == null && text == menu.copy?.call())) return;
         edit == null ? paste(text) : edit.run(true, () => paste(text));
       }, enabled: canPaste, tickColumn: tickColumn),
   ];

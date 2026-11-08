@@ -3177,7 +3177,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         px += step.dx;
         py += step.dy;
       }
-      moves.add((box, px, py, null));
+      // A layer already where it is wanted makes no undo step.
+      if ((px - box.map.px).abs() > 1e-6 || (py - box.map.py).abs() > 1e-6) {
+        moves.add((box, px, py, null));
+      }
     }
     _place(moves);
   }
