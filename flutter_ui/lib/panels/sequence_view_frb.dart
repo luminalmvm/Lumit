@@ -918,7 +918,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
         final percent = await showStretchDialogFrb(
           context: context,
           durationFrames: null,
-          fps: widget.fps,
         );
         if (percent == null || !mounted) return;
         // Constant, not a ramp: the dialogue asks one number, and a ramp is

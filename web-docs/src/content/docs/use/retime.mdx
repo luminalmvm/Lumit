@@ -36,8 +36,8 @@ workspace changes nothing in the project.
 The **Retime** panel works on the selected layers:
 
 - The toggle turns Retime on or off.
-- The strip draws the layer's speed from end to end, with the speed at the playhead and the
-  moment of the source showing. A click or a drag seeks.
+- The strip draws the layer's speed from end to end. The speed at the playhead and the moment
+  of the source showing stand beside the playhead line. A click or a drag seeks.
 - **Speed** and **Duration** stretch the layer. **25**, **50**, **100**, **200** and **400** set
   its speed.
 - **Freeze frame** holds the frame at the playhead.
@@ -82,8 +82,7 @@ line per clip, in per cent.
 | **Smooth** | The speed eases out of the point and into the next. |
 | **Sharp** | The speed changes fastest near both points. |
 | **Hold** | The speed stays as it is until the next point, then jumps. |
-| **Flip** | Mirrors every point's speed about 100%. |
-| **Thin** | Removes the points already on the straight line between their neighbours. |
+| **Remove unneeded points** | Removes the points already on the straight line between their neighbours. |
 | **Reset speed** | Sets the whole clip back to 100%. |
 
 Below 0% the clip plays backwards.
@@ -167,7 +166,7 @@ Right-click the layer's row in the Timeline and choose **Stretch…**, or hold `
 either end of the layer's bar. Dragging the start holds the end where it is. In the Audio and
 Cut workspaces, `Shift`+drag on either edge of a clip stretches the clip.
 
-The dialogue takes a **New speed**, from 1% to 10000%, or a **New duration** in frames.
+The dialogue takes a **Speed**, from 1% to 10000%, or a **Duration** as a timecode.
 Editing either moves the other. The layer's in point holds and its end moves.
 
 Stretch turns Retime on if it was off, and scales an existing Retime about the in point. With

@@ -2736,7 +2736,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
             SubmenuRow(
               key: const ValueKey('viewer-menu-layer'),
               closeParent: close,
-              submenu: (dismiss) => viewerLayerFlyout(context, dismiss),
+              submenu: (dismiss) => viewerLayerFlyout(
+                  context, dismiss, top?.id ?? picked.first),
               child: MenuLabel(
                   top == null ? l10n.menuLayer : names[top.id] ?? l10n.menuLayer,
                   ticked: false),

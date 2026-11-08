@@ -107,7 +107,6 @@ Future<void> askToStretch(
   final percent = await showStretchDialogFrb(
     context: context,
     durationFrames: first.outFrame - first.inFrame,
-    fps: _uiOf(context).model.fps,
   );
   if (percent == null || !context.mounted) return;
   _forEach(

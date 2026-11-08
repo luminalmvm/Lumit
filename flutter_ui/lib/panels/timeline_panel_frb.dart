@@ -2650,9 +2650,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       (_priorPasteClaim?.call() ?? false) ||
       (!_onNodeGraph && _pasteKeysIntoSelection());
 
-  /// The right-click menu on a lane keyframe: the graph key's own menu —
-  /// Linear / Easy ease / Hold / Delete key — plus *Ease…*, which opens the
-  /// popover on whatever is selected.
+  /// The right-click menu on a lane keyframe, the one every key has.
   ///
   /// A right-click on an **unselected** key selects it first, so the menu acts
   /// on the thing that was clicked; on a selected one it acts on the whole
@@ -2661,22 +2659,29 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (!_laneKeySelection.contains(id)) _onLaneKeysSelected({id});
     final app = Provider.of<LumitState>(context, listen: false);
     final ui = Provider.of<LumitUiState>(context, listen: false);
+    final (fpsNum, fpsDen) = ui.model.fpsExact;
     showMenuAt<void>(
       context: context,
       position: position,
-      width: 190,
-      rows: (close) => keyMenuRows(
+      width: keyMenuWidth,
+      rows: (close) => channelKeyMenuRows(
+        context,
         close: () => close(null),
         keyPrefix: 'tl-key-menu',
-        onInterp: _applyInterp,
+        channels: () => _selectionChannels(ui),
+        picked: _actionKeySelection,
+        count: _selectedKeyCount,
+        onChanged: ui.model.refresh,
+        project: _project,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
         onEase: () => _openEasePopover(position),
         // The panel's own claims: the keys picked here, through the same two
         // commands the Edit menu runs.
         onCopy: () => copySelectionFrb(ui),
         onPaste: () => pasteSelectionFrb(
             app, ui, ui.selectedComp, ui.selectedLayer.value),
-        onCopyEase: _copyEase,
-        onPasteEase: _pasteEase,
         onDelete: _deleteSelectedKeys,
       ),
     );

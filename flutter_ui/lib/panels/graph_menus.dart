@@ -5,12 +5,13 @@
 part of 'graph_editor_frb.dart';
 
 /// One row: shuts the menu, then runs. [action] is the keymap's, for its chord.
-Widget _row(
+/// Every row keeps the tick column, so the names in a menu share one edge.
+Widget _tickRow(
   void Function(Object?) close,
   String label,
   VoidCallback? run, {
   String? action,
-  bool? ticked,
+  bool ticked = false,
   String? keyName,
 }) =>
     MenuRow(
@@ -23,17 +24,6 @@ Widget _row(
       child: MenuLabel(label,
           action: action, ticked: ticked, enabled: run != null),
     );
-
-/// A row in a menu that has toggles, its name on the same edge as theirs.
-Widget _tickRow(
-  void Function(Object?) close,
-  String label,
-  VoidCallback? run, {
-  String? action,
-  bool ticked = false,
-  String? keyName,
-}) =>
-    _row(close, label, run, action: action, ticked: ticked, keyName: keyName);
 
 /// The width every menu on the pane opens at, chords included.
 const double _menuWidth = 218;
@@ -51,27 +41,13 @@ extension _GraphMenus on GraphEditorFrbState {
     return widget.selectedKeys;
   }
 
-  void _setInterp(Set<String> keys, BridgeSideInterp side,
-      {bool inSide = true, bool outSide = true}) {
-    applyInterpToSelection(
-        channels: _channels,
-        selectedKeys: keys,
-        side: side,
-        inSide: inSide,
-        outSide: outSide);
-    widget.onChanged();
-  }
-
   ProjectReference? get _project =>
       Provider.of<LumitState>(context, listen: false).project;
 
   /// The clipboard's two rows for keys, the chords' own road.
-  List<Widget> _keyClipboardRows(void Function(Object?) close,
-          {bool lined = false}) =>
-      [
-        (lined ? _tickRow : _row)(close, l10n.menuCopy, widget.onCopyKeys,
-            action: 'edit.copy'),
-        (lined ? _tickRow : _row)(close, l10n.menuPaste,
+  List<Widget> _keyClipboardRows(void Function(Object?) close) => [
+        _tickRow(close, l10n.menuCopy, widget.onCopyKeys, action: 'edit.copy'),
+        _tickRow(close, l10n.menuPaste,
             graphKeyClipboard.isEmpty ? null : widget.onPasteKeys,
             action: 'edit.paste'),
       ];
@@ -86,103 +62,30 @@ extension _GraphMenus on GraphEditorFrbState {
       return _showSpeedPointMenu(channel, index, position);
     }
     final keys = _pickFor('${channel.id}#$index');
-    final hasEase = !keyEaseOf(channel.keys, index).isEmpty;
     await showMenuAt<Object>(
       context: context,
       position: position,
-      width: _menuWidth,
-      rows: (close) => [
-        _row(close, l10n.easeLinear,
-            () => _setInterp(keys, const BridgeSideInterp.linear())),
-        _row(close, l10n.easeEasy, () => _setInterp(keys, easyEase),
-            action: 'graph.ease'),
-        _row(close, l10n.keyEasyEaseIn,
-            () => _setInterp(keys, easyEase, outSide: false),
-            action: 'graph.ease.in'),
-        _row(close, l10n.keyEasyEaseOut,
-            () => _setInterp(keys, easyEase, inSide: false),
-            action: 'graph.ease.out'),
-        _row(close, l10n.easeHold,
-            () => _setInterp(keys, const BridgeSideInterp.hold())),
-        if (widget.onOpenEase case final open?)
-          _row(close, l10n.keyMenuEase, () => open(position)),
-        SubmenuRow(
-          closeParent: () => close(null),
-          submenu: (dismiss) => FloatSurface(
-            width: 120,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final (mode, name) in [
-                  (TangentMode.auto, l10n.graphTangentAuto),
-                  (TangentMode.clamp, l10n.graphTangentClamp),
-                  (TangentMode.free, l10n.graphTangentFree),
-                ])
-                  MenuRow(
-                    onPressed: () {
-                      dismiss();
-                      applyTangentModeToSelection(
-                          channels: _channels, selectedKeys: keys, mode: mode);
-                      widget.onChanged();
-                    },
-                    child: Text(name),
-                  ),
-              ],
-            ),
-          ),
-          child: Text(l10n.keyMenuTangents),
-        ),
-        const MenuDivider(),
-        _row(close, l10n.menuKeyframeSpeed,
-            hasEase ? () => _openKeySpeed(channel, index, side: side) : null,
-            action: 'keyframe.speed', keyName: 'graph-key-menu-speed'),
-        _row(
-            close,
-            l10n.keyMenuJoinHandles,
-            anyHandlesSplit(channels: _channels, selectedKeys: keys)
-                ? () {
-                    joinHandlesOnSelection(
-                        channels: _channels, selectedKeys: keys);
-                    widget.onChanged();
-                  }
-                : null),
-        const MenuDivider(),
-        ..._keyClipboardRows(close),
-        _row(close, l10n.keyMenuCopyEase, () {
-          copySelectedEase(channels: _channels, selectedKeys: keys);
-        }),
-        _row(
-            close,
-            l10n.keyMenuPasteEase,
-            easeClipboard.isEmpty
-                ? null
-                : () {
-                    pasteEaseOnSelection(
-                        project: _project,
-                        channels: _channels,
-                        selectedKeys: keys);
-                    widget.onChanged();
-                  }),
-        if (keys.length > 1) ...[
-          const MenuDivider(),
-          _row(close, l10n.easingReverse, () {
-            asOneUndoStep(
-                _project,
-                () => reverseSelection(
-                    channels: _channels,
-                    selectedKeys: keys,
-                    fps: widget.fps,
-                    fpsNum: widget.fpsNum,
-                    fpsDen: widget.fpsDen));
-            widget.onChanged();
-          }),
-        ],
-        const MenuDivider(),
-        _row(close, keys.length > 1 ? l10n.deleteKeys : l10n.deleteKey,
-            _deleteSelection,
-            action: 'edit.delete.selection'),
-      ],
+      width: keyMenuWidth,
+      rows: (close) => channelKeyMenuRows(
+        context,
+        close: () => close(null),
+        keyPrefix: 'graph-key-menu',
+        channels: () => _channels,
+        picked: (_) => keys,
+        count: keys.length,
+        onChanged: widget.onChanged,
+        project: _project,
+        fps: widget.fps,
+        fpsNum: widget.fpsNum,
+        fpsDen: widget.fpsDen,
+        onEase: widget.onOpenEase == null
+            ? null
+            : () => widget.onOpenEase!(position),
+        onSpeed: () => _openKeySpeed(channel, index, side: side),
+        onCopy: widget.onCopyKeys,
+        onPaste: widget.onPasteKeys,
+        onDelete: _deleteSelection,
+      ),
     );
   }
 
@@ -227,7 +130,7 @@ extension _GraphMenus on GraphEditorFrbState {
           ..._curveRows(close, channel, index, current),
         ],
         const MenuDivider(),
-        ..._keyClipboardRows(close, lined: true),
+        ..._keyClipboardRows(close),
         const MenuDivider(),
         _tickRow(close, l10n.speedPointDelete,
             keys.length - points.length >= 2 ? _deleteSelection : null,
@@ -340,7 +243,6 @@ extension _GraphMenus on GraphEditorFrbState {
               close, channel, span, speedCurveOf(keys[span].interpOut)),
         ],
         const MenuDivider(),
-        _tickRow(close, l10n.speedFlip, () => write(flipEnvelope(keys))),
         _tickRow(close, l10n.speedThin, () => write(thinEnvelope(keys))),
         _tickRow(close, l10n.clipResetSpeed, () => write(resetEnvelope(keys))),
         const MenuDivider(),
@@ -380,16 +282,24 @@ extension _GraphMenus on GraphEditorFrbState {
                     widget.onChanged();
                   }
                 : null),
-        _tickRow(close, l10n.graphBreakHandles, widget.onToggleBreakHandles,
-            ticked: widget.breakHandles),
         const MenuDivider(),
         _tickRow(close, l10n.easeLinear, () {
-          _setInterp(keys, const BridgeSideInterp.linear(),
-              inSide: !isOut, outSide: isOut);
+          applyInterpToSelection(
+              channels: _channels,
+              selectedKeys: keys,
+              side: const BridgeSideInterp.linear(),
+              inSide: !isOut,
+              outSide: isOut);
+          widget.onChanged();
         }),
         _tickRow(close, l10n.menuKeyframeSpeed,
             () => _openKeySpeed(channel, index, side: isOut),
             action: 'keyframe.speed'),
+        // A mode of the pane, not something done to this handle, so it stands
+        // apart from the rows that are.
+        const MenuDivider(),
+        _tickRow(close, l10n.graphBreakHandles, widget.onToggleBreakHandles,
+            ticked: widget.breakHandles),
       ],
     );
   }
@@ -595,7 +505,7 @@ extension _GraphMenus on GraphEditorFrbState {
         _tickRow(close, l10n.graphFrameAll, widget.onFrameAll,
             keyName: 'graph-plot-frame-all'),
         _tickRow(close, l10n.graphFrameSelected,
-            widget.selectedKeys.length > 1 ? widget.onFrame : null,
+            widget.selectedKeys.isEmpty ? null : widget.onFrame,
             action: 'graph.fit'),
         _tickRow(close, l10n.graphAutoFit, widget.onToggleAutoFit,
             ticked: widget.autoFit),

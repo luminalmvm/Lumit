@@ -45,6 +45,7 @@ import 'graph_maths.dart';
 import 'key_block.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
+import 'timeline_key_lane_frb.dart' show channelKeyMenuRows, keyMenuWidth;
 import 'timeline_snap.dart';
 import 'graph_channels.dart';
 import 'graph_clipboard.dart';
@@ -769,12 +770,18 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         if (widget.selectedKeys.contains('${c.id}#$i')) picked.add(t);
       }
     }
-    final times = picked.length > 1 && !everything ? picked : all;
-    if (times.length < 2) return null;
+    final one = picked.length == 1 && !everything;
+    final times = picked.isNotEmpty && !everything ? picked : all;
+    if (times.length < 2 && !one) return null;
     var t0 = times.first, t1 = times.first;
     for (final t in times) {
       if (t < t0) t0 = t;
       if (t > t1) t1 = t;
+    }
+    // One key has no span of its own, so it gets a second of air round it.
+    if (one) {
+      t0 -= 0.5;
+      t1 += 0.5;
     }
     if (!widget.autoFit) {
       setState(() => _manual[widget.lens] = _fitRange((t0, t1)));
@@ -2730,7 +2737,18 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       unit: graphChannelUnit(channel),
     );
     if (asked == null || asked.isEmpty) return;
-    _applyKeyEase(channel.id, index, asked);
+    // A row acts on all that's picked, and typed numbers are new lengths for
+    // their handles, so the lengths remembered from the last drag go.
+    for (final c in _channels) {
+      for (var i = 0; i < c.keys.length; i++) {
+        if (widget.selectedKeys.contains('${c.id}#$i')) {
+          _forgetHandleLengths(c, i);
+        }
+      }
+    }
+    applyKeyEaseToSelection(
+        channels: _channels, selectedKeys: widget.selectedKeys, ease: asked);
+    widget.onChanged();
   }
 
   /// The readout pill's box: the same numbers in a small popover that writes

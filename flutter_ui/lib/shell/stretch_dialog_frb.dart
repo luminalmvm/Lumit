@@ -18,9 +18,14 @@
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../state/timecode.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/time_readout.dart';
 import 'dialog_frame.dart';
 
 /// Ask for a new speed, in per cent. Completes with null when dismissed.
@@ -31,13 +36,11 @@ import 'dialog_frame.dart';
 Future<double?> showStretchDialogFrb({
   required BuildContext context,
   required int? durationFrames,
-  required double fps,
 }) =>
     showLumitModal<double>(
       context: context,
       builder: (close) => _StretchBody(
         durationFrames: durationFrames,
-        fps: fps,
         onConfirm: close,
         onCancel: () => close(null),
       ),
@@ -45,13 +48,11 @@ Future<double?> showStretchDialogFrb({
 
 class _StretchBody extends StatefulWidget {
   final int? durationFrames;
-  final double fps;
   final ValueChanged<double> onConfirm;
   final VoidCallback onCancel;
 
   const _StretchBody({
     required this.durationFrames,
-    required this.fps,
     required this.onConfirm,
     required this.onCancel,
   });
@@ -84,6 +85,26 @@ class _StretchBodyState extends State<_StretchBody> {
   }
 
   void _confirm() => widget.onConfirm(_speed);
+
+  /// The length as a timecode, as the Retime panel's well shows it.
+  Widget _duration(LumitTheme t) {
+    final (fpsNum, fpsDen) =
+        Provider.of<LumitUiState>(context, listen: false).model.fpsExact;
+    return TimeReadout(
+      key: const ValueKey('stretch-duration'),
+      frame: _frames,
+      format: (f) => timecodeOfRateSigned(f, fpsNum, fpsDen),
+      parse: (text) => framesOfTimecodeSigned(text, fpsNum, fpsDen),
+      widthChars: timecodeChars(fpsNum, fpsDen),
+      style: t.mono.copyWith(fontSize: wellTextSize),
+      well: true,
+      wellFaceHeight: wellHeight,
+      minFrame: 1,
+      maxFrame: 1000000,
+      draggable: true,
+      onCommit: _setFrames,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,14 +157,7 @@ class _StretchBodyState extends State<_StretchBody> {
                     t,
                     l10n.stretchNewDuration,
                     labelColumn: 64,
-                    DragValueField(
-                      key: const ValueKey('stretch-duration'),
-                      value: _frames,
-                      min: 1,
-                      max: 1000000,
-                      decimals: 0,
-                      onChanged: _setFrames,
-                    ),
+                    _duration(t),
                   ),
               ],
             ),
@@ -151,12 +165,6 @@ class _StretchBodyState extends State<_StretchBody> {
           dialogFooter(
             t,
             keyPrefix: 'stretch',
-            summary: frames == null
-                ? ''
-                : l10n.compDurationReading(
-                    '$_frames',
-                    (_frames / widget.fps).toStringAsFixed(2),
-                  ),
             actions: [
               dialogPlainAction(t,
                   key: const ValueKey('stretch-cancel'),

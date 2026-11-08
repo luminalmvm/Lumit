@@ -880,8 +880,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
             child: MenuLabel(name, ticked: curve == current),
           ),
         const MenuDivider(),
-        plain('seq-envelope-flip', l10n.speedFlip, 'flip', close,
-            enabled: clip.retimed),
         plain('seq-envelope-thin', l10n.speedThin, 'thin', close,
             enabled: keys.length > 2),
         const MenuDivider(),
@@ -896,8 +894,6 @@ class SpeedEnvelopeState extends State<SpeedEnvelope> {
     switch (picked) {
       case 'add':
         _plant(local);
-      case 'flip':
-        _write(clip, flipEnvelope(keys));
       case 'thin':
         _write(clip, thinEnvelope(keys));
       case 'copy':

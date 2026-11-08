@@ -16,12 +16,12 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/lib.dart' show F32Array4;
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart' show showCompSettingsFrb;
-import '../shell/menu_bar_frb.dart'
-    show lumitMenus, menuEntriesFlyout, MenuEntry;
+import '../shell/menu_bar_frb.dart' show menuEntriesFlyout;
 import '../shell/number_dialog_frb.dart' show askNumberFrb;
 import '../state/file_dialogs.dart' show pickFrameSaveLocation;
 import '../state/settings.dart';
@@ -30,6 +30,8 @@ import '../state/viewer_view.dart';
 import '../state/viewer_views.dart';
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show addMarkerFrb, showMenuAt, workAreaFrames;
+import 'timeline_layer_menu_frb.dart' show layerMenuEntries;
+import 'timeline_outline_row_frb.dart' show layerRowRename;
 import 'viewer_bar.dart' show durationFramesOf;
 import 'viewer_panel_frb.dart' show showViewerBackgroundPicker;
 import 'viewer_rulers.dart' show viewerGuideComp, viewerRulerBand;
@@ -795,24 +797,21 @@ void showViewerPictureMenu({
 
 List<Widget> _noRows(VoidCallback close) => const [];
 
-/// What a layer's row in a picture menu opens: clipboard rows off the Edit menu
-/// and the whole of the Layer menu, acting on the selection as they do there.
-Widget viewerLayerFlyout(BuildContext context, VoidCallback dismiss) {
+/// What a layer's row in a picture menu opens: the layer menu a row in the
+/// Timeline has, for the layer [id], acting on the selection as it does there.
+Widget viewerLayerFlyout(
+    BuildContext context, VoidCallback dismiss, UuidValue id) {
   final app = Provider.of<LumitState>(context, listen: false);
-  final menus = lumitMenus(context, app);
-  List<MenuEntry> of(String title) =>
-      menus.firstWhere((m) => m.title == title).items();
-  final edit = of(l10n.menuEdit);
-  MenuEntry? editRow(String action) =>
-      edit.where((e) => e.action == action).firstOrNull;
-  return menuEntriesFlyout([
-    ...of(l10n.menuLayer),
-    MenuEntry.divider(),
-    for (final action in const ['edit.cut', 'edit.copy', 'edit.paste', 'layer.duplicate'])
-      if (editRow(action) case final row?) row,
-    MenuEntry.divider(),
-    if (editRow('edit.delete.selection') case final row?) row,
-  ], dismiss);
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final entry =
+      ui.model.layers.where((e) => e.layer.internallayerId == id).firstOrNull;
+  return menuEntriesFlyout(
+    entry == null
+        ? const []
+        : layerMenuEntries(context, app, ui, entry,
+            onRename: layerRowRename(id)),
+    dismiss,
+  );
 }
 
 /// The source view's menu: the marks, placing what they hold, and letting it go.

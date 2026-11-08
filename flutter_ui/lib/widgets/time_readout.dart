@@ -118,6 +118,10 @@ class TimeReadout extends StatefulWidget {
   /// the whole of the invitation, and it costs no colour to make.
   final bool well;
 
+  /// How tall the well stands. A readout beside a [DragValueField] passes
+  /// `wellHeight`, so the two are one height.
+  final double wellFaceHeight;
+
   /// What the **editor** is seeded with, when that is not what the readout
   /// shows. The frame count rests as `f48` and edits as `48`: the `f`
   /// is a label saying which clock this is, not a digit, and leaving it in the
@@ -137,6 +141,7 @@ class TimeReadout extends StatefulWidget {
     required this.onCommit,
     required this.minFrame,
     required this.maxFrame,
+    this.wellFaceHeight = readoutWellHeight,
     this.draggable = false,
     this.onDragLive,
     this.onDragCancel,
@@ -327,7 +332,7 @@ class _TimeReadoutState extends State<TimeReadout>
             : null,
         child: Container(
           width: width,
-          height: widget.well ? readoutWellHeight : null,
+          height: widget.well ? widget.wellFaceHeight : null,
           padding: readoutPadding,
           alignment: Alignment.centerRight,
           decoration: BoxDecoration(

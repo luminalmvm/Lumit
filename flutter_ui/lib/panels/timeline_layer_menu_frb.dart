@@ -102,8 +102,9 @@ List<MenuEntry> layerMenuEntries(
   final source = _sourceItem(layer);
 
   return [
-    MenuEntry(l10n.rename, many || locked ? null : onRename,
-        action: 'layer.rename'),
+    if (onRename != null)
+      MenuEntry(l10n.rename, many || locked ? null : onRename,
+          action: 'layer.rename'),
     MenuEntry(l10n.menuLayerSettings,
         () => layerSettingsOf(context, app, ui, layer),
         action: 'layer.settings'),
@@ -585,11 +586,9 @@ void _convert(LumitState app, List<BridgeLayerEntry> unlocked,
 /// layer is stretched by the same speed, which is the number it asked in.
 Future<void> _stretch(BuildContext context, LumitState app, LumitUiState ui,
     BridgeLayerEntry entry, List<BridgeLayerEntry> unlocked) async {
-  final (fpsNum, fpsDen) = ui.model.fpsExact;
   final percent = await showStretchDialogFrb(
     context: context,
     durationFrames: entry.info.outFrame - entry.info.inFrame,
-    fps: fpsNum / fpsDen,
   );
   if (percent == null) return;
   asOneUndoStep(app.project, () {

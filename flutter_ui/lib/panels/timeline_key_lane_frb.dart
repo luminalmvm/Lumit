@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart' show ProjectReference;
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -22,8 +23,16 @@ import 'timeline_metrics_frb.dart';
 import 'timeline_bar_frb.dart';
 import 'timeline_outline_frb.dart';
 import 'timeline_key_block_frb.dart';
-import 'graph_clipboard.dart' show easeClipboard;
-import 'graph_maths.dart' show easyEase;
+import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
+import 'graph_channels.dart' show GraphChannel;
+import 'graph_clipboard.dart'
+    show
+        copySelectedEase,
+        easeClipboard,
+        graphKeyClipboard,
+        pasteEaseOnSelection;
+import 'graph_edits.dart';
+import 'graph_maths.dart' show TangentMode, easyEase;
 
 /// One keyed property's lane: its keyframes as diamonds, each draggable in
 /// time.
@@ -833,23 +842,32 @@ class RowDividerPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// The rows a key's right-click menu shares across every surface that draws
-/// keys: the lanes, the key block, the effect strip, the graph and the audio
-/// lanes. The interpolations first, then the shaping rows a surface offers,
-/// then the clipboard, with Delete last. A surface hands in the callbacks it
-/// has; a row with none is left out. Paste ease stays, greyed, while nothing
-/// has been copied.
+/// The width a key's menu opens at, on every surface.
+const double keyMenuWidth = 218;
+
+/// The rows of a key's right-click menu, on every surface that draws keys, so
+/// one key reads the same wherever it is clicked. How it eases first, then what
+/// shapes it, then the clipboard, with Delete last. A surface hands in what it
+/// can do, and a row it has no callback for stays out. The rest grey out while
+/// they have nothing to act on: [many] is whether several keys are picked.
 List<Widget> keyMenuRows({
   required VoidCallback close,
   required ValueChanged<BridgeSideInterp> onInterp,
+  VoidCallback? onEaseIn,
+  VoidCallback? onEaseOut,
+  ValueChanged<TangentMode>? onTangents,
   VoidCallback? onEase,
   VoidCallback? onSpeed,
+  bool canSpeed = true,
   VoidCallback? onJoinHandles,
-  required VoidCallback onCopyEase,
-  required VoidCallback onPasteEase,
+  bool canJoinHandles = true,
+  VoidCallback? onReverse,
   VoidCallback? onCopy,
   VoidCallback? onPaste,
+  required VoidCallback onCopyEase,
+  required VoidCallback onPasteEase,
   required VoidCallback onDelete,
+  bool many = false,
   String keyPrefix = 'key-menu',
 }) {
   Widget row(String name, String label, VoidCallback? run, {String? action}) =>
@@ -862,27 +880,156 @@ List<Widget> keyMenuRows({
         },
         child: MenuLabel(label, action: action, enabled: run != null),
       );
-  final shaping = onEase != null || onSpeed != null || onJoinHandles != null;
+  final shaping = onEase != null ||
+      onSpeed != null ||
+      onJoinHandles != null ||
+      onReverse != null;
   return [
     row('linear', l10n.easeLinear,
         () => onInterp(const BridgeSideInterp.linear())),
     row('ease', l10n.easeEasy, () => onInterp(easyEase), action: 'graph.ease'),
+    if (onEaseIn != null)
+      row('ease-in', l10n.keyEasyEaseIn, onEaseIn, action: 'graph.ease.in'),
+    if (onEaseOut != null)
+      row('ease-out', l10n.keyEasyEaseOut, onEaseOut, action: 'graph.ease.out'),
     row('hold', l10n.easeHold, () => onInterp(const BridgeSideInterp.hold()),
         action: 'keyframe.hold.toggle'),
+    if (onTangents != null)
+      SubmenuRow(
+        key: ValueKey<String>('$keyPrefix-tangents'),
+        closeParent: close,
+        submenu: (dismiss) => FloatSurface(
+          width: 120,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (mode, name) in [
+                (TangentMode.auto, l10n.graphTangentAuto),
+                (TangentMode.clamp, l10n.graphTangentClamp),
+                (TangentMode.free, l10n.graphTangentFree),
+              ])
+                MenuRow(
+                  key: ValueKey<String>('$keyPrefix-tangent-${mode.name}'),
+                  onPressed: () {
+                    dismiss();
+                    onTangents(mode);
+                  },
+                  child: Text(name),
+                ),
+            ],
+          ),
+        ),
+        child: Text(l10n.keyMenuTangents),
+      ),
     if (shaping) const MenuDivider(),
     if (onEase != null) row('shape', l10n.keyMenuEase, onEase),
     if (onSpeed != null)
-      row('speed', l10n.menuKeyframeSpeed, onSpeed, action: 'keyframe.speed'),
+      row('speed', l10n.menuKeyframeSpeed, canSpeed ? onSpeed : null,
+          action: 'keyframe.speed'),
     if (onJoinHandles != null)
-      row('join', l10n.keyMenuJoinHandles, onJoinHandles),
+      row('join', l10n.keyMenuJoinHandles,
+          canJoinHandles ? onJoinHandles : null),
+    if (onReverse != null)
+      row('reverse', l10n.easingReverse, many ? onReverse : null),
     const MenuDivider(),
     if (onCopy != null) row('copy', l10n.menuCopy, onCopy, action: 'edit.copy'),
     if (onPaste != null)
-      row('paste', l10n.menuPaste, onPaste, action: 'edit.paste'),
+      row('paste', l10n.menuPaste, graphKeyClipboard.isEmpty ? null : onPaste,
+          action: 'edit.paste'),
     row('copy-ease', l10n.keyMenuCopyEase, onCopyEase),
     row('paste-ease', l10n.keyMenuPasteEase,
         easeClipboard.isEmpty ? null : onPasteEase),
     const MenuDivider(),
-    row('delete', l10n.deleteKey, onDelete),
+    row('delete', many ? l10n.deleteKeys : l10n.deleteKey, onDelete,
+        action: 'edit.delete.selection'),
   ];
+}
+
+/// [keyMenuRows] for a surface that holds its keys as curves: every shaping row
+/// runs on the [channels] the [picked] keys sit on. Both are asked again at the
+/// moment a row runs, because a channel is a snapshot. [count] is the keys as
+/// the surface counts them, where a lane's one mark can be several curves' keys.
+List<Widget> channelKeyMenuRows(
+  BuildContext context, {
+  required VoidCallback close,
+  required List<GraphChannel> Function() channels,
+  required Set<String> Function(List<GraphChannel>) picked,
+  required int count,
+  required VoidCallback onChanged,
+  required ProjectReference? project,
+  required double fps,
+  required int fpsNum,
+  required int fpsDen,
+  VoidCallback? onEase,
+  VoidCallback? onSpeed,
+  VoidCallback? onCopy,
+  VoidCallback? onPaste,
+  required VoidCallback onDelete,
+  String keyPrefix = 'key-menu',
+}) {
+  void edit(
+      void Function(List<GraphChannel> channels, Set<String> keys) write) {
+    final now = channels();
+    write(now, picked(now));
+    onChanged();
+  }
+
+  void interp(BridgeSideInterp side, {bool inSide = true, bool outSide = true}) =>
+      edit((c, keys) => applyInterpToSelection(
+          channels: c,
+          selectedKeys: keys,
+          side: side,
+          inSide: inSide,
+          outSide: outSide));
+
+  final now = channels();
+  final keys = picked(now);
+  return keyMenuRows(
+    close: close,
+    keyPrefix: keyPrefix,
+    many: count > 1,
+    onInterp: interp,
+    onEaseIn: () => interp(easyEase, outSide: false),
+    onEaseOut: () => interp(easyEase, inSide: false),
+    onTangents: (mode) => edit((c, keys) => applyTangentModeToSelection(
+        channels: c, selectedKeys: keys, mode: mode)),
+    onEase: onEase,
+    onSpeed: onSpeed ??
+        () async {
+          final first = firstPickedEase(channels: now, selectedKeys: keys);
+          if (first == null) return;
+          final asked = await showKeyframeSpeedFrb(
+              context: context, ease: first.ease, unit: first.unit);
+          if (asked == null || asked.isEmpty) return;
+          edit((c, keys) => applyKeyEaseToSelection(
+              channels: c, selectedKeys: keys, ease: asked));
+        },
+    canSpeed: firstPickedEase(channels: now, selectedKeys: keys) != null,
+    onJoinHandles: () => edit((c, keys) =>
+        joinHandlesOnSelection(channels: c, selectedKeys: keys)),
+    canJoinHandles: anyHandlesSplit(channels: now, selectedKeys: keys),
+    onReverse: () => edit((c, keys) => asOneUndoStep(
+        project,
+        () => reverseSelection(
+            channels: c,
+            selectedKeys: keys,
+            fps: fps,
+            fpsNum: fpsNum,
+            fpsDen: fpsDen))),
+    onCopy: onCopy,
+    onPaste: onPaste,
+    onCopyEase: () {
+      final c = channels();
+      copySelectedEase(channels: c, selectedKeys: picked(c));
+    },
+    onPasteEase: () {
+      final c = channels();
+      if (pasteEaseOnSelection(
+          project: project, channels: c, selectedKeys: picked(c))) {
+        onChanged();
+      }
+    },
+    onDelete: onDelete,
+  );
 }

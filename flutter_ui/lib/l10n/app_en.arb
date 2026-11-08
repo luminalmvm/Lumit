@@ -1660,7 +1660,7 @@
   "@deleteAllMarkers": {
     "description": "Context-menu item."
   },
-  "deleteKey": "Delete key",
+  "deleteKey": "Delete keyframe",
   "@deleteKey": {
     "description": "Menu item: remove this keyframe."
   },
@@ -6418,19 +6418,19 @@
   "@graphEditorEmpty": {
     "description": "Empty state in the graph editor: no property is picked, so there is no curve to draw."
   },
-  "graphAddKeyAtPlayhead": "Add key at playhead",
+  "graphAddKeyAtPlayhead": "Add keyframe at playhead",
   "@graphAddKeyAtPlayhead": {
     "description": "Graph editor, right-click on the empty plot: plants a key under the playhead on every keyed curve on show, leaving the curve as it was."
   },
-  "graphAddKeyHere": "Add key here",
+  "graphAddKeyHere": "Add keyframe here",
   "@graphAddKeyHere": {
     "description": "Graph editor, right-click on a curve: plants a key on it where the pointer is, leaving the curve as it was."
   },
-  "graphSelectAllKeys": "Select all keys",
+  "graphSelectAllKeys": "Select all keyframes",
   "@graphSelectAllKeys": {
     "description": "Graph editor, right-click on the empty plot: selects every key of every curve on show."
   },
-  "graphSelectKeys": "Select keys",
+  "graphSelectKeys": "Select keyframes",
   "@graphSelectKeys": {
     "description": "Graph editor, right-click on a curve or its row in the curve list: selects every key of that curve."
   },
@@ -6458,9 +6458,9 @@
   "@keyMenuTangents": {
     "description": "Graph editor, right-click on a key: the submenu holding the tangent modes Auto, Clamp and Free."
   },
-  "deleteKeys": "Delete keys",
+  "deleteKeys": "Delete keyframes",
   "@deleteKeys": {
-    "description": "Graph editor, right-click on a key with several keys selected: removes them all."
+    "description": "Right-click menu on a keyframe, with several selected: removes them all."
   },
   "graphSpeed": "Speed",
   "@graphSpeed": {
@@ -8324,7 +8324,7 @@
   "@menuText": {
     "description": "Menu item."
   },
-  "menuTogglePathKey": "Add or remove key at playhead",
+  "menuTogglePathKey": "Add or remove keyframe at playhead",
   "@menuTogglePathKey": {
     "description": "Layer ▸ Mask and shape path submenu item: keys the picked path's shape at the playhead, or takes away the key already there."
   },
@@ -14542,7 +14542,7 @@
   "@viewerMenuResetDivider": {
     "description": "Right-click menu on the line between two compared views in the Viewer: puts the line back in the middle."
   },
-  "viewerMenuGoToKey": "Go to key",
+  "viewerMenuGoToKey": "Go to keyframe",
   "@viewerMenuGoToKey": {
     "description": "Right-click menu on a key of a motion path in the Viewer: moves the playhead to it."
   },
@@ -16040,13 +16040,9 @@
   "@speedCurveHold": {
     "description": "Speed envelope curve: the speed stays as it is until the next point, then jumps. Vegas calls this Hold."
   },
-  "speedFlip": "Flip",
-  "@speedFlip": {
-    "description": "Speed line, right-click menu: mirror every point's speed about 100 per cent, so a slow-down becomes the same speed-up. Vegas calls this Flip."
-  },
-  "speedThin": "Thin",
+  "speedThin": "Remove unneeded points",
   "@speedThin": {
-    "description": "Speed line, right-click menu: remove the points that change nothing, those already on the straight line between their neighbours. Vegas calls this Thin."
+    "description": "Speed line, right-click menu: remove the points that change nothing, those already on the straight line between their neighbours."
   },
   "speedPointAdd": "Add point",
   "@speedPointAdd": {

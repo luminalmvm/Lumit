@@ -67,16 +67,9 @@ import 'easing_curve.dart' show ApplyEasing, EaseSides, EasingCurve;
 import 'effect_controls_panel_frb.dart' show showAddEffectMenu;
 import 'graph_channels.dart' show GraphChannel, graphChannels;
 import 'graph_clipboard.dart'
-    show
-        copySelectedEase,
-        copySelectedKeys,
-        easeClipboard,
-        graphKeyClipboard,
-        pasteEaseOnSelection,
-        pasteKeysAtPlayhead;
-import 'graph_edits.dart'
-    show applyEasingToSelection, applyInterpToSelection, deleteKeysFromChannels;
-import 'graph_maths.dart' show easyEase, rationalSeconds;
+    show copySelectedKeys, graphKeyClipboard, pasteKeysAtPlayhead;
+import 'graph_edits.dart' show applyEasingToSelection, deleteKeysFromChannels;
+import 'graph_maths.dart' show rationalSeconds;
 import 'key_block.dart' show KeyStretch;
 import 'layer_fold_frb.dart';
 import '../state/share.dart';
@@ -708,13 +701,19 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final ui = _ui;
     final comp = ui?.selectedComp;
     if (!mounted || ui == null || comp == null || !_keysAreOurs) return false;
+    if (_keysOnChannels(_keyChannels(ui)).isEmpty) return _copyClips();
+    return _copyKeys(ui);
+  }
+
+  /// Copy the picked keyframes, and say whether it took any.
+  bool _copyKeys(LumitUiState ui) {
+    final comp = ui.selectedComp;
+    if (comp == null) return false;
     final channels = _keyChannels(ui);
-    final selection = _keysOnChannels(channels);
-    if (selection.isEmpty) return _copyClips();
     final took = copySelectedKeys(
       comp: comp,
       channels: channels,
-      selectedKeys: selection,
+      selectedKeys: _keysOnChannels(channels),
       fps: ui.model.fps,
     );
     if (took) _copiedClips = false;
@@ -727,6 +726,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final ui = _ui;
     if (!mounted || ui == null || !_keysAreOurs) return false;
     if (_copiedClips) return _pasteClips();
+    return _pasteKeys(ui);
+  }
+
+  bool _pasteKeys(LumitUiState ui) {
     if (graphKeyClipboard.isEmpty) return false;
     final channels = _keyChannels(ui);
     if (channels.isEmpty) return false;
@@ -760,68 +763,34 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     return true;
   }
 
-  /// Linear, Easy ease or Hold on both sides of every picked keyframe.
-  void _applyInterp(BridgeSideInterp side) {
-    final ui = _ui;
-    if (!mounted || ui == null) return;
-    final channels = _keyChannels(ui);
-    final selection = _keysOnChannels(channels);
-    if (selection.isEmpty) return;
-    applyInterpToSelection(
-        channels: channels, selectedKeys: selection, side: side);
-    _afterWrite();
-  }
-
-  /// The right-click menu on a lane keyframe, the layer Timeline's own rows
-  /// less the ease editor, which wants the graph view this panel does not
-  /// have. A key that is not picked is picked first, so the menu acts on what
-  /// was clicked, and on a picked one it acts on all of them.
+  /// The right-click menu on a lane keyframe, the one every key has. A key that
+  /// is not picked is picked first, so the menu acts on what was clicked, and
+  /// on a picked one it acts on all of them.
   void _keyMenu(String id, Offset position) {
     if (!_laneKeys.value.contains(id)) _selectKey(id, false);
     final ui = _ui;
     if (ui == null) return;
-    Widget row(String key, String label, VoidCallback act,
-            void Function(Object?) close,
-            {String? action, bool enabled = true}) =>
-        MenuRow(
-          key: ValueKey<String>('atl-key-menu-$key'),
-          enabled: enabled,
-          onPressed: () {
-            close(null);
-            act();
-          },
-          child: MenuLabel(label, action: action, enabled: enabled),
-        );
+    final (fpsNum, fpsDen) = ui.model.fpsExact;
     showMenuAt<void>(
       context: context,
       position: position,
-      width: 190,
-      rows: (close) => [
-        row('linear', l10n.easeLinear,
-            () => _applyInterp(const BridgeSideInterp.linear()), close),
-        row('ease', l10n.easeEasy, () => _applyInterp(easyEase), close),
-        row('hold', l10n.easeHold,
-            () => _applyInterp(const BridgeSideInterp.hold()), close),
-        const MenuDivider(),
-        row('copy-ease', l10n.keyMenuCopyEase, () {
-          final channels = _keyChannels(ui);
-          copySelectedEase(
-              channels: channels, selectedKeys: _keysOnChannels(channels));
-        }, close),
-        row('paste-ease', l10n.keyMenuPasteEase, () {
-          final channels = _keyChannels(ui);
-          if (pasteEaseOnSelection(
-            project: Provider.of<LumitState>(context, listen: false).project,
-            channels: channels,
-            selectedKeys: _keysOnChannels(channels),
-          )) {
-            _afterWrite();
-          }
-        }, close, enabled: easeClipboard.isNotEmpty),
-        const MenuDivider(),
-        row('delete', l10n.deleteKey, _deleteKeys, close,
-            action: 'edit.delete.selection'),
-      ],
+      width: keyMenuWidth,
+      rows: (close) => channelKeyMenuRows(
+        context,
+        close: () => close(null),
+        keyPrefix: 'atl-key-menu',
+        channels: () => _keyChannels(ui),
+        picked: _keysOnChannels,
+        count: _laneKeys.value.length,
+        onChanged: _afterWrite,
+        project: Provider.of<LumitState>(context, listen: false).project,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        onCopy: () => _copyKeys(ui),
+        onPaste: () => _pasteKeys(ui),
+        onDelete: _deleteKeys,
+      ),
     );
   }
 

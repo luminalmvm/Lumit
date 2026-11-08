@@ -34,6 +34,9 @@ const double _stripLeast = 56;
 const double _stripMost = 300;
 const double _besideStrip = 176;
 
+/// What the speed and the source time need side by side on the strip.
+const double _sourceTimeRoom = 160;
+
 class RetimePanelFrb extends StatefulWidget {
   const RetimePanelFrb({super.key});
 
@@ -52,20 +55,32 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
   double? _liveSpeed;
 
   /// How the first target finds its in-between frames. The read model only
-  /// says whether flow is on, so this is asked once per document revision, and
-  /// never by a rebuild that changed nothing.
-  BridgeRetimeInterp? _interp;
+  /// says whether flow is on, so this is asked once per document revision.
+  BridgeRetimeInterp _interp = BridgeRetimeInterp.nearest;
   Object? _interpAsked;
 
   /// The footage's own rate by layer id, which the source clock counts in, as
-  /// the Retime row's does. Asked once per layer, and never from a build.
+  /// the Retime row's does. Asked once per layer.
   final Map<Object, (int, int)?> _rates = {};
 
-  (int, int) _rateOf(BridgeLayerEntry entry) {
-    final id = entry.layer.internallayerId;
+  (int, int) _rateOf(BridgeLayerEntry entry) =>
+      _rates[entry.layer.internallayerId] ?? _ui.model.fpsExact;
+
+  /// Among several, the first one with a Retime is the one to read.
+  BridgeLayerEntry? _firstOf(List<BridgeLayerEntry> targets) => targets.isEmpty
+      ? null
+      : targets.firstWhere((e) => e.info.retime != null,
+          orElse: () => targets.first);
+
+  /// Ask the engine what the read model doesn't hold, when the selection or the
+  /// document changes, so a build only ever reads the answers.
+  void _askEngine() {
+    final first = _firstOf(retimeTargets(_ui));
+    if (first == null) return;
+    final id = first.layer.internallayerId;
+    final source = first.info.source;
     if (!_rates.containsKey(id)) {
       _rates[id] = null;
-      final source = entry.info.source;
       if (source is ItemReference_Footage) {
         source.field0.mediaInfo().then((info) {
           if (!mounted ||
@@ -78,20 +93,27 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
         });
       }
     }
-    return _rates[id] ?? _ui.model.fpsExact;
+    final asked = (id, _ui.model.heldRevision);
+    if (asked == _interpAsked) return;
+    _interpAsked = asked;
+    try {
+      _interp = first.layer.getInterpolation();
+    } catch (_) {
+      _interp = BridgeRetimeInterp.nearest;
+    }
   }
 
-  BridgeRetimeInterp _interpOf(BridgeLayerEntry entry) {
-    final asked = (entry.layer.internallayerId, _ui.model.heldRevision);
-    if (asked != _interpAsked || _interp == null) {
-      _interpAsked = asked;
-      try {
-        _interp = entry.layer.getInterpolation();
-      } catch (_) {
-        _interp = BridgeRetimeInterp.nearest;
-      }
-    }
-    return _interp!;
+  @override
+  void initState() {
+    super.initState();
+    _changes.addListener(_askEngine);
+    _askEngine();
+  }
+
+  @override
+  void dispose() {
+    _changes.removeListener(_askEngine);
+    super.dispose();
   }
 
   @override
@@ -104,12 +126,8 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
     final t = ThemeScope.of(context).theme;
     final targets = retimeTargets(_ui);
     final on = targets.isNotEmpty;
-    // Among several, the first one with a Retime is the one to read.
     final retimed = targets.any((e) => e.info.retime != null);
-    final first = !on
-        ? null
-        : targets.firstWhere((e) => e.info.retime != null,
-            orElse: () => targets.first);
+    final first = _firstOf(targets);
     final fps = _ui.model.fps;
     final speed =
         _liveSpeed ?? (first == null ? 100.0 : averageSpeed(first, fps));
@@ -208,12 +226,16 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Flat at 100% until there's a Retime to draw, so it
+                        // reserves no ground for a shape it hasn't got.
                         _strip(
                             t,
                             first,
-                            (box.maxHeight - _besideStrip)
-                                .clamp(_stripLeast, _stripMost)
-                                .toDouble()),
+                            retimed
+                                ? (box.maxHeight - _besideStrip)
+                                    .clamp(_stripLeast, _stripMost)
+                                    .toDouble()
+                                : _stripLeast),
                         const SizedBox(height: 10),
                         if (wide)
                           Row(children: [
@@ -271,9 +293,9 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
       on ? child : IgnorePointer(child: Opacity(opacity: 0.4, child: child));
 
   /// The layer from end to end, its speed drawn along it, with the speed under
-  /// the playhead large in the corner and the moment of the source it is showing
-  /// opposite. Click or drag to seek. Reads the keys in hand and asks the engine
-  /// nothing.
+  /// the playhead and the moment of the source it's showing beside the playhead
+  /// line, so they read as "here". Past the middle they hang on the line's left.
+  /// Click or drag to seek. Reads the keys in hand and asks the engine nothing.
   Widget _strip(LumitTheme t, BridgeLayerEntry? entry, double height) {
     final keys = entry == null ? const <BridgeKeyframe>[] : retimeKeysOf(entry);
     final inFrame = entry?.info.inFrame ?? 0;
@@ -323,42 +345,63 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                           : keys.isEmpty
                               ? 100.0
                               : evaluateKeysSpeed(keys, at) * 100;
+                      if (speed == null) return const SizedBox.shrink();
                       final source = keys.isEmpty || !inside
                           ? null
                           : evaluateKeys(keys, at);
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(6, 2, 6, 0),
+                      final span = outFrame - inFrame;
+                      final x = span <= 0
+                          ? 0.0
+                          : (frame - inFrame) / span * box.maxWidth;
+                      final hangs = x > box.maxWidth / 2;
+                      final readout = Text(
+                        '${speedText(speed, fine: false)}'
+                        '${l10n.unitSymbolPercent}',
+                        key: const ValueKey('retime-readout'),
+                        maxLines: 1,
+                        style: t.mono.copyWith(
+                          fontSize: 18,
+                          color: keys.isEmpty ? t.textMuted : t.textPrimary,
+                        ),
+                      );
+                      // Half the strip is the least the pair ever has to stand
+                      // in, so the source time goes first when that's short.
+                      final time = source == null ||
+                              box.maxWidth < _sourceTimeRoom * 2
+                          ? null
+                          : Text(
+                              timecodeOfRateSigned(
+                                  (source * fpsNum / fpsDen).round(),
+                                  fpsNum,
+                                  fpsDen),
+                              key: const ValueKey('retime-source-time'),
+                              maxLines: 1,
+                              style: t.mono.copyWith(
+                                  fontSize: wellTextSize, color: t.textMuted),
+                            );
+                      return Positioned(
+                        top: 2,
+                        left: hangs ? null : x + 6,
+                        right: hangs ? box.maxWidth - x + 6 : null,
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (speed != null)
-                              Text(
-                                '${speedText(speed, fine: false)}'
-                                '${l10n.unitSymbolPercent}',
-                                key: const ValueKey('retime-readout'),
-                                style: t.mono.copyWith(
-                                  fontSize: 18,
-                                  color: keys.isEmpty
-                                      ? t.textMuted
-                                      : t.textPrimary,
-                                ),
-                              ),
-                            const Spacer(),
-                            if (source != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 3),
-                                child: Text(
-                                  timecodeOfRateSigned(
-                                      (source * fpsNum / fpsDen).round(),
-                                      fpsNum,
-                                      fpsDen),
-                                  key: const ValueKey('retime-source-time'),
-                                  style: t.mono.copyWith(
-                                      fontSize: wellTextSize,
-                                      color: t.textMuted),
-                                ),
-                              ),
-                          ],
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: hangs
+                              ? [
+                                  if (time != null) ...[
+                                    time,
+                                    const SizedBox(width: 8),
+                                  ],
+                                  readout,
+                                ]
+                              : [
+                                  readout,
+                                  if (time != null) ...[
+                                    const SizedBox(width: 8),
+                                    time,
+                                  ],
+                                ],
                         ),
                       );
                     },
@@ -382,6 +425,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
       widthChars: timecodeChars(fpsNum, fpsDen),
       style: t.mono.copyWith(fontSize: wellTextSize),
       well: true,
+      wellFaceHeight: wellHeight,
       minFrame: 1,
       maxFrame: 1000000,
       draggable: true,
@@ -443,7 +487,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
 
   Widget _interpolation(
       LumitTheme t, List<BridgeLayerEntry> targets, BridgeLayerEntry first) {
-    final now = _interpOf(first);
+    final now = _interp;
     return Segment(
       key: const ValueKey('retime-interp'),
       children: [

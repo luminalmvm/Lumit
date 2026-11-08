@@ -707,6 +707,21 @@ class _ColourDropdown extends StatelessWidget {
     final summary = ui.colourSummary;
     final engaged = look.stops != 0 || look.toneMap;
     final name = _faceName(summary, ui.colourView);
+    // One transform and nothing to say about it is no choice: the name alone.
+    if (summary.displays.isEmpty &&
+        !showToneMap &&
+        ui.colourView == null &&
+        (summary.path.isEmpty || summary.loaded)) {
+      return LumitTooltip(
+        message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
+        child: Text(
+          engaged ? l10n.viewerDisplayTransformPreview(name) : name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: t.small.copyWith(color: engaged ? t.accent : t.textMuted),
+        ),
+      );
+    }
     return LumitTooltip(
       message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
       child: Builder(

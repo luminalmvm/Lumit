@@ -100,6 +100,8 @@ String _legend(String key) {
   return switch (key) {
     // A real space bar is blank.
     'Space' => '',
+    // Already on the number pad here, so the star needs no saying so.
+    '*' => '*',
     // The same reading a chord gets, with Page Up and Page Down on two lines.
     _ => chordLabel(key).replaceFirst(' ', '\n'),
   };

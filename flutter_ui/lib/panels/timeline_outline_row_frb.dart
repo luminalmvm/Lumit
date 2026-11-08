@@ -197,6 +197,17 @@ Future<void> showLayerRowMenu(
   return showLayerMenuFrb(context, layer: entry.layer, position: position);
 }
 
+/// What Rename runs for [layer], or null while its row isn't on screen to type
+/// the name into.
+VoidCallback? layerRowRename(UuidValue layer) {
+  final row = _rowsOnScreen[layer];
+  if (row == null) return null;
+  return () {
+    row.widget.renameRequest.value = layer;
+    row._maybeRename();
+  };
+}
+
 class _OutlineRowState extends State<OutlineRow> {
   /// The inline rename, entered with `Enter` on the selected layer.
   TextEditingController? _rename;

@@ -33,6 +33,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/shape.dart';
 import 'package:lumit_flutter/panels/shape_entries.dart';
+import 'package:lumit_flutter/widgets/time_readout.dart';
 
 import 'frb_test_support.dart';
 
@@ -2118,9 +2119,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(
           tester
-              .widget<DragValueField>(
+              .widget<TimeReadout>(
                   find.byKey(const ValueKey('stretch-duration')))
-              .value,
+              .frame,
           (before.outFrame - before.inFrame) * 2,
           reason: 'the duration well follows the speed well');
 

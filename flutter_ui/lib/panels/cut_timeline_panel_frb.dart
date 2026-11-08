@@ -3609,7 +3609,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                       clip.retimed ||
                       _speedShown.contains(id)),
               _row(close, 'ctl-menu-speed-set', l10n.menuClipSpeed,
-                  () => _askSpeed(ui),
+                  _askSpeed,
                   ticked: false),
               _row(close, 'ctl-menu-speed-reset', l10n.clipResetSpeed,
                   () => _setSpeed(100),
@@ -3951,9 +3951,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       ];
 
   /// Ask one speed for the picked picture clips.
-  Future<void> _askSpeed(LumitUiState ui) async {
-    final percent = await showStretchDialogFrb(
-        context: context, durationFrames: null, fps: ui.model.fps);
+  Future<void> _askSpeed() async {
+    final percent =
+        await showStretchDialogFrb(context: context, durationFrames: null);
     if (percent != null && mounted) _setSpeed(percent);
   }
 

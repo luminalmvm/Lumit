@@ -407,15 +407,6 @@ void envelopeTests() {
       out = setEnvelopeSpeed(out, 1, 200);
       out = setEnvelopeSpeed(out, 2, 100);
       out = setEnvelopeSpeed(out, 3, 150);
-      final flipped = flipEnvelope(out);
-      expect(envelopeSpeeds(flipped), [
-        closeTo(-100, 1e-6),
-        closeTo(0, 1e-6),
-        closeTo(100, 1e-6),
-        closeTo(50, 1e-6),
-      ]);
-      expect(envelopeSpeeds(flipEnvelope(flipped)),
-          [for (final s in envelopeSpeeds(out)) closeTo(s, 1e-6)]);
       // 200 at 1s is on the line from 300 to 100, 100 at 2s is a bend.
       final thin = thinEnvelope(out);
       expect(envelopeSpeeds(thin),
