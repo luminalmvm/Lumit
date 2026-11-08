@@ -1418,11 +1418,12 @@ void main() {
       // A shape layer with a square of its own, in comp coordinates — the
       // layer maps 1:1 to the comp, so its points sit where the maths below
       // says they do.
+      final item = UuidValue.fromString(const Uuid().v4());
       final shape = p.comp.addShapeLayer(
         name: 'Square',
         contents: [
           BridgeShapeItem(
-            id: UuidValue.fromString(const Uuid().v4()),
+            id: item,
             name: 'Rectangle',
             vertices: const [
               BridgeVertex(
@@ -1463,6 +1464,10 @@ void main() {
         ],
       );
       p.uiState.setSelection([shape]);
+      // A shape's points are offered while its Path row is picked.
+      p.uiState.selectedProperties.value = [
+        '${shape.internallayerId}/contents/$item/path'
+      ];
       p.uiState.model.refresh();
       await mount(tester, p);
 
