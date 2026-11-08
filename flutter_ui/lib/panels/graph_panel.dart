@@ -68,6 +68,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'comp_graph_panel.dart' show CompBoxRows, CompGraphPanel, compBoxRows;
+import 'effect_commands.dart' show EffectCommands;
 import 'effect_param_row_frb.dart' show cachedListParameters, relistedRows;
 import 'graph_card.dart';
 import 'graph_cut_fade.dart';
@@ -2127,6 +2128,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     showGraphBoxMenu(
       context,
       at,
+      // The effect's own menu while only effects are picked. A pick with a
+      // driver or an end in it keeps the box rows, which act on all of it.
+      effect: picked.every((k) => k.startsWith('effect:'))
+          ? _effectCommands(key)
+          : null,
       bypassed: derived ? null : !node.enabled,
       onBypass: derived ? null : () => _toggleBypass(key, node.enabled),
       onRename: derived ? null : () => setState(() => _renamingNode = key),
@@ -2153,7 +2159,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       onCopy: effects.isEmpty ? null : () => _copyPicked(ui),
       onPaste: () => _pasteEffects(ui),
       canPaste: ui.clipboard.kind == ClipboardKind.effects,
-      onDuplicate: effects.isEmpty ? null : () => _duplicatePicked(ui),
+      onDuplicate: effects.isEmpty ? null : _duplicatePicked,
       onGroup: groupPicked,
       onSaveGroup: () => saveGroup(),
       canSaveGroup: canSaveGroup,
@@ -2184,7 +2190,50 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           0,
       onColour: (colour) => _restyle(key, colour: colour),
       onDelete: derived ? null : _deleteSelected,
+      locked: ui.model.byId(_layer!.internallayerId)?.info.switches.locked ??
+          false,
     );
+  }
+
+  /// What the effect behind box [key] can do, through the commands its
+  /// headings use, over the picked effects. Null for a box that isn't one.
+  EffectCommands? _effectCommands(String key) {
+    final ui = _ui;
+    final layer = _layer;
+    final comp = ui?.selectedComp;
+    final info = _infos[key];
+    if (ui == null ||
+        layer == null ||
+        comp == null ||
+        info == null ||
+        !key.startsWith('effect:')) {
+      return null;
+    }
+    // The commands act on the effect selection, so it is the pick here.
+    ui.setEffectSelection(layer, _pickedEffects());
+    return EffectCommands(
+        info: info, layer: layer, comp: comp, onStackChanged: _effectRowDone);
+  }
+
+  /// An effect's row, or the shell's Duplicate, has changed the stack. The
+  /// pick follows the effect selection, so Duplicate's copies are picked here
+  /// as they are in Effect controls, and the graph is read again.
+  void _effectRowDone() {
+    final ui = _ui;
+    final layer = _layer;
+    if (!mounted || ui == null || layer == null) return;
+    if (ui.selectedEffectsLayer?.internallayerId == layer.internallayerId) {
+      _selection
+        ..clear()
+        ..addEntries([
+          for (final id in ui.selectedEffects.value)
+            MapEntry(graphNodeKey(BridgeNodeRef.effect(id)),
+                BridgeNodeRef.effect(id)),
+        ]);
+    }
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
+    _reload();
   }
 
   /// The effect a box added after [node] goes in front of: the next one in the
@@ -2407,22 +2456,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     return true;
   }
 
-  /// The picked effects again, after the chain's last box. One op, and the
-  /// clipboard is left as it was.
-  void _duplicatePicked(LumitUiState ui) {
-    final layer = _layer;
+  /// The picked effects again, each copy after its original and picked in its
+  /// place: the effect menu's Duplicate. The clipboard is left as it was.
+  void _duplicatePicked() {
     final ids = _pickedEffects();
-    if (layer == null || ids.isEmpty) return;
-    try {
-      layer.pasteEffects(
-          text: layer.copyEffects(effects: ids),
-          atFrame: ui.playheadFrame.value);
-    } catch (_) {
-      return;
-    }
-    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
-    ui.model.refresh();
-    _reload();
+    if (ids.isEmpty) return;
+    _effectCommands(graphNodeKey(BridgeNodeRef.effect(ids.first)))
+        ?.duplicate(context);
   }
 
   // --- The console --------------------------------------------------------
@@ -3597,8 +3637,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
             case 'nodes.frame.all':
               _frameAll(_viewport, layout);
               return KeyEventResult.handled;
+            // The shell has already duplicated the picked effects, as the
+            // Edit menu's Duplicate does, and picked the copies. They
+            // become the pick here too.
             case 'effect.duplicate':
-              _duplicatePicked(_ui!);
+              _effectRowDone();
               return KeyEventResult.handled;
           }
         }

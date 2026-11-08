@@ -1,7 +1,8 @@
 // The right-click menus of the node canvases: a box, a socket, a wire, a tie
 // and the ground. One set of rows, so a box on the layer graph, on a node
 // graph composition and inside a shader opens the same menu, and each canvas
-// hands over only the commands it has.
+// hands over only the commands it has. An effect's box on the layer graph
+// opens the effect's own menu with the box's rows added.
 //
 // A row whose callback is null is left out: the box never could do that
 // here. A row that could with a different pick, or a different clipboard, is
@@ -11,6 +12,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import 'effect_commands.dart' show EffectCommands;
 import 'timeline_extras_frb.dart' show labelChips, showMenuAt;
 
 /// What a socket's colour means, for its tooltip.
@@ -58,38 +60,52 @@ Future<void> _show(
     rows: (close) => [
       for (final (i, g) in kept.indexed) ...[
         if (i > 0) const MenuDivider(),
-        for (final r in g)
-          if (r.submenu case final submenu?)
-            SubmenuRow(
-              key: ValueKey<String>('graph-menu-${r.key}'),
-              closeParent: () => close(null),
-              submenu: submenu,
-              child: MenuLabel(r.text, ticked: ticks ? false : null),
-            )
-          else
-            MenuRow(
-              key: ValueKey<String>('graph-menu-${r.key}'),
-              enabled: r.enabled,
-              onPressed: () {
-                close(null);
-                r.run!();
-              },
-              child: MenuLabel(r.text,
-                  action: r.action,
-                  enabled: r.enabled,
-                  ticked: ticks ? (r.ticked ?? false) : null),
-            ),
+        for (final r in g) _draw(r, () => close(null), ticks: ticks),
       ],
     ],
+  );
+}
+
+/// One row as the menu draws it. [ticks] keeps a tick column on every row
+/// when any row in the menu has a tick, so the names line up.
+Widget _draw(_Row r, VoidCallback close, {required bool ticks}) {
+  if (r.submenu case final submenu?) {
+    return SubmenuRow(
+      key: ValueKey<String>('graph-menu-${r.key}'),
+      closeParent: close,
+      submenu: submenu,
+      child: MenuLabel(r.text, ticked: ticks ? false : null),
+    );
+  }
+  return MenuRow(
+    key: ValueKey<String>('graph-menu-${r.key}'),
+    enabled: r.enabled,
+    onPressed: () {
+      close();
+      r.run!();
+    },
+    child: MenuLabel(r.text,
+        action: r.action,
+        enabled: r.enabled,
+        ticked: ticks ? (r.ticked ?? false) : null),
   );
 }
 
 /// A box's menu. [bypassed] is null on a box with no enable tick, [expanded]
 /// null on one with no twirl, and [enterLabel] names what a double-click
 /// opens, where there is an inside to open.
+///
+/// An effect's box on the layer's graph hands over its [effect] and opens the
+/// effect's own menu, the one its headings open, with the box's rows in their
+/// places. The effect then answers for Bypass, the clipboard, the reveal, the
+/// manual and Delete, so those callbacks are not asked for.
+///
+/// A [locked] layer refuses every edit, so a row that would make one greys,
+/// and the Colour flyout is left out, as the effect's Move and Presets are.
 Future<void> showGraphBoxMenu(
   BuildContext context,
   Offset at, {
+  EffectCommands? effect,
   bool? bypassed,
   VoidCallback? onBypass,
   VoidCallback? onRename,
@@ -117,61 +133,94 @@ Future<void> showGraphBoxMenu(
   int colour = 0,
   ValueChanged<int>? onColour,
   VoidCallback? onDelete,
-}) =>
-    _show(context, at, [
-      [
-        _Row('bypass', l10n.fxBypass, onBypass, ticked: bypassed),
-        _Row('rename', l10n.rename, onRename, action: 'effect.rename'),
-        // The socket menu's pair, so the twirl has one name wherever it is
-        // pressed.
-        _Row(
-            'expand',
-            (expanded ?? false) ? l10n.graphHideSockets : l10n.graphShowSockets,
-            onExpand),
-        if (enterLabel != null) _Row('enter', enterLabel, onEnter),
-        _Row('add-node', l10n.graphAddNode, onAddNode, action: 'console.open'),
-      ],
-      [
-        _Row('copy', l10n.menuCopy, onCopy, action: 'edit.copy'),
-        _Row('paste', l10n.menuPaste, onPaste,
-            action: 'edit.paste', enabled: canPaste),
-        _Row('duplicate', l10n.menuDuplicate, onDuplicate,
-            action: 'effect.duplicate'),
-      ],
-      [
-        _Row('group', l10n.graphGroup, onGroup, action: 'layer.group'),
-        _Row('save-group', l10n.graphSaveGroup, onSaveGroup,
-            enabled: canSaveGroup),
-        _Row('ungroup', l10n.graphUngroup, onUngroup,
-            action: 'layer.ungroup', enabled: canUngroup),
-      ],
-      [
-        // The Viewer's "at" chip, from the box itself. Ticked while the
-        // picture stops here.
-        _Row('view-here', l10n.graphViewHere, onViewHere, ticked: viewHere),
-        _Row('reveal', l10n.graphRevealEffect, onReveal),
-        _Row('manual', l10n.fxMenuManual, onManual),
-        _Row('disconnect-all', l10n.graphDisconnectAll, onDisconnectAll),
-      ],
-      [
-        _Row('collapse', (collapsed ?? false) ? l10n.expand : l10n.collapse,
-            onCollapse),
-        // The Timeline's label chips; the first, the quiet one, takes the
-        // colour away.
-        _Row('colour', l10n.graphBoxColour, onColour == null ? null : () {},
-            submenu: (dismiss) => FloatSurface(
-                  child: labelChips(ThemeScope.of(context).theme,
-                      keyPrefix: 'graph-menu-colour', selected: colour,
-                      onPick: (i) {
-                    dismiss();
-                    onColour?.call(i);
-                  }),
-                )),
-      ],
-      [
-        _Row('delete', l10n.delete, onDelete, action: 'edit.delete.selection'),
-      ],
-    ]);
+  bool locked = false,
+}) {
+  final open = !locked;
+  // What a box does on its canvas: the same rows, in the same places, on an
+  // effect's box and on any other.
+  final own = [
+    // The socket menu's pair, so the twirl has one name wherever it is
+    // pressed.
+    _Row(
+        'expand',
+        (expanded ?? false) ? l10n.graphHideSockets : l10n.graphShowSockets,
+        onExpand,
+        enabled: open),
+    if (enterLabel != null) _Row('enter', enterLabel, onEnter),
+    _Row('add-node', l10n.graphAddNode, onAddNode,
+        action: 'console.open', enabled: open),
+    _Row('disconnect-all', l10n.graphDisconnectAll, onDisconnectAll,
+        enabled: open),
+  ];
+  final arrange = [
+    _Row('group', l10n.graphGroup, onGroup,
+        action: 'layer.group', enabled: open),
+    _Row('save-group', l10n.graphSaveGroup, onSaveGroup,
+        enabled: canSaveGroup && open),
+    _Row('ungroup', l10n.graphUngroup, onUngroup,
+        action: 'layer.ungroup', enabled: canUngroup && open),
+  ];
+  // The Viewer's "at" chip, from the box itself. Ticked while the picture
+  // stops here.
+  final view =
+      _Row('view-here', l10n.graphViewHere, onViewHere, ticked: viewHere);
+  final look = [
+    _Row('collapse', (collapsed ?? false) ? l10n.expand : l10n.collapse,
+        onCollapse,
+        enabled: open),
+    // The Timeline's label chips; the first, the quiet one, takes the
+    // colour away.
+    _Row('colour', l10n.graphBoxColour,
+        onColour == null || locked ? null : () {},
+        submenu: (dismiss) => FloatSurface(
+              child: labelChips(ThemeScope.of(context).theme,
+                  keyPrefix: 'graph-menu-colour', selected: colour,
+                  onPick: (i) {
+                dismiss();
+                onColour?.call(i);
+              }),
+            )),
+  ];
+  if (effect != null) {
+    // Bypass gives the effect's menu a tick column.
+    List<Widget> draw(List<_Row> rows, VoidCallback close) => [
+          for (final r in rows)
+            if (r.run != null) _draw(r, close, ticks: true),
+        ];
+    effect.showMenu(context, at,
+        onStartRename: onRename,
+        box: (close) => (
+              own: draw(own, close),
+              arrange: draw(arrange, close),
+              view: draw([view], close),
+              look: draw(look, close),
+            ));
+    return Future.value();
+  }
+  return _show(context, at, [
+    [
+      _Row('bypass', l10n.fxBypass, onBypass, ticked: bypassed, enabled: open),
+      _Row('rename', l10n.rename, onRename,
+          action: 'effect.rename', enabled: open),
+    ],
+    own,
+    [
+      _Row('copy', l10n.menuCopy, onCopy, action: 'edit.copy'),
+      _Row('paste', l10n.menuPaste, onPaste,
+          action: 'edit.paste', enabled: canPaste && open),
+      _Row('duplicate', l10n.menuDuplicate, onDuplicate,
+          action: 'effect.duplicate', enabled: open),
+    ],
+    arrange,
+    [_Row('manual', l10n.fxMenuManual, onManual)],
+    [view, _Row('reveal', l10n.graphRevealEffect, onReveal)],
+    look,
+    [
+      _Row('delete', l10n.delete, onDelete,
+          action: 'edit.delete.selection', enabled: open),
+    ],
+  ]);
+}
 
 /// A socket's menu: take its wire off, and open or shut the box's unused
 /// sockets.

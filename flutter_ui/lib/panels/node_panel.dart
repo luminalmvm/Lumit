@@ -476,23 +476,21 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     showGraphBoxMenu(
       context,
       at,
+      // An effect on a layer has its own menu, the one its box opens.
+      effect: layer == null || comp == null
+          ? null
+          : EffectCommands(
+              info: picked.info,
+              layer: layer,
+              comp: comp,
+              onStackChanged: ui.model.refresh,
+            ),
       bypassed: !picked.info.enabled,
       onBypass: () => _setEnabled(picked, !picked.info.enabled),
       viewHere: viewHere ? ui.atSelectedEffect.value : null,
       onViewHere: viewHere
           ? () => ui.setAtSelectedEffect(!ui.atSelectedEffect.value)
           : null,
-      onReveal: layer == null
-          ? null
-          : () => ui.revealEffectCard(layer, picked.info.id),
-      onDelete: layer == null || comp == null
-          ? null
-          : () => EffectCommands(
-                info: picked.info,
-                layer: layer,
-                comp: comp,
-                onStackChanged: ui.model.refresh,
-              ).remove(context),
     );
   }
 

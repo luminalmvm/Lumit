@@ -1,6 +1,6 @@
 // What can be done to one effect, and the menu that offers it. The heading in
-// Effect controls and the heading in the Timeline's fold-out both come here, so
-// one effect has one menu wherever it is shown.
+// Effect controls, the heading in the Timeline's fold-out and the box on the
+// layer's graph all come here, so one effect has one menu wherever it is shown.
 
 import 'dart:io';
 
@@ -333,7 +333,7 @@ class EffectCommands {
 
   /// Duplicate this effect in place, with the rest of the picked run when it
   /// is part of one, and pick the copies.
-  void _duplicate(BuildContext context) {
+  void duplicate(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     try {
       ui.setEffectSelection(layer,
@@ -345,19 +345,22 @@ class EffectCommands {
     onStackChanged();
   }
 
-  /// The effect's menu at [at]. An instance that has gone has none.
+  /// The effect's menu at [at]: the same rows in the same order from its
+  /// heading in Effect controls, its heading in the Timeline and its box on
+  /// the layer's graph. An instance that has gone has none.
   ///
-  /// [onStartRename] opens the heading's own name editor, [onFoldAll] twirls
+  /// [onStartRename] opens the surface's own name editor, [onFoldAll] twirls
   /// the whole stack, and [compositing] is the Compositing fold where the
   /// heading has one. Each is left out where the surface has no such thing.
-  /// [renameChord] says whether the keymap's rename reaches this heading.
+  /// [box] is what the box adds, and from the box the reveal goes the other
+  /// way, to Effect controls.
   void showMenu(
     BuildContext context,
     Offset at, {
     VoidCallback? onStartRename,
-    bool renameChord = true,
     ValueChanged<bool>? onFoldAll,
     ({bool open, VoidCallback toggle})? compositing,
+    EffectBoxRows Function(VoidCallback close)? box,
   }) {
     final stack = instances();
     final index = stack.indexWhere((e) => e.id() == info.id);
@@ -419,6 +422,7 @@ class EffectCommands {
               child: MenuLabel(label,
                   action: action, ticked: ticked, enabled: enabled),
             );
+        final extra = box?.call(done);
         return FloatSurface(
           width: 210,
           child: Column(
@@ -427,22 +431,15 @@ class EffectCommands {
             children: menuGroups([
               // What the effect is doing, first.
               [
-                // Bypass, ticked while off: the word the node box and the
-                // Grade panel use for the same switch.
+                // Bypass, ticked while off: the word the Grade panel uses
+                // for the same switch.
                 if (!inputs)
                   row('bypass', l10n.fxBypass,
                       () => setEnabled(context, !info.enabled),
                       ticked: !info.enabled, enabled: !locked),
-                if (compositing case final fold?)
-                  row(
-                    'compositing',
-                    l10n.fxFoldCompositing,
-                    fold.toggle,
-                    ticked: fold.open,
-                  ),
                 if (onStartRename case final start?)
                   row('rename', l10n.rename, start,
-                      action: renameChord ? 'effect.rename' : null,
+                      action: 'effect.rename',
                       ticked: inputs ? null : false,
                       enabled: !locked),
                 if (!material)
@@ -450,6 +447,7 @@ class EffectCommands {
                       enabled: !atDefault && !locked,
                       ticked: inputs ? null : false),
               ],
+              extra?.own ?? const [],
               // A clip's or a group's stack is not a layer's to paste onto.
               [
                 if (copies) ...[
@@ -471,7 +469,7 @@ class EffectCommands {
                     ticked: false,
                   ),
                   row('duplicate', l10n.menuDuplicate,
-                      () => _duplicate(context),
+                      () => duplicate(context),
                       action: 'effect.duplicate',
                       ticked: false,
                       enabled: !locked),
@@ -516,6 +514,7 @@ class EffectCommands {
                       child: Text(l10n.fxMenuMove),
                     ),
                   ),
+                ...?extra?.arrange,
               ],
               [
                 // The presets this effect ships with. Each sets the whole
@@ -584,21 +583,39 @@ class EffectCommands {
                     }
                   }, ticked: false),
               ],
-              // The box on the layer's graph is this effect seen the other
-              // way; a style, a clip's or a group's effect has none.
+              // The same effect seen the other way: its box on the layer's
+              // graph, or from the box its heading in Effect controls. A
+              // style, a clip's or a group's effect has no box.
               [
+                ...?extra?.view,
                 if (onStack && !style && !material && !inputs)
-                  row('reveal-graph', l10n.fxMenuRevealGraph,
-                      () => ui.revealBox(layer, BridgeNodeRef.effect(info.id)),
-                      ticked: false),
+                  box == null
+                      ? row(
+                          'reveal-graph',
+                          l10n.fxMenuRevealGraph,
+                          () => ui.revealBox(
+                              layer, BridgeNodeRef.effect(info.id)),
+                          ticked: false)
+                      : row('reveal-controls', l10n.graphRevealEffect,
+                          () => ui.revealEffectCard(layer, info.id),
+                          ticked: false),
               ],
+              // How this surface draws the effect.
               [
+                if (compositing case final fold?)
+                  row(
+                    'compositing',
+                    l10n.fxFoldCompositing,
+                    fold.toggle,
+                    ticked: fold.open,
+                  ),
                 if (onFoldAll case final fold?) ...[
                   row('expand', l10n.fxMenuExpandAll, () => fold(true),
                       ticked: inputs ? null : false),
                   row('collapse', l10n.fxMenuCollapseAll, () => fold(false),
                       ticked: inputs ? null : false),
                 ],
+                ...?extra?.look,
               ],
               // Last, on its own: the one row that takes the effect away. A
               // material goes back to its file's own values instead.
@@ -620,3 +637,13 @@ class EffectCommands {
     );
   }
 }
+
+/// The rows only an effect's box on the layer's graph has, each list in its
+/// place in the effect's menu: [own] after Bypass, Rename and Reset,
+/// [arrange] beside Move, [view] before the reveal and [look] before Delete.
+typedef EffectBoxRows = ({
+  List<Widget> own,
+  List<Widget> arrange,
+  List<Widget> view,
+  List<Widget> look,
+});
