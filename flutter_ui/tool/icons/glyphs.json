@@ -200,6 +200,46 @@
    ]
   },
   {
+   "name": "Cutting",
+   "glyphs": [
+    {
+     "name": "Ripple trim",
+     "body": "<path d=\"M5.5 3H3v10h2.5\"/><path d=\"M8 8h6\"/><path d=\"M11.5 5.5L14 8l-2.5 2.5\"/>",
+     "comment": "An edge, and what is after it pushed along."
+    },
+    {
+     "name": "Roll",
+     "body": "<path d=\"M5.5 3H7v10H5.5\"/><path d=\"M10.5 3H9v10h1.5\"/><path d=\"M3.5 8H1.5M2.75 6.75L1.5 8l1.25 1.25\"/><path d=\"M12.5 8h2M13.25 6.75L14.5 8l-1.25 1.25\"/>",
+     "comment": "Two clips meeting, the meeting point going either way."
+    },
+    {
+     "name": "Slip",
+     "body": "<rect x=\"2\" y=\"4\" width=\"12\" height=\"8\" rx=\"1\"/><path d=\"M5.5 8h5M6.75 6.75L5.5 8l1.25 1.25M9.25 6.75L10.5 8 9.25 9.25\"/>",
+     "comment": "The arrows inside the clip: the box stays and what it shows moves."
+    },
+    {
+     "name": "Slide",
+     "body": "<rect x=\"5\" y=\"4\" width=\"6\" height=\"8\" rx=\"1\"/><path d=\"M3.25 6.75L2 8l1.25 1.25\"/><path d=\"M12.75 6.75L14 8l-1.25 1.25\"/>",
+     "comment": "The arrows outside the clip: the box itself moves. Slip's twin."
+    },
+    {
+     "name": "Auto ripple",
+     "body": "<rect x=\"2\" y=\"4\" width=\"4.5\" height=\"8\" rx=\"1\"/><path d=\"M9 5.5a4 4 0 0 1 0 5\"/><path d=\"M12 4a7 7 0 0 1 0 8\"/>",
+     "comment": "A clip and the ripple running on from it."
+    },
+    {
+     "name": "Crossfade",
+     "body": "<path d=\"M2 12C6 12 10 4 14 4\"/><path d=\"M2 4C6 4 10 12 14 12\"/>",
+     "comment": "One ramp falling through one rising. Curved, so it is never read as Close."
+    },
+    {
+     "name": "Quantise",
+     "body": "<path d=\"M2 12.5h12\"/><path d=\"M4 12.5V10M8 12.5V10M12 12.5V10\"/><circle cx=\"8\" cy=\"5\" r=\"2\"/>",
+     "comment": "A point sat over the tick it will land on."
+    }
+   ]
+  },
+  {
    "name": "Layer switches",
    "glyphs": [
     {

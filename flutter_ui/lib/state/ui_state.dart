@@ -3545,6 +3545,30 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
+  /// Whether [view] shares its pane, so letting its clip go leaves a picture.
+  bool sourceBesideComposition(ViewerSurface view) => views.paneViews.values
+      .any((ids) => ids.length > 1 && ids.contains(view.id));
+
+  /// Let a source view's clip go. An empty source takes no room, so the
+  /// composition beside it has the pane again.
+  void clearSourceView(ViewerSurface view) {
+    view.itemId = null;
+    view.sourceFrame = 0;
+    view.sourceIn = null;
+    view.sourceOut = null;
+    if (views.activeId == view.id) {
+      for (final other in views.views) {
+        if (other.mode == ViewMode.composition) {
+          views.front(other.id);
+          break;
+        }
+      }
+    }
+    views.touch();
+    rememberSession();
+    requestFrame();
+  }
+
   /// Set a footage view's In or Out mark to the frame it stands on. A mark
   /// that would cross the other one moves it out of the way, so In is never
   /// after Out.

@@ -64,6 +64,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../shell/welcome_frb.dart' show EmptyStageFrb;
@@ -77,7 +79,6 @@ import '../widgets/controls.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
-import 'placeholder.dart';
 import 'viewer_bar.dart';
 import 'viewer_camera.dart' show altNavigates;
 import 'viewer_compare.dart';
@@ -216,18 +217,27 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
         final layout = ui.views.layoutOf(widget.pane);
         final compare = ui.views.compareOf(widget.pane);
         if (views.isEmpty) return const EmptyStageFrb();
-        if (views.length == 1) return _surface(ui, views.first);
-        if (compare != CompareMode.none && views.length >= 2) {
+        // A source side with nothing loaded takes no room: the composition
+        // has the pane until a clip is opened into it.
+        final shown = [
+          for (final view in views)
+            if (view.mode != ViewMode.footage || view.itemId != null) view,
+        ];
+        if (shown.length < 2) {
+          return _surface(ui, shown.isEmpty ? views.first : shown.first,
+              alone: true);
+        }
+        if (compare != CompareMode.none) {
           return ViewerCompare(
             pane: widget.pane,
             mode: compare,
             at: ui.views.dividerOf(widget.pane),
             onDivider: (at) => ui.views.setDivider(widget.pane, at),
-            left: _surface(ui, views[0]),
-            right: _surface(ui, views[1]),
+            left: _surface(ui, shown[0]),
+            right: _surface(ui, shown[1]),
           );
         }
-        return _grid(ui, views, layout);
+        return _grid(ui, shown, layout);
       },
     );
   }
@@ -238,7 +248,7 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
   ///
   /// A press anywhere in it fronts it, before the content sees the event —
   /// the same rule the dock's own pane chrome follows, one level down.
-  Widget _surface(LumitUiState ui, ViewerSurface view) {
+  Widget _surface(LumitUiState ui, ViewerSurface view, {bool alone = false}) {
     final surface = ViewerViewSurface(
       key: ValueKey(view.id),
       pane: widget.pane,
@@ -246,7 +256,7 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
     );
     // One view in the pane is the pane, so it needs no edge of its own: the
     // dock already draws one round the active pane.
-    if (ui.views.forPane(widget.pane).length < 2) return surface;
+    if (alone) return surface;
     final t = ThemeScope.of(context).theme;
     final active = view.id == ui.views.activeId;
     return Listener(
@@ -1251,15 +1261,6 @@ class FootageStageFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
     final footage = ui.footageOf(view);
-    // A source side with nothing loaded yet says how to load something.
-    if (view.itemId == null) {
-      return PlaceholderPanel(
-        key: const ValueKey('footage-view-empty'),
-        icon: LumitIcon.footage,
-        title: l10n.sourceTitle,
-        hint: l10n.sourceEmptyHint,
-      );
-    }
     final facts = footage == null ? null : ui.itemFacts(footage);
     // Being probed, gone from the project, or a file with no picture in it:
     // the empty state is the honest answer to all three.
@@ -1290,6 +1291,26 @@ class FootageStageFrb extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          // Let the clip go and the composition has the pane back.
+          if (ui.sourceBesideComposition(view))
+            LumitTooltip(
+              message: l10n.close,
+              child: HouseButton(
+                key: const ValueKey('footage-view-close'),
+                small: true,
+                frameless: true,
+                padding: EdgeInsets.zero,
+                onPressed: () => ui.clearSourceView(view),
+                child: SizedBox(
+                  width: iconSize + 4,
+                  height: iconSize + 4,
+                  child: Center(
+                    child: glyph.LumitIcon(LumitIcons.close,
+                        colour: t.textSecondary),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

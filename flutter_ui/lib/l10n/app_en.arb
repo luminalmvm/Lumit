@@ -8504,10 +8504,6 @@
   "@sourceTitle": {
     "description": "Title of the Viewer's source side, where one footage item is looked at before it is placed in a composition."
   },
-  "sourceEmptyHint": "Double-click footage to load it here.",
-  "@sourceEmptyHint": {
-    "description": "Empty-state line in the Viewer's source side before any footage has been loaded into it."
-  },
   "sourcePlay": "Play this footage",
   "@sourcePlay": {
     "description": "Tooltip for the play button under the source picture, which plays the loaded footage item by itself."
@@ -12057,13 +12053,80 @@
   "@cutPanCropRotation": {
     "description": "Cut timeline, Pan/Crop window: label beside how far the box is turned, in degrees."
   },
-  "cutPanCropLockAspect": "Lock aspect",
+  "cutPanCropCentre": "Centre",
+  "@cutPanCropCentre": {
+    "description": "Pan/Crop window, right-click menu on the picture: put the box back in the middle of the picture, keeping its size and rotation."
+  },
+  "cutPanCropResetRotation": "Reset rotation",
+  "@cutPanCropResetRotation": {
+    "description": "Pan/Crop window, right-click menu on the picture: put the box's rotation back to none."
+  },  "cutPanCropLockAspect": "Lock aspect",
   "@cutPanCropLockAspect": {
     "description": "Cut timeline, Pan/Crop window: checkbox that keeps the box's width and height in proportion while it is resized."
   },
   "cutPanCropFill": "Fill frame",
   "@cutPanCropFill": {
     "description": "Cut timeline, Pan/Crop window: button that puts the box back over the whole picture, unturned, so the clip fills the frame as it was."
+  },
+  "cutOpenInSource": "Open in Source",
+  "@cutOpenInSource": {
+    "description": "Cut timeline, clip menu: load this clip's footage into the Viewer's source side."
+  },
+  "cutPanCropMenu": "Pan/Crop…",
+  "@cutPanCropMenu": {
+    "description": "Cut timeline, clip menu: open the Pan/Crop window on this clip."
+  },
+  "cutTrimMenu": "Trim to playhead",
+  "@cutTrimMenu": {
+    "description": "Cut timeline, clip menu: heading of the rows that bring an edge of the clip to the playhead."
+  },
+  "cutTrimStart": "Trim start",
+  "@cutTrimStart": {
+    "description": "Cut timeline, clip menu, Trim to playhead: the clip's start moves to the playhead and nothing else moves."
+  },
+  "cutTrimEnd": "Trim end",
+  "@cutTrimEnd": {
+    "description": "Cut timeline, clip menu, Trim to playhead: the clip's end moves to the playhead and nothing else moves."
+  },
+  "cutRippleTrimStart": "Ripple trim start",
+  "@cutRippleTrimStart": {
+    "description": "Cut timeline, clip menu, Trim to playhead: the clip's start moves to the playhead and what follows closes up behind it."
+  },
+  "cutRippleTrimEnd": "Ripple trim end",
+  "@cutRippleTrimEnd": {
+    "description": "Cut timeline, clip menu, Trim to playhead: the clip's end moves to the playhead and what follows closes up behind it."
+  },
+  "cutTransitionMenu": "Transition",
+  "@cutTransitionMenu": {
+    "description": "Cut timeline, clip menu: heading of the dissolve and fade rows."
+  },
+  "cutSoundMenu": "Sound",
+  "@cutSoundMenu": {
+    "description": "Cut timeline, clip menu: heading of the rows about the clip's sound (keep pitch, detach, audio streams)."
+  },
+  "cutUseEffects": "Use effects",
+  "@cutUseEffects": {
+    "description": "Cut timeline, clip menu: turn a clip's bypassed effects back on. The other side of Bypass effects."
+  },
+  "cutSelectTrack": "Select track",
+  "@cutSelectTrack": {
+    "description": "Cut timeline, track and clip menus: pick every clip on this track."
+  },
+  "cutResetHeight": "Reset height",
+  "@cutResetHeight": {
+    "description": "Cut timeline and sequence view, menu on a track or a divider that has been dragged: back to the usual height."
+  },
+  "cutResetWidth": "Reset width",
+  "@cutResetWidth": {
+    "description": "Cut timeline, menu on the right edge of the track heads: back to the usual width."
+  },
+  "cutFadeLengthMenu": "Length…",
+  "@cutFadeLengthMenu": {
+    "description": "Cut timeline, menu on a fade or a dissolve: type how long it runs."
+  },
+  "cutFadeLengthTitle": "Length in frames",
+  "@cutFadeLengthTitle": {
+    "description": "Title of the box that asks how many frames a fade or a dissolve runs."
   },
   "cutMenuSplit": "Split",
   "@cutMenuSplit": {

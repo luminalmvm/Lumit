@@ -123,6 +123,29 @@ abstract final class LumitIcons {
   static const String viewAxes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1" opacity=".55"/><path d="M8 8h4.5M8 8V3.5"/><path d="M10.6 6.7 12.5 8l-1.9 1.3M6.7 5.4 8 3.5l1.3 1.9"/></svg>';
 
+  // --- Cutting ---
+  /// An edge, and what is after it pushed along.
+  static const String rippleTrim =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3v10h2.5"/><path d="M8 8h6"/><path d="M11.5 5.5L14 8l-2.5 2.5"/></svg>';
+  /// Two clips meeting, the meeting point going either way.
+  static const String roll =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H7v10H5.5"/><path d="M10.5 3H9v10h1.5"/><path d="M3.5 8H1.5M2.75 6.75L1.5 8l1.25 1.25"/><path d="M12.5 8h2M13.25 6.75L14.5 8l-1.25 1.25"/></svg>';
+  /// The arrows inside the clip: the box stays and what it shows moves.
+  static const String slip =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="8" rx="1"/><path d="M5.5 8h5M6.75 6.75L5.5 8l1.25 1.25M9.25 6.75L10.5 8 9.25 9.25"/></svg>';
+  /// The arrows outside the clip: the box itself moves. Slip's twin.
+  static const String slide =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="6" height="8" rx="1"/><path d="M3.25 6.75L2 8l1.25 1.25"/><path d="M12.75 6.75L14 8l-1.25 1.25"/></svg>';
+  /// A clip and the ripple running on from it.
+  static const String autoRipple =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="4.5" height="8" rx="1"/><path d="M9 5.5a4 4 0 0 1 0 5"/><path d="M12 4a7 7 0 0 1 0 8"/></svg>';
+  /// One ramp falling through one rising. Curved, so it is never read as Close.
+  static const String crossfade =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12C6 12 10 4 14 4"/><path d="M2 4C6 4 10 12 14 12"/></svg>';
+  /// A point sat over the tick it will land on.
+  static const String quantise =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12.5h12"/><path d="M4 12.5V10M8 12.5V10M12 12.5V10"/><circle cx="8" cy="5" r="2"/></svg>';
+
   // --- Layer switches ---
   static const String visible =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8c2.5-4.5 10.5-4.5 13 0-2.5 4.5-10.5 4.5-13 0z"/><circle cx="8" cy="8" r="2"/></svg>';
@@ -498,6 +521,13 @@ abstract final class LumitIcons {
     'Local axes': localAxes,
     'World axes': worldAxes,
     'View axes': viewAxes,
+    'Ripple trim': rippleTrim,
+    'Roll': roll,
+    'Slip': slip,
+    'Slide': slide,
+    'Auto ripple': autoRipple,
+    'Crossfade': crossfade,
+    'Quantise': quantise,
     'Visible': visible,
     'Hidden': hidden,
     'Audio': audio,

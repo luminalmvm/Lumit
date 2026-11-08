@@ -24,6 +24,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +35,7 @@ import '../shell/stretch_dialog_frb.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
+import 'cut_timeline_tracks.dart' show cutClipsCopiedIn, cutClipsHeld;
 import 'graph_maths.dart';
 import 'speed_envelope.dart';
 import 'timeline_extras_frb.dart';
@@ -347,6 +349,8 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
           height: t.density.laneRow + sequenceClipExtra,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onSecondaryTapDown: (d) =>
+                _groundMenu(d.globalPosition, d.localPosition.dx),
             // The razor cuts here, since there is no bar to aim at while the
             // view is open — the same command on the same layer, aimed at
             // where it was clicked (docs/07 §4.4).
@@ -753,23 +757,57 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
     );
   }
 
+  /// One row of a menu here, answering with [answer].
+  MenuRow _menuRow(void Function(String) close, String answer, String label,
+          {bool enabled = true, String? action}) =>
+      MenuRow(
+        key: ValueKey<String>('seq-menu-$answer'),
+        enabled: enabled,
+        onPressed: () => close(answer),
+        child: MenuLabel(label, action: action, enabled: enabled),
+      );
+
+  bool get _clipsHeld => cutClipsHeld(
+      Provider.of<LumitState>(context, listen: false).project);
+
+  /// A Cut edit on this row, its refusal said on the status line, and the panel
+  /// told when it went through.
+  void _edit(BridgeCutResult Function() call) {
+    final BridgeCutResult result;
+    try {
+      result = call();
+    } catch (_) {
+      return;
+    }
+    _ui?.reportCut(result);
+    if (result == BridgeCutResult.done) widget.onChanged();
+  }
+
+  bool get _linked => _ui?.cutLinked.value ?? true;
+
   /// What can be done to one clip. Right-click is where a clip's own
   /// operations live: it is the one gesture that is unambiguously *about this
   /// clip* and cannot be confused with cutting, moving or trimming it.
   Future<void> _clipMenu(BridgeClip clip, Offset at) async {
+    final comp = widget.comp;
+    final frame = _ui?.playheadFrame.value ?? 0;
+    final inside =
+        clip.startFrame.toInt() < frame && frame < clip.endFrame.toInt();
+    bool meets({required bool end}) => _clips.any((other) =>
+        other.id != clip.id &&
+        (end
+            ? other.startFrame <= clip.endFrame &&
+                other.endFrame > clip.endFrame
+            : other.endFrame >= clip.startFrame &&
+                other.startFrame < clip.startFrame));
+    final second = math.max(1, widget.fps.round());
     final picked = await showMenuAt<String>(
       context: context,
       position: at,
-      width: 190,
+      width: 220,
       rows: (close) => [
-        MenuRow(
-            onPressed: () => close('copy-clip'),
-            child: Text(l10n.clipCopyShape)),
-        MenuRow(
-            onPressed: () => close('copy-row'),
-            child: Text(l10n.clipCopyRowShape)),
-        MenuRow(
-            onPressed: () => close('paste'), child: Text(l10n.clipPasteShape)),
+        if (comp != null)
+          _menuRow(close, 'split', l10n.cutMenuSplit, enabled: inside),
         // The numeric speed entry (docs/04 §12.1's `retime.set_segment_speed`),
         // beside the reset that was already here. No duration well: a clip's
         // place and length are fixed by the covenant, so its speed
@@ -778,13 +816,98 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             key: ValueKey<String>('seq-clip-speed-${clip.id}'),
             onPressed: () => close('speed'),
             child: Text(l10n.menuClipSpeed)),
-        MenuRow(
-            onPressed: () => close('reset'), child: Text(l10n.clipResetSpeed)),
-        MenuRow(onPressed: () => close('delete'), child: Text(l10n.clipDelete)),
+        _menuRow(close, 'reset', l10n.clipResetSpeed, enabled: clip.retimed),
+        if (comp != null) ...[
+          if (!meets(end: false))
+            _menuRow(
+                close,
+                'fade-in',
+                clip.fadeIn.seconds > 0
+                    ? l10n.cutRemoveFadeIn
+                    : l10n.cutFadeIn),
+          if (!meets(end: true))
+            _menuRow(
+                close,
+                'fade-out',
+                clip.fadeOut.seconds > 0
+                    ? l10n.cutRemoveFadeOut
+                    : l10n.cutFadeOut),
+          const MenuDivider(),
+          _menuRow(close, 'cut', l10n.menuCut),
+          _menuRow(close, 'copy', l10n.menuCopy),
+          _menuRow(close, 'paste', l10n.menuPaste, enabled: _clipsHeld),
+        ],
+        const MenuDivider(),
+        // The shape: where the cuts fall and how each piece is ramped, with
+        // no media in it.
+        _menuRow(close, 'copy-clip', l10n.clipCopyShape),
+        _menuRow(close, 'copy-row', l10n.clipCopyRowShape),
+        _menuRow(close, 'paste-shape', l10n.clipPasteShape,
+            enabled: sequenceShapeClipboard != null),
+        const MenuDivider(),
+        SubmenuRow(
+          key: const ValueKey('seq-menu-colour'),
+          closeParent: () => close('none'),
+          submenu: (dismiss) => clipColourMenu(
+            ThemeScope.of(context).theme,
+            keyPrefix: 'seq-menu-colour',
+            onPick: (label) {
+              dismiss();
+              try {
+                widget.entry.layer.setClipLabel(clip: clip.id, label: label);
+              } catch (_) {
+                // A locked layer refuses, and quietly.
+              }
+              widget.onChanged();
+            },
+          ),
+          child: Text(l10n.clipColour),
+        ),
+        const MenuDivider(),
+        _menuRow(close, 'delete', l10n.clipDelete,
+            action: 'edit.delete.selection'),
+        if (comp != null)
+          _menuRow(close, 'ripple-delete', l10n.cutRippleDelete),
       ],
     );
-    if (!mounted || picked == null) return;
+    if (!mounted || picked == null || picked == 'none') return;
     switch (picked) {
+      case 'split':
+        _edit(() => comp!.cutRazor(
+            layers: [widget.entry.layer], atFrame: frame, linked: _linked));
+        return;
+      case 'fade-in':
+        _edit(() => comp!.cutTransition(
+            clip: clip.id,
+            endEdge: false,
+            frames: clip.fadeIn.seconds > 0 ? 0 : second,
+            linked: _linked));
+        return;
+      case 'fade-out':
+        _edit(() => comp!.cutTransition(
+            clip: clip.id,
+            endEdge: true,
+            frames: clip.fadeOut.seconds > 0 ? 0 : second,
+            linked: _linked));
+        return;
+      case 'cut' || 'copy':
+        final result = comp!.cutCopy(clips: [clip.id], linked: _linked);
+        _ui?.reportCut(result);
+        if (result != BridgeCutResult.done) return;
+        cutClipsCopiedIn =
+            Provider.of<LumitState>(context, listen: false).project;
+        if (picked == 'cut') {
+          _edit(() =>
+              comp.cutDelete(clips: [clip.id], ripple: false, linked: _linked));
+        }
+        return;
+      case 'paste':
+        _pasteAt(frame);
+        return;
+      case 'ripple-delete':
+        _edit(() =>
+            comp!.cutDelete(clips: [clip.id], ripple: true, linked: _linked));
+        return;
       case 'delete':
         // A gap, not a closed row: what follows keeps the beat it was cut to.
         widget.entry.layer.deleteClip(clip: clip.id);
@@ -802,21 +925,73 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
         // what the envelope beneath the clips is for.
         widget.entry.layer
             .setClipSpeed(clip: clip.id, percent: percent, endPercent: percent);
-      // The shape — where the cuts fall and how each piece is ramped — with
-      // no media in it, so pasting it onto a depth pass cuts and ramps that
-      // pass to match without touching what it plays.
+      // The shape, with no media in it, so pasting it onto a depth pass cuts
+      // and ramps that pass to match without touching what it plays.
       case 'copy-clip':
         sequenceShapeClipboard =
             widget.entry.layer.copySequenceShape(clip: clip.id);
       case 'copy-row':
         sequenceShapeClipboard = widget.entry.layer.copySequenceShape();
-      case 'paste':
+      case 'paste-shape':
         final shape = sequenceShapeClipboard;
         if (shape != null) {
           widget.entry.layer.pasteSequenceShape(text: shape);
         }
     }
     widget.onChanged();
+  }
+
+  /// The held clips landed at [frame] on this row.
+  void _pasteAt(int frame) {
+    final comp = widget.comp;
+    if (comp == null) return;
+    _edit(() {
+      final paste = comp.cutPaste(atFrame: frame, target: widget.entry.layer);
+      return paste.result;
+    });
+  }
+
+  /// A right click on the row's empty ground: what can land here, closing the
+  /// room, and closing the view.
+  Future<void> _groundMenu(Offset at, double x) async {
+    final comp = widget.comp;
+    final frame = widget.axis.frameAt(x);
+    final isGap = _clips.any((clip) => clip.startFrame.toInt() > frame);
+    final picked = await showMenuAt<String>(
+      context: context,
+      position: at,
+      width: 210,
+      rows: (close) => [
+        if (comp != null) ...[
+          _menuRow(close, 'paste', l10n.menuPaste, enabled: _clipsHeld),
+          _menuRow(close, 'close-gap', l10n.cutCloseGap, enabled: isGap),
+          const MenuDivider(),
+        ],
+        _menuRow(close, 'paste-shape', l10n.clipPasteShape,
+            enabled: sequenceShapeClipboard != null),
+        _menuRow(close, 'copy-row', l10n.clipCopyRowShape,
+            enabled: _clips.isNotEmpty),
+        const MenuDivider(),
+        _menuRow(close, 'close', l10n.close),
+      ],
+    );
+    if (!mounted || picked == null) return;
+    switch (picked) {
+      case 'paste':
+        _pasteAt(frame);
+      case 'close-gap':
+        _edit(() =>
+            comp!.cutCloseGap(layer: widget.entry.layer, atFrame: frame));
+      case 'paste-shape':
+        final shape = sequenceShapeClipboard;
+        if (shape == null) return;
+        widget.entry.layer.pasteSequenceShape(text: shape);
+        widget.onChanged();
+      case 'copy-row':
+        sequenceShapeClipboard = widget.entry.layer.copySequenceShape();
+      case 'close':
+        widget.onClose?.call();
+    }
   }
 
   /// Write the drag: a body grab slides the clip, an edge grab trims it.
@@ -936,6 +1111,24 @@ class _GraphDividerState extends State<_GraphDivider> {
         },
         onVerticalDragEnd: (_) => _from = null,
         onVerticalDragCancel: () => _from = null,
+        onDoubleTap: () => widget.onHeight(sequenceEnvelopeStrip),
+        onSecondaryTapDown: (d) => showMenuAt<void>(
+          context: context,
+          position: d.globalPosition,
+          width: 160,
+          rows: (close) => [
+            MenuRow(
+              key: const ValueKey('seq-graph-reset'),
+              enabled: widget.height != sequenceEnvelopeStrip,
+              onPressed: () {
+                close(null);
+                widget.onHeight(sequenceEnvelopeStrip);
+              },
+              child: MenuLabel(l10n.cutResetHeight,
+                  enabled: widget.height != sequenceEnvelopeStrip),
+            ),
+          ],
+        ),
         child: SizedBox(
           height: _dividerHeight,
           child: Center(

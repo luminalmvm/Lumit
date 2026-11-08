@@ -121,6 +121,9 @@ class CutTrack {
 ///
 /// With [anyOrder] there is no dividing line: every track stands in stack
 /// order, and an uncut footage layer's sound row stands under its bar.
+///
+/// A Camera, a Light or a Null has no picture and no sound, so there is
+/// nothing on it to cut. It gets no row here, and the Timeline keeps it.
 List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
     {Map<String, bool> hasAudio = const {}, bool anyOrder = false}) {
   final above = <CutTrack>[];
@@ -128,7 +131,7 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
   final own = <CutTrack>[];
   if (anyOrder) {
     final all = <CutTrack>[];
-    for (final entry in layers) {
+    for (final entry in layers.where(_cuttable)) {
       final info = entry.info;
       final id = entry.layer.internallayerId.toString();
       final clips = [...info.clips]
@@ -147,7 +150,7 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
     }
     return all;
   }
-  for (final entry in layers) {
+  for (final entry in layers.where(_cuttable)) {
     final info = entry.info;
     final id = entry.layer.internallayerId.toString();
     final clips = [...info.clips]
@@ -166,6 +169,22 @@ List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
   }
   return [...above, ...below, ...own];
 }
+
+/// The project clips were last copied in, which is as far as a paste of them
+/// reaches.
+Object? cutClipsCopiedIn;
+
+/// Whether a paste in [project] has clips to land.
+bool cutClipsHeld(Object? project) =>
+    project != null && identical(project, cutClipsCopiedIn);
+
+bool _cuttable(BridgeLayerEntry entry) => switch (entry.info.kind) {
+      BridgeLayerKind.camera ||
+      BridgeLayerKind.light ||
+      BridgeLayerKind.nullLayer =>
+        false,
+      _ => true,
+    };
 
 /// How many tracks stand above the dividing line.
 int cutPictureCount(List<CutTrack> tracks) {

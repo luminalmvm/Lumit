@@ -7,6 +7,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -15,16 +16,22 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../shell/number_dialog_frb.dart' show askNumberFrb;
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'mixer_panel_frb.dart' show panLabel;
-import 'volume_band_frb.dart' show volumeBandFloorDb, volumeBandTopDb;
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'volume_band_frb.dart'
+    show BandKind, volumeBandFloorDb, volumeBandTopDb;
 
 /// How tall one bar is, and the gap between two.
 const double _barHeight = 15;
 const double _barGap = 2;
+
+/// The press a bar opened its own menu with, so the head behind it opens none.
+int? cutMixMenuPointer;
 
 /// One track's mix controls, filling the width its parent gives it.
 class CutTrackMix extends StatelessWidget {
@@ -39,12 +46,19 @@ class CutTrackMix extends StatelessWidget {
   /// stack them.
   final bool inline;
 
+  /// Whether a sound track's envelope is out across its lane, and the switch
+  /// for it, for the bar's own menu.
+  final bool Function(BandKind kind) bandShown;
+  final void Function(BandKind kind) onBand;
+
   const CutTrackMix({
     super.key,
     required this.comp,
     required this.entry,
     required this.sound,
     required this.onChanged,
+    required this.bandShown,
+    required this.onBand,
     this.inline = false,
   });
 
@@ -106,6 +120,7 @@ class CutTrackMix extends StatelessWidget {
         reset: 100,
         fill: t.accent,
         enabled: live(level),
+        suffix: l10n.unitSymbolPercent,
         text: (v) => '${v.round()}${l10n.unitSymbolPercent}',
         onCommit: (v) => write(
             level,
@@ -130,6 +145,13 @@ class CutTrackMix extends StatelessWidget {
             ? l10n.volumeNegInf
             : '${v.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
         onCommit: (v) => write(volume, v, (s) => layer.setVolumeDb(value: s)),
+        suffix: l10n.unitSymbolDb,
+        band: (
+          label: l10n.cutVolumeEnvelope,
+          action: 'cut.envelope.volume',
+          shown: bandShown(BandKind.volume),
+          toggle: () => onBand(BandKind.volume),
+        ),
       ),
       // The pan band's colour, so the bar and the line on the lane match.
       _MixBar(
@@ -144,6 +166,12 @@ class CutTrackMix extends StatelessWidget {
         enabled: live(pan),
         text: panLabel,
         onCommit: (v) => write(pan, v, (s) => layer.setPan(value: s)),
+        band: (
+          label: l10n.cutPanEnvelope,
+          action: 'cut.envelope.pan',
+          shown: bandShown(BandKind.pan),
+          toggle: () => onBand(BandKind.pan),
+        ),
       ),
     ];
     if (inline) {
@@ -179,6 +207,12 @@ class _MixBar extends StatefulWidget {
   /// False shows the value dimmed and takes no drag.
   final bool enabled;
 
+  /// The unit the number box asks in.
+  final String? suffix;
+
+  /// The envelope that draws this same value across the lane, for the menu.
+  final ({String label, String action, bool shown, VoidCallback toggle})? band;
+
   const _MixBar({
     super.key,
     required this.label,
@@ -191,6 +225,8 @@ class _MixBar extends StatefulWidget {
     required this.onCommit,
     required this.enabled,
     this.origin,
+    this.suffix,
+    this.band,
   });
 
   @override
@@ -201,11 +237,72 @@ class _MixBarState extends State<_MixBar> {
   /// The value while a drag runs, null at rest.
   double? _live;
 
+  /// A right click on the bar: type the value, put it back, and the envelope
+  /// that draws it across the lane.
+  void _menu(Offset at) {
+    final band = widget.band;
+    final changed = widget.value != widget.reset;
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 210,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('ctl-mix-set'),
+          onPressed: () async {
+            close(null);
+            final typed = await askNumberFrb(
+              context: context,
+              title: widget.label,
+              value: widget.value,
+              min: widget.min,
+              max: widget.max,
+              decimals: 1,
+              suffix: widget.suffix,
+            );
+            if (typed != null && mounted && typed != widget.value) {
+              widget.onCommit(typed);
+            }
+          },
+          child: MenuLabel(l10n.envelopePointSet,
+              ticked: band == null ? null : false),
+        ),
+        MenuRow(
+          key: const ValueKey('ctl-mix-reset'),
+          enabled: changed,
+          onPressed: () {
+            close(null);
+            widget.onCommit(widget.reset);
+          },
+          child: MenuLabel(l10n.reset,
+              enabled: changed, ticked: band == null ? null : false),
+        ),
+        if (band != null) ...[
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('ctl-mix-band'),
+            onPressed: () {
+              close(null);
+              band.toggle();
+            },
+            child: MenuLabel(band.label,
+                action: band.action, ticked: band.shown),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final shown = _live ?? widget.value;
-    final value = t.mono.copyWith(fontSize: 9, color: t.textPrimary);
+    // At its usual value the bar recedes, so a track that has been turned
+    // down or panned is the one that stands out.
+    final changed = (shown - widget.reset).abs() > 1e-6;
+    final value = t.mono.copyWith(
+        fontSize: 9, color: changed ? t.textPrimary : t.textMuted);
+    final fill = changed ? widget.fill : t.textMuted;
     return LayoutBuilder(builder: (context, box) {
       final width = box.maxWidth.isFinite ? box.maxWidth : 120.0;
       double xOf(double v) =>
@@ -252,7 +349,8 @@ class _MixBarState extends State<_MixBar> {
                 bottom: 0,
                 // Lifts a shade under the pointer.
                 child: ColoredBox(
-                    color: widget.fill.withValues(alpha: 0.25 + 0.2 * lit)),
+                    color: fill.withValues(
+                        alpha: (changed ? 0.25 : 0.1) + 0.2 * lit)),
               ),
               // The origin, so Pan at centre reads as a centred slider.
               if (widget.origin != null)
@@ -290,7 +388,17 @@ class _MixBarState extends State<_MixBar> {
       );
       return IgnorePointer(
         ignoring: !widget.enabled,
-        child: Opacity(opacity: widget.enabled ? 1 : 0.5, child: bar),
+        child: Opacity(
+          opacity: widget.enabled ? 1 : 0.5,
+          child: Listener(
+            onPointerDown: (e) {
+              if (e.buttons != kSecondaryMouseButton) return;
+              cutMixMenuPointer = e.pointer;
+              _menu(e.position);
+            },
+            child: bar,
+          ),
+        ),
       );
     });
   }
