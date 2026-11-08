@@ -90,6 +90,7 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                     max: 2000,
                     decimals: 1,
                     suffix: ' px',
+                    resetTo: plainTextSize,
                     change: (v) => (d) => d.copyWith(size: v),
                   ),
                 ),
@@ -100,13 +101,18 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                     ui,
                     target,
                     keyName: 'text-leading',
-                    // Auto leading shows the number it comes to.
+                    // Auto leading shows the number it comes to, and Reset
+                    // goes back to it: that number is auto.
                     value: style.leading ?? document.size * 1.2,
                     min: 0,
                     max: 8000,
                     decimals: 1,
                     suffix: ' px',
-                    change: (v) => restyle((s) => s.copyWith(leading: v)),
+                    resetTo: document.size * 1.2,
+                    change: (v) => restyle((s) =>
+                        (v - document.size * 1.2).abs() < 1e-5
+                            ? s.copyWith(autoLeading: true)
+                            : s.copyWith(leading: v)),
                   ),
                 ),
                 textCell(

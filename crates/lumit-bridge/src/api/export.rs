@@ -610,7 +610,12 @@ pub enum BridgeExportQueueState {
         /// The encoder actually chosen, which may not be the one asked for.
         encoder: String,
     },
-    Done,
+    Done {
+        /// How long it took to export, in whole seconds.
+        seconds: u32,
+        /// The file's size, zero for an image sequence.
+        bytes: u64,
+    },
     Failed {
         error: String,
     },
@@ -707,7 +712,9 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
                     total,
                     encoder,
                 },
-                crate::export::QueueRowState::Done => BridgeExportQueueState::Done,
+                crate::export::QueueRowState::Done { seconds, bytes } => {
+                    BridgeExportQueueState::Done { seconds, bytes }
+                }
                 crate::export::QueueRowState::Failed(error) => {
                     BridgeExportQueueState::Failed { error }
                 }

@@ -45,6 +45,10 @@ void main() {
       expect(paletteScore('zzz', 'New composition'), isNull);
       expect(paletteScore('NC', 'new composition'), isNotNull,
           reason: 'matching ignores case both ways');
+      expect(paletteScore('reset', 'Effect presets'), isNull,
+          reason: 'a match starts a word');
+      expect(paletteScore('precompose', 'Pre-compose…'), isNotNull,
+          reason: 'hyphens are left out of the comparison');
     });
   });
 

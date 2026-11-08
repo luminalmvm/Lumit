@@ -582,18 +582,44 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       page != SettingsPage.account && page != SettingsPage.addons;
 
   /// Whether Reset page would change anything on [page], from what its rows
-  /// said as it was last built. The keymap can't be asked, so its page says
-  /// yes; Preview and cache also puts the quality tier back.
+  /// said as it was last built. The keymap is asked whole, as a search may
+  /// have built only some of its rows; Preview and cache also puts the
+  /// quality tier back.
   bool _changedOn(SettingsPage page) =>
-      page == SettingsPage.shortcuts ||
+      (page == SettingsPage.shortcuts &&
+          (_keymapState()?.groups.any(
+                  (g) => g.bindings.any((b) => b.chord != b.stock)) ??
+              false)) ||
       (_settingsOn[page]?.any((s) => s.changed) ?? false) ||
       (page == SettingsPage.previewAndCache && (_perf?.tier.tier ?? 1) != 1);
 
   /// [_changedOn] for a page that may not be on screen: the page is built
   /// unseen first, so its rows say where they stand.
   bool _pageChanged(SettingsPage page) {
-    if (page != SettingsPage.shortcuts) _collect(page);
+    _collect(page);
     return _changedOn(page);
+  }
+
+  /// The pages holding a change, which the sidebar marks with the rows' dot.
+  /// Worked out as the window opens and after each change made in it, every
+  /// row counted whatever the search hides, and never while building.
+  Set<SettingsPage> _changedPages = const {};
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    // Not on the cache readings' tick, which changes no setting.
+    if (fn == _pollPerf) return;
+    final keep = _keepEveryRow;
+    _keepEveryRow = true;
+    try {
+      _changedPages = {
+        for (final page in SettingsPage.shown)
+          if (_resettable(page) && _pageChanged(page)) page,
+      };
+    } finally {
+      _keepEveryRow = keep;
+    }
   }
 
   void _collect(SettingsPage page) {
@@ -705,7 +731,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _titleStrip(t),
+              // The strip's right-click puts the window back, or closes it.
+              Builder(
+                builder: (context) => GestureDetector(
+                  onSecondaryTapUp: (d) => showWindowMenu(
+                      context, d.globalPosition,
+                      onClose: widget.onClose),
+                  child: _titleStrip(t),
+                ),
+              ),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -815,7 +849,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   // The tick and the fill behind it move from the page left to
                   // the page chosen. The padding gives up exactly what the
                   // tick takes at every step, so the name does not move.
-                  child: AnimatedContainer(
+                  child: _changedDot(t, page, AnimatedContainer(
                     duration: ThemeScope.of(context).motion.mark.duration,
                     curve: ThemeScope.of(context).motion.mark.curve,
                     height: settingsNavRow,
@@ -836,13 +870,31 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     ),
                     child: Text(page.label,
                         style: _marked(page) ? t.bodyPrimary : t.body),
-                  ),
+                  )),
                 ),
               )),
             ],
           ],
         ),
       );
+
+  /// [row] with the rows' dot in its gutter while [page] holds a change.
+  Widget _changedDot(LumitTheme t, SettingsPage page, Widget row) =>
+      Stack(children: [
+        row,
+        if (_changedPages.contains(page))
+          PositionedDirectional(
+            start: 6,
+            top: (settingsNavRow - settingsChangedMark) / 2,
+            child: Container(
+              key: ValueKey<String>('settings-page-changed-${page.name}'),
+              width: settingsChangedMark,
+              height: settingsChangedMark,
+              decoration:
+                  BoxDecoration(color: t.accent, shape: BoxShape.circle),
+            ),
+          ),
+      ]);
 
   /// Everything here applies as it is changed, so the footer's only act on the
   /// settings is to put a page back, kept apart from the way out. A search has
@@ -1055,8 +1107,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// Put [page] back the way it ships. Each row knows where its setting
   /// stands and how to put it back, so the page is built unseen and every
   /// row that differs is reset. The keymap goes back to the stock one, and
-  /// Preview and cache puts the quality tier back too.
-  void _resetPage(SettingsPage page) {
+  /// Preview and cache puts the quality tier back too. It can't be undone,
+  /// so it asks first.
+  Future<void> _resetPage(SettingsPage page) async {
+    if (!await askBefore(
+        context, l10n.settingsResetPageAsk(page.label), l10n.reset)) {
+      return;
+    }
+    if (!mounted) return;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     if (page == SettingsPage.shortcuts) {
       unawaited(_resetKeymap(ui.keymap));
@@ -3435,14 +3493,24 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 t,
                 binding.description,
                 '',
-                _ChordCell(
-                  key: ValueKey('keymap-chord-${binding.context.name}-'
-                      '${binding.action}'),
-                  binding: binding,
-                  keymap: km,
-                  onChanged: () {
-                    if (mounted) setState(() {});
-                  },
+                // Reset and the dot, as every other row has them.
+                SettingControl(
+                  setting: _noted(SettingState(
+                    changed: binding.chord != binding.stock,
+                    reset: () async {
+                      await km.resetBinding(binding.context, binding.action);
+                      if (mounted) setState(() {});
+                    },
+                  )),
+                  child: _ChordCell(
+                    key: ValueKey('keymap-chord-${binding.context.name}-'
+                        '${binding.action}'),
+                    binding: binding,
+                    keymap: km,
+                    onChanged: () {
+                      if (mounted) setState(() {});
+                    },
+                  ),
                 ),
               ),
             ),
@@ -4445,16 +4513,6 @@ class _ChordCellState extends State<_ChordCell> {
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
-        HouseButton(
-          small: true,
-          onPressed: () async {
-            await widget.keymap
-                .resetBinding(widget.binding.context, widget.binding.action);
-            widget.onChanged();
-          },
-          child: Text(l10n.reset, style: t.small),
         ),
       ],
     );

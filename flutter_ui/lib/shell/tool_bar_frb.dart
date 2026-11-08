@@ -35,6 +35,9 @@
 // gesture on the toolbar; the Viewer's own guides menu shows the same switch
 // under its own name.
 
+import 'dart:math' show max, min;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart'
     show BridgeBrushShape, BridgeLayerKind;
@@ -118,7 +121,7 @@ String _actionFor(ToolGroup group) =>
 /// One group's button on the strip, and its row in the overflow menu once
 /// folded. Selection and the armed group never fold.
 FoldItem _foldedTool(LumitTheme t, ToolGroup group, ToolsState tools,
-    {required bool seam}) {
+    {required bool seam, bool rail = false}) {
   final member = tools.memberOf(group);
   final armed = tools.tool.group == group;
   final enabled =
@@ -135,11 +138,12 @@ FoldItem _foldedTool(LumitTheme t, ToolGroup group, ToolsState tools,
                 : t.textSecondary),
     selected: armed,
     onPressed: enabled ? () => tools.select(member) : null,
-    child: Row(
+    child: Flex(
+      direction: rail ? Axis.vertical : Axis.horizontal,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ToolButton(group: group, tools: tools),
-        if (seam && group == _seamAfter) const _ToolBarDivider(),
+        _ToolButton(group: group, tools: tools, rail: rail),
+        if (seam && group == _seamAfter) _ToolBarDivider(vertical: rail),
       ],
     ),
   );
@@ -183,8 +187,6 @@ class LumitToolBarFrb extends StatelessWidget {
             children: [
               // Folds from the end into the overflow mark on a narrow
               // window, keeping Selection and the tool in your hand.
-              // Flexible so the options beside it get their share of the
-              // room instead of being squeezed to nothing.
               Flexible(
                 child: FoldingRow(
                   markKey: const ValueKey('tool-bar-overflow'),
@@ -213,17 +215,10 @@ class LumitToolBarFrb extends StatelessWidget {
               // immediately beside the last tool with the free space stranded
               // past them.
               Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                        child: _pill(t, 'tool-pill', tools,
-                            height: _lanternPill)),
-                    if (options != null) ...[
-                      _gap(pills),
-                      Flexible(child: options),
-                    ],
-                  ],
-                ),
+                child: _ToolsFirst(children: [
+                  _pill(t, 'tool-pill', tools, height: _lanternPill),
+                  if (options != null) ...[_gap(pills), options],
+                ]),
               ),
               if (!pills) ...[
                 const _ToolBarDivider(),
@@ -322,6 +317,72 @@ List<MenuEntry> _barRows(LumitUiState ui) {
 /// on the flat strip.
 Widget _gap(bool pills) =>
     pills ? const SizedBox(width: 8) : const _ToolBarDivider();
+
+/// The tools, then the gap and the armed tool's options. The tools take the
+/// width they need first, so none folds while the bar has room for it. The
+/// options take what is left, and keep at least a quarter of the row (or
+/// their own width, if less) so a narrow window still shows some of them.
+class _ToolsFirst extends MultiChildRenderObjectWidget {
+  const _ToolsFirst({required super.children});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderToolsFirst();
+}
+
+class _RenderToolsFirst extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, MultiChildLayoutParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, MultiChildLayoutParentData> {
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! MultiChildLayoutParentData) {
+      child.parentData = MultiChildLayoutParentData();
+    }
+  }
+
+  @override
+  void performLayout() {
+    final room = constraints.maxWidth;
+    BoxConstraints upTo(double w) =>
+        BoxConstraints(maxWidth: max(0.0, w), maxHeight: constraints.maxHeight);
+    final tools = firstChild!;
+    final gap = childAfter(tools);
+    final options = gap == null ? null : childAfter(gap);
+    if (gap == null || options == null) {
+      tools.layout(upTo(room), parentUsesSize: true);
+    } else {
+      gap.layout(upTo(room), parentUsesSize: true);
+      final free = room - gap.size.width;
+      // Each at the most it could have, to learn what it wants.
+      tools.layout(upTo(free), parentUsesSize: true);
+      options.layout(upTo(free), parentUsesSize: true);
+      final left = free - tools.size.width;
+      final width = min(options.size.width, max(left, room / 4));
+      tools.layout(upTo(free - width), parentUsesSize: true);
+      options.layout(upTo(width), parentUsesSize: true);
+    }
+    var height = 0.0;
+    for (var c = firstChild; c != null; c = childAfter(c)) {
+      height = max(height, c.size.height);
+    }
+    height = constraints.constrainHeight(height);
+    var x = 0.0;
+    for (var c = firstChild; c != null; c = childAfter(c)) {
+      (c.parentData! as MultiChildLayoutParentData).offset =
+          Offset(x, (height - c.size.height) / 2);
+      x += c.size.width;
+    }
+    size = constraints.constrain(Size(room, height));
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
+}
 
 /// The armed tool's own options, when it has any: After Effects puts them
 /// beside the tools, and the strip is empty for the tools that draw nothing.
@@ -424,19 +485,21 @@ class LumitToolRailFrb extends StatelessWidget {
           Column(
             key: const ValueKey('tool-bar-tools'),
             children: [
+              // A short window folds the last tools into the mark at the
+              // foot rather than cutting one in half.
               Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      for (final group in toolBarOrder) ...[
-                        _ToolButton(
-                          group: group,
-                          tools: ui.tools,
-                          rail: true,
-                        ),
-                        if (group == _seamAfter)
-                          const _ToolBarDivider(vertical: true),
-                      ],
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: FoldingRow(
+                    axis: Axis.vertical,
+                    markKey: const ValueKey('tool-bar-overflow'),
+                    markWidth: _toolButtonWidth,
+                    markHeight:
+                        t.shape == ThemeShape.desk ? toolRailWidth : 36,
+                    items: [
+                      for (final group in toolBarOrder)
+                        _foldedTool(t, group, ui.tools,
+                            seam: true, rail: true),
                     ],
                   ),
                 ),
@@ -680,6 +743,7 @@ class _ToolOptions extends StatelessWidget {
         _Swatch(
           label: l10n.toolFill,
           colour: tools.fill,
+          resetTo: ToolColour.white,
           onPicked: (colour) => tools.fill = colour,
         ),
         const SizedBox(width: 6),
@@ -767,6 +831,7 @@ class _ToolOptions extends StatelessWidget {
           _Swatch(
             label: l10n.toolStroke,
             colour: tools.stroke,
+            resetTo: ToolColour.black,
             onPicked: (colour) => tools.stroke = colour,
           ),
           const SizedBox(width: 6),
@@ -839,10 +904,14 @@ class _Swatch extends StatelessWidget {
   final ToolColour colour;
   final ValueChanged<ToolColour>? onPicked;
 
+  /// What the well's menu resets to.
+  final ToolColour resetTo;
+
   const _Swatch({
     required this.label,
     required this.colour,
     required this.onPicked,
+    required this.resetTo,
   });
 
   @override
@@ -870,6 +939,15 @@ class _Swatch extends StatelessWidget {
       message: l10n.tipSwatchColour(label),
       child: HoverMark(
         builder: (context, lit) => GestureDetector(
+          // The menu every colour well has.
+          onSecondaryTapUp: (details) => showColourWellMenu(
+            context,
+            details.globalPosition,
+            current: PickedColour(colour.r, colour.g, colour.b),
+            resetTo: PickedColour(resetTo.r, resetTo.g, resetTo.b),
+            onPicked: (picked) =>
+                onPicked!(ToolColour(picked.r, picked.g, picked.b)),
+          ),
           onTapUp: (details) => showColourPicker(
             context: context,
             position: details.globalPosition,
@@ -1219,6 +1297,21 @@ class _FlyoutMarkPainter extends CustomPainter {
   bool shouldRepaint(_FlyoutMarkPainter old) => old.colour != colour;
 }
 
+/// An arrangement's shape, leaving out what changes as it is used (the tab in
+/// front, the stacked panels open), to tell when it has moved from a preset.
+String _arrangement(DockNode node) => switch (node) {
+      DockPane(:final panel) => panel.name,
+      DockTabs(:final children) => '[${children.map(_arrangement).join(',')}]',
+      DockSplit(:final axis, :final children, :final shares) => () {
+          final total = shares.fold<double>(0, (a, b) => a + b);
+          return '${axis.name}(${[
+            for (var i = 0; i < children.length; i++)
+              '${(shares[i] / total).toStringAsFixed(2)} '
+                  '${_arrangement(children[i])}',
+          ].join(',')})';
+        }(),
+    };
+
 /// The workspace switcher docs/07 §1.4 requires in the window chrome: the
 /// shipped presets as mono-caps kickers, the current one ticked in the accent.
 class _WorkspaceStrip extends StatelessWidget {
@@ -1230,6 +1323,10 @@ class _WorkspaceStrip extends StatelessWidget {
     final ui = context.watch<LumitUiState>();
     final app = context.read<LumitState>();
     final active = ui.workspace.activePreset;
+    // The preset in force wears the settings' dot once it has been moved
+    // from how it ships, and its menu's Reset workspace puts it back.
+    final moved = active != null &&
+        _arrangement(ui.workspace.dock) != _arrangement(presetLayout(active));
     final row = Row(
       key: const ValueKey('workspace-strip'),
       mainAxisSize: MainAxisSize.min,
@@ -1240,6 +1337,7 @@ class _WorkspaceStrip extends StatelessWidget {
             label: preset.title,
             slot: i + 1,
             active: preset == active,
+            moved: preset == active && moved,
             onPressed: () => ui.workspace.applyWorkspacePreset(preset),
             onMenu: (context, at) => showMenuEntries(
                 context,
@@ -1307,6 +1405,9 @@ class _StripEntry extends StatelessWidget {
   final bool active;
   final VoidCallback onPressed;
 
+  /// Moved from how its preset ships: the settings' dot in its corner.
+  final bool moved;
+
   /// Opens the name's own menu at a right-click.
   final void Function(BuildContext context, Offset at) onMenu;
 
@@ -1317,6 +1418,7 @@ class _StripEntry extends StatelessWidget {
     required this.active,
     required this.onPressed,
     required this.onMenu,
+    this.moved = false,
   });
 
   /// The name on one line, cut short past what a strip can give one of a
@@ -1399,7 +1501,24 @@ class _StripEntry extends StatelessWidget {
       action: 'workspace.switch.$slot',
       child: GestureDetector(
         onSecondaryTapUp: (d) => onMenu(context, d.globalPosition),
-        child: button,
+        child: Stack(children: [
+          button,
+          if (moved)
+            PositionedDirectional(
+              top: 2,
+              end: 2,
+              child: Container(
+                key: const ValueKey('workspace-moved'),
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  // On Lantern's accent capsule, in the capsule's ink.
+                  color: t.shape == ThemeShape.lantern ? accentInk(t) : t.accent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ]),
       ),
     );
   }

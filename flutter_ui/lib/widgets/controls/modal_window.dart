@@ -7,12 +7,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
 
+import '../../l10n/strings.dart';
 import '../../state/workspace.dart';
 import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
 import 'menus.dart';
 import 'motion.dart';
+import 'popups.dart';
 
 /// Show a positioned popup and complete with the value handed to `close`.
 /// Clicking outside, or pressing Escape, dismisses with null.
@@ -253,6 +255,15 @@ class _MovableWindowState extends State<_MovableWindow> {
     modalPlacementStore?.rememberWindow(id, WindowPlacement(_offset, _size));
   }
 
+  /// Back in the middle at the size it opens at, and remembered so.
+  void _reset() {
+    setState(() {
+      _offset = Offset.zero;
+      _size = widget.initialSize;
+    });
+    _remember();
+  }
+
   /// Keep the middle of the window inside the app window, so however far it is
   /// dragged there is always something left to grab.
   Offset _clampOffset(Offset o, BoxConstraints box) => Offset(
@@ -313,7 +324,7 @@ class _MovableWindowState extends State<_MovableWindow> {
                     child: FocusScope(
                       child: FocusTraversalGroup(
                         policy: ReadingOrderTraversalPolicy(),
-                        child: widget.child,
+                        child: _WindowScope(window: this, child: widget.child),
                       ),
                     ),
                   ),
@@ -362,6 +373,57 @@ class _MovableWindowState extends State<_MovableWindow> {
       },
     );
   }
+}
+
+/// The window a title strip is in, for the strip's right-click.
+class _WindowScope extends InheritedWidget {
+  const _WindowScope({required this.window, required super.child});
+  final _MovableWindowState window;
+
+  @override
+  bool updateShouldNotify(_WindowScope old) => false;
+}
+
+/// A window's title strip right-click at [at]: put the window back where and
+/// as big as it opens, and [onClose] where the strip has a close mark.
+void showWindowMenu(BuildContext context, Offset at, {VoidCallback? onClose}) {
+  final window = context.getInheritedWidgetOfExactType<_WindowScope>()?.window;
+  if (window == null) return;
+  showLumitPopup<void>(
+    context: context,
+    position: at,
+    builder: (close) => FloatSurface(
+      child: IntrinsicWidth(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MenuRow(
+              key: const ValueKey('window-menu-reset'),
+              onPressed: () {
+                close(null);
+                window._reset();
+              },
+              child: MenuLabel(window.widget.initialSize == null
+                  ? l10n.windowResetPlace
+                  : l10n.windowResetSizeAndPlace),
+            ),
+            if (onClose != null) ...[
+              const MenuDivider(),
+              MenuRow(
+                key: const ValueKey('window-menu-close'),
+                onPressed: () {
+                  close(null);
+                  onClose();
+                },
+                child: MenuLabel(l10n.close),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// The three short diagonals that say "drag this corner".

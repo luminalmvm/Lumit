@@ -652,24 +652,28 @@ class EffectParamRowFrb extends StatelessWidget {
       canReset: onReset != null ||
           fallback == null ||
           !isDefaultEffectValue(value, fallback, owner: ownerLayerId),
-      copy: numeric
-          ? () => copiedAxes(scalars.take(float ? 1 : 3).map(read))
-          : null,
-      paste: !numeric
+      copy: numeric && float ? () => copiedAxes([read(scalars.first)]) : null,
+      paste: !numeric || !float
           ? null
           : (text) {
-              final n = pastedAxes(text, float ? 1 : 3);
+              final n = pastedAxes(text, 1);
               if (n == null) return;
+              _set(BridgeEffectValue.float(scalarWithValueAt(
+                  scalars.first, n[0], comp, playhead.value)));
+            },
+      // A colour row's clipboard is the one every colour well shares.
+      colour: numeric && !float
+          ? () => PickedColour(
+              read(scalars[0]), read(scalars[1]), read(scalars[2]))
+          : null,
+      pasteColour: !numeric || float
+          ? null
+          : (picked) {
               final frame = playhead.value;
-              if (float) {
-                _set(BridgeEffectValue.float(
-                    scalarWithValueAt(scalars.first, n[0], comp, frame)));
-                return;
-              }
               _set(BridgeEffectValue.colour(BridgeColour(
-                r: scalarWithValueAt(scalars[0], n[0], comp, frame),
-                g: scalarWithValueAt(scalars[1], n[1], comp, frame),
-                b: scalarWithValueAt(scalars[2], n[2], comp, frame),
+                r: scalarWithValueAt(scalars[0], picked.r, comp, frame),
+                g: scalarWithValueAt(scalars[1], picked.g, comp, frame),
+                b: scalarWithValueAt(scalars[2], picked.b, comp, frame),
                 a: scalars[3],
               )));
             },

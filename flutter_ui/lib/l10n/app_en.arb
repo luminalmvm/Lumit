@@ -7842,7 +7842,7 @@
   },
   "menuAssignWorkspaceShortcut": "Assign shortcut to this workspace…",
   "@menuAssignWorkspaceShortcut": {
-    "description": "Menu item (a feature that is not built yet — it appears greyed out)."
+    "description": "Row in the Window menu, and the title of the small box it opens, which sets the keyboard shortcut that switches to the current workspace."
   },
   "menuAutoOutline": "Auto-outline",
   "@menuAutoOutline": {
@@ -8095,6 +8095,26 @@
   "@menuHistory": {
     "description": "The Edit menu row that opens the History window."
   },
+  "menuClear": "Clear",
+  "@menuClear": {
+    "description": "Edit menu submenu holding the rows that empty the caches and the undo history."
+  },
+  "menuClearMemoryCache": "Memory cache",
+  "@menuClearMemoryCache": {
+    "description": "Edit > Clear row: empties the frames kept in memory and on the graphics card. They are made again as they are needed."
+  },
+  "menuClearDiskCache": "Disk cache…",
+  "@menuClearDiskCache": {
+    "description": "Edit > Clear row: deletes the frames kept on disk, after asking."
+  },
+  "menuClearAllCaches": "All caches…",
+  "@menuClearAllCaches": {
+    "description": "Edit > Clear row: empties the memory, graphics card and disk caches of rendered frames. The disk one asks first."
+  },
+  "menuClearUndoHistory": "Undo history…",
+  "@menuClearUndoHistory": {
+    "description": "Edit > Clear row: drops every undo and redo step, leaving the project as it is, after asking."
+  },
   "historyTitle": "History",
   "@historyTitle": {
     "description": "The History window's title."
@@ -8272,6 +8292,14 @@
   "@menuResetWorkspace": {
     "description": "Menu item."
   },
+  "windowResetPlace": "Reset place",
+  "@windowResetPlace": {
+    "description": "Right-click menu of a window's title strip: puts the window back in the middle of the app, where it first opened."
+  },
+  "windowResetSizeAndPlace": "Reset size and place",
+  "@windowResetSizeAndPlace": {
+    "description": "Right-click menu of a resizable window's title strip: puts the window back in the middle of the app at the size it first opened at."
+  },
   "menuResolution": "Resolution",
   "@menuResolution": {
     "description": "Menu item."
@@ -8308,7 +8336,7 @@
   "@menuSaveAnimationPreset": {
     "description": "Menu item."
   },
-  "menuRevertToSaved": "Revert to saved",
+  "menuRevertToSaved": "Revert to saved…",
   "@menuRevertToSaved": {
     "description": "File menu, after Save as…: throws away every change since the project was last saved, after asking. Greyed while there are none."
   },
@@ -8446,7 +8474,7 @@
   },
   "menuChangeShortcut": "Change shortcut…",
   "@menuChangeShortcut": {
-    "description": "Row on a tool button's right-click menu: opens Settings at the Shortcuts page, where the tool's key can be changed."
+    "description": "Row on a tool button's and a workspace name's right-click menu: opens the place where its keyboard shortcut can be changed."
   },
   "menuSnapToGrid": "Snap to grid",
   "@menuSnapToGrid": {
@@ -9375,7 +9403,7 @@
   },
   "projectShowInFolder": "Show in folder",
   "@projectShowInFolder": {
-    "description": "Project panel right-click menu, on a footage item whose file is there: opens the folder the file is in, in the desktop's own file manager, with the file selected."
+    "description": "Opens the folder a file is in, in the desktop's own file manager, with the file selected. On a footage item's right-click menu in the Project panel, a recent project on Welcome, the project name, a finished export in the queue and the bottom strip, and Export's Write to menu."
   },
   "projectOpen": "Open",
   "@projectOpen": {
@@ -9436,10 +9464,6 @@
   "collapseAll": "Collapse all",
   "@collapseAll": {
     "description": "Menu row on a list: shut every folder or heading in it."
-  },
-  "tipOpenFolder": "Open folder",
-  "@tipOpenFolder": {
-    "description": "Hover text on a finished export's path in the bottom strip and on a finished row in the export queue: a click opens the folder the file was written to, in the desktop's own file manager. The same words as the export dialog's Open folder tick. Two words at most."
   },
   "removeExpression": "Remove expression",
   "@removeExpression": {
@@ -14706,6 +14730,15 @@
   "@settingsResetPage": {
     "description": "Settings window: the footer button that puts every setting on the page being shown back to the value Lumit ships with."
   },
+  "settingsResetPageAsk": "Reset the {page} page?",
+  "@settingsResetPageAsk": {
+    "description": "The whole of the window Reset page opens in Settings, before every setting on the page goes back to how Lumit ships. Answered with Reset or Cancel. {page} is the page's name, such as Appearance.",
+    "placeholders": {
+      "page": {
+        "type": "String"
+      }
+    }
+  },
   "settingsScale": "Scale",
   "@settingsScale": {
     "description": "Settings window, Appearance: the name of the row setting how large the interface is drawn, as a percentage."
@@ -15149,17 +15182,13 @@
   "@exportTypeImageSequence": {
     "description": "Export dialog: output type: one numbered still image per frame."
   },
-  "exportBrowse": "Browse",
-  "@exportBrowse": {
-    "description": "Export dialog: button that opens the system file picker to choose where to write."
-  },
   "exportWhenDone": "When done",
   "@exportWhenDone": {
     "description": "Export dialog: row label: what happens once the export has finished."
   },
   "exportBrowseEllipsis": "Browse…",
   "@exportBrowseEllipsis": {
-    "description": "Export window, right-click menu of the Write to row: opens the save dialogue to choose where the file goes. The same as the Browse button beside the row, with an ellipsis because it opens a window."
+    "description": "Button beside where an export is written, in the Export window and in Add compositions, and the Write to row's right-click menu: opens the system's dialogue to choose the file or folder."
   },
   "exportOpenFolder": "Open folder",
   "@exportOpenFolder": {
@@ -15790,9 +15819,9 @@
   "@exportPresetMore": {
     "description": "Tooltip on the three dots beside the Export window's preset list, which open Edit and Set as default."
   },
-  "exportPresetEdit": "Edit",
+  "exportPresetEdit": "Edit…",
   "@exportPresetEdit": {
-    "description": "Export dialog, Preset row: opens the name field for the preset in force so it can be renamed or written over. Short — the button is 48 px wide."
+    "description": "Export window, the preset's menu: opens the name field for the preset in force, to save the settings on screen over it or under another name, or to delete it."
   },
   "exportPresetSaveAs": "Save as…",
   "@exportPresetSaveAs": {
@@ -17101,7 +17130,7 @@
   },
   "tipDockMoreTabs": "More tabs",
   "@tipDockMoreTabs": {
-    "description": "Tooltip on the small down-pointing mark at the end of a panel group's tab strip, shown only when the group is too narrow for all its tabs. A click lists every tab in the group, to bring one to the front. One or two words."
+    "description": "Tooltip on the overflow mark (three dots) at the end of a panel group's tab strip, shown only when the group is too narrow for all its tabs. A click lists every tab in the group, to bring one to the front. One or two words."
   },
   "resetSplit": "Reset split",
   "@resetSplit": {
@@ -19603,6 +19632,10 @@
   "menuShowTour": "Lumit tour",
   "@menuShowTour": {
     "description": "Help menu item: opens the guided tour of the interface again."
+  },
+  "menuKeyboardShortcuts": "Keyboard shortcuts…",
+  "@menuKeyboardShortcuts": {
+    "description": "Help menu row: opens Settings on the Shortcuts page, with the keyboard that shows which keys do what."
   },
   "tourBack": "Back",
   "@tourBack": {
@@ -22258,7 +22291,7 @@
   "@menuLumitPro": {
     "description": "Help menu row that opens the Lumit Pro window. Lumit Pro is a product name: do not translate it."
   },
-  "menuReviewLinks": "Share preview…",
+  "menuReviewLinks": "Previews…",
   "@menuReviewLinks": {
     "description": "File menu row that opens the Previews window, where previews are sent and their comments read. A preview is an address where people watch an export in a browser and comment on it. Sending one needs Lumit Pro."
   },

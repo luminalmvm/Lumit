@@ -131,6 +131,101 @@ String formatHex(Color colour) {
       .toUpperCase();
 }
 
+/// The clipboard every colour well shares, an Effect controls row's included:
+/// a colour copied from one pastes exactly into any other.
+abstract final class ColourClipboard {
+  /// The last colour copied, exactly, over-range channels and all.
+  static PickedColour? _copied;
+
+  /// What it put on the system clipboard, to tell whether it is still there.
+  static String? _text;
+
+  static void copy(PickedColour colour) {
+    _copied = colour;
+    // The hex goes on the system clipboard as well, so the colour can be
+    // pasted outside Lumit too.
+    _text = '#${formatHex(colour.clipped)}';
+    Clipboard.setData(ClipboardData(text: _text!));
+  }
+
+  static void copyHex(PickedColour colour) =>
+      Clipboard.setData(ClipboardData(text: '#${formatHex(colour.clipped)}'));
+
+  static Future<String?> read() async =>
+      (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+
+  /// What a paste gives from [clip], the system clipboard's text: the colour
+  /// copied last while the clipboard still holds it, a hex, or the three
+  /// numbers Copy value writes. Null for anything else.
+  static PickedColour? from(String? clip) {
+    final copied = _copied;
+    if (copied != null && (clip == null || clip == _text)) return copied;
+    if (clip == null) return null;
+    if (parseHex(clip) case final hex?) return PickedColour.of(hex);
+    final n = [
+      for (final m
+          in RegExp(r'-?\d*\.?\d+(?:[eE][-+]?\d+)?').allMatches(clip))
+        double.parse(m[0]!),
+    ];
+    return n.length < 3 ? null : PickedColour(n[0], n[1], n[2]);
+  }
+}
+
+/// A colour well's right-click at [at]: back to its default where it has
+/// one, then its colour to and from the shared clipboard.
+Future<void> showColourWellMenu(
+  BuildContext context,
+  Offset at, {
+  required PickedColour current,
+  required ValueChanged<PickedColour> onPicked,
+  PickedColour? resetTo,
+}) async {
+  final paste = ColourClipboard.from(await ColourClipboard.read());
+  if (!context.mounted) return;
+  showLumitPopup<void>(
+    context: context,
+    position: at,
+    builder: (close) {
+      Widget row(String id, String label, VoidCallback? run) => MenuRow(
+            key: ValueKey<String>('swatch-menu-$id'),
+            enabled: run != null,
+            onPressed: () {
+              close(null);
+              run?.call();
+            },
+            child: MenuLabel(label, enabled: run != null),
+          );
+      return FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (resetTo case final reset?) ...[
+                row(
+                    'reset',
+                    l10n.reset,
+                    reset.r == current.r &&
+                            reset.g == current.g &&
+                            reset.b == current.b
+                        ? null
+                        : () => onPicked(reset)),
+                const MenuDivider(),
+              ],
+              row('copy', l10n.swatchCopyColour,
+                  () => ColourClipboard.copy(current)),
+              row('paste', l10n.swatchPasteColour,
+                  paste == null ? null : () => onPicked(paste)),
+              row('hex', l10n.swatchCopyHex,
+                  () => ColourClipboard.copyHex(current)),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// How the picker's three numbers are shown and edited.
 ///
 /// Not a cosmetic choice: it is the difference between a colour that *is* eight
@@ -368,86 +463,15 @@ class ColourSwatchButton extends StatelessWidget {
     this.resetTo,
   });
 
-  /// The last colour Copy colour took, exactly, over-range channels and all.
-  static PickedColour? _copied;
-
-  /// The well's right-click: its colour to and from the clipboard, and back
-  /// to its default. Paste takes a colour copied from another well, or a hex
-  /// copied from anywhere.
-  Future<void> _menu(BuildContext context, Offset at) async {
-    final current = initial ?? PickedColour.of(colour);
-    final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
-    final hex = clip == null ? null : parseHex(clip);
-    // What Copy colour took, while the clipboard has not moved on since.
-    final copied = _copied;
-    final paste = copied != null && (clip == null || clip == _copiedText)
-        ? copied
-        : hex == null
-            ? null
-            : PickedColour.of(hex);
-    if (!context.mounted) return;
-    final reset = resetTo;
-    showLumitPopup<void>(
-      context: context,
-      position: at,
-      builder: (close) {
-        Widget row(String id, String label, VoidCallback? run) => MenuRow(
-              key: ValueKey<String>('swatch-menu-$id'),
-              enabled: run != null,
-              onPressed: () {
-                close(null);
-                run?.call();
-              },
-              child: MenuLabel(label, enabled: run != null),
-            );
-        return FloatSurface(
-          child: IntrinsicWidth(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                row('copy', l10n.swatchCopyColour, () {
-                  _copied = current;
-                  // The hex goes on the system clipboard as well, so the
-                  // colour can be pasted outside Lumit too.
-                  _copiedText = '#${formatHex(current.clipped)}';
-                  Clipboard.setData(ClipboardData(text: _copiedText!));
-                }),
-                row('paste', l10n.swatchPasteColour,
-                    paste == null ? null : () => onPicked(paste)),
-                row('hex', l10n.swatchCopyHex, () {
-                  Clipboard.setData(
-                      ClipboardData(text: '#${formatHex(current.clipped)}'));
-                }),
-                if (reset != null) ...[
-                  const MenuDivider(),
-                  row(
-                      'reset',
-                      l10n.reset,
-                      reset.r == current.r &&
-                              reset.g == current.g &&
-                              reset.b == current.b
-                          ? null
-                          : () => onPicked(reset)),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// What Copy colour put on the system clipboard, to tell whether it is
-  /// still there.
-  static String? _copiedText;
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onSecondaryTapDown: (d) => _menu(context, d.globalPosition),
+      onSecondaryTapDown: (d) => showColourWellMenu(context, d.globalPosition,
+          current: initial ?? PickedColour.of(colour),
+          onPicked: onPicked,
+          resetTo: resetTo),
       onTap: () async {
         final box = context.findRenderObject();
         if (box is! RenderBox) return;

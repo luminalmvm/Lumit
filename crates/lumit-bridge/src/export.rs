@@ -747,7 +747,11 @@ pub(crate) enum QueueRowState {
         total: u64,
         encoder: String,
     },
-    Done,
+    /// How long it took in seconds, and the file's size, zero for a sequence.
+    Done {
+        seconds: u32,
+        bytes: u64,
+    },
     Failed(String),
 }
 

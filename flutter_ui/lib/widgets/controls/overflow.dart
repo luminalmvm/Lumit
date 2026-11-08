@@ -25,19 +25,23 @@ class OverflowMark extends StatelessWidget {
   final Key? buttonKey;
   final void Function(BuildContext context) onOpen;
 
+  /// What it holds, on hover: more controls unless told otherwise.
+  final String? tooltip;
+
   const OverflowMark({
     super.key,
     required this.width,
     required this.height,
     required this.onOpen,
     this.buttonKey,
+    this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return LumitTooltip(
-      message: l10n.tipViewerMoreControls,
+      message: tooltip ?? l10n.tipViewerMoreControls,
       child: Builder(
         builder: (markContext) => HouseButton(
           key: buttonKey,
@@ -92,12 +96,16 @@ class FoldingRow extends StatefulWidget {
   final double markHeight;
   final Key? markKey;
 
+  /// Down the page for a rail, folding from the bottom.
+  final Axis axis;
+
   const FoldingRow({
     super.key,
     required this.items,
     required this.markWidth,
     required this.markHeight,
     this.markKey,
+    this.axis = Axis.horizontal,
   });
 
   @override
@@ -119,7 +127,9 @@ class _FoldingRowState extends State<FoldingRow> {
     final ticks = items.any((item) => item.selected);
     showLumitPopup<void>(
       context: context,
-      position: box.localToGlobal(Offset(0, box.size.height)),
+      position: box.localToGlobal(widget.axis == Axis.vertical
+          ? Offset(box.size.width, 0)
+          : Offset(0, box.size.height)),
       // As wide as its longest row, not the window.
       builder: (close) => IntrinsicWidth(
           child: FloatSurface(
@@ -159,6 +169,7 @@ class _FoldingRowState extends State<FoldingRow> {
   Widget build(BuildContext context) => _Fold(
         keep: [for (final item in widget.items) item.keep],
         folded: _folded,
+        axis: widget.axis,
         children: [
           for (final item in widget.items) item.child,
           OverflowMark(
@@ -174,22 +185,25 @@ class _FoldingRowState extends State<FoldingRow> {
 class _Fold extends MultiChildRenderObjectWidget {
   final List<bool> keep;
   final List<int> folded;
+  final Axis axis;
 
   const _Fold({
     required this.keep,
     required this.folded,
+    required this.axis,
     required super.children,
   });
 
   @override
   _RenderFold createRenderObject(BuildContext context) =>
-      _RenderFold(keep, folded);
+      _RenderFold(keep, folded, axis);
 
   @override
   void updateRenderObject(BuildContext context, _RenderFold renderObject) {
     renderObject
       ..keep = keep
-      ..folded = folded;
+      ..folded = folded
+      ..axis = axis;
   }
 }
 
@@ -204,13 +218,22 @@ class _RenderFold extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _FoldParent>,
         RenderBoxContainerDefaultsMixin<RenderBox, _FoldParent> {
-  _RenderFold(this._keep, this.folded);
+  _RenderFold(this._keep, this.folded, this._axis);
 
   List<bool> _keep;
   set keep(List<bool> v) {
     _keep = v;
     markNeedsLayout();
   }
+
+  Axis _axis;
+  set axis(Axis v) {
+    if (v == _axis) return;
+    _axis = v;
+    markNeedsLayout();
+  }
+
+  bool get _down => _axis == Axis.vertical;
 
   List<int> folded;
   bool _cut = false;
@@ -232,11 +255,16 @@ class _RenderFold extends RenderBox
   }
 
   @override
-  double computeMinIntrinsicWidth(double height) => 0;
+  double computeMinIntrinsicWidth(double height) =>
+      _down ? computeMaxIntrinsicWidth(height) : 0;
 
   @override
   double computeMaxIntrinsicWidth(double height) {
     final kids = _kids;
+    if (_down) {
+      return kids.fold(
+          0.0, (w, k) => max(w, k.getMaxIntrinsicWidth(double.infinity)));
+    }
     var w = 0.0;
     for (var i = 0; i < kids.length - 1; i++) {
       w += kids[i].getMaxIntrinsicWidth(height);
@@ -245,61 +273,84 @@ class _RenderFold extends RenderBox
   }
 
   @override
-  double computeMaxIntrinsicHeight(double width) => _kids.fold(
-      0.0, (h, k) => max(h, k.getMaxIntrinsicHeight(double.infinity)));
+  double computeMaxIntrinsicHeight(double width) {
+    final kids = _kids;
+    if (!_down) {
+      return kids.fold(
+          0.0, (h, k) => max(h, k.getMaxIntrinsicHeight(double.infinity)));
+    }
+    var h = 0.0;
+    for (var i = 0; i < kids.length - 1; i++) {
+      h += kids[i].getMaxIntrinsicHeight(width);
+    }
+    return h;
+  }
 
   @override
   double computeMinIntrinsicHeight(double width) =>
-      computeMaxIntrinsicHeight(width);
+      _down ? 0 : computeMaxIntrinsicHeight(width);
 
   @override
   void performLayout() {
     final kids = _kids;
-    final loose = BoxConstraints(maxHeight: constraints.maxHeight);
-    var height = 0.0;
+    // Along is the way the row runs, across the other way.
+    final down = _down;
+    double along(RenderBox k) => down ? k.size.height : k.size.width;
+    double across(RenderBox k) => down ? k.size.width : k.size.height;
+    final room = down ? constraints.maxHeight : constraints.maxWidth;
+    final loose = down
+        ? BoxConstraints(maxWidth: constraints.maxWidth)
+        : BoxConstraints(maxHeight: constraints.maxHeight);
+    var thick = 0.0;
     for (final k in kids) {
       k.layout(loose, parentUsesSize: true);
-      if (k.size.height > height) height = k.size.height;
+      if (across(k) > thick) thick = across(k);
     }
     final items = kids.length - 1;
     final mark = kids.last;
     final shown = List<bool>.filled(items, true);
     var used = 0.0;
     for (var i = 0; i < items; i++) {
-      used += kids[i].size.width;
+      used += along(kids[i]);
     }
     folded.clear();
-    if (used > constraints.maxWidth) {
-      used += mark.size.width;
-      for (var i = items - 1; i >= 0 && used > constraints.maxWidth; i--) {
+    if (used > room) {
+      used += along(mark);
+      for (var i = items - 1; i >= 0 && used > room; i--) {
         if (i < _keep.length && _keep[i]) continue;
         shown[i] = false;
-        used -= kids[i].size.width;
+        used -= along(kids[i]);
         folded.insert(0, i);
       }
     }
     // The mark only when something folded. Kept items too wide even so are
     // cut short of the mark, which stays in reach at the end.
     final markShown = folded.isNotEmpty;
-    height = constraints.constrainHeight(height);
+    thick = down
+        ? constraints.constrainWidth(thick)
+        : constraints.constrainHeight(thick);
+    Offset at(RenderBox k, double x) => down
+        ? Offset((thick - k.size.width) / 2, x)
+        : Offset(x, (thick - k.size.height) / 2);
     var x = 0.0;
     for (var i = 0; i < items; i++) {
       final data = kids[i].parentData! as _FoldParent;
       data.shown = shown[i];
       if (!data.shown) continue;
-      data.offset = Offset(x, (height - kids[i].size.height) / 2);
-      x += kids[i].size.width;
+      data.offset = at(kids[i], x);
+      x += along(kids[i]);
     }
     final markData = mark.parentData! as _FoldParent;
     markData.shown = markShown;
-    _clip = min(x, constraints.maxWidth);
+    _clip = min(x, room);
     if (markShown) {
-      _clip = min(x, max(0.0, constraints.maxWidth - mark.size.width));
-      markData.offset = Offset(_clip, (height - mark.size.height) / 2);
+      _clip = min(x, max(0.0, room - along(mark)));
+      markData.offset = at(mark, _clip);
     }
     _cut = _clip < x;
+    final length = _clip + (markShown ? along(mark) : 0);
     size = constraints
-        .constrain(Size(_clip + (markShown ? mark.size.width : 0), height));
+        .constrain(down ? Size(thick, length) : Size(length, thick));
   }
 
   @override
@@ -314,7 +365,11 @@ class _RenderFold extends RenderBox
 
     if (_cut) {
       context.pushClipRect(
-          needsCompositing, offset, Offset.zero & Size(_clip, size.height), items);
+          needsCompositing,
+          offset,
+          Offset.zero &
+              (_down ? Size(size.width, _clip) : Size(_clip, size.height)),
+          items);
     } else {
       items(context, offset);
     }

@@ -33,6 +33,8 @@ import 'package:provider/provider.dart';
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
+import 'package:lumit_flutter/src/rust/api/cache.dart'
+    show clearCache, clearVramCache;
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -76,7 +78,13 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
 import '../panels/retime_commands.dart'
-    show canFreezeAt, holdHere, retimeClips, retimeTargets, reverseRow;
+    show
+        askToRamp,
+        canFreezeAt,
+        holdHere,
+        retimeClips,
+        retimeTargets,
+        reverseRow;
 import '../panels/viewer_menus.dart' show ViewerMenuHost, saveViewerFrame;
 import '../state/drag_payloads.dart' show EffectDragData;
 import 'settings_account.dart' show askBefore;
@@ -90,6 +98,7 @@ import 'dock_widget.dart' show panelGroups;
 import 'fx_console_context.dart';
 import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
+import 'cache_confirm_frb.dart';
 import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart' show newSolidFrb;
 import '../panels/cut_insert.dart'
@@ -233,6 +242,19 @@ List<MenuEntry> workspaceEntryRows(
   final rows = userWorkspaceRows(context, app, ui, of: user);
   final name = preset?.title ?? user ?? '';
   return [
+    // The workspace itself first, which goes to it and wears its chord, as a
+    // tool's menu leads with the tool.
+    MenuEntry(
+      name,
+      () => preset != null
+          ? workspace.applyWorkspacePreset(preset)
+          : workspace.applyUserWorkspace(name),
+      action: slot <= workspaceSlots ? 'workspace.switch.$slot' : null,
+      checked: preset != null
+          ? workspace.activePreset == preset
+          : workspace.activeUserWorkspace == name,
+    ),
+    MenuEntry.divider(),
     // A preset goes back to its factory arrangement. A saved workspace is
     // whatever it was last left as, so there is nothing to put back.
     if (preset != null) ...[
@@ -244,10 +266,9 @@ List<MenuEntry> workspaceEntryRows(
     if (user != null) ...rows.sublist(1, 4),
     MenuEntry.divider(),
     MenuEntry(
-        l10n.menuAssignWorkspaceShortcut,
+        l10n.menuChangeShortcut,
         assignWorkspaceShortcutAction(context, app, ui,
-            slot: slot, name: name),
-        action: slot <= workspaceSlots ? 'workspace.switch.$slot' : null),
+            slot: slot, name: name)),
   ];
 }
 
@@ -739,7 +760,8 @@ class LumitMenuBarFrb extends StatelessWidget {
   /// walked, so a command the menus gain is in the palette the same day and
   /// runs the same closure its menu row runs. A row teaches whatever chord the
   /// keymap gives its action, the same lookup the menus do. A row the menus
-  /// show disabled is left out.
+  /// show disabled is listed greyed, after the rest, so a search for it says
+  /// it is there.
   Future<void> _palette(BuildContext context) async {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final keymap = ui.keymap;
@@ -749,18 +771,24 @@ class LumitMenuBarFrb extends StatelessWidget {
     void walk(String path, List<MenuEntry> rows) {
       for (final raw in rows) {
         final row = raw.current;
-        if (row.isDivider || !row.enabled) continue;
-        final label = '$path$palettePathSeparator${row.text}';
-        if (row.children case final children?) {
-          walk(label, children);
+        // The palette's own row, never offered from inside it.
+        if (row.isDivider || row.todo || row.action == 'palette.open') {
           continue;
         }
+        final label = '$path$palettePathSeparator${row.text}';
+        if (row.children case final children?) {
+          if (row.enabled) walk(label, children);
+          continue;
+        }
+        final chord = row.action == null ? null : keymap.chordFor(row.action!);
         commands.add(PaletteCommand(
           label: label,
           category: l10n.paletteCommand,
-          shortcut: row.action == null ? null : keymap.chordFor(row.action!),
+          shortcut: chord,
           ticked: row.checked ?? false,
-          run: row.onPressed!,
+          // Greyed, with its chord where it has one.
+          disabled: row.enabled ? null : (chord ?? ''),
+          run: row.onPressed ?? () {},
         ));
       }
     }
@@ -1250,6 +1278,28 @@ List<MenuSection> lumitMenus(
             // walk the same list one step at a time.
             MenuEntry(l10n.menuHistory,
                 project == null ? null : () => showHistoryFrb(context, app)),
+            // What the cache meter's and the History window's right-clicks
+            // clear, where the palette finds them too. The disk and the undo
+            // history ask first.
+            MenuEntry.submenu(l10n.menuClear, [
+              MenuEntry(l10n.menuClearMemoryCache, () {
+                clearCache();
+                clearVramCache();
+              }),
+              MenuEntry(l10n.menuClearDiskCache,
+                  () => confirmClearDiskCache(context)),
+              MenuEntry(l10n.menuClearAllCaches, () {
+                clearCache();
+                clearVramCache();
+                confirmClearDiskCache(context);
+              }),
+              MenuEntry.divider(),
+              MenuEntry(
+                  l10n.menuClearUndoHistory,
+                  (history?.canUndo ?? false) || (history?.canRedo ?? false)
+                      ? () => clearHistoryAsking(context, app)
+                      : null),
+            ]),
             MenuEntry.divider(),
             // Copy takes the finest thing that is selected: the keyframes a panel
             // has claimed, else the picked effects, else the selected layer whole
@@ -1420,22 +1470,26 @@ List<MenuSection> lumitMenus(
               newRow(l10n.menuCard, 'layer.new.card'),
               newRow(l10n.menuSequence, 'layer.new.sequence'),
               newRow(l10n.menuAudio, 'layer.new.audio'),
-              MenuEntry.divider(),
-              // The Cut ground's two: five seconds from the playhead. Without
-              // its chord, which only the Cut timeline hears.
-              MenuEntry(
-                  l10n.insertTitle,
-                  comp == null
-                      ? null
-                      : () => insertTitle(context, ui, comp,
-                          ui.playheadFrame.value, row(comp))),
-              MenuEntry(
-                  l10n.insertSolid,
-                  comp == null
-                      ? null
-                      : () => insertSolid(
-                          context, comp, ui.playheadFrame.value, row(comp),
-                          onDone: app.notifyDocumentChanged)),
+              // The Cut ground's two: five seconds from the playhead. Only
+              // where the comp has clips, as beside Text and Solid they read
+              // as the same thing twice. Without their chord, which only the
+              // Cut timeline hears.
+              if (ui.model.layers.any((e) => e.info.clips.isNotEmpty)) ...[
+                MenuEntry.divider(),
+                MenuEntry(
+                    l10n.insertTitle,
+                    comp == null
+                        ? null
+                        : () => insertTitle(context, ui, comp,
+                            ui.playheadFrame.value, row(comp))),
+                MenuEntry(
+                    l10n.insertSolid,
+                    comp == null
+                        ? null
+                        : () => insertSolid(
+                            context, comp, ui.playheadFrame.value, row(comp),
+                            onDone: app.notifyDocumentChanged)),
+              ],
             ]),
             // What the layer *is*, as opposed to what it is doing: its name, and a
             // Solid's own size and colour (the shared dialogue pattern).
@@ -1541,6 +1595,7 @@ List<MenuSection> lumitMenus(
             // selected layers: the chord's own command.
             MenuEntry(l10n.retimeFreeze, freezeRow(context, ui),
                 action: 'layer.retime.hold'),
+            MenuEntry(l10n.retimeRamp, rampRow(context, ui)),
             // In and out of the clip-editing surface, for anyone — the Vegas
             // preference decides what an *import* becomes, never what a layer is
             // allowed to be. Offered here and on a layer's right-click. Coming
@@ -2071,6 +2126,10 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuLumitOnlineGuides,
                 () => _openLink(app, lumitGuidesUrl)),
             MenuEntry(l10n.menuShowTour, () => showTourFrb(context, app, ui)),
+            MenuEntry(
+                l10n.menuKeyboardShortcuts,
+                () => showSettingsWindowFrb(context,
+                    initialPage: SettingsPage.shortcuts)),
             MenuEntry.divider(),
             MenuEntry.toggle(
               l10n.menuEnableDebugPanel,
@@ -2131,6 +2190,24 @@ VoidCallback? freezeRow(BuildContext context, LumitUiState ui) {
   final can = retimeClips(ui).isNotEmpty ||
       retimeTargets(ui).any((entry) => canFreezeAt(entry, frame));
   return can ? () => holdHere(context, ui) : null;
+}
+
+/// The Retime panel's Ramp… on the picked clips or else the selected layers,
+/// greyed where its button is: with nothing picked under the playhead. With
+/// no button to hang from, it opens a third of the way down the window.
+VoidCallback? rampRow(BuildContext context, LumitUiState ui) {
+  final frame = ui.playheadFrame.value;
+  final clips = retimeClips(ui);
+  final targets = retimeTargets(ui);
+  final can = clips.isNotEmpty
+      ? clips.any((c) => frame >= c.clip.startFrame && frame < c.clip.endFrame)
+      : targets.any((e) => frame >= e.info.inFrame && frame < e.info.outFrame);
+  if (!can) return null;
+  return () {
+    final size = MediaQuery.sizeOf(context);
+    askToRamp(
+        context, targets, clips, Offset(size.width / 2 - 120, size.height / 3));
+  };
 }
 
 /// The clips picked in the Cut timeline as a composition of their own, which
@@ -3659,8 +3736,9 @@ class _MenuListState extends State<_MenuList> {
 
   /// One row's contents: the tick column where the menu has toggles, the name,
   /// and the chord it answers to on the right. A row for Lumit Pro, to an
-  /// account without it, wears the badge before the chord, faded to about
-  /// the chord's weight so a menu of them doesn't shout.
+  /// account without it, wears the badge beside its name, so the chords keep
+  /// their column, faded to about the chord's weight so a menu of them
+  /// doesn't shout.
   Widget _label(LumitTheme t, MenuEntry item,
       {required bool ticks, required String? shortcut}) {
     final style = item.enabled ? null : t.body.copyWith(color: t.textDisabled);
@@ -3676,15 +3754,21 @@ class _MenuListState extends State<_MenuList> {
           const SizedBox(width: 8),
         ],
         Expanded(
-          child: item.tip == null
-              ? text
-              : LumitTooltip(message: item.tip!, child: text),
-        ),
-        if (item.needsPro)
-          const Padding(
-            padding: EdgeInsetsDirectional.only(start: 16),
-            child: Opacity(opacity: 0.6, child: ProBadge()),
+          child: Row(
+            children: [
+              Flexible(
+                child: item.tip == null
+                    ? text
+                    : LumitTooltip(message: item.tip!, child: text),
+              ),
+              if (item.needsPro)
+                const Padding(
+                  padding: EdgeInsetsDirectional.only(start: 8),
+                  child: Opacity(opacity: 0.6, child: ProBadge()),
+                ),
+            ],
           ),
+        ),
         if (shortcut != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),

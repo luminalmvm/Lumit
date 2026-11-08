@@ -1064,7 +1064,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                     child: HouseButton(
                       key: const ValueKey('export-choose'),
                       onPressed: _choose,
-                      child: Text(l10n.exportBrowse, style: t.body),
+                      child: Text(l10n.exportBrowseEllipsis, style: t.body),
                     ),
                   ),
                 ],
@@ -1114,46 +1114,49 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   /// What can be done with the preset in force: the three dots' rows, and
   /// Save as… before them on the preset's own right-click, where the button
-  /// beside it is not in reach.
-  List<Widget> _presetRows(VoidCallback close, {bool saveAs = false}) => [
-        if (saveAs)
-          MenuRow(
-            key: const ValueKey('export-preset-save-as-row'),
-            onPressed: () {
-              close();
-              _nameAPreset('');
-            },
-            child: Text(l10n.exportPresetSaveAs),
-          ),
+  /// beside it is not in reach. The default wears a tick, as a choice does.
+  List<Widget> _presetRows(VoidCallback close, {bool saveAs = false}) {
+    // Greyed for a shipped preset, which is not yours to delete.
+    final own = _presets.any((p) => p.name == _preset && !p.readOnly);
+    return [
+      if (saveAs)
         MenuRow(
-          key: const ValueKey('export-preset-edit'),
+          key: const ValueKey('export-preset-save-as-row'),
           onPressed: () {
             close();
-            _editPreset();
+            _nameAPreset('');
           },
-          child: Text(l10n.exportPresetEdit),
+          child: MenuLabel(l10n.exportPresetSaveAs, ticked: false),
         ),
-        MenuRow(
-          key: const ValueKey('export-preset-set-default'),
-          selected: _preset == _defaultPreset,
-          onPressed: () {
-            close();
-            _setAsDefault();
-          },
-          child: Text(l10n.exportPresetSetDefault),
-        ),
-        const MenuDivider(),
-        // Greyed for a shipped preset, which is not yours to delete.
-        MenuRow(
-          key: const ValueKey('export-preset-delete-row'),
-          enabled: _presets.any((p) => p.name == _preset && !p.readOnly),
-          onPressed: () {
-            close();
-            _deletePreset();
-          },
-          child: Text(l10n.delete),
-        ),
-      ];
+      MenuRow(
+        key: const ValueKey('export-preset-edit'),
+        onPressed: () {
+          close();
+          _editPreset();
+        },
+        child: MenuLabel(l10n.exportPresetEdit, ticked: false),
+      ),
+      MenuRow(
+        key: const ValueKey('export-preset-set-default'),
+        onPressed: () {
+          close();
+          _setAsDefault();
+        },
+        child: MenuLabel(l10n.exportPresetSetDefault,
+            ticked: _preset == _defaultPreset),
+      ),
+      const MenuDivider(),
+      MenuRow(
+        key: const ValueKey('export-preset-delete-row'),
+        enabled: own,
+        onPressed: () {
+          close();
+          _deletePreset();
+        },
+        child: MenuLabel(l10n.delete, ticked: false, enabled: own),
+      ),
+    ];
+  }
 
   /// The file's right-click: its path to the clipboard, another place, and
   /// the folder it goes in.
@@ -1191,7 +1194,7 @@ class _ExportDialogState extends State<_ExportDialog> {
               close(null);
               if (!revealInFolder(path: path!)) revealInFolder(path: folder!);
             },
-            child: Text(l10n.tipOpenFolder),
+            child: Text(l10n.projectShowInFolder),
           ),
         ],
       ],

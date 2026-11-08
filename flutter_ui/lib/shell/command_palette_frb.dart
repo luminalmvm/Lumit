@@ -95,17 +95,20 @@ Future<void> showCommandPaletteFrb({
 /// Lower is better. The score is the span the match occupies plus where it
 /// starts, so "comp" scores better against "Composition settings" than against
 /// "New composition": earlier and tighter wins. One or two letters match as
-/// a subsequence; three or more have to sit in the name whole, or each start
-/// a word, since a loose subsequence had "fit" finding Photo filter.
+/// a subsequence; three or more have to sit in the name whole from the start
+/// of a word, or each start a word, since a loose subsequence had "fit"
+/// finding Photo filter and a match inside a word had "reset" finding every
+/// preset. Hyphens don't count, so "precompose" finds Pre-compose.
 int? paletteScore(String needle, String haystack) {
-  if (needle.isEmpty) return 0;
-  final lower = haystack.toLowerCase();
-  final want = needle.toLowerCase();
+  final want = needle.toLowerCase().replaceAll('-', '');
+  if (want.isEmpty) return 0;
   final strict = want.length >= 3;
   if (strict) {
-    final whole = lower.indexOf(want);
-    if (whole >= 0) return (want.length - 1) + whole;
+    if (_wholeAtWord(want, haystack) case final at?) {
+      return (want.length - 1) + at;
+    }
   }
+  final (lower, starts) = _words(haystack);
   var at = 0;
   var first = -1;
   var last = 0;
@@ -113,7 +116,7 @@ int? paletteScore(String needle, String haystack) {
     final char = String.fromCharCode(rune);
     var found = lower.indexOf(char, at);
     if (strict) {
-      while (found > 0 && _wordChar.hasMatch(lower[found - 1])) {
+      while (found >= 0 && !starts.contains(found)) {
         found = lower.indexOf(char, found + 1);
       }
     }
@@ -126,6 +129,32 @@ int? paletteScore(String needle, String haystack) {
 }
 
 final RegExp _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
+/// [text] in lower case with its hyphens taken out, and where each of its
+/// words starts in that, a hyphen still counting as a break.
+(String, Set<int>) _words(String text) {
+  final source = text.toLowerCase();
+  final out = StringBuffer();
+  final starts = <int>{};
+  for (var i = 0; i < source.length; i++) {
+    if (source[i] == '-') continue;
+    if (i == 0 || !_wordChar.hasMatch(source[i - 1])) starts.add(out.length);
+    out.write(source[i]);
+  }
+  return (out.toString(), starts);
+}
+
+/// Where [want], lower case and without hyphens, sits whole in [text] from
+/// the start of a word, or null.
+int? _wholeAtWord(String want, String text) {
+  final (lower, starts) = _words(text);
+  for (var at = lower.indexOf(want);
+      at >= 0;
+      at = lower.indexOf(want, at + 1)) {
+    if (starts.contains(at)) return at;
+  }
+  return null;
+}
 
 class _Palette extends StatefulWidget {
   final List<PaletteCommand> commands;
@@ -197,7 +226,8 @@ class _PaletteState extends State<_Palette> {
       if (score == null) continue;
       final recency = widget.recent.indexOf(label);
       scored.add((
-        leaf == null ? 1 : 0,
+        // What can't run now comes after everything that can.
+        (widget.commands[i].disabled == null ? 0 : 2) + (leaf == null ? 1 : 0),
         score,
         recency < 0 ? widget.recent.length : recency,
         i,
@@ -221,10 +251,10 @@ class _PaletteState extends State<_Palette> {
   /// Where [needle] sits whole in one of [crumbs], or null when it is in
   /// none of them. Never across two: a path is read a step at a time.
   static int? _crumbScore(String needle, List<String> crumbs) {
-    final lower = needle.toLowerCase();
+    final want = needle.toLowerCase().replaceAll('-', '');
+    if (want.isEmpty) return null;
     for (final crumb in crumbs) {
-      final at = crumb.toLowerCase().indexOf(lower);
-      if (at >= 0) return at;
+      if (_wholeAtWord(want, crumb) case final at?) return at;
     }
     return null;
   }

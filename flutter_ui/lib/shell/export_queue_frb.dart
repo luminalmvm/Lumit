@@ -54,6 +54,7 @@ import '../widgets/middle_ellipsis.dart';
 import 'dialog_frame.dart';
 import 'export_dialog_frb.dart';
 import 'export_pick_frb.dart';
+import 'settings_rows.dart' show byteSize;
 import 'status_line_frb.dart';
 
 /// The frame: wide enough for a name, its preset, a path and how it is
@@ -397,7 +398,7 @@ class _ExportQueueState extends State<_ExportQueue> {
       item.state is! BridgeExportQueueState_Done || kIsWeb
           ? row
           : LumitTooltip(
-              message: l10n.tipOpenFolder,
+              message: l10n.projectShowInFolder,
               child: HoverFill(
                 child: GestureDetector(
                   key: ValueKey<String>('export-queue-open-${item.id}'),
@@ -531,7 +532,7 @@ class _ExportQueueState extends State<_ExportQueue> {
         return [
           if (running) _stopAfterRow(() => close(null)),
           if (done && !kIsWeb)
-            row('open', l10n.tipOpenFolder,
+            row('open', l10n.projectShowInFolder,
                 () => revealInFolder(path: item.path), run),
           // A failed row too, where its settings are what has to change.
           if (waiting || item.state is BridgeExportQueueState_Failed)
@@ -588,7 +589,7 @@ class _ExportQueueState extends State<_ExportQueue> {
       );
 
   /// The queue's own menu: run it, hold it after the export in flight, add
-  /// to it, and clear away what has landed.
+  /// to it, find the last file it wrote, and clear away what has landed.
   void _queueMenu(Offset at) {
     final running =
         _items.any((item) => item.state is BridgeExportQueueState_Running);
@@ -598,6 +599,9 @@ class _ExportQueueState extends State<_ExportQueue> {
       for (final item in _items)
         if (item.state is BridgeExportQueueState_Done) item.id,
     ];
+    final last = _items
+        .where((item) => item.state is BridgeExportQueueState_Done)
+        .lastOrNull;
     unawaited(showMenuAt<void>(
       context: context,
       position: at,
@@ -619,6 +623,9 @@ class _ExportQueueState extends State<_ExportQueue> {
           const MenuDivider(),
           row('add', l10n.exportQueueAddComps,
               () => showExportPickFrb(context: context)),
+          if (!kIsWeb)
+            row('folder', l10n.projectShowInFolder,
+                last == null ? null : () => revealInFolder(path: last.path)),
           row(
               'clear',
               l10n.exportQueueRemoveFinished,
@@ -738,12 +745,31 @@ class _ExportQueueState extends State<_ExportQueue> {
   String _status(BridgeExportQueueItem item) => switch (item.state) {
         BridgeExportQueueState_Waiting() => l10n.exportQueueWaiting,
         BridgeExportQueueState_Running() => l10n.exportQueuePreparing,
-        BridgeExportQueueState_Done() => l10n.exportQueueDone,
+        // How long it took and how big the file is, where those are known.
+        BridgeExportQueueState_Done(:final seconds, :final bytes) => [
+            l10n.exportQueueDone,
+            if (seconds > 0) clockTime(seconds),
+            if (bytes > 0) fileSize(bytes),
+          ].join(' · '),
         BridgeExportQueueState_Failed(:final error) => error,
       };
 
   static String _leaf(String path) => path.split(RegExp(r'[/\\]')).last;
 }
+
+/// [seconds] as a clock reads it: `2:31`, or `1:02:31` past the hour.
+String clockTime(int seconds) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  final h = seconds ~/ 3600;
+  final m = seconds ~/ 60 % 60;
+  final s = two(seconds % 60);
+  return h > 0 ? '$h:${two(m)}:$s' : '$m:$s';
+}
+
+/// A file's size, in kilobytes under one megabyte.
+String fileSize(int bytes) => bytes < 1 << 20
+    ? '${(bytes / 1024).ceil()} ${l10n.unitKb}'
+    : byteSize(bytes);
 
 /// The list's own inset — the export dialog's body padding, which is the
 /// pattern's (§12A.4).

@@ -230,13 +230,19 @@ class _HistoryDialogState extends State<_HistoryDialog> {
     );
   }
 
-  /// Drop every step, once asked: the project stays as it is, and the list
-  /// starts again from here.
   Future<void> _clear() async {
-    if (!await askBefore(context, l10n.historyClearAsk, l10n.clear)) return;
-    if (!mounted) return;
-    widget.app.settleHistory();
-    widget.app.project?.clearHistory();
-    setState(_read);
+    if (await clearHistoryAsking(context, widget.app) && mounted) {
+      setState(_read);
+    }
   }
+}
+
+/// Drop every undo and redo step, once asked: the project stays as it is,
+/// and the history starts again from here. Says whether it did.
+Future<bool> clearHistoryAsking(BuildContext context, LumitState app) async {
+  if (!await askBefore(context, l10n.historyClearAsk, l10n.clear)) return false;
+  if (!context.mounted) return false;
+  app.settleHistory();
+  app.project?.clearHistory();
+  return true;
 }

@@ -341,7 +341,7 @@ void main() {
       final p = await mount(tester);
       final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.studio);
       final row =
-          find.byKey(const ValueKey<String>('menu-row-Share preview…'));
+          find.byKey(const ValueKey<String>('menu-row-Previews…'));
       Finder badge() =>
           find.descendant(of: row, matching: find.byType(ProBadge));
 
@@ -350,7 +350,7 @@ void main() {
       expect(badge(), findsOneWidget);
       // An ordinary row, not a greyed one: it opens the window, which
       // offers Pro.
-      expect(tester.widget<Text>(find.text('Share preview…')).style?.color,
+      expect(tester.widget<Text>(find.text('Previews…')).style?.color,
           isNot(t.textDisabled));
       await tester.tap(row);
       await tester.pump();
@@ -364,7 +364,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
       await tester.pump();
       expect(badge(), findsNothing);
-      expect(tester.widget<Text>(find.text('Share preview…')).style?.color,
+      expect(tester.widget<Text>(find.text('Previews…')).style?.color,
           isNot(t.textDisabled));
       await dismiss(tester);
     });
@@ -441,8 +441,8 @@ void main() {
         Iterable<String> all() => labels(
             tester.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus);
 
-        expect(all(), contains('Share preview… (Pro)'));
-        expect(all(), isNot(contains('Share preview…')));
+        expect(all(), contains('Previews… (Pro)'));
+        expect(all(), isNot(contains('Previews…')));
 
         p.uiState.account.account =
             const CloudAccount(id: '1', email: '', name: '', pro: true);
@@ -451,8 +451,8 @@ void main() {
         // Twice: the read follows the notification by a microtask.
         await tester.pump();
         await tester.pump();
-        expect(all(), contains('Share preview…'));
-        expect(all(), isNot(contains('Share preview… (Pro)')));
+        expect(all(), contains('Previews…'));
+        expect(all(), isNot(contains('Previews… (Pro)')));
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }

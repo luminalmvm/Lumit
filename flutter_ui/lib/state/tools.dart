@@ -431,7 +431,7 @@ class ToolsState extends ChangeNotifier {
         _rotateSets = RotateSets.orientation;
       case ToolGroup.type:
         _fill = ToolColour.white;
-        _textSize = 72;
+        _textSize = plainTextSize;
       case ToolGroup.shape || ToolGroup.pen:
         _fill = ToolColour.white;
         _stroke = ToolColour.black;
@@ -497,7 +497,7 @@ class ToolsState extends ChangeNotifier {
       BridgeColourRgba(r: _fill.r, g: _fill.g, b: _fill.b, a: 1);
 
   /// The point size new text is set at.
-  double _textSize = 72;
+  double _textSize = plainTextSize;
   double get textSize => _textSize;
   set textSize(double value) {
     final next = value.clamp(1.0, 2000.0);

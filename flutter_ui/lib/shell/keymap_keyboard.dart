@@ -103,6 +103,8 @@ String _legend(String key) {
     'Space' => '',
     // Already on the number pad here, so the star needs no saying so.
     '*' => '*',
+    // On a key cap the mark is the key, where a menu spells it out.
+    '`' => '`',
     // The same reading a chord gets, with Page Up and Page Down on two lines.
     _ => chordLabel(key).replaceFirst(' ', '\n'),
   };

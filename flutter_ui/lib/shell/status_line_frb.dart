@@ -1027,7 +1027,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
             // The finished file is one click away: the line opens its folder.
             Flexible(
               child: _result(LumitTooltip(
-                message: l10n.tipOpenFolder,
+                message: l10n.projectShowInFolder,
                 child: HoverMark(
                   builder: (context, lit) => GestureDetector(
                     key: const ValueKey('status-export-done'),

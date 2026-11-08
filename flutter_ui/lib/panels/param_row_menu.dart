@@ -15,6 +15,7 @@ import 'package:uuid/uuid.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show addExpressionRow;
+import '../widgets/colour_picker.dart' show ColourClipboard, PickedColour;
 import '../widgets/controls.dart';
 import 'drive_chain.dart';
 import 'effect_param_row_frb.dart' show newExpressionLanguage;
@@ -34,6 +35,8 @@ class ParamMenu {
     this.canReset = true,
     this.copy,
     this.paste,
+    this.colour,
+    this.pasteColour,
     this.setExpression,
     this.axisExpressions = const [],
     this.removeExpression,
@@ -83,6 +86,11 @@ class ParamMenu {
   /// into any other row or field.
   final String Function()? copy;
   final void Function(String text)? paste;
+
+  /// A colour row's colour and setting it, for the clipboard rows every
+  /// colour well has, in place of Copy value and Paste value.
+  final PickedColour Function()? colour;
+  final void Function(PickedColour colour)? pasteColour;
   final VoidCallback? setExpression;
 
   /// Set expression on a row of several axes, one each: an expression is worked
@@ -472,9 +480,15 @@ List<Widget> menuGroups(List<List<Widget>> groups) {
   return out;
 }
 
-/// The menu itself, at [at].
-void showParamMenu(BuildContext context, Offset at, ParamMenu menu) {
-  List<Widget> rows(VoidCallback close) => _rows(context, menu, close);
+/// The menu itself, at [at]. The clipboard is read first, so a paste with
+/// nothing to take greys.
+Future<void> showParamMenu(
+    BuildContext context, Offset at, ParamMenu menu) async {
+  final clip = menu.paste != null || menu.pasteColour != null
+      ? await ColourClipboard.read()
+      : null;
+  if (!context.mounted) return;
+  List<Widget> rows(VoidCallback close) => _rows(context, menu, close, clip);
   if (menu.host case final host?) {
     host(context, at, rows);
     return;
@@ -486,7 +500,8 @@ void showParamMenu(BuildContext context, Offset at, ParamMenu menu) {
   );
 }
 
-List<Widget> _rows(BuildContext context, ParamMenu menu, VoidCallback done) {
+List<Widget> _rows(
+    BuildContext context, ParamMenu menu, VoidCallback done, String? clip) {
   final ui = Provider.of<LumitUiState>(context, listen: false);
   // A paste on a row with several keys picked moves them all, as typing does.
   final edit = context.getInheritedWidgetOfExactType<ValueEditScope>();
@@ -514,13 +529,26 @@ List<Widget> _rows(BuildContext context, ParamMenu menu, VoidCallback done) {
           Clipboard.setData(ClipboardData(text: copy()));
         }),
       if (menu.paste case final paste?)
-        _row('param-menu-paste', l10n.paramMenuPasteValue, () async {
+        _row('param-menu-paste', l10n.paramMenuPasteValue, () {
           done();
-          final data = await Clipboard.getData(Clipboard.kTextPlain);
-          final text = data?.text;
-          if (text == null) return;
-          edit == null ? paste(text) : edit.run(true, () => paste(text));
+          if (clip == null) return;
+          edit == null ? paste(clip) : edit.run(true, () => paste(clip));
+        }, enabled: clip != null && numbersIn(clip).isNotEmpty),
+      if (menu.colour case final colour?) ...[
+        _row('param-menu-copy-colour', l10n.swatchCopyColour, () {
+          done();
+          ColourClipboard.copy(colour());
         }),
+        if (menu.pasteColour case final paste?)
+          _row('param-menu-paste-colour', l10n.swatchPasteColour, () {
+            done();
+            if (ColourClipboard.from(clip) case final got?) paste(got);
+          }, enabled: ColourClipboard.from(clip) != null),
+        _row('param-menu-copy-hex', l10n.swatchCopyHex, () {
+          done();
+          ColourClipboard.copyHex(colour());
+        }),
+      ],
       if (menu.linkTo case final to?)
         _row('param-menu-copy-link', l10n.paramMenuCopyLink, () {
           done();

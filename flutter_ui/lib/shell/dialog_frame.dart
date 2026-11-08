@@ -231,7 +231,7 @@ Widget dialogTitleBar(
       ),
     ),
   );
-  return Container(
+  final strip = Container(
     key: ValueKey<String>('$keyPrefix-title-strip'),
     height: dialogTitleStrip + 1,
     decoration: BoxDecoration(
@@ -274,6 +274,14 @@ Widget dialogTitleBar(
               close,
             ],
           ),
+  );
+  // The strip's right-click puts the window back, or closes it.
+  return Builder(
+    builder: (context) => GestureDetector(
+      onSecondaryTapUp: (d) =>
+          showWindowMenu(context, d.globalPosition, onClose: onClose),
+      child: strip,
+    ),
   );
 }
 

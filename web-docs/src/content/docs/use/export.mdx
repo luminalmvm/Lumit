@@ -141,18 +141,20 @@ Export queue** reopens it later.
 
 One export runs at a time and the rest wait. Each row says which composition it came
 from, its preset or format, the file it writes, and how it is getting on: *Waiting*, a
-bar with how much is done and about how long is left, *Done*, or the failure.
+bar with how much is done and about how long is left, *Done* with how long it took and the
+file's size, or the failure.
 
 - **Drag a waiting row** to move it up or down. A row that is running, has run, or has
   failed cannot be picked up.
 - **The × on a row** cancels it while it is writing.
 - **Click a finished row** to open the folder its file was written to.
-- **Right-click a row** for **Open folder**, **Settings…**, **Duplicate**, **Queue again**,
+- **Right-click a row** for **Show in folder**, **Settings…**, **Duplicate**, **Queue again**,
   **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it. On a
   failed row, **Settings…** queues it again with the changes. On the running row,
   **Stop after this one** lets that export finish and starts nothing after it.
 - **Right-click around the rows**, or the count under them, for **Start**, **Stop after
-  this one**, **Add compositions…** and **Remove finished**.
+  this one**, **Add compositions…**, **Show in folder** for the last file written, and
+  **Remove finished**.
 
 An item's settings are captured the moment it is queued, so working on the project 
 afterwards does not impact the export.

@@ -8,6 +8,9 @@ import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:uuid/uuid.dart';
 
+/// The size new text is set at, and what the Text panel's Size resets to.
+const double plainTextSize = 72;
+
 /// The style of a layer nobody has styled, for a document built by hand. The
 /// engine's `defaultTextStyle` is the authority, and a test holds the two
 /// together.

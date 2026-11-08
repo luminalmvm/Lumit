@@ -6,6 +6,8 @@
 // movePanel. Every pane is a drop target, bare ones included. A pane standing
 // alone has no tab, so its title lifts it instead (DockPaneHandle).
 
+import 'dart:math' show max, min;
+
 import 'package:flutter/gestures.dart'
     show GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/rendering.dart' show RenderOffstage;
@@ -111,6 +113,31 @@ double dockMinWidth(DockNode node) => switch (node) {
           : axis == DockAxis.horizontal
               ? children.map(dockMinWidth).reduce((a, b) => a + b)
               : children.map(dockMinWidth).reduce((a, b) => a > b ? a : b),
+    };
+
+/// The height below which a stacked split stops shrinking a panel and takes
+/// the room from a sibling instead. Only the timelines have one: their
+/// header, their column header and six rows. Everything else scales or
+/// scrolls.
+double panelMinHeight(Panel panel) => switch (panel) {
+      Panel.timeline || Panel.audioTimeline || Panel.cutTimeline => 250,
+      _ => 0,
+    };
+
+/// [dockMinWidth]'s twin down the page: a split is the sum of its children
+/// down, or the tallest of them across.
+double dockMinHeight(DockNode node) => switch (node) {
+      DockPane(:final panel) => panelMinHeight(panel),
+      DockTabs(:final children) => children.isEmpty
+          ? 0
+          : children
+              .map((c) => panelMinHeight(c.panel))
+              .reduce((a, b) => a > b ? a : b),
+      DockSplit(:final axis, :final children) => children.isEmpty
+          ? 0
+          : axis == DockAxis.vertical
+              ? children.map(dockMinHeight).reduce((a, b) => a + b)
+              : children.map(dockMinHeight).reduce((a, b) => a > b ? a : b),
     };
 
 /// Holds [child] to [minWidth] and slides it sideways when the pane is
@@ -473,36 +500,42 @@ class _DockWidgetState extends State<DockWidget> {
       for (var i = 0; i < split.children.length; i++)
         if (_shown(split.children[i])) i,
     ];
-    if (!horizontal) {
-      return Column(children: _splitChildren(context, t, split, shown, null));
-    }
     return LayoutBuilder(
       builder: (context, box) {
         final seams =
             (shown.length - 1) * _Divider.extentFor(t.tokens.tileGap);
+        final weights = _givenWay(split, shown,
+            (horizontal ? box.maxWidth : box.maxHeight) - seams);
+        final children = _splitChildren(context, t, split, shown, weights);
+        if (!horizontal) return Column(children: children);
         return Row(
           // The arrangement is the one the user built, in every language:
           // the seam drags and the drop sides below are in screen terms.
           textDirection: TextDirection.ltr,
-          children: _splitChildren(context, t, split, shown,
-              _givenWay(split, shown, box.maxWidth - seams)),
+          children: children,
         );
       },
     );
   }
 
-  /// What each shown child of a horizontal split is drawn at across [room]:
-  /// its share, except that a child narrower than its panels' least is
-  /// widened to it, the width coming off the sibling with the most to spare
-  /// above its own. Only the drawing gives way; the shares the user dragged
-  /// stay as they were, and a wider window puts them back.
+  /// The least a child of [split] can be drawn at along the split.
+  double _least(DockSplit split, DockNode child) =>
+      split.axis == DockAxis.horizontal
+          ? dockMinWidth(child)
+          : dockMinHeight(child);
+
+  /// What each shown child of a split is drawn at along [room]: its share,
+  /// except that a child smaller than its panels' least is grown to it, the
+  /// room coming off the sibling with the most to spare above its own. Only
+  /// the drawing gives way; the shares the user dragged stay as they were,
+  /// and a bigger window puts them back.
   List<double> _givenWay(DockSplit split, List<int> shown, double room) {
     final total = shown.fold<double>(0, (sum, i) => sum + split.shares[i]);
     if (total <= 0 || !room.isFinite || room <= 0) {
       return [for (final i in shown) split.shares[i]];
     }
     final width = [for (final i in shown) split.shares[i] / total * room];
-    final least = [for (final i in shown) dockMinWidth(split.children[i])];
+    final least = [for (final i in shown) _least(split, split.children[i])];
     for (var k = 0; k < width.length; k++) {
       var short = least[k] - width[k];
       while (short > 0.5) {
@@ -573,18 +606,13 @@ class _DockWidgetState extends State<DockWidget> {
     final b = split.shares[j] - deltaShare;
     if (a < minShare || b < minShare) return;
     // **The seam stops at the panels' own minimums.** Every panel declares a
-    // minimum, and the dock will not shrink it past that. Across a horizontal
-    // split that minimum is a width, so the drag is refused rather than
-    // clamped — a seam that slid on while the panel underneath stopped moving
-    // was how a panel ended up narrower than anything it could draw.
-    if (split.axis == DockAxis.horizontal) {
-      final aPx = a / total * totalExtent;
-      final bPx = b / total * totalExtent;
-      if (aPx < dockMinWidth(split.children[i]) ||
-          bPx < dockMinWidth(split.children[j])) {
-        return;
-      }
-    }
+    // minimum, and the dock will not shrink it past that, so the drag is
+    // refused rather than clamped: a seam that slid on while the panel
+    // underneath stopped moving was how a panel ended up smaller than
+    // anything it could draw. Growing one already under its least is fine.
+    final shrunk = deltaShare > 0 ? j : i;
+    final shrunkPx = (deltaShare > 0 ? b : a) / total * totalExtent;
+    if (shrunkPx < _least(split, split.children[shrunk])) return;
     split.shares[i] = a;
     split.shares[j] = b;
   }
@@ -1152,10 +1180,6 @@ class _TabGroup extends StatelessWidget {
   }
 }
 
-/// The least a tab's name is cut to before the strip scrolls instead: four
-/// or so letters, enough to tell one tab from the next.
-const double _leastTabWord = 30;
-
 /// A tab's width less its name, in each shape: what [_TabPill] puts round the
 /// word.
 double _tabChrome(LumitTheme t) {
@@ -1171,9 +1195,9 @@ double _tabChrome(LumitTheme t) {
 
 /// A tab group's strip. A group narrower than its tabs first takes width from
 /// the tabs behind the fronted one, each name fading where it is cut, down to
-/// a few letters. Past that the strip scrolls: the wheel moves it, and a mark
-/// at its end lists every tab of the group. The whole line, its margins
-/// included, takes the group's right-click.
+/// its first word and two letters of the next. Past that the strip scrolls:
+/// the wheel moves it, and a mark at its end lists every tab of the group.
+/// The whole line, its margins included, takes the group's right-click.
 class _TabStrip extends StatefulWidget {
   final DockTabs tabs;
 
@@ -1231,10 +1255,27 @@ class _TabStripState extends State<_TabStrip> {
     widget.onChanged();
   }
 
-  double _word(LumitTheme t, TextStyle ambient, int i, TextScaler scaler) {
+  double _word(LumitTheme t, TextStyle ambient, int i, TextScaler scaler) =>
+      _measure(t, ambient, i, scaler,
+          t.kickerCase(paneTitle(widget.tabs.children[i].id)));
+
+  /// The least of tab [i]'s name drawn before the strip scrolls: its first
+  /// word and two letters of the next, clear of the fade after them, so no
+  /// two tabs cut to the same few letters. A one-word name stays whole.
+  double _least(LumitTheme t, TextStyle ambient, int i, TextScaler scaler) {
+    final name = t.kickerCase(paneTitle(widget.tabs.children[i].id));
+    final parts = name.split(' ');
+    if (parts.length < 2) return _word(t, ambient, i, scaler);
+    final kept = '${parts[0]} ${parts[1].substring(0, min(2, parts[1].length))}';
+    if (kept.length >= name.length) return _word(t, ambient, i, scaler);
+    // The fade covers an ellipsis' width at the cut.
+    return _measure(t, ambient, i, scaler, '$kept…');
+  }
+
+  double _measure(LumitTheme t, TextStyle ambient, int i, TextScaler scaler,
+      String words) {
     // Over the ambient style, as the tab's own Text is drawn.
     final style = ambient.merge(i == widget.front ? t.kickerOn : t.kicker);
-    final words = t.kickerCase(paneTitle(widget.tabs.children[i].id));
     return _words.putIfAbsent((words, style, scaler), () {
       final painter = TextPainter(
         text: TextSpan(text: words, style: style),
@@ -1250,8 +1291,8 @@ class _TabStripState extends State<_TabStrip> {
 
   /// How wide each tab behind the front one may draw its name, by index, in
   /// [room], and whether even then the strip is cut. The narrowest keep
-  /// their names and the rest share what is left alike, down to a few
-  /// letters each; empty when every tab fits whole.
+  /// their names and the rest share what is left alike, none below its
+  /// [_least]; empty when every tab fits whole.
   (Map<int, double>, bool) _fit(
       LumitTheme t, TextStyle ambient, double room, TextScaler scaler) {
     final words = {
@@ -1269,34 +1310,35 @@ class _TabStripState extends State<_TabStrip> {
     if (rest.fold<double>(0, (sum, i) => sum + words[i]!) <= left) {
       return (const {}, false);
     }
-    final least = rest.fold<double>(
-        0,
-        (sum, i) =>
-            sum + (words[i]! < _leastTabWord ? words[i]! : _leastTabWord));
-    if (least > left) {
+    final least = {
+      for (final i in rest) i: min(words[i]!, _least(t, ambient, i, scaler))
+    };
+    if (rest.fold<double>(0, (sum, i) => sum + least[i]!) > left) {
       return (
         {
           for (final i in rest)
-            if (words[i]! > _leastTabWord) i: _leastTabWord,
+            if (words[i]! > least[i]!) i: least[i]!,
         },
         true
       );
     }
-    var count = rest.length;
-    var cap = _leastTabWord;
-    for (final i in rest) {
-      if (words[i]! * count <= left) {
-        left -= words[i]!;
-        count--;
-        continue;
+    // Each name draws at the cap, or whole if shorter, or its least if
+    // longer: the widest cap that fits, found by halving.
+    double drawn(int i, double cap) => min(words[i]!, max(least[i]!, cap));
+    var lo = 0.0;
+    var hi = rest.fold<double>(0, (m, i) => max(m, words[i]!));
+    for (var k = 0; k < 20; k++) {
+      final cap = (lo + hi) / 2;
+      if (rest.fold<double>(0, (sum, i) => sum + drawn(i, cap)) <= left) {
+        lo = cap;
+      } else {
+        hi = cap;
       }
-      cap = left / count;
-      break;
     }
     return (
       {
         for (final i in rest)
-          if (words[i]! > cap) i: cap,
+          if (words[i]! > drawn(i, lo)) i: drawn(i, lo),
       },
       false
     );
@@ -1396,26 +1438,12 @@ class _TabStripState extends State<_TabStrip> {
                       ),
                     ),
                     if (cut)
-                      Builder(
-                        builder: (context) => LumitTooltip(
-                          message: l10n.tipDockMoreTabs,
-                          child: HoverMark(
-                            builder: (_, lit) => GestureDetector(
-                              key: const ValueKey('dock-tabs-more'),
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => _list(context),
-                              child: SizedBox(
-                                width: _tabMarkWidth,
-                                height: t.density.headerStrip,
-                                child: Center(
-                                  child: Caret(
-                                      colour: Color.lerp(
-                                          t.textMuted, t.textPrimary, lit)!),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                      OverflowMark(
+                        buttonKey: const ValueKey('dock-tabs-more'),
+                        tooltip: l10n.tipDockMoreTabs,
+                        width: _tabMarkWidth,
+                        height: t.density.headerStrip,
+                        onOpen: _list,
                       ),
                   ],
                 ),
@@ -1429,7 +1457,7 @@ class _TabStripState extends State<_TabStrip> {
 }
 
 /// The mark at a cut strip's end.
-const double _tabMarkWidth = 18;
+const double _tabMarkWidth = 24;
 
 /// A row for each of [shown], the fronted one ticked, which fronts its tab.
 List<Widget> _tabRows(DockTabs tabs, List<int> shown, int front,

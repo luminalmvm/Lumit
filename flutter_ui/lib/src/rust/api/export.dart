@@ -429,7 +429,13 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
     /// The encoder actually chosen, which may not be the one asked for.
     required String encoder,
   }) = BridgeExportQueueState_Running;
-  const factory BridgeExportQueueState.done() = BridgeExportQueueState_Done;
+  const factory BridgeExportQueueState.done({
+    /// How long it took to export, in whole seconds.
+    required int seconds,
+
+    /// The file's size, zero for an image sequence.
+    required int bytes,
+  }) = BridgeExportQueueState_Done;
   const factory BridgeExportQueueState.failed({
     required String error,
   }) = BridgeExportQueueState_Failed;

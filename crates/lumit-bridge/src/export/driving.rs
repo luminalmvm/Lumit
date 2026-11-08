@@ -33,6 +33,8 @@ struct Item {
     spec: BridgeExportSpec,
     out_path: String,
     state: ItemState,
+    /// When it started encoding, for how long it took.
+    started: Option<std::time::Instant>,
 }
 
 /// Where an item is in its life. Progress is not held here: the in-flight
@@ -41,7 +43,11 @@ struct Item {
 pub(super) enum ItemState {
     Waiting,
     Running,
-    Done,
+    /// How long it took, and the file's size where it is one file.
+    Done {
+        seconds: u32,
+        bytes: u64,
+    },
     Failed(String),
 }
 
@@ -193,6 +199,7 @@ pub(super) fn queue_add(
         spec: spec.clone(),
         out_path: with_format_extension(out_path, &spec.codec),
         state: ItemState::Waiting,
+        started: None,
     });
     if start {
         guard.running = true;
@@ -239,7 +246,10 @@ pub(super) fn queue_list() -> Vec<super::QueueRow> {
                         encoder: encoder.unwrap_or_default(),
                     }
                 }
-                ItemState::Done => super::QueueRowState::Done,
+                ItemState::Done { seconds, bytes } => super::QueueRowState::Done {
+                    seconds: *seconds,
+                    bytes: *bytes,
+                },
                 ItemState::Failed(error) => super::QueueRowState::Failed(error.clone()),
             },
         })
@@ -287,7 +297,7 @@ pub(super) fn move_refusal(state: &ItemState) -> Option<&'static str> {
     match state {
         ItemState::Waiting => None,
         ItemState::Running => Some("that export is already running"),
-        ItemState::Done | ItemState::Failed(_) => Some("that export has already run"),
+        ItemState::Done { .. } | ItemState::Failed(_) => Some("that export has already run"),
     }
 }
 
@@ -378,6 +388,7 @@ fn pump(run: &mut Run) {
         match launch(run, &doc, comp, &spec, &out_path) {
             Ok(()) => {
                 run.queue[index].state = ItemState::Running;
+                run.queue[index].started = Some(std::time::Instant::now());
                 run.current = Some(id);
             }
             Err(error) => run.queue[index].state = ItemState::Failed(error),
@@ -458,7 +469,13 @@ fn drain(run: &mut Run) {
             if let Some(item) = run.queue.iter_mut().find(|item| item.id == id) {
                 item.state = match &state {
                     State::Failed { error } => ItemState::Failed(error.clone()),
-                    _ => ItemState::Done,
+                    // A sequence's path names no one file, so it has no size.
+                    _ => ItemState::Done {
+                        seconds: item.started.map_or(0, |at| {
+                            u32::try_from(at.elapsed().as_secs()).unwrap_or(u32::MAX)
+                        }),
+                        bytes: std::fs::metadata(&item.out_path).map_or(0, |m| m.len()),
+                    },
                 };
                 // The ticks the dialogue set, honoured here rather than by
                 // whatever window happens to be watching: an export that
@@ -467,7 +484,7 @@ fn drain(run: &mut Run) {
                 // left running wants the sound *and* the folder — and the
                 // noise is silent, never an error, when no sound has been
                 // supplied.
-                if matches!(item.state, ItemState::Done) {
+                if matches!(item.state, ItemState::Done { .. }) {
                     if item.spec.make_a_noise {
                         lumit_render::export::play_done_sound();
                     }

@@ -97,6 +97,9 @@ pub struct BridgeKeyBinding {
     /// rather than hides. One chord per row — no shipped action carries two,
     /// so a list here would be structure with nothing to hold.
     pub chord: String,
+    /// The chord Lumit ships it with, empty when it ships unbound: what the
+    /// row's Reset puts back, so the page can mark a row that differs.
+    pub stock: String,
 }
 
 /// One context's worth of rows, with the heading to put above them — the shape
@@ -168,15 +171,18 @@ fn with_keymap<R>(f: impl FnOnce(&mut Keymap) -> R) -> R {
 }
 
 #[frb(ignore)]
-fn row(km: &Keymap, context: KeyContext, action: &ActionId) -> BridgeKeyBinding {
+fn row(km: &Keymap, stock: &Keymap, context: KeyContext, action: &ActionId) -> BridgeKeyBinding {
+    let chord = |map: &Keymap| {
+        map.binding_for(context, action)
+            .map(ToString::to_string)
+            .unwrap_or_default()
+    };
     BridgeKeyBinding {
         context: context.into(),
         action: action.0.clone(),
         description: action.description(),
-        chord: km
-            .binding_for(context, action)
-            .map(ToString::to_string)
-            .unwrap_or_default(),
+        chord: chord(km),
+        stock: chord(stock),
     }
 }
 
@@ -189,6 +195,7 @@ fn row(km: &Keymap, context: KeyContext, action: &ActionId) -> BridgeKeyBinding 
 #[frb(sync)]
 #[must_use]
 pub fn keymap_groups() -> Vec<BridgeKeymapGroup> {
+    let defaults = lumit_keymap::defaults::default_keymap();
     with_keymap(|km| {
         KeyContext::ALL
             .iter()
@@ -198,7 +205,6 @@ pub fn keymap_groups() -> Vec<BridgeKeymapGroup> {
                 // lost the key to, from the defaults or left unbound: a row
                 // that goes when its chord is taken can never be given one
                 // again.
-                let defaults = lumit_keymap::defaults::default_keymap();
                 let mut actions: Vec<ActionId> = Vec::new();
                 let known = km
                     .bindings
@@ -214,7 +220,10 @@ pub fn keymap_groups() -> Vec<BridgeKeymapGroup> {
                 BridgeKeymapGroup {
                     context: (*context).into(),
                     label: context.label().to_string(),
-                    bindings: actions.iter().map(|a| row(km, *context, a)).collect(),
+                    bindings: actions
+                        .iter()
+                        .map(|a| row(km, &defaults, *context, a))
+                        .collect(),
                 }
             })
             .filter(|g| !g.bindings.is_empty())
@@ -227,6 +236,7 @@ pub fn keymap_groups() -> Vec<BridgeKeymapGroup> {
 #[frb(sync)]
 #[must_use]
 pub fn keymap_search(query: String) -> Vec<BridgeKeyBinding> {
+    let defaults = lumit_keymap::defaults::default_keymap();
     with_keymap(|km| {
         km.search(&query)
             .into_iter()
@@ -235,6 +245,10 @@ pub fn keymap_search(query: String) -> Vec<BridgeKeyBinding> {
                 action: b.action.0.clone(),
                 description: b.action.description(),
                 chord: b.chord.to_string(),
+                stock: defaults
+                    .binding_for(b.context, &b.action)
+                    .map(ToString::to_string)
+                    .unwrap_or_default(),
             })
             .collect()
     })
