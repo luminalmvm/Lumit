@@ -1766,8 +1766,10 @@ class _SourceBarState extends State<_SourceBar>
   bool _canFit = false;
   int? _fitAskedAt;
 
-  /// How wide the bar has to be to show Replace and Fit to fill as well.
-  static const double _roomForEveryEdit = 560;
+  /// How wide the bar has to be to show Replace and Fit to fill as well, and
+  /// to show the steps and the jumps to the marks beside Play.
+  static const double _roomForEveryEdit = 660;
+  static const double _roomForSteps = 420;
 
   ViewerSurface get view => widget.view;
   BridgeMediaInfo get facts => widget.facts;
@@ -1884,14 +1886,17 @@ class _SourceBarState extends State<_SourceBar>
     final face = t.mono.copyWith(fontSize: viewerTimecodeSize);
     final label = face.copyWith(color: t.textMuted);
     final value = face.copyWith(color: t.textSecondary);
+    // The length in the marked stretch's own tint, so it reads as that
+    // stretch on the strip above.
+    final marked = face.copyWith(color: t.accent);
     final whole = TextSpan(children: [
       TextSpan(text: '${l10n.sourceMarkIn} ', style: label),
       TextSpan(text: '${at(a)}   ', style: value),
       TextSpan(text: '${l10n.sourceMarkOut} ', style: label),
       TextSpan(text: '${at(b)}   ', style: value),
-      TextSpan(text: '$length   ', style: label),
+      TextSpan(text: '$length   ', style: marked),
     ]);
-    final short = TextSpan(text: '$length   ', style: label);
+    final short = TextSpan(text: '$length   ', style: marked);
     return LayoutBuilder(builder: (context, box) {
       double wide(TextSpan s) {
         final p = TextPainter(text: s, textDirection: TextDirection.ltr)
@@ -1906,12 +1911,18 @@ class _SourceBarState extends State<_SourceBar>
           : wide(short) <= box.maxWidth
               ? short
               : null;
+      final text = shown == null
+          ? null
+          : Text.rich(shown, key: const ValueKey('source-marks'), maxLines: 1);
       return Align(
         alignment: Alignment.centerRight,
-        child: shown == null
-            ? null
-            : Text.rich(shown,
-                key: const ValueKey('source-marks'), maxLines: 1),
+        // The length alone says the marks in full when the pointer asks.
+        child: text != null && identical(shown, short)
+            ? LumitTooltip(
+                message: '${l10n.sourceMarkIn} ${at(a)}   '
+                    '${l10n.sourceMarkOut} ${at(b)}',
+                child: text)
+            : text,
       );
     });
   }
@@ -1939,8 +1950,32 @@ class _SourceBarState extends State<_SourceBar>
       padding: EdgeInsets.symmetric(horizontal: viewerStripPaddingFor(t)),
       child: LayoutBuilder(builder: (context, box) {
       final wide = box.maxWidth >= _roomForEveryEdit;
+      final steps = box.maxWidth >= _roomForSteps;
+      final last = LumitUiState.framesOf(facts) - 1;
+      // A step or a jump to a mark, the Viewer's own glyphs. A jump with no
+      // mark to go to greys.
+      Widget mark(String id, LumitIcon icon, String tip, int? frame,
+              {String? action}) =>
+          viewerBarMark(
+            key: ValueKey('source-$id'),
+            icon: icon,
+            colour: frame == null ? t.textDisabled : t.textMuted,
+            onPressed: frame == null
+                ? null
+                : () => ui.seekFootageView(view, frame.clamp(0, last)),
+            tip: tip,
+            action: action,
+          );
       return Row(
         children: [
+          if (steps) ...[
+            mark('go-in', LumitIcon.toStart, l10n.sourceGoToIn, view.sourceIn,
+                action: 'cut.goto.in'),
+            viewerBarGapBox(viewerTransportGap),
+            mark('step-back', LumitIcon.previousFrame,
+                l10n.tipTransportPrevious, view.sourceFrame - 1),
+            viewerBarGapBox(viewerTransportGap),
+          ],
           viewerBarMark(
             key: const ValueKey('source-play'),
             icon: _ticker.isActive ? LumitIcon.pause : LumitIcon.play,
@@ -1948,6 +1983,14 @@ class _SourceBarState extends State<_SourceBar>
             onPressed: _toggle,
             tip: _ticker.isActive ? l10n.sourceStop : l10n.sourcePlay,
           ),
+          if (steps) ...[
+            viewerBarGapBox(viewerTransportGap),
+            mark('step-forward', LumitIcon.nextFrame, l10n.tipTransportNext,
+                view.sourceFrame + 1),
+            viewerBarGapBox(viewerTransportGap),
+            mark('go-out', LumitIcon.toEnd, l10n.sourceGoToOut, view.sourceOut,
+                action: 'cut.goto.out'),
+          ],
           const SizedBox(width: viewerBarGap),
           button('mark-in', l10n.sourceMarkIn, l10n.sourceMarkInTip,
               () => ui.markSource(view, markIn: true),

@@ -4000,7 +4000,7 @@ class LumitUiState extends ChangeNotifier {
     final picked = cutClip.value;
     final marked = _marked(view);
     if (comp == null || picked == null || marked == null) return;
-    _sourceEdit(() => comp.cutReplace(
+    _sourceEdit(name: 'Replace', () => comp.cutReplace(
           clip: picked.clip,
           footage: marked.footage,
           sourceIn: marked.from,
@@ -4016,7 +4016,7 @@ class LumitUiState extends ChangeNotifier {
     final comp = _selectedComp;
     final marked = _marked(view);
     if (comp == null || marked == null) return;
-    final done = _sourceEdit(() => comp.cutFitToFill(
+    final done = _sourceEdit(name: 'Fit to fill', () => comp.cutFitToFill(
           target: _sourceTarget(),
           footage: marked.footage,
           sourceIn: marked.from,
@@ -4069,13 +4069,19 @@ class LumitUiState extends ChangeNotifier {
 
   /// Run a source-side edit, say why when it is refused, and whether it went
   /// through.
-  bool _sourceEdit(BridgeCutResult Function() edit) {
+  bool _sourceEdit(BridgeCutResult Function() edit, {String? name}) {
     final BridgeCutResult result;
+    // Named in the History list where the edit has a name of its own.
+    final project = name == null ? null : _app.project;
+    project?.beginUndoGroup();
+    if (name != null) project?.nameUndoGroup(name: name);
     try {
       result = edit();
     } catch (_) {
       // The item or the composition went away under the press.
       return false;
+    } finally {
+      project?.endUndoGroup();
     }
     reportCut(result);
     if (result != BridgeCutResult.done) return false;

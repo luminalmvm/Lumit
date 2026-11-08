@@ -654,6 +654,12 @@ class ProjectReference {
   void jumpHistory({required int applied}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceJumpHistory(that: this, applied: applied);
 
+  /// Call the step the open undo group folds into `name` in the History
+  /// list, rather than after the first thing done in it. English, translated
+  /// on arrival like every other step's name. Does nothing with no group open.
+  void nameUndoGroup({required String name}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceNameUndoGroup(that: this, name: name);
+
   /// Add a composition, filed into the Compositions auto-folder, as one undo
   /// step. A blank name gets the next "Comp N".
   ///

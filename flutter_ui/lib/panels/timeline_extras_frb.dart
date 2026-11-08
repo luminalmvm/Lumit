@@ -1827,6 +1827,9 @@ class TimelineRuler extends StatefulWidget {
   /// row. Null for a ruler with no cache to show.
   final Widget? cache;
 
+  /// Rows a view adds under the ground's menu, for edits of its own.
+  final List<Widget> Function(VoidCallback close)? groundRows;
+
   const TimelineRuler({
     super.key,
     required this.comp,
@@ -1840,6 +1843,7 @@ class TimelineRuler extends StatefulWidget {
     this.onMarkersChanged,
     this.onMarkerPreview,
     this.cache,
+    this.groundRows,
     this.snapTargets = const [],
     this.magnet = true,
   });
@@ -2248,6 +2252,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
         frame: frame,
         addMarker: widget.onMarkersChanged == null ? null : _createMarkerAt,
         setWork: widget.onWorkArea,
+        extra: widget.groundRows,
       );
 
   /// Whether [x], in the ruler's own pixels, lands in either work-area
@@ -3634,6 +3639,7 @@ void addMarkerFrb(
 
 /// The menu on a ruler's ground, with [frame] as its "here": a marker there,
 /// and the work area's ends. Either half stays out where its callback is null.
+/// [extra] is a view's own rows, under them.
 Future<void> showRulerMenu(
   BuildContext context, {
   required CompositionReference comp,
@@ -3641,6 +3647,7 @@ Future<void> showRulerMenu(
   required int frame,
   Future<void> Function(int frame)? addMarker,
   ValueChanged<BridgeSpan?>? setWork,
+  List<Widget> Function(VoidCallback close)? extra,
 }) async {
   if (setWork == null && addMarker == null) return;
   final picked = await showMenuAt<String>(
@@ -3651,7 +3658,7 @@ Future<void> showRulerMenu(
         MenuRow(
             key: const ValueKey('tl-ruler-add-marker'),
             onPressed: () => close('marker'),
-            child: Text(l10n.menuAddMarkerHere)),
+            child: MenuLabel(l10n.menuAddMarkerHere, action: 'marker.add')),
       if (setWork != null) ...[
         if (addMarker != null) const MenuDivider(),
         MenuRow(
@@ -3668,6 +3675,7 @@ Future<void> showRulerMenu(
             onPressed: () => close('work-clear'),
             child: Text(l10n.workAreaClear)),
       ],
+      if (extra != null) ...extra(() => close(null)),
     ],
   );
   if (picked == null || !context.mounted) return;

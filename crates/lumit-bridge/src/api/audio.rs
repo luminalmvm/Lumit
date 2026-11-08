@@ -229,6 +229,41 @@ impl LayerReference {
         Ok(levels)
     }
 
+    /// The gain line each of `clips` needs for the integrated loudness of the
+    /// stretch of the file it plays to land at `target_lufs`. A clip that isn't
+    /// on this layer, has no sound, or is too short or too quiet to measure
+    /// isn't in the answer.
+    ///
+    /// Reads and writes nothing in the document, as [`Self::normalise_clips`].
+    /// Not sync, because it decodes the stretch.
+    pub fn loudness_clips(
+        &self,
+        clips: Vec<uuid::Uuid>,
+        target_lufs: f64,
+    ) -> Result<Vec<BridgeClipLevel>, BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Sequence { clips: held } = &layer.kind else {
+            return Ok(Vec::new());
+        };
+        let mut levels = Vec::with_capacity(clips.len());
+        for clip in held.iter().filter(|c| clips.contains(&c.id)) {
+            let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+                continue;
+            };
+            let a = clip.source_time(clip.place_start.to_f64());
+            let b = clip.source_time(clip.place_end().to_f64());
+            let lufs =
+                self.source_loudness(item, clip.audio_streams.places(), a.min(b), a.max(b))?;
+            if let Some(lufs) = lufs {
+                levels.push(BridgeClipLevel {
+                    clip: clip.id,
+                    db: target_lufs - lufs,
+                });
+            }
+        }
+        Ok(levels)
+    }
+
     /// The Volume this layer needs for its loudest sample, over the stretch of
     /// the file it plays, to land at `target_db`. None for a layer with no file
     /// of its own to read, or one with nothing but silence on it.
@@ -299,6 +334,65 @@ impl LayerReference {
         #[cfg(not(feature = "media"))]
         {
             let _ = (item, streams, edges);
+            Ok(None)
+        }
+    }
+}
+
+impl LayerReference {
+    /// The integrated loudness, in LUFS, of `item`'s sound from `from` to `to`
+    /// seconds of the file, read a piece at a time. None without a sound to
+    /// read, or for a stretch too short or too quiet to gate a block.
+    #[frb(ignore)]
+    fn source_loudness(
+        &self,
+        item: uuid::Uuid,
+        streams: &[u32],
+        from: f64,
+        to: f64,
+    ) -> Result<Option<f64>, BridgeError> {
+        #[cfg(feature = "media")]
+        {
+            use lumit_media::audio::{SoundReader, SoundSource};
+            const RATE: u32 = 48_000;
+            const PIECE: u64 = 1 << 16;
+            let path = {
+                let project = self.project()?;
+                let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
+                let snapshot = project.store.snapshot();
+                let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(item)
+                else {
+                    return Ok(None);
+                };
+                crate::api::footage::FootageReference::resolve_path(&project, footage)
+            };
+            let Some(path) = path else {
+                return Ok(None);
+            };
+            let Ok(mut reader) = SoundReader::open(&SoundSource::streams_of(path, streams), RATE)
+            else {
+                return Ok(None);
+            };
+            let mut meter = lumit_audio::loudness::Loudness::new(RATE);
+            let frame = |t: f64| (t.max(0.0) * f64::from(RATE)) as u64;
+            let (mut at, end) = (frame(from), frame(to));
+            while at < end {
+                let want = (end - at).min(PIECE) as usize;
+                let Ok((piece, _)) = reader.read(at, want, false) else {
+                    return Ok(None);
+                };
+                if piece.is_empty() {
+                    break;
+                }
+                meter.add(&piece);
+                at += (piece.len() / 2) as u64;
+            }
+            let lufs = f64::from(meter.reading().integrated);
+            Ok(lufs.is_finite().then_some(lufs))
+        }
+        #[cfg(not(feature = "media"))]
+        {
+            let _ = (item, streams, from, to);
             Ok(None)
         }
     }

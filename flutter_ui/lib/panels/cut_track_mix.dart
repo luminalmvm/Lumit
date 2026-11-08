@@ -16,12 +16,11 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
-import '../shell/number_dialog_frb.dart' show askNumberFrb;
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
-import 'mixer_panel_frb.dart' show panLabel;
+import 'mixer_panel_frb.dart' show mixValueRows, panLabel;
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'volume_band_frb.dart'
     show BandKind, volumeBandFloorDb, volumeBandTopDb;
@@ -104,6 +103,40 @@ class CutTrackMix extends StatelessWidget {
       onChanged();
     }
 
+    // The bar's right-click: the Mixer's own rows for the same value.
+    MixMenu menu(
+      BridgeScalar scalar,
+      void Function(BridgeScalar) set, {
+      required String reset,
+      required String ask,
+      required String title,
+      required double min,
+      required double max,
+      double usual = 0,
+      int decimals = 1,
+      String? suffix,
+      List<(String, double)> sides = const [],
+    }) =>
+        (close, tickColumn) => mixValueRows(
+              context: context,
+              comp: comp,
+              frame: frame,
+              scalar: scalar,
+              write: set,
+              onChanged: onChanged,
+              close: close,
+              resetLabel: reset,
+              askLabel: ask,
+              title: title,
+              min: min,
+              max: max,
+              reset: usual,
+              decimals: decimals,
+              suffix: suffix,
+              sides: sides,
+              tickColumn: tickColumn,
+            );
+
     // A locked track, or a value an expression drives, is shown and not
     // dragged.
     bool live(BridgeScalar s) =>
@@ -111,6 +144,8 @@ class CutTrackMix extends StatelessWidget {
 
     if (!sound) {
       final level = info.transform.opacity;
+      void setLevel(BridgeScalar s) =>
+          layer.setTransform(prop: BridgeTransformProp.opacity, value: s);
       return _MixBar(
         key: ValueKey<String>('ctl-mix-level-$id'),
         label: l10n.cutMixLevel,
@@ -120,13 +155,17 @@ class CutTrackMix extends StatelessWidget {
         reset: 100,
         fill: t.accent,
         enabled: live(level),
-        suffix: l10n.unitSymbolPercent,
         text: (v) => '${v.round()}${l10n.unitSymbolPercent}',
-        onCommit: (v) => write(
-            level,
-            v,
-            (s) => layer.setTransform(
-                prop: BridgeTransformProp.opacity, value: s)),
+        onCommit: (v) => write(level, v, setLevel),
+        menu: menu(level, setLevel,
+            reset: l10n.cutResetLevel,
+            ask: l10n.mixerSetLevel,
+            title: l10n.cutMixLevel,
+            min: 0,
+            max: 100,
+            usual: 100,
+            decimals: 0,
+            suffix: l10n.unitSymbolPercent),
       );
     }
     final volume = info.volumeDb;
@@ -145,7 +184,13 @@ class CutTrackMix extends StatelessWidget {
             ? l10n.volumeNegInf
             : '${v.toStringAsFixed(1)} ${l10n.unitSymbolDb}',
         onCommit: (v) => write(volume, v, (s) => layer.setVolumeDb(value: s)),
-        suffix: l10n.unitSymbolDb,
+        menu: menu(volume, (s) => layer.setVolumeDb(value: s),
+            reset: l10n.audioResetVolume,
+            ask: l10n.mixerSetLevel,
+            title: l10n.volume,
+            min: volumeBandFloorDb,
+            max: volumeBandTopDb,
+            suffix: ' ${l10n.unitSymbolDb}'),
         band: (
           label: l10n.cutVolumeEnvelope,
           action: 'cut.envelope.volume',
@@ -166,6 +211,14 @@ class CutTrackMix extends StatelessWidget {
         enabled: live(pan),
         text: panLabel,
         onCommit: (v) => write(pan, v, (s) => layer.setPan(value: s)),
+        menu: menu(pan, (s) => layer.setPan(value: s),
+            reset: l10n.audioResetPan,
+            ask: l10n.mixerSetPan,
+            title: l10n.audioPan,
+            min: -100,
+            max: 100,
+            decimals: 0,
+            sides: [(l10n.mixerPanLeft, -100), (l10n.mixerPanRight, 100)]),
         band: (
           label: l10n.cutPanEnvelope,
           action: 'cut.envelope.pan',
@@ -189,6 +242,10 @@ class CutTrackMix extends StatelessWidget {
   }
 }
 
+/// A bar's own menu rows, given how to close the menu and whether to leave
+/// room for a tick.
+typedef MixMenu = List<Widget> Function(VoidCallback close, bool tickColumn);
+
 /// One thin bar: the fill runs from [origin] to the value, the label and the
 /// value are written over it.
 class _MixBar extends StatefulWidget {
@@ -207,8 +264,7 @@ class _MixBar extends StatefulWidget {
   /// False shows the value dimmed and takes no drag.
   final bool enabled;
 
-  /// The unit the number box asks in.
-  final String? suffix;
+  final MixMenu menu;
 
   /// The envelope that draws this same value across the lane, for the menu.
   final ({String label, String action, bool shown, VoidCallback toggle})? band;
@@ -224,8 +280,8 @@ class _MixBar extends StatefulWidget {
     required this.text,
     required this.onCommit,
     required this.enabled,
+    required this.menu,
     this.origin,
-    this.suffix,
     this.band,
   });
 
@@ -237,46 +293,16 @@ class _MixBarState extends State<_MixBar> {
   /// The value while a drag runs, null at rest.
   double? _live;
 
-  /// A right click on the bar: type the value, put it back, and the envelope
-  /// that draws it across the lane.
+  /// A right click on the bar: the value's own rows, and the envelope that
+  /// draws it across the lane.
   void _menu(Offset at) {
     final band = widget.band;
-    final changed = widget.value != widget.reset;
     showMenuAt<void>(
       context: context,
       position: at,
       width: 210,
       rows: (close) => [
-        MenuRow(
-          key: const ValueKey('ctl-mix-set'),
-          onPressed: () async {
-            close(null);
-            final typed = await askNumberFrb(
-              context: context,
-              title: widget.label,
-              value: widget.value,
-              min: widget.min,
-              max: widget.max,
-              decimals: 1,
-              suffix: widget.suffix,
-            );
-            if (typed != null && mounted && typed != widget.value) {
-              widget.onCommit(typed);
-            }
-          },
-          child: MenuLabel(l10n.envelopePointSet,
-              ticked: band == null ? null : false),
-        ),
-        MenuRow(
-          key: const ValueKey('ctl-mix-reset'),
-          enabled: changed,
-          onPressed: () {
-            close(null);
-            widget.onCommit(widget.reset);
-          },
-          child: MenuLabel(l10n.reset,
-              enabled: changed, ticked: band == null ? null : false),
-        ),
+        ...widget.menu(() => close(null), band != null),
         if (band != null) ...[
           const MenuDivider(),
           MenuRow(

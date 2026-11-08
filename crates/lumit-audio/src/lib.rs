@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::sync::Arc;
 
 pub mod beat;
-mod loudness;
+pub mod loudness;
 pub mod meter;
 pub mod mix;
 pub mod peaks;

@@ -449,7 +449,7 @@ class CutTrackPainter extends CustomPainter {
     }
     final header = own ? _soundHeader(box) : 0.0;
     _name(canvas, info.name, box,
-        from: clipEdgeWidth + 4, band: header > 0 ? header : null);
+        gainDb: 0, from: clipEdgeWidth + 4, band: header > 0 ? header : null);
   }
 
   /// The outline of the clip's whole source behind its box while an edge is
@@ -505,18 +505,28 @@ class CutTrackPainter extends CustomPainter {
   /// [band] is how much of the box's height the name line has, from its top:
   /// all of it for a picture clip, and the header a sound clip keeps above its
   /// wave.
+  /// The clip's name, and after it its own level while that is off 0 dB, as
+  /// the Audio timeline has it. A long name gives way to the level.
   void _name(Canvas canvas, String name, Rect box,
       {required double from,
+      required double gainDb,
       double? band,
       double room = 0,
       bool ground = false}) {
-    if (name.isEmpty || box.width - from - room < 12) return;
+    final end = box.right - 1 - room;
+    if (name.isEmpty || end - box.left - from < 12) return;
     final text = nameOf(name);
-    canvas.save();
-    canvas.clipRect(Rect.fromLTRB(
-        box.left + 1, box.top + 1, box.right - 1 - room, box.bottom - 1));
+    final level =
+        gainDb.abs() >= 0.05 ? nameOf(clipGainWords(gainDb)) : null;
+    const pad = 4.0;
+    final chipWide = level == null ? 0.0 : level.width + pad * 2;
+    final shows = level != null && end - box.left - from >= chipWide + 16;
     final at = Offset(
         box.left + from, box.top + ((band ?? box.height) - text.height) / 2);
+    final nameEnd = shows ? end - chipWide - 3 : end;
+    canvas.save();
+    canvas.clipRect(
+        Rect.fromLTRB(box.left + 1, box.top + 1, nameEnd, box.bottom - 1));
     // A sound clip on a track too short for a header has its name over its
     // wave, so the name stands on a ground of its own.
     if (ground) {
@@ -528,6 +538,15 @@ class CutTrackPainter extends CustomPainter {
     }
     text.paint(canvas, at);
     canvas.restore();
+    if (!shows) return;
+    final left = min(at.dx + text.width + 4, end - chipWide);
+    final high = min(level.height + 2, (band ?? box.height) - 2);
+    final chip = Rect.fromLTWH(left,
+        box.top + ((band ?? box.height) - high) / 2, chipWide, high);
+    canvas.drawRRect(RRect.fromRectAndRadius(chip, Radius.circular(radius)),
+        Paint()..color = colours.handleFill.withValues(alpha: 0.9));
+    level.paint(
+        canvas, Offset(chip.left + pad, chip.top + (high - level.height) / 2));
   }
 
   /// The header a sound clip keeps for its name above its wave, the Audio
@@ -571,6 +590,7 @@ class CutTrackPainter extends CustomPainter {
       final chips = _chips(canvas, clip, box,
           band: header > 0 ? header : null, badges: badges);
       _name(canvas, clip.sourceName, box,
+          gainDb: clip.gainDb,
           band: header > 0 ? header : null,
           ground: true,
           room: chips,
@@ -648,10 +668,12 @@ class CutTrackPainter extends CustomPainter {
       canvas.restore();
       if (!strip) from += wide + 2;
     }
-    final nameBand =
-        badges.isEmpty && !strip ? above.height : min(above.height, 20.0);
+    // The name keeps to the top band whether the buttons show or not, so it
+    // stays put as the pointer comes and goes.
+    final nameBand = min(above.height, 20.0);
     final chips = _chips(canvas, clip, box, band: nameBand, badges: badges);
     _name(canvas, clip.sourceName, box,
+        gainDb: clip.gainDb,
         band: nameBand,
         room: chips,
         ground: strip,
@@ -762,8 +784,6 @@ class CutTrackPainter extends CustomPainter {
         (nameOf('${past > 0 ? '+' : ''}${past.toStringAsFixed(2)}'), true),
       if (clip.blend case final blend? when blend < blendNames.length)
         (nameOf(blendNames[blend]), true),
-      // Its own level off 0 dB, so a normalised clip reads as one.
-      if (clip.gainDb.abs() >= 0.05) (nameOf(clipGainWords(clip.gainDb)), true),
       // Said by the fx button where the clip has room for one.
       if (clip.effects.isNotEmpty && badges.isEmpty) (nameOf('fx'), clip.fx),
     ];

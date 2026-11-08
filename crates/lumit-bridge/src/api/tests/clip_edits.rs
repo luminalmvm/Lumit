@@ -132,3 +132,57 @@ fn a_kind_keeps_its_rows_and_goes_with_its_overlap() {
     assert_eq!(off.expect("answered"), BridgeCutResult::Done);
     assert_eq!(row_clips(&top)[1].transition, None, "gone with the overlap");
 }
+
+/// A dissolve's linked sound with nothing across fades over exactly the
+/// pictures' overlap, and taking the dissolve off brings its edge back.
+#[test]
+fn a_linked_sound_fades_across_the_pictures_overlap() {
+    use lumit_core::sequence::ClipSource;
+    let (project, comp, top, length) = cut_row(2);
+    let footage = FootageReference {
+        project: project.id,
+        id: match row_clips(&top)[0].source {
+            ClipSource::Footage(id) => id,
+            other => panic!("a footage clip, not {other:?}"),
+        },
+    };
+    comp.add_audio_layer(&footage, None).expect("placed");
+    let below = comp.get_layers().expect("layers").remove(0);
+    below.convert_to_sequenced().expect("a row of clips");
+    let sound = row_clips(&below)[0].id;
+    let done = comp.cut_trim(sound, 0, length, false, false, false, None);
+    assert_eq!(done.expect("trimmed"), BridgeCutResult::Done);
+    let link = Uuid::now_v7();
+    for row in [top, below] {
+        let mut clips = row_clips(&row);
+        clips[0].link = Some(link);
+        row.commit(Op::SetSequenceClips {
+            comp: comp.id(),
+            layer: row.id(),
+            clips,
+        })
+        .expect("linked");
+    }
+    let picture = row_clips(&top)[0].id;
+
+    let done = comp.cut_transition(picture, true, 12, true);
+    assert_eq!(done.expect("made"), BridgeCutResult::Done);
+    assert_eq!(
+        row_frames(&top),
+        [(0, length + 6), (length - 6, 2 * length)]
+    );
+    let (seen, heard) = (row_clips(&top), row_clips(&below).remove(0));
+    assert_eq!(
+        heard.place_end(),
+        seen[0].place_end(),
+        "it ends with the picture"
+    );
+    let overlap = seen[0].place_end().checked_sub(seen[1].place_start);
+    assert_eq!(Ok(heard.fade_out.seconds), overlap, "and fades across it");
+
+    let done = comp.cut_transition(picture, true, 0, true);
+    assert_eq!(done.expect("taken off"), BridgeCutResult::Done);
+    assert_eq!(row_frames(&below), [(0, length)]);
+    let heard = row_clips(&below).remove(0);
+    assert_eq!(heard.fade_out.seconds, lumit_core::time::Rational::ZERO);
+}

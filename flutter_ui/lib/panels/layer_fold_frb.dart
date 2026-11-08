@@ -2005,12 +2005,15 @@ BridgeRational timeOfSubframe(double frame, int fpsNum, int fpsDen) {
 /// so an exception part-way through a gesture must not cost the session its
 /// history as well. A null [project] — a widget test with no project open —
 /// simply runs [body], which is what leaves this safe to call unconditionally.
-void asOneUndoStep(ProjectReference? project, void Function() body) {
+void asOneUndoStep(ProjectReference? project, void Function() body,
+    {String? name}) {
   if (project == null) {
     body();
     return;
   }
   project.beginUndoGroup();
+  // The step's name in the History list, where the command has its own.
+  if (name != null) project.nameUndoGroup(name: name);
   try {
     body();
   } finally {

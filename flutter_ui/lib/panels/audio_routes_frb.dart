@@ -310,6 +310,68 @@ List<Widget> audioLayerRows({
   ];
 }
 
+/// A sound clip's own rows, the same in the Cut and Audio timelines: whether its
+/// track keeps its pitch, and the picked clips' level brought to the Normalise
+/// target or back to 0 dB. A row given no action is left out, except Reset gain
+/// where [resetGainShown], which greys while no picked clip is off 0 dB.
+/// [tickColumn] leaves room for a tick on every row, for a menu whose rows all
+/// keep one. [onLoudness] normalises to a loudness, in LUFS, picked from a list.
+List<Widget> soundClipRows({
+  required VoidCallback close,
+  bool keepPitch = false,
+  VoidCallback? onKeepPitch,
+  VoidCallback? onNormalise,
+  ValueChanged<double>? onLoudness,
+  bool resetGainShown = false,
+  VoidCallback? onResetGain,
+  bool tickColumn = false,
+}) {
+  Widget row(String key, String label, VoidCallback? act, {bool? ticked}) =>
+      MenuRow(
+        key: ValueKey<String>('sound-clip-$key'),
+        enabled: act != null,
+        onPressed: () {
+          close();
+          act?.call();
+        },
+        child: MenuLabel(label,
+            ticked: ticked ?? (tickColumn ? false : null),
+            enabled: act != null),
+      );
+  return [
+    if (onKeepPitch != null)
+      row('keep-pitch', l10n.menuKeepPitch, onKeepPitch, ticked: keepPitch),
+    if (onNormalise != null) row('normalise', l10n.audioNormalise, onNormalise),
+    if (onLoudness != null)
+      SubmenuRow(
+        key: const ValueKey<String>('sound-clip-loudness'),
+        closeParent: close,
+        submenu: (dismiss) => FloatSurface(
+          width: 130,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // The common targets for streaming, podcasts and broadcast.
+              for (final lufs in const [-14.0, -16.0, -23.0])
+                MenuRow(
+                  key: ValueKey<String>('sound-clip-loudness-${-lufs.round()}'),
+                  onPressed: () {
+                    dismiss();
+                    onLoudness(lufs);
+                  },
+                  child: Text(l10n.audioLoudnessTarget('\u2212${-lufs.round()}')),
+                ),
+            ],
+          ),
+        ),
+        child: MenuLabel(l10n.audioNormaliseLoudness,
+            ticked: tickColumn ? false : null),
+      ),
+    if (resetGainShown) row('reset-gain', l10n.clipResetGain, onResetGain),
+  ];
+}
+
 /// What a track head adds to [audioLayerRows], the same in the Cut and Audio
 /// timelines. A row greys where it cannot act now: a track with no clips has
 /// none to select, and the top one cannot go up. [lane] is the choice of

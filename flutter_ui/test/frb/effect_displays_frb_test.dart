@@ -6,6 +6,7 @@
 // what a curve editor must not do is look right and commit something else.
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -217,6 +218,11 @@ void main() {
       p.layer.addEffect(name: 'linear_wipe');
       await mount(tester, p);
       final id = p.layer.getEffects().single.id();
+      // The menu reads the clipboard before it opens, so Paste can grey.
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async => null);
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
 
       await tester.tap(find.byKey(ValueKey<String>('fx-float-$id-completion')),
           buttons: kSecondaryButton);

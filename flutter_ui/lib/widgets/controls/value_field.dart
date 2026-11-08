@@ -894,14 +894,14 @@ class _DragValueFieldState extends State<DragValueField>
                       : widget.keyed
                           ? t.animated
                           // A bare number has no well to say "editable", so it
-                          // rests where the drawing puts it, a bar's own
-                          // secondary reading. A number at its default does too,
+                          // rests muted at its default and bright once changed.
+                          // A number in a well at its default rests a step down,
                           // so one that has been changed stands out down a list.
-                          : widget.bare || _atDefault
-                              ? (_hover || _focused
-                                  ? t.textPrimary
-                                  : t.textSecondary)
-                              : t.textPrimary,
+                          : _hover || _focused || !_atDefault
+                              ? t.textPrimary
+                              : widget.bare
+                                  ? t.textMuted
+                                  : t.textSecondary,
                 ),
               ),
             ),

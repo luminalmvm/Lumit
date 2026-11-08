@@ -178,6 +178,102 @@ BridgeScalar scalarWithKeyToggled(
   ]);
 }
 
+/// The rows a track's Volume, Pan or Level gives wherever it is pressed, the
+/// Mixer's fader and pot and the Cut timeline's head bars alike: back to its
+/// usual value, a number asked for, any sides it can be thrown to, and a key at
+/// the playhead.
+List<Widget> mixValueRows({
+  required BuildContext context,
+  required CompositionReference comp,
+  required int frame,
+  required BridgeScalar scalar,
+  required void Function(BridgeScalar next) write,
+  required VoidCallback onChanged,
+  required VoidCallback close,
+  required String resetLabel,
+  required String askLabel,
+  required String title,
+  required double min,
+  required double max,
+  required int decimals,
+  double reset = 0,
+  String? suffix,
+  List<(String, double)> sides = const [],
+  bool tickColumn = false,
+}) {
+  // Room for a tick, when a row the caller adds below wears one.
+  final tick = tickColumn ? false : null;
+  final value = scalar is BridgeScalar_Static
+      ? scalar.field0
+      : sampledScalar(scalar, timeOfFrame(comp, frame));
+  final keyed = scalar is BridgeScalar_Keyframed &&
+      scalar.field0.any((k) => comp.frameAtTime(time: k.time) == frame);
+  void put(double v) {
+    try {
+      write(scalarWithValueAt(scalar, v, comp, frame));
+    } catch (_) {
+      // A locked layer refuses, and quietly.
+      return;
+    }
+    onChanged();
+  }
+
+  return [
+    MenuRow(
+      key: const ValueKey<String>('mixer-value-reset'),
+      enabled: value != reset,
+      onPressed: () {
+        close();
+        put(reset);
+      },
+      child: MenuLabel(resetLabel, enabled: value != reset, ticked: tick),
+    ),
+    MenuRow(
+      key: const ValueKey<String>('mixer-value-ask'),
+      onPressed: () async {
+        close();
+        final typed = await askNumberFrb(
+            context: context,
+            title: title,
+            value: value,
+            min: min,
+            max: max,
+            decimals: decimals,
+            suffix: suffix);
+        if (typed != null && context.mounted) put(typed);
+      },
+      child: MenuLabel(askLabel, ticked: tick),
+    ),
+    for (final (label, side) in sides)
+      MenuRow(
+        key: ValueKey<String>('mixer-value-side-$side'),
+        onPressed: () {
+          close();
+          put(side);
+        },
+        child: MenuLabel(label, ticked: tick),
+      ),
+    // A value an expression drives has no keys to add.
+    if (scalar is! BridgeScalar_Expression) ...[
+      const MenuDivider(),
+      MenuRow(
+        key: const ValueKey<String>('mixer-value-key'),
+        onPressed: () {
+          close();
+          try {
+            write(scalarWithKeyToggled(scalar, value, comp, frame));
+          } catch (_) {
+            return;
+          }
+          onChanged();
+        },
+        child: MenuLabel(keyed ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
+            ticked: tick),
+      ),
+    ],
+  ];
+}
+
 class MixerPanelFrb extends StatefulWidget {
   /// A test's own feed, silent and hand-pulsed. The application passes none
   /// and the panel makes its own polling one.
@@ -398,8 +494,12 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                         ),
                       )
                     // A bar under the strips says there are more than the
-                    // panel shows, and where they are.
-                    : Listener(
+                    // panel shows, and where they are. The strips stop a gap
+                    // short of the Master, so a strip cut at the edge fades
+                    // out before its scale meets the Master's.
+                    : Padding(
+                        padding: const EdgeInsets.only(right: _deskGap),
+                        child: Listener(
                         onPointerSignal: _wheel,
                         child: LayoutBuilder(
                         builder: (context, box) {
@@ -412,6 +512,7 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                         thumbVisibility:
                             width * sounding.length > box.maxWidth + 0.5,
                         child: EdgeFade(
+                        reach: _fadeReach,
                         child: ListView(
                         controller: _strips,
                         scrollDirection: Axis.horizontal,
@@ -447,6 +548,7 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                         },
                       ),
                       ),
+                      ),
                 ),
               ),
               _MasterStrip(
@@ -479,6 +581,11 @@ const double _loudnessWidth = 13;
 
 /// The desk's own ground kept beside strips that all fit, for its right-click.
 const double _deskGround = 16;
+
+/// The gap between the strips and the Master, and how far in from a cut edge
+/// the strips fade: most of a part strip, so its numbers never read.
+const double _deskGap = 10;
+const double _fadeReach = 34;
 
 /// How wide each of [count] strips stands on a desk [room] wide. They share
 /// the room, so a spare inch goes to the names. A desk too narrow for all of
@@ -600,8 +707,7 @@ class _MixerStripState extends State<_MixerStrip> {
     );
   }
 
-  /// A fader's or a pot's right-click: back to its usual value, a number asked
-  /// for, a key at the playhead, and any sides it can be thrown to.
+  /// A fader's or a pot's right-click, as [mixValueRows] gives it.
   void _valueMenu(
     Offset at, {
     required BridgeScalar scalar,
@@ -616,69 +722,27 @@ class _MixerStripState extends State<_MixerStrip> {
     List<(String, double)> sides = const [],
   }) {
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    final frame = ui.playheadFrame.value;
-    final value = _sampled(scalar, frame);
-    final keyed = scalar is BridgeScalar_Keyframed &&
-        scalar.field0.any((k) => widget.comp.frameAtTime(time: k.time) == frame);
-    void put(double v) {
-      write(scalarWithValueAt(scalar, v, widget.comp, frame));
-      widget.onChanged();
-    }
-
     showMenuAt<void>(
       context: context,
       position: at,
       width: 190,
-      rows: (close) => [
-        MenuRow(
-          key: const ValueKey<String>('mixer-value-reset'),
-          enabled: value != 0,
-          onPressed: () {
-            close(null);
-            put(0);
-          },
-          child: MenuLabel(resetLabel, enabled: value != 0),
-        ),
-        MenuRow(
-          key: const ValueKey<String>('mixer-value-ask'),
-          onPressed: () async {
-            close(null);
-            final typed = await askNumberFrb(
-                context: context,
-                title: title,
-                value: value,
-                min: min,
-                max: max,
-                decimals: decimals,
-                suffix: suffix);
-            if (typed != null && mounted) put(typed);
-          },
-          child: MenuLabel(askLabel),
-        ),
-        for (final (label, side) in sides)
-          MenuRow(
-            key: ValueKey<String>('mixer-value-side-$side'),
-            onPressed: () {
-              close(null);
-              put(side);
-            },
-            child: MenuLabel(label),
-          ),
-        // A value an expression drives has no keys to add.
-        if (scalar is! BridgeScalar_Expression) ...[
-          const MenuDivider(),
-          MenuRow(
-            key: const ValueKey<String>('mixer-value-key'),
-            onPressed: () {
-              close(null);
-              write(scalarWithKeyToggled(scalar, value, widget.comp, frame));
-              widget.onChanged();
-            },
-            child: MenuLabel(
-                keyed ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe),
-          ),
-        ],
-      ],
+      rows: (close) => mixValueRows(
+        context: context,
+        comp: widget.comp,
+        frame: ui.playheadFrame.value,
+        scalar: scalar,
+        write: write,
+        onChanged: widget.onChanged,
+        close: () => close(null),
+        resetLabel: resetLabel,
+        askLabel: askLabel,
+        title: title,
+        min: min,
+        max: max,
+        decimals: decimals,
+        suffix: suffix,
+        sides: sides,
+      ),
     );
   }
 

@@ -27,7 +27,112 @@ fn running_into<'c>(clips: &'c [Clip], clip: &Clip) -> Option<&'c Clip> {
         .find(|o| o.id != clip.id && follows(o, clip) && clip.place_start < o.place_end())
 }
 
+/// An overlap an edit has made or kept: its two clips, outgoing first, their
+/// links, and the span it covered before the edit and covers now.
+#[frb(ignore)]
+struct Span {
+    ids: (Uuid, Uuid),
+    links: (Option<Uuid>, Option<Uuid>),
+    was: (Rational, Rational),
+    now: (Rational, Rational),
+}
+
+#[frb(ignore)]
+impl Span {
+    /// The overlap of `outgoing` and `incoming` as they were and as `now`
+    /// holds them.
+    fn of(outgoing: &Clip, incoming: &Clip, now: &[Clip]) -> Option<Self> {
+        let out = now.iter().find(|c| c.id == outgoing.id)?;
+        let inc = now.iter().find(|c| c.id == incoming.id)?;
+        Some(Span {
+            ids: (outgoing.id, incoming.id),
+            links: (outgoing.link, incoming.link),
+            was: (incoming.place_start, outgoing.place_end()),
+            now: (inc.place_start, out.place_end()),
+        })
+    }
+}
+
 impl Edit<'_> {
+    /// Fade an edge with nothing across it. When its linked clip has an
+    /// overlap on another row and the edge sat inside it, the edge goes where
+    /// the overlap now ends, as far as its media and the next clip allow, and
+    /// the fade spans the overlap. Otherwise it fades on its own for `length`.
+    fn fade_alone(&mut self, id: Uuid, end_edge: bool, length: Rational, spans: &[Span]) -> Cut {
+        let (r, c) = self.find(id)?;
+        let this = self.rows[r].clips[c].clone();
+        let (clip, seconds) = self
+            .following(&this, end_edge, spans)?
+            .unwrap_or((this, length));
+        let slot = &mut self.rows[r].clips[c];
+        *slot = clip;
+        let seconds = seconds.max(Rational::ZERO).min(slot.place_duration);
+        if end_edge {
+            slot.fade_out.seconds = seconds;
+        } else {
+            slot.fade_in.seconds = seconds;
+        }
+        Ok(())
+    }
+
+    /// `this` with its edge carried to where its linked clip's overlap now
+    /// ends, and how long the fade across that overlap is, or `None` when no
+    /// overlap held the edge or the edge cannot go there.
+    fn following(
+        &self,
+        this: &Clip,
+        end_edge: bool,
+        spans: &[Span],
+    ) -> Cut<Option<(Clip, Rational)>> {
+        let id = this.id;
+        let edge = if end_edge {
+            this.place_end()
+        } else {
+            this.place_start
+        };
+        let held = spans.iter().find(|s| {
+            let (link, other) = if end_edge {
+                (s.links.0, s.ids.0)
+            } else {
+                (s.links.1, s.ids.1)
+            };
+            this.link.is_some() && link == this.link && other != id
+        });
+        let Some(span) = held.filter(|s| s.was.0 <= edge && edge <= s.was.1) else {
+            return Ok(None);
+        };
+        let (r, _) = self.find(id)?;
+        let clips = &self.rows[r].clips;
+        let mut target = if end_edge { span.now.1 } else { span.now.0 };
+        if end_edge && target > edge {
+            let next = clips.iter().filter(|o| o.id != id && o.place_start >= edge);
+            target = next.map(|o| o.place_start).fold(target, Rational::min);
+            if let Some(room) = self.room(this, false)? {
+                target = target.min(edge.checked_add(room)?);
+            }
+        } else if !end_edge && target < edge {
+            let before = clips.iter().filter(|o| o.id != id && o.place_end() <= edge);
+            target = before.map(Clip::place_end).fold(target, Rational::max);
+            if let Some(room) = self.room(this, true)? {
+                target = target.max(edge.checked_sub(room)?);
+            }
+        }
+        let (start, end) = if end_edge {
+            (this.place_start, target)
+        } else {
+            (target, this.place_end())
+        };
+        let Some(next) = trimmed(this, start, end) else {
+            return Ok(None);
+        };
+        let across = if end_edge {
+            target.checked_sub(span.now.0)?
+        } else {
+            span.now.1.checked_sub(target)?
+        };
+        Ok(Some((next, across)))
+    }
+
     /// The clips an edit on one edge of `clip` reaches, each with the edge it
     /// is on: `clip`, and with `linked` the clips linked to it on the same
     /// edge and the clips linked to the clip across the edit point on the
@@ -76,6 +181,10 @@ impl Edit<'_> {
         let edges = self.edges(clip, end_edge, linked)?;
         // Both clips of an overlap made already, so its pair isn't made twice.
         let mut done: Vec<Uuid> = Vec::new();
+        let mut spans: Vec<Span> = Vec::new();
+        // Edges with nothing across, faded once every overlap is made, so a
+        // linked sound can follow its picture's.
+        let mut alone: Vec<(Uuid, bool)> = Vec::new();
         for (id, end_edge) in edges {
             if done.contains(&id) {
                 continue;
@@ -94,14 +203,7 @@ impl Edit<'_> {
                     }
             };
             let Some(other) = row.clips.iter().find(across) else {
-                // Nothing to dissolve with, so the edge fades on its own.
-                let seconds = length.min(this.place_duration);
-                let slot = &mut self.rows[r].clips[c];
-                if end_edge {
-                    slot.fade_out.seconds = seconds;
-                } else {
-                    slot.fade_in.seconds = seconds;
-                }
+                alone.push((id, end_edge));
                 continue;
             };
             let (outgoing, incoming) = if end_edge {
@@ -111,6 +213,7 @@ impl Edit<'_> {
             };
             let room = (self.room(outgoing, false)?, self.room(incoming, true)?);
             done.extend([outgoing.id, incoming.id]);
+            let coming = incoming;
             let incoming = incoming.id;
             let mut next = sequence::transition::dissolve(
                 &row.clips,
@@ -128,7 +231,11 @@ impl Edit<'_> {
                     clip.fade_in.shape = FadeShape::Linear;
                 }
             }
+            spans.extend(Span::of(outgoing, coming, &next));
             self.rows[r].clips = next;
+        }
+        for (id, end_edge) in alone {
+            self.fade_alone(id, end_edge, length, &spans)?;
         }
         self.commit()
     }
@@ -162,6 +269,8 @@ impl Edit<'_> {
         linked: bool,
     ) -> Cut {
         let frames = frames.max(0);
+        let mut spans: Vec<Span> = Vec::new();
+        let mut alone: Vec<(Uuid, bool)> = Vec::new();
         for (id, end_edge) in self.edges(clip, end_edge, linked)? {
             let (r, c) = self.find(id)?;
             let this = self.rows[r].clips[c].clone();
@@ -177,16 +286,8 @@ impl Edit<'_> {
                     .find(|o| o.id != id && follows(o, &this))
             };
             let Some(other) = found.cloned() else {
-                // A linked sound with nothing across fades where the picture
-                // dissolves.
                 if self.rows[r].audio_only && id != clip {
-                    let seconds = self.time(frames)?.min(this.place_duration);
-                    let slot = &mut self.rows[r].clips[c];
-                    if end_edge {
-                        slot.fade_out.seconds = seconds;
-                    } else {
-                        slot.fade_in.seconds = seconds;
-                    }
+                    alone.push((id, end_edge));
                 }
                 continue;
             };
@@ -219,6 +320,12 @@ impl Edit<'_> {
                 )
                 .ok_or(BridgeCutResult::Limit)?;
             }
+            let (going, coming) = if end_edge {
+                (&this, &other)
+            } else {
+                (&other, &this)
+            };
+            spans.extend(Span::of(going, coming, &self.rows[r].clips));
             if self.rows[r].audio_only {
                 continue;
             }
@@ -236,6 +343,12 @@ impl Edit<'_> {
                 }
                 clip.fade_in.shape = FadeShape::Linear;
             }
+        }
+        // A linked sound with nothing across fades where the picture
+        // dissolves.
+        let length = self.time(frames)?;
+        for (id, end_edge) in alone {
+            self.fade_alone(id, end_edge, length, &spans)?;
         }
         self.commit()
     }

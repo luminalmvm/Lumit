@@ -4,6 +4,22 @@
 use super::*;
 
 impl Edit<'_> {
+    /// What a new row is called: Picture or Sound, and the first number no
+    /// layer in the composition, or made by this edit, already has with it.
+    pub(super) fn row_name(&self, audio_only: bool) -> String {
+        let kind = if audio_only { "Sound" } else { "Picture" };
+        let made = self.rows.iter().filter_map(|r| r.fresh.as_ref());
+        let names: Vec<&str> = self
+            .comp
+            .layers
+            .iter()
+            .chain(made)
+            .map(|l| l.name.as_str())
+            .collect();
+        let free = (1..).find(|n| !names.contains(&format!("{kind} {n}").as_str()));
+        format!("{kind} {}", free.unwrap_or(1))
+    }
+
     /// `target` is the row's layer. `span`, when given, is where on the row
     /// the stretch goes in place of `at_frame` and its own length, played at
     /// whatever speed fills it.
@@ -73,7 +89,7 @@ impl Edit<'_> {
         let picture_row = match target {
             _ if !picture || onto_sound => None,
             Some(r) => Some(r),
-            None => Some(self.add_row(name.clone(), false, width, height)),
+            None => Some(self.add_row(None, false, width, height)),
         };
         // With `with_picture` the picture clip plays the first of them itself,
         // and with `linked` the rest go down as sound clips beside it.
@@ -151,8 +167,10 @@ impl Edit<'_> {
             }
             let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
             let name = match plays.places() {
-                [place] if n > 0 || !wanted => crate::streams::split_name(&name, *place, &streams),
-                _ => name.clone(),
+                [place] if n > 0 || !wanted => {
+                    Some(crate::streams::split_name(&name, *place, &streams))
+                }
+                _ => None,
             };
             landings[n] = Some(self.add_row(name, true, w, h));
         }
@@ -212,16 +230,19 @@ impl Edit<'_> {
         if comp == self.comp.id {
             return Err(BridgeCutResult::WrongLayer.into());
         }
-        let (name, length, width, height) = {
+        let (length, width, height) = {
             let doc = self.of.document()?;
             let inner = doc.comp(comp).ok_or(BridgeError::InvalidComp)?;
-            let size = (f64::from(inner.width), f64::from(inner.height));
-            (inner.name.clone(), inner.duration.0, size.0, size.1)
+            (
+                inner.duration.0,
+                f64::from(inner.width),
+                f64::from(inner.height),
+            )
         };
         let at = self.time(at_frame.max(0))?;
         let r = match target {
             Some(layer) => self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?,
-            None => self.add_row(name, false, width, height),
+            None => self.add_row(None, false, width, height),
         };
         if self.rows[r].audio_only {
             return Err(BridgeCutResult::WrongLayer.into());

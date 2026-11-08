@@ -495,13 +495,14 @@ impl<'a> Edit<'a> {
         Ok(ids)
     }
 
-    /// A Sequence layer this edit will add, as a row to work on with the rest.
-    fn add_row(&mut self, name: String, audio_only: bool, width: f64, height: f64) -> usize {
+    /// A Sequence layer this edit will add, as a row to work on with the rest,
+    /// called `name` or else by [`Self::row_name`].
+    fn add_row(&mut self, name: Option<String>, audio_only: bool, w: f64, h: f64) -> usize {
         let mut layer = crate::edits::base_layer(
-            name,
+            name.unwrap_or_else(|| self.row_name(audio_only)),
             LayerKind::Sequence { clips: Vec::new() },
             self.comp.duration.0,
-            crate::edits::centred_transform(width, height, self.comp.width, self.comp.height),
+            crate::edits::centred_transform(w, h, self.comp.width, self.comp.height),
         );
         layer.audio_only = audio_only;
         // A sound row wears the label an Audio layer starts on, so picture and
@@ -824,9 +825,8 @@ impl<'a> Edit<'a> {
             let landing = match room {
                 Some(i) => i,
                 None => {
-                    let name = self.streams_of(item)?.0;
                     let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
-                    self.add_row(name, true, w, h)
+                    self.add_row(None, true, w, h)
                 }
             };
             // The effects move rather than copy, so they keep their ids.
@@ -1342,9 +1342,9 @@ impl<'a> Edit<'a> {
         };
 
         // Each lane of the copy, top first with the picture lanes ahead of
-        // the sound, beside what a layer made for it would be called and how
-        // big its picture is, and the row it lands on once that is known.
-        type Lane = ((bool, usize), (String, f64, f64), Option<usize>);
+        // the sound, beside how big a layer made for it would be, and the row
+        // it lands on once that is known.
+        type Lane = ((bool, usize), (f64, f64), Option<usize>);
         let mut lanes: Vec<Lane> = Vec::new();
         {
             let proj = self.of.project()?;
@@ -1358,14 +1358,13 @@ impl<'a> Edit<'a> {
                 for clip in of_lane(sound, lane) {
                     // A composition cannot play itself, and an item deleted
                     // since the copy is nothing to paste.
-                    let named = match clip.source {
+                    let size = match clip.source {
                         ClipSource::Comp(id) if id == self.comp.id => {
                             return Err(BridgeCutResult::WrongLayer.into())
                         }
                         ClipSource::Comp(id) => {
                             let inner = doc.comp(id).ok_or(BridgeCutResult::Nothing)?;
-                            let (w, h) = (f64::from(inner.width), f64::from(inner.height));
-                            (inner.name.clone(), w, h)
+                            (f64::from(inner.width), f64::from(inner.height))
                         }
                         ClipSource::Footage(id) => {
                             let Some(ProjectItem::Footage(f)) = doc.item(id) else {
@@ -1373,14 +1372,14 @@ impl<'a> Edit<'a> {
                             };
                             let (_, w, h) =
                                 CompositionReference::footage_span_and_size(&state, f, &self.comp);
-                            (f.name.clone(), w, h)
+                            (w, h)
                         }
                         ClipSource::Solid(id) => {
                             let sd = doc.solid(id).ok_or(BridgeCutResult::Nothing)?;
-                            (sd.name.clone(), f64::from(sd.width), f64::from(sd.height))
+                            (f64::from(sd.width), f64::from(sd.height))
                         }
                     };
-                    look.get_or_insert(named);
+                    look.get_or_insert(size);
                 }
                 lanes.extend(look.map(|look| ((sound, lane), look, None)));
             }
@@ -1446,12 +1445,12 @@ impl<'a> Edit<'a> {
             self.comp.layers.iter().position(|l| l.id == id)
         });
         let (width, height) = (f64::from(self.comp.width), f64::from(self.comp.height));
-        for ((sound, _), (name, w, h), landing) in lanes.iter_mut().rev() {
+        for ((sound, _), (w, h), landing) in lanes.iter_mut().rev() {
             if landing.is_some() {
                 continue;
             }
             let (w, h) = if *sound { (width, height) } else { (*w, *h) };
-            let made = self.add_row(name.clone(), *sound, w, h);
+            let made = self.add_row(None, *sound, w, h);
             if let (false, Some(_), Some(under)) = (*sound, target, under) {
                 self.rows[made].at = under + 1;
             }

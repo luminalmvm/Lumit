@@ -190,15 +190,26 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
   /// One second in this composition's frames: the default transition.
   int _secondFrames(LumitUiState ui) => max(1, ui.model.fps.round());
 
+  /// [edit] as one History step called [name].
+  BridgeCutResult _named(String name, BridgeCutResult Function() edit) {
+    var result = BridgeCutResult.nothing;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project,
+        () => result = edit(),
+        name: name);
+    return result;
+  }
+
   /// A transition on one edge of [clip], or none when [frames] is zero.
   void _transition(LumitUiState ui, CompositionReference comp, BridgeClip clip,
       {required bool endEdge, required int frames}) {
-    _afterCut(_cut(() => comp.cutTransition(
-          clip: clip.id,
-          endEdge: endEdge,
-          frames: frames,
-          linked: _linked,
-        )));
+    _afterCut(_cut(() => _named(
+        'Transition',
+        () => comp.cutTransition(
+              clip: clip.id,
+              endEdge: endEdge,
+              frames: frames,
+              linked: _linked,
+            ))));
   }
 
   /// Make the overlap at one edge of [clip] the kind named, or the dissolve
@@ -206,13 +217,15 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
   /// kind's rows come up in Effect controls when [show] is set.
   void _setKind(CompositionReference comp, CutTrack track, BridgeClip clip,
       bool endEdge, String? kind, int frames, {bool show = false}) {
-    _afterCut(_cut(() => comp.cutSetTransition(
-          clip: clip.id,
-          endEdge: endEdge,
-          frames: frames,
-          kind: kind,
-          linked: _linked,
-        )));
+    _afterCut(_cut(() => _named(
+        'Transition',
+        () => comp.cutSetTransition(
+              clip: clip.id,
+              endEdge: endEdge,
+              frames: frames,
+              kind: kind,
+              linked: _linked,
+            ))));
     if (kind != null && show) {
       final other = cutClipAcross(track, clip, endEdge: endEdge);
       _showOverlap(track, endEdge ? other : clip);
@@ -463,6 +476,20 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
             MenuLabel(label, action: action, ticked: ticked, enabled: enabled),
       );
 
+  /// A row of the clip menu: [_row] with room for a tick on every row, as the
+  /// Audio timeline's clip menu has, so a ticked row keeps the one text edge.
+  Widget _cell(
+    void Function(void) close,
+    String key,
+    String label,
+    VoidCallback run, {
+    String? action,
+    bool enabled = true,
+    bool? ticked,
+  }) =>
+      _row(close, key, label, run,
+          action: action, enabled: enabled, ticked: ticked ?? false);
+
   /// A row with more rows out beside it.
   Widget _flyout(
     void Function(void) close,
@@ -470,7 +497,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
     String label,
     List<Widget> rows, {
     double width = 210,
-    bool? ticked,
+    bool? ticked = false,
   }) =>
       SubmenuRow(
         key: ValueKey<String>(key),
@@ -485,6 +512,26 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
         ),
         child: MenuLabel(label, ticked: ticked),
       );
+
+  /// An audio effect on every picked clip on a sound track, as one undo step.
+  void _addClipAudioEffect(String name) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    asOneUndoStep(app.project, () {
+      for (final id in cutPicked) {
+        final at = cutTrackOf[id];
+        if (at == null || !cutTracks[at].sound) continue;
+        final clip = cutTracks[at].clip(id);
+        if (clip == null) continue;
+        try {
+          cutTracks[at].entry.layer.addClipEffect(clip: clip.id, name: name);
+        } catch (_) {
+          // A locked track refuses, and the rest still take it.
+        }
+      }
+    });
+    app.notifyDocumentChanged();
+    _afterWrite();
+  }
 
   /// Every clip on [track] picked.
   void _selectTrack(CutTrack track) => cutPicked = ({
@@ -550,37 +597,65 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
         !clip.sourceIsComp &&
         !clip.sourceIsSolid;
 
-    /// The rows about the clip's sound. One row stands in the menu itself and
-    /// several go under a heading of their own.
+    // The picked clips that are heard, which the level rows act on.
+    final heardPicks = [
+      for (final pick in cutPicked)
+        if (cutTrackOf[pick] case final at?)
+          if (cutTracks[at].clip(pick) case final c?)
+            if (cutTracks[at].entry.info.switches.audible && c.audible)
+              (cutTracks[at].entry.layer, c),
+    ];
+    void afterLevel() {
+      if (!mounted) return;
+      Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+      _afterWrite();
+    }
+
+    /// The rows about the clip's sound: in the menu itself on a sound track,
+    /// as the Audio timeline has them, and under a heading of their own on a
+    /// picture track where there are several.
     List<Widget> soundRows(void Function(void) close) => [
-          if (track.sound)
-            _row(close, 'ctl-menu-keep-pitch', l10n.menuKeepPitch, () {
-              track.entry.layer.setPitchFollowsSpeed(
-                  follows: !track.entry.info.pitchFollowsSpeed);
-              _afterCut(BridgeCutResult.done);
-            }, ticked: !track.entry.info.pitchFollowsSpeed),
-          if (heard && clip.audible)
-            _row(close, 'ctl-menu-normalise', l10n.audioNormalise, () async {
-              final app = Provider.of<LumitState>(context, listen: false);
-              await normaliseClips(app, ui.workspace.normaliseTargetDb, [
-                for (final pick in cutPicked)
-                  if (cutTrackOf[pick] case final at?)
-                    if (cutTracks[at].clip(pick) case final c?)
-                      if (cutTracks[at].entry.info.switches.audible && c.audible)
-                        (cutTracks[at].entry.layer, c.id),
-              ], then: () {
-                if (!mounted) return;
-                app.notifyDocumentChanged();
-                _afterWrite();
-              });
-            }),
+          ...soundClipRows(
+            close: () => close(null),
+            tickColumn: true,
+            keepPitch: !track.entry.info.pitchFollowsSpeed,
+            onKeepPitch: track.sound
+                ? () {
+                    track.entry.layer.setPitchFollowsSpeed(
+                        follows: !track.entry.info.pitchFollowsSpeed);
+                    _afterCut(BridgeCutResult.done);
+                  }
+                : null,
+            onNormalise: heard && clip.audible
+                ? () => normaliseClips(
+                    Provider.of<LumitState>(context, listen: false),
+                    ui.workspace.normaliseTargetDb,
+                    [for (final (layer, c) in heardPicks) (layer, c.id)],
+                    then: afterLevel)
+                : null,
+            onLoudness: heard && clip.audible
+                ? (lufs) => normaliseClips(
+                    Provider.of<LumitState>(context, listen: false),
+                    lufs,
+                    [for (final (layer, c) in heardPicks) (layer, c.id)],
+                    then: afterLevel,
+                    loudness: true)
+                : null,
+            resetGainShown: heard && clip.audible,
+            onResetGain: heardPicks.any((p) => p.$2.gainDb != 0)
+                ? () => resetClipGain(
+                    Provider.of<LumitState>(context, listen: false),
+                    heardPicks,
+                    then: afterLevel)
+                : null,
+          ),
           // A picture clip's sound, taken off onto a sound track of its own,
           // or brought back from the clip it was taken onto.
           if (canDetach && heard && clip.audible)
-            _row(close, 'ctl-menu-detach-audio', l10n.cutDetachAudio,
+            _cell(close, 'ctl-menu-detach-audio', l10n.cutDetachAudio,
                 () => _sound(comp, detach: true))
           else if (canDetach && (cutMates[id]?.isNotEmpty ?? false))
-            _row(close, 'ctl-menu-attach-audio', l10n.cutAttachAudio,
+            _cell(close, 'ctl-menu-attach-audio', l10n.cutAttachAudio,
                 () => _sound(comp, detach: false)),
           // A file with several audio streams: which of them this clip plays,
           // a linked clip to each on a track of its own, and back onto one.
@@ -623,9 +698,9 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                   _afterWrite();
                 },
               ),
-            _row(close, 'ctl-menu-split-streams', l10n.menuSplitAudioStreams,
+            _cell(close, 'ctl-menu-split-streams', l10n.menuSplitAudioStreams,
                 () => _streams(comp, split: true)),
-            _row(close, 'ctl-menu-merge-streams', l10n.menuMergeAudioStreams,
+            _cell(close, 'ctl-menu-merge-streams', l10n.menuMergeAudioStreams,
                 () => _streams(comp, split: false)),
           ],
         ];
@@ -639,32 +714,32 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
         return [
           // What an editor reaches for all day comes first: what can be done
           // to it along the time.
-          _row(close, 'ctl-menu-split', l10n.cutMenuSplit,
+          _cell(close, 'ctl-menu-split', l10n.cutMenuSplit,
               () => _addEdit(ui, comp, all: false),
               action: 'cut.add.edit', enabled: inside),
           _flyout(close, 'ctl-menu-trim', l10n.cutTrimMenu, [
-            _row(
+            _cell(
                 close,
                 'ctl-menu-trim-start',
                 l10n.cutTrimStart,
                 () => _trimToPlayhead(ui, comp, start: true, ripple: false),
                 action: 'cut.trim.start',
                 enabled: inside),
-            _row(
+            _cell(
                 close,
                 'ctl-menu-trim-end',
                 l10n.cutTrimEnd,
                 () => _trimToPlayhead(ui, comp, start: false, ripple: false),
                 action: 'cut.trim.end',
                 enabled: inside),
-            _row(
+            _cell(
                 close,
                 'ctl-menu-ripple-trim-start',
                 l10n.cutRippleTrimStart,
                 () => _trimToPlayhead(ui, comp, start: true, ripple: true),
                 action: 'cut.trim.start.ripple',
                 enabled: inside),
-            _row(
+            _cell(
                 close,
                 'ctl-menu-ripple-trim-end',
                 l10n.cutRippleTrimEnd,
@@ -677,7 +752,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               // A sound track only crossfades. A picture track has every kind,
               // and the way back to a plain cut once there is an overlap.
               if (across && track.kind != CutTrackKind.picture)
-                _row(
+                _cell(
                     close,
                     'ctl-menu-dissolve',
                     dissolved ? l10n.cutRemoveDissolve : l10n.cutAddDissolve,
@@ -688,7 +763,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                 ..._kindRows(close, 'ctl-menu-kind', comp, track, clip, endEdge,
                     second),
                 if (dissolved)
-                  _row(
+                  _cell(
                       close,
                       'ctl-menu-transition-remove',
                       l10n.cutRemoveTransition,
@@ -698,7 +773,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                 if (fadesIn || fadesOut) const MenuDivider(),
               ],
               if (fadesIn)
-                _row(
+                _cell(
                     close,
                     'ctl-menu-fade-in',
                     clip.fadeIn.seconds > 0
@@ -709,7 +784,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                         frames: clip.fadeIn.seconds > 0 ? 0 : second),
                     ticked: false),
               if (fadesOut)
-                _row(
+                _cell(
                     close,
                     'ctl-menu-fade-out',
                     clip.fadeOut.seconds > 0
@@ -721,7 +796,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                     ticked: false),
             ]),
           // The frame under the playhead held, for a length it asks.
-          _row(close, 'ctl-menu-freeze', l10n.cutFreezeFrame, () {
+          _cell(close, 'ctl-menu-freeze', l10n.cutFreezeFrame, () {
             askToFreezeClips(
                 context, [(layer: track.entry.layer, clip: clip)], global);
           }, enabled: playhead >= start && playhead < end),
@@ -732,29 +807,38 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               // The line on this clip alone, with the switch off. A retimed
               // clip always shows it.
               if (cutSpeedShown case final shown?)
-                _row(close, 'ctl-menu-speed-line', l10n.cutSpeedLineHere, () {
+                _cell(close, 'ctl-menu-speed-line', l10n.cutSpeedLineHere, () {
                   setState(() {
                     if (!shown.remove(id)) shown.add(id);
                   });
                 },
                     enabled: !_speedLines && !clip.retimed,
                     ticked: _speedLines || clip.retimed || shown.contains(id)),
-              _row(close, 'ctl-menu-speed-set', l10n.menuClipSpeed,
+              _cell(close, 'ctl-menu-speed-set', l10n.menuClipSpeed,
                   _askSpeed,
                   ticked: false),
-              _row(close, 'ctl-menu-speed-reset', l10n.clipResetSpeed,
+              _cell(close, 'ctl-menu-speed-reset', l10n.clipResetSpeed,
                   () => _setSpeed(100),
                   enabled: _pickedPicture().any((p) => p.$2.retimed),
                   ticked: false),
               const MenuDivider(),
-              _row(close, 'ctl-menu-speed-copy', l10n.cutCopySpeed,
+              _cell(close, 'ctl-menu-speed-copy', l10n.cutCopySpeed,
                   () => speedLineClipboard = keysOf(clip.retime),
                   ticked: false),
-              _row(close, 'ctl-menu-speed-paste', l10n.cutPasteSpeed,
+              _cell(close, 'ctl-menu-speed-paste', l10n.cutPasteSpeed,
                   () => _pasteSpeed(ui),
                   enabled: speedLineClipboard != null, ticked: false),
             ]),
-          if (sound.length == 1)
+          if (track.sound) ...[
+            ...sound,
+            SubmenuRow(
+              key: const ValueKey('ctl-menu-add-audio-effect'),
+              closeParent: () => close(null),
+              submenu: (dismiss) =>
+                  audioEffectFlyout(dismiss, _addClipAudioEffect),
+              child: MenuLabel(l10n.audioAddEffect, ticked: false),
+            ),
+          ] else if (sound.length == 1)
             sound.single
           else if (sound.isNotEmpty)
             _flyout(close, 'ctl-menu-sound', l10n.cutSoundMenu, sound,
@@ -792,20 +876,20 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                   ),
                 ),
               ),
-              child: Text(l10n.tipBlendMode),
+              child: MenuLabel(l10n.tipBlendMode, ticked: false),
             ),
           // The clip's takes, the one showing ticked: picked to show it, or
           // deleted. Takes come from footage dropped on the clip with Alt.
           if (clip.takes.length > 1)
             _flyout(close, 'ctl-menu-takes', l10n.cutTakeMenu, [
               for (var n = 0; n < clip.takes.length; n++)
-                _row(close, 'ctl-menu-take-$n', clip.takes[n], () {
+                _cell(close, 'ctl-menu-take-$n', clip.takes[n], () {
                   if (n == 0) return;
                   _afterCut(
                       _cut(() => comp.cutSetTake(clip: clip.id, take: n)));
                 }, ticked: n == 0),
               const MenuDivider(),
-              _row(
+              _cell(
                   close,
                   'ctl-menu-take-delete',
                   l10n.cutDeleteTake,
@@ -820,21 +904,21 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
           if (ui.currentViewerPane != null &&
               !clip.sourceIsComp &&
               !clip.sourceIsSolid)
-            _row(close, 'ctl-menu-open-source', l10n.cutOpenInSource,
+            _cell(close, 'ctl-menu-open-source', l10n.cutOpenInSource,
                 () => _openClip(ui, comp, track, clip),
                 enabled: one),
-          _row(close, 'ctl-menu-effects', l10n.effectControls,
+          _cell(close, 'ctl-menu-effects', l10n.effectControls,
               () => _badge(ui, track, clip, CutBadge.fx),
               enabled: one),
           if (picture)
-            _row(close, 'ctl-menu-pan-crop', l10n.cutPanCropMenu,
+            _cell(close, 'ctl-menu-pan-crop', l10n.cutPanCropMenu,
                 () => _badge(ui, track, clip, CutBadge.panCrop),
                 enabled: one),
           if (!one)
-            _row(close, 'ctl-menu-fold', l10n.cutNewCompositionFromSelection,
+            _cell(close, 'ctl-menu-fold', l10n.cutNewCompositionFromSelection,
                 () => _foldPicked(ui, comp))
           else if (!clip.sourceIsSolid)
-            _row(
+            _cell(
                 close,
                 'ctl-menu-open-comp',
                 clip.sourceIsComp
@@ -842,20 +926,20 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                     : l10n.cutNewCompositionFromClip,
                 () => _openAsComposition(ui, comp, clip)),
           const MenuDivider(),
-          _row(close, 'ctl-menu-cut', l10n.menuCut,
+          _cell(close, 'ctl-menu-cut', l10n.menuCut,
               () => _copyFromMenu(ui, comp, cut: true),
               action: 'edit.cut'),
-          _row(close, 'ctl-menu-copy', l10n.menuCopy,
+          _cell(close, 'ctl-menu-copy', l10n.menuCopy,
               () => _copyFromMenu(ui, comp, cut: false),
               action: 'edit.copy'),
-          _row(close, 'ctl-menu-paste', l10n.menuPaste,
+          _cell(close, 'ctl-menu-paste', l10n.menuPaste,
               () => _pasteAtPlayhead(ui, comp),
               action: 'edit.paste', enabled: _clipsHeld),
-          _row(close, 'ctl-menu-duplicate', l10n.menuDuplicate,
+          _cell(close, 'ctl-menu-duplicate', l10n.menuDuplicate,
               () => _duplicatePicked(comp)),
           // The copied clip's effects, levels, fades and speed onto the picked
           // clips.
-          _row(
+          _cell(
               close,
               'ctl-menu-paste-attributes',
               l10n.cutPasteAttributes,
@@ -866,16 +950,16 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
           const MenuDivider(),
           if (extra != null) ...[...extra(close), const MenuDivider()],
           if (cutPicksMany)
-            _row(close, 'ctl-menu-group', l10n.cutGroup,
+            _cell(close, 'ctl-menu-group', l10n.cutGroup,
                 () => _group(join: true),
                 action: 'cut.group', enabled: cutPicked.length > 1),
           if (clip.group != null)
-            _row(close, 'ctl-menu-ungroup', l10n.cutUngroup,
+            _cell(close, 'ctl-menu-ungroup', l10n.cutUngroup,
                 () => _group(join: false),
                 action: 'cut.ungroup'),
           // This clip and everything after it, on the picked clips' tracks.
           if (cutPicksMany) ...[
-            _row(close, 'ctl-menu-select-to-end', l10n.cutSelectToEnd, () {
+            _cell(close, 'ctl-menu-select-to-end', l10n.cutSelectToEnd, () {
               cutPicked = {
                 for (final row in _candidateTracks())
                   for (final c in row.clips)
@@ -883,7 +967,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                       ..._withMates(c.id.toString()),
               };
             }),
-            _row(close, 'ctl-menu-select-track', l10n.cutSelectTrack,
+            _cell(close, 'ctl-menu-select-track', l10n.cutSelectTrack,
                 () => _selectTrack(track)),
           ],
           const MenuDivider(),
@@ -898,10 +982,10 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
                 _setClipLabel(label);
               },
             ),
-            child: Text(l10n.clipColour),
+            child: MenuLabel(l10n.clipColour, ticked: false),
           ),
           if (clip.effects.isNotEmpty)
-            _row(
+            _cell(
                 close,
                 'ctl-menu-bypass-fx',
                 clip.fx ? l10n.cutBypassEffects : l10n.cutUseEffects, () {
@@ -913,10 +997,10 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               _afterWrite();
             }),
           const MenuDivider(),
-          _row(close, 'ctl-menu-delete', l10n.clipDelete,
+          _cell(close, 'ctl-menu-delete', l10n.clipDelete,
               () => _deleteSelected(ripple: false),
               action: 'edit.delete.selection'),
-          _row(close, 'ctl-menu-ripple-delete', l10n.cutRippleDelete,
+          _cell(close, 'ctl-menu-ripple-delete', l10n.cutRippleDelete,
               () => _deleteSelected(ripple: true),
               action: 'cut.delete.ripple'),
         ];
@@ -943,7 +1027,7 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
             clip: clip.id, endEdge: endEdge, frames: frames, linked: false));
         if (result != BridgeCutResult.done) refused = result;
       }
-    });
+    }, name: 'Transition');
     _afterCut(BridgeCutResult.done);
     ui.reportCut(refused);
   }

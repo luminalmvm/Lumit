@@ -122,7 +122,9 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
   final GlobalKey _content = GlobalKey();
   double _plot = _plotMax;
   static const double _plotMax = 260;
-  static const double _plotMin = 120;
+  // Low enough that the whole grade stands in the Colour workspace at 1080 in
+  // every look, Lantern's taller rows included.
+  static const double _plotMin = 96;
   static const double _listFoot = 8;
 
   /// From this width the curve takes a column of its own, up to
@@ -381,6 +383,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     final project = app.project;
     if (project == null) return;
     project.beginUndoGroup();
+    project.nameUndoGroup(name: 'Grade');
     _touched = project;
     if (_touches == 0) _touchAdded = false;
     _touches++;
@@ -724,6 +727,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             () => _setBypassed(fxs, !off),
             ticked: off),
       ],
+      if (param != null) paramCopyRows(context, param, close, tickColumn: true),
       if (param != null) paramKeyRows(context, param, close, tickColumn: true),
       [
         _row('grade-section-reveal', l10n.gradeRevealInEffectControls, close,
@@ -828,7 +832,26 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
             ? BridgeEffectValue.colour(
                 BridgeColour(r: next[0], g: next[1], b: next[2], a: next[3]))
             : BridgeEffectValue.float(next[0]);
+    final colour = v is BridgeEffectValue_Colour;
     return ParamMenu(
+      // The value as text, as Effect controls copies it, so it pastes into any
+      // other row or field, and onto every picked layer.
+      copy: expression != null
+          ? null
+          : () => copiedAxes(
+              colour ? _colour(fx, id).take(3) : [_float(fx, id)]),
+      paste: expression != null
+          ? null
+          : (text) {
+              final n = pastedAxes(text, colour ? 3 : 1);
+              if (n == null) return;
+              _write(
+                  fx,
+                  id,
+                  (on) => colour
+                      ? _colourFor(fx, id, n, on)
+                      : BridgeEffectValue.float(_scalarFor(fx, id, n[0], on)));
+            },
       keys: expression != null
           ? null
           : KeyframeControlsFrb(
@@ -1508,7 +1531,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     }
     if (!mounted) return;
     final ui = this.ui;
-    layGrade(app, ui, text);
+    layGrade(app, ui, text, name: 'Apply look');
     if (!mounted) return;
     setState(() {
       for (final layer in ui.selectedLayers.value) {
@@ -1526,8 +1549,12 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
     final layer = _layer;
     final info = _info;
     if (layer == null || info == null) return;
+    // The layer's name to start from, less a file's extension.
     final name = await askThemeName(context,
-        title: l10n.gradeSaveLookTitle, suggested: '', confirm: l10n.save);
+        title: l10n.gradeSaveLookTitle,
+        suggested: info.name.replaceFirst(RegExp(r'\.[A-Za-z0-9]{2,4}$'), ''),
+        confirm: l10n.save,
+        label: l10n.name);
     final library = presetsDirPath();
     if (name == null || library == null || !mounted) return;
     // The name can hold what a file's name can't.
@@ -1551,7 +1578,7 @@ class _GradePanelFrbState extends State<GradePanelFrb> {
       return;
     }
     ui.presetsChanged.value++;
-    app.postNotice(l10n.presetSavedNotice);
+    app.postNotice(l10n.gradeLookSavedNotice);
   }
 
   Future<void> _pickLut() async {

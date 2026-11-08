@@ -12,7 +12,8 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 
-/// Ask for a theme name, seeded with [suggested] and headed by [title].
+/// Ask for a theme name, seeded with [suggested] and headed by [title]. With
+/// [label] the field sits in a labelled row, as Pre-compose's does.
 ///
 /// Returns the trimmed name, or null when the dialogue was dismissed or left
 /// blank — a theme with no name could not be selected again, so a blank is the
@@ -22,12 +23,20 @@ Future<String?> askThemeName(
   required String title,
   required String suggested,
   String? confirm,
+  String? label,
 }) async {
   final controller = TextEditingController(text: suggested);
   final name = await showLumitModal<String>(
     context: context,
     builder: (close) => Builder(builder: (context) {
       final t = ThemeScope.of(context).theme;
+      final field = HouseTextField(
+        key: const ValueKey('theme-name-field'),
+        controller: controller,
+        width: double.infinity,
+        autofocus: true,
+        onSubmitted: close,
+      );
       return DialogFrame(
         width: 340,
         children: [
@@ -37,13 +46,9 @@ Future<String?> askThemeName(
               keyPrefix: 'theme-name'),
           Padding(
             padding: dialogBodyPadding,
-            child: HouseTextField(
-              key: const ValueKey('theme-name-field'),
-              controller: controller,
-              width: double.infinity,
-              autofocus: true,
-              onSubmitted: close,
-            ),
+            child: label == null
+                ? field
+                : dialogRow(t, label, field, labelColumn: 60),
           ),
           dialogFooter(
             t,

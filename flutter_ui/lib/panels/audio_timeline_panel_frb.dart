@@ -2441,7 +2441,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           addMarkerFrb(comp, frame: frame);
           _afterWrite();
         },
-        child: MenuLabel(l10n.menuAddMarkerHere),
+        child: MenuLabel(l10n.menuAddMarkerHere, action: 'marker.add'),
       );
 
   /// The fade menu: a right click on a fade, or anywhere in an overlap. The
@@ -2688,27 +2688,43 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             row('freeze', l10n.cutFreezeFrame, () {
               askToFreezeClips(context, [(layer: layer, clip: clip)], at);
             }, close, enabled: first <= playhead && playhead < last),
-          MenuRow(
-            key: ValueKey<String>('atl-keep-pitch-${track.id}'),
-            onPressed: () {
-              close();
+          ...soundClipRows(
+            close: close,
+            tickColumn: true,
+            keepPitch: !follows,
+            onKeepPitch: () {
               layer.setPitchFollowsSpeed(follows: !follows);
               _afterWrite();
             },
-            child: MenuLabel(l10n.menuKeepPitch, ticked: !follows),
+            onNormalise: () async {
+              final app = Provider.of<LumitState>(context, listen: false);
+              final target = ui.workspace.normaliseTargetDb;
+              if (picked != null) {
+                await normaliseClips(app, target,
+                    [for (final (on, c) in picked) (on.entry.layer, c.id)],
+                    then: _afterWrite);
+              } else {
+                await normaliseLayers(app, comp, playhead, target, [track.entry],
+                    then: _afterWrite);
+              }
+            },
+            onLoudness: picked == null
+                ? null
+                : (lufs) => normaliseClips(
+                    Provider.of<LumitState>(context, listen: false),
+                    lufs,
+                    [for (final (on, c) in picked) (on.entry.layer, c.id)],
+                    then: _afterWrite,
+                    loudness: true),
+            // An uncut layer's bar has no clip of its own to set back.
+            resetGainShown: picked != null,
+            onResetGain: picked != null && picked.any((p) => p.$2.gainDb != 0)
+                ? () => resetClipGain(
+                    Provider.of<LumitState>(context, listen: false),
+                    [for (final (on, c) in picked) (on.entry.layer, c)],
+                    then: _afterWrite)
+                : null,
           ),
-          row('normalise', l10n.audioNormalise, () async {
-            final app = Provider.of<LumitState>(context, listen: false);
-            final target = ui.workspace.normaliseTargetDb;
-            if (picked != null) {
-              await normaliseClips(app, target,
-                  [for (final (on, c) in picked) (on.entry.layer, c.id)],
-                  then: _afterWrite);
-            } else {
-              await normaliseLayers(app, comp, playhead, target, [track.entry],
-                  then: _afterWrite);
-            }
-          }, close),
           _laneSubmenu([track], close),
           if (clip != null) ...[
             if (clip.takes.length > 1)
@@ -3518,6 +3534,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                   rowHeight: bandHeight,
                   onChanged: _afterWrite,
                   kind: kind,
+                  onHide: () => _toggleEnvelope(kind, [track]),
                 ),
               ),
             ),

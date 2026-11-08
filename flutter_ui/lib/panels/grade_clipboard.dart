@@ -100,7 +100,8 @@ bool pasteGrade(LumitState app, LumitUiState ui) {
 
 /// [text], a stack of effects, in place of the grade on every selected layer
 /// that can take one, as one undo step.
-void layGrade(LumitState app, LumitUiState ui, String text) {
+void layGrade(LumitState app, LumitUiState ui, String text,
+    {String name = 'Paste grade'}) {
   final frame = ui.playheadFrame.value;
   asOneUndoStep(app.project, () {
     for (final (layer, info) in _gradeTargets(ui)) {
@@ -110,7 +111,7 @@ void layGrade(LumitState app, LumitUiState ui, String text) {
         // A locked layer refuses, and the rest still take it.
       }
     }
-  });
+  }, name: name);
   app.notifyDocumentChanged();
   ui.model.refresh();
 }

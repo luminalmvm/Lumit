@@ -237,6 +237,29 @@ MenuRow _row(String key, String label, VoidCallback onPressed,
           action: action, enabled: enabled, ticked: tickColumn ? false : null),
     );
 
+/// Copy value and Paste value, for a menu that lays out the row's rows itself.
+List<Widget> paramCopyRows(
+    BuildContext context, ParamMenu menu, VoidCallback close,
+    {bool tickColumn = false}) {
+  // A paste on a row with several keys picked moves them all, as typing does.
+  final edit = context.getInheritedWidgetOfExactType<ValueEditScope>();
+  return [
+    if (menu.copy case final copy?)
+      _row('param-menu-copy', l10n.paramMenuCopyValue, () {
+        close();
+        Clipboard.setData(ClipboardData(text: copy()));
+      }, tickColumn: tickColumn),
+    if (menu.paste case final paste?)
+      _row('param-menu-paste', l10n.paramMenuPasteValue, () async {
+        close();
+        final data = await Clipboard.getData(Clipboard.kTextPlain);
+        final text = data?.text;
+        if (text == null) return;
+        edit == null ? paste(text) : edit.run(true, () => paste(text));
+      }, tickColumn: tickColumn),
+  ];
+}
+
 /// Add or remove a key at the playhead and stop animating, for this row's
 /// keyframes. [tickColumn] keeps the words in line with a menu whose other
 /// rows carry a tick.
@@ -503,8 +526,6 @@ Future<void> showParamMenu(
 List<Widget> _rows(
     BuildContext context, ParamMenu menu, VoidCallback done, String? clip) {
   final ui = Provider.of<LumitUiState>(context, listen: false);
-  // A paste on a row with several keys picked moves them all, as typing does.
-  final edit = context.getInheritedWidgetOfExactType<ValueEditScope>();
   final playhead = ui.playheadFrame;
   final keys = menu.keys;
   final frame = playhead.value;
@@ -523,17 +544,7 @@ List<Widget> _rows(
         }, enabled: menu.canReset),
     ],
     [
-      if (menu.copy case final copy?)
-        _row('param-menu-copy', l10n.paramMenuCopyValue, () {
-          done();
-          Clipboard.setData(ClipboardData(text: copy()));
-        }),
-      if (menu.paste case final paste?)
-        _row('param-menu-paste', l10n.paramMenuPasteValue, () {
-          done();
-          if (clip == null) return;
-          edit == null ? paste(clip) : edit.run(true, () => paste(clip));
-        }, enabled: clip != null && numbersIn(clip).isNotEmpty),
+      ...paramCopyRows(context, menu, done),
       if (menu.colour case final colour?) ...[
         _row('param-menu-copy-colour', l10n.swatchCopyColour, () {
           done();

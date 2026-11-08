@@ -153,7 +153,7 @@ impl Edit<'_> {
             Some(r) => r,
             None => {
                 let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
-                let row = self.add_row(self.comp.name.clone(), sound_only, w, h);
+                let row = self.add_row(None, sound_only, w, h);
                 self.rows[row].at = first.unwrap_or(0).min(self.comp.layers.len());
                 row
             }

@@ -274,7 +274,24 @@ class _HouseButtonState extends State<HouseButton> {
         curve: scope.motion.hoverIn.curve,
         child: Padding(
           padding: margin,
+          // The index and the focus ring are painted over the box, so they
+          // inset nothing and the control is the same size as its neighbours.
+          // They change at once rather than easing, as a rounded ring cannot
+          // ease into a one-sided edge.
+          child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: ring != null
+              ? BoxDecoration(
+                  borderRadius: radius, border: Border.all(color: ring))
+              : index
+                  ? BoxDecoration(
+                      border:
+                          Border(left: BorderSide(color: t.accent, width: 2)))
+                  : const BoxDecoration(),
           child: frosted(dressed, radius, insetShadows(dressed, radius, AnimatedContainer(
+          // A plate's one-sided edge cannot ease into a rounded box either, so
+          // a change of shape swaps the box.
+          key: ValueKey(plate),
           duration: step.duration,
           curve: step.curve,
           padding: innerPad,
@@ -293,16 +310,6 @@ class _HouseButtonState extends State<HouseButton> {
                 : Border.all(
                     color: edge ?? const Color(0x00000000), width: 1),
           ), dressed),
-          // The index and the focus ring are painted over the box, so they
-          // inset nothing and the control is the same size as its neighbours.
-          foregroundDecoration: ring != null
-              ? BoxDecoration(
-                  borderRadius: radius, border: Border.all(color: ring))
-              : index
-                  ? BoxDecoration(
-                      border:
-                          Border(left: BorderSide(color: t.accent, width: 2)))
-                  : null,
           child: DefaultTextStyle(
             // A dropdown's closed face reads in the secondary text colour —
             // the mockups' own (§12A.6); bright primary at 11px reads bold.
@@ -317,6 +324,7 @@ class _HouseButtonState extends State<HouseButton> {
                 : _centred(_capitalised(t, widget.child, widget.primary)),
           ),
         ))),
+        ),
         ),
         ),
         ),

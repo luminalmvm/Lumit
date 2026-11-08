@@ -23,7 +23,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
-    show BridgeRational, BridgeScalar;
+    show BridgeRational, BridgeScalar, BridgeScalar_Static;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -43,7 +43,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart'
-    show exportFrb, newLayerRow, showInsertLayerMenu;
+    show exportFrb, insertEmptyLayer, newLayerRow;
 import 'cut_insert.dart';
 import 'cut_kinds.dart';
 import 'retime_commands.dart' show askToFreezeClips;
@@ -71,7 +71,12 @@ import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'audio_routes_frb.dart'
-    show audioLayerRows, audioMenuTargets, soundHeadRows;
+    show
+        audioEffectFlyout,
+        audioLayerRows,
+        audioMenuTargets,
+        soundClipRows,
+        soundHeadRows;
 import 'audio_streams_menu_frb.dart';
 import 'audio_timeline_clips_frb.dart' show audioClipGainY;
 import 'clip_fade_popover.dart' show clipFadeShapeName;
@@ -80,6 +85,7 @@ import 'cut_timeline_lane.dart';
 import 'cut_timeline_tracks.dart';
 import 'cut_pan_crop.dart' show showCutPanCrop;
 import 'cut_track_mix.dart';
+import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'graph_maths.dart'
     show envelopeStretchedOnto, keysOf, rationalSeconds;
 import 'layer_fold_frb.dart' show asOneUndoStep, timeOfSubframe;
@@ -587,7 +593,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final heights = _heightsHere;
     if (heights == null) return;
     final least = _trackHeight * cutTrackMinScale;
-    final all = _tracks.every((t) => (heights[t.id] ?? _trackHeight) <= least);
+    final all = _tracks.every((t) => (heights[t.id] ?? _usualOf(t)) <= least);
     setState(() {
       if (all) {
         heights.clear();
@@ -607,18 +613,33 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     return comp == null ? null : ui!.cutTrackHeights.putIfAbsent(comp, () => {});
   }
 
+  /// The height a track opens at. A plain bar that isn't footage, a title, a
+  /// solid, an adjustment or a composition, opens at the least height, so the
+  /// sound tracks under it stay in sight, and so does every picture track
+  /// while the panel is too short for them.
+  double _usualOf(CutTrack track) => !track.below &&
+          (_squeezed ||
+              (track.kind == CutTrackKind.plain &&
+                  track.entry.info.kind != BridgeLayerKind.footage))
+      ? _trackHeight * cutTrackMinScale
+      : _trackHeight;
+
+  /// Whether the panel is too short to show the first sound track with the
+  /// picture tracks at their usual height. Worked out as the tracks are laid.
+  bool _squeezed = false;
+
   /// A track's height as it stands: where it was dragged to, the usual
   /// height otherwise, and on its way back while it settles.
   double _heightOf(CutTrack track) {
-    final usual = _trackHeight;
+    final usual = _usualOf(track);
     final settling = _settling;
     if (settling != null && settling.track == track.id) {
       final curve = _motion?.makeWay.curve ?? Curves.linear;
       return settling.from +
           (usual - settling.from) * curve.transform(_settle.value);
     }
-    return (_heightsHere?[track.id] ?? usual)
-        .clamp(usual * cutTrackMinScale, usual * cutTrackMaxScale);
+    return (_heightsHere?[track.id] ?? usual).clamp(
+        _trackHeight * cutTrackMinScale, _trackHeight * cutTrackMaxScale);
   }
 
   /// An edge taken hold of: the size it had and where the pointer was, so the
@@ -657,7 +678,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final from = _heightOf(track);
     _heightsHere?.remove(track.id);
     _ui!.rememberSession();
-    if (from == _trackHeight) return;
+    if (from == _usualOf(track)) return;
     // Every track below moves with it, so it eases in without the landing's
     // overshoot, which wobbled them all.
     final settle = _motion?.makeWay ?? MotionSpec.still;
@@ -1862,7 +1883,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       if (track != null) {
         _menu(ui, track, hit?.clip, at, event.position);
       } else {
-        _insertMenu(ui, event.position);
+        _insertMenu(ui, event.position, frame: _laneAxis.frameAt(at.dx));
       }
       return;
     }
@@ -2834,12 +2855,68 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         )));
   }
 
-  /// A right click on the ground under the last track: a new empty one.
-  void _insertMenu(LumitUiState ui, Offset global) {
+  /// The Cut ruler's own rows under its marker and work area: the work area
+  /// lifted or extracted, as `;` and `'` do, and every track split at the
+  /// playhead.
+  List<Widget> _rulerRows(
+      LumitUiState ui, CompositionReference comp, VoidCallback close) {
+    final set = !(_workArea?.whole ?? true);
+    final at = ui.playheadFrame.value;
+    final splits = _tracks.any((track) => track.clips.any(
+        (c) => c.startFrame.toInt() < at && at < c.endFrame.toInt()));
+    return [
+      _row((_) => close(), 'ctl-ruler-lift', l10n.cutLiftWorkArea,
+          () => _removeWorkArea(ui, comp, ripple: false),
+          action: 'cut.lift', enabled: set),
+      _row((_) => close(), 'ctl-ruler-extract', l10n.cutExtractWorkArea,
+          () => _removeWorkArea(ui, comp, ripple: true),
+          action: 'cut.extract', enabled: set),
+      const MenuDivider(),
+      _row((_) => close(), 'ctl-ruler-split-all', l10n.cutSplitAllTracks,
+          () => _addEdit(ui, comp, all: true),
+          action: 'cut.add.edit.all', enabled: splits),
+    ];
+  }
+
+  /// A right click on the ground under the last track: a new empty one, and
+  /// what the room between clips offers that a ground can mean too. [frame]
+  /// is the time under the pointer, where there is one.
+  void _insertMenu(LumitUiState ui, Offset global, {int? frame}) {
     final comp = ui.selectedComp;
     if (comp == null) return;
-    showInsertLayerMenu(context, ui, comp, global,
-        picture: true, onDone: _afterWrite);
+    showMenuAt<void>(
+      context: context,
+      position: global,
+      width: 230,
+      rows: (close) => [
+        ...cutInsertRows(context, ui, comp,
+            close: () => close(null),
+            frame: frame ?? ui.playheadFrame.value,
+            row: newLayerRow(ui, comp),
+            onDone: _afterWrite),
+        const MenuDivider(),
+        for (final (action, label) in [
+          ('layer.new.audio', l10n.insertAudioLayer),
+          ('layer.new.sequence', l10n.insertVideoLayer),
+          ('layer.new.adjustment', l10n.insertAdjustmentLayer),
+        ])
+          _row(close, 'insert-$action', label, () {
+            insertEmptyLayer(ui, comp, action);
+            _afterWrite();
+          }, action: action),
+        const MenuDivider(),
+        _row(close, 'ctl-ground-paste', l10n.menuPaste,
+            () => _pasteAt(ui, comp, frame ?? ui.playheadFrame.value),
+            action: 'edit.paste', enabled: _clipsHeld),
+        _row(close, 'ctl-ground-select-all', l10n.menuSelectAll, _selectEvery,
+            action: 'edit.select.all'),
+        if (frame != null)
+          _row(close, 'ctl-ground-marker', l10n.menuAddMarkerHere, () {
+            addMarkerFrb(comp, frame: frame);
+            _afterWrite();
+          }, action: 'marker.add'),
+      ],
+    );
   }
 
   /// Whether the track at [to] is somewhere the track at [from] can go.
@@ -2943,29 +3020,39 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
 
     final isFootage = info.kind == BridgeLayerKind.footage;
     final isSequence = info.kind == BridgeLayerKind.sequence;
+    // The head's Level bar, back at full where it has moved from it.
+    final frame = ui?.playheadFrame.value ?? 0;
+    final opacity = info.transform.opacity;
+    final level = opacity is BridgeScalar_Static
+        ? opacity.field0
+        : comp == null
+            ? 100.0
+            : sampledScalar(opacity, timeOfFrame(comp, frame));
+    // In the sound head's order: the layer's own commands, its switches, its
+    // mix, the track's place, the copy and its label, and Delete last.
     return showMenuAt<void>(
       context: context,
       position: global,
       width: 230,
       rows: (close) => [
-        if (own)
+        if (own) ...[
           _row(close, 'ctl-head-rename', l10n.rename,
               () => _startRename(track),
               action: 'layer.rename', ticked: false),
-        if (track.below) ...envelopes(close),
-        if (own && isFootage)
-          _row(close, 'ctl-head-to-sequence', l10n.menuConvertToSequenceLayer,
-              () => convert(layer.convertToSequenced),
-              ticked: false),
-        if (own && isSequence)
-          _row(close, 'ctl-head-to-footage', l10n.menuConvertToFootageLayer,
-              () => convert(layer.convertFromSequenced),
-              ticked: false),
-        if (own) const MenuDivider(),
+          if (isFootage)
+            _row(close, 'ctl-head-to-sequence', l10n.menuConvertToSequenceLayer,
+                () => convert(layer.convertToSequenced),
+                ticked: false),
+          if (isSequence)
+            _row(close, 'ctl-head-to-footage', l10n.menuConvertToFootageLayer,
+                () => convert(layer.convertFromSequenced),
+                ticked: false),
+          const MenuDivider(),
+        ],
         if (track.kind == CutTrackKind.picture || track.below)
-          _row(close, 'ctl-head-audible', l10n.switchAudible,
+          _row(close, 'ctl-head-mute', l10n.audioMute,
               () => flip(BridgeLayerSwitch.audible, !s.audible),
-              ticked: s.audible),
+              ticked: !s.audible),
         if (track.kind == CutTrackKind.picture)
           _row(close, 'ctl-head-solo', l10n.switchSolo,
               () => flip(BridgeLayerSwitch.solo, !s.solo),
@@ -2978,23 +3065,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             () => flip(BridgeLayerSwitch.locked, !s.locked),
             action: 'layer.lock.toggle', ticked: s.locked),
         const MenuDivider(),
+        if (track.below) ...envelopes(close),
+        if (own && comp != null)
+          _row(close, 'ctl-head-reset-level', l10n.cutResetLevel, () {
+            try {
+              layer.setTransform(
+                  prop: BridgeTransformProp.opacity,
+                  value: scalarWithValueAt(opacity, 100, comp, frame));
+            } catch (_) {
+              // A locked layer refuses, and quietly.
+            }
+            _afterWrite();
+          }, enabled: level != 100, ticked: false),
+        const MenuDivider(),
         if (own) ...[
           _row(close, 'ctl-head-select', l10n.cutSelectTrack,
               () => _selectTrack(track),
               enabled: track.clips.isNotEmpty, ticked: false),
-          _row(close, 'ctl-head-duplicate', l10n.menuDuplicate, () {
-            try {
-              layer.duplicate();
-            } catch (_) {}
-            _afterCut(BridgeCutResult.done);
-          }, ticked: false),
-          const MenuDivider(),
-        ],
-        _row(close, 'ctl-head-new', l10n.newLayer, () {
-          final ui = _ui;
-          if (ui != null) _insertMenu(ui, global);
-        }, ticked: false),
-        if (own) ...[
           _row(close, 'ctl-head-up', l10n.moveUp, () => _moveTrack(at, at - 1),
               enabled: _canLand(at, at - 1), ticked: false),
           _row(close, 'ctl-head-down', l10n.moveDown,
@@ -3010,6 +3097,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               ticked: false),
         if (own) ...[
           const MenuDivider(),
+          _row(close, 'ctl-head-duplicate', l10n.menuDuplicate, () {
+            try {
+              layer.duplicate();
+            } catch (_) {}
+            _afterCut(BridgeCutResult.done);
+          }, ticked: false),
           SubmenuRow(
             key: const ValueKey('ctl-head-label'),
             closeParent: () => close(null),
@@ -3163,7 +3256,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         _row(close, 'ctl-menu-marker', l10n.menuAddMarkerHere, () {
           addMarkerFrb(comp, frame: frame);
           _afterWrite();
-        }),
+        }, action: 'marker.add'),
         _row(close, 'ctl-menu-work-in', l10n.workAreaStart,
             () => workEdge(true)),
         _row(close, 'ctl-menu-work-out', l10n.workAreaEnd,
@@ -3652,7 +3745,18 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         anyOrder: ui.workspace.interface.cutTracksAnyOrder);
     _setNameStyle(t.small.copyWith(color: t.textSecondary));
     _trackHeight = t.density.laneRow * 2;
-    final heights = [for (final track in _tracks) _heightOf(track)];
+    // In a short panel the picture tracks give way too, so the first sound
+    // track stays in sight.
+    _squeezed = false;
+    var heights = [for (final track in _tracks) _heightOf(track)];
+    final firstSound = _tracks.indexWhere((track) => track.below);
+    if (firstSound > 0 && _laneHeight > 0) {
+      final upTo = heights.take(firstSound + 1).fold(0.0, (a, b) => a + b);
+      if (upTo > _laneHeight) {
+        _squeezed = true;
+        heights = [for (final track in _tracks) _heightOf(track)];
+      }
+    }
     _tops = cutTrackTops(heights);
 
     final revision = ui.model.revision;
@@ -4730,6 +4834,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 },
                 onWorkPreview: (span) => _workPreview.value = span,
                 onMarkersChanged: _afterWrite,
+                groundRows: (close) => _rulerRows(ui, comp, close),
                 snapTargets: _snapTargets,
                 magnet: _snap,
                 cache: TimelineCacheBar(
@@ -4738,7 +4843,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, box) {
-                    _laneHeight = box.maxHeight;
+                    // The tracks were laid for the height the lanes had: a
+                    // new one lays them again, as a short panel squeezes.
+                    if (box.maxHeight != _laneHeight) {
+                      _laneHeight = box.maxHeight;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() {});
+                      });
+                    }
                     return SingleChildScrollView(
                       controller: _vLane,
                       child: ConstrainedBox(
@@ -5001,6 +5113,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                             rowHeight: heights[i] - cutFadeHandleHeight - 2,
                                             onChanged: _afterSound,
                                             kind: kind,
+                                            onHide: () => _toggleEnvelope(kind,
+                                                on: [_tracks[i]]),
                                           ),
                                         ),
                                       ),

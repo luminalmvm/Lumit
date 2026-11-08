@@ -4015,6 +4015,18 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceLoadPreset(
           that: this, text: text, clip: clip);
 
+  /// The gain line each of `clips` needs for the integrated loudness of the
+  /// stretch of the file it plays to land at `target_lufs`. A clip that isn't
+  /// on this layer, has no sound, or is too short or too quiet to measure
+  /// isn't in the answer.
+  ///
+  /// Reads and writes nothing in the document, as [`Self::normalise_clips`].
+  /// Not sync, because it decodes the stretch.
+  Future<List<BridgeClipLevel>> loudnessClips(
+          {required List<UuidValue> clips, required double targetLufs}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceLoudnessClips(
+          that: this, clips: clips, targetLufs: targetLufs);
+
   /// **Merge audio streams**, the way back from a split: this row sounds
   /// the streams mixed and the rows split off beside it go.
   ///

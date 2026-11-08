@@ -395,6 +395,10 @@
   "@gradeSaveLookTitle": {
     "description": "Title of the window that asks what a saved look is called."
   },
+  "gradeLookSavedNotice": "Look saved",
+  "@gradeLookSavedNotice": {
+    "description": "Status line after Save look in the Grade panel: the layer's grade was saved as a look."
+  },
   "gradeLookReplace": "Replace {name}?",
   "@gradeLookReplace": {
     "description": "Asked before a saved look is written over one of the same name.",
@@ -12487,6 +12491,18 @@
   "@workAreaClear": {
     "description": "Menu item: go back to previewing the whole composition."
   },
+  "cutLiftWorkArea": "Lift work area",
+  "@cutLiftWorkArea": {
+    "description": "Cut timeline, ruler menu: take out what is inside the work area, leaving an empty gap where it was."
+  },
+  "cutExtractWorkArea": "Extract work area",
+  "@cutExtractWorkArea": {
+    "description": "Cut timeline, ruler menu: take out what is inside the work area and close the gap, so what follows moves earlier."
+  },
+  "cutSplitAllTracks": "Split all tracks",
+  "@cutSplitAllTracks": {
+    "description": "Cut timeline, ruler menu: cut every clip under the playhead in two, on every track."
+  },
   "workAreaEnd": "Work area ends here",
   "@workAreaEnd": {
     "description": "Menu item: set the end of the stretch of time being previewed."
@@ -12697,6 +12713,10 @@
   "@cutMixLevel": {
     "description": "Cut timeline, a picture track's header: short label inside the slider that sets how see-through the track is (its opacity). Keep it short."
   },
+  "cutResetLevel": "Reset level",
+  "@cutResetLevel": {
+    "description": "Cut timeline, menu on a picture track's Level slider and on its header: put the track's opacity back to 100%."
+  },
   "cutPanCropTitle": "Pan/Crop",
   "@cutPanCropTitle": {
     "description": "Cut timeline: title of the window that sets which part of a clip's picture fills the frame, as Vegas's Pan/Crop window."
@@ -12770,7 +12790,7 @@
   },
   "cutSoundMenu": "Sound",
   "@cutSoundMenu": {
-    "description": "Cut timeline, clip menu: heading of the rows about the clip's sound (keep pitch, detach, audio streams)."
+    "description": "Cut timeline, clip menu: heading of the rows about a picture clip's sound (normalise, detach, audio streams)."
   },
   "cutUseEffects": "Use effects",
   "@cutUseEffects": {
@@ -12824,9 +12844,21 @@
   "@envelopeFlipAll": {
     "description": "Volume or pan envelope, right-click the line: mirror every point, louder becomes quieter by the same amount, or left swaps with right. Vegas calls this Flip All Points."
   },
-  "envelopeResetAll": "Reset all",
-  "@envelopeResetAll": {
-    "description": "Volume or pan envelope, right-click the line: remove every point and put the level back to 0 dB, or to centre for pan. Vegas calls this Reset All."
+  "envelopeCopyVolume": "Copy volume",
+  "@envelopeCopyVolume": {
+    "description": "Volume envelope, right-click the line: remember the track's volume line, its points and curves, to paste onto another track."
+  },
+  "envelopePasteVolume": "Paste volume",
+  "@envelopePasteVolume": {
+    "description": "Volume envelope, right-click the line: give this track the volume line copied last."
+  },
+  "envelopeCopyPan": "Copy pan",
+  "@envelopeCopyPan": {
+    "description": "Pan envelope, right-click the line: remember the track's pan line, its points and curves, to paste onto another track."
+  },
+  "envelopePastePan": "Paste pan",
+  "@envelopePastePan": {
+    "description": "Pan envelope, right-click the line: give this track the pan line copied last."
   },
   "cutSpeedLineHere": "Speed line",
   "@cutSpeedLineHere": {
@@ -16133,6 +16165,24 @@
   "@audioNormalise": {
     "description": "Menu row on a sound clip or a sound layer: sets its level so its loudest sample lands at the level in Settings. Each by its own loudest sample."
   },
+  "audioNormaliseLoudness": "Normalise loudness",
+  "@audioNormaliseLoudness": {
+    "description": "Menu row on a sound clip, opening a list of loudness targets: sets each picked clip's level so its measured loudness lands on the target picked."
+  },
+  "audioLoudnessTarget": "{value} LUFS",
+  "@audioLoudnessTarget": {
+    "description": "One target in the Normalise loudness list: a loudness in LUFS, the unit loudness is measured in.",
+    "placeholders": {
+      "value": {
+        "type": "String",
+        "example": "−14"
+      }
+    }
+  },
+  "clipResetGain": "Reset gain",
+  "@clipResetGain": {
+    "description": "Menu row on a sound clip: puts the clip's own level back to 0 dB, as it was before Normalise or a drag of its gain line."
+  },
   "audioResetVolume": "Reset volume",
   "@audioResetVolume": {
     "description": "Right-click menu on a sound layer, a Mixer strip or its fader: puts the Volume back at 0 dB."
@@ -17935,6 +17985,38 @@
   "histEditClips": "Edit clips",
   "@histEditClips": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histFreezeFrame": "Freeze frame",
+  "@histFreezeFrame": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: one frame of a clip held for a length."
+  },
+  "histNormalise": "Normalise",
+  "@histNormalise": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: sound brought to the Normalise level."
+  },
+  "histResetGain": "Reset gain",
+  "@histResetGain": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: clips' own level put back to 0 dB."
+  },
+  "histReplace": "Replace",
+  "@histReplace": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: footage from the source view put over a picked clip."
+  },
+  "histFitToFill": "Fit to fill",
+  "@histFitToFill": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: footage from the source view stretched over the work area."
+  },
+  "histGrade": "Grade",
+  "@histGrade": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a change made in the Grade panel."
+  },
+  "histPasteGrade": "Paste grade",
+  "@histPasteGrade": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a copied grade put on layers."
+  },
+  "histApplyLook": "Apply look",
+  "@histApplyLook": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. This one: a look from the Grade panel put on layers."
   },
   "histChangeLayerKind": "Change layer kind",
   "@histChangeLayerKind": {

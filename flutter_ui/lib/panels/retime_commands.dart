@@ -306,14 +306,17 @@ void freezeClips(BuildContext context, List<RetimeClip> clips) {
   for (final (layer: _, :clip) in clips) {
     if (at < clip.startFrame || at >= clip.endFrame) continue;
     final settings = ui.workspace.interface;
-    final BridgeCutResult result;
+    var result = BridgeCutResult.nothing;
     try {
-      result = comp.cutFreeze(
-        clip: clip.id,
-        atFrame: at,
-        holdFrames: _framesOf(ui, settings.cutFreezeSeconds),
-        linked: ui.cutLinked.value && !settings.cutFreezeKeepsSound,
-      );
+      asOneUndoStep(
+          Provider.of<LumitState>(context, listen: false).project,
+          () => result = comp.cutFreeze(
+                clip: clip.id,
+                atFrame: at,
+                holdFrames: _framesOf(ui, settings.cutFreezeSeconds),
+                linked: ui.cutLinked.value && !settings.cutFreezeKeepsSound,
+              ),
+          name: 'Freeze frame');
     } catch (_) {
       return;
     }

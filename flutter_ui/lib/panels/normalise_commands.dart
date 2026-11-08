@@ -14,12 +14,15 @@ import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
 
 /// Picked clips, as the layer each is on and its id. [then] runs inside the undo
-/// step, for a panel that writes something of its own after an edit.
+/// step, for a panel that writes something of its own after an edit. With
+/// [loudness] each clip's measured loudness lands on [targetDb] in LUFS, in
+/// place of its loudest sample.
 Future<void> normaliseClips(
   LumitState app,
   double targetDb,
   Iterable<(LayerReference, UuidValue)> picked, {
   required void Function() then,
+  bool loudness = false,
 }) async {
   final byLayer = <LayerReference, List<UuidValue>>{};
   for (final (layer, clip) in picked) {
@@ -28,8 +31,9 @@ Future<void> normaliseClips(
   final levels = <(LayerReference, BridgeClipLevel)>[];
   for (final MapEntry(key: layer, value: clips) in byLayer.entries) {
     try {
-      for (final level
-          in await layer.normaliseClips(clips: clips, targetDb: targetDb)) {
+      for (final level in loudness
+          ? await layer.loudnessClips(clips: clips, targetLufs: targetDb)
+          : await layer.normaliseClips(clips: clips, targetDb: targetDb)) {
         levels.add((layer, level));
       }
     } catch (_) {
@@ -39,7 +43,27 @@ Future<void> normaliseClips(
   asOneUndoStep(app.project, () {
     _writeClips(levels);
     then();
-  });
+  }, name: 'Normalise');
+}
+
+/// Picked clips' own level back at 0 dB, as one undo step. A clip already there
+/// makes no change.
+void resetClipGain(
+  LumitState app,
+  Iterable<(LayerReference, BridgeClip)> picked, {
+  required void Function() then,
+}) {
+  asOneUndoStep(app.project, () {
+    for (final (layer, clip) in picked) {
+      if (clip.gainDb == 0) continue;
+      try {
+        layer.setClipGain(clip: clip.id, db: 0);
+      } catch (_) {
+        // A locked layer refuses, and the rest still take it.
+      }
+    }
+    then();
+  }, name: 'Reset gain');
 }
 
 void _writeClips(List<(LayerReference, BridgeClipLevel)> levels) {
@@ -91,5 +115,5 @@ Future<void> normaliseLayers(
       }
     }
     then();
-  });
+  }, name: 'Normalise');
 }
