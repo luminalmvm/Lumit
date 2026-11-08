@@ -63,6 +63,9 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.effectsAndPresets => 180,
       Panel.node => 200,
       Panel.scopes => 160,
+      // A primary's name, its track and its number; the wheels stack under
+      // this.
+      Panel.grade => 200,
       Panel.hierarchy => 180,
       Panel.easing => 220,
       // Two strips and the Master: below that a desk is a list of names.

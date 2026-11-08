@@ -312,6 +312,34 @@
   "@acceptsShadows": {
     "description": "Material options row: whether shadows fall on the layer."
   },
+  "gradeBalance": "Balance",
+  "@gradeBalance": {
+    "description": "Grade panel: the heading over the three colour wheels (lift, gamma, gain)."
+  },
+  "gradeBasics": "Basics",
+  "@gradeBasics": {
+    "description": "Grade panel: the heading over the primary sliders (exposure, contrast, saturation, temperature, tint)."
+  },
+  "gradeBefore": "Before",
+  "@gradeBefore": {
+    "description": "Grade panel: tooltip on the button that shows the picture without the grade for as long as it is held."
+  },
+  "gradeBypassAll": "Bypass grade",
+  "@gradeBypassAll": {
+    "description": "Grade panel menu: switches every effect of the grade off, or back on. Ticked while they are off."
+  },
+  "gradeRemoveAll": "Remove grade",
+  "@gradeRemoveAll": {
+    "description": "Grade panel menu: removes every effect the grade is made of from the layer."
+  },
+  "gradeResetAll": "Reset grade",
+  "@gradeResetAll": {
+    "description": "Grade panel: puts every grade control back to its default. On the header button's tooltip and in the menu."
+  },
+  "gradeRevealInEffectControls": "Reveal in Effect controls",
+  "@gradeRevealInEffectControls": {
+    "description": "Grade panel menu: selects the grade's effects in the Effect controls panel and brings that panel up."
+  },
   "holdout": "Holdout",
   "@holdout": {
     "description": "Material options switch on a Model layer: it shows what is under its 3D layers in its place, so it hides what is behind it."
@@ -8439,6 +8467,10 @@
   "@panelEffectsAndPresets": {
     "description": "The name of the panel listing every effect and saved preset."
   },
+  "panelGrade": "Grade",
+  "@panelGrade": {
+    "description": "The name of the panel that grades the selected layer: colour wheels, primaries, curves and a look."
+  },
   "panelHierarchy": "Hierarchy",
   "@panelHierarchy": {
     "description": "The name of the panel showing how layers are parented to each other."
@@ -8449,7 +8481,7 @@
   },
   "panelScopes": "Scopes",
   "@panelScopes": {
-    "description": "The name of the panel with the waveform and vectorscope."
+    "description": "The name of the panel with the waveform, parade, vectorscope and histogram."
   },
   "panelTimeline": "Timeline",
   "@panelTimeline": {
@@ -9028,9 +9060,17 @@
   "@scopeEverything": {
     "description": "Choice in the Applies to picker: every project on this machine."
   },
+  "scopeGraticule": "Graticule",
+  "@scopeGraticule": {
+    "description": "Scopes panel menu: the scale drawn over the trace. Ticked while it is shown."
+  },
   "scopeHistogram": "Histogram",
   "@scopeHistogram": {
     "description": "The name of a scope counting how many pixels sit at each brightness."
+  },
+  "scopeLuma": "Luma",
+  "@scopeLuma": {
+    "description": "Scopes panel: the waveform or histogram reads the brightness. The trade's own word."
   },
   "scopeParade": "RGB parade",
   "@scopeParade": {
@@ -9040,13 +9080,13 @@
   "@scopeThisProject": {
     "description": "Choice in the Applies to picker: only the project that is open."
   },
+  "scopeRgb": "RGB",
+  "@scopeRgb": {
+    "description": "Scopes panel: the waveform or histogram reads the three channels."
+  },
   "scopeVectorscope": "Vectorscope",
   "@scopeVectorscope": {
     "description": "The name of a scope showing colour as angle and distance."
-  },
-  "scopesWaiting": "Waiting for a trace",
-  "@scopesWaiting": {
-    "description": "Shown in the Scopes panel before the first frame has been measured."
   },
   "search": "Search",
   "@search": {

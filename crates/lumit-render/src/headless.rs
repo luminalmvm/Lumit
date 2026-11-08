@@ -2164,7 +2164,7 @@ impl HeadlessRenderer {
     /// read back.
     ///
     /// `kind` is `0` luma / `1` RGB waveform / `2` vectorscope / `3` histogram
-    /// (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
+    /// / `4` parade / `5` luma histogram (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
     /// `ScopeColours` as `[bg, trace, red, green, blue]` RGB byte triples, so no
     /// colour literal lives in the engine (docs/15-DESIGN.md) and the bridge need
     /// not name `lumit-gpu`. `Err` on an unknown kind or if the tiny readback

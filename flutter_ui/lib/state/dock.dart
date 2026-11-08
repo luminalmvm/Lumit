@@ -18,6 +18,10 @@ enum Panel {
   effectControls,
   effectsAndPresets,
   scopes,
+
+  /// The selected layer's grade as wheels, primaries, curves and a look,
+  /// over the Colour effects that do the work. The Colour workspace's own.
+  grade,
   debug,
   hierarchy,
   easing,
@@ -91,6 +95,7 @@ enum Panel {
         Panel.effectControls => l10n.effectControls,
         Panel.effectsAndPresets => l10n.panelEffectsAndPresets,
         Panel.scopes => l10n.panelScopes,
+        Panel.grade => l10n.panelGrade,
         Panel.hierarchy => l10n.panelHierarchy,
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,
@@ -516,9 +521,10 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
           ],
           [0.76, 0.24],
         ),
-      // Project and Effect controls (fronted) tabbed on the left; Viewer
-      // centre-dominant; a wide right-hand column with Scopes open and
-      // Effects & presets shut under it; the Timeline at the one height.
+      // Project and Effects & presets tabbed on the left; the Viewer in the
+      // centre with Scopes under it, wide, the way a waveform wants to be
+      // read; the Grade panel full height on the right with Effect controls
+      // one tab behind it; the Timeline at the one height.
       WorkspacePreset.colour => DockSplit(
           DockAxis.vertical,
           [
@@ -527,19 +533,22 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
               [
                 DockTabs([
                   DockPane(Panel.project),
-                  DockPane(Panel.effectControls),
-                ], active: 1),
-                DockPane(Panel.viewer),
-                DockTabs(
+                  DockPane(Panel.effectsAndPresets),
+                ]),
+                DockSplit(
+                  DockAxis.vertical,
                   [
+                    DockPane(Panel.viewer),
                     DockPane(Panel.scopes),
-                    DockPane(Panel.effectsAndPresets),
                   ],
-                  stacked: true,
-                  open: {Panel.scopes.pane()},
+                  [0.62, 0.38],
                 ),
+                DockTabs([
+                  DockPane(Panel.grade),
+                  DockPane(Panel.effectControls),
+                ]),
               ],
-              [0.18, 0.52, 0.30],
+              [0.16, 0.56, 0.28],
             ),
             DockPane(Panel.timeline),
           ],

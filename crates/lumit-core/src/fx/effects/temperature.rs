@@ -1,4 +1,5 @@
-//! Temperature (docs/08 §3.16): the warm/cool channel gain pair.
+//! Temperature (docs/08 §3.16): the warm/cool channel gain pair, and the
+//! green/magenta tint that goes with it.
 
 use crate::fx::{
     cpu, params::Params, registry::EffectDef, registry::EffectMetadata, schema::EffectSchema,
@@ -37,6 +38,19 @@ pub struct Temperature {
     )]
     pub temperature: f32,
 
+    /// The other axis of white balance: negative goes green (green up),
+    /// positive magenta (green down). 0 is neutral, and a project saved
+    /// before this row existed reads 0.
+    #[slider(
+        min = -150.0,
+        max = 150.0,
+        default = 0.0,
+        hard_min = -200.0,
+        hard_max = 200.0,
+        unit = Raw
+    )]
+    pub tint: f32,
+
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
@@ -69,12 +83,20 @@ impl Temperature {
         (self.temperature / 100.0).clamp(-2.0, 2.0)
     }
 
-    /// The two gains the kernel multiplies by, and the mix
-    /// (docs/impl/effect-registry.md §2.4). Both render paths read this one
-    /// method, so the CPU reference and the WGSL kernel cannot drift apart.
-    pub fn packed(self) -> (f32, f32, f32) {
+    /// Tint ÷ 100, clamped the same way: what the green gain is made from.
+    #[must_use]
+    pub fn tint_k(self) -> f32 {
+        (self.tint / 100.0).clamp(-2.0, 2.0)
+    }
+
+    /// The three gains the kernel multiplies by (red, green, blue), and the
+    /// mix (docs/impl/effect-registry.md §2.4). Both render paths read this
+    /// one method, so the CPU reference and the WGSL kernel cannot drift
+    /// apart.
+    pub fn packed(self) -> ([f32; 3], f32) {
         let (gain_r, gain_b) = self.gains();
-        (gain_r, gain_b, (self.mix / 100.0).clamp(0.0, 1.0))
+        let gain_g = cpu::tint_gain(self.tint_k());
+        ([gain_r, gain_g, gain_b], (self.mix / 100.0).clamp(0.0, 1.0))
     }
 }
 
@@ -87,7 +109,7 @@ impl EffectDef for TemperatureDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], _w: u32, _h: u32, p: Params<'_>) {
-        let (gain_r, gain_b, mix) = Temperature::read(p).packed();
-        cpu::temperature(rgba, gain_r, gain_b, mix);
+        let (gains, mix) = Temperature::read(p).packed();
+        cpu::temperature_matted(rgba, gains, 0.0, 0.0, mix, &[]);
     }
 }

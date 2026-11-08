@@ -2869,6 +2869,17 @@
           "hard_max": 200.0
         },
         {
+          "id": "tint",
+          "label": "Tint",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -150.0,
+          "slider_max": 150.0,
+          "hard_min": -200.0,
+          "hard_max": 200.0
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",

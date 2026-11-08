@@ -2384,10 +2384,13 @@ class LumitUiState extends ChangeNotifier {
     // put back there, and the Project panel is what an opened project fronts
     // (item 6.35).
     // Except over the Mixer: picking a track there is mixing, and taking the
-    // faders away for its effects is the one thing nobody asked for.
+    // faders away for its effects is the one thing nobody asked for. The
+    // Grade panel is the same: it is the layer's controls in the Colour
+    // workspace, and Effect controls sit one tab behind it on purpose.
     if (primary != null &&
         !_restoring &&
-        !frontedOver(split, Panel.mixer, Panel.effectControls)) {
+        !frontedOver(split, Panel.mixer, Panel.effectControls) &&
+        !frontedOver(split, Panel.grade, Panel.effectControls)) {
       frontPanel(Panel.effectControls);
     }
     if (primary == null) {

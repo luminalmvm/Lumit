@@ -2740,8 +2740,8 @@ pub struct RenderScopeRequest {
     pub comp: CompositionReference,
     pub frame: u64,
     pub scale: f32,
-    /// Which trace: the codes `lumit_render` reads — 0 waveform, 1 parade,
-    /// 2 vectorscope, 3 histogram.
+    /// Which trace: the codes `lumit_render` reads, 0 waveform, 1 RGB
+    /// waveform, 2 vectorscope, 3 histogram, 4 parade, 5 luma histogram.
     pub kind: u32,
     /// Background, trace, then the R, G and B channel tints, each `[r, g, b]`.
     pub colours: [[u8; 3]; 5],

@@ -1,15 +1,15 @@
 // The Scopes panel, on the flutter_rust_bridge API.
 //
-// One of the four traces — waveform, parade, vectorscope, histogram — of the
-// frame at the playhead. The binning runs on the GPU and only the finished
+// One of the four instruments, waveform, parade, vectorscope or histogram, of
+// the frame at the playhead. The binning runs on the GPU and only the finished
 // 256x256 picture crosses, which is why a scope costs a fraction of what
 // reading the frame back would.
 //
 // **Why it asks for its own render.** The trace needs CPU pixels, and the
 // zero-copy Viewer paths never bring any back — so a scope cannot borrow the
 // picture on screen and has to render its own. That is real work per trace, so
-// this throttles rather than tracing every frame the playhead touches, and
-// nothing happens at all while the panel is not on screen.
+// this asks once per new picture rather than once per rebuild, and nothing
+// happens at all while the panel is not on screen.
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -27,11 +27,30 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'placeholder.dart';
 
-/// The trace codes the engine reads.
+/// The four instruments the picker offers.
 enum ScopeKind { waveform, parade, vectorscope, histogram }
 
 /// The engine's fixed trace size.
 const int _traceEdge = 256;
+
+/// The engine's codes: 0 luma waveform, 1 RGB waveform, 2 vectorscope, 3 RGB
+/// histogram, 4 parade, 5 luma histogram.
+int _engineKind(ScopeKind kind, {required bool rgb}) => switch (kind) {
+      ScopeKind.waveform => rgb ? 1 : 0,
+      ScopeKind.parade => 4,
+      ScopeKind.vectorscope => 2,
+      ScopeKind.histogram => rgb ? 3 : 5,
+    };
+
+/// Which kinds have a luma or RGB reading to choose between. The parade is
+/// RGB by nature and the vectorscope reads chroma alone.
+bool _hasChannelPick(ScopeKind kind) =>
+    kind == ScopeKind.waveform || kind == ScopeKind.histogram;
+
+/// The room a trace leaves round itself for the scale: levels down the left
+/// of a waveform, code values under a histogram.
+const double _gutter = 22;
+const double _margin = 6;
 
 class ScopesPanelFrb extends StatefulWidget {
   const ScopesPanelFrb({super.key});
@@ -42,7 +61,17 @@ class ScopesPanelFrb extends StatefulWidget {
 
 class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   ScopeKind _kind = ScopeKind.waveform;
+
+  /// Whether the waveform and the histogram read each channel rather than
+  /// the brightness.
+  bool _rgb = false;
+  bool _graticule = true;
   ui.Image? _trace;
+
+  /// The engine kind the trace on screen was made for, so a trace of another
+  /// kind (the Levels effect asks for histograms on the same stream) is
+  /// never shown here.
+  int _traceKind = -1;
   StreamSubscription<WorkerResponse>? _responses;
 
   int _lastFrame = -1;
@@ -52,6 +81,8 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   /// already traced is exactly as worth tracing as a new frame number — a
   /// value drag holds the playhead still and changes the picture under it.
   int _lastArrival = -1;
+
+  int get _asked => _engineKind(_kind, rgb: _rgb);
 
   @override
   void initState() {
@@ -68,9 +99,12 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   }
 
   /// Scope traces ride the same worker stream as the frames, so this ignores
-  /// everything that is not one.
+  /// everything that is not one, and every trace that is not this panel's.
+  /// The Levels effect's own histogram asks on the same stream, and before
+  /// this test it landed here as a white bell over the waveform.
   void _onResponse(WorkerResponse response) {
     if (response is! WorkerResponse_Scope) return;
+    if (response.field0.kind != _asked) return;
     ui.decodeImageFromPixels(
       Uint8List.fromList(response.field0.rgba),
       _traceEdge,
@@ -84,9 +118,20 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
         setState(() {
           _trace?.dispose();
           _trace = image;
+          _traceKind = response.field0.kind;
         });
       },
     );
+  }
+
+  void _pick({ScopeKind? kind, bool? rgb}) {
+    setState(() {
+      _kind = kind ?? _kind;
+      _rgb = rgb ?? _rgb;
+      // A new trace kind is worth a request of its own: neither the frame
+      // nor the picture of it has moved, so nothing else here would ask.
+      _lastFrame = -1;
+    });
   }
 
   @override
@@ -115,80 +160,130 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                height: 26,
-                color: t.surface1,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                // Scrolls sideways when docked narrow, the same answer the
-                // Timeline toolbar gives — an overflow stripe is a layout fault.
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 110,
-                        child: BareDropdown<ScopeKind>(
-                          key: const ValueKey('scope-kind'),
-                          value: _kind,
-                          options: ScopeKind.values,
-                          label: _label,
-                          onChanged: (k) => setState(() {
-                            _kind = k;
-                            // A new trace kind is worth a request of its own:
-                            // neither the frame nor the picture of it has
-                            // moved, so nothing else here would ask.
-                            _lastFrame = -1;
-                          }),
-                        ),
-                      ),
-                      // No frame readout here: the playhead's position is the
-                      // Timeline's and the Viewer's to state, and repeating it in
-                      // the scope's own toolbar only competes with the trace.
-                    ],
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  color: t.surface0,
-                  child: Center(
-                    child: _trace == null
-                        ? Text(l10n.scopesWaiting, style: t.small)
-                        : AspectRatio(
-                            aspectRatio: 1,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                RawImage(
-                                  key: const ValueKey('scope-trace'),
-                                  image: _trace,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.none,
-                                ),
-                                // The graticule: what the trace is measured
-                                // against. Drawn here rather than baked into the
-                                // engine's picture so it stays crisp at any panel
-                                // size — the trace is a fixed 256x256 and would
-                                // carry its labels up scaled and soft.
-                                CustomPaint(
-                                  key: const ValueKey('scope-graticule'),
-                                  painter: _GraticulePainter(
-                                    kind: _kind,
-                                    line: t.hairlineStrong,
-                                    label: t.small.copyWith(color: t.textMuted),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                  ),
-                ),
-              ),
+              _header(t),
+              Expanded(child: _body(t, ui_)),
             ],
           );
         },
       ),
     );
+  }
+
+  Widget _header(LumitTheme t) => Container(
+        height: 26,
+        color: t.surface1,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        // Scrolls sideways when docked narrow, the same answer the Timeline
+        // toolbar gives, as an overflow stripe is a layout fault.
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 110,
+                child: BareDropdown<ScopeKind>(
+                  key: const ValueKey('scope-kind'),
+                  value: _kind,
+                  options: ScopeKind.values,
+                  label: scopeKindLabel,
+                  onChanged: (k) => _pick(kind: k),
+                ),
+              ),
+              if (_hasChannelPick(_kind)) ...[
+                const SizedBox(width: 8),
+                _channelButton(t, l10n.scopeLuma, rgb: false),
+                const SizedBox(width: 2),
+                _channelButton(t, l10n.scopeRgb, rgb: true),
+              ],
+            ],
+          ),
+        ),
+      );
+
+  Widget _channelButton(LumitTheme t, String word, {required bool rgb}) =>
+      HouseButton(
+        key: ValueKey<String>('scope-${rgb ? 'rgb' : 'luma'}'),
+        small: true,
+        frameless: _rgb != rgb,
+        active: _rgb == rgb,
+        onPressed: () => _pick(rgb: rgb),
+        child: Text(word, style: t.small),
+      );
+
+  Widget _body(LumitTheme t, LumitUiState state) {
+    final themed = state.workspace.themedScopes;
+    final colours = themed ? null : ScopeColours.standard;
+    final plotFill = colours?.bg ?? t.surface0;
+    final line = colours?.graticule ?? t.hairlineStrong;
+    // The trace on screen only while it is the one asked for, so a change of
+    // instrument shows an empty plot for the moment, never the old picture
+    // under the new scale.
+    final trace = _traceKind == _asked ? _trace : null;
+    return _ScopeMenu(
+      kind: _kind,
+      rgb: _rgb,
+      graticule: _graticule,
+      themed: themed,
+      onKind: (k) => _pick(kind: k),
+      onRgb: (on) => _pick(rgb: on),
+      onGraticule: (on) => setState(() => _graticule = on),
+      onThemed: (on) {
+        state.workspace.setThemedScopes(on);
+        _pick();
+      },
+      child: Container(
+        color: t.surface0,
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final plot = _plotRect(box.biggest);
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Positioned.fromRect(
+                  rect: plot,
+                  child: ColoredBox(
+                    color: plotFill,
+                    child: trace == null
+                        ? null
+                        : RawImage(
+                            key: const ValueKey('scope-trace'),
+                            image: trace,
+                            fit: BoxFit.fill,
+                            // A 256-column trace stretched across a wide
+                            // panel: bilinear gives a phosphor's glow,
+                            // nearest gives bars.
+                            filterQuality: FilterQuality.low,
+                          ),
+                  ),
+                ),
+                if (_graticule)
+                  CustomPaint(
+                    key: const ValueKey('scope-graticule'),
+                    painter: _GraticulePainter(
+                      kind: _kind,
+                      plot: plot,
+                      line: line,
+                      label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Where the trace is drawn: the panel less the scale's gutters, and for
+  /// the vectorscope the largest square that fits, centred.
+  Rect _plotRect(Size size) {
+    final left = _kind == ScopeKind.vectorscope ? _margin : _gutter;
+    final bottom = _kind == ScopeKind.histogram ? 14.0 : _margin;
+    final inner = Rect.fromLTRB(
+        left, _margin, size.width - _margin, size.height - bottom);
+    if (_kind != ScopeKind.vectorscope) return inner;
+    final side = math.max(0.0, inner.shortestSide);
+    return Rect.fromCenter(center: inner.center, width: side, height: side);
   }
 
   /// Ask for a trace when the frame has moved, or when a new picture of it has
@@ -200,12 +295,8 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
   /// [arrived] is [LumitUiState.frameArrived]'s count. Together with [frame] it
   /// is the whole memo: the same frame and the same picture of it is nothing to
   /// ask for, and every other rebuild — a hover, a resize, the trace landing —
-  /// therefore costs no render. Every rebuild used to ask once a throttle had
-  /// elapsed, which was a trace the engine had to make each time; then the
-  /// throttle went and the same-frame test alone swallowed a value drag, which
-  /// changes the picture without moving the playhead. Once per arrival is the
-  /// rule, never once per rebuild. `_lastFrame = -1` is how the kind picker
-  /// forces one through.
+  /// therefore costs no render. Once per arrival is the rule, never once per
+  /// rebuild. `_lastFrame = -1` is how the pickers force one through.
   void _requestIfDue(LumitUiState state, int frame, int arrived) {
     final comp = state.selectedComp;
     if (comp == null) return;
@@ -217,18 +308,108 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
     comp.renderScope(
       frame: frame,
       scale: state.measuredScale,
-      kind: _kind.index,
+      kind: _asked,
       colours: scopeColoursFor(t, themed: state.workspace.themedScopes),
       view: state.measuredViewId,
     );
   }
+}
 
-  static String _label(ScopeKind kind) => switch (kind) {
-        ScopeKind.waveform => l10n.foldWaveform,
-        ScopeKind.parade => l10n.scopeParade,
-        ScopeKind.vectorscope => l10n.scopeVectorscope,
-        ScopeKind.histogram => l10n.scopeHistogram,
-      };
+/// What the picker and the menu call each instrument.
+String scopeKindLabel(ScopeKind kind) => switch (kind) {
+      ScopeKind.waveform => l10n.foldWaveform,
+      ScopeKind.parade => l10n.scopeParade,
+      ScopeKind.vectorscope => l10n.scopeVectorscope,
+      ScopeKind.histogram => l10n.scopeHistogram,
+    };
+
+/// The panel's right-click menu: the instrument, its reading, and what it is
+/// read against.
+class _ScopeMenu extends StatelessWidget {
+  final ScopeKind kind;
+  final bool rgb;
+  final bool graticule;
+  final bool themed;
+  final ValueChanged<ScopeKind> onKind;
+  final ValueChanged<bool> onRgb;
+  final ValueChanged<bool> onGraticule;
+  final ValueChanged<bool> onThemed;
+  final Widget child;
+
+  const _ScopeMenu({
+    required this.kind,
+    required this.rgb,
+    required this.graticule,
+    required this.themed,
+    required this.onKind,
+    required this.onRgb,
+    required this.onGraticule,
+    required this.onThemed,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapDown: (d) => _open(context, d.globalPosition),
+        child: child,
+      );
+
+  void _open(BuildContext context, Offset at) {
+    final picks = _hasChannelPick(kind);
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) => FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final k in ScopeKind.values)
+                MenuRow.option(
+                  key: ValueKey<String>('scope-menu-${k.name}'),
+                  selected: k == kind,
+                  onPressed: () => onKind(k),
+                  child: MenuLabel(scopeKindLabel(k), ticked: k == kind),
+                ),
+              const MenuDivider(),
+              // Greyed where the instrument has one reading, so the rows keep
+              // their place and the eye learns where to find them.
+              MenuRow.option(
+                key: const ValueKey('scope-menu-luma'),
+                enabled: picks,
+                selected: picks && !rgb,
+                onPressed: () => onRgb(false),
+                child: MenuLabel(l10n.scopeLuma,
+                    ticked: picks && !rgb, enabled: picks),
+              ),
+              MenuRow.option(
+                key: const ValueKey('scope-menu-rgb'),
+                enabled: picks,
+                selected: picks && rgb,
+                onPressed: () => onRgb(true),
+                child: MenuLabel(l10n.scopeRgb,
+                    ticked: picks && rgb, enabled: picks),
+              ),
+              const MenuDivider(),
+              MenuRow.option(
+                key: const ValueKey('scope-menu-graticule'),
+                onPressed: () => onGraticule(!graticule),
+                child: MenuLabel(l10n.scopeGraticule, ticked: graticule),
+              ),
+              MenuRow.option(
+                key: const ValueKey('scope-menu-themed'),
+                onPressed: () => onThemed(!themed),
+                child: MenuLabel(l10n.settingsScopesUseThemeColour,
+                    ticked: themed),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Background, trace, then the R, G and B tints — the five triples the engine
@@ -238,8 +419,7 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
 /// instrument, and it is read on a near-black graticule with a bright trace
 /// whatever the chrome around it is doing — the same grading-accuracy
 /// reasoning that keeps the Viewer's surround neutral (docs/15-DESIGN §8,
-/// §2.1). `ScopeColours.standard` is that fixed set, and it has been in this
-/// file all along; the panel simply never asked for it.
+/// §2.1). `ScopeColours.standard` is that fixed set.
 ///
 /// With [themed] on, the scope takes the theme's own colours instead —
 /// off-spec, opt-in, and squarely a matter of taste rather than of reading a
@@ -267,17 +447,19 @@ List<Uint8List> scopeColoursFor(LumitTheme t, {bool themed = false}) {
 /// colour targets and skin-tone line for the vectorscope, and the code range
 /// for the histogram.
 ///
-/// In plain terms: the engine sends a picture of the measurement, and this
-/// draws the ruler over it. Without one a waveform is a shape with no idea
-/// what counts as black or white, and a vectorscope is a blob with no idea
-/// which way is red — which is what made the scopes pretty rather than useful.
+/// The engine sends a picture of the measurement, and this draws the ruler
+/// over it. Without one a waveform is a shape with no idea what counts as
+/// black or white, and a vectorscope is a blob with no idea which way is red.
+/// The numbers sit in the gutter beside the plot, never over the trace.
 class _GraticulePainter extends CustomPainter {
   final ScopeKind kind;
+  final Rect plot;
   final Color line;
   final TextStyle label;
 
   const _GraticulePainter({
     required this.kind,
+    required this.plot,
     required this.line,
     required this.label,
   });
@@ -295,33 +477,32 @@ class _GraticulePainter extends CustomPainter {
       case ScopeKind.waveform:
       case ScopeKind.parade:
         for (final ire in const [0, 25, 50, 75, 100]) {
-          final y = size.height * (1 - ire / 100);
-          canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-          _text(canvas, '$ire', Offset(2, y + 1), size);
+          final y = plot.top + plot.height * (1 - ire / 100);
+          canvas.drawLine(Offset(plot.left, y), Offset(plot.right, y), paint);
+          _text(canvas, '$ire', Offset(plot.left - 3, y), align: _Align.right);
         }
         // The parade's three cells, so it reads as R, G and B rather than one
         // wide trace. No captions over them: each channel fills its own third
-        // of the width and is drawn in its own colour, so an R above the left
-        // cell tells you what the cell already says.
+        // of the width and is drawn in its own colour.
         if (kind == ScopeKind.parade) {
           for (var i = 1; i < 3; i++) {
-            final x = size.width * i / 3;
-            canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+            final x = plot.left + plot.width * i / 3;
+            canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), paint);
           }
         }
 
       // Hue round, saturation out from the middle: the circle is the frame of
       // reference, and without it the trace has no centre and no scale.
       case ScopeKind.vectorscope:
-        final centre = Offset(size.width / 2, size.height / 2);
-        final radius = size.shortestSide / 2;
+        final centre = plot.center;
+        final radius = plot.shortestSide / 2;
         for (final r in const [0.25, 0.5, 0.75, 1.0]) {
           canvas.drawCircle(centre, radius * r, paint);
         }
         canvas.drawLine(
-            Offset(centre.dx, 0), Offset(centre.dx, size.height), paint);
+            Offset(centre.dx, plot.top), Offset(centre.dx, plot.bottom), paint);
         canvas.drawLine(
-            Offset(0, centre.dy), Offset(size.width, centre.dy), paint);
+            Offset(plot.left, centre.dy), Offset(plot.right, centre.dy), paint);
         // The six primary and secondary targets at their standard angles,
         // measured anticlockwise from the +x axis, and the skin-tone line at
         // 123 degrees — the one every colourist actually looks for.
@@ -337,7 +518,9 @@ class _GraticulePainter extends CustomPainter {
           final p = centre +
               Offset(radius * 0.75 * math.cos(a), -radius * 0.75 * math.sin(a));
           canvas.drawCircle(p, 3, paint);
-          _text(canvas, name, p + const Offset(4, -6), size);
+          // The name sits just outside its target, away from the centre.
+          final out = p + Offset(10 * math.cos(a), -10 * math.sin(a));
+          _text(canvas, name, out, align: _Align.centre);
         }
         final skin = 123.0 * math.pi / 180;
         canvas.drawLine(
@@ -357,33 +540,43 @@ class _GraticulePainter extends CustomPainter {
           (0.75, '192'),
           (1.0, '255'),
         ]) {
-          final x = size.width * frac;
-          canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-          _text(canvas, name, Offset(x + 2, size.height - 12).translate(0, 0),
-              size);
+          final x = plot.left + plot.width * frac;
+          canvas.drawLine(Offset(x, plot.top), Offset(x, plot.bottom), paint);
+          _text(canvas, name, Offset(x, plot.bottom + 2),
+              align: frac == 0
+                  ? _Align.left
+                  : frac == 1
+                      ? _Align.right
+                      : _Align.centre,
+              below: true);
         }
     }
   }
 
-  void _text(Canvas canvas, String s, Offset at, Size size) {
+  /// A label anchored at [at]: centred on its y, and set left, right or
+  /// centred on its x; [below] hangs it under the point instead.
+  void _text(Canvas canvas, String s, Offset at,
+      {required _Align align, bool below = false}) {
     final p = TextPainter(
       text: TextSpan(text: s, style: label),
       textDirection: TextDirection.ltr,
     )..layout();
-    p.paint(
-      canvas,
-      Offset(
-        at.dx.clamp(0, (size.width - p.width).clamp(0, double.infinity)),
-        at.dy.clamp(0, (size.height - p.height).clamp(0, double.infinity)),
-      ),
-    );
+    final x = switch (align) {
+      _Align.left => at.dx,
+      _Align.right => at.dx - p.width,
+      _Align.centre => at.dx - p.width / 2,
+    };
+    final y = below ? at.dy : at.dy - p.height / 2;
+    p.paint(canvas, Offset(x, y));
   }
 
   @override
   bool shouldRepaint(_GraticulePainter old) =>
-      old.kind != kind || old.line != line;
+      old.kind != kind || old.line != line || old.plot != plot;
 
   /// A scale, not a control: clicks fall through to whatever is beneath.
   @override
   bool? hitTest(Offset position) => false;
 }
+
+enum _Align { left, right, centre }

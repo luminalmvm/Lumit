@@ -161,7 +161,8 @@ Not interchangeable.
 | **Source view** | A Viewer view of one footage item, with **In** and **Out** marks on the stretch to place |
 | **Work area** | The span used for preview and default export |
 | **Playhead** | The current time. Not *CTI* |
-| **Scopes** | Waveform, vectorscope, histogram |
+| **Scopes** | Waveform, RGB parade, vectorscope, histogram |
+| **Grade panel** | The selected layer's grade as wheels, primaries, curves and a look, over its Colour effects |
 | **Easing panel** | One curve shape applied to selected keyframe spans |
 | **Text panel** | Sets a text layer's font, size, spacing and outline |
 | **Paragraph panel** | Sets how a text layer's lines are aligned and spaced |
