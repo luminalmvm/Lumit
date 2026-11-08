@@ -51,27 +51,33 @@ import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
+import '../state/preview_throttle.dart';
+import '../state/timeline_columns.dart' show ValueColumn;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'node_menus.dart';
-import 'graph_value_row.dart';
 import 'effect_param_row_frb.dart'
     show
         cachedListParameterGroups,
         instanceParameters,
         defaultEffectValue,
         disabledParams,
+        EffectParamRowFrb,
         isDefaultEffectValue,
         paramGroupVisible,
         paramRidersFor,
-        relistedRows;
+        relistedRows,
+        withChained;
+import 'flare_window.dart';
+import 'lens_window.dart';
 import 'graph_cut_fade.dart';
 import 'graph_groups.dart';
 import 'graph_panel.dart';
 import 'graph_ties.dart';
 import 'placeholder.dart';
-import 'shader_editor.dart' show InstanceHome;
+import 'shader_editor.dart'
+    show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap, showCompTabMenuFrb;
 import 'viewer_tool_cursor.dart' show handPanLayer;
@@ -327,6 +333,12 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   Map<String, BridgeEffectInstanceInfo> _infos = const {};
   Map<String, CompBoxRows> _params = const {};
 
+  /// A drag on a box's control: shown at once, previewed through the render
+  /// request, committed once on release. Several values, because a chained
+  /// pair moves both of its rows in one gesture.
+  ({UuidValue node, Map<String, BridgeEffectValue> values})? _staged;
+  final PreviewThrottle _preview = PreviewThrottle();
+
   /// Canvas positions, staged: a drag moves this map and the release commits.
   Map<String, Offset> _positions = {};
 
@@ -478,6 +490,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   @override
   void dispose() {
     _unbind();
+    _preview.cancel();
     _canvasFocus.dispose();
     super.dispose();
   }
@@ -817,27 +830,194 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
   // --- A box's own controls -----------------------------------------------
 
-  /// One parameter row on an open box: its name and its value at the
-  /// playhead, read from the values the canvas holds. It only reads; the Node
-  /// panel's row is where the value is set.
+  /// One parameter row on an open box: the Node panel's row, drawn from the
+  /// values the canvas holds. It writes through the same op the panel's edit
+  /// does and previews through the same request.
   Widget _paramRow(String key, String param) {
+    final node = _byKey[key];
     final info = _infos[key];
     final held = _params[key];
     final p = held?.open.where((p) => p.id == param).firstOrNull;
     final ui = _ui;
-    if (info == null || held == null || p == null || ui == null) {
+    if (node == null ||
+        info == null ||
+        held == null ||
+        p == null ||
+        ui == null) {
       return const SizedBox.shrink();
     }
-    return GraphValueRow(
+    final values = {for (final v in info.values) v.id: v.value};
+    final staged = _staged;
+    BridgeEffectValue? valueOf(String id) =>
+        (staged != null && staged.node == node.id ? staged.values[id] : null) ??
+        values[id];
+    return EffectParamRowFrb(
       key: ValueKey<String>('graph-row-$key-$param'),
+      effectId: node.id,
       param: p,
-      value: info.values.where((v) => v.id == param).firstOrNull?.value,
+      value: valueOf(param),
       comp: widget.comp,
-      frame: ui.playheadFrame.value,
-      // Greyed where another control has taken the row over.
+      // A node graph has no layers: a layer row is a socket on the box, and
+      // the row draws its dash (§4.3).
+      ownerLayerId: node.id,
+      ownerLayers: const [],
+      playheadFrame: ui.playheadFrame.value,
+      onSeek: (frame) => ui.playheadFrame.value = frame,
+      onWrite: (node, param, value) =>
+          _writeParams(node, _withChained(info, param, value)),
+      onLive: (node, param, value) =>
+          _liveParams(node, _withChained(info, param, value)),
+      rowPadding: EdgeInsets.zero,
+      valueColumn: const ValueColumn(graphControlColumn, graphRowInset),
+      siblings: values,
+      // Greyed where another control has taken the row over, so a drag on the
+      // box cannot commit an op that changes no pixel.
       enabled: !held.disabled.contains(param),
+      riders: [
+        for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
+          (r, valueOf(r.id)),
+      ],
+      // A Custom shader's two buttons press the way they do in Effect controls.
+      // The only other Action a box carries is the Node graph's Open graph, and
+      // the canvas already knows how to go in.
+      onAction: (effect, param) {
+        if (node.matchName == 'custom_shader' &&
+            pressShaderButton(
+              context: context,
+              home: InstanceHome.graph(
+                widget.comp,
+                draw: (staged) => widget.comp.renderFrameWithGraphPreview(
+                  frame: ui.playheadFrame.value,
+                  scale: ui.viewerScale,
+                  instances: staged,
+                ),
+              ),
+              effect: effect,
+              param: param,
+              onApplied: () {
+                ui.model.refresh();
+                _reload();
+              },
+            )) {
+          return;
+        }
+        if (pressLensButton(
+          context: context,
+          home: InstanceHome.graph(widget.comp),
+          effect: effect,
+          param: param,
+          onApplied: () {
+            ui.model.refresh();
+            _reload();
+          },
+        )) {
+          return;
+        }
+        if (pressFlareButton(
+          context: context,
+          home: InstanceHome.graph(
+            widget.comp,
+            draw: (staged) => widget.comp.renderFrameWithGraphPreview(
+              frame: ui.playheadFrame.value,
+              scale: ui.viewerScale,
+              instances: staged,
+            ),
+          ),
+          effect: effect,
+          param: param,
+          comp: widget.comp,
+          frame: ui.playheadFrame.value,
+          onApplied: () {
+            ui.model.refresh();
+            _reload();
+          },
+        )) {
+          return;
+        }
+        if (node.matchName == 'expression' &&
+            editExpressionOn(
+              context: context,
+              home: InstanceHome.graph(widget.comp),
+              effect: effect,
+              param: param,
+              onApplied: () {
+                ui.model.refresh();
+                _reload();
+              },
+            )) {
+          return;
+        }
+        if (_enterBox(node)) return;
+        // Every other button is the engine's: an analysis to start or stop.
+        // The box is picked as well, so the Node panel is showing the card
+        // that says how it is getting on.
+        pressGraphBox(context, widget.comp, effect, param);
+        setState(() => _pick([node.id]));
+      },
     );
   }
+
+  /// One row's new value, and with it the other half of its pair where the
+  /// box has the two **chained**: a Transform's Scale x and Scale y are two
+  /// rows here, each with a socket of its own, and the chain the Node panel
+  /// draws between them holds on the box as well.
+  Map<String, BridgeEffectValue> _withChained(
+      BridgeEffectInstanceInfo info, String param, BridgeEffectValue value) {
+    final ui = _ui;
+    if (ui == null) return {param: value};
+    return withChained(
+        info, param, value, widget.comp, ui.playheadFrame.value);
+  }
+
+  /// The staged boxes with these values written into one of them: what a
+  /// preview sends and what a commit sends.
+  List<BridgeEffectInstance> _instancesWith(
+      UuidValue node, Map<String, BridgeEffectValue> values) {
+    final instances = widget.comp.getNodeGraphInstances();
+    for (final instance in instances) {
+      if (instance.id() != node) continue;
+      for (final entry in values.entries) {
+        instance.setValue(id: entry.key, value: entry.value);
+      }
+    }
+    return instances;
+  }
+
+  /// A typed value, or the release of a drag: one `setNodeGraph`, one undo
+  /// step, exactly what the Node panel's edit commits.
+  void _writeParams(UuidValue node, Map<String, BridgeEffectValue> values) {
+    _preview.cancel();
+    final List<BridgeEffectInstance> instances;
+    try {
+      instances = _instancesWith(node, values);
+    } catch (_) {
+      return;
+    }
+    _staged = null;
+    _commit(_wiringNow(), instances: instances);
+  }
+
+  /// A drag tick: the row shows it and the Viewer previews it; nothing is
+  /// committed.
+  void _liveParams(UuidValue node, Map<String, BridgeEffectValue> values) {
+    final ui = _ui;
+    if (ui == null) return;
+    setState(() => _staged = (node: node, values: values));
+    // Read inside the closure: a held tick must send the newest staged
+    // value, not the one that was current when it was held.
+    _preview.request(() {
+      try {
+        widget.comp.renderFrameWithGraphPreview(
+          frame: ui.playheadFrame.value,
+          scale: ui.viewerScale,
+          instances: _instancesWith(node, values),
+        );
+      } catch (_) {
+        // The graph moved under the drag; the release re-reads.
+      }
+    });
+  }
+
 
   // --- Wires --------------------------------------------------------------
 
