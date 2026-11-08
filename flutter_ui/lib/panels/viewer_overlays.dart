@@ -14,7 +14,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:provider/provider.dart';
 
@@ -23,12 +22,14 @@ import '../l10n/strings.dart';
 import '../state/workspace.dart' show ViewerReach;
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_menus.dart';
 import 'viewer_panel_frb.dart'
     show
         showViewerBackgroundPicker,
         viewerBackgroundColour,
         viewerBarIconSize,
         viewerMarkEdge,
+        viewerOffers3d,
         viewerStripHeight;
 
 /// The bar's **view menu**: one mark, and everything that is
@@ -64,6 +65,7 @@ class ViewerGuidesMenu extends StatelessWidget {
   /// The Viewer view this bar belongs to, whose own 3D ground and axes the
   /// menu shows and switches.
   final int viewId;
+  final ViewerMenuHost host;
 
   const ViewerGuidesMenu({
     super.key,
@@ -72,6 +74,7 @@ class ViewerGuidesMenu extends StatelessWidget {
     required this.comp,
     required this.background,
     required this.viewId,
+    required this.host,
   });
 
   @override
@@ -96,19 +99,22 @@ class ViewerGuidesMenu extends StatelessWidget {
     return LumitTooltip(
       message: l10n.tipViewerGuides,
       child: Builder(
-        builder: (context) => HouseButton(
-          key: const ValueKey('viewer-guides-menu'),
-          frameless: true,
-          padding: EdgeInsets.zero,
-          onPressed: () => _open(context, ui),
-          child: SizedBox(
-            width: viewerBarIconSize,
-            height: viewerStripHeight - 2 * viewerMarkEdge,
-            child: Center(
-              child: lumitIcon(
-                LumitIcon.grid,
-                size: viewerBarIconSize,
-                color: lit ? t.accent : t.textMuted,
+        builder: (context) => ViewerRightClick(
+          rows: (close) => _rows(context, ui, close),
+          child: HouseButton(
+            key: const ValueKey('viewer-guides-menu'),
+            frameless: true,
+            padding: EdgeInsets.zero,
+            onPressed: () => _open(context, ui),
+            child: SizedBox(
+              width: viewerBarIconSize,
+              height: viewerStripHeight - 2 * viewerMarkEdge,
+              child: Center(
+                child: lumitIcon(
+                  LumitIcon.grid,
+                  size: viewerBarIconSize,
+                  color: lit ? t.accent : t.textMuted,
+                ),
               ),
             ),
           ),
@@ -117,94 +123,42 @@ class ViewerGuidesMenu extends StatelessWidget {
     );
   }
 
-  /// Whether this view can show anything in 3D: it looks from a fixed or
-  /// custom view, or its comp has something in depth, which with no camera
-  /// layer is seen through the default camera.
-  bool _offers3d(LumitUiState ui) =>
-      ui.viewPoseOf(viewId) != null ||
-      ui.model.heldLayers.any((e) =>
-          e.info.switches.threeD ||
-          e.info.kind == BridgeLayerKind.camera ||
-          e.info.kind == BridgeLayerKind.light);
+  bool _offers3d(LumitUiState ui) => viewerOffers3d(ui, viewId);
 
   void _open(BuildContext context, LumitUiState ui) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
-    final t = ThemeScope.of(context).theme;
-    final region = ui.regionOfInterest != null;
-    final aids = ui.viewerAidsOf(viewId);
     // The bar sits at the bottom of the panel, so a menu anchored under it
     // would hang off the window — showLumitPopup's layout pulls it back on
     // screen, which is the same thing the background picker relies on.
-    final under = box.localToGlobal(Offset(0, box.size.height + 6));
     showMenuAt<void>(
       context: context,
-      position: under,
-      rows: (close) => [
-        for (final row in <ViewerToggle>[
-          ...viewerOverlayToggles(ui),
-          if (_offers3d(ui)) ...[
-            (
-              key: 'viewer-guides-ground',
-              text: l10n.viewerOverlayGround,
-              on: aids.ground,
-              pick: () => ui.setViewerAids(viewId, ground: !aids.ground),
-            ),
-            (
-              key: 'viewer-guides-axes',
-              text: l10n.viewerOverlayAxes,
-              on: aids.axes,
-              pick: () => ui.setViewerAids(viewId, axes: !aids.axes),
-            ),
-          ],
-          (
-            key: 'viewer-wireframes',
-            text: l10n.viewerOverlayLayerControls,
-            on: wireframes,
-            pick: onWireframes,
-          ),
-          (
-            key: 'viewer-region',
-            // A region that exists is cleared; otherwise the next drag on the
-            // picture is armed to sweep one out.
-            text: region
-                ? l10n.viewerOverlayClearRegion
-                : l10n.viewerOverlayRegion,
-            on: region || ui.armingRegion,
-            pick: () => region
-                ? ui.setRegionOfInterest(null)
-                : ui.armingRegion = !ui.armingRegion,
-          ),
-        ])
-          viewerToggleRow(row, () => close(null)),
-        // Taking every guide off this comp at once. Only offered when
-        // there is something to take off, and no tick: it is a command, not a
-        // state you can be in.
-        if (ui.guides.isNotEmpty)
-          MenuRow(
-            key: const ValueKey('viewer-guides-clear'),
-            onPressed: () {
-              close(null);
-              ui.setGuides(const []);
-            },
-            child: Row(
-              children: [
-                menuTick(false),
-                Text(l10n.viewerOverlayClearGuides),
-              ],
-            ),
-          ),
+      position: box.localToGlobal(Offset(0, box.size.height + 6)),
+      rows: (close) => _rows(context, ui, () => close(null)),
+    );
+  }
+
+  List<Widget> _rows(
+          BuildContext context, LumitUiState ui, VoidCallback close) =>
+      [
+        ...viewerShowRows(ui, host, close),
+        const MenuDivider(),
+        ...viewerGuideRows(ui, host, close),
+        const MenuDivider(),
+        viewerRegionRow(ui, close),
         // The one row that is a document edit rather than a way of looking, so
         // it carries the colour it would write.
         MenuRow(
           key: const ValueKey('viewer-background'),
           onPressed: () {
-            close(null);
+            close();
+            final box = context.findRenderObject();
             showViewerBackgroundPicker(
               context: context,
               comp: comp,
               background: background,
-              position: under,
+              position:
+                  box is RenderBox ? box.localToGlobal(Offset.zero) : Offset.zero,
             );
           },
           child: Row(
@@ -212,78 +166,27 @@ class ViewerGuidesMenu extends StatelessWidget {
               SizedBox(
                 width: 16,
                 child: Center(
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: viewerBackgroundColour(background),
-                      border: Border.all(color: t.hairlineStrong),
-                      borderRadius:
-                          BorderRadius.circular(t.tokens.controlRadius),
-                    ),
-                  ),
+                  child: Builder(builder: (context) {
+                    final t = ThemeScope.of(context).theme;
+                    return Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: viewerBackgroundColour(background),
+                        border: Border.all(color: t.hairlineStrong),
+                        borderRadius:
+                            BorderRadius.circular(t.tokens.controlRadius),
+                      ),
+                    );
+                  }),
                 ),
               ),
               Text(l10n.viewerOverlayBackground),
             ],
           ),
         ),
-      ],
-    );
-  }
+      ];
 }
-
-/// One ticked row of a Viewer menu: what it reads, whether it is on, and what
-/// picking it does.
-typedef ViewerToggle = ({
-  String key,
-  String text,
-  bool on,
-  void Function() pick,
-});
-
-/// The marks over the picture that the view menu and the picture's own
-/// right-click menu both switch, so the two cannot drift apart.
-List<ViewerToggle> viewerOverlayToggles(LumitUiState ui) => [
-      (
-        key: 'viewer-guides-grid',
-        text: l10n.viewerOverlayGrid,
-        on: ui.viewerOverlays.grid,
-        pick: () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
-      ),
-      (
-        key: 'viewer-guides-safe',
-        text: l10n.viewerOverlaySafeAreas,
-        on: ui.viewerOverlays.safeAreas,
-        pick: () =>
-            ui.setViewerOverlays(safeAreas: !ui.viewerOverlays.safeAreas),
-      ),
-      // The rulers, and the magnet that decides whether a drag reaches for
-      // what they put on the picture. The magnet is the toolbar's
-      // own switch under a second name, exactly as the layer-controls row
-      // is the View menu's: one switch, two places to find it.
-      (
-        key: 'viewer-guides-rulers',
-        text: l10n.viewerOverlayRulers,
-        on: ui.viewerOverlays.rulers,
-        pick: () => ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
-      ),
-      // How far a node graph's picture reaches past the frame. Only a node
-      // graph has one, so only a node graph offers it.
-      if (ui.model.isNodeGraph)
-        (
-          key: 'viewer-guides-reach',
-          text: l10n.viewerOverlayReach,
-          on: ui.viewerOverlays.reach,
-          pick: () => ui.setViewerOverlays(reach: !ui.viewerOverlays.reach),
-        ),
-      (
-        key: 'viewer-guides-snap',
-        text: l10n.viewerOverlaySnap,
-        on: ui.tools.snapping,
-        pick: () => ui.tools.snapping = !ui.tools.snapping,
-      ),
-    ];
 
 /// How far a node graph's picture reaches past the frame: a dotted outline
 /// round it, and its size in comp pixels under the bottom right corner. The
@@ -367,21 +270,6 @@ class ViewerReachPainter extends CustomPainter {
       old.line != line ||
       old.limitLine != limitLine;
 }
-
-/// [row] as a menu row: its tick and its name. Picking it closes the menu.
-Widget viewerToggleRow(ViewerToggle row, VoidCallback close) => MenuRow(
-      key: ValueKey<String>(row.key),
-      onPressed: () {
-        close();
-        row.pick();
-      },
-      child: Row(
-        children: [
-          menuTick(row.on),
-          Text(row.text),
-        ],
-      ),
-    );
 
 /// The grid and the safe rectangles, over the picture.
 ///

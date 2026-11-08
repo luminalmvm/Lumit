@@ -10,8 +10,10 @@ import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 
-/// Ask for a theme name, seeded with [suggested] and headed by [title].
+/// Ask for a theme name, seeded with [suggested] and headed by [title]. With
+/// [label] the field sits in a labelled row, as Pre-compose's does.
 ///
 /// Returns the trimmed name, or null when the dialogue was dismissed or left
 /// blank — a theme with no name could not be selected again, so a blank is the
@@ -21,54 +23,55 @@ Future<String?> askThemeName(
   required String title,
   required String suggested,
   String? confirm,
+  String? label,
 }) async {
   final controller = TextEditingController(text: suggested);
   final name = await showLumitModal<String>(
     context: context,
-    builder: (close) => FloatSurface(
-      width: 340,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(title, style: ThemeScope.of(context).theme.body),
-            const SizedBox(height: 10),
-            HouseTextField(
-              key: const ValueKey('theme-name-field'),
-              controller: controller,
-              width: 300,
-              autofocus: true,
-              onSubmitted: close,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                HouseButton(
-                  small: true,
-                  frameless: true,
-                  onPressed: () => close(null),
-                  child: Text(l10n.cancel),
-                ),
-                const SizedBox(width: 6),
-                HouseButton(
-                  key: const ValueKey('theme-name-ok'),
-                  small: true,
-                  // The default action. The name field holds focus, so
-                  // Enter lands there and submits — the edge just says what
-                  // Enter will do.
-                  primary: true,
-                  onPressed: () => close(controller.text),
-                  child: Text(confirm ?? l10n.save),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    ),
+    builder: (close) => Builder(builder: (context) {
+      final t = ThemeScope.of(context).theme;
+      final field = HouseTextField(
+        key: const ValueKey('theme-name-field'),
+        controller: controller,
+        width: double.infinity,
+        autofocus: true,
+        onSubmitted: close,
+      );
+      return DialogFrame(
+        width: 340,
+        children: [
+          dialogTitleBar(t,
+              title: title,
+              onClose: () => close(null),
+              keyPrefix: 'theme-name'),
+          Padding(
+            padding: dialogBodyPadding,
+            child: label == null
+                ? field
+                : dialogRow(t, label, field, labelColumn: 60),
+          ),
+          dialogFooter(
+            t,
+            keyPrefix: 'theme-name',
+            actions: [
+              HouseButton(
+                key: const ValueKey('theme-name-cancel'),
+                onPressed: () => close(null),
+                child: Text(l10n.cancel),
+              ),
+              HouseButton(
+                key: const ValueKey('theme-name-ok'),
+                // The default action. The name field holds focus, so Enter
+                // lands there and submits: the fill just says what Enter does.
+                primary: true,
+                onPressed: () => close(controller.text),
+                child: Text(confirm ?? l10n.save),
+              ),
+            ],
+          ),
+        ],
+      );
+    }),
   );
   controller.dispose();
   final trimmed = name?.trim();

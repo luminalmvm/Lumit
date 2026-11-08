@@ -217,8 +217,9 @@ const double _widthForPath = projectHeaderPadLeft +
     projectPathColumn;
 /// Date comes last, once there is room for it beside everything else.
 const double _widthForDate = _widthForPath + projectRowGap + projectDateColumn;
-const double _widthForFps = 230;
-const double _widthForSize = 190;
+// What a name needs ahead of them, with a row's indent, twirl and mark.
+const double _widthForFps = 300;
+const double _widthForSize = 240;
 
 /// Which optional columns a given panel width can carry, how wide each of them
 /// has been dragged, and — because the two answers cannot be given apart —
@@ -253,14 +254,16 @@ class ProjectColumns {
   factory ProjectColumns.forWidth(
     double width, {
     Map<ProjectColumn, double> widths = defaultProjectColumnWidths,
+    Set<ProjectColumn> hidden = const {},
   }) =>
       ProjectColumns(
-        items: width >= _widthForItems,
-        size: width >= _widthForSize,
-        fps: width >= _widthForFps,
-        duration: width >= _widthForDuration,
-        date: width >= _widthForDate,
-        path: width >= _widthForPath,
+        items: width >= _widthForItems && !hidden.contains(ProjectColumn.items),
+        size: width >= _widthForSize && !hidden.contains(ProjectColumn.size),
+        fps: width >= _widthForFps && !hidden.contains(ProjectColumn.fps),
+        duration: width >= _widthForDuration &&
+            !hidden.contains(ProjectColumn.duration),
+        date: width >= _widthForDate && !hidden.contains(ProjectColumn.date),
+        path: width >= _widthForPath && !hidden.contains(ProjectColumn.path),
         panelWidth: width,
         widths: widths,
       );

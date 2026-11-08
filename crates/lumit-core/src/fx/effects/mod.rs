@@ -18,6 +18,7 @@ pub mod accumulation_mb;
 pub mod add_grain;
 pub mod angle_control;
 pub mod audio;
+pub mod audio_spectrum;
 pub mod bake_points;
 pub mod beam;
 pub mod bezier_warp;

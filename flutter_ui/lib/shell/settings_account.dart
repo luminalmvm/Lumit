@@ -26,6 +26,7 @@ import 'add_phone_window.dart';
 import 'pro_window.dart';
 import 'profile_chip.dart';
 import 'project_history_window.dart' show backupSize, backupTime;
+import 'question_window.dart';
 import 'settings_rows.dart';
 import 'share_dialog_frb.dart' show askStopKeeping;
 import 'sign_in_window.dart';
@@ -352,25 +353,30 @@ class AccountSettings extends StatelessWidget {
     final profiles = ui.profiles;
     final pro = ui.account.pro;
     final current = profiles.current;
-    Widget toggle(String id, bool value, ValueChanged<bool> set) => IgnorePointer(
-          ignoring: !pro,
-          child: Opacity(
-            opacity: pro ? 1 : 0.4,
-            child: HouseToggle(
-              key: ValueKey<String>('settings-sync-$id'),
-              value: value,
-              onChanged: set,
-            ),
-          ),
+    Widget toggle(String id, bool value, ValueChanged<bool> set) => HouseToggle(
+          key: ValueKey<String>('settings-sync-$id'),
+          value: value,
+          onChanged: set,
         );
     return [
       _row(
         t,
         l10n.settingsSyncOn,
-        toggle('on', current.sync, profiles.setSync),
-        description: pro ? '' : l10n.settingsSyncNeedsPro,
+        // Without Pro there is nothing for it or the rows under it to do, and
+        // the tip says why.
+        pro
+            ? toggle('on', current.sync, profiles.setSync)
+            : LumitTooltip(
+                message: l10n.settingsSyncNeedsPro,
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: 0.4,
+                    child: toggle('on', false, profiles.setSync),
+                  ),
+                ),
+              ),
       ),
-      if (current.sync)
+      if (pro && current.sync)
         for (final group in ProfileGroup.values)
           _row(
             t,
@@ -459,18 +465,26 @@ class _BackupRow extends StatelessWidget {
         return settingsRow(
           t,
           l10n.backupSettingsOn,
-          pro ? '' : l10n.backupNeedsPro,
-          IgnorePointer(
-            ignoring: !pro,
-            child: Opacity(
-              opacity: pro ? 1 : 0.4,
-              child: HouseToggle(
-                key: const ValueKey('settings-backup-on'),
-                value: backup.on,
-                onChanged: backup.setOn,
-              ),
-            ),
-          ),
+          '',
+          pro
+              ? HouseToggle(
+                  key: const ValueKey('settings-backup-on'),
+                  value: backup.on,
+                  onChanged: backup.setOn,
+                )
+              : LumitTooltip(
+                  message: l10n.backupNeedsPro,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.4,
+                      child: HouseToggle(
+                        key: const ValueKey('settings-backup-on'),
+                        value: false,
+                        onChanged: backup.setOn,
+                      ),
+                    ),
+                  ),
+                ),
         );
       },
     );
@@ -546,8 +560,7 @@ class _KeptOnlineState extends State<_KeptOnline> {
   /// The one question the Shared project window asks too. A project with
   /// no file known here may have no copy on this computer.
   Future<void> _stop(OnlineKept kept) async {
-    final sure = await askStopKeeping(context,
-        name: kept.name, here: kept.name != null);
+    final sure = await askStopKeeping(context, name: kept.name);
     if (!sure || !mounted) return;
     setState(() => _stopping = kept.id);
     try {
@@ -576,7 +589,7 @@ class _KeptOnlineState extends State<_KeptOnline> {
           settingsRow(
             t,
             l10n.settingsOnlineEnded,
-            l10n.settingsOnlineEndedHint,
+            '',
             const SizedBox.shrink(),
             actions: [
               HouseButton(
@@ -626,12 +639,10 @@ class _KeptOnlineState extends State<_KeptOnline> {
                     horizontal: settingsRowPadding),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: settingsLabelColumn,
+                    Expanded(
                       child: Text(l10n.settingsOnlineUnnamed,
                           style: t.body.copyWith(color: t.textMuted)),
                     ),
-                    const Spacer(),
                     control,
                   ],
                 ),
@@ -1035,52 +1046,20 @@ class _PhonesState extends State<_Phones> {
   }
 }
 
-/// Ask before something that can't be taken back. True for yes. [note] is
-/// one quiet line under the question.
-Future<bool> askBefore(BuildContext context, String question, String yes,
-    {String? note}) async {
+/// Ask before something that can't be taken back. True for yes. The question
+/// is the title, and the whole of the window.
+Future<bool> askBefore(
+    BuildContext context, String question, String yes) async {
   final sure = await showLumitModal<bool>(
     context: context,
-    builder: (close) => FloatSurface(
-      width: 360,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Builder(builder: (context) {
-          final t = ThemeScope.of(context).theme;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(question, style: t.bodyPrimary.copyWith(height: 1.4)),
-              if (note != null) ...[
-                const SizedBox(height: 6),
-                Text(note, style: t.small),
-              ],
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  HouseButton(
-                    key: const ValueKey('confirm-no'),
-                    small: true,
-                    primary: true,
-                    autofocus: true,
-                    onPressed: () => close(false),
-                    child: Text(l10n.cancel),
-                  ),
-                  const SizedBox(width: 6),
-                  HouseButton(
-                    key: const ValueKey('confirm-yes'),
-                    small: true,
-                    onPressed: () => close(true),
-                    child: Text(yes),
-                  ),
-                ],
-              ),
-            ],
-          );
-        }),
-      ),
+    builder: (close) => QuestionWindow(
+      title: question,
+      keyPrefix: 'confirm',
+      onClose: () => close(false),
+      actions: [
+        questionPlain('confirm-no', l10n.cancel, () => close(false)),
+        questionFilled('confirm-yes', yes, () => close(true)),
+      ],
     ),
   );
   return sure ?? false;

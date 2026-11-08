@@ -85,7 +85,7 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-readout')), findsOneWidget);
 
       // The reading goes first: every fact on it is said again elsewhere.
-      await mount(tester, p, size: const Size(430, 520));
+      await mount(tester, p, size: const Size(530, 520));
       expect(find.byKey(const ValueKey('viewer-readout')), findsNothing,
           reason: 'the reading is the first whole thing to go');
       expect(shows('viewer-grid'), isTrue);
@@ -93,7 +93,7 @@ void main() {
       expect(shows('viewer-play'), isTrue);
 
       // Then the ways of looking fold into one mark — §12A.6's step 4.
-      await mount(tester, p, size: const Size(340, 520));
+      await mount(tester, p, size: const Size(430, 520));
       expect(shows('viewer-overflow'), isTrue,
           reason: 'a toolbar collapses into a menu rather than clipping');
       expect(shows('viewer-grid'), isFalse,

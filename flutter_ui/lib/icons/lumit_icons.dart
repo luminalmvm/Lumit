@@ -46,8 +46,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l4 4-4.5 6.5L4 14l1.5-3.5z"/><circle cx="7.8" cy="8.7" r="1"/><path d="M5.5 10.5l2.3-1.8"/></svg>';
   static const String text =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3.5h10M8 3.5V13M6 13h4"/></svg>';
+  /// A clip with the cut running through it. A tilted blade would be the Eraser beside it.
   static const String razor =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5L5 9.5"/><path d="M5 9.5l-2 4 4-2z" fill="currentColor"/><path d="M9 5.5l1.5 1.5"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4H3.5a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1H5"/><path d="M10 12h2.5a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H11"/><path d="M10 2 6 14"/></svg>';
   static const String anchor =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M8 2v3M8 11v3M2 8h3M11 8h3"/></svg>';
   static const String camera =
@@ -123,6 +124,29 @@ abstract final class LumitIcons {
   static const String viewAxes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1" opacity=".55"/><path d="M8 8h4.5M8 8V3.5"/><path d="M10.6 6.7 12.5 8l-1.9 1.3M6.7 5.4 8 3.5l1.3 1.9"/></svg>';
 
+  // --- Cutting ---
+  /// An edge, and what is after it pushed along.
+  static const String rippleTrim =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H3v10h2.5"/><path d="M8 8h6"/><path d="M11.5 5.5L14 8l-2.5 2.5"/></svg>';
+  /// Two clips meeting, the meeting point going either way.
+  static const String roll =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3H7v10H5.5"/><path d="M10.5 3H9v10h1.5"/><path d="M3.5 8H1.5M2.75 6.75L1.5 8l1.25 1.25"/><path d="M12.5 8h2M13.25 6.75L14.5 8l-1.25 1.25"/></svg>';
+  /// The arrows inside the clip: the box stays and what it shows moves.
+  static const String slip =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="12" height="8" rx="1"/><path d="M5.5 8h5M6.75 6.75L5.5 8l1.25 1.25M9.25 6.75L10.5 8 9.25 9.25"/></svg>';
+  /// The arrows outside the clip: the box itself moves. Slip's twin.
+  static const String slide =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="6" height="8" rx="1"/><path d="M3.25 6.75L2 8l1.25 1.25"/><path d="M12.75 6.75L14 8l-1.25 1.25"/></svg>';
+  /// Two clips, and the later one coming back to close the gap.
+  static const String autoRipple =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="3.5" height="8" rx="1"/><rect x="11" y="4" width="3.5" height="8" rx="1"/><path d="M9.5 8H6.5M8 6.5 6.5 8 8 9.5"/></svg>';
+  /// One ramp falling through one rising. Curved, so it is never read as Close.
+  static const String crossfade =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12C6 12 10 4 14 4"/><path d="M2 4C6 4 10 12 14 12"/></svg>';
+  /// A beat grid, with a point sat on one of its lines.
+  static const String quantise =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v10M8 3v10M13 3v10"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>';
+
   // --- Layer switches ---
   static const String visible =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8c2.5-4.5 10.5-4.5 13 0-2.5 4.5-10.5 4.5-13 0z"/><circle cx="8" cy="8" r="2"/></svg>';
@@ -144,18 +168,20 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6c3-3 7-3 10 0" opacity=".35"/><path d="M2 9c3 3 9 3 12 0"/></svg>';
   static const String guide =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6 1v14M1 10h14" stroke-dasharray="2 1.5"/></svg>';
-  /// The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word.
+  /// The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word. The x is kept small, as two crossing strokes at 16px darken fast.
   static const String effectsSwitch =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5h-.5a3 3 0 0 0-3 3v8M2.5 7h5"/><path d="M9.5 7l4.5 6.5M14 7l-4.5 6.5"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5h-.5a2.5 2.5 0 0 0-2.5 2.5v8.5M3 7h4.5"/><path d="M10 7.5l3.5 5.5M13.5 7.5L10 13"/></svg>';
   /// A ball and the two places it has just been, the further one fainter. Three short lines behind a small ring read as an equals sign and a letter O at 16px.
   static const String motionBlur =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="8" r="3.5"/><path d="M6.2 5A3.5 3.5 0 0 0 6.2 11"/><path d="M3.2 5A3.5 3.5 0 0 0 3.2 11" opacity=".55"/></svg>';
   static const String flow =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h2.5c2.8 0 4.2 6 7 6H14M2 11h2.5c2.8 0 4.2-6 7-6H14"/><path d="M12.2 9.2L14 11l-1.8 1.8M12.2 3.2L14 5l-1.8 1.8"/></svg>';
+  /// The inner edges are fainter, as the motion blur's ghosts are, so the cube weighs the same as the fx beside it.
   static const String threeD =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5 3v6l-5 3-5-3V5z"/><path d="M8 8l5-3M8 8v6M8 8L3 5"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5 3v6l-5 3-5-3V5z"/><path d="M8 8l5-3M8 8v6M8 8L3 5" opacity=".55"/></svg>';
+  /// The filled half is at half strength, as the matte's is, so a solid blob does not outweigh the line icons beside it.
   static const String adjustment =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11"/><path d="M8 8a3 3 0 0 1 0 0" fill="currentColor"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" opacity=".5"/></svg>';
   static const String collapse =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6L8 11l3.5-5z" fill="currentColor" stroke="none"/></svg>';
   static const String expand =
@@ -203,8 +229,9 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg>';
   static const String value =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12V4M2 12h12"/><path d="M4 9l3-3 3 2 3-4"/></svg>';
+  /// The speed line itself, ramping up over its clip.
   static const String speed =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h12"/><path d="M3 12c2-7 8-7 10 0z" fill="currentColor" opacity=".35"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13.5h12" opacity=".55"/><path d="M2 11h3.5l5-7H14"/></svg>';
   static const String auto =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M3 8h3M10 8h3"/></svg>';
   static const String clamp =
@@ -313,6 +340,28 @@ abstract final class LumitIcons {
   /// The transfer curve on its axes: values going up the side and coming out flat at the top is the whole of what the switch does to the ones above 1. Value draws a zigzag on the same axes and the two never share a surface.
   static const String toneMap =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h12M2 13V4" opacity=".4"/><path d="M3 13C8 13 8 4.5 13.5 4.5"/></svg>';
+  static const String alignEdgeLeft =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v12"/><rect x="5" y="3.5" width="8.5" height="3" rx=".5"/><rect x="5" y="9.5" width="5.5" height="3" rx=".5"/></svg>';
+  static const String alignEdgeCentre =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v1.5M8 6.5v3M8 12.5V14"/><rect x="3" y="3.5" width="10" height="3" rx=".5"/><rect x="5" y="9.5" width="6" height="3" rx=".5"/></svg>';
+  static const String alignEdgeRight =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2v12"/><rect x="2.5" y="3.5" width="8.5" height="3" rx=".5"/><rect x="5.5" y="9.5" width="5.5" height="3" rx=".5"/></svg>';
+  static const String alignEdgeTop =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12"/><rect x="3.5" y="5" width="3" height="8.5" rx=".5"/><rect x="9.5" y="5" width="3" height="5.5" rx=".5"/></svg>';
+  static const String alignEdgeMiddle =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h1.5M6.5 8h3M12.5 8H14"/><rect x="3.5" y="3" width="3" height="10" rx=".5"/><rect x="9.5" y="5" width="3" height="6" rx=".5"/></svg>';
+  static const String alignEdgeBottom =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13.5h12"/><rect x="3.5" y="2.5" width="3" height="8.5" rx=".5"/><rect x="9.5" y="5.5" width="3" height="5.5" rx=".5"/></svg>';
+  static const String distributeAcross =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v12M13.5 2v12"/><rect x="6" y="4" width="4" height="8" rx=".5"/></svg>';
+  static const String distributeDown =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h12M2 13.5h12"/><rect x="4" y="6" width="8" height="4" rx=".5"/></svg>';
+  static const String fitToComp =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1"/><rect x="5" y="5.5" width="6" height="5" rx=".5"/></svg>';
+  static const String fitToCompWidth =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3v10M13.5 3v10M5 8h6M6.5 6.5L5 8l1.5 1.5M9.5 6.5L11 8l-1.5 1.5"/></svg>';
+  static const String fitToCompHeight =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h10M3 13.5h10M8 5v6M6.5 6.5L8 5l1.5 1.5M6.5 9.5L8 11l1.5-1.5"/></svg>';
 
   // --- Project ---
   static const String folder =
@@ -496,6 +545,13 @@ abstract final class LumitIcons {
     'Local axes': localAxes,
     'World axes': worldAxes,
     'View axes': viewAxes,
+    'Ripple trim': rippleTrim,
+    'Roll': roll,
+    'Slip': slip,
+    'Slide': slide,
+    'Auto ripple': autoRipple,
+    'Crossfade': crossfade,
+    'Quantise': quantise,
     'Visible': visible,
     'Hidden': hidden,
     'Audio': audio,
@@ -578,6 +634,17 @@ abstract final class LumitIcons {
     'Quality': quality,
     'Scopes': scopes,
     'Tone map': toneMap,
+    'Align edge left': alignEdgeLeft,
+    'Align edge centre': alignEdgeCentre,
+    'Align edge right': alignEdgeRight,
+    'Align edge top': alignEdgeTop,
+    'Align edge middle': alignEdgeMiddle,
+    'Align edge bottom': alignEdgeBottom,
+    'Distribute across': distributeAcross,
+    'Distribute down': distributeDown,
+    'Fit to comp': fitToComp,
+    'Fit to comp width': fitToCompWidth,
+    'Fit to comp height': fitToCompHeight,
     'Folder': folder,
     'New folder': newFolder,
     'Composition': composition,

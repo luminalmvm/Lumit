@@ -440,6 +440,13 @@ class ProjectReference {
         that: this,
       );
 
+  /// Drop every undo and redo step and leave the document as it is. Under
+  /// the project's lock, as undo and redo are.
+  void clearHistory() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceClearHistory(
+        that: this,
+      );
+
   void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
         that: this,
       );
@@ -647,6 +654,12 @@ class ProjectReference {
   void jumpHistory({required int applied}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceJumpHistory(that: this, applied: applied);
 
+  /// Call the step the open undo group folds into `name` in the History
+  /// list, rather than after the first thing done in it. English, translated
+  /// on arrival like every other step's name. Does nothing with no group open.
+  void nameUndoGroup({required String name}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceNameUndoGroup(that: this, name: name);
+
   /// Add a composition, filed into the Compositions auto-folder, as one undo
   /// step. A blank name gets the next "Comp N".
   ///
@@ -714,6 +727,14 @@ class ProjectReference {
   /// field and the making cannot disagree.
   String nextNodeGraphName() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceNextNodeGraphName(
+        that: this,
+      );
+
+  /// The name a solid made right now would get, "White solid 3" when the
+  /// project holds two. What New solid puts in its Name field, read off the
+  /// same call that names the solid, so the two cannot disagree.
+  String nextSolidName() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNextSolidName(
         that: this,
       );
 

@@ -8,6 +8,7 @@ import '../frb_generated.dart';
 import 'composition.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -114,6 +115,13 @@ sealed class ItemReference with _$ItemReference {
   /// file.
   void setLabel({required int label}) => BridgeLib.instance.api
       .crateApiProjectItemItemReferenceSetLabel(that: this, label: label);
+
+  /// The layers that show this item, in the order the project holds them:
+  /// a layer whose source it is, or a Sequence layer with a clip of it.
+  List<LayerReference> usedBy() =>
+      BridgeLib.instance.api.crateApiProjectItemItemReferenceUsedBy(
+        that: this,
+      );
 
   /// How many uses in compositions a delete of this item would take with
   /// it, so the panel can ask first.

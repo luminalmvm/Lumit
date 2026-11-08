@@ -44,6 +44,8 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/l10n/engine_labels.dart';
+import 'package:lumit_flutter/panels/cut_kinds.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeExpressionLanguage, BridgeFfxImport, importFfxPresets;
 import 'package:lumit_flutter/src/rust/api/export.dart';
@@ -57,7 +59,6 @@ import 'package:provider/provider.dart';
 
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
-import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
 import '../state/app_icon.dart';
@@ -67,6 +68,7 @@ import '../state/extensions.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
+import '../state/setting_defaults.dart';
 import '../state/settings.dart';
 import '../state/updates.dart';
 import '../state/workspace.dart';
@@ -77,11 +79,12 @@ import '../theme/style_sheet.dart' show styleFileExtension;
 import '../theme/theme.dart';
 import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
-import 'dialog_frame.dart' show dialogSurface;
+import 'dialog_frame.dart' show dialogFooter, dialogSurface;
 import 'extension_install_frb.dart';
 import 'export_dialog_frb.dart'
     show
@@ -123,15 +126,18 @@ const Size settingsWindowSize = Size(760, 520);
 /// Below this the sidebar and the widest setting row stop fitting side by side.
 const Size settingsMinSize = Size(560, 380);
 
-/// The title strip, and the footer under the page. §12A.4's dialog title strip
-/// is 30; the footer is 8 above a 26px button and 8 below it, over a hairline.
+/// The title strip.
 const double settingsTitleStrip = 30;
-const double settingsFooterHeight = 43;
-const double settingsFooterButton = 26;
+
+/// As wide as a page's rows go. A window pulled wider than this keeps its rows
+/// together in the middle rather than leaving a name a long way from its
+/// control.
+const double settingsPageMeasure = 720;
 
 /// The sidebar, and one page's entry in it.
 const double settingsSidebarWidth = 160;
 const double settingsNavRow = 24;
+const double settingsNavGroupGap = 12;
 
 /// The tick down the left edge of the page being shown, and the inset the
 /// label gives up to it.
@@ -148,6 +154,9 @@ const double settingsCloseGlyph = 12;
 /// narrow one for a single word.
 const double _ddWide = 180;
 const double _ddNarrow = 120;
+
+/// How much room the scheme row needs before its swatch strip joins it.
+const double _schemeWithStrip = 340;
 
 /// The scale row's track and its well.
 const double _scaleTrack = 160;
@@ -166,16 +175,21 @@ const double _gutterEnds = 8;
 /// One page in the sidebar.
 enum SettingsPage {
   general,
-  account,
   appearance,
+  shortcuts,
   timeline,
   viewer,
   audio,
   autosave,
   export,
-  addons,
   previewAndCache,
-  shortcuts;
+  addons,
+  account;
+
+  /// A page the sidebar stands a little apart from the one above: how you work,
+  /// the panels, what gets written, and what comes from outside.
+  bool get startsGroup =>
+      this == timeline || this == autosave || this == addons;
 
   /// The name in the sidebar. A getter rather than a constructor argument
   /// because an enum constant is built once, at start-up, and the language can
@@ -277,6 +291,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// the window opens.
   int _largest = 8192;
   List<int> _largestChoices = const [8192];
+
+  /// What the largest picture is on a new install: the engine's 8192, or
+  /// the most this machine takes below it.
+  int get _largestShipped => _largestChoices
+      .lastWhere((side) => side <= 8192, orElse: () => _largestChoices.first);
 
   @override
   void initState() {
@@ -471,10 +490,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   // ---- the search ----------------------------------------------------------
 
-  /// Whether a row called [title] survives the search. Rows are matched on
-  /// their own names only: a search that also read the section kickers would
-  /// keep every row under "Theme" for the word *theme*, which is a page, not a
-  /// result.
+  /// Whether a row called [title] survives the search.
   bool _matches(String title) {
     if (kIsWeb && settingsNotInPage.contains(title)) return false;
     // [settingsRowNames] is asking what the rows are called, not for the rows.
@@ -482,36 +498,162 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       names.add(title);
       return false;
     }
-    return _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
+    return _keepEveryRow || _saysQuery(title);
   }
+
+  bool _saysQuery(String title) =>
+      _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
+
+  /// Set while a page is built whole for [_found]: every row is built, the
+  /// ones whose names say the query are noted in [_matched], and
+  /// [_sections] keeps a section whole or only those, by its name.
+  bool _keepEveryRow = false;
+  final Set<Widget> _matched = {};
+
+  /// Whether the page being built whole is itself named by the query, which
+  /// keeps all of it.
+  bool _pageNamed = false;
 
   /// A row, or nothing when the search has hidden it.
   Widget? _row(LumitTheme t, String title, Widget control,
       {String description = ''}) {
     if (!_matches(title)) return null;
-    final row = settingsRow(t, title, description, control);
-    if (title != widget.row || _wantedKeyed) return row;
+    final row = _keyed(title, settingsRow(t, title, description, control));
+    if (_keepEveryRow && _saysQuery(title)) _matched.add(row);
+    return row;
+  }
+
+  /// [row] marked as the one the window opened on, when [name] is the row
+  /// asked for: a setting's title, or a shortcut's action.
+  Widget _keyed(String name, Widget row) {
+    if (name != widget.row || _wantedKeyed) return row;
     _wantedKeyed = true;
     return KeyedSubtree(key: _wantedRow, child: row);
   }
 
+  /// The page whose rows are being built, null between builds.
+  SettingsPage? _building;
+
+  /// Each page's settings as they stood when it was last built: what Reset
+  /// page puts back, and whether there is anything to.
+  final Map<SettingsPage, List<SettingState>> _settingsOn = {};
+
+  /// Where the setting [key] shows stands against a new install's, from the
+  /// one table that knows ([shippedSettings]). A key it doesn't have gets no
+  /// Reset, only [copy] if there is one.
+  SettingState? _setting<T>(String key, T value, void Function(T) set,
+      {String? copy}) {
+    final shipped = shippedSettings[key];
+    if (!shippedSettings.containsKey(key) || shipped is! T) {
+      return copy == null ? null : SettingState(copy: copy);
+    }
+    return _noted(SettingState(
+      changed: value != shipped,
+      reset: () {
+        set(shipped);
+        if (mounted) setState(() {});
+      },
+      copy: copy,
+    ));
+  }
+
+  /// [setting], noted against the page being built.
+  SettingState _noted(SettingState setting) {
+    if (_building case final page?) (_settingsOn[page] ??= []).add(setting);
+    return setting;
+  }
+
+  /// The shipped number for [key], for a value well's own Reset.
+  static num? _shippedNumber(String key) => switch (shippedSettings[key]) {
+        final num n => n,
+        _ => null,
+      };
+
+  /// A path worth copying, or null for none chosen.
+  static String? _path(String path) => path.isEmpty ? null : path;
+
+  /// [control], carrying [setting] for the row it is put in.
+  static Widget _carry(SettingState? setting, Widget control) =>
+      setting == null ? control : SettingControl(setting: setting, child: control);
+
+  /// Whether [page] holds anything Reset page puts back. The Shortcuts page
+  /// goes back to the stock keymap; Account and Addons hold no settings.
+  static bool _resettable(SettingsPage page) =>
+      page != SettingsPage.account && page != SettingsPage.addons;
+
+  /// Whether Reset page would change anything on [page], from what its rows
+  /// said as it was last built. The keymap is asked whole, as a search may
+  /// have built only some of its rows; Preview and cache also puts the
+  /// quality tier back.
+  bool _changedOn(SettingsPage page) =>
+      (page == SettingsPage.shortcuts &&
+          (_keymapState()?.groups.any(
+                  (g) => g.bindings.any((b) => b.chord != b.stock)) ??
+              false)) ||
+      (_settingsOn[page]?.any((s) => s.changed) ?? false) ||
+      (page == SettingsPage.previewAndCache && (_perf?.tier.tier ?? 1) != 1);
+
+  /// [_changedOn] for a page that may not be on screen: the page is built
+  /// unseen first, so its rows say where they stand.
+  bool _pageChanged(SettingsPage page) {
+    _collect(page);
+    return _changedOn(page);
+  }
+
+  /// The pages holding a change, which the sidebar marks with the rows' dot.
+  /// Worked out as the window opens and after each change made in it, every
+  /// row counted whatever the search hides, and never while building.
+  Set<SettingsPage> _changedPages = const {};
+
+  /// What a keystroke in the search sets: nothing but the query, already read.
+  void _searched() {}
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    // Not on the cache readings' tick or a keystroke in the search, which
+    // change no setting.
+    if (fn == _pollPerf || fn == _searched) return;
+    final keep = _keepEveryRow;
+    _keepEveryRow = true;
+    try {
+      _changedPages = {
+        for (final page in SettingsPage.shown)
+          if (_resettable(page) && _pageChanged(page)) page,
+      };
+    } finally {
+      _keepEveryRow = keep;
+    }
+  }
+
+  void _collect(SettingsPage page) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    if (page == SettingsPage.previewAndCache && _perf == null) _pollPerf();
+    if (page == SettingsPage.export && _exportDefaults == null) {
+      _readExportDefaults();
+    }
+    _sectionsOf(page, ui.theme, ui);
+  }
+
   /// A switch row — the drawing's pill, not a checkbox: the same answer, in the
-  /// shape the Settings drawing gives it.
+  /// shape the Settings drawing gives it. [setting] stands in for the table's
+  /// answer where the default isn't one value.
   Widget? _flag(
     LumitTheme t,
     String key,
     String title, {
     required bool value,
     required ValueChanged<bool> set,
+    SettingState? setting,
   }) =>
       _row(
         t,
         title,
-        HouseToggle(
+        _carry(setting ?? _setting(key, value, set), HouseToggle(
           key: ValueKey<String>(key),
           value: value,
           onChanged: (on) => setState(() => set(on)),
-        ),
+        )),
       );
 
   /// A dropdown at the drawing's height, in one of its two widths.
@@ -526,7 +668,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     ValueChanged<T>? onPreview,
     VoidCallback? onPreviewEnd,
   }) =>
-      SizedBox(
+      _carry(_setting(key, value, onChanged), SizedBox(
         width: width,
         height: settingsControlHeight,
         child: BareDropdown<T>(
@@ -539,19 +681,31 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           onPreview: onPreview,
           onPreviewEnd: onPreviewEnd,
         ),
-      );
+      ));
 
   /// A page: its sections, in order, with the ones the search emptied dropped
-  /// and the first survivor left without a rule above it.
+  /// and the first survivor left without a rule above it. Each kicker's
+  /// right-click puts the page back.
   List<Widget> _sections(
     LumitTheme t,
     List<(String, List<Widget?>)> sections,
   ) {
+    final page = _building;
+    final reset = page != null && _resettable(page) && _names == null
+        ? () => _resetPage(page)
+        : null;
+    final changed = page != null && _changedOn(page);
     final out = <Widget>[];
     for (final (title, rows) in sections) {
-      final kept = rows.whereType<Widget>().toList();
+      final built = rows.whereType<Widget>();
+      // Built whole for a search: all of a section named by the query, and
+      // otherwise the rows that are.
+      final kept = !_keepEveryRow || _pageNamed || _saysQuery(title)
+          ? built.toList()
+          : built.where(_matched.contains).toList();
       if (kept.isEmpty) continue;
-      out.add(settingsSection(t, title, kept, first: out.isEmpty));
+      out.add(settingsSection(t, title, kept,
+          first: out.isEmpty, onResetPage: reset, pageChanged: changed));
     }
     return out;
   }
@@ -581,7 +735,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _titleStrip(t),
+              // The strip's right-click puts the window back, or closes it.
+              Builder(
+                builder: (context) => GestureDetector(
+                  onSecondaryTapUp: (d) => showWindowMenu(
+                      context, d.globalPosition,
+                      onClose: widget.onClose),
+                  child: _titleStrip(t),
+                ),
+              ),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -673,15 +835,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// lists rows from all of them.
   bool _marked(SettingsPage page) => _page == page && !_everywhere;
 
-  Widget _sidebar(LumitTheme t) => Padding(
-        padding: const EdgeInsets.only(top: 8),
+  Widget _sidebar(LumitTheme t) => SingleChildScrollView(
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final page in SettingsPage.shown)
+            for (final page in SettingsPage.shown) ...[
+              if (page.startsGroup) const SizedBox(height: settingsNavGroupGap),
               // The highlight a menu's rows take, under the page's own mark:
               // the page in force draws its fill over it.
-              HoverFill(
+              pageMenu(_resettable(page) ? () => _resetPage(page) : null,
+                  changed: () => _pageChanged(page), HoverFill(
                 child: GestureDetector(
                   key: ValueKey<String>('settings-page-${page.name}'),
                   behavior: HitTestBehavior.opaque,
@@ -689,7 +853,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   // The tick and the fill behind it move from the page left to
                   // the page chosen. The padding gives up exactly what the
                   // tick takes at every step, so the name does not move.
-                  child: AnimatedContainer(
+                  child: _changedDot(t, page, AnimatedContainer(
                     duration: ThemeScope.of(context).motion.mark.duration,
                     curve: ThemeScope.of(context).motion.mark.curve,
                     height: settingsNavRow,
@@ -710,50 +874,66 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     ),
                     child: Text(page.label,
                         style: _marked(page) ? t.bodyPrimary : t.body),
-                  ),
+                  )),
                 ),
-              ),
+              )),
+            ],
           ],
         ),
       );
 
-  Widget _footer(LumitTheme t, LumitUiState ui) => Container(
-        key: const ValueKey('settings-footer'),
-        height: settingsFooterHeight,
-        decoration: BoxDecoration(
-          color: t.surface2,
-          border: Border(top: BorderSide(color: t.hairline)),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            const Spacer(),
-            SizedBox(
-              height: settingsFooterButton,
-              child: HouseButton(
+  /// [row] with the rows' dot in its gutter while [page] holds a change.
+  Widget _changedDot(LumitTheme t, SettingsPage page, Widget row) =>
+      Stack(children: [
+        row,
+        if (_changedPages.contains(page))
+          PositionedDirectional(
+            start: 6,
+            top: (settingsNavRow - settingsChangedMark) / 2,
+            child: Container(
+              key: ValueKey<String>('settings-page-changed-${page.name}'),
+              width: settingsChangedMark,
+              height: settingsChangedMark,
+              decoration:
+                  BoxDecoration(color: t.accent, shape: BoxShape.circle),
+            ),
+          ),
+      ]);
+
+  /// Everything here applies as it is changed, so the footer's only act on the
+  /// settings is to put a page back, kept apart from the way out. A search has
+  /// no one page to reset, and two pages have nothing that ships with a value.
+  Widget _footer(LumitTheme t, LumitUiState ui) => dialogFooter(
+        t,
+        keyPrefix: 'settings',
+        leading: _everywhere ||
+                _page == SettingsPage.account ||
+                _page == SettingsPage.addons
+            ? null
+            : HouseButton(
                 key: const ValueKey('settings-reset-page'),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                // A search across the pages has no one page to reset.
-                onPressed: _everywhere ? null : () => _resetPage(ui),
+                // The page was built above, so what its rows said is fresh.
+                onPressed: _changedOn(_page) ? () => _resetPage(_page) : null,
                 child: Text(l10n.settingsResetPage),
               ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              height: settingsFooterButton,
-              child: HouseButton(
-                key: const ValueKey('settings-close-button'),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                onPressed: widget.onClose,
-                child: Text(l10n.close),
-              ),
-            ),
-          ],
-        ),
+        actions: [
+          HouseButton(
+            key: const ValueKey('settings-close-button'),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            onPressed: widget.onClose,
+            child: Text(l10n.close),
+          ),
+        ],
       );
 
-  List<Widget> _sectionsOf(SettingsPage page, LumitTheme t, LumitUiState ui) =>
-      switch (page) {
+  /// [page]'s sections, noting where each of its settings stands as it goes.
+  List<Widget> _sectionsOf(SettingsPage page, LumitTheme t, LumitUiState ui) {
+    final was = _building;
+    _building = page;
+    _settingsOn[page] = [];
+    try {
+      return switch (page) {
         SettingsPage.general => _general(t, ui),
         SettingsPage.account => _accountPage(ui),
         SettingsPage.appearance => _appearance(t, ui),
@@ -766,6 +946,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         SettingsPage.previewAndCache => _performance(t, ui),
         SettingsPage.shortcuts => _keymap(t, ui),
       };
+    } finally {
+      _building = was;
+    }
+  }
 
   /// The Account page, which draws and redraws itself. Asked only what its
   /// rows are called, it says and draws nothing.
@@ -774,7 +958,24 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       accountSettingsRows().forEach(_matches);
       return const [];
     }
+    if (!accountSettingsRows().any(_matches)) return const [];
     return [AccountSettings(ui: ui, matches: _matches)];
+  }
+
+  /// What a search keeps of [page]: all of it when the word is the page's name,
+  /// all of a section when it is the section's, and otherwise the rows named
+  /// it. So "cache" finds the cache sections, whose rows are Budget and In use.
+  List<Widget> _foundOn(SettingsPage page, LumitTheme t, LumitUiState ui) {
+    // The Account page keeps its own rows and answers [_matches] itself.
+    if (page == SettingsPage.account) return _sectionsOf(page, t, ui);
+    _keepEveryRow = true;
+    _pageNamed = _saysQuery(page.label);
+    _matched.clear();
+    try {
+      return _sectionsOf(page, t, ui);
+    } finally {
+      _keepEveryRow = false;
+    }
   }
 
   /// What a search found: each page's surviving rows, live as they are on the
@@ -783,9 +984,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   List<Widget> _found(LumitTheme t, LumitUiState ui) => [
         for (final page in SettingsPage.shown)
           if (page != SettingsPage.shortcuts)
-            if (_sectionsOf(page, t, ui) case final sections
+            if (_foundOn(page, t, ui) case final sections
                 when sections.isNotEmpty) ...[
-              ColoredBox(
+              pageMenu(_resettable(page) ? () => _resetPage(page) : null,
+                  changed: () => _changedOn(page), ColoredBox(
                 color: t.surface2,
                 child: HoverFill(
                   child: GestureDetector(
@@ -801,7 +1003,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     ),
                   ),
                 ),
-              ),
+              )),
               ...sections,
               const SizedBox(height: 8),
             ],
@@ -819,7 +1021,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             0, _gutterEnds, _gutterInset, _gutterEnds),
         // Built whole, so the thumb is sized from the page's real length rather
         // than a lazy list's guess, and without the app's own second scrollbar.
-        child: ScrollConfiguration(
+        // Faded where it is cut, so a page longer than the window says so.
+        child: EdgeFade(
+          axis: Axis.vertical,
+          child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: SingleChildScrollView(
             key: ValueKey<String>(
@@ -834,22 +1039,30 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ? MotionSpec.still
                   : ThemeScope.of(context).motion.reveal,
               rise: ThemeScope.of(context).motion.revealRise,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ...sections,
-                  if (sections.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(l10n.settingsNoMatches,
-                          key: const ValueKey('settings-no-matches'),
-                          style: t.small.copyWith(color: t.textMuted)),
-                    ),
-                  const SizedBox(height: 8),
-                ],
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxWidth: settingsPageMeasure),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ...sections,
+                      if (sections.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(l10n.settingsNoMatches,
+                              key: const ValueKey('settings-no-matches'),
+                              style: t.small.copyWith(color: t.textMuted)),
+                        ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
+        ),
         ),
       ),
       // **6.16: dragging the scrollbar scrolls, it does not carry the window
@@ -895,123 +1108,28 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             .clamp(0.0, range));
   }
 
-  /// Put the page back the way it ships. What "the way it ships" means is
-  /// knowable in Dart for every page but Preview and cache, where the cache
-  /// budgets are the engine's own defaults and it offers no way to ask for
-  /// them back — so that page resets the two things it can, the playback mode
-  /// and the quality tier, and leaves the budgets where the user put them.
-  void _resetPage(LumitUiState ui) {
-    final workspace = ui.workspace;
-    final settings = workspace.interface;
-    final shipped = InterfaceSettings();
-    switch (_page) {
-      case SettingsPage.general:
-        workspace.nightlyUpdates = null;
-        workspace.nightlyIcon = true;
-        ui.applyAppIcon();
-        workspace.setAutoUpdate(true);
-        workspace.setDiscordStatus(DiscordStatus.app);
-        ui.pushDiscordStatus();
-        workspace.setKeepRunning(false);
-        unawaited(applyBackground(workspace));
-        if (workspace.liveEndpoint) {
-          workspace.setLiveEndpoint(false);
-          ui.applyLiveEndpoint();
-        }
-        ui.setLanguage(null);
-      case SettingsPage.account:
-        // Nothing here has a shipped value to go back to.
-        break;
-      case SettingsPage.appearance:
-        workspace.setScheme(LumitColorScheme.dark);
-        workspace.setAccent(null);
-        ui.setShape(ThemeShape.studio);
-        workspace.setAnimationLevel(AnimationLevel.all);
-        workspace.setThemedScopes(false);
-        workspace.setThemedSplash(false);
-        workspace.setThemedEffectGraphs(false);
-        workspace.setThemedViewerSurround(false);
-        settings.uiScale = shipped.uiScale;
-        settings.showTooltips = shipped.showTooltips;
-        settings.multiwaveWaveforms = shipped.multiwaveWaveforms;
-        settings.waveformsFromBottom = shipped.waveformsFromBottom;
-        settings.compact = shipped.compact;
-        settings.chromeLabels = shipped.chromeLabels;
-        settings.room = shipped.room;
-        settings.labelCase = shipped.labelCase;
-        settings.toolBarPosition = shipped.toolBarPosition;
-        settings.rangeSliders = shipped.rangeSliders;
-        settings.projectThumbnails = shipped.projectThumbnails;
-        settings.layerNamesOnBars = shipped.layerNamesOnBars;
-        settings.markerLines = shipped.markerLines;
-        settings.timelineMinimap = shipped.timelineMinimap;
-        settings.wireStyle = shipped.wireStyle;
-        workspace.recompose();
-        workspace.save();
-      case SettingsPage.timeline:
-        settings.retimeOpensToSpeed = shipped.retimeOpensToSpeed;
-        settings.retimeInSeconds = shipped.retimeInSeconds;
-        settings.videoAsSequenceLayer = shipped.videoAsSequenceLayer;
-        settings.streamsArrival = shipped.streamsArrival;
-        settings.cutSoundWithPicture = shipped.cutSoundWithPicture;
-        settings.cutTracksAnyOrder = shipped.cutTracksAnyOrder;
-        settings.pasteLayersAtOriginalTime = shipped.pasteLayersAtOriginalTime;
-        settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
-        settings.transformInEffectControls = shipped.transformInEffectControls;
-        workspace.setFxKeyStrip(true);
-        settings.easingInPopup = shipped.easingInPopup;
-        settings.quantiseSound = shipped.quantiseSound;
-        settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
-        settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
-        settings.shiftAOpensNodeSearch = shipped.shiftAOpensNodeSearch;
-        workspace.settingsChanged();
-      case SettingsPage.viewer:
-        workspace.setSmoothZoomedViewer(false);
-        settings.showToneMap = shipped.showToneMap;
-        settings.invertOrbitAcross = shipped.invertOrbitAcross;
-        settings.invertOrbitUpDown = shipped.invertOrbitUpDown;
-        workspace.settingsChanged();
-        ui.pushViewerLook();
-      case SettingsPage.audio:
-        _chooseAudioDevice(workspace, null);
-        _setAudioOffset(workspace, 0);
-      case SettingsPage.autosave:
-        _setAutosave(workspace, minutes: 5, keep: 5);
-      case SettingsPage.export:
-        // Everything blank is what an unwritten store says, which is the export
-        // Lumit has always opened on.
-        _writeExportDefaults(const BridgeExportDefaults(
-          preset: '',
-          codec: '',
-          filenameTemplate: '',
-          destination: exportDestinationAsk,
-          folder: '',
-        ));
-      case SettingsPage.addons:
-        // Nothing on this page is a setting: it lists what is installed and
-        // offers to fetch more, and neither is Reset's to undo.
-        break;
-      case SettingsPage.previewAndCache:
-        _perfEdit(() {
-          // The shipped default, read from the one place it is written down,
-          // so Reset cannot drift from what a fresh install gets.
-          final shipped = PerformanceSettings();
-          workspace.performance.playback = shipped.playback;
-          workspace.performance.fullResDragPreviews =
-              shipped.fullResDragPreviews;
-          setFullResDragPreviews(fullRes: shipped.fullResDragPreviews);
-          workspace.performance.hardwareDecode = shipped.hardwareDecode;
-          setHardwareDecode(on_: shipped.hardwareDecode);
-          workspace.performance.largestPicture = null;
-          setLargestPicture(side: 8192);
-          _largest = largestPicture();
-          workspace.settingsChanged();
-          resetRealtime();
-          ui.requestFrame();
-        });
-      case SettingsPage.shortcuts:
-        unawaited(_resetKeymap(ui.keymap));
+  /// Put [page] back the way it ships. Each row knows where its setting
+  /// stands and how to put it back, so the page is built unseen and every
+  /// row that differs is reset. The keymap goes back to the stock one, and
+  /// Preview and cache puts the quality tier back too. It can't be undone,
+  /// so it asks first.
+  Future<void> _resetPage(SettingsPage page) async {
+    if (!await askBefore(
+        context, l10n.settingsResetPageAsk(page.label), l10n.reset)) {
+      return;
     }
+    if (!mounted) return;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    if (page == SettingsPage.shortcuts) {
+      unawaited(_resetKeymap(ui.keymap));
+      return;
+    }
+    if (!_resettable(page)) return;
+    _collect(page);
+    for (final setting in [...?_settingsOn[page]]) {
+      if (setting.changed) setting.reset?.call();
+    }
+    if (page == SettingsPage.previewAndCache) _perfEdit(resetRealtime);
     setState(() {});
   }
 
@@ -1064,25 +1182,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ],
         ),
         (
-          l10n.settingsGroupSharing,
-          [
-            _row(
-              t,
-              l10n.settingsShareUpLimit,
-              _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
-                  (limit) => ui.workspace.setShareLimits(up: limit)),
-            ),
-            _row(
-              t,
-              l10n.settingsShareDownLimit,
-              _shareLimit(
-                  'settings-share-down-limit',
-                  ui.workspace.shareDownLimit,
-                  (limit) => ui.workspace.setShareLimits(down: limit)),
-            ),
-          ],
-        ),
-        (
           l10n.settingsGroupWorkspace,
           [
             // Off means Lumit opens straight into the shell; the Viewer
@@ -1108,7 +1207,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _row(
               t,
               l10n.settingsProjectTemplate,
-              Row(
+              _carry(_setting('settings-project-template',
+                  ui.workspace.projectTemplate, ui.workspace.setProjectTemplate,
+                  copy: _path(ui.workspace.projectTemplate)), Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   HouseButton(
@@ -1132,21 +1233,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     ),
                   ],
                 ],
-              ),
+              )),
               description: ui.workspace.projectTemplate,
-            ),
-            // Converted once into the preset library, so the Effects &
-            // presets panel lists them beside Lumit's own.
-            _row(
-              t,
-              l10n.settingsAfterEffectsPresets,
-              HouseButton(
-                key: const ValueKey('settings-import-ffx'),
-                small: true,
-                onPressed: () => _importFfxPresets(ui),
-                child: Text(l10n.menuImport, style: t.small),
-              ),
-              description: _ffxMessage ?? '',
             ),
             _row(
               t,
@@ -1158,6 +1246,91 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 child: Text(l10n.menuResetWorkspace, style: t.small),
               ),
             ),
+          ],
+        ),
+        // The same updater the Help menu drives, seen from the other side: one
+        // service, two views, so they can never disagree about whether a check
+        // is running or an update is waiting.
+        (
+          l10n.settingsGroupUpdates,
+          [
+            _flag(t, 'settings-auto-update', l10n.settingsAutomaticUpdates,
+                value: ui.workspace.autoUpdate,
+                set: ui.workspace.setAutoUpdate),
+            // A nightly follows nightlies unless told not to, and a release
+            // doesn't, so the default is whichever this build is.
+            _flag(t, 'settings-nightly', l10n.settingsNightlyBuilds,
+                value: ui.updates.followsNightly,
+                set: (on) => _setNightly(ui, on),
+                setting: _noted(SettingState(
+                    changed:
+                        ui.updates.followsNightly != ui.updates.runningNightly,
+                    reset: () => _setNightly(ui, ui.updates.runningNightly)))),
+            // A nightly's own icon, or the regular one. Only a nightly has
+            // both to choose between.
+            if (ui.updates.runningNightly && appIconCanChange)
+              _flag(t, 'settings-nightly-icon', l10n.settingsNightlyIcon,
+                  value: ui.workspace.nightlyIcon, set: (on) {
+                ui.workspace.setNightlyIcon(on);
+                ui.applyAppIcon();
+              }),
+            // The whole row watches the service, not just its button: the line
+            // under it is the part that says what was found, and a stale
+            // sentence beside a live button would be worse than either alone.
+            if (_matches(l10n.settingsThisVersion))
+              ListenableBuilder(
+                listenable: ui.updates,
+                builder: (context, _) => settingsRow(
+                  t,
+                  l10n.settingsThisVersion,
+                  _updateStatusLine(ui),
+                  _carry(SettingState(copy: _installed), HouseButton(
+                    key: const ValueKey('settings-check-updates'),
+                    small: true,
+                    onPressed: ui.updates.busy
+                        ? null
+                        : () => pressUpdateRow(
+                              context,
+                              updates: ui.updates,
+                              notice: context.read<LumitState>().postNotice,
+                              projectIsDirty: () =>
+                                  context
+                                      .read<LumitState>()
+                                      .project
+                                      ?.isDirty() ??
+                                  false,
+                              saveProject: () => saveProjectFrb(
+                                  context.read<LumitState>(), ui,
+                                  leaving: true),
+                            ),
+                    child: Text(ui.updates.menuLabel, style: t.small),
+                  )),
+                ),
+              ),
+          ],
+        ),
+        (
+          l10n.settingsGroupSharing,
+          [
+            _row(
+              t,
+              l10n.settingsShareUpLimit,
+              _shareLimit('settings-share-up-limit', ui.workspace.shareUpLimit,
+                  (limit) => ui.workspace.setShareLimits(up: limit)),
+            ),
+            _row(
+              t,
+              l10n.settingsShareDownLimit,
+              _shareLimit(
+                  'settings-share-down-limit',
+                  ui.workspace.shareDownLimit,
+                  (limit) => ui.workspace.setShareLimits(down: limit)),
+            ),
+          ],
+        ),
+        (
+          l10n.settingsGroupConnections,
+          [
             _row(
               t,
               l10n.settingsDiscordStatus,
@@ -1184,6 +1357,57 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ui.workspace.setLiveEndpoint(on);
               ui.applyLiveEndpoint();
             }),
+            // Converted once into the preset library, so the Effects &
+            // presets panel lists them beside Lumit's own.
+            _row(
+              t,
+              l10n.settingsAfterEffectsPresets,
+              HouseButton(
+                key: const ValueKey('settings-import-ffx'),
+                small: true,
+                onPressed: () => _importFfxPresets(ui),
+                child: Text(l10n.menuImport, style: t.small),
+              ),
+              description: _ffxMessage ?? '',
+            ),
+            // Picked here, or the one found on the machine. Clear goes back
+            // to looking.
+            _row(
+              t,
+              l10n.settingsBlender,
+              _carry(_setting('settings-blender', ui.workspace.blenderPath,
+                  (String path) => _chooseBlender(ui, path),
+                  copy: _path(_blender?.path ?? '')), Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-blender'),
+                    small: true,
+                    onPressed: () async {
+                      final path = await pickProgram();
+                      if (path == null || !mounted) return;
+                      _chooseBlender(ui, path);
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.blenderPath.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-blender-clear'),
+                      small: true,
+                      onPressed: () => _chooseBlender(ui, ''),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              )),
+              description: switch ((_blenderLooked, _blender)) {
+                (false, _) => '',
+                (true, null) => l10n.settingsBlenderNotFound,
+                (true, final found?) =>
+                  l10n.settingsBlenderFound(found.version, found.path),
+              },
+            ),
           ],
         ),
         (
@@ -1193,7 +1417,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _row(
               t,
               l10n.settingsScriptsFolder,
-              Row(
+              _carry(_setting('settings-scripts-folder',
+                  ui.workspace.scriptsFolder, ui.workspace.setScriptsFolder,
+                  copy: _path(ui.workspace.scriptsFolder.isEmpty
+                      ? _ownScriptsFolder
+                      : ui.workspace.scriptsFolder)), Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   HouseButton(
@@ -1217,7 +1445,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     ),
                   ],
                 ],
-              ),
+              )),
               description: ui.workspace.scriptsFolder.isEmpty
                   ? _ownScriptsFolder
                   : ui.workspace.scriptsFolder,
@@ -1248,102 +1476,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   label: (script) => script ?? l10n.none,
                   onChanged: (script) => setState(
                       () => ui.workspace.setEventScript(event, script)),
-                ),
-              ),
-          ],
-        ),
-        (
-          l10n.settingsGroup3dModels,
-          [
-            // Picked here, or the one found on the machine. Clear goes back
-            // to looking.
-            _row(
-              t,
-              l10n.settingsBlender,
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  HouseButton(
-                    key: const ValueKey('settings-blender'),
-                    small: true,
-                    onPressed: () async {
-                      final path = await pickProgram();
-                      if (path == null || !mounted) return;
-                      _chooseBlender(ui, path);
-                    },
-                    child: Text(l10n.chooseEllipsis, style: t.small),
-                  ),
-                  if (ui.workspace.blenderPath.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    HouseButton(
-                      key: const ValueKey('settings-blender-clear'),
-                      small: true,
-                      onPressed: () => _chooseBlender(ui, ''),
-                      child: Text(l10n.clear, style: t.small),
-                    ),
-                  ],
-                ],
-              ),
-              description: switch ((_blenderLooked, _blender)) {
-                (false, _) => '',
-                (true, null) => l10n.settingsBlenderNotFound,
-                (true, final found?) =>
-                  l10n.settingsBlenderFound(found.version, found.path),
-              },
-            ),
-          ],
-        ),
-        // The same updater the Help menu drives, seen from the other side: one
-        // service, two views, so they can never disagree about whether a check
-        // is running or an update is waiting.
-        (
-          l10n.settingsGroupUpdates,
-          [
-            _flag(t, 'settings-auto-update', l10n.settingsAutomaticUpdates,
-                value: ui.workspace.autoUpdate,
-                set: ui.workspace.setAutoUpdate),
-            _flag(t, 'settings-nightly', l10n.settingsNightlyBuilds,
-                value: ui.updates.followsNightly,
-                set: (on) => _setNightly(ui, on)),
-            // A nightly's own icon, or the regular one. Only a nightly has
-            // both to choose between.
-            if (ui.updates.runningNightly && appIconCanChange)
-              _flag(t, 'settings-nightly-icon', l10n.settingsNightlyIcon,
-                  value: ui.workspace.nightlyIcon, set: (on) {
-                ui.workspace.setNightlyIcon(on);
-                ui.applyAppIcon();
-              }),
-            // The whole row watches the service, not just its button: the line
-            // under it is the part that says what was found, and a stale
-            // sentence beside a live button would be worse than either alone.
-            if (_matches(l10n.settingsThisVersion))
-              ListenableBuilder(
-                listenable: ui.updates,
-                builder: (context, _) => settingsRow(
-                  t,
-                  l10n.settingsThisVersion,
-                  _updateStatusLine(ui),
-                  HouseButton(
-                    key: const ValueKey('settings-check-updates'),
-                    small: true,
-                    onPressed: ui.updates.busy
-                        ? null
-                        : () => pressUpdateRow(
-                              context,
-                              updates: ui.updates,
-                              notice: context.read<LumitState>().postNotice,
-                              projectIsDirty: () =>
-                                  context
-                                      .read<LumitState>()
-                                      .project
-                                      ?.isDirty() ??
-                                  false,
-                              saveProject: () => saveProjectFrb(
-                                  context.read<LumitState>(), ui,
-                                  leaving: true),
-                            ),
-                    child: Text(ui.updates.menuLabel, style: t.small),
-                  ),
                 ),
               ),
           ],
@@ -1404,7 +1536,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(
             t,
             l10n.settingsColourScheme,
-            Row(
+            // The strip goes first when the window is narrow: the name is the
+            // setting, and the strip only shows it.
+            _carry(_setting('settings-scheme', ui.workspace.themeChoice,
+                ui.workspace.choose), LayoutBuilder(builder: (context, box) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _dropdown<ThemeChoice>(
@@ -1422,16 +1557,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   onPreview: ui.workspace.previewChoice,
                   onPreviewEnd: () => ui.workspace.previewChoice(null),
                 ),
-                const SizedBox(width: 8),
-                // What the selection actually looks like, beside its name.
-                // The drawing leaves the rest of the row empty and this is
-                // what it is for.
-                ThemeSwatchStrip(
-                  key: const ValueKey('settings-theme-swatches'),
-                  theme: ui.workspace.theme,
-                ),
+                if (box.maxWidth >= _schemeWithStrip) ...[
+                  const SizedBox(width: 8),
+                  // What the selection actually looks like, beside its name.
+                  ThemeSwatchStrip(
+                    key: const ValueKey('settings-theme-swatches'),
+                    theme: ui.workspace.theme,
+                  ),
+                ],
               ],
-            ),
+            ))),
           ),
           // Scheme, then the two rows about *your* theme, then the two dials
           // that tune whichever one is in force. The order is the order the
@@ -1453,7 +1588,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ),
           _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
               description: _themeMessage ?? ''),
-          _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
+          _row(
+              t,
+              l10n.settingsAccent,
+              _carry(
+                  _setting('settings-accent', ui.workspace.accentOverride,
+                      ui.workspace.setAccent,
+                      copy: _hex(t.accent)),
+                  _accentSwatches(t, ui))),
           _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
               value: ui.workspace.themedSplash,
               set: ui.workspace.setThemedSplash),
@@ -1516,7 +1658,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 HouseButton(
                   key: const ValueKey('settings-styles-folder'),
                   small: true,
-                  frameless: true,
                   // The style in use, picked out, or the folder itself.
                   onPressed: () => revealInFolder(
                       path: switch (ui.workspace.activeStyle) {
@@ -1672,6 +1813,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsEffectGraphsUseThemeColour,
               value: ui.workspace.themedEffectGraphs,
               set: ui.workspace.setThemedEffectGraphs),
+          _flag(t, 'settings-align-first', l10n.settingsAlignToFirstPicked,
+              value: settings.alignToFirstPicked, set: (on) {
+            settings.alignToFirstPicked = on;
+            ui.workspace.settingsChanged();
+          }),
           _row(
             t,
             l10n.settingsSurround,
@@ -1746,7 +1892,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _row(
               t,
               l10n.settingsOwnTitleBar,
-              description: l10n.settingsOwnTitleBarNote,
               HouseToggle(
                 key: const ValueKey<String>('settings-own-title-bar'),
                 value: linuxOwnTitleBar,
@@ -1779,8 +1924,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(
             t,
             l10n.settingsIconsFolder,
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            _carry(SettingState(copy: IconStyle.folder), Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -1795,12 +1940,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     IconStyle.folder ?? '',
                     key: const ValueKey('settings-icons-folder'),
                     style: t.small.copyWith(color: t.textMuted),
+                    textAlign: TextAlign.end,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
-            ),
+            )),
           ),
         ],
       ),
@@ -1834,7 +1980,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               set: (on) {
             settings.timelineMinimap = on;
             ui.workspace.settingsChanged();
-          }),
+          },
+              setting: _noted(SettingState(
+                  changed: (settings.timelineMinimap ??
+                          t.shape == ThemeShape.lantern) !=
+                      (t.shape == ThemeShape.lantern),
+                  reset: () => setState(() {
+                        settings.timelineMinimap = null;
+                        ui.workspace.settingsChanged();
+                      })))),
           _row(
             t,
             l10n.settingsWireStyle,
@@ -1975,7 +2129,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ui.workspace.settingsChanged();
         });
     final unit = t.mono.copyWith(fontSize: 10, color: t.textMuted);
-    return Row(
+    final percent = settings.uiScale * 100;
+    return _carry(_setting('settings-ui-scale', percent, set,
+        copy: '${percent.round()}'), LayoutBuilder(builder: (context, box) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         HouseSlider(
@@ -1984,7 +2140,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           min: 75,
           max: 200,
           step: 5,
-          width: _scaleTrack,
+          // The track gives way when the window is narrow.
+          width: (box.maxWidth - _scaleWell - 40).clamp(40.0, _scaleTrack),
           showValue: false,
           commitOnRelease: true,
           onChanged: set,
@@ -1999,26 +2156,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             min: 75,
             max: 200,
             decimals: 0,
+            resetTo: _shippedNumber('settings-ui-scale'),
             onChanged: (v) => set(v.toDouble()),
           ),
         ),
         const SizedBox(width: 8),
         Text(l10n.unitSymbolPercent, style: unit),
-        const SizedBox(width: 8),
-        // The one thing in the row that may be shortened: the window is
-        // resizable, and at the drawing's own width this row fills the column
-        // to the pixel — the note gets the 107-odd the drawing leaves it, and
-        // **wraps onto the two lines the drawing draws**.
-        //
-        // It used to carry `overflow: TextOverflow.ellipsis`, which is not the
-        // "shorten it" this needed: an ellipsis with no line limit puts the
-        // whole phrase on one line and cuts it off, so the note read "applies
-        // on rele…" instead of wrapping. Wrapping is the shortening.
-        Flexible(
-          child: Text(l10n.settingsAppliesOnRelease, style: unit),
-        ),
       ],
-    );
+    )));
   }
 
   // ---- Your themes ---------------------------------------------------------
@@ -2060,7 +2205,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         HouseButton(
           key: const ValueKey('settings-theme-delete'),
           small: true,
-          frameless: true,
           onPressed: custom == null
               ? null
               : () => setState(() {
@@ -2257,6 +2401,34 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.quantiseSound = on;
             changed();
           }),
+          _flag(t, 'settings-freeze-keeps-sound', l10n.settingsFreezeKeepsSound,
+              value: settings.cutFreezeKeepsSound, set: (on) {
+            settings.cutFreezeKeepsSound = on;
+            changed();
+          }),
+          _row(
+            t,
+            l10n.settingsDefaultTransition,
+            _dropdown<String?>(
+              key: 'settings-default-transition',
+              value: settings.cutDefaultTransition,
+              options: [
+                null,
+                for (final kind in transitionKinds) kind.matchName,
+              ],
+              label: (kind) {
+                if (kind == null) return l10n.cutDissolve;
+                for (final each in transitionKinds) {
+                  if (each.matchName == kind) return engineLabel(each.label);
+                }
+                return kind;
+              },
+              onChanged: (kind) {
+                setState(() => settings.cutDefaultTransition = kind);
+                changed();
+              },
+            ),
+          ),
         ],
       ),
       (
@@ -2384,7 +2556,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(
             t,
             l10n.settingsAudioOffset,
-            SizedBox(
+            _carry(_setting('settings-audio-offset', ui.workspace.audioOffsetMs,
+                (int ms) => _setAudioOffset(ui.workspace, ms),
+                copy: '${ui.workspace.audioOffsetMs}'), SizedBox(
               width: 70,
               height: settingsControlHeight,
               child: DragValueField(
@@ -2394,9 +2568,32 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 max: 1000,
                 decimals: 0,
                 suffix: ' ms',
+                resetTo: _shippedNumber('settings-audio-offset'),
                 onChanged: (ms) => _setAudioOffset(ui.workspace, ms.round()),
               ),
-            ),
+            )),
+          ),
+          _row(
+            t,
+            l10n.settingsNormaliseTo,
+            _carry(_setting('settings-normalise-target',
+                ui.workspace.normaliseTargetDb,
+                (double db) => ui.workspace.setNormaliseTargetDb(db),
+                copy: ui.workspace.normaliseTargetDb.toStringAsFixed(1)), SizedBox(
+              width: 70,
+              height: settingsControlHeight,
+              child: DragValueField(
+                key: const ValueKey('settings-normalise-target'),
+                value: ui.workspace.normaliseTargetDb,
+                min: -24,
+                max: 0,
+                decimals: 1,
+                suffix: ' dB',
+                resetTo: _shippedNumber('settings-normalise-target'),
+                onChanged: (db) => setState(
+                    () => ui.workspace.setNormaliseTargetDb(db.toDouble())),
+              ),
+            )),
           ),
         ],
       ),
@@ -2442,7 +2639,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(
             t,
             l10n.settingsAutosaveEvery,
-            Row(
+            _carry(_setting('settings-autosave-minutes', workspace.autosaveMinutes,
+                (int minutes) => _setAutosave(workspace,
+                    minutes: minutes, keep: workspace.autosaveKeep),
+                copy: '${workspace.autosaveMinutes}'), Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
@@ -2455,6 +2655,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     max: 240,
                     speed: 0.1,
                     decimals: 0,
+                    resetTo: _shippedNumber('settings-autosave-minutes'),
                     onChanged: (minutes) => _setAutosave(workspace,
                         minutes: minutes.round(), keep: workspace.autosaveKeep),
                   ),
@@ -2463,12 +2664,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 Text(l10n.unitMinutes,
                     style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
               ],
-            ),
+            )),
           ),
           _row(
             t,
             l10n.settingsAutosaveKeep,
-            SizedBox(
+            _carry(_setting('settings-autosave-keep', workspace.autosaveKeep,
+                (int keep) => _setAutosave(workspace,
+                    minutes: workspace.autosaveMinutes, keep: keep),
+                copy: '${workspace.autosaveKeep}'), SizedBox(
               width: 70,
               height: settingsControlHeight,
               child: DragValueField(
@@ -2478,10 +2682,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 max: 50,
                 speed: 0.1,
                 decimals: 0,
+                resetTo: _shippedNumber('settings-autosave-keep'),
                 onChanged: (keep) => _setAutosave(workspace,
                     minutes: workspace.autosaveMinutes, keep: keep.round()),
               ),
-            ),
+            )),
           ),
           if (kIsWeb) _row(t, l10n.settingsBrowserStorage, storageKept(t)),
         ],
@@ -2539,7 +2744,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(
             t,
             l10n.settingsExportFilename,
-            SizedBox(
+            _carry(_setting('settings-export-template', defaults.filenameTemplate,
+                (String template) => _setExportDefaults(template: template),
+                copy: _path(defaults.filenameTemplate)), SizedBox(
               width: _ddWide,
               height: settingsControlHeight,
               child: HouseTextField(
@@ -2556,12 +2763,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 onSubmitted: (text) =>
                     _setExportDefaults(template: text.trim()),
               ),
-            ),
+            )),
           ),
           _row(
             t,
             l10n.settingsExportDestination,
-            Row(
+            // Back to asking forgets the folder too, as an unwritten store has
+            // none.
+            _carry(_setting('settings-export-destination', defaults.destination,
+                (String to) => _setExportDefaults(destination: to, folder: ''),
+                copy: folder ? _path(defaults.folder) : null), Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
@@ -2589,7 +2800,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ),
                 ],
               ],
-            ),
+            )),
             // The one thing this page has to *report*: which folder, when a
             // folder is what was chosen. A path is too long for the label
             // column, which is what the full-width line under a row is for.
@@ -2759,12 +2970,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ],
         ),
-        description: [
-          if (extension.summary.isNotEmpty) extension.summary,
-          if (extension.effects.isNotEmpty)
-            l10n.settingsExtensionEffects(
-                extension.effects.map((e) => e.name).join(', ')),
-        ].join('\n'),
       );
 
   List<Widget?> _extensionRows(LumitTheme t, LumitUiState ui) {
@@ -3286,18 +3491,31 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       for (final group in groups)
         settingsSection(t, group.label, [
           for (final binding in group.bindings)
-            settingsRow(
-              t,
-              binding.description,
-              '',
-              _ChordCell(
-                key: ValueKey('keymap-chord-${binding.context.name}-'
-                    '${binding.action}'),
-                binding: binding,
-                keymap: km,
-                onChanged: () {
-                  if (mounted) setState(() {});
-                },
+            _keyed(
+              binding.action,
+              settingsRow(
+                t,
+                binding.description,
+                '',
+                // Reset and the dot, as every other row has them.
+                SettingControl(
+                  setting: _noted(SettingState(
+                    changed: binding.chord != binding.stock,
+                    reset: () async {
+                      await km.resetBinding(binding.context, binding.action);
+                      if (mounted) setState(() {});
+                    },
+                  )),
+                  child: _ChordCell(
+                    key: ValueKey('keymap-chord-${binding.context.name}-'
+                        '${binding.action}'),
+                    binding: binding,
+                    keymap: km,
+                    onChanged: () {
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ),
               ),
             ),
         ]),
@@ -3527,7 +3745,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         // out of one, only those of the page that is left showing.
         if (_everywhere && !was) _readEveryPage();
         if (was && !_everywhere) _showPage(_page);
-        setState(() {});
+        setState(_searched);
       });
     _search = created;
     return created;
@@ -3590,10 +3808,21 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               // Not kept, but in force until Lumit closes.
             }
           }),
+          // The engine's own size, held to what this card takes, is the
+          // default; a file that never chose stores nothing.
           _row(
             t,
             l10n.settingsLargestPicture,
-            _dropdown<int>(
+            _carry(_noted(SettingState(
+              changed: _largest != _largestShipped,
+              reset: () => setState(() {
+                setLargestPicture(side: 8192);
+                _largest = largestPicture();
+                ui.workspace.performance.largestPicture = null;
+                ui.workspace.settingsChanged();
+                ui.requestFrame();
+              }),
+            )), _dropdown<int>(
               key: 'settings-largest-picture',
               value: _largest,
               options: _largestChoices,
@@ -3608,7 +3837,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 ui.workspace.settingsChanged();
                 ui.requestFrame();
               }),
-            ),
+            )),
           ),
           _row(
             t,
@@ -3848,7 +4077,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         _row(
           t,
           l10n.settingsWhere,
-          Row(
+          // A project's own choice is the project's, put back with an undo
+          // rather than here.
+          _carry(scope == CacheScope.everywhere
+              ? _noted(SettingState(
+                  changed: where != BridgeCacheLocation.appData,
+                  reset: () =>
+                      _setLocation(ui, BridgeCacheLocation.appData, scope),
+                  copy: _path(disk.root)))
+              : SettingState(copy: _path(disk.root)), Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
@@ -3875,7 +4112,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 ),
               ],
             ],
-          ),
+          )),
           description:
               disk.root.isEmpty ? l10n.settingsHelpNowhereToPark : disk.root,
         ),
@@ -4023,7 +4260,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       _row(
         t,
         l10n.settingsBudget,
-        Row(
+        // The engine picks the shipped budget for the machine and can't be
+        // asked it, so there is a number to copy but nothing to reset to.
+        _carry(SettingState(copy: '${bytes >> 20}'), Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
@@ -4044,7 +4283,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             Text(l10n.unitMb,
                 style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
           ],
-        ),
+        )),
       );
 
   /// What the machine has, in MiB, falling back to a documented ceiling when
@@ -4278,16 +4517,6 @@ class _ChordCellState extends State<_ChordCell> {
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
-        HouseButton(
-          small: true,
-          onPressed: () async {
-            await widget.keymap
-                .resetBinding(widget.binding.context, widget.binding.action);
-            widget.onChanged();
-          },
-          child: Text(l10n.reset, style: t.small),
         ),
       ],
     );

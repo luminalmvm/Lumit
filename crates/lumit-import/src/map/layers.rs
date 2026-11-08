@@ -149,6 +149,16 @@ pub(crate) fn map_layer(
     // rotations come across exactly.
     transform.after_effects_order = ae.switches.as_ref().and_then(|s| s.three_d) == Some(true)
         || matches!(kind, LayerKind::Camera { .. } | LayerKind::Light { .. });
+    // A camera's or a light's Auto-orient is its two-node aim.
+    transform.orient = match ae.auto_orient.as_deref() {
+        Some("ALONG_PATH") => lumit_core::orient::Orient::AlongPath,
+        Some("CAMERA_OR_POINT_OF_INTEREST")
+            if !matches!(kind, LayerKind::Camera { .. } | LayerKind::Light { .. }) =>
+        {
+            lumit_core::orient::Orient::TowardsCamera
+        }
+        _ => lumit_core::orient::Orient::Off,
+    };
     // Nothing lights a camera, a light or a null, so it keeps the material a
     // file leaves out.
     transform.material = Box::new(match kind {
@@ -559,6 +569,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         None => return TransformGroup::default(),
     };
     TransformGroup {
+        orient: lumit_core::orient::Orient::Off,
         anchor_x: scalar(conv, path, props, "ADBE Anchor Point", 0, 0.0),
         anchor_y: scalar(conv, path, props, "ADBE Anchor Point", 1, 0.0),
         position_x: scalar(conv, path, props, "ADBE Position", 0, 0.0),

@@ -312,6 +312,9 @@ class FootageReference {
         that: this,
       );
 
+  /// Where the file is on disk, a path kept relative to the project
+  /// resolved against the project's folder. Whether anything is there is
+  /// [`Self::get_status`]'s question.
   String filePath() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceFilePath(
         that: this,

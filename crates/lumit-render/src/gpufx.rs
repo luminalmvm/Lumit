@@ -28,6 +28,7 @@ use lumit_gpu::GpuContext;
 
 use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
+mod audio_spectrum;
 mod energy_line;
 pub mod lfx;
 pub mod ofx;
@@ -461,6 +462,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Scribble,
     &Stroke,
     &energy_line::EnergyLine,
+    &audio_spectrum::AudioSpectrum,
     &crate::gpufx_particulate::Particulate,
     &Grid,
     &Scatter,
@@ -2410,7 +2412,7 @@ impl GpuEffect for Temperature {
         aux: AuxSlot<'_>,
     ) -> Tex {
         let e = effects::temperature::Temperature::read(p);
-        let (gain_r, gain_b, mix) = e.packed();
+        let ([gain_r, gain_g, gain_b], mix) = e.packed();
         fx.temperature(
             ctx,
             tex,
@@ -2419,7 +2421,9 @@ impl GpuEffect for Temperature {
             aux.matte(),
             &lumit_gpu::fx::colour::TemperatureOp {
                 t: e.t(),
+                tint: e.tint_k(),
                 gain_r,
+                gain_g,
                 gain_b,
                 mix,
             },

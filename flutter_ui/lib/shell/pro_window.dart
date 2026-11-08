@@ -30,6 +30,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'profile_chip.dart';
+import 'question_window.dart';
 import 'sign_in_window.dart';
 import 'wordmark.dart';
 
@@ -208,15 +209,15 @@ class _ProWindowState extends State<_ProWindow>
         ),
         ProHero(
           arrive: _arrive,
-          headline: pro ? l10n.proThanksHeadline : l10n.proHeadline,
-          lead: pro
-              ? (account!.preview ? l10n.proPreviewNote : l10n.proThanksBody)
-              : null,
+          // Thanks are said once, to whoever just got it.
+          headline:
+              pro && !_hadPro ? l10n.proThanksHeadline : l10n.proHeadline,
+          lead: pro && account!.preview ? l10n.proPreviewNote : null,
           pro: pro,
           preview: pro ? account!.preview : (config?.preview ?? false),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
+          padding: EdgeInsets.fromLTRB(22, 4, 22, pro ? 8 : 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -257,17 +258,36 @@ class _ProWindowState extends State<_ProWindow>
                 body: l10n.proFeatureSyncBody,
                 on: pro,
               ),
-              const SizedBox(height: 14),
-              ..._foot(t, account, config),
+              if (!pro) ...[
+                const SizedBox(height: 14),
+                ..._foot(t, account, config),
+              ],
             ],
           ),
         ),
+        if (pro) _proFooter(t, account!),
       ],
     );
   }
 
-  /// Under the features: the plans and the button, or what stands in for
-  /// them once there is nothing left to buy.
+  /// With Pro there is nothing left to buy, so the window ends as any other
+  /// does: how the subscription stands, and the ways out.
+  Widget _proFooter(LumitTheme t, CloudAccount account) {
+    final line = subscriptionLine(account);
+    return dialogFooter(
+      t,
+      keyPrefix: 'pro',
+      summary: account.onIphone ? l10n.proManagedOnIphone : line?.$1 ?? '',
+      actions: [
+        if (!account.onIphone && account.subscription != null)
+          questionPlain('pro-manage', l10n.proManage,
+              () => unawaited(openSubscriptionPage(_account))),
+        questionFilled('pro-done', l10n.proClose, widget.close),
+      ],
+    );
+  }
+
+  /// Under the features: the plans and the button.
   List<Widget> _foot(LumitTheme t, CloudAccount? account, CloudConfig? config) {
     Widget note(String words, {bool warning = false}) => Text(
           words,
@@ -287,25 +307,6 @@ class _ProWindowState extends State<_ProWindow>
           ),
         );
 
-    if (account?.pro ?? false) {
-      final line = subscriptionLine(account!);
-      return [
-        if (line != null) ...[
-          note(line.$1, warning: line.$2),
-          const SizedBox(height: 12),
-        ],
-        if (account.onIphone) ...[
-          note(l10n.proManagedOnIphone),
-          const SizedBox(height: 12),
-        ] else if (account.subscription != null) ...[
-          action('manage', l10n.proManage,
-              () => unawaited(openSubscriptionPage(_account)),
-              primary: false),
-          const SizedBox(height: 8),
-        ],
-        action('done', l10n.proClose, widget.close),
-      ];
-    }
     if (_waiting) {
       return [
         const Center(

@@ -185,11 +185,16 @@ class BridgeKeyBinding {
   /// so a list here would be structure with nothing to hold.
   final String chord;
 
+  /// The chord Lumit ships it with, empty when it ships unbound: what the
+  /// row's Reset puts back, so the page can mark a row that differs.
+  final String stock;
+
   const BridgeKeyBinding({
     required this.context,
     required this.action,
     required this.description,
     required this.chord,
+    required this.stock,
   });
 
   @override
@@ -197,7 +202,8 @@ class BridgeKeyBinding {
       context.hashCode ^
       action.hashCode ^
       description.hashCode ^
-      chord.hashCode;
+      chord.hashCode ^
+      stock.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -207,7 +213,8 @@ class BridgeKeyBinding {
           context == other.context &&
           action == other.action &&
           description == other.description &&
-          chord == other.chord;
+          chord == other.chord &&
+          stock == other.stock;
 }
 
 /// One chord that could fire more than one action where both are live — what
@@ -243,6 +250,7 @@ enum BridgeKeyContext {
   timeline,
   viewer,
   graph,
+  nodes,
   panels,
   effects,
   cut,

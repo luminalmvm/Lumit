@@ -310,7 +310,8 @@ fn placement(layer: &Layer, t: f64, context: &ExpressionContext) -> Affine {
     let tr = &layer.transform;
     let v = |p: &crate::anim::Property| p.value_at_with_context(lt, ctx.clone());
     let (sx, sy) = (v(&tr.scale_x) / 100.0, v(&tr.scale_y) / 100.0);
-    let (sin, cos) = v(&tr.rotation).to_radians().sin_cos();
+    let turn = v(&tr.rotation) + crate::orient::flat_turn(tr, lt);
+    let (sin, cos) = turn.to_radians().sin_cos();
     Affine::translation(-v(&tr.anchor_x), -v(&tr.anchor_y))
         .then(&Affine([sx, 0.0, 0.0, sy, 0.0, 0.0]))
         .then(&Affine([cos, sin, -sin, cos, 0.0, 0.0]))

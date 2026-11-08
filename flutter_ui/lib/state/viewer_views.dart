@@ -72,6 +72,13 @@ enum CompareMode {
 
   /// The two pictures side by side inside one pane, each squeezed to its half.
   split,
+
+  /// One view's picture wiped against its own snapshot, the snapshot on the
+  /// left. No second view: the snapshot is the other side.
+  snapshot;
+
+  /// Whether this compare puts two views together.
+  bool get pairsViews => this == wipe || this == split;
 }
 
 /// One picture surface.
@@ -377,6 +384,13 @@ class ViewerViews extends ChangeNotifier {
   /// Where the divider sits in a compare, as a fraction across the pane.
   final Map<PaneId, double> paneDivider = {};
 
+  /// Panes whose compare draws its second picture left of the line.
+  final Set<PaneId> paneSwapped = {};
+
+  /// The layout a compare split the pane from, to put back when it ends, and
+  /// the view that was there, which stays whichever side it ended on.
+  final Map<PaneId, ({ViewLayout layout, String? keep})> _beforeCompare = {};
+
   String? _activeId;
 
   /// The view the transport plays, when one has been named (docs/07, "always
@@ -477,6 +491,8 @@ class ViewerViews extends ChangeNotifier {
         ..addAll(footage);
     }
     paneLayouts[pane] = layout;
+    // A layout picked during a compare is the one to keep after it.
+    _beforeCompare.remove(pane);
     forPane(pane);
     notifyListeners();
   }
@@ -485,12 +501,32 @@ class ViewerViews extends ChangeNotifier {
 
   void setCompare(PaneId pane, CompareMode mode) {
     if (compareOf(pane) == mode) return;
-    // A compare needs two pictures to put together.
-    if (mode != CompareMode.none && layoutOf(pane).views < 2) {
+    // A compare needs two pictures to put together, and ending it puts back
+    // the layout it split.
+    if (mode.pairsViews && layoutOf(pane).views < 2) {
+      _beforeCompare[pane] =
+          (layout: layoutOf(pane), keep: paneViews[pane]?.firstOrNull);
       paneLayouts[pane] = ViewLayout.twoAcross;
       forPane(pane);
+    } else if (!mode.pairsViews) {
+      paneSwapped.remove(pane);
+      if (_beforeCompare.remove(pane) case final before?) {
+        final ids = paneViews[pane];
+        if (before.keep case final keep? when ids != null && ids.remove(keep)) {
+          ids.insert(0, keep);
+        }
+        paneLayouts[pane] = before.layout;
+        forPane(pane);
+      }
     }
     paneCompare[pane] = mode;
+    notifyListeners();
+  }
+
+  /// The two sides of a compare the other way round. Only the drawing turns:
+  /// the first view stays the one the app is working in.
+  void swapCompare(PaneId pane) {
+    if (!paneSwapped.remove(pane)) paneSwapped.add(pane);
     notifyListeners();
   }
 
@@ -532,6 +568,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.remove(pane);
     paneCompare.remove(pane);
     paneDivider.remove(pane);
+    paneSwapped.remove(pane);
     viewportPanes.remove(pane);
     notifyListeners();
   }
@@ -606,8 +643,10 @@ class ViewerViews extends ChangeNotifier {
           for (final e in paneLayouts.entries) _paneKey(e.key): e.value.name,
         },
         'compare': {
+          // A snapshot is not kept across a restart, so neither is a
+          // compare against one.
           for (final e in paneCompare.entries)
-            if (e.value != CompareMode.none) _paneKey(e.key): e.value.name,
+            if (e.value.pairsViews) _paneKey(e.key): e.value.name,
         },
         'dividers': {
           for (final e in paneDivider.entries) _paneKey(e.key): e.value,
@@ -643,6 +682,8 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.clear();
     paneCompare.clear();
     paneDivider.clear();
+    paneSwapped.clear();
+    _beforeCompare.clear();
     viewportPanes.clear();
     _activeId = null;
     alwaysPreviewId = null;

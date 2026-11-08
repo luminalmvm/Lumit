@@ -17,15 +17,18 @@ outside a timeline.
 | **Footage item** | A reference to a media file on disk. |
 | **Audio item** | A reference to a sound file on disk. |
 | **Composition** | A timeline. It can be used as footage inside another composition. |
-| **[Node graph](/use/node-graphs/)** | A composition made of boxes and wires. Its row wears the nodes glyph and the type word *node graph*. |
+| **[Node graph](/use/node-graphs/)** | A composition made of boxes and wires. Its row wears the nodes glyph and the type word *Node graph*. |
 | **Folder** | A grouping inside the panel. It creates no folder on your computer. |
 | **Solid** | A solid colour. |
 
-Top to bottom the panel is a preview card for whatever is picked, a search well with the
-colour filter beside it, a row of column headings, the tree, and a bottom bar.
+Top to bottom the panel is a search well with the colour filter inside it, a row of column
+headings, the tree, a preview card while one item is selected, and a bottom bar.
 
 Click a column heading to sort the tree by that column, and again to reverse the order. A
-folder keeps its own items. The sort lasts until the panel is closed.
+folder keeps its own items. The sort lasts until the panel is closed. Right-click the empty
+space in the tree for **Sort by**, **Expand all**, **Collapse all**, and everything new.
+
+A file or solid no composition uses has a muted name.
 
 ## Columns
 
@@ -33,23 +36,25 @@ folder keeps its own items. The sort lasts until the panel is closed.
 | --- | --- |
 | **Items** | How many things a folder holds. |
 | **Size** | Pixel dimensions, or a sound file's sample rate. |
-| **FPS** | Frame rate, or a sound file's channels. |
+| **FPS** | Frame rate. Blank for sound. |
 | **Duration** | Length as `HH:MM:SS:FF` at the item's own rate; `HH:MM:SS:mmm` for sound. Blank for folders and stills. |
 | **Date** | When a footage item's file was last changed. |
 | **Path** | The folder a footage item's file is in. |
 
 Columns leave as the panel narrows, Date first, then Path, then Duration. Dragging the seam
-between two headings widens the column on its left.
+between two headings widens the column on its left. Right-click a heading to hide a column,
+or **Reset columns**.
 
 **Thumbnails on footage rows**, in **Settings ▸ Appearance ▸ Panels**, draws each footage
 row's first frame in place of its glyph, at the row's height. Off by default.
 
 ## The preview card
 
-Select an item and the card at the top shows what Lumit knows about it: a thumbnail, the
-name, and the facts — resolution, frame rate, duration, codec. Sound reads its rate and
-channels; a folder reads how many items it holds. With nothing selected it reads what the
-project holds: how many compositions, footage items, solids and folders.
+Select one item and the card under the tree shows what Lumit knows about it: a thumbnail, the
+name, the facts (resolution, frame rate, duration, codec) and how many times it is used.
+Sound reads its rate and channels; a folder reads how many items it holds. With nothing
+selected, or several, there is no card. Hover the count on the bottom bar for what the project
+holds.
 
 Move the pointer across the thumbnail to scrub the clip. Leaving it puts the first frame
 back. A still and a sound file have nothing to scrub.
@@ -74,7 +79,7 @@ import those from the menu.
 
 ## Clicking and opening
 
-A click selects. A click on the row that is *already* the lone selection **opens** it.
+A click selects. A double-click **opens** the row.
 
 | Item | What opening does |
 | --- | --- |
@@ -84,9 +89,12 @@ A click selects. A click on the row that is *already* the lone selection **opens
 | **Folder** | Shows or hides its children. |
 
 Footage, composition and solid rows drag onto the Timeline, where a composition lands as a
-Precomp layer and a solid as a Solid layer. Dropped onto **Composition** on the bottom bar instead, they raise the same
-New composition dialogue with the media's size, rate and length filled in, and every
-dropped item lands in the finished composition as a layer.
+Precomp layer and a solid as a Solid layer. **Add to composition** on the row's menu does the
+same, and **Reveal in composition**, or a click on the card's uses line, opens the
+composition that uses the item with those layers selected. An item used in several lists
+them to pick from. Dropped onto **New composition** on the bottom bar instead, they raise the same New
+composition dialogue with the media's size, rate and length filled in, and every dropped item
+lands in the finished composition as a layer.
 
 Renaming is `Enter`, or **Rename** on the row's own menu.
 
@@ -103,18 +111,18 @@ glyph.
 **A folder hands its colour down.** A row with no tag of its own wears the colour of the
 nearest tagged folder above it. An explicit tag always wins over an inherited one.
 
-The dots beside the search well filter by colour: tap one to narrow the tree to the items
-wearing it, tap the neutral dot — or the held colour again — to show everything.
+The square in the search well filters by colour: pick a colour to narrow the tree to the items
+wearing it, and the neutral chip to show everything.
 
 ## Proxies
 
-A **proxy** is a smaller copy that keeps previews fast. Attach one from the row's menu:
-**Set proxy…** points at a file you already have, **Make proxy** transcodes one in the
+A **proxy** is a smaller copy that keeps previews fast. Attach one from **Proxy** on the
+row's menu: **Set proxy…** points at a file you already have, **Make proxy** transcodes one in the
 background, **Use proxy** decides whether this item reads from it, and **Clear proxy**
-forgets it. A row reading from its proxy wears a `proxy` badge beside `in use`.
+forgets it. A row reading from its proxy wears a `proxy` badge.
 
-**Proxies** on the bottom bar is the master switch for the whole project — using proxies,
-or using originals — and an export reads the originals whatever it is set to. See
+The proxies mark on the bottom bar is the master switch for the whole project, between using
+proxies and using originals, and an export reads the originals whatever it is set to. See
 [Proxies](/use/proxies/).
 
 ## Missing files
@@ -124,8 +132,8 @@ badge *is* the relink control: click it and pick the new path, and every layer u
 item recovers. **Find missing footage** on the row menu searches for it instead.
 
 **Replace footage…** on the row menu points a footage item whose file is not missing at a
-different file. **Show in folder** opens the folder the file is in. **Interpret footage…**
-sets how the file is read, see [Importing](/use/importing/#interpretation).
+different file. **Show in folder** opens the folder the file is in. **Interpret ▸ Interpret
+footage…** sets how the file is read, see [Importing](/use/importing/#interpretation).
 
 The count at the right of the bottom bar reads `1 missing · 10 items` when anything is
 broken, and clicking it filters the tree down to the broken rows alone.

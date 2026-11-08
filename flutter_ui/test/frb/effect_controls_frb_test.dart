@@ -16,6 +16,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/fx_section.dart' show FxQuiet;
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show
         effectLabelOf,
@@ -83,12 +84,24 @@ void main() {
       await tester.pump();
     }
 
+    /// The Compositing fold, shut by default, from the heading's menu.
+    Future<void> openCompositing(WidgetTester tester, UuidValue id) async {
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>('fx-twirl-$id'))) +
+            const Offset(40, 0),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>('fx-menu-compositing-$id')));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('Add effect commits one, and it appears as a card',
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
 
-      expect(find.textContaining('No effects'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fx-empty-add')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('fx-add')));
       await tester.pumpAndSettle();
@@ -258,13 +271,18 @@ void main() {
       expect(find.byType(DashedOutline), findsOneWidget,
           reason: 'the bypassed heading wears the outline; the live one does '
               'not');
+      // The stopwatch's own quiet is the row's rest, not the bypass.
       expect(
-        find.descendant(
-          of: find.byType(EffectParamRowFrb),
-          matching: find.byWidgetPredicate((w) => w is Opacity && w.opacity < 1,
-              description: 'a dimmed row'),
-        ),
-        findsNothing,
+        find
+            .descendant(
+              of: find.byType(EffectParamRowFrb),
+              matching: find.byWidgetPredicate(
+                  (w) => w is Opacity && w.opacity < 1,
+                  description: 'a dimmed row'),
+            )
+            .evaluate()
+            .where((e) => e.findAncestorWidgetOfExactType<FxQuiet>() == null),
+        isEmpty,
         reason: 'the 40% dim is gone — the outline carries the state',
       );
 
@@ -277,6 +295,9 @@ void main() {
         tester.getCenter(heading(effectLabelOf(second.name()))),
         buttons: kSecondaryButton,
       );
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-menu-move-${second.id()}')));
       await tester.pumpAndSettle();
       await tester
           .tap(find.byKey(ValueKey<String>('fx-menu-up-${second.id()}')));
@@ -328,6 +349,8 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p, transform: false);
 
+      await tester.ensureVisible(heading('Lens options'));
+      await tester.pump();
       await tester.tap(heading('Lens options'));
       await tester.pump();
       expect(find.text('Blades'), findsOneWidget);
@@ -531,6 +554,8 @@ void main() {
       expect(find.text('Blades'), findsNothing);
 
       // Twirling Lens options open reveals the Int-kind Blades row.
+      await tester.ensureVisible(heading('Lens options'));
+      await tester.pump();
       await tester.tap(heading('Lens options'));
       await tester.pump();
       expect(find.text('Blades'), findsOneWidget);
@@ -663,9 +688,7 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
-      // The Mix and Matte rows sit under the Compositing fold, shut by default.
-      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
-      await tester.pumpAndSettle();
+      await openCompositing(tester, id);
       final picker = find.byKey(ValueKey<String>('fx-layer-$id-matte'));
       final invert = find.byKey(ValueKey<String>('fx-bool-$id-matte_invert'));
       expect(picker, findsOneWidget,
@@ -722,9 +745,7 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
-      // Both rows sit under the Compositing fold, shut by default.
-      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
-      await tester.pumpAndSettle();
+      await openCompositing(tester, id);
       final channel =
           find.byKey(ValueKey<String>('fx-choice-$id-matte_channel'));
       final blend = find.byKey(ValueKey<String>('fx-choice-$id-blend'));
@@ -1387,6 +1408,9 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester
+          .tap(find.byKey(ValueKey<String>('fx-menu-move-${stack[2].id()}')));
+      await tester.pumpAndSettle();
+      await tester
           .tap(find.byKey(ValueKey<String>('fx-menu-top-${stack[2].id()}')));
       await tester.pumpAndSettle();
 
@@ -1437,6 +1461,9 @@ void main() {
           reason: 'nothing is picked once it no longer exists');
       expect(p.layer.getInfo().name, isNotEmpty,
           reason: 'the layer itself is untouched');
+      p.state.project!.undo();
+      expect(p.layer.getEffects().length, 3,
+          reason: 'one undo brings the whole run back');
     });
 
     /// **A Custom shader's rows are the ones its own source declares**

@@ -31,6 +31,8 @@ const BridgeExportDefaults nothingSaid = BridgeExportDefaults(
 
 void main() {
   setUpAll(initEngineForTests);
+  // The rows these tests reach live inside the Export window's folds.
+  setUp(() => exportOpenSections.addAll(ExportSection.values));
 
   // The machine's own defaults are borrowed, not taken.
   late BridgeExportDefaults borrowed;

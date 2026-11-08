@@ -1,7 +1,8 @@
-// The keyed rows of the box picked on a node graph's canvas, as lanes under
-// the Timeline's ruler, so its keys can be seen, moved and eased as a layer's
-// are. The lanes and everything done to them are the Effect controls key
-// strip's ([FxKeyStripHost], [FxKeyLane]), laid out on the ruler's axis.
+// The keyed rows of the box picked on a node graph's canvas, or of every box
+// with nothing picked, as lanes under the Timeline's ruler, so their keys can
+// be seen, moved and eased as a layer's are. The lanes and everything done to
+// them are the Effect controls key strip's ([FxKeyStripHost], [FxKeyLane]),
+// laid out on the ruler's axis.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -12,7 +13,7 @@ import 'package:provider/provider.dart';
 import '../l10n/engine_labels.dart';
 import '../state/dock.dart' show Panel;
 import '../widgets/controls.dart' show ThemeScope;
-import 'effect_param_row_frb.dart' show cachedListParameters;
+import 'effect_param_row_frb.dart' show cachedListParameters, effectLabelOf;
 import 'fx_key_strip.dart';
 
 class GraphBoxLanes extends StatefulWidget {
@@ -36,9 +37,12 @@ class GraphBoxLanes extends StatefulWidget {
 class _GraphBoxLanesState extends State<GraphBoxLanes> {
   LumitUiState? _ui;
 
-  /// The picked Fx box, read when the pick moves or the document commits and
-  /// never in a build.
-  BridgeEffectInstanceInfo? _box;
+  /// The picked Fx box, or every one with nothing picked, read when the pick
+  /// moves or the document commits and never in a build.
+  List<BridgeEffectInstanceInfo> _boxes = const [];
+
+  /// Whether the lanes are the one picked box's, which need no box name.
+  bool _picked = false;
 
   @override
   void didChangeDependencies() {
@@ -72,20 +76,21 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
   void _reload() {
     if (!mounted) return;
     final picked = _ui?.compGraphNode.value;
-    BridgeEffectInstanceInfo? box;
-    if (picked != null) {
-      try {
-        for (final instance in widget.comp.getNodeGraphInstances()) {
-          if (instance.id() == picked.id) {
-            box = instance.getInfo();
-            break;
-          }
+    var boxes = <BridgeEffectInstanceInfo>[];
+    try {
+      for (final instance in widget.comp.getNodeGraphInstances()) {
+        if (picked == null || instance.id() == picked.id) {
+          boxes.add(instance.getInfo());
         }
-      } catch (_) {
-        // The comp or the box has gone; there is nothing to draw.
       }
+    } catch (_) {
+      // The comp or the box has gone; there is nothing to draw.
+      boxes = [];
     }
-    setState(() => _box = box);
+    setState(() {
+      _boxes = boxes;
+      _picked = picked != null;
+    });
   }
 
   /// One parameter's channels into the value the box stores: four for a
@@ -110,14 +115,12 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
     _ui?.model.refresh();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final box = _box;
-    if (box == null) return const SizedBox.shrink();
+  /// [box]'s rows with keys: a lane with nothing on it is a row to scroll
+  /// past on the way to the canvas.
+  List<(BridgeEffectInstanceInfo, BridgeParamInfo, List<BridgeScalar>)>
+      _keyedRows(BridgeEffectInstanceInfo box) {
     final values = {for (final v in box.values) v.id: v.value};
-    // Only the rows with keys: a lane with nothing on it is a row to scroll
-    // past on the way to the canvas.
-    final rows = <(BridgeParamInfo, List<BridgeScalar>)>[
+    return [
       for (final param in [
         ...cachedListParameters(box.name),
         ...box.derivedParams,
@@ -134,9 +137,21 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
         }
             case final scalars?
             when scalars.first is BridgeScalar_Keyframed)
-          (param, scalars),
+          (box, param, scalars),
     ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = [for (final box in _boxes) ..._keyedRows(box)];
     if (rows.isEmpty) return const SizedBox.shrink();
+    // With nothing picked each lane says whose it is.
+    String label(BridgeEffectInstanceInfo box, BridgeParamInfo param) {
+      final own = engineLabel(param.label);
+      return _picked
+          ? own
+          : '${box.customName ?? effectLabelOf(box.name)} · $own';
+    }
     final t = ThemeScope.of(context).theme;
     return FxKeyStripHost(
       spanStart: 0,
@@ -147,7 +162,7 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final (param, scalars) in rows)
+          for (final (box, param, scalars) in rows)
             DecoratedBox(
               decoration: BoxDecoration(
                 color: t.surface0,
@@ -164,7 +179,7 @@ class _GraphBoxLanesState extends State<GraphBoxLanes> {
                       child: IgnorePointer(
                         child: Center(
                           child: Text(
-                            t.propertyCase(engineLabel(param.label)),
+                            t.propertyCase(label(box, param)),
                             style: t.small,
                           ),
                         ),

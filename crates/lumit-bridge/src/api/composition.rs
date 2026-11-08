@@ -2319,7 +2319,7 @@ impl CompositionReference {
         frame: u64,
         scale: f32,
         mode: BridgePlaybackMode,
-        prefix: Option<crate::api::state::BridgePrefixPoint>,
+        prefix: Option<crate::api::state::prefix::BridgePrefixPoint>,
         view: u32,
         active: bool,
     ) -> Result<(), BridgeError> {
@@ -3395,9 +3395,7 @@ impl CompositionReference {
             .collect();
         crate::api::track::settle(&before, &mut nodes);
         let mut graph = crate::api::comp_graph::wiring_into(wiring, nodes);
-        let held = self.graph_of(&doc)?;
-        graph.notes = held.notes.clone();
-        graph.ties = held.ties.clone();
+        graph.keep_canvas(self.graph_of(&doc)?);
         self.commit(lumit_core::ops::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
@@ -3517,17 +3515,8 @@ impl CompositionReference {
                 taken.insert(input.id.clone());
             }
         }
-        // A pasted box starts open, as a box added any other way does. A saved
-        // group is an arrangement somebody laid out, so it keeps the boxes shut
-        // that were saved shut, and lands at the pitch it was drawn at.
-        if !named {
-            graph
-                .exposed
-                .extend(added.nodes.iter().filter_map(|node| match node {
-                    lumit_core::comp_graph::GraphNode::Fx(instance) => Some(instance.id),
-                    _ => None,
-                }));
-        }
+        // A pasted box starts shut, as a box added any other way does. A saved
+        // group lands at the pitch it was drawn at.
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);

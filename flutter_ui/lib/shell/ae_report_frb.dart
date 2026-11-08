@@ -22,6 +22,9 @@
 // sentence built with `format!` on the other side could not be translated
 // (docs/17).
 
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/import.dart';
 
@@ -30,6 +33,9 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
+import 'question_window.dart';
+import 'review_link_parts.dart' show reviewRowMenu;
 
 /// Show the report for a finished import. Returns when the window closes.
 Future<void> showAeImportReport({
@@ -39,9 +45,21 @@ Future<void> showAeImportReport({
     showLumitModal<void>(
       context: context,
       id: 'ae-import-report',
-      initialSize: const Size(560, 460),
+      initialSize: Size(560, _heightFor(report)),
       builder: (close) => _ReportBody(report: report, onClose: () => close(null)),
     );
+
+/// As tall as what there is to say, up to where it scrolls.
+double _heightFor(BridgeImportReport report) {
+  final sections = reportSections(report);
+  final lines = sections.fold<int>(0, (n, s) => n + s.$3.length);
+  return (dialogTitleStrip +
+          dialogFooterHeight +
+          30 +
+          sections.length * 30 +
+          lines * 40)
+      .clamp(180.0, 560.0);
+}
 
 /// The grade a section is headed with.
 String outcomeLabel(BridgeImportOutcome outcome) => switch (outcome) {
@@ -106,39 +124,86 @@ class _ReportBody extends StatefulWidget {
 
 class _ReportBodyState extends State<_ReportBody> {
   late final _sections = reportSections(widget.report);
+  final _scroll = ScrollController();
 
   /// The lines opened to show where they apply.
   final Set<ReportGroup> _open = {};
 
   @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _copy(String text) =>
+      unawaited(Clipboard.setData(ClipboardData(text: text)));
+
+  /// The whole report as text, for pasting into a message.
+  String get _asText => [
+        for (final (outcome, _, groups) in _sections) ...[
+          outcomeLabel(outcome),
+          for (final group in groups) ...[
+            '  ${group.said}',
+            for (final place in group.places) '    $place',
+          ],
+        ],
+      ].join('\n');
+
+  void _menu(Offset at, ReportGroup group) {
+    final several = group.places.length > 1;
+    reviewRowMenu(context, at, [
+      if (several)
+        (
+          'ae-fold',
+          _open.contains(group) ? l10n.aeHidePlaces : l10n.aeShowPlaces,
+          () => setState(() =>
+              _open.contains(group) ? _open.remove(group) : _open.add(group)),
+        ),
+      if (several)
+        ('ae-open-all', l10n.aeShowAllPlaces, () {
+          setState(() {
+            for (final (_, _, groups) in _sections) {
+              _open.addAll(groups.where((g) => g.places.length > 1));
+            }
+          });
+        }),
+      if (several) null,
+      ('ae-copy-line', l10n.copyLine, () => _copy(group.said)),
+      (
+        'ae-copy-place',
+        l10n.aeCopyPlaces,
+        () => _copy(group.places.join('\n')),
+      ),
+      ('ae-copy-all', l10n.aeCopyReport, () => _copy(_asText)),
+    ]);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(l10n.aeReportTitle, style: t.heading),
-          ),
-          Text(
-            l10n.aeItemsImported(widget.report.imported),
-            style: t.small.copyWith(color: t.textSecondary),
-          ),
-          const SizedBox(height: 10),
-          Flexible(
-            child: _sections.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      l10n.aeNothingToReport,
-                      textAlign: TextAlign.center,
-                      style: t.body.copyWith(color: t.textMuted),
-                    ),
-                  )
-                : ListView(
+    return DialogFrame(
+      children: [
+        dialogTitleBar(t,
+            title: l10n.aeReportTitle,
+            onClose: widget.onClose,
+            keyPrefix: 'ae-report'),
+        Expanded(
+          child: _sections.isEmpty
+              ? Center(
+                  child: Text(
+                    l10n.aeNothingToReport,
+                    style: t.body.copyWith(color: t.textSecondary),
+                  ),
+                )
+              : dialogScroller(
+                  context,
+                  t,
+                  _scroll,
+                  child: ListView(
                     key: const ValueKey<String>('ae-report-rows'),
+                    controller: _scroll,
+                    padding: const EdgeInsets.fromLTRB(
+                        dialogPadding, 6, dialogPadding, dialogPadding),
                     children: [
                       for (final (outcome, count, groups) in _sections) ...[
                         _heading(t, outcome, count),
@@ -146,101 +211,115 @@ class _ReportBodyState extends State<_ReportBody> {
                       ],
                     ],
                   ),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: HouseButton(
-              primary: true,
-              autofocus: true,
-              onPressed: widget.onClose,
-              child: Text(l10n.close),
-            ),
-          ),
-        ],
-      ),
+                ),
+        ),
+        dialogFooter(
+          t,
+          keyPrefix: 'ae-report',
+          summary: l10n.aeItemsImported(widget.report.imported),
+          actions: [
+            if (_sections.isNotEmpty)
+              questionPlain(
+                  'ae-report-copy', l10n.aeCopyReport, () => _copy(_asText)),
+            questionFilled('ae-report-close', l10n.close, widget.onClose),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _heading(LumitTheme t, BridgeImportOutcome outcome, int count) =>
       Padding(
-        padding: const EdgeInsets.only(top: 10, bottom: 4),
+        padding: const EdgeInsets.only(top: 12, bottom: 4),
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                outcomeLabel(outcome),
-                style: t.small.copyWith(color: t.textSecondary),
-              ),
+              child: Text(t.kickerCase(outcomeLabel(outcome)), style: t.kicker),
             ),
-            Text('$count', style: t.small.copyWith(color: t.textMuted)),
+            Text('$count', style: dialogMono(t)),
           ],
         ),
       );
 
   /// One thing the report says. Said about one place, the place sits under
   /// it; said about several, it is a line with a count that opens to list
-  /// them.
+  /// them. Every line starts at one edge, with the twirl hanging in the margin
+  /// before it.
   Widget _group(LumitTheme t, ReportGroup group) {
-    final place = Text(
-      group.places.first,
-      style: t.small.copyWith(color: t.textMuted),
-    );
-    if (group.places.length == 1) {
-      return Padding(
-        padding: const EdgeInsetsDirectional.fromSTEB(20, 4, 0, 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [Text(group.said, style: t.body), place],
-        ),
-      );
-    }
+    final quiet = t.small.copyWith(color: t.textMuted);
+    final several = group.places.length > 1;
     final open = _open.contains(group);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        HoverMark(
-          builder: (context, lit) => GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(
-                () => open ? _open.remove(group) : _open.add(group)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TwirlTurn(
-                    open: open,
-                    child: lumitIcon(
-                      open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                      size: iconSize,
-                      color: Color.lerp(t.textMuted, t.textPrimary, lit)!,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (press) => _menu(press.globalPosition, group),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          HoverMark(
+            builder: (context, lit) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: !several
+                  ? null
+                  : () => setState(
+                      () => open ? _open.remove(group) : _open.add(group)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: _placeInset,
+                      child: !several
+                          ? null
+                          : Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: TwirlTurn(
+                                open: open,
+                                child: lumitIcon(
+                                  open
+                                      ? LumitIcon.twirlOpen
+                                      : LumitIcon.twirlClosed,
+                                  size: iconSize,
+                                  color: Color.lerp(
+                                      t.textMuted, t.textPrimary, lit)!,
+                                ),
+                              ),
+                            ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(child: Text(group.said, style: t.body)),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${group.places.length}',
-                    style: t.small.copyWith(color: t.textMuted),
-                  ),
-                ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(group.said, style: t.body),
+                          if (!several) Text(group.places.first, style: quiet),
+                        ],
+                      ),
+                    ),
+                    if (several) ...[
+                      const SizedBox(width: 8),
+                      Text('${group.places.length}', style: dialogMono(t)),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        if (open)
-          Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(20, 0, 0, 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final place in group.places)
-                  Text(place, style: t.small.copyWith(color: t.textMuted)),
-              ],
+          if (open)
+            Padding(
+              padding:
+                  const EdgeInsetsDirectional.fromSTEB(_placeInset, 0, 0, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final place in group.places) Text(place, style: quiet),
+                ],
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
+
+/// How far a line's words stand in, which is the room its twirl takes.
+const double _placeInset = 18;

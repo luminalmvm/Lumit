@@ -2164,7 +2164,7 @@ impl HeadlessRenderer {
     /// read back.
     ///
     /// `kind` is `0` luma / `1` RGB waveform / `2` vectorscope / `3` histogram
-    /// (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
+    /// / `4` parade / `5` luma histogram (an unknown value is a calm `Err`); `colours` carries the frontend's fixed
     /// `ScopeColours` as `[bg, trace, red, green, blue]` RGB byte triples, so no
     /// colour literal lives in the engine (docs/15-DESIGN.md) and the bridge need
     /// not name `lumit-gpu`. `Err` on an unknown kind or if the tiny readback
@@ -2615,6 +2615,18 @@ impl HeadlessRenderer {
         let parts = self.parts.as_ref()?;
         let bytes = parts.colour.readback8(&self.gpu, &held.texture).ok()?;
         Some((held.texture.width(), held.texture.height(), bytes))
+    }
+
+    /// Read a prepared frame's pixels back off the card, in the channel order
+    /// it was made in. For the Scopes: a drag's preview is never held under a
+    /// name, and this is how a trace reads the picture the Viewer is showing
+    /// rather than the document behind it. Waits for the card, as
+    /// [`Self::read_back_frame_texture`] does.
+    #[must_use]
+    pub fn read_back_prepared(&self, prepared: &PreparedFrame) -> Option<(u32, u32, Vec<u8>)> {
+        let parts = self.parts.as_ref()?;
+        let bytes = parts.colour.readback8(&self.gpu, &prepared.texture).ok()?;
+        Some((prepared.texture.width(), prepared.texture.height(), bytes))
     }
 
     /// How many times the held set has changed — bumped by every insert, every
@@ -4993,6 +5005,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     read(a, plate),
                     read(b, black),
@@ -5606,6 +5619,7 @@ mod tests {
             group: None,
             opacity: 1.0,
             takes: Vec::new(),
+            transition: None,
             extra: serde_json::Map::new(),
         };
         push_layer(
@@ -5841,6 +5855,7 @@ mod tests {
             c.graph = Some(CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes,
                 edges: vec![GraphEdge {
                     from: read,
@@ -6700,6 +6715,16 @@ mod tests {
                 comp.layers.insert(0, adj);
                 (doc, comp_id, 15)
             }),
+            ("a layer turned along its path", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (_, top) = matrix_top(&mut doc, comp_id, blue);
+                let comp = doc.comp_mut(comp_id).unwrap();
+                let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+                l.transform.orient = lumit_core::orient::Orient::AlongPath;
+                l.transform.position_x = ramp(0.0, 64.0, 1);
+                l.transform.position_y = ramp(0.0, 32.0, 1);
+                (doc, comp_id, 15)
+            }),
             // The anti-aliasing row (docs/impl/anti-aliasing.md §5,
             // test 3): the count is a PROJECT property, so both walks read the
             // same one — an export that anti-aliased differently from the
@@ -6773,6 +6798,7 @@ mod tests {
                 l.graph = LayerGraph {
                     notes: Vec::new(),
                     ties: Vec::new(),
+                    looks: Default::default(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![wiggle],
@@ -7878,6 +7904,7 @@ mod tests {
                 l.graph = LayerGraph {
                     notes: Vec::new(),
                     ties: Vec::new(),
+                    looks: Default::default(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![remap],
@@ -8581,6 +8608,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8632,6 +8660,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -8695,6 +8724,7 @@ mod tests {
             CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Input {
                         id: src,
@@ -8786,6 +8816,7 @@ mod tests {
         let graph = LayerGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![sampler],

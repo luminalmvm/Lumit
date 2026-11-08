@@ -30,25 +30,36 @@ import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
+import 'package:lumit_flutter/src/rust/api/shader_fault.dart';
 import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'node_menus.dart';
 import 'graph_ties.dart';
 import 'shader_editor.dart' show InstanceHome;
 import 'graph_panel.dart'
     show
         GraphBoxStack,
         GraphGroundPainter,
+        GraphNameField,
         GraphNodeFrame,
+        graphClearSpot,
         graphShaderHeader,
+        graphFrame,
+        graphFrameAllFold,
+        graphToolFold,
+        graphToolbarFold,
         graphDashPath,
         graphWirePath,
+        graphWireGrab,
         graphDotGrid,
         graphNodeHeaderHeight,
         graphOutNodeWidth,
@@ -56,6 +67,13 @@ import 'graph_panel.dart'
         graphSocketSize,
         graphToolbarHeight,
         graphWireWidth;
+
+const _menuKeyLead = 'shader-menu-';
+
+/// What the Node panel puts on [LumitUiState.graphBoxMenuAsk] for a shader
+/// box's menu, or for the shader's ground with [id] null. The outer canvases
+/// know no such key and leave it for this one.
+String shaderMenuKey(int? id) => '$_menuKeyLead${id ?? 'ground'}';
 
 /// The engine's word for a box, in the user's language. The kinds cross the
 /// bridge as ids, never as English — these words are the frontend's.
@@ -129,6 +147,34 @@ String shaderPortWord(String id) => switch (id) {
       'tint' => l10n.shaderPortTint,
       _ => id,
     };
+
+/// Why a graph won't compile, said the way the canvas names things: a box by
+/// its word and its own name, an input by the word on the box.
+String shaderFaultWords(
+    BridgeShaderGraphError error, List<BridgeShaderGraphNode> nodes) {
+  switch (error.fault) {
+    case BridgeShaderFault.typeMismatch:
+      final node = nodes.where((n) => n.id == error.node).firstOrNull;
+      final box = node == null
+          ? ''
+          : [shaderNodeWord(node.kind), if (node.label case final own?) own]
+              .join(' ');
+      return l10n.shaderFaultTypeMismatch(
+          box, shaderPortWord(error.port ?? ''));
+    case BridgeShaderFault.unreadable:
+      return l10n.shaderFaultUnreadable;
+    case BridgeShaderFault.noResult:
+      return l10n.shaderFaultNoResult;
+    case BridgeShaderFault.manyResults:
+      return l10n.shaderFaultManyResults;
+    case BridgeShaderFault.doubleInput:
+      return l10n.shaderFaultDoubleInput;
+    case BridgeShaderFault.cycle:
+      return l10n.shaderFaultCycle;
+    case BridgeShaderFault.badParameter:
+      return l10n.shaderFaultBadParameter;
+  }
+}
 
 /// Which theme token a shader port type draws in: the widths one to three are
 /// numbers, a vec4 is a colour, and a picture is the image family — the same
@@ -306,8 +352,16 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
 
   final Set<int> _selection = {};
 
+  /// The Parameter box whose name is an inline editor, or null, and whether
+  /// the press in hand landed in that editor, which leaves it to the editor.
+  int? _renaming;
+  bool _editorPress = false;
+
   Offset _pan = Offset.zero;
   double _zoom = 1;
+
+  /// Whether a dragged box lands on the grid's pitch, as on the outer canvas.
+  bool _snapToGrid = true;
 
   _Flight? _flight;
   ({int node, Offset grab, Map<int, Offset> origins})? _drag;
@@ -329,8 +383,12 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     final ui = Provider.of<LumitUiState>(context, listen: false);
     if (identical(ui, _ui)) return;
     _ui?.model.removeListener(_reload);
+    _ui?.shaderGraphNode.removeListener(_onPickAsked);
+    _ui?.graphBoxMenuAsk.removeListener(_onMenuAsked);
     _ui = ui;
     ui.model.addListener(_reload);
+    ui.shaderGraphNode.addListener(_onPickAsked);
+    ui.graphBoxMenuAsk.addListener(_onMenuAsked);
     // While the inner graph is the panel's face, Ctrl+Space adds a shader
     // box — the owner's "can't add options in the custom shader view".
     // Chained over the outer canvas's own claim, which stands down while a
@@ -341,6 +399,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     if (held != null) {
       _pan = held.pan;
       _zoom = held.zoom;
+      _viewMoved = true;
     }
     _reload();
   }
@@ -349,11 +408,61 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   void dispose() {
     _rememberView();
     _ui?.model.removeListener(_reload);
+    _ui?.shaderGraphNode.removeListener(_onPickAsked);
+    _ui?.graphBoxMenuAsk.removeListener(_onMenuAsked);
     if (_ui?.consoleClaim == _consoleClaim) {
       _ui!.consoleClaim = _priorConsoleClaim;
     }
     _focus.dispose();
     super.dispose();
+  }
+
+  /// The one picked box, told to the Node panel, which draws it.
+  void _publishPick() {
+    final ui = _ui;
+    if (ui == null || !mounted) return;
+    final one = _selection.length == 1 ? _selection.single : null;
+    if (ui.shaderGraphNode.value == one) return;
+    _publishing = true;
+    ui.shaderGraphNode.value = one;
+    _publishing = false;
+  }
+
+  bool _publishing = false;
+
+  /// A box picked from the Node panel's list, or the list asked for again.
+  void _onPickAsked() {
+    if (_publishing || !mounted) return;
+    final id = _ui?.shaderGraphNode.value;
+    setState(() {
+      _selection.clear();
+      if (id != null) _selection.add(id);
+    });
+  }
+
+  /// The Node panel asking for a box's menu ([shaderMenuKey]), or the
+  /// ground's: the box becomes the pick, and the canvas opens its own rows.
+  void _onMenuAsked() {
+    final ask = _ui?.graphBoxMenuAsk.value;
+    if (!mounted || ask == null || !ask.key.startsWith(_menuKeyLead)) return;
+    _ui!.graphBoxMenuAsk.value = null;
+    final boxes = _boxes();
+    final id = int.tryParse(ask.key.substring(_menuKeyLead.length));
+    if (id == null) {
+      _canvasMenu(
+          graphClearSpot(
+              _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
+              [for (final b in boxes) b.rect]),
+          ask.at);
+      return;
+    }
+    if (!boxes.any((b) => b.node.id == id)) return;
+    if (!_selection.contains(id)) {
+      setState(() => _selection
+        ..clear()
+        ..add(id));
+    }
+    _boxMenu(id, ask.at);
   }
 
   /// The claim this view had to displace to take Ctrl+Space.
@@ -381,7 +490,8 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   /// learns the type rules (the engine is asked per drop), so it cannot
   /// promise which boxes a wire fits — the picked box lands unwired and the
   /// hand draws the wire, with the engine's refusal as the backstop.
-  Future<void> _openConsole(Offset at, {bool byKey = false}) async {
+  Future<void> _openConsole(Offset at,
+      {bool byKey = false, Map<String, dynamic>? onWire}) async {
     if (_searching) return;
     setState(() => _searching = true);
     final kinds = _kinds ??= listShaderNodes();
@@ -397,7 +507,9 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
                 FxConsoleEntry(
                   label: shaderNodeWord(k.kind),
                   kind: FxConsoleKind.effect,
-                  run: () => _addNode(k.kind, at),
+                  run: () => onWire == null
+                      ? _addNode(k.kind, at)
+                      : _insertNode(k.kind, at, onWire),
                 ),
           ],
         ),
@@ -408,11 +520,18 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   }
 
   /// The view you left is the view you return to (§4.2), held in the session
-  /// and never in the document.
+  /// and never in the document. Only a view somebody moved: one left as it
+  /// opened frames itself again next time.
   void _rememberView() {
+    if (!_viewMoved) return;
     _ui?.shaderGraphViews[widget.entry.effect.toString()] =
         (pan: _pan, zoom: _zoom);
   }
+
+  /// The panel size the view was last framed for. Until the user pans or
+  /// zooms, a new size frames the boxes again, as the outer canvases do.
+  Size? _framedFor;
+  bool _viewMoved = false;
 
   /// This shader's staged handle in a fresh copy of the stack, or null when
   /// the effect has gone from under the view.
@@ -447,6 +566,11 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       null => _Inner.fresh(),
     };
     final view = shaderGraphView(graph: graph.encode());
+    // The boxes that make a value, by the name the Viewer's chip gives them.
+    _ui?.shaderGraphWords = {
+      for (final n in view.nodes)
+        if (n.outputs.isNotEmpty) n.id: n.label ?? shaderNodeWord(n.kind),
+    };
     setState(() {
       _graph = graph;
       _view = view;
@@ -525,17 +649,25 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     return null;
   }
 
-  /// Delete the picked boxes, their wires with them in the same commit.
+  /// Delete the picked boxes, their wires with them in the same commit. The
+  /// Result box stays: it is the shader's picture.
   bool _deleteSelected() {
-    if (_selection.isEmpty || _graph == null) return false;
-    final next = _graph!.clone();
-    next.nodes.removeWhere((n) => _selection.contains(n['id']));
-    next.edges.removeWhere((e) =>
-        _selection.contains(e['from']) || _selection.contains(e['to']));
-    for (final id in _selection) {
+    final graph = _graph;
+    if (graph == null) return false;
+    final gone = {
+      for (final n in graph.nodes)
+        if (_selection.contains(n['id']) && n['kind'] != 'result')
+          n['id'] as int,
+    };
+    if (gone.isEmpty) return false;
+    final next = graph.clone();
+    next.nodes.removeWhere((n) => gone.contains(n['id']));
+    next.edges.removeWhere(
+        (e) => gone.contains(e['from']) || gone.contains(e['to']));
+    for (final id in gone) {
       _positions.remove(id);
     }
-    _selection.clear();
+    _selection.removeAll(gone);
     _commit(next);
     return true;
   }
@@ -546,18 +678,76 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   void _addNode(String kind, Offset at) {
     final next = _graph!.clone();
     final id = next.nextId();
-    final node = <String, dynamic>{'id': id, 'kind': kind};
-    if (kind == 'param') {
-      node['settings'] = {
-        'id': 'param$id',
-        'kind': 'slider',
-        'min': 0,
-        'max': 1,
-        'default': 0,
-      };
-    }
-    next.nodes.add(node);
+    next.nodes.add(_freshNode(kind, id));
     _positions[id] = at;
+    _commit(next);
+  }
+
+  static Map<String, dynamic> _freshNode(String kind, int id) => {
+        'id': id,
+        'kind': kind,
+        if (kind == 'param')
+          'settings': {
+            'id': 'param$id',
+            'kind': 'slider',
+            'min': 0,
+            'max': 1,
+            'default': 0,
+          },
+      };
+
+  /// Add node… after a box: on the wire leaving it, or wired from its first
+  /// output when nothing leaves it. Null for a box with no output.
+  VoidCallback? _addAfterOf(int id) {
+    final boxes = _boxes();
+    final box = boxes.where((b) => b.node.id == id).firstOrNull;
+    if (box == null || box.node.outputs.isEmpty) return null;
+    return () => _openConsole(
+        graphClearSpot(box.rect.topRight + const Offset(48, 0),
+            [for (final b in boxes) b.rect]),
+        onWire: _graph!.edges.where((e) => e['from'] == id).firstOrNull ??
+            {'from': id, 'from_port': 0, 'to': null});
+  }
+
+  /// A box put on a wire takes the wire's place: fed through its first input
+  /// the wire fits, feeding on from its first output that fits. The engine
+  /// says what fits, and where nothing does the box lands unwired.
+  void _insertNode(String kind, Offset at, Map<String, dynamic> edge) {
+    final next = _graph!.clone();
+    final id = next.nextId();
+    next.nodes.add(_freshNode(kind, id));
+    _positions[id] = at;
+    final ports = shaderGraphView(graph: next.encode())
+        .nodes
+        .where((n) => n.id == id)
+        .firstOrNull;
+    final broken = _view?.error != null;
+    for (var i = 0; i < (ports?.inputs.length ?? 0); i++) {
+      for (var o = 0; o < ports!.outputs.length; o++) {
+        final wired = next.clone()
+          ..edges.removeWhere((e) => _sameEdge(e, edge))
+          ..edges.addAll([
+            {
+              'from': edge['from'],
+              'from_port': edge['from_port'],
+              'to': id,
+              'to_port': i,
+            },
+            // Nothing to pass on when the box was added after an end.
+            if (edge['to'] != null)
+              {
+                'from': id,
+                'from_port': o,
+                'to': edge['to'],
+                'to_port': edge['to_port'],
+              },
+          ]);
+        if (broken || shaderGraphView(graph: wired.encode()).error == null) {
+          _commit(wired);
+          return;
+        }
+      }
+    }
     _commit(next);
   }
 
@@ -596,9 +786,29 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   @override
   double get tieZoom => _zoom;
 
-  /// Every wire, as the ties name it and in its type's colour.
+  /// The input a type fault names, by box and port index, or null.
+  ({int node, int port})? _refusedInput(List<_Box> boxes) {
+    final fault = _view?.error;
+    final node = fault?.node;
+    if (node == null || fault?.fault != BridgeShaderFault.typeMismatch) {
+      return null;
+    }
+    final port = boxes
+            .where((b) => b.node.id == node)
+            .firstOrNull
+            ?.node
+            .inputs
+            .indexWhere((p) => p.id == fault!.port) ??
+        -1;
+    return port < 0 ? null : (node: node, port: port);
+  }
+
+  /// Every wire, as the ties name it and in its type's colour, the one a
+  /// type fault names in the error colour, heavier, and dashed by the
+  /// painter, so it reads apart from a colour wire in any scheme.
   List<(TieWire, Color, double)> _tieWires(List<_Box> boxes, LumitTheme t) {
     final byId = {for (final b in boxes) b.node.id: b};
+    final refused = _refusedInput(boxes);
     return [
       for (final e in _graph?.edges ?? const <Map<String, dynamic>>[])
         if ((byId[e['from']], byId[e['to']], e['from_port'] as int? ?? 0)
@@ -610,11 +820,18 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
               from: from.socket(port, isInput: false),
               to: to.socket(e['to_port'] as int? ?? 0, isInput: true),
             ),
-            shaderPortColour(t, from.node.outputs[port].ty),
-            1.0,
+            _isRefused(e, refused)
+                ? t.error
+                : shaderPortColour(t, from.node.outputs[port].ty),
+            _isRefused(e, refused) ? 1.6 : 1.0,
           ),
     ];
   }
+
+  bool _isRefused(Map<String, dynamic> edge, ({int node, int port})? refused) =>
+      refused != null &&
+      edge['to'] == refused.node &&
+      (edge['to_port'] ?? 0) == refused.port;
 
   @override
   List<TieWire> tieWiresNow() => _wiresOf(_boxes());
@@ -658,13 +875,24 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   // --- Pointers -----------------------------------------------------------
 
   void _down(PointerDownEvent event, List<_Box> boxes) {
-    _focus.requestFocus();
     final at = _toCanvas(event.localPosition);
+    _editorPress = boxes.any((b) =>
+        b.node.id == _renaming &&
+        (b.rect.topLeft & Size(b.rect.width, graphNodeHeaderHeight))
+            .contains(at));
+    if (_editorPress) return;
+    _focus.requestFocus();
     _pressAt = event.localPosition;
 
     // Ctrl and a press on a point is a press on the socket its wires leave.
     final socket =
         _socketAt(boxes, tieWireFrom(event, at, _wiresOf(boxes)) ?? at);
+    final right = event.buttons == kSecondaryMouseButton;
+    // The right button asks a socket rather than pulling on it.
+    if (socket != null && right) {
+      _socketMenu(socket, event.position);
+      return;
+    }
     if (socket != null) {
       // A wired input is grabbed by its far end, exactly as the outer canvas
       // grabs one: drop it elsewhere to move it, on nothing to take it off.
@@ -688,8 +916,16 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     }
 
     final box = _boxAt(boxes, at);
-    if (box == null && tieDown(event, at, _wiresOf(boxes))) return;
+    if (box == null && tieDown(event, at, _wiresOf(boxes))) {
+      // A right-click on empty ground opens a menu on release, and a
+      // right-button drag ties the wires it crosses.
+      _menuPress = right;
+      return;
+    }
     if (box != null) {
+      // A right press picks and grabs as the left does, and a release that
+      // never moved opens the box's menu.
+      _menuBox = right ? box.node.id : null;
       setState(() {
         if (!_selection.contains(box.node.id)) {
           _selection
@@ -719,6 +955,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   }
 
   void _move(PointerMoveEvent event, List<_Box> boxes) {
+    if (_editorPress) return;
     final at = _toCanvas(event.localPosition);
     if (_flight case final flight?) {
       setState(() => flight.to = at);
@@ -730,7 +967,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
         var delta = at - drag.grab;
         // The magnet the outer canvas keeps: boxes land on the grid's pitch.
         final origin = drag.origins[drag.node];
-        if (origin != null) {
+        if (origin != null && _snapToGrid) {
           final raw = origin + delta;
           delta += Offset(
                 (raw.dx / graphDotGrid).round() * graphDotGrid,
@@ -745,6 +982,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       return;
     }
     if (_panFrom case final from?) {
+      _viewMoved = true;
       setState(() {
         _pan = from + event.localPosition;
         _rememberView();
@@ -753,6 +991,10 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   }
 
   void _up(PointerUpEvent event, List<_Box> boxes) {
+    if (_editorPress) {
+      _editorPress = false;
+      return;
+    }
     final at = _toCanvas(event.localPosition);
     final moved = _pressAt == null ||
         (event.localPosition - _pressAt!).distance > 3;
@@ -779,14 +1021,268 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       return;
     }
 
-    if (tieUp(at, moved, _wiresOf(boxes))) return;
+    if (tieUp(at, moved, _wiresOf(boxes), menuAt: event.position)) {
+      _menuPress = false;
+      return;
+    }
+    if (_menuPress) {
+      _menuPress = false;
+      if (moved) return;
+      if (_wireAt(boxes, at) case final edge?) {
+        showGraphWireMenu(context, event.position,
+            onInsert: () => _openConsole(at, onWire: edge),
+            onReroute: () => tieAddPoint(
+                tieWireKey('n${edge['to']}', '${edge['to_port'] ?? 0}'), at),
+            onDelete: () => _removeEdge(edge));
+      } else {
+        _canvasMenu(at, event.position);
+      }
+      return;
+    }
     if (_drag != null) {
       setState(() => _drag = null);
+      final menuBox = _menuBox;
+      _menuBox = null;
+      if (!moved && menuBox != null) {
+        _boxMenu(menuBox, event.position);
+        return;
+      }
       if (moved && _graph != null) _commit(_graph!.clone());
       return;
     }
     setState(() => _panFrom = null);
   }
+
+  // --- Menus --------------------------------------------------------------
+
+  /// A right-click on empty canvas, waiting for its release.
+  bool _menuPress = false;
+
+  /// The box a right press landed on, whose menu opens if the release never
+  /// moved.
+  int? _menuBox;
+
+  /// The stored wire nearest [at], within a wire's grab distance.
+  Map<String, dynamic>? _wireAt(List<_Box> boxes, Offset at) {
+    final graph = _graph;
+    if (graph == null) return null;
+    final byId = {for (final b in boxes) b.node.id: b};
+    final wires = _wiresOf(boxes);
+    Map<String, dynamic>? best;
+    var nearest = graphWireGrab;
+    for (final e in graph.edges) {
+      final from = byId[e['from']];
+      final to = byId[e['to']];
+      if (from == null || to == null) continue;
+      final wire = (
+        key: tieWireKey('n${e['to']}', '${e['to_port'] ?? 0}'),
+        from: from.socket(e['from_port'] as int? ?? 0, isInput: false),
+        to: to.socket(e['to_port'] as int? ?? 0, isInput: true),
+      );
+      final d = tieWireDistance(wire, at, wires);
+      if (d < nearest) {
+        nearest = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  void _boxMenu(int id, Offset at) {
+    final graph = _graph;
+    final ui = _ui;
+    if (graph == null) return;
+    // The right press picked the box; say so now rather than after the next
+    // frame, so the rows below read this box.
+    _publishPick();
+    final wired = graph.edges.any((e) => e['from'] == id || e['to'] == id);
+    // The Result box alone copies to nothing and goes nowhere: a graph has
+    // one.
+    final resultAlone = _selection.length == 1 &&
+        graph.nodes.any((n) => n['id'] == id && n['kind'] == 'result');
+    showGraphBoxMenu(
+      context,
+      at,
+      onRename: _selection.length == 1
+          ? () => setState(() => _renaming = id)
+          : null,
+      onAddNode: _selection.length == 1 ? _addAfterOf(id) : null,
+      onCopy: resultAlone ? null : _copySelected,
+      onPaste: () => _paste(_toCanvas(const Offset(80, 80))),
+      canPaste: _copied != null,
+      onDuplicate: resultAlone ? null : _duplicateSelected,
+      onDisconnectAll: !wired
+          ? null
+          : () {
+              final next = graph.clone();
+              next.edges.removeWhere((e) => e['from'] == id || e['to'] == id);
+              _commit(next);
+            },
+      // The Viewer's chip, from the box: the shader's Result reads this box
+      // instead. The right press has picked it, so the chip's point is this.
+      viewHere:
+          ui?.viewerShaderPoint == null ? null : ui!.atSelectedEffect.value,
+      onViewHere: ui?.viewerShaderPoint == null
+          ? null
+          : () => ui!.setAtSelectedEffect(!ui.atSelectedEffect.value),
+      onDelete: resultAlone ? null : _deleteSelected,
+    );
+  }
+
+  /// A box's own name; a Parameter box's is the name its control shows.
+  /// Empty puts back the box's own word, or a Parameter's id.
+  void _rename(int id, String name) {
+    final graph = _graph;
+    setState(() => _renaming = null);
+    if (graph == null) return;
+    final next = graph.clone();
+    for (final n in next.nodes.where((n) => n['id'] == id)) {
+      final settings = Map<String, dynamic>.of(
+          (n['settings'] as Map?)?.cast<String, dynamic>() ?? const {});
+      name.trim().isEmpty
+          ? settings.remove('label')
+          : settings['label'] = name.trim();
+      n['settings'] = settings;
+    }
+    _commit(next);
+  }
+
+  /// The boxes copied last, with the wires between them, held for the
+  /// session: a shader box names nothing outside its graph, so a copy is
+  /// the boxes themselves.
+  static ({List<Map<String, dynamic>> nodes, List<Map<String, dynamic>> edges})?
+      _copied;
+
+  ({List<Map<String, dynamic>> nodes, List<Map<String, dynamic>> edges})?
+      _pickedBoxes() {
+    final graph = _graph;
+    if (graph == null || _selection.isEmpty) return null;
+    return (
+      nodes: [
+        for (final n in graph.nodes)
+          if (_selection.contains(n['id'])) jsonDecode(jsonEncode(n)),
+      ],
+      edges: [
+        for (final e in graph.edges)
+          if (_selection.contains(e['from']) && _selection.contains(e['to']))
+            Map<String, dynamic>.of(e),
+      ],
+    );
+  }
+
+  void _copySelected() => _copied = _pickedBoxes() ?? _copied;
+
+  /// The held boxes land with fresh ids, the first at [at] and the rest
+  /// keeping their offsets from it, and become the pick. A second Result
+  /// box is left out: a graph has one.
+  void _paste(Offset at,
+      [({List<Map<String, dynamic>> nodes, List<Map<String, dynamic>> edges})?
+          held]) {
+    final graph = _graph;
+    final boxes = held ?? _copied;
+    if (graph == null || boxes == null || boxes.nodes.isEmpty) return;
+    final next = graph.clone();
+    var id = next.nextId();
+    final ids = <int, int>{};
+    final origins = {for (final b in _boxes()) b.node.id: b.rect.topLeft};
+    final first = origins[boxes.nodes.first['id']] ?? Offset.zero;
+    for (final n in boxes.nodes) {
+      if (n['kind'] == 'result' && _hasResult()) continue;
+      final was = n['id'] as int;
+      ids[was] = id;
+      next.nodes.add(jsonDecode(jsonEncode(n)) as Map<String, dynamic>
+        ..['id'] = id);
+      _positions[id] = at + ((origins[was] ?? first) - first);
+      id++;
+    }
+    for (final e in boxes.edges) {
+      final from = ids[e['from']];
+      final to = ids[e['to']];
+      if (from == null || to == null) continue;
+      next.edges.add(Map<String, dynamic>.of(e)
+        ..['from'] = from
+        ..['to'] = to);
+    }
+    _selection
+      ..clear()
+      ..addAll(ids.values);
+    _commit(next);
+  }
+
+  void _duplicateSelected() {
+    final picked = _pickedBoxes();
+    if (picked == null) return;
+    final first =
+        _boxes().where((b) => b.node.id == picked.nodes.first['id']).firstOrNull;
+    _paste((first?.rect.topLeft ?? Offset.zero) + const Offset(20, 20), picked);
+  }
+
+  /// Fit every box on screen, with a little air round the edges. Asked for
+  /// by hand, so the panel's own resizes leave the view be after it.
+  void _frameAll() {
+    _viewMoved = true;
+    _frame(_boxes());
+  }
+
+  /// Fit the picked boxes, or every box when none is picked.
+  void _frameSelected() {
+    final picked = [
+      for (final b in _boxes())
+        if (_selection.contains(b.node.id)) b
+    ];
+    _viewMoved = true;
+    _frame(picked.isEmpty ? _boxes() : picked);
+  }
+
+  void _frame(List<_Box> boxes, {double maxZoom = 2}) {
+    final view =
+        graphFrame(_viewport, [for (final b in boxes) b.rect], maxZoom: maxZoom);
+    if (view == null) return;
+    setState(() {
+      _zoom = view.zoom;
+      _pan = view.pan;
+      _rememberView();
+    });
+  }
+
+  Size _viewport = Size.zero;
+
+  void _socketMenu(_Sock socket, Offset at) {
+    final graph = _graph;
+    if (graph == null) return;
+    final edges = [
+      for (final e in graph.edges)
+        if (socket.isInput
+            ? e['to'] == socket.node && e['to_port'] == socket.port
+            : e['from'] == socket.node && e['from_port'] == socket.port)
+          e,
+    ];
+    showGraphSocketMenu(
+      context,
+      at,
+      onDisconnect: edges.isEmpty
+          ? null
+          : () {
+              final next = graph.clone();
+              next.edges.removeWhere((e) => edges.any((x) => _sameEdge(e, x)));
+              _commit(next);
+            },
+    );
+  }
+
+  void _canvasMenu(Offset at, Offset position) => showGraphCanvasMenu(
+        context,
+        position,
+        onAddNode: () => _openConsole(at, byKey: true),
+        onPaste: () => _paste(at),
+        canPaste: _copied != null,
+        onSelectAll: () => setState(() => _selection
+          ..clear()
+          ..addAll([for (final n in _graph?.nodes ?? const []) n['id'] as int])),
+        onFrameSelected: _frameSelected,
+        canFrameSelected: _selection.isNotEmpty,
+        onFrameAll: _frameAll,
+      );
 
   void _wheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
@@ -794,6 +1290,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     final next = (was * (event.scrollDelta.dy > 0 ? 0.9 : 1.1)).clamp(0.2, 2.0);
     if (next == was) return;
     final anchor = (event.localPosition - _pan) / was;
+    _viewMoved = true;
     setState(() {
       _zoom = next;
       _pan = event.localPosition - anchor * next;
@@ -807,11 +1304,26 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final boxes = _boxes();
+    // After the frame: the pick has settled, and a listener may rebuild.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _publishPick());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _breadcrumb(t),
-        Expanded(child: _canvas(t, boxes)),
+        Expanded(
+          child: LayoutBuilder(builder: (context, box) {
+            _viewport = box.biggest;
+            // The boxes open in the middle of the panel, never larger than
+            // they are. After the frame, as a view change is.
+            if (boxes.isNotEmpty && !_viewMoved && _framedFor != _viewport) {
+              _framedFor = _viewport;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && !_viewMoved) _frame(_boxes(), maxZoom: 1);
+              });
+            }
+            return _canvas(t, boxes);
+          }),
+        ),
       ],
     );
   }
@@ -840,23 +1352,68 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Text('›', style: t.kicker.copyWith(color: t.textMuted)),
     );
-    return Container(
-      key: const ValueKey<String>('shader-breadcrumb'),
-      height: graphToolbarHeight,
-      color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Row(
-        children: [
-          crumb('shader-crumb-comp', widget.entry.compName, widget.onExit),
-          sep,
-          if (widget.entry.layerName case final layer?) ...[
-            crumb('shader-crumb-layer', layer, widget.onExit),
-            sep,
+    // The outer canvas's toolbar, on the strip's right: the same switch,
+    // framing and zoom.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (d) => showGraphToolbarMenu(
+        context,
+        d.globalPosition,
+        snap: _snapToGrid,
+        onSnap: () => setState(() => _snapToGrid = !_snapToGrid),
+        onFrameSelected: _frameSelected,
+        canFrameSelected: _selection.isNotEmpty,
+        onFrameAll: _frameAll,
+      ),
+      child: Container(
+        key: const ValueKey<String>('shader-breadcrumb'),
+        height: graphToolbarHeight,
+        color: t.surface1,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                      child: crumb('shader-crumb-comp',
+                          widget.entry.compName, widget.onExit)),
+                  sep,
+                  if (widget.entry.layerName case final layer?) ...[
+                    Flexible(
+                        child:
+                            crumb('shader-crumb-layer', layer, widget.onExit)),
+                    sep,
+                  ],
+                  Flexible(
+                      child: crumb('shader-crumb-shader',
+                          widget.entry.effectName, null)),
+                ],
+              ),
+            ),
+            graphToolbarFold(
+              markKey: const ValueKey('shader-toolbar-more'),
+              [
+                graphToolFold(t,
+                    key: const ValueKey('shader-snap'),
+                    tip: _snapToGrid ? l10n.tipSnapOn : l10n.tipSnapOff,
+                    icon: LumitIcons.snap,
+                    on: _snapToGrid,
+                    gap: 10,
+                    onPressed: () =>
+                        setState(() => _snapToGrid = !_snapToGrid)),
+                graphFrameAllFold(t,
+                    key: const ValueKey('shader-frame-all'),
+                    onPressed: _frameAll),
+              ],
+            ),
+            Text(
+              l10n.graphZoom((_zoom * 100).round()),
+              key: const ValueKey('shader-zoom'),
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
+            ),
           ],
-          Expanded(
-              child: crumb('shader-crumb-shader', widget.entry.effectName,
-                  null)),
-        ],
+        ),
       ),
     );
   }
@@ -872,13 +1429,30 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
           }
           // No Tab door: Ctrl+Space is the console's one key,
           // answered through [_consoleClaim].
+          if (_renaming != null) return KeyEventResult.ignored;
           if (event.logicalKey == LogicalKeyboardKey.delete ||
               event.logicalKey == LogicalKeyboardKey.backspace) {
             return tieDelete() || _deleteSelected()
                 ? KeyEventResult.handled
                 : KeyEventResult.ignored;
           }
-          return KeyEventResult.ignored;
+          // Enter names the one picked box, as it renames a picked effect.
+          if (event.logicalKey == LogicalKeyboardKey.enter &&
+              _selection.length == 1) {
+            setState(() => _renaming = _selection.single);
+            return KeyEventResult.handled;
+          }
+          switch (_ui?.keymap.actionFor(BridgeKeyContext.nodes, event)) {
+            case 'nodes.frame.selected':
+              _frameSelected();
+            case 'nodes.frame.all':
+              _frameAll();
+            case 'effect.duplicate':
+              _duplicateSelected();
+            default:
+              return KeyEventResult.ignored;
+          }
+          return KeyEventResult.handled;
         },
         child: Listener(
           onPointerDown: (e) => _down(e, boxes),
@@ -910,6 +1484,10 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
                   child: CustomPaint(
                     painter: _WirePainter(
                       wires: _tieWires(boxes, t),
+                      dashed: {
+                        if (_refusedInput(boxes) case final r?)
+                          tieWireKey('n${r.node}', '${r.port}'),
+                      },
                       ties: tieView(),
                       flight: _flight,
                       pan: _pan,
@@ -936,23 +1514,42 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
                               box: box,
                               graph: _graph,
                               selected: _selection.contains(box.node.id),
+                              refusedPort: switch (_refusedInput(boxes)) {
+                                final r? when r.node == box.node.id => r.port,
+                                _ => null,
+                              },
+                              nameEditor: _renaming != box.node.id
+                                  ? null
+                                  : GraphNameField(
+                                      key: ValueKey<String>(
+                                          'shader-rename-${box.node.id}'),
+                                      initial: _labelOf(box.node.id),
+                                      onDone: (name) =>
+                                          _rename(box.node.id, name),
+                                      onCancel: () =>
+                                          setState(() => _renaming = null),
+                                    ),
                             ),
                           ),
                       ],
                     ),
                   ),
                 ),
-                // The one sentence about a graph that will not compile —
-                // never red, never modal, and the canvas stays editable
-                // (§2.2: being broken is a state to work in).
+                // Why the graph won't compile, small at the foot and never
+                // modal, so the canvas stays a place to fix it (§2.2: being
+                // broken is a state to work in). The wire it is about is
+                // drawn in the same colour.
                 if (_view?.error case final error?)
                   Positioned(
                     left: 10,
+                    right: 10,
                     bottom: 8,
                     child: Text(
-                      error,
+                      shaderFaultWords(error, _view!.nodes),
                       key: const ValueKey<String>('shader-error'),
-                      style: t.small.copyWith(color: t.accent),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.small.copyWith(color: t.error),
                     ),
                   ),
               ],
@@ -963,6 +1560,15 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
 
   bool _hasResult() =>
       _graph?.nodes.any((n) => n['kind'] == 'result') ?? false;
+
+  String _labelOf(int id) {
+    for (final n in _graph?.nodes ?? const <Map<String, dynamic>>[]) {
+      if (n['id'] == id) {
+        return (n['settings'] as Map?)?['label'] as String? ?? '';
+      }
+    }
+    return '';
+  }
 }
 
 /// One box: the shared frame, the L11 header grammar (the strip an Effect
@@ -973,10 +1579,18 @@ class _ShaderNodeCard extends StatelessWidget {
   final _Inner? graph;
   final bool selected;
 
+  /// The input a type fault names, ringed in the error colour.
+  final int? refusedPort;
+
+  /// Takes the name's place while the box is being renamed.
+  final Widget? nameEditor;
+
   const _ShaderNodeCard({
     required this.box,
     required this.graph,
     required this.selected,
+    this.refusedPort,
+    this.nameEditor,
   });
 
   bool _wired(int port, {required bool isInput}) {
@@ -1024,7 +1638,8 @@ class _ShaderNodeCard extends StatelessWidget {
                 color: graphShaderHeader(t),
                 border: Border(bottom: BorderSide(color: t.hairline)),
               ),
-              child: Row(
+              // While it is being renamed the editor takes the whole strip.
+              child: nameEditor ?? Row(
                 children: [
                   Flexible(
                     child: Text(
@@ -1121,6 +1736,10 @@ class _ShaderNodeCard extends StatelessWidget {
         color: _wired(i, isInput: isInput) ? colour : t.surface1,
         shape: BoxShape.circle,
         border: Border.all(color: colour),
+        // A ring, not a glow: drawn hard round the refused input.
+        boxShadow: isInput && i == refusedPort
+            ? [BoxShadow(color: t.error, spreadRadius: 2.5)]
+            : null,
       ),
     );
   }
@@ -1129,6 +1748,9 @@ class _ShaderNodeCard extends StatelessWidget {
 /// Every wire, coloured by its source port's type, and the dashed one in hand.
 class _WirePainter extends CustomPainter {
   final List<(TieWire, Color, double)> wires;
+
+  /// The refused wire, by its tie key, drawn dashed.
+  final Set<String> dashed;
   final TieView ties;
   final _Flight? flight;
   final Offset pan;
@@ -1138,6 +1760,7 @@ class _WirePainter extends CustomPainter {
 
   const _WirePainter({
     required this.wires,
+    required this.dashed,
     required this.ties,
     required this.flight,
     required this.pan,
@@ -1151,7 +1774,7 @@ class _WirePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     paintTiedWires(canvas, wires, ties,
-        pan: pan, zoom: zoom, style: style, theme: theme);
+        pan: pan, zoom: zoom, style: style, theme: theme, dashed: dashed);
     if (flight case final f?) {
       final (a, b) =
           f.from.isInput ? (f.to, f.from.at) : (ties.via ?? f.from.at, f.to);

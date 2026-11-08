@@ -410,8 +410,9 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
         : () => unawaited(
             openExternalLink(review.compareUrl(before.n, v.n)));
     final delete = only ? null : () => widget.onDeleteVersion(v);
-    return Builder(
-      builder: (row) => GestureDetector(
+    return HoverMark(
+      cursor: MouseCursor.defer,
+      builder: (row, lit) => GestureDetector(
         behavior: HitTestBehavior.translucent,
         // What the row's two words do, for a right click too.
         onSecondaryTapDown: compare == null && delete == null
@@ -472,27 +473,24 @@ class _ReviewLinkPageState extends State<ReviewLinkPage> {
                       ],
                     ),
                   ),
-                  Text(reviewWhen(v.created), style: t.small),
-                  const SizedBox(width: 6),
-                  // Beside the one it took over from, in the browser. The
-                  // first version has none before it, and keeps the word's
-                  // room so the columns stand in line down the list, while
-                  // there is a list for them to stand in line down.
-                  if (compare != null)
-                    reviewAction(t, 'compare-${v.n}',
-                        Text(l10n.reviewCompare, style: t.small), compare)
-                  else if (!only)
-                    Visibility.maintain(
-                      visible: false,
-                      child: reviewAction(t, 'compare-none',
-                          Text(l10n.reviewCompare, style: t.small), () {}),
-                    ),
-                  if (delete != null)
-                    reviewAction(
-                        t,
-                        'delete-version-${v.n}',
-                        Text(l10n.reviewDeleteVersion, style: t.small),
-                        delete),
+                  // The time, and under the pointer what can be done in its
+                  // place, as a comment's row has it.
+                  if (lit == 0)
+                    Text(reviewWhen(v.created), style: t.small)
+                  else ...[
+                    // Beside the one it took over from, in the browser.
+                    if (compare != null)
+                      reviewAction(t, 'compare-${v.n}',
+                          Text(l10n.reviewCompare, style: t.small), compare),
+                    if (delete != null)
+                      reviewAction(
+                          t,
+                          'delete-version-${v.n}',
+                          Text(l10n.reviewDeleteVersion, style: t.small),
+                          delete),
+                    if (compare == null && delete == null)
+                      Text(reviewWhen(v.created), style: t.small),
+                  ],
                 ],
               ),
             ),

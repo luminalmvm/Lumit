@@ -16,6 +16,9 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show MenuEntry, effectMenuEntries;
+import '../state/clipboard.dart' show ClipboardKind;
+import '../state/tools.dart' show ToolMode;
 import '../state/comp_time.dart';
 import '../state/drag_payloads.dart';
 import '../state/timeline_columns.dart';
@@ -25,9 +28,11 @@ import '../widgets/controls.dart';
 import 'audio_routes_frb.dart' show writeSend;
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
+import 'effect_commands.dart';
 import 'effect_param_row_frb.dart';
 import 'viewer_effect_points.dart' show pickForPoint;
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart';
 import 'model_fold_rows.dart' show setModelPartShown;
 import 'light_rows_frb.dart';
@@ -41,6 +46,8 @@ import 'timeline_mask_rows_frb.dart';
 import 'timeline_puppet_rows_frb.dart';
 import 'timeline_shape_rows_frb.dart';
 import 'timeline_retime_row_frb.dart';
+import 'timeline_layer_menu_frb.dart' show audioRows, showMenuEntriesAt;
+import 'viewer_shapes.dart' show shapePath;
 
 /// The Timeline with no composition open: the placeholder, and a drop target
 /// over it.
@@ -90,6 +97,9 @@ class EmptyTimelineDrop extends StatelessWidget {
     );
   }
 }
+
+/// The effect heading whose name is being edited, by its path.
+final ValueNotifier<String?> foldEffectRenaming = ValueNotifier(null);
 
 /// One row of a layer's fold-out, in the outline.
 ///
@@ -156,6 +166,10 @@ class FoldRow extends StatelessWidget {
   /// from the glyph rather than from the corner of the panel.
   final void Function(BuildContext at)? onAddEffect;
 
+  /// Twirl these headings open or shut, for an effect's Expand all and Collapse
+  /// all. Null where the panel keeps no such thing.
+  final void Function(List<String> paths, bool open)? onFoldPaths;
+
   /// Whether the layer this row belongs to is locked. A locked layer's
   /// rows are still *read* — the numbers are what the document holds and the
   /// curves still draw — but nothing on them can be touched.
@@ -182,6 +196,7 @@ class FoldRow extends StatelessWidget {
     this.others = const [],
     this.onSetEnabled,
     this.onAddEffect,
+    this.onFoldPaths,
     this.keysPickedOn,
   });
 
@@ -289,13 +304,16 @@ class FoldRow extends StatelessWidget {
               : picks
                   ? HeldFor(
                       names: [path],
-                      child: keysPickedOn == null
-                          ? _control(context)
-                          : ValueEditScope(
-                              run: (typed, edit) => editPickedKeys(
-                                  keysPickedOn!(path), typed, edit),
-                              child: _control(context),
-                            ),
+                      child: ParamRowPath(
+                        path: path,
+                        child: keysPickedOn == null
+                            ? _control(context)
+                            : ValueEditScope(
+                                run: (typed, edit) => editPickedKeys(
+                                    keysPickedOn!(path), typed, edit),
+                                child: _control(context),
+                              ),
+                      ),
                     )
                   : _control(context),
         ),
@@ -313,30 +331,246 @@ class FoldRow extends StatelessWidget {
   /// Copy the effect this heading names — or, when it is one of
   /// several picked, all of them. The Timeline's half of the pair, the
   /// Effect controls panel's heading carrying the other.
-  void _effectMenu(BuildContext context, Offset at, String effectId) {
-    showMenuAt<void>(
-      context: context,
-      position: at,
-      width: 190,
-      rows: (close) => [
-        MenuRow(
-          key: ValueKey<String>('tl-fx-menu-copy-$effectId'),
-          onPressed: () {
-            close(null);
-            final ui = Provider.of<LumitUiState>(context, listen: false);
-            try {
-              ui.copyEffectsToClipboard(layer.copyEffects(
-                effects:
-                    ui.effectsToCopy(layer, UuidValue.fromString(effectId)),
-              ));
-            } catch (_) {
-              // The effect went away between the menu opening and this row
-              // being chosen; the clipboard keeps whatever it had.
-            }
-          },
-          child: Text(l10n.copyEffect),
-        ),
-      ],
+  /// The menu a heading opens, or null for a heading with nothing to offer:
+  /// an effect's own, Transform's, the Effects rack's and the Masks stack's.
+  void Function(BuildContext, Offset)? _headingMenu(String path) {
+    final id = layer.internallayerId.toString();
+    if (effectIdOfPath(path) ?? styleIdOfPath(path) case final effectId?) {
+      return (context, at) => _effectMenu(context, at, effectId);
+    }
+    if (path == transformPath(id)) {
+      return (context, at) =>
+          showTransformMenu(context, at, layer, onChanged: onChanged);
+    }
+    if (path == effectsPath(id)) return _effectsMenu;
+    if (path == masksPath(id)) return _masksMenu;
+    if (path == audioPath(id)) return _audioMenu;
+    return null;
+  }
+
+  /// Audio: its waveform lane, then the Layer menu's own Audio rows.
+  void _audioMenu(BuildContext context, Offset at) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = _aboutThisLayer(context);
+    final entry = ui.model.byId(layer.internallayerId);
+    if (entry == null) return;
+    final id = layer.internallayerId.toString();
+    final wave = row is FoldGroupRow && ((row as FoldGroupRow).waveform ?? false);
+    final fold = onFoldPaths;
+    showMenuEntriesAt(context, at, [
+      MenuEntry(l10n.foldWaveform, () {
+        if (fold == null) {
+          onToggle(waveformPath(id));
+        } else if (wave) {
+          fold([waveformPath(id)], false);
+        } else {
+          fold([audioPath(id), waveformPath(id)], true);
+        }
+      }, action: 'reveal.audio', checked: wave),
+      MenuEntry.divider(),
+      ...audioRows(app, ui, entry),
+    ]);
+  }
+
+  /// The layer the heading belongs to, selected, so the shell's rows act on
+  /// it: a heading outside the selection is about its own layer.
+  LumitUiState _aboutThisLayer(BuildContext context) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    if (!ui.selectedLayerIds.contains(layer.internallayerId)) {
+      ui.setSelection([layer]);
+    }
+    return ui;
+  }
+
+  /// Effects: the rack filled from the Effect menu, or from the clipboard.
+  void _effectsMenu(BuildContext context, Offset at) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = _aboutThisLayer(context);
+    showMenuEntriesAt(context, at, [
+      MenuEntry.submenu(l10n.addEffect, effectMenuEntries(app, ui, [layer])),
+      MenuEntry(
+          l10n.pasteEffect,
+          ui.clipboard.kind == ClipboardKind.effects && !locked
+              ? () => _pasteEffects(app, ui)
+              : null,
+          action: 'edit.paste'),
+    ]);
+  }
+
+  void _pasteEffects(LumitState app, LumitUiState ui) {
+    final text = ui.clipboard.text;
+    if (text == null) return;
+    try {
+      layer.pasteEffects(text: text, atFrame: ui.playheadFrame.value);
+    } catch (_) {
+      return;
+    }
+    app.notifyDocumentChanged();
+    onChanged();
+  }
+
+  /// Masks: a new rectangle the size of the comp, for the pen and the shape
+  /// tools to reshape, since the stack has no other way to start one here.
+  /// Then Paste and Delete all, as the Effects heading has.
+  void _masksMenu(BuildContext context, Offset at) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final masks = ui.model.byId(layer.internallayerId)?.info.masks ?? const [];
+    showMenuEntriesAt(context, at, [
+      MenuEntry(
+          l10n.menuAddMask,
+          locked
+              ? null
+              : () {
+                  final settings = comp.getSettings();
+                  try {
+                    layer.addMask(
+                      mask: BridgeMask(
+                        id: const Uuid().v4obj(),
+                        name: l10n.maskDefaultName,
+                        vertices: shapePath(
+                          tool: ToolMode.shapeRectangle,
+                          from: (0, 0),
+                          to: (
+                            settings.width.toDouble(),
+                            settings.height.toDouble()
+                          ),
+                        ),
+                        closed: true,
+                        inverted: false,
+                        opacity: const BridgeScalar.static_(100),
+                        mode: BridgeMaskMode.add,
+                        feather: const BridgeScalar.static_(0),
+                        vertexFeather: const [],
+                        expansion: const BridgeScalar.static_(0),
+                        pathKeys: const [],
+                      ),
+                    );
+                  } catch (_) {
+                    return;
+                  }
+                  app.notifyDocumentChanged();
+                  onChanged();
+                }),
+      MenuEntry.divider(),
+      MenuEntry(
+          l10n.menuPaste,
+          ui.clipboard.kind == ClipboardKind.masks && !locked
+              ? () => pasteMasksOnto(app, ui, [layer])
+              : null,
+          action: 'edit.paste'),
+      MenuEntry.divider(),
+      MenuEntry(
+          l10n.deleteAllMasks,
+          masks.isEmpty || locked
+              ? null
+              : () {
+                  asOneUndoStep(app.project, () {
+                    for (final mask in masks) {
+                      try {
+                        layer.deleteMask(id: mask.id);
+                      } catch (_) {}
+                    }
+                  });
+                  app.notifyDocumentChanged();
+                  onChanged();
+                }),
+    ]);
+  }
+
+  /// What can be done to the effect or style this heading names, the same as
+  /// its heading in Effect controls. Null once it has gone.
+  EffectCommands? _effectCommands(BuildContext context, String id) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final root = path.split('/').first;
+    final group =
+        root.startsWith('g:') ? UuidValue.fromString(root.substring(2)) : null;
+    final clip =
+        root.startsWith('c:') ? UuidValue.fromString(root.substring(2)) : null;
+    final style = styleIdOfPath(path) != null;
+    final entry = ui.model.byId(layer.internallayerId)?.info;
+    final List<BridgeEffectInstanceInfo> infos;
+    if (clip != null) {
+      infos = [
+        for (final e in layer.getClipEffects(clip: clip, onCompClock: true))
+          e.getInfo(),
+      ];
+    } else if (group != null) {
+      infos = ui.model.groups.where((g) => g.id == group).firstOrNull?.effects ??
+          const [];
+    } else {
+      infos = (style ? entry?.styles : entry?.effects) ?? const [];
+    }
+    final info = infos.where((e) => '${e.id}' == id).firstOrNull;
+    if (info == null) return null;
+    return EffectCommands(
+      info: info,
+      layer: layer,
+      comp: comp,
+      style: style,
+      group: group,
+      clip: clip,
+      onStackChanged: () {
+        app.notifyDocumentChanged();
+        onChanged();
+      },
+    );
+  }
+
+  /// The menu of the effect or style this heading names.
+  void _effectMenu(BuildContext context, Offset at, String id) {
+    final commands = _effectCommands(context, id);
+    if (commands == null) return;
+    final root = path.split('/').first;
+    final fold = onFoldPaths;
+    commands.showMenu(
+      context,
+      at,
+      onStartRename: commands.group == null && commands.clip == null
+          ? () => foldEffectRenaming.value = path
+          : null,
+      onFoldAll: fold == null
+          ? null
+          : (open) => fold([
+                for (final e in commands.onStack
+                    ? Provider.of<LumitUiState>(context, listen: false)
+                            .model
+                            .byId(layer.internallayerId)
+                            ?.info
+                            .effects ??
+                        const <BridgeEffectInstanceInfo>[]
+                    : [commands.info])
+                  effectPath(root, '${e.id}'),
+              ], open),
+    );
+  }
+
+  /// A heading's name, which an effect's Rename turns into its editor in place.
+  Widget _headingName(
+      BuildContext context, String label, bool named, double lit) {
+    final t = ThemeScope.of(context).theme;
+    final text = Text(named ? label : t.propertyCase(label),
+        style:
+            t.body.copyWith(color: Color.lerp(t.body.color, t.textPrimary, lit)),
+        overflow: TextOverflow.ellipsis);
+    final id = effectIdOfPath(path) ?? styleIdOfPath(path);
+    if (id == null) return text;
+    return ValueListenableBuilder<String?>(
+      valueListenable: foldEffectRenaming,
+      builder: (context, renaming, _) => renaming != path
+          ? text
+          : Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FxRenameField(
+                initial: label,
+                onDone: (name) {
+                  foldEffectRenaming.value = null;
+                  _effectCommands(context, id)?.rename(name);
+                },
+                onCancel: () => foldEffectRenaming.value = null,
+              ),
+            ),
     );
   }
 
@@ -441,13 +675,11 @@ class FoldRow extends StatelessWidget {
             // headings — Transform, Effects, Masks, Audio — are groupings rather
             // than things that can be copied, and `effectIdOfPath` is what tells
             // them apart: only an effect's path carries an id.
-            onSecondaryTapUp: effectIdOfPath(path) == null
-                ? null
-                : (details) => _effectMenu(
-                      context,
-                      details.globalPosition,
-                      effectIdOfPath(path)!,
-                    ),
+            onSecondaryTapUp: switch (_headingMenu(path)) {
+              final menu? => (details) =>
+                  menu(context, details.globalPosition),
+              null => null,
+            },
             child: Row(
               children: [
                 // The effect's own bypass, where a panel offers it: this heading
@@ -507,13 +739,7 @@ class FoldRow extends StatelessWidget {
                 // where the layer rows' numbers are.
                 if (effectIdOfPath(path) case final String effectId
                     when timingsColumn.width > 0) ...[
-                  Expanded(
-                    child: Text(named ? label : t.propertyCase(label),
-                        style: t.body.copyWith(
-                            color:
-                                Color.lerp(t.body.color, t.textPrimary, lit)),
-                        overflow: TextOverflow.ellipsis),
-                  ),
+                  Expanded(child: _headingName(context, label, named, lit)),
                   Padding(
                     padding: EdgeInsets.only(right: timingsColumn.rightInset),
                     child: SizedBox(
@@ -522,13 +748,7 @@ class FoldRow extends StatelessWidget {
                     ),
                   ),
                 ] else
-                  Flexible(
-                    child: Text(named ? label : t.propertyCase(label),
-                        style: t.body.copyWith(
-                            color:
-                                Color.lerp(t.body.color, t.textPrimary, lit)),
-                        overflow: TextOverflow.ellipsis),
-                  ),
+                  Flexible(child: _headingName(context, label, named, lit)),
                 // The glyph that fills the rack this heading names, where a
                 // panel offers one. It sits after the word, so the heading reads
                 // as what it is and the button as what it does.
@@ -560,6 +780,9 @@ class FoldRow extends StatelessWidget {
           light: info.light,
           material: info.material,
           acceptsLights: info.switches.acceptsLights,
+          orient: info.transform.orient,
+          threeD: info.switches.threeD,
+          kind: info.kind,
           valueColumn: valueColumn,
           keyPrefix: 'tl-tf',
           onChanged: onChanged,
@@ -995,21 +1218,22 @@ class _FlowRow extends StatelessWidget {
       FlowRowKind.inputRate => _inputRate(),
     };
 
-    return Row(
-      children: [
-        if (row.kind == FlowRowKind.inputRate)
-          KeyframeControlsFrb(
+    final keys = row.kind != FlowRowKind.inputRate
+        ? null
+        : KeyframeControlsFrb(
             scalars: [row.rate!],
             comp: comp,
             onSeek: onSeek,
             rowKey: 'tl-flow-rate',
+            navigatorApart: true,
             onWrite: (next) {
               layer.setFlowInputRate(value: next.single);
               onChanged();
             },
-          )
-        else
-          const SizedBox(width: fxKeyframeGutter),
+          );
+    final line = Row(
+      children: [
+        keys ?? const SizedBox(width: fxKeyframeGutter + 6),
         const SizedBox(width: 4),
         Expanded(
           child: HoverMark(
@@ -1026,9 +1250,13 @@ class _FlowRow extends StatelessWidget {
             ),
           ),
         ),
+        if (keys?.trailingNavigator case final nav?) nav,
         SizedBox(width: valueColumn.width, child: control),
       ],
     );
+    return keys == null
+        ? line
+        : ParamRowMenu(menu: scalarRowMenu(context, keys), child: line);
   }
 
   Widget _choice(
@@ -1134,58 +1362,64 @@ class _VolumeRowState extends State<_VolumeRow> {
               BridgeScalar_Static(:final field0) => field0,
               _ => sampledScalar(scalar, timeOfFrame(widget.comp, frame)),
             };
-        return Row(
-          children: [
-            KeyframeControlsFrb(
-              scalars: [scalar],
-              comp: widget.comp,
-              onSeek: widget.onSeek,
-              rowKey: widget.rowKey,
-              onWrite: (next) {
-                _write(next.single);
-                widget.onChanged();
-              },
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-                child: Text(widget.label ?? t.propertyCase(l10n.volume),
-                    style: t.body)),
-            if (widget.trailing != null) widget.trailing!,
-            SizedBox(
-              width: widget.valueColumn.width,
-              // Animated: the change lands in the key under the playhead (or
-              // plants one) rather than flattening the curve, and the drag is
-              // staged so the whole gesture is one undo step.
-              child: animated
-                  ? KeyedValueField(
-                      fieldKey: ValueKey('${widget.rowKey}-db'),
-                      value: value,
-                      min: -60,
-                      max: 12,
-                      decimals: 1,
-                      suffix: ' dB',
-                      speed: 0.2,
-                      onCommit: (v) => _commitAt(scalar, v, frame),
-                    )
-                  : DragValueField(
-                      key: ValueKey('${widget.rowKey}-db'),
-                      value: value,
-                      // The engine's own range (docs/09 §6): silence to a
-                      // +12 dB boost.
-                      min: -60,
-                      max: 12,
-                      decimals: 1,
-                      suffix: ' dB',
-                      speed: 0.2,
-                      onChanged: (v) => _commitAt(scalar, v, frame),
-                      onChangeLive: (v) =>
-                          setState(() => _staged = v.toDouble()),
-                      onChangeEnd: (v) => _commitAt(scalar, v, frame),
-                      onDragCancel: () => setState(() => _staged = null),
-                    ),
-            ),
-            SizedBox(width: widget.valueColumn.rightInset),
-          ],
+        final keys = KeyframeControlsFrb(
+          scalars: [scalar],
+          comp: widget.comp,
+          onSeek: widget.onSeek,
+          rowKey: widget.rowKey,
+          navigatorApart: true,
+          onWrite: (next) {
+            _write(next.single);
+            widget.onChanged();
+          },
+        );
+        return ParamRowMenu(
+          menu: scalarRowMenu(context, keys, defaults: const [0]),
+          child: Row(
+            children: [
+              keys,
+              const SizedBox(width: 4),
+              Expanded(
+                  child: Text(widget.label ?? t.propertyCase(l10n.volume),
+                      style: t.body)),
+              if (keys.trailingNavigator case final nav?) nav,
+              if (widget.trailing != null) widget.trailing!,
+              SizedBox(
+                width: widget.valueColumn.width,
+                // Animated: the change lands in the key under the playhead (or
+                // plants one) rather than flattening the curve, and the drag is
+                // staged so the whole gesture is one undo step.
+                child: animated
+                    ? KeyedValueField(
+                        fieldKey: ValueKey('${widget.rowKey}-db'),
+                        value: value,
+                        min: -60,
+                        max: 12,
+                        decimals: 1,
+                        suffix: ' dB',
+                        speed: 0.2,
+                        onCommit: (v) => _commitAt(scalar, v, frame),
+                      )
+                    : DragValueField(
+                        key: ValueKey('${widget.rowKey}-db'),
+                        value: value,
+                        // The engine's own range (docs/09 §6): silence to a
+                        // +12 dB boost.
+                        min: -60,
+                        max: 12,
+                        decimals: 1,
+                        suffix: ' dB',
+                        speed: 0.2,
+                        onChanged: (v) => _commitAt(scalar, v, frame),
+                        onChangeLive: (v) =>
+                            setState(() => _staged = v.toDouble()),
+                        onChangeEnd: (v) => _commitAt(scalar, v, frame),
+                        onDragCancel: () => setState(() => _staged = null),
+                      ),
+              ),
+              SizedBox(width: widget.valueColumn.rightInset),
+            ],
+          ),
         );
       },
     );

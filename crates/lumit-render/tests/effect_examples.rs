@@ -44,6 +44,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod chord;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -396,6 +398,13 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
         ],
         // The light on its own would leave the plate behind, so the plate
         // stays under it, and the line runs across the frame on a slant.
+        // Over the plate, and hearing the chord example_doc lays under it.
+        "audio_spectrum" => vec![
+            ("composite_on_original", on(true)),
+            ("hue_spread", f(120.0)),
+            ("from_y", f(720.0)),
+            ("to_y", f(720.0)),
+        ],
         "energy_line" => vec![
             ("composite_on_original", on(true)),
             ("start_x", f(260.0)),
@@ -845,6 +854,11 @@ fn example_doc(
     if let Some(d) = depth {
         footage("depth.mp4", d);
     }
+    // The plate is silent and Audio spectrum has to hear something.
+    let hears = fx
+        .as_ref()
+        .is_some_and(|f| f.effect.match_name == "audio_spectrum");
+    let chord = hears.then(|| chord::layer(footage("chord.wav", &chord::written()), span));
 
     let mut plate = layer("Plate", LayerKind::Footage { item }, span);
     if let Some(f) = fx.as_ref() {
@@ -980,6 +994,7 @@ fn example_doc(
     if let Some(aux) = aux_layer(depth, span) {
         layers.push(aux);
     }
+    layers.extend(chord);
 
     let comp_id = id("Example");
     doc.items.push(ProjectItem::Composition(Composition {

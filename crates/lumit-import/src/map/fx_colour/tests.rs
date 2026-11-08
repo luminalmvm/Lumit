@@ -629,6 +629,8 @@ fn every_mapping_the_table_started_with_still_resolves() {
         ("ADBE Scribble Fill", "scribble"),
         ("ADBE Stroke", "stroke"),
         ("VIDEOCOPILOT LightSaber", "energy_line"),
+        ("ADBE AudSpect", "audio_spectrum"),
+        ("ADBE AudWave", "audio_spectrum"),
         ("ADBE Echo", "echo"),
         ("ADBE Posterize Time", "posterize_time"),
         // The distortion / stylise / transition / utility / controls half.

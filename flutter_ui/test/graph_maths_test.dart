@@ -26,6 +26,22 @@ void main() {
   /// **M19 — a new keyframe takes after its neighbours.** It used to be born
   /// linear on both sides whatever it landed between, so planting one in the
   /// middle of a held run quietly turned that run into a ramp.
+  // Reversing an eased curve used to leave its stored speeds pointing the old
+  // way, which bends every frame between the keys: wrong pixels, quietly.
+  test('reversed keys draw the same curve backwards', () {
+    const ease = BridgeSideInterp.bezier(
+        BridgeBezierSide(speed: 30, influence: 0.4));
+    final keys = [
+      key(1, 1, 0, interpOut: ease),
+      key(3, 1, 100, interpIn: ease, interpOut: ease),
+      key(6, 1, 40, interpIn: ease),
+    ];
+    final back = reversedKeys(keys, (s) => rat((s * 1000).round(), 1000));
+    for (var t = 1.0; t <= 6; t += 0.25) {
+      expect(evaluateKeys(back, 7 - t), closeTo(evaluateKeys(keys, t), 1e-9));
+    }
+  });
+
   group('keyframeAmong', () {
     const hold = BridgeSideInterp.hold();
     const ease =
@@ -391,15 +407,6 @@ void envelopeTests() {
       out = setEnvelopeSpeed(out, 1, 200);
       out = setEnvelopeSpeed(out, 2, 100);
       out = setEnvelopeSpeed(out, 3, 150);
-      final flipped = flipEnvelope(out);
-      expect(envelopeSpeeds(flipped), [
-        closeTo(-100, 1e-6),
-        closeTo(0, 1e-6),
-        closeTo(100, 1e-6),
-        closeTo(50, 1e-6),
-      ]);
-      expect(envelopeSpeeds(flipEnvelope(flipped)),
-          [for (final s in envelopeSpeeds(out)) closeTo(s, 1e-6)]);
       // 200 at 1s is on the line from 300 to 100, 100 at 2s is a bend.
       final thin = thinEnvelope(out);
       expect(envelopeSpeeds(thin),

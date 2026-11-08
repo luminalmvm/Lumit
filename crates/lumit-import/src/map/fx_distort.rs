@@ -906,7 +906,7 @@ impl<'a, 'c> Fx<'a, 'c> {
             // can rewrite it; the number it produces will be in the old base.
             self.approximated(
                 &ae_name,
-                "an expression still written in After Effects' units",
+                "an expression still written in the imported project's units",
             );
         }
         self.set(id, EffectValue::Float(converted));

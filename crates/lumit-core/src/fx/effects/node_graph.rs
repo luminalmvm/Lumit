@@ -355,6 +355,7 @@ mod tests {
         CompGraph {
             notes: Vec::new(),
             ties: Vec::new(),
+            looks: Default::default(),
             nodes,
             edges: Vec::new(),
             layout: Vec::new(),

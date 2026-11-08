@@ -33,8 +33,14 @@ import 'package:lumit_flutter/src/rust/api/wire_tie.dart' show BridgeWireTie;
 import '../theme/motion.dart' show MotionSpec;
 import '../theme/theme.dart';
 import '../widgets/controls.dart' show ThemeScope;
+import 'node_menus.dart' show showGraphTieMenu;
 import 'graph_panel.dart'
-    show graphWireDistance, graphWirePath, graphWireStub, graphWireWidth;
+    show
+        graphDashPath,
+        graphWireDistance,
+        graphWirePath,
+        graphWireStub,
+        graphWireWidth;
 
 /// How far apart the wires in a tie run, in canvas units.
 const double graphTieGap = 4;
@@ -331,7 +337,8 @@ class TieView {
 }
 
 /// Draw [wires], each with its colour and weight, through their ties, then
-/// the ties over them and any stroke being drawn.
+/// the ties over them and any stroke being drawn. The wires named in
+/// [dashed] are drawn in long dashes, which is how a refused wire reads.
 void paintTiedWires(
   Canvas canvas,
   List<(TieWire, Color, double)> wires,
@@ -340,6 +347,7 @@ void paintTiedWires(
   required double zoom,
   required WireStyle style,
   required LumitTheme theme,
+  Set<String> dashed = const {},
 }) {
   final plain = [for (final (w, _, _) in wires) w];
   final level = style == WireStyle.angled;
@@ -363,7 +371,7 @@ void paintTiedWires(
         : tiedWirePath(a, b, onScreen(to), zoom: zoom, wires: style);
     final lit = view.crossed.contains(w.key);
     canvas.drawPath(
-        path,
+        dashed.contains(w.key) ? graphDashPath(path, dash: 6 * zoom) : path,
         Paint()
           ..color = lit ? theme.animated : colour
           ..style = PaintingStyle.stroke
@@ -642,9 +650,16 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
     if (hit != _tieHover) setState(() => _tieHover = hit);
   }
 
+  /// A reroute point on one wire, where the pointer is.
+  void tieAddPoint(String wire, Offset at) => _write([
+        ...ties,
+        BridgeWireTie(x: at.dx, y: at.dy, wires: [wire], point: true),
+      ], tieWiresNow());
+
   /// The press let go. False for a right-click that met no tie, which the
-  /// canvas then treats as its own.
-  bool tieUp(Offset at, bool moved, List<TieWire> wires) {
+  /// canvas then treats as its own. A stationary right-click on a tie opens
+  /// its menu at [menuAt], in window coordinates.
+  bool tieUp(Offset at, bool moved, List<TieWire> wires, {Offset? menuAt}) {
     if (_tieDrag case (final i, final where)?) {
       setState(() {
         _tieDrag = null;
@@ -673,7 +688,16 @@ mixin GraphTies<W extends StatefulWidget> on State<W> {
     if (!moved) {
       final hit = layout.barAt(at, tieZoom);
       if (hit == null) return false;
-      _write([...ties]..removeAt(hit), wires);
+      if (menuAt == null) {
+        _write([...ties]..removeAt(hit), wires);
+        return true;
+      }
+      setState(() => _tiePicked = hit);
+      showGraphTieMenu(context, menuAt, onDelete: () {
+        if (!mounted || hit >= ties.length) return;
+        setState(() => _tiePicked = null);
+        _write([...ties]..removeAt(hit), tieWiresNow());
+      });
       return true;
     }
     final from = stroke.$1;

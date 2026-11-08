@@ -183,6 +183,230 @@ impl CompositionReference {
     }
 }
 
+/// What one clip's gain has to be for its peak to land where it was asked.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeClipLevel {
+    pub clip: uuid::Uuid,
+    pub db: f64,
+}
+
+impl LayerReference {
+    /// The gain line each of `clips` needs for its loudest sample, over the
+    /// stretch of the file it plays, to land at `target_db`. A clip that isn't
+    /// on this layer, or has no sound or nothing but silence, isn't in the
+    /// answer.
+    ///
+    /// Reads and writes nothing in the document: the caller writes the answers
+    /// once they are all in, as one undo step. Not sync, because the first ask
+    /// for a file decodes it.
+    pub fn normalise_clips(
+        &self,
+        clips: Vec<uuid::Uuid>,
+        target_db: f64,
+    ) -> Result<Vec<BridgeClipLevel>, BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Sequence { clips: held } = &layer.kind else {
+            return Ok(Vec::new());
+        };
+        let mut levels = Vec::with_capacity(clips.len());
+        for clip in held.iter().filter(|c| clips.contains(&c.id)) {
+            let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+                continue;
+            };
+            let start = clip.place_start.to_f64();
+            let step = clip.place_duration.to_f64() / PEAK_STEPS as f64;
+            let edges = (0..=PEAK_STEPS).map(|i| clip.source_time(start + step * i as f64));
+            let peak = self.source_peak(
+                item,
+                clip.audio_streams.places(),
+                &edges.collect::<Vec<_>>(),
+            )?;
+            if let Some(db) = peak.and_then(|peak| level_for(peak, target_db)) {
+                levels.push(BridgeClipLevel { clip: clip.id, db });
+            }
+        }
+        Ok(levels)
+    }
+
+    /// The gain line each of `clips` needs for the integrated loudness of the
+    /// stretch of the file it plays to land at `target_lufs`. A clip that isn't
+    /// on this layer, has no sound, or is too short or too quiet to measure
+    /// isn't in the answer.
+    ///
+    /// Reads and writes nothing in the document, as [`Self::normalise_clips`].
+    /// Not sync, because it decodes the stretch.
+    pub fn loudness_clips(
+        &self,
+        clips: Vec<uuid::Uuid>,
+        target_lufs: f64,
+    ) -> Result<Vec<BridgeClipLevel>, BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Sequence { clips: held } = &layer.kind else {
+            return Ok(Vec::new());
+        };
+        let mut levels = Vec::with_capacity(clips.len());
+        for clip in held.iter().filter(|c| clips.contains(&c.id)) {
+            let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+                continue;
+            };
+            let a = clip.source_time(clip.place_start.to_f64());
+            let b = clip.source_time(clip.place_end().to_f64());
+            let lufs =
+                self.source_loudness(item, clip.audio_streams.places(), a.min(b), a.max(b))?;
+            if let Some(lufs) = lufs {
+                levels.push(BridgeClipLevel {
+                    clip: clip.id,
+                    db: target_lufs - lufs,
+                });
+            }
+        }
+        Ok(levels)
+    }
+
+    /// The Volume this layer needs for its loudest sample, over the stretch of
+    /// the file it plays, to land at `target_db`. None for a layer with no file
+    /// of its own to read, or one with nothing but silence on it.
+    ///
+    /// Not sync, for the reason [`Self::normalise_clips`] isn't.
+    pub fn normalise_layer(&self, target_db: f64) -> Result<Option<f64>, BridgeError> {
+        let layer = self.item()?;
+        let lumit_core::model::LayerKind::Footage { item, .. } = layer.kind else {
+            return Ok(None);
+        };
+        let offset = layer.start_offset.0.to_f64();
+        let start = layer.in_point.0.to_f64() - offset;
+        let step = (layer.out_point.0.to_f64() - offset - start) / PEAK_STEPS as f64;
+        let edges = (0..=PEAK_STEPS).map(|i| layer.source_time_at(start + step * i as f64));
+        let peak = self.source_peak(
+            item,
+            layer.audio_streams.places(),
+            &edges.collect::<Vec<_>>(),
+        )?;
+        Ok(peak.and_then(|peak| level_for(peak, target_db)))
+    }
+
+    /// The loudest sample of `item`'s sound over the stretches between `edges`,
+    /// on the louder channel where it has two, or None without a sound to read.
+    #[frb(ignore)]
+    fn source_peak(
+        &self,
+        item: uuid::Uuid,
+        streams: &[u32],
+        edges: &[f64],
+    ) -> Result<Option<f32>, BridgeError> {
+        #[cfg(feature = "media")]
+        {
+            use lumit_audio::peaks::Band;
+            // As with the waveforms, the lock goes no further than the path.
+            let path = {
+                let project = self.project()?;
+                let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
+                let snapshot = project.store.snapshot();
+                let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(item)
+                else {
+                    return Ok(None);
+                };
+                crate::api::footage::FootageReference::resolve_path(&project, footage)
+            };
+            let Some(path) = path else {
+                return Ok(None);
+            };
+            let sound = lumit_media::audio::SoundSource::streams_of(path, streams);
+            let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
+                return Ok(None);
+            };
+            let sides = crate::peaks::channel_pyramids_for(&sound);
+            let summaries: Vec<&lumit_audio::peaks::PeakPyramid> = match &sides {
+                Some(both) => both.iter().collect(),
+                None => vec![&pyramid],
+            };
+            let mut peak = 0.0_f32;
+            for summary in summaries {
+                for pair in edges.windows(2) {
+                    let (a, b) = (pair[0].min(pair[1]), pair[0].max(pair[1]));
+                    let block = summary.window(Band::Full, a, b);
+                    peak = peak.max(block.min.abs()).max(block.max.abs());
+                }
+            }
+            Ok(Some(peak))
+        }
+        #[cfg(not(feature = "media"))]
+        {
+            let _ = (item, streams, edges);
+            Ok(None)
+        }
+    }
+}
+
+impl LayerReference {
+    /// The integrated loudness, in LUFS, of `item`'s sound from `from` to `to`
+    /// seconds of the file, read a piece at a time. None without a sound to
+    /// read, or for a stretch too short or too quiet to gate a block.
+    #[frb(ignore)]
+    fn source_loudness(
+        &self,
+        item: uuid::Uuid,
+        streams: &[u32],
+        from: f64,
+        to: f64,
+    ) -> Result<Option<f64>, BridgeError> {
+        #[cfg(feature = "media")]
+        {
+            use lumit_media::audio::{SoundReader, SoundSource};
+            const RATE: u32 = 48_000;
+            const PIECE: u64 = 1 << 16;
+            let path = {
+                let project = self.project()?;
+                let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
+                let snapshot = project.store.snapshot();
+                let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(item)
+                else {
+                    return Ok(None);
+                };
+                crate::api::footage::FootageReference::resolve_path(&project, footage)
+            };
+            let Some(path) = path else {
+                return Ok(None);
+            };
+            let Ok(mut reader) = SoundReader::open(&SoundSource::streams_of(path, streams), RATE)
+            else {
+                return Ok(None);
+            };
+            let mut meter = lumit_audio::loudness::Loudness::new(RATE);
+            let frame = |t: f64| (t.max(0.0) * f64::from(RATE)) as u64;
+            let (mut at, end) = (frame(from), frame(to));
+            while at < end {
+                let want = (end - at).min(PIECE) as usize;
+                let Ok((piece, _)) = reader.read(at, want, false) else {
+                    return Ok(None);
+                };
+                if piece.is_empty() {
+                    break;
+                }
+                meter.add(&piece);
+                at += (piece.len() / 2) as u64;
+            }
+            let lufs = f64::from(meter.reading().integrated);
+            Ok(lufs.is_finite().then_some(lufs))
+        }
+        #[cfg(not(feature = "media"))]
+        {
+            let _ = (item, streams, from, to);
+            Ok(None)
+        }
+    }
+}
+
+/// How many stretches a span is read in, so a Retime's ramp is followed along
+/// the file rather than guessed from its two ends.
+const PEAK_STEPS: usize = 256;
+
+/// The level that takes `peak` to `target_db`. Silence has no such level.
+fn level_for(peak: f32, target_db: f64) -> Option<f64> {
+    (peak > 1e-6).then(|| target_db - 20.0 * f64::from(peak).log10())
+}
+
 /// Pause. The clock holds its position, so play resumes from here.
 #[frb(sync)]
 pub fn audio_pause() {
@@ -325,6 +549,49 @@ pub fn audio_meters() -> Vec<BridgeAudioMeter> {
 pub fn reset_audio_clip() {
     #[cfg(feature = "media")]
     crate::audio::reset_clip();
+}
+
+/// The master's loudness (ITU-R BS.1770, EBU R128).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeAudioLoudness {
+    /// The last three seconds, in LUFS. Minus infinity while stopped or silent.
+    pub short_term: f64,
+    /// Everything played since the measure began, gated, in LUFS. Minus
+    /// infinity until there is something to measure.
+    pub integrated: f64,
+    /// The loudest true peak since the measure began, as an amplitude, 1.0
+    /// being full scale.
+    pub true_peak: f64,
+}
+
+/// The master's loudness, polled with [`audio_meters`]. The measure begins
+/// again when another composition's sound is loaded, and on
+/// [`reset_audio_loudness`].
+#[frb(sync)]
+pub fn audio_loudness() -> BridgeAudioLoudness {
+    #[cfg(feature = "media")]
+    {
+        let r = crate::audio::loudness::loudness();
+        BridgeAudioLoudness {
+            short_term: f64::from(r.short_term),
+            integrated: f64::from(r.integrated),
+            true_peak: f64::from(r.true_peak),
+        }
+    }
+    #[cfg(not(feature = "media"))]
+    BridgeAudioLoudness {
+        short_term: f64::NEG_INFINITY,
+        integrated: f64::NEG_INFINITY,
+        true_peak: 0.0,
+    }
+}
+
+/// Start the integrated loudness and the true peak afresh.
+#[frb(sync)]
+pub fn reset_audio_loudness() {
+    #[cfg(feature = "media")]
+    crate::audio::loudness::reset_loudness();
 }
 
 /// One output the machine can play through.

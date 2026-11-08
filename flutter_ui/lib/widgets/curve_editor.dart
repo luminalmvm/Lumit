@@ -24,8 +24,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show DragStartBehavior;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import 'controls.dart';
 
@@ -38,6 +41,14 @@ const List<List<double>> curveIdentity = [
   [0.0, 0.0],
   [1.0, 1.0]
 ];
+
+/// Whether [points] is the identity diagonal, with no bend or moved end.
+bool curveIsIdentity(List<List<double>> points) =>
+    points.length == 2 &&
+    points[0][0] == 0 &&
+    points[0][1] == 0 &&
+    points[1][0] == 1 &&
+    points[1][1] == 1;
 
 /// How far outside the plot a point must be dragged before it is dropped, in
 /// logical pixels. Generous, because losing a point to a twitchy hand is worse
@@ -152,6 +163,9 @@ class CurveEditor extends StatefulWidget {
   /// own colour so a Red tab draws red (owner, desk test).
   final Color? line;
 
+  /// Rows the panel adds to the right-click menu, under the curve's own.
+  final List<Widget> Function(VoidCallback close)? moreRows;
+
   const CurveEditor({
     super.key,
     required this.points,
@@ -159,6 +173,7 @@ class CurveEditor extends StatefulWidget {
     required this.onCommit,
     this.size = 150,
     this.line,
+    this.moreRows,
   });
 
   @override
@@ -209,8 +224,117 @@ class _CurveEditorState extends State<CurveEditor> {
     return best;
   }
 
-  void _onTapUp(TapUpDetails d) {
-    final local = d.localPosition;
+  void _onTapUp(TapUpDetails d) => _addAt(d.localPosition);
+
+  /// The plot's right-click menu: the point under the pointer or a new one
+  /// there, then the curve as a whole.
+  void _menu(Offset local, Offset global) {
+    final near = _nearest(local);
+    final points = _points;
+    // The two ends are never removed, as a drag off the plot does not either.
+    final middle = near > 0 && near < points.length - 1;
+    final bent = !curveIsIdentity(points);
+    final asText = points.map((p) => p.join(' ')).join(', ');
+    showLumitPopup<void>(
+      context: context,
+      position: global,
+      builder: (close) {
+        void done() => close(null);
+        final more = widget.moreRows?.call(done) ?? const <Widget>[];
+        final ticks = more.isEmpty ? null : false;
+        return FloatSurface(
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (near < 0)
+                  MenuRow(
+                    key: const ValueKey('curve-menu-add'),
+                    enabled: points.length < curveMaxPoints,
+                    onPressed: () {
+                      done();
+                      _addAt(local);
+                    },
+                    child: MenuLabel(l10n.curveAddPoint,
+                        ticked: ticks, enabled: points.length < curveMaxPoints),
+                  )
+                else
+                  MenuRow(
+                    key: const ValueKey('curve-menu-delete'),
+                    enabled: middle,
+                    onPressed: () {
+                      done();
+                      widget.onCommit([
+                        for (var i = 0; i < points.length; i++)
+                          if (i != near) points[i],
+                      ]);
+                    },
+                    child: MenuLabel(l10n.curveDeletePoint,
+                        ticked: ticks, enabled: middle),
+                  ),
+                MenuRow(
+                  key: const ValueKey('curve-menu-reset'),
+                  enabled: bent,
+                  onPressed: () {
+                    done();
+                    widget.onCommit(curveIdentity);
+                  },
+                  child: MenuLabel(l10n.tipResetCurve,
+                      ticked: ticks, enabled: bent),
+                ),
+                const MenuDivider(),
+                MenuRow(
+                  key: const ValueKey('curve-menu-copy'),
+                  onPressed: () {
+                    done();
+                    Clipboard.setData(ClipboardData(text: asText));
+                  },
+                  child: MenuLabel(l10n.curveCopy, ticked: ticks),
+                ),
+                MenuRow(
+                  key: const ValueKey('curve-menu-paste'),
+                  onPressed: () async {
+                    done();
+                    final data = await Clipboard.getData(Clipboard.kTextPlain);
+                    // The curve it already has makes no undo step.
+                    if (data?.text == asText) return;
+                    final parsed = _pointsIn(data?.text ?? '');
+                    if (parsed != null && mounted) widget.onCommit(parsed);
+                  },
+                  child: MenuLabel(l10n.curvePaste, ticked: ticks),
+                ),
+                if (more.isNotEmpty) ...[const MenuDivider(), ...more],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// A curve copied from another one: pairs of numbers, rising in x.
+  static List<List<double>>? _pointsIn(String text) {
+    final numbers = [
+      for (final m in RegExp(r'-?\d*\.?\d+').allMatches(text))
+        double.parse(m[0]!),
+    ];
+    if (numbers.length < 4 ||
+        numbers.length.isOdd ||
+        numbers.length > curveMaxPoints * 2) {
+      return null;
+    }
+    final out = [
+      for (var i = 0; i < numbers.length; i += 2)
+        [numbers[i].clamp(0.0, 1.0), numbers[i + 1].clamp(0.0, 1.0)],
+    ];
+    for (var i = 1; i < out.length; i++) {
+      if (out[i][0] - out[i - 1][0] < _minGap) return null;
+    }
+    return out;
+  }
+
+  void _addAt(Offset local) {
     if (_nearest(local) >= 0) return; // a tap on a point is not a new point
     final points = _points;
     if (points.length >= curveMaxPoints) return;
@@ -302,6 +426,7 @@ class _CurveEditorState extends State<CurveEditor> {
       // already twenty pixels away from it.
       dragStartBehavior: DragStartBehavior.down,
       onTapUp: _onTapUp,
+      onSecondaryTapUp: (d) => _menu(d.localPosition, d.globalPosition),
       // **Two axis recognisers rather than one pan**, because the panel this
       // sits in is a list. A pan needs twice the slop a single-axis drag does,
       // so an enclosing vertical scroll always wins the arena first and every
@@ -565,10 +690,7 @@ class CurveChannelEditor extends StatefulWidget {
   /// with nowhere to write it gets.
   final ValueChanged<double>? onPlotSize;
 
-  /// The word on the per-channel reset action.
-  final String resetLabel;
-
-  /// Its tooltip.
+  /// The tooltip on the per-channel reset.
   final String resetTip;
 
   /// What each channel's curve draws in, parallel to [labels]. A null entry —
@@ -585,7 +707,6 @@ class CurveChannelEditor extends StatefulWidget {
     required this.onLive,
     required this.onCommit,
     required this.keyPrefix,
-    required this.resetLabel,
     required this.resetTip,
     this.channelColours,
     this.plotSize = curvePlotSizeDefault,
@@ -617,11 +738,7 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
     return best;
   }
 
-  /// Small → medium → large → small. One button rather than a picker: three
-  /// steps is a cycle, and a dropdown for three words is a popup nobody wants
-  /// in a row this small.
-  void _stepSize() {
-    final next = curvePlotSizes[(_sizeStep + 1) % curvePlotSizes.length];
+  void _setSize(double next) {
     final persist = widget.onPlotSize;
     if (persist == null) {
       setState(() => _localSize = next);
@@ -630,11 +747,23 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
     }
   }
 
-  String get _sizeWord => switch (_sizeStep) {
-        0 => l10n.curveGraphSizeSmall,
-        1 => l10n.curveGraphSizeMedium,
-        _ => l10n.curveGraphSizeLarge,
-      };
+  /// The three sizes, for the plot's right-click menu. Ticked rows rather than
+  /// a button that cycles, whose word sat over every plot.
+  List<Widget> _sizeRows(VoidCallback close) => [
+        for (final (i, word) in [
+          l10n.curveGraphSizeSmall,
+          l10n.curveGraphSizeMedium,
+          l10n.curveGraphSizeLarge,
+        ].indexed)
+          MenuRow(
+            key: ValueKey<String>('${widget.keyPrefix}-size-$i'),
+            onPressed: () {
+              close();
+              _setSize(curvePlotSizes[i]);
+            },
+            child: MenuLabel(word, ticked: i == _sizeStep),
+          ),
+      ];
 
   /// The channel's own colour, or null for the ones drawn in the theme's.
   Color? _colourOf(int channel) {
@@ -648,61 +777,39 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final channel = _channel.clamp(0, widget.curves.length - 1);
-    final channels = ChannelButtons(
-      labels: widget.labels,
-      channel: channel,
-      onChannel: (i) => setState(() => _channel = i),
-      keyPrefix: widget.keyPrefix,
-      colours: widget.channelColours,
-    );
     final columnWidth = channelColumnWidth(widget.labels);
+    // The channel buttons, and under them the one way back: only while this
+    // channel's curve has somewhere to come back from.
+    final channels = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ChannelButtons(
+          labels: widget.labels,
+          channel: channel,
+          onChannel: (i) => setState(() => _channel = i),
+          keyPrefix: widget.keyPrefix,
+          colours: widget.channelColours,
+        ),
+        if (!curveIsIdentity(widget.curves[channel]))
+          LumitTooltip(
+            message: widget.resetTip,
+            child: HouseButton(
+              key: ValueKey<String>('${widget.keyPrefix}-reset'),
+              frameless: true,
+              small: true,
+              padding: const EdgeInsets.all(1),
+              onPressed: () => widget.onCommit(channel, curveIdentity),
+              child: LumitIcon(LumitIcons.reset, size: 12, colour: t.textMuted),
+            ),
+          ),
+      ],
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              // Flexible, because a narrow panel must clip the size word
-              // rather than overflow the row — Reset is the one of the two
-              // that has to stay readable.
-              Flexible(
-                child: LumitTooltip(
-                  message: l10n.tipCurveGraphSize,
-                  child: HouseButton(
-                    key: ValueKey<String>('${widget.keyPrefix}-size'),
-                    frameless: true,
-                    small: true,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    onPressed: _stepSize,
-                    child: Text(
-                      _sizeWord,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.small.copyWith(color: t.textMuted),
-                    ),
-                  ),
-                ),
-              ),
-              const Spacer(),
-              LumitTooltip(
-                message: widget.resetTip,
-                child: HouseButton(
-                  key: ValueKey<String>('${widget.keyPrefix}-reset'),
-                  frameless: true,
-                  small: true,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  onPressed: () => widget.onCommit(channel, curveIdentity),
-                  child: Text(widget.resetLabel,
-                      style: t.small.copyWith(color: t.textMuted)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
           LayoutBuilder(
             builder: (context, box) {
               // Which edge the column takes is a question of room: on the right
@@ -719,6 +826,7 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
                 points: widget.curves[channel],
                 line: _colourOf(channel),
                 size: plot,
+                moreRows: _sizeRows,
                 onLive: (p) => widget.onLive(channel, p),
                 onCommit: (p) => widget.onCommit(channel, p),
               );

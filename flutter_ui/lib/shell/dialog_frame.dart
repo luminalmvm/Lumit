@@ -15,6 +15,7 @@
 // pinned by `export_metrics_test` / `comp_settings_metrics_test`. A value that
 // disagrees with the drawing is a defect (§12A.6).
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../icons/lumit_icon.dart' as glyph;
@@ -61,6 +62,13 @@ const double dialogControlHeight = 22;
 /// and the air between two of them. The box's corner is the shape's
 /// `sectionRadius`.
 const double dialogGroupGap = 10;
+
+/// The body of a short dialogue, inside the title strip and the footer.
+const EdgeInsets dialogBodyPadding =
+    EdgeInsets.symmetric(horizontal: dialogPadding, vertical: 10);
+
+/// The row a fold's name and reading stand on.
+const double dialogFoldRow = 28;
 
 /// The factual mono lines — the footer's summary, a group's own reading.
 const double dialogMonoSize = 10;
@@ -183,7 +191,10 @@ Widget dialogTitleBar(
           margin: const EdgeInsetsDirectional.only(end: 6),
           decoration: BoxDecoration(color: t.accent, shape: BoxShape.circle),
         ),
-      Text(t.kickerCase(title), style: t.kickerOn),
+      Flexible(
+        child: Text(t.kickerCase(title),
+            style: t.kickerOn, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
     ],
   );
   final about = Padding(
@@ -220,7 +231,7 @@ Widget dialogTitleBar(
       ),
     ),
   );
-  return Container(
+  final strip = Container(
     key: ValueKey<String>('$keyPrefix-title-strip'),
     height: dialogTitleStrip + 1,
     decoration: BoxDecoration(
@@ -246,12 +257,31 @@ Widget dialogTitleBar(
           )
         : Row(
             children: [
-              name,
-              Expanded(
-                  child: Align(alignment: AlignmentDirectional.centerStart, child: about)),
+              // A question for a title can be long, and is cut before the
+              // close mark is.
+              if (subject.isEmpty)
+                Expanded(
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: name))
+              else ...[
+                name,
+                Expanded(
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: about)),
+              ],
               close,
             ],
           ),
+  );
+  // The strip's right-click puts the window back, or closes it.
+  return Builder(
+    builder: (context) => GestureDetector(
+      onSecondaryTapUp: (d) =>
+          showWindowMenu(context, d.globalPosition, onClose: onClose),
+      child: strip,
+    ),
   );
 }
 
@@ -371,6 +401,134 @@ Widget dialogGroup(
           ),
         ],
       ),
+    );
+
+/// A section of a dialogue: a rule, its name, then its rows. The rule and the
+/// name are one thing, so a dialogue is never fenced in twice.
+Widget dialogSection(LumitTheme t, String title, List<Widget> rows) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(height: 1, color: t.hairline),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              dialogPadding, 4, dialogPadding, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 24,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(t.kickerCase(title), style: t.kicker),
+                  ),
+                ),
+              ),
+              ...rows,
+            ],
+          ),
+        ),
+      ],
+    );
+
+/// [child] under a hover fill when [on], and bare when a press would do nothing.
+Widget _hoverIf(bool on, Widget child) => on ? HoverFill(child: child) : child;
+
+/// A part of a long dialogue that folds away. Shut, it says what it holds in
+/// [reading], so everything can be checked without opening anything. The twirl
+/// hangs in the margin, which leaves the name on the edge the rows use.
+Widget dialogFold(
+  LumitTheme t, {
+  required String title,
+  required bool open,
+  /// Null while the fold is held open, so the twirl does not pretend.
+  required VoidCallback? onToggle,
+  required List<Widget> rows,
+  required double readingAt,
+  String reading = '',
+  bool dimmed = false,
+  Key? key,
+}) =>
+    Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(height: 1, color: t.hairline),
+        // A fold held open does not light under the pointer: nothing would
+        // happen on the click.
+        _hoverIf(
+          onToggle != null,
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onToggle,
+            child: SizedBox(
+              height: dialogFoldRow,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: dialogPadding,
+                    child: Center(
+                      child: TwirlTurn(
+                        open: open,
+                        child: glyph.LumitIcon(
+                          open ? LumitIcons.collapse : LumitIcons.expand,
+                          size: 12,
+                          colour: t.textMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: readingAt,
+                    child: Text(
+                      title,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.body.copyWith(
+                          color: dimmed
+                              ? t.textDisabled
+                              : open
+                                  ? t.textPrimary
+                                  : null),
+                    ),
+                  ),
+                  if (!open)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.only(
+                            end: dialogPadding),
+                        child: Text(
+                          reading,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: dialogMono(t),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        OpenReveal(
+          open: open,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                dialogPadding, 0, dialogPadding, 8),
+            child: IgnorePointer(
+              ignoring: dimmed,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: rows,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
 
 /// One row: its name on the left in a fixed column, its control beside it.
@@ -693,6 +851,24 @@ class FittedText extends StatelessWidget {
       );
 }
 
+/// Enter presses a dialogue's default action wherever focus sits in it, and
+/// Escape is the modal's. The window takes focus as it opens, so the keyboard
+/// can say yes without having to find the button.
+Widget dialogEnter({required VoidCallback onEnter, required Widget child}) =>
+    Focus(
+      autofocus: true,
+      onKeyEvent: (_, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey != LogicalKeyboardKey.enter &&
+            event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+          return KeyEventResult.ignored;
+        }
+        onEnter();
+        return KeyEventResult.handled;
+      },
+      child: child,
+    );
+
 /// A short question with a button per answer, beside Cancel: the shape the
 /// unsaved-changes window has. The last answer is the default, focused on
 /// open. Cancel, Escape and the close mark answer null. [stacked] puts the
@@ -700,23 +876,26 @@ class FittedText extends StatelessWidget {
 Future<T?> askLumitChoice<T>({
   required BuildContext context,
   required String title,
-  required String question,
+  /// Only where the answers do not say it all.
+  String question = '',
   required List<(String, T)> answers,
   bool stacked = false,
+  double width = 360,
 }) =>
     showLumitModal<T>(
       context: context,
       builder: (close) => Builder(builder: (context) {
         final t = ThemeScope.of(context).theme;
         return DialogFrame(
-          width: 360,
+          width: width,
           children: [
             dialogTitleBar(t,
                 title: title, onClose: () => close(null), keyPrefix: 'choice'),
-            Padding(
-              padding: const EdgeInsets.all(dialogPadding),
-              child: Text(question, style: t.body),
-            ),
+            if (question.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(dialogPadding),
+                child: Text(question, style: t.body),
+              ),
             dialogFooter(
               t,
               keyPrefix: 'choice',

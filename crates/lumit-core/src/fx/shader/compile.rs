@@ -23,7 +23,7 @@
 use std::collections::BTreeMap;
 use std::sync::{OnceLock, RwLock};
 
-use super::graph::{ports_of, spec_of, GraphTy, ShaderEdge, ShaderGraph, ShaderNode};
+use super::graph::{ports_of, spec_of, GraphTy, ShaderEdge, ShaderGraph, ShaderNode, VIEW_KEY};
 
 /// Why a graph will not compile (§4.4). These are edits this application made,
 /// so they refuse — but the *badge* is how they reach the user: a stored graph
@@ -195,7 +195,12 @@ pub fn compile(graph: &ShaderGraph) -> Result<String, GraphError> {
             }
         };
         if node.kind == "result" {
-            ret = coerce4(input(0, "colour")?, *id, "colour")?;
+            let colour = input(0, "colour")?;
+            ret = if node.settings.contains_key(VIEW_KEY) {
+                view4(colour, *id)?
+            } else {
+                coerce4(colour, *id, "colour")?
+            };
             continue;
         }
         let name = format!("n{}", lets.len());
@@ -291,6 +296,18 @@ fn coerce4(v: Val, node: u32, port: &str) -> Result<String, GraphError> {
             port: port.to_owned(),
         }),
     }
+}
+
+/// A value as View here shows it, opaque: a number as grey, two numbers as
+/// red and green, three as a colour.
+fn view4(v: Val, node: u32) -> Result<String, GraphError> {
+    let (e, t) = num(v, node, "colour")?;
+    Ok(match t.width() {
+        1 => format!("vec4<f32>(vec3<f32>({e}), 1.0)"),
+        2 => format!("vec4<f32>({e}, 0.0, 1.0)"),
+        3 => format!("vec4<f32>({e}, 1.0)"),
+        _ => e,
+    })
 }
 
 type Outs = Vec<(u32, Val)>;
@@ -851,6 +868,21 @@ mod tests {
             ],
             layout: Vec::new(),
         }
+    }
+
+    /// View here at the uv box: its two numbers reach the Result, which a
+    /// stored graph refuses, and the copy shows them as a picture instead.
+    #[test]
+    fn view_here_shows_a_narrow_box_as_a_picture() {
+        let stored = serde_json::to_value(gradient()).unwrap();
+        let viewed = super::super::graph::viewed_at(&stored, 1).expect("the uv box");
+        let graph: ShaderGraph = serde_json::from_value(viewed).unwrap();
+        let text = compile(&graph).expect("a viewed box compiles");
+        assert!(text.contains("return vec4<f32>(n0, 0.0, 1.0);"), "{text}");
+        assert!(
+            super::super::graph::viewed_at(&stored, 5).is_none(),
+            "the Result is the picture"
+        );
     }
 
     /// §8 item 22 — the determinism gate for the whole of §4: the same graph,

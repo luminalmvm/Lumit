@@ -1,0 +1,96 @@
+---
+title: Audio spectrum
+description: "Draws a sound as bars, a line, a ring of bars or a waveform."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Audio spectrum is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Audio spectrum" category="generate" slug="audio-spectrum" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Measures the sound around the frame into a row of bands, spaced evenly in pitch, and draws one
+bar for each along a line, a circle or a mask. **Line** draws one line through the bars' tips
+and **Waveform** draws the wave itself. A sound that has been deleted reads as silence.
+
+The **Points** socket hands on one point at each band's tip, for
+[Particulate](/effects/generate/particulate/) to emit from.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Source** | Dropdown | This comp · Layer · Clip | This comp | - |
+| **Audio** | Layer | Any layer in the composition | None | - |
+| **Clip** | clip | - | - | - |
+| **Shape** | Dropdown | Bars · Line · Ring · Waveform | Bars | - |
+| **Bands** | Slider, whole numbers | 2 to 256; up to 512 | 64 | - |
+| **Start frequency** | Slider | 20 to 20000; down to 1 and higher | 40 | - |
+| **End frequency** | Slider | 20 to 20000; down to 1 and higher | 16000 | - |
+| **Draw along** | Dropdown | Line · Mask | Line | - |
+| **From x** | Slider | 0 to 3840; any value by typing | 360 | Pixels at composition size |
+| **From y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **To x** | Slider | 0 to 3840; any value by typing | 1560 | Pixels at composition size |
+| **To y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Path** | Masks | This layer's masks | First mask | - |
+| **Height** | Slider | 0 to 1080; higher | 320 | Pixels at composition size |
+| **Thickness** | Slider | 0.5 to 100; down to 0.1 and higher | 10 | Pixels at composition size |
+| **Softness** | Slider | 0 to 100 | 0 | Per cent |
+| **Inside colour** | Colour | Each channel 0 to 4, scene-linear | 0.05, 0.3, 1, 1 | - |
+| **Outside colour** | Colour | Each channel 0 to 4, scene-linear | 1, 0.15, 0.5, 1 | - |
+| **Hue spread** | Slider | 0 to 360; up to 720 | 0 | Degrees |
+| **Mirror** | Checkbox | On or off | Off | - |
+| **Smoothing** | Slider, whole numbers | 0 to 30; up to 120 | 2 | Frames |
+| **Composite on original** | Checkbox | On or off | Off | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Source**: which sound is measured: **This comp** is the composition's mix, **Layer** one
+  layer of it, **Clip** one clip of that layer.
+- **Audio**: the layer **Layer** and **Clip** measure.
+- **Clip**: the clip **Clip** measures.
+- **Shape**: **Bars**, **Line**, **Ring** or **Waveform**. **Ring** is bars round a circle half
+  as wide as **From** is from **To**, centred between them.
+- **Bands**: how many bars, or points along a line.
+- **Start frequency** and **End frequency**: the lowest and highest pitch drawn, in hertz.
+- **Draw along**: **Line** lays the bands between **From** and **To**, **Mask** along a mask.
+- **From x**, **From y**, **To x** and **To y**: where the line runs.
+- **Path**: which mask to follow. **First mask** is the layer's first.
+- **Height**: how far a band at full level reaches.
+- **Thickness**: how wide a bar or the line is.
+- **Softness**: how much of the width its edge fades over.
+- **Inside colour**: the colour where a bar starts.
+- **Outside colour**: the colour a band at full level reaches.
+- **Hue spread**: how far the colours turn round the wheel from the first band to the last.
+- **Mirror**: each band reaches both ways from the line.
+- **Smoothing**: how many frames before this one are averaged in. On **Waveform**, how much
+  sound one sweep shows.
+- **Composite on original**: on, the layer this effect is applied to is drawn underneath.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Audio level](/effects/drivers/audio-level/)
+- [Particulate](/effects/generate/particulate/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

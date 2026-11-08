@@ -22,6 +22,7 @@
 //! cheaper than one decoded at 4K and thrown away.
 
 use crate::decode::{CompJob, Cut};
+use crate::overlap::under_incoming;
 use crate::source::SourceProbes;
 use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
@@ -731,7 +732,7 @@ pub fn collect_comp_jobs(
                             let Some(mut job) = footage_job(incoming, lt, whole) else {
                                 return under;
                             };
-                            job.cuts.push(Cut::Under(gain, under));
+                            job.cuts.push(under_incoming(incoming, whole, gain, under));
                             Some(job)
                         }
                     }
@@ -2222,6 +2223,7 @@ mod tests {
             Some(CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -2258,6 +2260,7 @@ mod tests {
             Some(CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read_comp,
@@ -2327,6 +2330,7 @@ mod tests {
             Some(CompGraph {
                 notes: Vec::new(),
                 ties: Vec::new(),
+                looks: Default::default(),
                 nodes: vec![GraphNode::Fx(nested_box), GraphNode::Output { id: out3 }],
                 edges: vec![wire(box_id, "output", out3, "input")],
                 layout: Vec::new(),
@@ -2402,6 +2406,7 @@ mod tests {
                 Some(CompGraph {
                     notes: Vec::new(),
                     ties: Vec::new(),
+                    looks: Default::default(),
                     nodes,
                     edges,
                     layout: Vec::new(),

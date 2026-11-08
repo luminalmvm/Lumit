@@ -28,6 +28,7 @@ import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/theme_swatches.dart';
+import 'dialog_frame.dart';
 
 /// Where the person is coming from: the three cards of the first question.
 enum FirstRunEditor {
@@ -68,8 +69,8 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
   final motion = workspace.animationLevel;
   final answer = await showLumitModal<FirstRunAnswer>(
     context: context,
-    // Tall enough for three cards' words and every row under them.
-    initialSize: const Size(620, 600),
+    // Tall enough for the three cards and every row under them.
+    initialSize: const Size(620, 530),
     minSize: const Size(520, 380),
     builder: (close) => _FirstRun(workspace: workspace, onChoose: close),
   );
@@ -157,24 +158,25 @@ class _FirstRunState extends State<_FirstRun> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final workspace = widget.workspace;
-    return FloatSurface(
-      child: SizedBox.expand(
+    return DialogFrame(
+      children: [
+        Expanded(
         // The look is the workspace's, and each choice here changes it.
         child: ListenableBuilder(
           listenable: workspace,
           builder: (context, _) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                child: Text(l10n.firstRunSetup,
-                    style: t.bodyStrong.copyWith(color: t.textPrimary)),
-              ),
+              dialogTitleBar(t,
+                  title: l10n.firstRunSetup,
+                  onClose: () => _answer(null),
+                  keyPrefix: 'first-run'),
               // Scrolls when the window is too short for all of it, so no
               // question is ever out of reach.
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  padding: const EdgeInsets.fromLTRB(
+                      dialogPadding, 10, dialogPadding, 6),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -343,53 +345,54 @@ class _FirstRunState extends State<_FirstRun> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                child: Row(
-                  children: [
-                    // The update tick, a smaller question. A page is newest.
-                    if (kIsWeb) const Spacer() else ...[
-                      HouseCheckbox(
-                        key: const ValueKey('first-run-auto-update'),
-                        value: _autoUpdate,
-                        onChanged: (on) => setState(() => _autoUpdate = on),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          l10n.settingsAutomaticUpdates,
-                          style: t.small.copyWith(color: t.textMuted),
+              dialogFooter(
+                t,
+                keyPrefix: 'first-run',
+                // The update tick, a smaller question. A page is newest.
+                leading: kIsWeb
+                    ? null
+                    : GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _autoUpdate = !_autoUpdate),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            HouseCheckbox(
+                              key: const ValueKey('first-run-auto-update'),
+                              value: _autoUpdate,
+                              onChanged: (on) =>
+                                  setState(() => _autoUpdate = on),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(l10n.settingsAutomaticUpdates, style: t.body),
+                          ],
                         ),
                       ),
-                    ],
-                    const SizedBox(width: 12),
-                    HouseButton(
-                      key: const ValueKey('first-run-skip'),
-                      small: true,
-                      frameless: true,
-                      onPressed: () => _answer(null),
-                      child: Text(l10n.skip, style: t.small),
-                    ),
-                    const SizedBox(width: 6),
-                    HouseButton(
-                      key: const ValueKey('first-run-continue'),
-                      primary: true,
-                      onPressed: () => _answer(_editor),
-                      child: Text(l10n.firstRunContinue),
-                    ),
-                  ],
-                ),
+                actions: [
+                  HouseButton(
+                    key: const ValueKey('first-run-skip'),
+                    onPressed: () => _answer(null),
+                    child: Text(l10n.skip),
+                  ),
+                  HouseButton(
+                    key: const ValueKey('first-run-continue'),
+                    primary: true,
+                    onPressed: () => _answer(_editor),
+                    child: Text(l10n.firstRunContinue),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ),
+        ),
+      ],
     );
   }
 
   /// The word over a question.
   Widget _heading(LumitTheme t, String text) => Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 6),
+        padding: const EdgeInsets.only(top: 8, bottom: 6),
         child: Text(t.kickerCase(text), style: t.kicker),
       );
 
@@ -520,32 +523,43 @@ class _Choice extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: double.infinity,
-            height: _editingPicture,
-            child: CustomPaint(painter: _EditingPainter(editor, t)),
-          ),
-          const SizedBox(height: 8),
-          Text(title, style: t.bodyPrimary),
-          const SizedBox(height: 4),
-          Text(blurb, style: t.small.copyWith(color: t.textSecondary)),
-          for (final (i, option) in options.indexed) ...[
-            const SizedBox(height: 8),
-            Row(
+          // The drawing and the name are the card. What it means is the tip.
+          LumitTooltip(
+            message: blurb,
+            maxWidth: 320,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                HouseCheckbox(
-                  key: ValueKey<String>('$id-option-$i'),
-                  value: option.on,
-                  onChanged: option.set,
+                SizedBox(
+                  width: double.infinity,
+                  height: _editingPicture,
+                  child: CustomPaint(painter: _EditingPainter(editor, t)),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(option.label,
-                      style: t.small.copyWith(color: t.textPrimary)),
-                ),
+                const SizedBox(height: 8),
+                Text(title, style: t.bodyPrimary),
               ],
             ),
-          ],
+          ),
+          // Only the chosen card's: a tick on a card not chosen read as a
+          // choice already made.
+          if (chosen)
+            for (final (i, option) in options.indexed) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  HouseCheckbox(
+                    key: ValueKey<String>('$id-option-$i'),
+                    value: option.on,
+                    onChanged: option.set,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(option.label,
+                        style: t.small.copyWith(color: t.textPrimary)),
+                  ),
+                ],
+              ),
+            ],
         ],
       ),
     );

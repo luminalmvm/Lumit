@@ -94,10 +94,14 @@ void main() {
     testWidgets('Layer ▸ Transform ▸ Reset puts every property back',
         (tester) async {
       final p = withComp();
+      final untouched = p.comp.addSolidLayer().getTransform();
       final layer = p.comp.addSolidLayer();
       layer.setTransform(
           prop: BridgeTransformProp.positionX,
           value: const BridgeScalar.static_(400));
+      layer.setTransform(
+          prop: BridgeTransformProp.anchorX,
+          value: const BridgeScalar.static_(10));
       layer.setTransform(
           prop: BridgeTransformProp.scaleX,
           value: const BridgeScalar.static_(37));
@@ -108,7 +112,10 @@ void main() {
       await choose(tester, 'Layer', 'Reset', under: 'Transform');
 
       final after = layer.getTransform();
-      expect(staticOf(after.positionX), 0);
+      expect(staticOf(after.positionX), staticOf(untouched.positionX),
+          reason: 'back in the middle of the comp, where a new layer sits');
+      expect(staticOf(after.anchorX), staticOf(untouched.anchorX),
+          reason: 'pivoting about its own middle, as a new layer does');
       expect(staticOf(after.scaleX), 100,
           reason: 'a fresh layer is at full size, not at nothing');
       expect(staticOf(after.opacity), 100);
@@ -145,11 +152,13 @@ void main() {
       expect(layer.getBlend(), 2);
 
       await settle(tester, p);
-      await choose(tester, 'Layer', 'Next blending mode');
+      await choose(tester, 'Layer', 'Next blending mode',
+          under: 'Blending mode');
       expect(layer.getBlend(), 3);
 
       await settle(tester, p);
-      await choose(tester, 'Layer', 'Previous blending mode');
+      await choose(tester, 'Layer', 'Previous blending mode',
+          under: 'Blending mode');
       expect(layer.getBlend(), 2);
     });
 
@@ -287,8 +296,9 @@ void main() {
       final after = layer.getTransform().positionX;
       expect(after, isA<BridgeScalar_Expression>());
       expect((after as BridgeScalar_Expression).field0, 'time * 2');
-      expect(after.field1, BridgeExpressionLanguage.rhai,
-          reason: 'a new expression starts in Rhai until Settings says not');
+      expect(after.field1, BridgeExpressionLanguage.javaScript,
+          reason:
+              'a new expression starts in JavaScript until Settings says not');
     });
 
     /// The language is the dropdown's to say, never the text's: the same
@@ -308,32 +318,33 @@ void main() {
 
       await choose(tester, 'Animation', 'Add expression');
       await tester.pumpAndSettle();
-      expect(find.descendant(of: picker, matching: find.text('Rhai')),
+      expect(find.descendant(of: picker, matching: find.text('JavaScript')),
           findsOneWidget);
-      await tester.enterText(editorText, 'Math.round(7 / 2)');
+      await tester.enterText(editorText, '7 / 2');
       await tester.tap(picker);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('JavaScript').last);
+      await tester.tap(find.text('Rhai').last);
       await tester.pumpAndSettle();
       await keepEdit(tester);
 
       final after = layer.getTransform().positionX as BridgeScalar_Expression;
-      expect(after.field0, 'Math.round(7 / 2)');
-      expect(after.field1, BridgeExpressionLanguage.javaScript);
+      expect(after.field0, '7 / 2');
+      expect(after.field1, BridgeExpressionLanguage.rhai);
       expect(
           sampleScalarWithContext(
               scalar: after,
               time: const BridgeRational(num: 0, den: 1),
               layer: layer),
-          4,
-          reason: 'JavaScript halves 7 to 3.5; Rhai has no Math at all');
+          3,
+          reason: 'Rhai divides whole numbers to a whole one; JavaScript '
+              'gives 3.5');
 
       // Reopened on a row that has one, the editor shows that row's own.
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
       await choose(tester, 'Animation', 'Add expression');
       await tester.pumpAndSettle();
-      expect(find.descendant(of: picker, matching: find.text('JavaScript')),
+      expect(find.descendant(of: picker, matching: find.text('Rhai')),
           findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
@@ -387,9 +398,7 @@ void main() {
         dir = Directory.systemTemp.createTempSync('lumit-menu-preset');
       });
       tearDown(() {
-        animationPresetSavePicker = (suggested) => pickPresetSaveLocation(
-            suggested,
-            initialDirectory: presetsDirPath());
+        animationPresetSavePicker = null;
         animationPresetOpenPicker = pickPresetToOpen;
         try {
           dir.deleteSync(recursive: true);

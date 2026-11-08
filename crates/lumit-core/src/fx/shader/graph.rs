@@ -472,3 +472,37 @@ pub fn swizzle_pattern(node: &ShaderNode) -> String {
         clean
     }
 }
+
+/// The setting a Result box carries in a copy made by [`viewed_at`]: its
+/// colour shows whatever width arrives instead of refusing a narrow one.
+pub const VIEW_KEY: &str = "view";
+
+/// `graph` with its Result reading box `node`'s first output: the picture at
+/// that box, for the Viewer's View here. Made on a copy for one render and
+/// never stored. `None` where nothing would change: no such box, a box with
+/// no output, the Result itself, or a box already feeding it.
+#[must_use]
+pub fn viewed_at(graph: &serde_json::Value, node: u32) -> Option<serde_json::Value> {
+    let mut g: ShaderGraph = serde_json::from_value(graph.clone()).ok()?;
+    let result = g.nodes.iter().find(|n| n.kind == "result")?.id;
+    let picked = g.nodes.iter().find(|n| n.id == node)?;
+    let fed = g
+        .edges
+        .iter()
+        .any(|e| e.to == result && e.to_port == 0 && e.from == node && e.from_port == 0);
+    if node == result || ports_of(picked).1.is_empty() || fed {
+        return None;
+    }
+    g.edges.retain(|e| !(e.to == result && e.to_port == 0));
+    g.edges.push(ShaderEdge {
+        from: node,
+        from_port: 0,
+        to: result,
+        to_port: 0,
+    });
+    for n in g.nodes.iter_mut().filter(|n| n.id == result) {
+        n.settings
+            .insert(VIEW_KEY.to_owned(), serde_json::Value::Bool(true));
+    }
+    serde_json::to_value(g).ok()
+}

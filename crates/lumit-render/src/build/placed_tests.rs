@@ -184,6 +184,7 @@ fn a_comp_shown_at_two_times_draws_each_from_its_own_frame() {
     let wired = CompGraph {
         notes: Vec::new(),
         ties: Vec::new(),
+        looks: Default::default(),
         nodes: vec![
             GraphNode::Read {
                 id: read,

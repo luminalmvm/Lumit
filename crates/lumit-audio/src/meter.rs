@@ -8,7 +8,8 @@
 //! module is the numbers behind those bars: for every strip in the mix, and
 //! for the master, the loudest sample of the last buffer (**peak**) and the
 //! average energy of it (**RMS**), plus a sticky flag saying the limiter has
-//! had to hold something back (**clip**).
+//! had to hold something back (**clip**). The master also carries its
+//! loudness, which [`crate::loudness`] measures.
 //!
 //! **The realtime callback is the only writer**, and it is sacred: no locks,
 //! no allocation, no waiting. So the meters are a small fixed bank of plain
@@ -138,17 +139,38 @@ impl Slot {
     }
 }
 
+/// The master's loudness ([`crate::loudness`]): short-term and integrated in
+/// LUFS, minus infinity while there is nothing to read, and the loudest true
+/// peak since the measure began, as an amplitude.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LoudnessReading {
+    pub short_term: f32,
+    pub integrated: f32,
+    pub true_peak: f32,
+}
+
 /// The meter bank shared between the audio callback and whoever draws it.
 pub struct Meters {
     slots: [Slot; SLOTS],
+    short_term: AtomicU32,
+    integrated: AtomicU32,
+    true_peak: AtomicU32,
+    /// Asked for by the desk, taken by the callback, which then starts the
+    /// loudness measure afresh.
+    loudness_reset: AtomicBool,
 }
 
 impl Default for Meters {
     fn default() -> Self {
+        let silent = f32::NEG_INFINITY.to_bits();
         Self {
             // `[Slot; SLOTS]` cannot derive Default (arrays only do up to 32
             // and Slot is not Copy), so the array is built from a closure.
             slots: std::array::from_fn(|_| Slot::default()),
+            short_term: AtomicU32::new(silent),
+            integrated: AtomicU32::new(silent),
+            true_peak: AtomicU32::new(0),
+            loudness_reset: AtomicBool::new(false),
         }
     }
 }
@@ -184,6 +206,36 @@ impl Meters {
         for slot in &self.slots {
             slot.clipped.store(false, Ordering::Relaxed);
         }
+    }
+
+    /// The master's loudness as the callback last published it.
+    #[must_use]
+    pub fn loudness(&self) -> LoudnessReading {
+        let f = |a: &AtomicU32| f32::from_bits(a.load(Ordering::Relaxed));
+        LoudnessReading {
+            short_term: f(&self.short_term),
+            integrated: f(&self.integrated),
+            true_peak: f(&self.true_peak),
+        }
+    }
+
+    /// Start the integrated loudness and the true peak afresh, from the next
+    /// buffer the callback fills.
+    pub fn reset_loudness(&self) {
+        self.loudness_reset.store(true, Ordering::Relaxed);
+    }
+
+    pub(crate) fn take_loudness_reset(&self) -> bool {
+        self.loudness_reset.swap(false, Ordering::Relaxed)
+    }
+
+    pub(crate) fn publish_loudness(&self, r: LoudnessReading) {
+        self.short_term
+            .store(r.short_term.to_bits(), Ordering::Relaxed);
+        self.integrated
+            .store(r.integrated.to_bits(), Ordering::Relaxed);
+        self.true_peak
+            .store(r.true_peak.to_bits(), Ordering::Relaxed);
     }
 }
 

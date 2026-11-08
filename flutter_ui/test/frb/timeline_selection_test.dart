@@ -206,7 +206,7 @@ void main() {
     // ---------------------------------------------------------------------
 
     /// **Right-clicking a lane key opens the graph key's menu** — Linear /
-    /// Easy ease / Hold / Ease… / Delete key — and a right-click on an
+    /// Easy ease / Hold / Ease… / Delete keyframe, and a right-click on an
     /// unselected key selects it first, so the menu acts on what was clicked.
     testWidgets('a lane key\'s menu holds the key it was opened on',
         (tester) async {

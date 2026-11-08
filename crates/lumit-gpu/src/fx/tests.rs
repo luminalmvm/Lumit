@@ -1540,7 +1540,9 @@ fn wgsl_temperature_matches_the_cpu_oracle() {
         let (gain_r, gain_b) = gains(temp);
         let op = TemperatureOp {
             t: 0.0,
+            tint: 0.0,
             gain_r,
+            gain_g: 1.0,
             gain_b,
             mix,
         };
@@ -13674,7 +13676,9 @@ fn the_matte_scales_temperature_toward_zero() {
     let (gain_r, gain_b) = lumit_core::fx::cpu::temperature_gains(t);
     let op = TemperatureOp {
         t,
+        tint: 0.0,
         gain_r,
+        gain_g: 1.0,
         gain_b,
         mix: 1.0,
     };
@@ -13686,7 +13690,14 @@ fn the_matte_scales_temperature_toward_zero() {
             h,
             img: &img,
             cpu: &|px, m| {
-                lumit_core::fx::cpu::temperature_matted(px, gain_r, gain_b, t, op.mix, m);
+                lumit_core::fx::cpu::temperature_matted(
+                    px,
+                    [gain_r, 1.0, gain_b],
+                    t,
+                    0.0,
+                    op.mix,
+                    m,
+                );
             },
             plain: &|px| lumit_core::fx::cpu::temperature(px, gain_r, gain_b, op.mix),
             gpu: &|tex, m| fx.temperature(&ctx, tex, w, h, m, &op),

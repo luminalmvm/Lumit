@@ -274,7 +274,24 @@ class _HouseButtonState extends State<HouseButton> {
         curve: scope.motion.hoverIn.curve,
         child: Padding(
           padding: margin,
+          // The index and the focus ring are painted over the box, so they
+          // inset nothing and the control is the same size as its neighbours.
+          // They change at once rather than easing, as a rounded ring cannot
+          // ease into a one-sided edge.
+          child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: ring != null
+              ? BoxDecoration(
+                  borderRadius: radius, border: Border.all(color: ring))
+              : index
+                  ? BoxDecoration(
+                      border:
+                          Border(left: BorderSide(color: t.accent, width: 2)))
+                  : const BoxDecoration(),
           child: frosted(dressed, radius, insetShadows(dressed, radius, AnimatedContainer(
+          // A plate's one-sided edge cannot ease into a rounded box either, so
+          // a change of shape swaps the box.
+          key: ValueKey(plate),
           duration: step.duration,
           curve: step.curve,
           padding: innerPad,
@@ -293,16 +310,6 @@ class _HouseButtonState extends State<HouseButton> {
                 : Border.all(
                     color: edge ?? const Color(0x00000000), width: 1),
           ), dressed),
-          // The index and the focus ring are painted over the box, so they
-          // inset nothing and the control is the same size as its neighbours.
-          foregroundDecoration: ring != null
-              ? BoxDecoration(
-                  borderRadius: radius, border: Border.all(color: ring))
-              : index
-                  ? BoxDecoration(
-                      border:
-                          Border(left: BorderSide(color: t.accent, width: 2)))
-                  : null,
           child: DefaultTextStyle(
             // A dropdown's closed face reads in the secondary text colour —
             // the mockups' own (§12A.6); bright primary at 11px reads bold.
@@ -312,9 +319,12 @@ class _HouseButtonState extends State<HouseButton> {
                         ? (widget.dropdown ? t.body : t.bodyPrimary)
                         : t.bodyPrimary.copyWith(color: label)))
                 : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
-            child: _centred(_capitalised(t, widget.child, widget.primary)),
+            child: widget.dropdown
+                ? _face(widget.child)
+                : _centred(_capitalised(t, widget.child, widget.primary)),
           ),
         ))),
+        ),
         ),
         ),
         ),
@@ -354,6 +364,19 @@ Widget _centred(Widget label) => Align(
       child: label,
     );
 
+/// A dropdown's closed face. Where a form stretches the button across its
+/// value column, the whole width is handed on, so the label starts on the
+/// column's edge and the caret stands at the far one ([dropdownFace]). A
+/// button that sizes itself centres it like any label.
+Widget _face(Widget face) => LayoutBuilder(
+      builder: (context, box) => box.hasTightWidth
+          ? Align(
+              heightFactor: 1,
+              child: SizedBox(width: box.maxWidth, child: face),
+            )
+          : _centred(face),
+    );
+
 /// The primary button's label cased for the shape, when it is a plain word.
 ///
 /// Flutter has no text transform, and the case is a *style* rather than part
@@ -379,6 +402,39 @@ Color accentInk(LumitTheme t) {
   return contrast(t.textPrimary) >= contrast(t.surface0)
       ? t.textPrimary
       : t.surface0;
+}
+
+/// A mark's corner: a 10px box takes half a well's corner, and none under
+/// Desk, where nothing is rounded.
+double markCorner(LumitTheme t) => t.tokens.wellRadius == 0
+    ? 0
+    : (t.tokens.wellRadius / 2).clamp(2.0, 3.5).toDouble();
+
+/// The tick in a ticked box: two strokes in the ink, round at the ends.
+class _TickPainter extends CustomPainter {
+  final Color colour;
+  const _TickPainter(this.colour);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final p = Paint()
+      ..color = colour
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * 0.2, h * 0.52)
+        ..lineTo(w * 0.42, h * 0.74)
+        ..lineTo(w * 0.8, h * 0.3),
+      p,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TickPainter old) => old.colour != colour;
 }
 
 /// A 14 px themed checkbox.
@@ -427,49 +483,54 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
     final onChanged = widget.onChanged;
-    // The mockups' checkbox: a 9px outlined box whose checked state is a 5px
-    // block of the primary text colour — no accent, which also puts the control
-    // inside §3.1's accent discipline. The 14px container stays as the hit
-    // target around the smaller mark; the focus ring reads in the animated
-    // token, like a focused value well. Under the pointer the edge lights, by
-    // [lit] of the way, which is what says the box can be ticked.
-    Widget mark(double lit) => SizedBox(
-      width: 14,
-      height: 14,
-      child: Center(
+    // A 10px box in a 14px hit target. Off it is an outline that lights
+    // under the pointer, by [lit] of the way, which is what says it can be
+    // ticked. On it fills with the accent and wears a tick in the ink that
+    // reads on it. Focus is a ring round the box, standing off it, so a
+    // ticked box still shows its ring.
+    final live = onChanged != null;
+    final on = widget.value;
+    final corner = markCorner(t);
+    Widget mark(double lit) {
+      final accent = Color.lerp(t.accent, t.accentHover, lit)!;
+      final edge = !live
+          ? t.textDisabled
+          : on
+              ? accent
+              : Color.lerp(t.textMuted, t.textPrimary, lit)!;
+      return Container(
+        width: 14,
+        height: 14,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(corner + 2),
+          border: Border.all(
+              color: _focused && live ? t.accent : const Color(0x00000000)),
+        ),
         child: Container(
-          width: 9,
-          height: 9,
+          width: 10,
+          height: 10,
           decoration: BoxDecoration(
-            // Half a well's corner, as the box is half a well's height: 1
-            // under Studio and Desk, 3.5 under Lantern.
-            borderRadius: BorderRadius.circular(t.tokens.wellRadius / 2),
-            border: Border.all(
-                color: onChanged == null
-                    ? t.textDisabled
-                    : _focused
-                        ? t.animated
-                        : Color.lerp(t.textMuted, t.textPrimary, lit)!,
-                width: _focused && onChanged != null ? 1.5 : 1),
+            color: !on
+                ? null
+                : live
+                    ? accent
+                    : t.textDisabled,
+            borderRadius: BorderRadius.circular(corner),
+            border: Border.all(color: edge),
           ),
-          child: widget.value
-              ? Center(
-                  child: Entrance(
-                    key: ValueKey<int>(_ticked),
-                    spec: _ticked == 0 ? MotionSpec.still : scope.motion.pop,
-                    scale: scope.motion.popScale,
-                    child: Container(
-                      width: 5,
-                      height: 5,
-                      color:
-                          onChanged == null ? t.textDisabled : t.textPrimary,
-                    ),
-                  ),
+          child: on
+              ? Entrance(
+                  key: ValueKey<int>(_ticked),
+                  spec: _ticked == 0 ? MotionSpec.still : scope.motion.pop,
+                  scale: scope.motion.popScale,
+                  child: CustomPaint(
+                      painter: _TickPainter(live ? accentInk(t) : t.surface1)),
                 )
               : null,
         ),
-      ),
-    );
+      );
+    }
     // The box, with its words after it inside the same hit area. One line of
     // text with the box in it, so it fits a row of any width and ends in an
     // ellipsis in a narrow one.
@@ -522,10 +583,9 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
 /// say the same thing; which one a surface draws is the drawing's business,
 /// and the Settings window's drawing asks for this.
 ///
-/// On is `animated`, the amber the drawing computes, **not** the accent:
-/// §3.1's accent discipline gives the accent to the single filled action and
-/// to focus, and a page of switches would spend it a dozen times over. Off is
-/// the same `hairline_strong` rule every inert edge takes.
+/// On is the accent, as a ticked box and a chosen radio are: colour means a
+/// state here, and one colour says it everywhere. The amber stays with keyed
+/// things. Off is the same `hairline_strong` rule every inert edge takes.
 class HouseToggle extends StatefulWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
@@ -594,7 +654,7 @@ class _HouseToggleState extends State<HouseToggle> {
             decoration: BoxDecoration(
               // Lifted a little under the pointer, whichever way it is set.
               color: widget.value
-                  ? Color.lerp(t.animated, t.textPrimary, 0.25 * lit)
+                  ? Color.lerp(t.accent, t.accentHover, lit)
                   : Color.lerp(t.hairlineStrong, t.textMuted, 0.6 * lit),
               borderRadius: BorderRadius.circular(_height / 2),
             ),
@@ -611,7 +671,7 @@ class _HouseToggleState extends State<HouseToggle> {
                 width: _knob,
                 height: _knob,
                 decoration: BoxDecoration(
-                  color: t.surface0,
+                  color: widget.value ? accentInk(t) : t.textSecondary,
                   borderRadius: BorderRadius.circular(_knob / 2),
                 ),
               ),
@@ -629,8 +689,8 @@ class _HouseToggleState extends State<HouseToggle> {
 /// "this, and therefore not that". Disabled it still shows which way the
 /// choice fell, dimmed, rather than going blank.
 ///
-/// Drawn as the checkbox is: chosen is a dot in the primary text colour, not
-/// the accent, and focus is the `animated` edge.
+/// Drawn as the checkbox is: chosen is the accent with an ink dot on it, and
+/// focus a ring standing off the circle.
 class HouseRadio extends StatefulWidget {
   final bool selected;
   final bool enabled;
@@ -671,10 +731,13 @@ class _HouseRadioState extends State<HouseRadio> {
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     final t = scope.theme;
-    Color ring(double lit) => !widget.enabled
+    final live = widget.enabled;
+    final on = widget.selected;
+    Color accent(double lit) => Color.lerp(t.accent, t.accentHover, lit)!;
+    Color ring(double lit) => !live
         ? t.textDisabled
-        : _focused
-            ? t.animated
+        : on
+            ? accent(lit)
             : Color.lerp(t.textMuted, t.textPrimary, lit)!;
 
     return FocusableActionDetector(
@@ -694,29 +757,44 @@ class _HouseRadioState extends State<HouseRadio> {
         child: HoverMark(
           cursor: widget.enabled ? SystemMouseCursors.click : MouseCursor.defer,
           builder: (context, lit) => Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            color: t.surface3,
-            shape: BoxShape.circle,
-            border: Border.all(color: ring(lit), width: 1.5),
-          ),
-          alignment: Alignment.center,
-          child: widget.selected
-              ? Entrance(
-                  key: ValueKey<int>(_chosen),
-                  spec: _chosen == 0 ? MotionSpec.still : scope.motion.pop,
-                  scale: scope.motion.popScale,
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: widget.enabled ? t.textPrimary : t.textDisabled,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                )
-              : null,
+            width: 14,
+            height: 14,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                  color:
+                      _focused && live ? t.accent : const Color(0x00000000)),
+            ),
+            child: Container(
+              width: 10,
+              height: 10,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: !on
+                    ? null
+                    : live
+                        ? accent(lit)
+                        : t.textDisabled,
+                shape: BoxShape.circle,
+                border: Border.all(color: ring(lit)),
+              ),
+              child: on
+                  ? Entrance(
+                      key: ValueKey<int>(_chosen),
+                      spec: _chosen == 0 ? MotionSpec.still : scope.motion.pop,
+                      scale: scope.motion.popScale,
+                      child: Container(
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: live ? accentInk(t) : t.surface1,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
           ),
         ),
       ),

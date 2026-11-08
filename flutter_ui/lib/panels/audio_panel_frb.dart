@@ -1,22 +1,20 @@
-// The Audio panel (docs/09, the approved AudioWorkspace board): three
-// sections down a column.
+// The Audio panel (docs/09, the approved AudioWorkspace board), down a column.
 //
-// **Levels** — the output's stereo bars off the engine's tap, with the
-// sticky clip lamp and the peak-hold caption. **Beats** — the full face of the
-// beat engine (docs/09 §5): source, sensitivity, range, minimum spacing, the
-// BPM well with Tap and the phase chips, and the Generate/Clear pair.
-// **Selected layer** — the fronted selection's sound: Volume and Pan rows with
-// their stopwatches, the fade wells with their curve chips, and the two
-// graph-template buttons, whose staged chains are ordinary graph wires the
-// Graph panel draws and the user can retune or delete.
+// **The output's levels**, the stereo bars off the engine's tap with their scale
+// under them. **The picked layer's sound**: Volume and Pan with their stopwatches,
+// the fade wells with their curve buttons, and the two graph-template buttons,
+// whose staged chains are ordinary graph wires the Graph panel draws and the user
+// can retune or delete. **Beats**, the face of the beat engine (docs/09 §5): one
+// press to generate at rest, and its source, sensitivity, range, spacing and tempo
+// a twirl away.
 //
 // The bars animate at UI rate inside their own RepaintBoundary off the shared
 // meter feed; everything else rebuilds only when the document or the
 // selection moves (the rebuild gates).
 
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart';
-import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -26,6 +24,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
@@ -35,12 +35,19 @@ import '../state/ui_state.dart';
 import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'audio_loudness.dart';
 import 'audio_meters_feed.dart';
+import 'audio_routes_frb.dart';
+import 'clip_fade_popover.dart' show FadeCurveGlyph;
+import 'drive_chain.dart' show stageAudioChain;
 import 'graph_maths.dart' show rationalSeconds;
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
-import 'mixer_panel_frb.dart' show PanPot, panLabel;
+import 'mixer_panel_frb.dart' show PanPot, meterRows;
 import 'placeholder.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'timeline_outline_row_frb.dart' show RowRenameField;
 
 /// The fade commands' silence, the engine's own floor
 /// (`lumit_audio::mix::VOLUME_FLOOR_DB`).
@@ -137,6 +144,30 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   /// Tap tempo: the last few tap moments; the median gap is the tempo.
   final List<DateTime> _taps = [];
 
+  /// Beats twirled open. Shut to begin with: generating is one press, and what
+  /// tunes it is wanted far less often.
+  bool _beatsOpen = false;
+
+  /// Whether the comp holds generated beat markers, so Clear only shows when it
+  /// has something to clear. Asked once per document revision.
+  bool _hasBeats = false;
+  int? _beatsAskedAt;
+
+  /// The picked layer's name while it is being renamed from the panel.
+  TextEditingController? _rename;
+
+  void _endRename(BridgeLayerEntry entry, {required bool commit}) {
+    final text = _rename?.text.trim();
+    setState(() {
+      _rename?.dispose();
+      _rename = null;
+    });
+    if (commit && text != null && text.isNotEmpty && text != entry.info.name) {
+      entry.layer.rename(name: text);
+      Provider.of<LumitUiState>(context, listen: false).model.refresh();
+    }
+  }
+
   /// Which layers can make a sound, probed once and remembered.
   final Map<String, bool> _hasAudio = {};
 
@@ -150,6 +181,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     super.initState();
     if (widget.feed == null) {
       final ui = Provider.of<LumitUiState>(context, listen: false);
+      meterPeakHoldSeconds = ui.workspace.interface.peakHoldSeconds;
       _feed.start(wake: Listenable.merge([ui.playing, ui.playheadFrame]));
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _settled = true);
@@ -158,6 +190,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   @override
   void dispose() {
     if (widget.feed == null) _feed.dispose();
+    _rename?.dispose();
     super.dispose();
   }
 
@@ -195,34 +228,32 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
             if (_hasAudio[entry.layer.internallayerId.toString()] ?? false)
               entry,
         ];
+        final revision = ui.model.revision;
+        if (revision == null || revision != _beatsAskedAt) {
+          _beatsAskedAt = revision;
+          _hasBeats = markersOf(comp).any((m) => m.isBeat);
+        }
         return Container(
           color: t.surface0,
           child: ListView(
             children: [
-              _section(t, l10n.audioSectionLevels),
-              _LevelsBlock(feed: _feed),
-              _hair(t),
-              _section(t, l10n.audioSectionBeats),
-              _beats(context, t, ui, comp, sounding),
+              _LevelsBlock(feed: _feed, ui: ui),
               _hair(t),
               // The pick is its own notifier: the model does not move when
               // a layer is picked, so this listens to it directly.
               ValueListenableBuilder<List<LayerReference>>(
                 valueListenable: ui.selectedLayers,
                 builder: (context, _, __) =>
-                    _selectedLayer(context, t, ui, comp),
+                    _selectedLayer(context, t, ui, comp, sounding),
               ),
+              _beatsHeading(context, t, ui, comp),
+              if (_beatsOpen) _beats(context, t, ui, comp, sounding),
             ],
           ),
         );
       },
     );
   }
-
-  Widget _section(LumitTheme t, String label) => Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-        child: Text(label, style: t.kicker),
-      );
 
   Widget _hair(LumitTheme t) => Container(height: 1, color: t.hairline);
 
@@ -238,6 +269,145 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
       );
 
   // --- Beats -------------------------------------------------------------
+
+  /// Beats' heading: the twirl, the word and the one press most visits want.
+  Widget _beatsHeading(BuildContext context, LumitTheme t, LumitUiState ui,
+          CompositionReference comp) =>
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => setState(() => _beatsOpen = !_beatsOpen),
+        onSecondaryTapUp: (e) => showMenuAt<void>(
+          context: context,
+          position: e.globalPosition,
+          width: 200,
+          rows: (close) => [
+            MenuRow(
+              key: const ValueKey<String>('beats-menu-generate'),
+              onPressed: () {
+                close(null);
+                _generate(context, ui, comp);
+              },
+              child: Text(l10n.beatsGenerate),
+            ),
+            MenuRow(
+              key: const ValueKey<String>('beats-menu-clear'),
+              enabled: _hasBeats,
+              onPressed: () {
+                close(null);
+                comp.clearBeatMarkers();
+                ui.model.refresh();
+              },
+              child: MenuLabel(l10n.beatsClearGenerated, enabled: _hasBeats),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
+          child: Row(children: [
+            HoverMark(
+              builder: (context, lit) => SizedBox(
+                width: 16,
+                child: Center(
+                  child: TwirlTurn(
+                    open: _beatsOpen,
+                    child: glyph.LumitIcon(
+                      _beatsOpen ? LumitIcons.collapse : LumitIcons.expand,
+                      size: iconSize,
+                      colour: Color.lerp(t.textMuted, t.textPrimary, lit),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Text(l10n.audioSectionBeats,
+                style: t.body.copyWith(color: t.textSecondary)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: HouseButton(
+                  key: const ValueKey('beats-generate'),
+                  small: true,
+                  onPressed: () => _generate(context, ui, comp),
+                  child: Text(l10n.beatsGenerate,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      );
+
+  /// A picker's row that answers a right-click with the picker's choices.
+  Widget _withOptions<T>(
+    BuildContext context, {
+    required List<T> options,
+    required T current,
+    required String Function(T) label,
+    required ValueChanged<T> onPick,
+    required Widget child,
+  }) =>
+      GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (e) => showMenuAt<void>(
+          context: context,
+          position: e.globalPosition,
+          width: 200,
+          rows: (close) => [
+            for (final option in options)
+              MenuRow.option(
+                onPressed: () {
+                  close(null);
+                  onPick(option);
+                },
+                child: MenuLabel(label(option), ticked: option == current),
+              ),
+          ],
+        ),
+        child: child,
+      );
+
+  /// Sensitivity's menu: the value's own rows, as a number well has them.
+  void _sensitivityMenu(BuildContext context, Offset at) => showMenuAt<void>(
+        context: context,
+        position: at,
+        width: 170,
+        rows: (close) => [
+          MenuRow(
+            key: const ValueKey('beats-sensitivity-reset'),
+            enabled: _sensitivity != 50,
+            onPressed: () {
+              close(null);
+              setState(() => _sensitivity = 50);
+            },
+            child: MenuLabel(l10n.reset, enabled: _sensitivity != 50),
+          ),
+          const MenuDivider(),
+          MenuRow(
+            onPressed: () {
+              close(null);
+              Clipboard.setData(
+                  ClipboardData(text: _sensitivity.round().toString()));
+            },
+            child: MenuLabel(l10n.paramMenuCopyValue),
+          ),
+          MenuRow(
+            onPressed: () async {
+              close(null);
+              final data = await Clipboard.getData(Clipboard.kTextPlain);
+              final parsed =
+                  data?.text == null ? null : parseNumberField(data!.text!);
+              if (parsed != null && mounted) {
+                setState(() => _sensitivity = parsed.toDouble().clamp(0, 100));
+              }
+            },
+            child: MenuLabel(l10n.paramMenuPasteValue),
+          ),
+        ],
+      );
 
   Widget _beats(
     BuildContext context,
@@ -262,55 +432,80 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [
-            _label(t, l10n.beatsSource),
-            _dropdown(
-              BareDropdown<String>(
-                key: const ValueKey('beats-source'),
-                value: _source,
-                options: [
-                  '',
-                  for (final entry in sounding)
-                    entry.layer.internallayerId.toString(),
-                ],
-                label: sourceName,
-                onChanged: (v) => setState(() => _source = v),
+          _withOptions<String>(
+            context,
+            options: [
+              '',
+              for (final entry in sounding)
+                entry.layer.internallayerId.toString(),
+            ],
+            current: _source,
+            label: sourceName,
+            onPick: (v) => setState(() => _source = v),
+            child: Row(children: [
+              _label(t, l10n.beatsSource),
+              _dropdown(
+                BareDropdown<String>(
+                  key: const ValueKey('beats-source'),
+                  value: _source,
+                  options: [
+                    '',
+                    for (final entry in sounding)
+                      entry.layer.internallayerId.toString(),
+                  ],
+                  label: sourceName,
+                  onChanged: (v) => setState(() => _source = v),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
           const SizedBox(height: 6),
-          Row(children: [
-            _label(t, l10n.beatsSensitivity),
-            Expanded(
-              child: HouseSlider(
-                key: const ValueKey('beats-sensitivity'),
-                value: _sensitivity,
-                min: 0,
-                max: 100,
-                decimals: 0,
-                // Fits beside its value readout at the panel's floor width;
-                // the slider does not stretch (its rail is its travel).
-                width: 110,
-                onChanged: (v) => setState(() => _sensitivity = v),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapUp: (e) => _sensitivityMenu(context, e.globalPosition),
+            child: Row(children: [
+              _label(t, l10n.beatsSensitivity),
+              Expanded(
+                child: HouseSlider(
+                  key: const ValueKey('beats-sensitivity'),
+                  value: _sensitivity,
+                  min: 0,
+                  max: 100,
+                  decimals: 0,
+                  // Fits beside its value readout at the panel's floor width;
+                  // the slider does not stretch (its rail is its travel).
+                  width: 110,
+                  onChanged: (v) => setState(() => _sensitivity = v),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
           const SizedBox(height: 6),
-          Row(children: [
-            _label(t, l10n.beatsRange),
-            _dropdown(
-              BareDropdown<BeatRange>(
-                key: const ValueKey('beats-range'),
-                value: _range,
-                options: BeatRange.values,
-                label: (r) => switch (r) {
-                  BeatRange.wholeComp => l10n.beatsRangeWholeComp,
-                  BeatRange.workArea => l10n.beatsRangeWorkArea,
-                },
-                onChanged: (v) => setState(() => _range = v),
+          _withOptions<BeatRange>(
+            context,
+            options: BeatRange.values,
+            current: _range,
+            label: (r) => switch (r) {
+              BeatRange.wholeComp => l10n.beatsRangeWholeComp,
+              BeatRange.workArea => l10n.beatsRangeWorkArea,
+            },
+            onPick: (v) => setState(() => _range = v),
+            child: Row(children: [
+              _label(t, l10n.beatsRange),
+              _dropdown(
+                BareDropdown<BeatRange>(
+                  key: const ValueKey('beats-range'),
+                  value: _range,
+                  options: BeatRange.values,
+                  label: (r) => switch (r) {
+                    BeatRange.wholeComp => l10n.beatsRangeWholeComp,
+                    BeatRange.workArea => l10n.beatsRangeWorkArea,
+                  },
+                  onChanged: (v) => setState(() => _range = v),
+                ),
               ),
-            ),
-          ]),
+            ]),
+          ),
           const SizedBox(height: 6),
           Row(children: [
             _label(t, l10n.beatsMinSpacing),
@@ -346,6 +541,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
                     min: 0,
                     max: 300,
                     decimals: 2,
+                    resetTo: 0,
                     onChanged: (v) => setState(
                         () => _bpmOverride = v.toDouble().clamp(0, 300)),
                   ),
@@ -357,10 +553,13 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
                 onPressed: _tap,
                 child: Text(l10n.beatsTap),
               ),
-              // The phase chips: the grid is right but early or late. Ten
-              // milliseconds a press — under half a frame at 60.
-              _phaseChip(t, '‹', -10),
-              _phaseChip(t, '›', 10),
+              // The phase chips: the grid is right but early or late, which
+              // only means anything once there is a grid. Ten milliseconds a
+              // press, under half a frame at 60.
+              if (bpmShown > 0) ...[
+                _phaseChip(t, '‹', -10),
+                _phaseChip(t, '›', 10),
+              ],
               // Where the nudges have put the grid, so a press is seen to do
               // something before Generate is run again.
               if (_phaseMs != 0)
@@ -368,24 +567,14 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
                     '${_phaseMs > 0 ? '+' : ''}${_phaseMs.round()} ms',
                     key: const ValueKey('beats-phase'),
                     style: t.caption),
-              if (_bpmOverride > 0)
-                Text(l10n.beatsGridOn, style: t.caption)
-              else if (bpmShown == 0)
-                Text(l10n.beatsBpmAuto, style: t.caption),
+              if (bpmShown == 0) Text(l10n.beatsBpmAuto, style: t.caption),
             ],
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              HouseButton(
-                key: const ValueKey('beats-generate'),
-                small: true,
-                onPressed: () => _generate(context, ui, comp),
-                child: Text(l10n.beatsGenerate),
-              ),
-              HouseButton(
+          if (_hasBeats) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: HouseButton(
                 key: const ValueKey('beats-clear'),
                 small: true,
                 onPressed: () {
@@ -394,8 +583,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
                 },
                 child: Text(l10n.beatsClearGenerated),
               ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -482,6 +671,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     LumitTheme t,
     LumitUiState ui,
     CompositionReference comp,
+    List<BridgeLayerEntry> sounding,
   ) {
     final selected = ui.selectedLayerIds;
     BridgeLayerEntry? entry;
@@ -493,135 +683,204 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
     }
     final canSound = entry != null &&
         (_hasAudio[entry.layer.internallayerId.toString()] ?? false);
+    // Nothing picked, nothing to show: the column closes up rather than saying
+    // so.
+    if (entry == null) return const SizedBox.shrink();
+    final picked = entry;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-          child: Row(children: [
-            Text(l10n.audioSectionSelectedLayer, style: t.kicker),
-            const SizedBox(width: 8),
-            if (entry != null)
-              Expanded(
-                child: Text(
-                  entry.info.name,
-                  style: t.mono.copyWith(fontSize: 10, color: t.textPrimary),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        // The layer's audio menu from anywhere in its block, the buttons
+        // included. A value keeps its own.
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapUp: (e) => showMenuAt<void>(
+            context: context,
+            position: e.globalPosition,
+            width: 200,
+            rows: (close) => audioLayerRows(
+              theme: t,
+              comp: comp,
+              app: context.read<LumitState>(),
+              entry: picked,
+              targets: audioMenuTargets(picked, sounding, selected),
+              buses: [
+                for (final l in ui.model.heldLayers)
+                  if (l.info.kind == BridgeLayerKind.bus) l,
+              ],
+              frame: ui.playheadFrame.value,
+              closeParent: () => close(null),
+              onRename: () => setState(() => _rename =
+                  TextEditingController(text: picked.info.name)),
+              renameAction: null,
+              duplicateAction: null,
+              onChanged: () {
+                ui.model.refresh();
+                comp.audioPrepare();
+              },
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+                child: Row(children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: t.labelColour(picked.info.label),
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: _rename != null
+                        ? RowRenameField(
+                            controller: _rename!,
+                            onCommit: () => _endRename(picked, commit: true),
+                            onCancel: () => _endRename(picked, commit: false),
+                          )
+                        : Text(
+                            picked.info.name,
+                            style: t.bodyPrimary,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                  ),
+                ]),
+              ),
+              Entrance(
+                key: ValueKey(
+                    'audio-selected-in-${entry.layer.internallayerId}'),
+                spec: _settled
+                    ? ThemeScope.of(context).motion.reveal
+                    : MotionSpec.still,
+                rise: ThemeScope.of(context).motion.revealRise,
+                child: _SelectedLayerBlock(
+                  key: ValueKey(
+                      'audio-selected-${entry.layer.internallayerId}'),
+                  comp: comp,
+                  entry: entry,
+                  // A silent layer keeps the template buttons: *Drive with
+                  // audio…* exists to move a visual layer's parameters with
+                  // the music. It loses the rows that would be lying on it.
+                  canSound: canSound,
+                  onChanged: () {
+                    ui.model.refresh();
+                    comp.audioPrepare();
+                  },
                 ),
               ),
-          ]),
+            ],
+          ),
         ),
-        if (entry == null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: Text(l10n.selectALayer, style: t.small),
-          )
-        else
-          Entrance(
-            key: ValueKey('audio-selected-in-${entry.layer.internallayerId}'),
-            spec: _settled
-                ? ThemeScope.of(context).motion.reveal
-                : MotionSpec.still,
-            rise: ThemeScope.of(context).motion.revealRise,
-            child: _SelectedLayerBlock(
-            key: ValueKey('audio-selected-${entry.layer.internallayerId}'),
-            comp: comp,
-            entry: entry,
-            // A silent layer keeps the template buttons — *Drive with audio…*
-            // exists precisely to move a visual layer's parameters with the
-            // music — and loses the rows that would be lying on it.
-            canSound: canSound,
-            onChanged: () {
-              ui.model.refresh();
-              comp.audioPrepare();
-            },
-          ),
-          ),
+        _hair(t),
       ],
     );
   }
 }
 
-/// The output's two bars, dB readouts, and the clip row — the board's Levels
-/// block. The bars and their numbers repaint off the feed inside one
-/// RepaintBoundary; the clip lamp is its own tiny widget under the clip
-/// listenable.
+/// The output's two bars and their scale, painted as one inside one
+/// RepaintBoundary, the limiter's lamp, which shows only while lit and is its
+/// own tiny widget under the clip listenable, and the loudness under them.
 class _LevelsBlock extends StatelessWidget {
   final AudioMeterFeed feed;
+  final LumitUiState ui;
 
-  const _LevelsBlock({required this.feed});
+  const _LevelsBlock({required this.feed, required this.ui});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          RepaintBoundary(
-            key: const ValueKey('levels-bars'),
-            child: SizedBox(
-              height: 26,
-              child: CustomPaint(
-                painter: LevelBarsPainter(
-                  frame: feed.frame,
-                  trough: t.surface0,
-                  edge: t.hairline,
-                  body: t.success,
-                  cap: t.warning,
-                  hold: t.textPrimary,
-                  text: t.mono.copyWith(fontSize: 9, color: t.textMuted),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(children: [
-            Text(l10n.audioClip, style: t.caption),
-            const SizedBox(width: 6),
-            ValueListenableBuilder<bool>(
-              valueListenable: feed.clipped,
-              builder: (context, lit, _) => LumitTooltip(
-                message:
-                    lit ? l10n.mixerLimiterClipped : l10n.mixerLimiter,
-                child: HoverMark(
-                  builder: (context, over) => GestureDetector(
-                    key: const ValueKey('audio-clip-lamp'),
-                    onTap: () {
-                      resetAudioClip();
-                      // A parked poll would leave the lamp lit.
-                      feed.wake();
-                    },
-                    child: AnimatedContainer(
-                      duration: ThemeScope.of(context).motion.mark.duration,
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Color.lerp(lit ? t.error : t.surface2,
-                            t.textPrimary, 0.35 * over),
-                        border: Border.all(
-                            color: lit ? t.error : t.hairlineStrong),
-                        shape: BoxShape.circle,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (e) => showMenuAt<void>(
+        context: context,
+        position: e.globalPosition,
+        width: 170,
+        rows: (close) => meterRows(ui, () => close(null)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                RepaintBoundary(
+                  key: const ValueKey('levels-bars'),
+                  child: SizedBox(
+                    height: LevelBarsPainter.height,
+                    width: double.infinity,
+                    child: CustomPaint(
+                      painter: LevelBarsPainter(
+                        frame: feed.frame,
+                        trough: t.surface2,
+                        edge: t.hairline,
+                        body: t.success,
+                        cap: t.warning,
+                        hold: t.textPrimary,
+                        text: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                       ),
                     ),
                   ),
                 ),
-              ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: feed.clipped,
+                    builder: (context, lit, _) => IgnorePointer(
+                      ignoring: !lit,
+                      child: Opacity(
+                        opacity: lit ? 1 : 0,
+                        child: LumitTooltip(
+                          message: l10n.mixerLimiterClipped,
+                          child: HoverMark(
+                            builder: (context, over) => GestureDetector(
+                              key: const ValueKey('audio-clip-lamp'),
+                              onTap: resetMeterPeaks,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: Color.lerp(
+                                      t.error, t.textPrimary, 0.35 * over),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const Spacer(),
-            Text(l10n.audioPeakHold, style: t.caption),
-          ]),
-        ],
+            const SizedBox(height: 6),
+            LoudnessReadout(feed: feed),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// The two horizontal bars with their dB numbers, painted as one so a tick
-/// repaints one boundary and rebuilds nothing.
+/// The two horizontal bars with their dB numbers and the scale under them,
+/// painted as one so a tick repaints one boundary and rebuilds nothing.
 class LevelBarsPainter extends CustomPainter {
+  /// How tall the block paints: the two bars and the scale.
+  static const double height = 36;
+  static const double _barHeight = 6;
+  static const double _rowStep = 12;
+  static const double _leftGutter = 12;
+  static const List<int> _scale = [-48, -36, -24, -12, 0];
+
   final ValueListenable<AudioMeterFrame> frame;
   final Color trough, edge, body, cap, hold;
   final TextStyle text;
@@ -636,52 +895,81 @@ class LevelBarsPainter extends CustomPainter {
     required this.text,
   }) : super(repaint: frame);
 
+  void _word(Canvas canvas, String words, Offset at,
+      {TextAlign align = TextAlign.left, double width = 0}) {
+    final painter = TextPainter(
+      text: TextSpan(text: words, style: text),
+      textDirection: TextDirection.ltr,
+      textAlign: align,
+    )..layout(minWidth: width);
+    painter.paint(canvas, at);
+  }
+
+  /// The readout's room at the right: the widest reading in this face and
+  /// a little more, so the bars take what is left and a number is never cut.
+  late final double _rightGutter = () {
+    final widest = TextPainter(
+      text: TextSpan(text: '-00.0', style: text),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final room = widest.width + 6;
+    widest.dispose();
+    return room;
+  }();
+
   @override
   void paint(Canvas canvas, Size size) {
     final master = frame.value.master;
-    _bar(canvas, size, 0, master.rmsLeft, master.peakLeft, master.holdLeft);
-    _bar(canvas, size, 1, master.rmsRight, master.peakRight, master.holdRight);
+    _bar(canvas, size, 0, l10n.audioMeterLeft, master.rmsLeft, master.peakLeft,
+        master.holdLeft);
+    _bar(canvas, size, 1, l10n.audioMeterRight, master.rmsRight,
+        master.peakRight, master.holdRight);
+    final width = size.width - _leftGutter - _rightGutter;
+    final tickTop = _rowStep * 2 - 2;
+    for (final db in _scale) {
+      final x = _leftGutter + width * (db + 60) / 60;
+      canvas.drawRect(
+          Rect.fromLTWH(x - 0.5, tickTop, 1, 2), Paint()..color = text.color!);
+      final painter = TextPainter(
+        text: TextSpan(text: '${db.abs()}', style: text),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(canvas, Offset(x - painter.width / 2, tickTop + 3));
+    }
   }
 
-  void _bar(Canvas canvas, Size size, int row, double rms, double peak,
-      double holdValue) {
-    const textWidth = 44.0;
-    const barHeight = 5.0;
-    final width = size.width - textWidth;
-    final y = row * 14.0 + (5 - barHeight) / 2;
-    final rect = Rect.fromLTWH(0, y, width, barHeight);
+  void _bar(Canvas canvas, Size size, int row, String side, double rms,
+      double peak, double holdValue) {
+    final width = size.width - _leftGutter - _rightGutter;
+    final y = row * _rowStep + 2;
+    _word(canvas, side, Offset(0, row * _rowStep));
+    canvas.save();
+    canvas.translate(_leftGutter, 0);
+    final rect = Rect.fromLTWH(0, y, width, _barHeight);
     canvas.drawRect(rect, Paint()..color = trough);
     canvas.drawRect(
-      rect.deflate(0.5),
-      Paint()
-        ..color = edge
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(0, y, width * meterFraction(peak), barHeight),
+      Rect.fromLTWH(0, y, width * meterFraction(peak), _barHeight),
       Paint()..color = cap.withValues(alpha: 0.55),
     );
     canvas.drawRect(
-      Rect.fromLTWH(0, y, width * meterFraction(rms), barHeight),
+      Rect.fromLTWH(0, y, width * meterFraction(rms), _barHeight),
       Paint()..color = body,
     );
     if (holdValue > 0) {
       canvas.drawRect(
-        Rect.fromLTWH(width * meterFraction(holdValue) - 1, y, 1, barHeight),
+        Rect.fromLTWH(width * meterFraction(holdValue) - 1, y, 1, _barHeight),
         Paint()..color = hold,
       );
     }
+    canvas.restore();
     final db = amplitudeDb(peak);
-    final painter = TextPainter(
-      text: TextSpan(
-        text: db <= -60 ? l10n.volumeNegInf : '${db.toStringAsFixed(1)} dB',
-        style: text,
-      ),
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.right,
-    )..layout(minWidth: textWidth - 4);
-    painter.paint(canvas, Offset(width + 4, y - 3));
+    _word(
+      canvas,
+      db <= -60 ? l10n.volumeNegInf : db.toStringAsFixed(1),
+      Offset(size.width - _rightGutter + 4, row * _rowStep),
+      align: TextAlign.right,
+      width: _rightGutter - 4,
+    );
   }
 
   @override
@@ -714,10 +1002,8 @@ class _SelectedLayerBlock extends StatefulWidget {
 }
 
 class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
-  /// How long a fade is made when the layer has none at that end yet. Where it
-  /// has one, the wells read the fade itself.
-  double _fadeInSeconds = 0.5;
-  double _fadeOutSeconds = 0.5;
+  /// How long a fade is made by a curve button, at an end that has none yet.
+  static const double _newFadeSeconds = 0.5;
 
   /// The pot's live reading while it is being turned, or null at rest — the
   /// Mixer strip's own shape: the drag shows here and commits once on release.
@@ -758,18 +1044,35 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 edgeSeconds: info.outFrame.toInt() / fps,
                 rising: false,
                 slack: slack);
+        final volumeKeys = KeyframeControlsFrb(
+          scalars: [volume],
+          comp: widget.comp,
+          onSeek: ui.scrubTo,
+          rowKey: 'audio-volume',
+          onWrite: (next) {
+            layer.setVolumeDb(value: next.single);
+            widget.onChanged();
+          },
+        );
+        final panKeys = KeyframeControlsFrb(
+          scalars: [pan],
+          comp: widget.comp,
+          onSeek: ui.scrubTo,
+          rowKey: 'audio-pan',
+          onWrite: (next) {
+            layer.setPan(value: next.single);
+            widget.onChanged();
+          },
+        );
         return Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!widget.canSound)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(l10n.audioLayerSilent, style: t.small),
-                ),
               if (widget.canSound) ...[
-              Wrap(
+              ParamRowMenu(
+                  menu: scalarRowMenu(context, volumeKeys, defaults: const [0]),
+                  child: Wrap(
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
@@ -793,19 +1096,12 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                KeyframeControlsFrb(
-                  scalars: [volume],
-                  comp: widget.comp,
-                  onSeek: ui.scrubTo,
-                  rowKey: 'audio-volume',
-                  onWrite: (next) {
-                    layer.setVolumeDb(value: next.single);
-                    widget.onChanged();
-                  },
-                ),
-              ]),
+                volumeKeys,
+              ])),
               const SizedBox(height: 6),
-              Wrap(
+              ParamRowMenu(
+                  menu: scalarRowMenu(context, panKeys, defaults: const [0]),
+                  child: Wrap(
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
@@ -828,16 +1124,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 ),
                 const SizedBox(width: 6),
                 // The stopwatch first, so it stands under Volume's.
-                KeyframeControlsFrb(
-                  scalars: [pan],
-                  comp: widget.comp,
-                  onSeek: ui.scrubTo,
-                  rowKey: 'audio-pan',
-                  onWrite: (next) {
-                    layer.setPan(value: next.single);
-                    widget.onChanged();
-                  },
-                ),
+                panKeys,
                 const SizedBox(width: 6),
                 // The board's own dial beside the value well — the Mixer
                 // strip's pot, turning the same way.
@@ -848,9 +1135,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   onCommit: (v) => _commitPan(pan, v, frame),
                   onCancel: () => setState(() => _dragPan = null),
                 ),
-                const SizedBox(width: 6),
-                Text(panLabel(panValue), style: t.caption),
-              ]),
+              ])),
               const SizedBox(height: 6),
               _fadeRow(
                 t,
@@ -858,8 +1143,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 label: l10n.audioFadeIn,
                 rising: true,
                 fade: fadeIn,
-                seconds: fadeIn?.seconds ?? _fadeInSeconds,
-                onDefault: (v) => _fadeInSeconds = v,
               ),
               const SizedBox(height: 6),
               _fadeRow(
@@ -868,8 +1151,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 label: l10n.audioFadeOut,
                 rising: false,
                 fade: fadeOut,
-                seconds: fadeOut?.seconds ?? _fadeOutSeconds,
-                onDefault: (v) => _fadeOutSeconds = v,
               ),
               const SizedBox(height: 10),
               ],
@@ -894,42 +1175,45 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// A fade well and its three curve chips. The well holds the length and a
-  /// chip the shape, and either writes the fade there and then. A chip is lit
-  /// only while the layer has a fade at that end, and a length of 0 takes the
-  /// fade away.
+  /// A fade well and its three curve buttons. The well holds the length, or
+  /// nought at an end with no fade, and a button the shape, and either writes
+  /// the fade there and then. A button is lit only while the layer has a fade at
+  /// that end, and a length of 0 takes the fade away.
   Widget _fadeRow(
     LumitTheme t, {
     required String key,
     required String label,
     required bool rising,
     required AudioFade? fade,
-    required double seconds,
-    required ValueChanged<double> onDefault,
   }) {
     final shape = fade?.shape;
-    Widget chip(String text, BridgeFadeShape option) => HoverMark(
-          builder: (context, lit) => GestureDetector(
-            key: ValueKey('$key-${option.name}'),
-            onTap: () => _writeFade(
-                rising: rising, fade: fade, seconds: seconds, shape: option),
-            child: AnimatedContainer(
-              duration: ThemeScope.of(context).motion.mark.duration,
-              curve: ThemeScope.of(context).motion.mark.curve,
-              margin: const EdgeInsets.only(left: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                border: Border.all(
-                    color: shape == option ? t.accent : t.hairlineStrong),
-                borderRadius: BorderRadius.circular(2),
-              ),
-              child: Text(
-                text,
-                style: t.mono.copyWith(
-                  fontSize: 9,
-                  color: shape == option
+    final seconds = fade?.seconds ?? 0.0;
+    Widget chip(String name, BridgeFadeShape option,
+            double Function(double) gain) =>
+        LumitTooltip(
+          message: name,
+          child: HoverMark(
+            builder: (context, lit) => GestureDetector(
+              key: ValueKey('$key-${option.name}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _writeFade(
+                  rising: rising,
+                  fade: fade,
+                  seconds: fade == null ? _newFadeSeconds : seconds,
+                  shape: option),
+              child: Container(
+                width: 22,
+                height: 18,
+                alignment: Alignment.center,
+                color: shape == option
+                    ? t.accent.withValues(alpha: 0.18)
+                    : t.accent.withValues(alpha: 0),
+                child: FadeCurveGlyph(
+                  gain: gain,
+                  falling: !rising,
+                  colour: shape == option
                       ? t.textPrimary
-                      : Color.lerp(t.textMuted, t.textSecondary, lit),
+                      : Color.lerp(t.textMuted, t.textPrimary, lit),
                 ),
               ),
             ),
@@ -954,19 +1238,29 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
             decimals: 2,
             suffix: ' s',
             speed: 0.02,
-            onChanged: (v) {
-              if (fade == null && v > 0) onDefault(v.toDouble());
-              _writeFade(
-                  rising: rising,
-                  fade: fade,
-                  seconds: v.toDouble(),
-                  shape: shape ?? BridgeFadeShape.ease);
-            },
+            onChanged: (v) => _writeFade(
+                rising: rising,
+                fade: fade,
+                seconds: v.toDouble(),
+                shape: shape ?? BridgeFadeShape.ease),
           ),
         ),
-        chip(l10n.fadeShapeEase, BridgeFadeShape.ease),
-        chip(l10n.fadeShapeLinear, BridgeFadeShape.linear),
-        chip(l10n.fadeShapeExponential, BridgeFadeShape.exponential),
+        const SizedBox(width: 6),
+        // One group, with the hairline round all three.
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: t.hairline),
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            chip(l10n.fadeShapeEase, BridgeFadeShape.ease,
+                (u) => u * u * (3 - 2 * u)),
+            chip(l10n.fadeShapeLinear, BridgeFadeShape.linear, (u) => u),
+            chip(l10n.fadeShapeExponential, BridgeFadeShape.exponential,
+                (u) => 1 - (1 - u) * (1 - u) * (1 - u)),
+          ]),
+        ),
       ],
     );
   }
@@ -1130,87 +1424,21 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// Audio level's Source row, the entry that reads one named layer. A number
-  /// because a Choice row crosses the bridge as its index.
-  static const int _sourceLayer = 1;
-
-  /// Stage the template: three drivers, three wires, one `setGraph` — so the
-  /// whole gesture is one undo step and the Graph panel shows exactly what
-  /// was built. An occupied target socket is re-routed rather than doubled,
-  /// the same rule a hand-drawn wire follows.
+  /// Stage the template through the shared chain: three drivers, three wires,
+  /// one `setGraph`, so the whole gesture is one undo step and the Graph panel
+  /// shows exactly what was built.
   void _stageChain({
     required BridgeInputRef target,
     required bool inverted,
     UuidValue? listenTo,
   }) {
-    final layer = widget.entry.layer;
-    final BridgeLayerGraph graph;
-    final BridgeEffectInstance level, remap, smooth;
-    try {
-      graph = layer.getGraph();
-      level = layer.newDriver(name: 'audio_level');
-      remap = layer.newDriver(name: 'remap');
-      smooth = layer.newDriver(name: 'smooth');
-    } catch (_) {
-      _sayChainRefused();
-      return;
-    }
-    if (listenTo != null) {
-      level.setValue(id: 'audio', value: BridgeEffectValue.layer(listenTo));
-      // Naming a layer is half of it: the Source row is what says which of the
-      // node's three readings it takes (docs/impl/audio-nodes.md §3), and it
-      // starts on the whole composition.
-      level.setValue(
-          id: 'source', value: const BridgeEffectValue.choice(_sourceLayer));
-    }
-    // A practical loudness window: RMS of finished music rarely clears 0.3,
-    // so the chain reaches its far end on real material rather than only on
-    // full scale.
-    remap.setValue(
-        id: 'in_high',
-        value: const BridgeEffectValue.float(BridgeScalar.static_(0.3)));
-    if (inverted) {
-      // The duck: silence in → 0 dB out, loud in → the floor. −18 dB is a
-      // clearly-under bed that is still audibly there; the Remap is an
-      // ordinary box, retunable on the graph.
-      remap.setValue(
-          id: 'out_low',
-          value: const BridgeEffectValue.float(BridgeScalar.static_(0.0)));
-      remap.setValue(
-          id: 'out_high',
-          value: const BridgeEffectValue.float(BridgeScalar.static_(-18.0)));
-    }
-    BridgeGraphEdge wire(
-            BridgeEffectInstance from, String port, BridgeInputRef to) =>
-        BridgeGraphEdge(
-          from: BridgeOutputRef.driver(node: from.id(), port: port),
-          to: to,
-        );
-    final edges = [...graph.wiring.edges]
-      ..removeWhere((e) => e.to == target)
-      ..addAll([
-        wire(level, 'amplitude',
-            BridgeInputRef.param(node: BridgeNodeRef.driver(remap.id()), port: 'value')),
-        wire(remap, 'value',
-            BridgeInputRef.param(node: BridgeNodeRef.driver(smooth.id()), port: 'value')),
-        wire(smooth, 'value', target),
-      ]);
-    try {
-      layer.setGraph(
-        drivers: [...layer.getGraphDrivers(), level, remap, smooth],
-        wiring: BridgeGraphWiring(
-          edges: edges,
-          // No positions passed for the new boxes: the Graph panel auto-places
-          // what has no entry, exactly as it does for a fresh layer.
-          layout: graph.wiring.layout,
-          exposed: graph.wiring.exposed,
-          groups: graph.wiring.groups,
-          // Ducking wires a driver in; it does not touch whether the
-          // layer's own output is plugged in.
-          outUnwired: graph.wiring.outUnwired,
-        ),
-      );
-    } catch (_) {
+    final ok = stageAudioChain(
+      layer: widget.entry.layer,
+      target: target,
+      inverted: inverted,
+      listenTo: listenTo,
+    );
+    if (!ok) {
       _sayChainRefused();
       return;
     }
