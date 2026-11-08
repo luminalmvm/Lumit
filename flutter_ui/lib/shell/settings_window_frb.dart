@@ -44,6 +44,8 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/blender.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/l10n/engine_labels.dart';
+import 'package:lumit_flutter/panels/cut_kinds.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgeExpressionLanguage, BridgeFfxImport, importFfxPresets;
 import 'package:lumit_flutter/src/rust/api/export.dart';
@@ -2295,6 +2297,34 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.quantiseSound = on;
             changed();
           }),
+          _flag(t, 'settings-freeze-keeps-sound', l10n.settingsFreezeKeepsSound,
+              value: settings.cutFreezeKeepsSound, set: (on) {
+            settings.cutFreezeKeepsSound = on;
+            changed();
+          }),
+          _row(
+            t,
+            l10n.settingsDefaultTransition,
+            _dropdown<String?>(
+              key: 'settings-default-transition',
+              value: settings.cutDefaultTransition,
+              options: [
+                null,
+                for (final kind in transitionKinds) kind.matchName,
+              ],
+              label: (kind) {
+                if (kind == null) return l10n.cutDissolve;
+                for (final each in transitionKinds) {
+                  if (each.matchName == kind) return engineLabel(each.label);
+                }
+                return kind;
+              },
+              onChanged: (kind) {
+                setState(() => settings.cutDefaultTransition = kind);
+                changed();
+              },
+            ),
+          ),
         ],
       ),
       (

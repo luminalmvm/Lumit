@@ -85,6 +85,7 @@ Future<void> newSolidFrb({
   required BuildContext context,
   required CompositionReference comp,
   int? row,
+  void Function(LayerReference layer)? place,
   VoidCallback? onDone,
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
@@ -128,6 +129,7 @@ Future<void> newSolidFrb({
               width: def.width,
               height: def.height));
     }
+    place?.call(layer);
   });
   onDone?.call();
 }

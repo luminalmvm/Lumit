@@ -6586,6 +6586,10 @@
   "@keyGiveTheLayerARetime": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyHoldTheFrameAtThePlayhead": "Hold the frame at the playhead",
+  "@keyHoldTheFrameAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyGoToTheEnd": "Go to the end",
   "@keyGoToTheEnd": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6816,6 +6820,10 @@
   },
   "keyCutEveryTrackAtThePlayhead": "Cut every track at the playhead",
   "@keyCutEveryTrackAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyInsertATitle": "Insert a title",
+  "@keyInsertATitle": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
   },
   "keyNudgeClipsOneFrameEarlier": "Nudge clips one frame earlier",
@@ -7877,10 +7885,6 @@
   "menuFlowchart": "Flowchart",
   "@menuFlowchart": {
     "description": "The Composition menu row that opens the flowchart: a small picture of which compositions the open one is nested in and which are nested inside it."
-  },
-  "menuFreezeFrame": "Freeze frame at playhead",
-  "@menuFreezeFrame": {
-    "description": "Layer context-menu item: hold the moment showing at the playhead for a second, without changing the layer's length."
   },
   "menuFull": "Full",
   "@menuFull": {
@@ -11243,6 +11247,34 @@
   "@retimePickLayer": {
     "description": "Empty state of the graph in the Retiming workspace: no layer is selected, so there is no Retime to draw."
   },
+  "retimeHoldHere": "Hold here",
+  "@retimeHoldHere": {
+    "description": "Retime row and layer menus: holds the frame under the playhead for the length last set, then carries on."
+  },
+  "retimeRamp": "Ramp…",
+  "@retimeRamp": {
+    "description": "Retime panel button and Retime row menu: opens a small box that ramps the speed from the playhead."
+  },
+  "retimeRampTo": "To",
+  "@retimeRampTo": {
+    "description": "Ramp box: label for the speed the ramp ends at. A per cent field follows."
+  },
+  "retimeRampOver": "Over",
+  "@retimeRampOver": {
+    "description": "Ramp box: label for how long the ramp takes. A field and a choice of frames or seconds follow."
+  },
+  "retimeRampEase": "Ease",
+  "@retimeRampEase": {
+    "description": "Ramp box: label for the curve the speed takes across the ramp. A dropdown of curve names follows."
+  },
+  "retimeRampGo": "Ramp",
+  "@retimeRampGo": {
+    "description": "Ramp box: the button that writes the ramp."
+  },
+  "unitSymbolFramesShort": "f",
+  "@unitSymbolFramesShort": {
+    "description": "Short unit for frames, beside s for seconds on a small switch."
+  },
   "retimeFreeze": "Freeze frame",
   "@retimeFreeze": {
     "description": "Retime panel button: holds the frame under the playhead for a moment, then carries on."
@@ -11286,6 +11318,14 @@
   "staggerOffset": "Offset per layer",
   "@staggerOffset": {
     "description": "Stagger panel: label for the number of frames each layer starts after the one before it. A frames field follows."
+  },
+  "staggerOverlap": "Overlap",
+  "@staggerOverlap": {
+    "description": "Stagger panel: label for how many frames each layer overlaps the end of the one before it, which lays the layers end to end. A frames field follows."
+  },
+  "staggerCrossfade": "Crossfade",
+  "@staggerCrossfade": {
+    "description": "Stagger panel: label for a tick that writes Opacity keys across each overlap, so the layers dissolve into each other."
   },
   "staggerOrder": "Order",
   "@staggerOrder": {
@@ -12239,6 +12279,14 @@
   "@insertVideoLayer": {
     "description": "Cut timeline, right-click on the empty ground below the rows: adds an empty Sequence layer for picture clips."
   },
+  "insertTitle": "Insert title",
+  "@insertTitle": {
+    "description": "Cut timeline, right-click on the ground or a gap: adds a Text layer at that frame and opens it for typing."
+  },
+  "insertSolid": "Insert solid",
+  "@insertSolid": {
+    "description": "Cut timeline, right-click on the ground or a gap: opens the Solid dialogue, then adds the solid at that frame."
+  },
   "insertAdjustmentLayer": "Insert adjustment layer",
   "@insertAdjustmentLayer": {
     "description": "Cut timeline, right-click on the empty ground below the rows: adds an Adjustment layer."
@@ -12435,6 +12483,41 @@
         "type": "String"
       }
     }
+  },
+  "cutDissolve": "Dissolve",
+  "@cutDissolve": {
+    "description": "Cut timeline, Transition list: the overlap fades one clip into the other. The rest of the list is the Transition effects, by name."
+  },
+  "cutRemoveTransition": "Remove transition",
+  "@cutRemoveTransition": {
+    "description": "Cut timeline, Transition list: take the transition off the edit point nearer the pointer, so the two clips meet at a plain cut again."
+  },
+  "cutFreezeFrame": "Freeze frame…",
+  "@cutFreezeFrame": {
+    "description": "Cut and Audio timelines, clip menu: asks how long, then holds the frame at the playhead as a clip of its own and moves what follows later."
+  },
+  "cutNewCompositionFromSelection": "New composition from selection",
+  "@cutNewCompositionFromSelection": {
+    "description": "Cut and Audio timelines, clip menu with several clips picked: moves them into a new composition and leaves one clip playing it."
+  },
+  "cutSelectionCompName": "{comp} selection",
+  "@cutSelectionCompName": {
+    "description": "The name of the composition New composition from selection makes, from the composition the clips came out of.",
+    "placeholders": {
+      "comp": { "type": "String" }
+    }
+  },
+  "effectControlsTransition": "Transition",
+  "@effectControlsTransition": {
+    "description": "A small mark beside the name in the Effect controls panel's header: the rows shown belong to the overlap between two clips. One word, drawn in capitals."
+  },
+  "settingsDefaultTransition": "Default transition",
+  "@settingsDefaultTransition": {
+    "description": "Settings window, Timeline page: the name of one setting. What Ctrl+D and a clip dragged across another under Auto crossfade put on the overlap."
+  },
+  "settingsFreezeKeepsSound": "Sound plays on through a freeze",
+  "@settingsFreezeKeepsSound": {
+    "description": "Settings window, Timeline page: the name of one setting. On, a freeze on a clip leaves its linked sound as it is. Off, the sound is cut too, with silence under the hold."
   },
   "cutAddDissolve": "Add dissolve",
   "@cutAddDissolve": {

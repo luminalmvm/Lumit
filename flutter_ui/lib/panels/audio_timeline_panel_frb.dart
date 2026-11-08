@@ -90,6 +90,7 @@ import 'timeline_navigator.dart';
 import 'timeline_outline_frb.dart' show GutterScrollbar;
 import 'timeline_razor.dart';
 import 'timeline_snap.dart';
+import 'retime_commands.dart' show askToFreezeClips;
 import 'timeline_toolbar_frb.dart' show timelineChromeControl;
 import 'volume_band_frb.dart';
 import 'waveform_frb.dart';
@@ -2667,7 +2668,27 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               }),
               child: MenuLabel(l10n.audioAddEffect, ticked: false),
             ),
-            if (!clip.sourceIsSolid)
+            // A hold on the sound under the playhead: a length of silence, with
+            // what follows moved later.
+            row('freeze', l10n.cutFreezeFrame, () {
+              askToFreezeClips(context, [(layer: layer, clip: clip)], at);
+            }, close, enabled: first <= playhead && playhead < last),
+            if ((picked?.length ?? 0) > 1)
+              row('fold', l10n.cutNewCompositionFromSelection, () {
+                CompositionReference? made;
+                try {
+                  made = comp.cutClipsToComposition(
+                    clips: ids,
+                    linked: false,
+                    name: l10n.cutSelectionCompName(comp.getSettings().name),
+                  );
+                } catch (_) {
+                  made = null;
+                }
+                if (made == null) ui.reportCut(BridgeCutResult.locked);
+                _afterWrite();
+              }, close)
+            else if (!clip.sourceIsSolid)
               row(
                   'open-comp',
                   clip.sourceIsComp
@@ -2825,6 +2846,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             overlap: _ui?.workspace.interface.cutAutoCrossfade ?? false,
             ripple: false,
             nudgeTicks: 0,
+            transition: null,
           ),
         )));
   }
@@ -2845,6 +2867,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               ripple: ripple,
               linked: false,
               overlap: _ui?.workspace.interface.cutAutoCrossfade ?? false,
+              transition: null,
             ));
       }
     });

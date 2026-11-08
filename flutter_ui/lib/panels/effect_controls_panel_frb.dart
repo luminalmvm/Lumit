@@ -64,6 +64,7 @@ import '../state/file_dialogs.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
+import 'cut_kinds.dart';
 import 'effect_param_row_frb.dart';
 import 'viewer_effect_points.dart' show pickForPoint;
 import 'graph_panel.dart' show DrivenParam, drivenParamsIn, graphCompById;
@@ -871,7 +872,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           }
           // One clip picked in the Cut timeline is the subject the way a
           // picked group header is: its own stack, its own Add effect.
-          return ValueListenableBuilder<
+          return _orOverlap(context, comp, ValueListenableBuilder<
               ({LayerReference layer, UuidValue clip})?>(
             valueListenable: ui.cutClip,
             builder: (context, pick, _) {
@@ -908,9 +909,119 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 ),
               );
             },
-          );
+          ));
         },
       ),
+    );
+  }
+
+  /// [child], or the rows of the overlap the Cut timeline has fronted.
+  Widget _orOverlap(
+      BuildContext context, CompositionReference comp, Widget child) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    return ValueListenableBuilder<({LayerReference layer, UuidValue clip})?>(
+      valueListenable: ui.cutOverlap,
+      builder: (context, overlap, _) =>
+          overlap == null || overlap.layer.internalcompId != comp.internalid
+              ? child
+              : _overlapBody(context, comp, overlap.layer, overlap.clip),
+    );
+  }
+
+  /// The Transition effect at a clip's start, read once per document revision.
+  ({int? revision, UuidValue clip, BridgeEffectInstanceInfo? info})? _overlapRead;
+
+  BridgeEffectInstanceInfo? _overlapInfo(
+      LumitUiState ui, LayerReference layer, UuidValue clip) {
+    final revision = ui.model.revision;
+    final held = _overlapRead;
+    if (held != null && held.revision == revision && held.clip == clip) {
+      return held.info;
+    }
+    BridgeEffectInstanceInfo? info;
+    try {
+      info = layer.getClipTransition(clip: clip)?.getInfo();
+    } catch (_) {
+      // The clip went under the panel.
+    }
+    _overlapRead = (revision: revision, clip: clip, info: info);
+    return info;
+  }
+
+  /// The panel with an **overlap** as its subject: its one effect's rows, less
+  /// what the overlap decides for it, marked as a transition. When the clip goes
+  /// or the overlap stops being one of the kinds, the panel goes back to what it
+  /// showed.
+  Widget _overlapBody(
+    BuildContext context,
+    CompositionReference comp,
+    LayerReference layer,
+    UuidValue clipId,
+  ) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    return ListenableBuilder(
+      listenable: ui.model,
+      builder: (context, _) {
+        final entry = ui.model.byId(layer.internallayerId);
+        BridgeClip? clip;
+        for (final c in entry?.info.clips ?? const <BridgeClip>[]) {
+          if (c.id == clipId) clip = c;
+        }
+        final fx = clip?.transition == null
+            ? null
+            : _overlapInfo(ui, layer, clipId);
+        if (entry == null || clip == null || fx == null) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => ui.cutOverlap.value = null);
+          return const SizedBox.shrink();
+        }
+        _effects.groupStack = null;
+        _effects.clipStack = () => [
+              if (layer.getClipTransition(clip: clipId) case final t?) t,
+            ];
+        var swept = const <String>{};
+        var name = fx.name;
+        for (final kind in transitionKinds) {
+          if (kind.matchName == clip.transition) {
+            swept = kind.sweptRows.toSet();
+            name = engineLabel(kind.label);
+          }
+        }
+        void changed() {
+          Provider.of<LumitState>(context, listen: false)
+              .notifyDocumentChanged();
+          ui.model.refresh();
+        }
+
+        final first = clip.startFrame.toInt();
+        final length = clip.endFrame.toInt() - first;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(
+              layerName: name,
+              clipOn: entry.info.name,
+              mark: l10n.effectControlsTransition,
+              onMenu: (_) {},
+            ),
+            Expanded(
+              child: FxKeyStripHost(
+                spanStart: first,
+                spanFrames: length < 1 ? 1 : length,
+                child: ListView(
+                  key: const ValueKey('fx-overlap-ground'),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    _clipEffectCard(
+                        context, ui, comp, layer, clipId, fx, 0, changed,
+                        stack: [fx], hideRows: swept),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1059,16 +1170,20 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     UuidValue clip,
     BridgeEffectInstanceInfo fx,
     int index,
-    VoidCallback changed,
-  ) {
+    VoidCallback changed, {
+    List<BridgeEffectInstanceInfo>? stack,
+    Set<String> hideRows = const {},
+  }) {
     return _EffectSection(
       key: ValueKey<String>('fx-card-clip-$index'),
+      hideRows: hideRows,
       info: fx,
       graphName: _graphNameOf(context, fx),
       clip: clip,
       open: _isOpen('fx-${fx.id}'),
       onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
-      onFoldAll: (open) => _foldAll(_clipInfos(ui, layer, clip), open),
+      onFoldAll: (open) =>
+          _foldAll(stack ?? _clipInfos(ui, layer, clip), open),
       driven: const {},
       stagedValue: _effects.stagedValue,
       onStackChanged: changed,
@@ -2170,7 +2285,12 @@ class _Header extends StatelessWidget {
   /// The layer a clip subject is on. Set, the header says the rows are a
   /// clip's and not the layer's own.
   final String? clipOn;
-  final ValueChanged<String> onAdd;
+
+  /// What the mark says for [clipOn]: the clip's, unless it says otherwise.
+  final String? mark;
+
+  /// Where the add button adds to. An overlap has no stack to add to.
+  final ValueChanged<String>? onAdd;
 
   /// A right-click anywhere on the header, the add button included.
   final ValueChanged<Offset> onMenu;
@@ -2180,7 +2300,8 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.layerName,
     this.clipOn,
-    required this.onAdd,
+    this.mark,
+    this.onAdd,
     required this.onMenu,
     this.filter,
   });
@@ -2232,7 +2353,7 @@ class _Header extends StatelessWidget {
                       border: Border.all(color: t.accent),
                       borderRadius: BorderRadius.circular(clipRadius(t)),
                     ),
-                    child: Text(t.kickerCase(l10n.effectControlsClip),
+                    child: Text(t.kickerCase(mark ?? l10n.effectControlsClip),
                         style: t.kicker.copyWith(color: t.accent)),
                   ),
                 ),
@@ -2245,20 +2366,21 @@ class _Header extends StatelessWidget {
         const SizedBox(width: 4),
         // Its own context, so the menu drops from the *button* rather than
         // from the header row's left edge — which is where it used to land.
-        Builder(
-          builder: (buttonContext) => LumitTooltip(
-            message: l10n.addEffect,
-            child: HouseButton(
-              key: const ValueKey('fx-add'),
-              small: true,
-              frameless: true,
-              padding: const EdgeInsets.all(1),
-              onPressed: () => showAddEffectMenu(buttonContext, onAdd),
-              child: glyph.LumitIcon(LumitIcons.addEffect,
-                  size: iconSize, colour: t.textSecondary),
+        if (onAdd case final add?)
+          Builder(
+            builder: (buttonContext) => LumitTooltip(
+              message: l10n.addEffect,
+              child: HouseButton(
+                key: const ValueKey('fx-add'),
+                small: true,
+                frameless: true,
+                padding: const EdgeInsets.all(1),
+                onPressed: () => showAddEffectMenu(buttonContext, add),
+                child: glyph.LumitIcon(LumitIcons.addEffect,
+                    size: iconSize, colour: t.textSecondary),
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -2458,6 +2580,9 @@ class _EffectSection extends StatelessWidget {
   final UuidValue? clip;
   final LayerReference layer;
 
+  /// Rows this subject doesn't show, on top of what the instance itself hides.
+  final Set<String> hideRows;
+
   /// Every layer in the comp, from the read model — what a layer-valued
   /// parameter picks from.
   final List<BridgeLayerEntry> allLayers;
@@ -2551,6 +2676,7 @@ class _EffectSection extends StatelessWidget {
     this.material = false,
     this.group,
     this.clip,
+    this.hideRows = const {},
     required this.layer,
     required this.allLayers,
     required this.comp,
@@ -2977,7 +3103,7 @@ class _EffectSection extends StatelessWidget {
 
     // A plugin hides and shows its own rows, and the instance says which
     // are hidden right now. A group with nothing left to show is not drawn.
-    final hidden = info.hiddenRows.toSet();
+    final hidden = {...info.hiddenRows, ...hideRows};
     final params = [
       for (final p in _rows)
         if (!hidden.contains(p.id) &&

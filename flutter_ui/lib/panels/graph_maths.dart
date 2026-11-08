@@ -1513,6 +1513,73 @@ List<BridgeKeyframe> reversedKeys(
   ];
 }
 
+/// [keys] with a ramp in them: a point at [from] seconds holding the speed
+/// already there, and a second at [to] seconds at [percent], the curve between
+/// them [curve]. Points between the two go. With no point of its own left after
+/// [to] the line stays at [percent] to its end, so a ramp is where the speed ends
+/// up and not a dip that comes back by itself.
+List<BridgeKeyframe> rampEnvelope(
+  List<BridgeKeyframe> keys,
+  double from,
+  double to,
+  double percent,
+  SpeedCurve curve,
+  BridgeRational Function(double seconds) timeOf,
+) {
+  if (keys.length < 2) return keys;
+  double at(BridgeKeyframe key) => rationalSeconds(key.time);
+  final first = at(keys.first), last = at(keys.last);
+  final start = from.clamp(first, last);
+  final end = to.clamp(first, last);
+  if (end <= start) return keys;
+  final speeds = envelopeSpeeds(keys);
+  final curves = envelopeCurves(keys);
+  // A span's curve is the one its starting point carries, and a point within
+  // half a thousandth of the ramp's ends stands for it.
+  const near = 5e-4;
+  var spanEnd = 0;
+  while (spanEnd + 2 < keys.length && at(keys[spanEnd + 1]) <= end + near) {
+    spanEnd++;
+  }
+  final here = envelopeSpeedAt(keys, start);
+  BridgeKeyframe plain(double seconds) => BridgeKeyframe(
+        time: timeOf(seconds),
+        value: 0,
+        interpIn: const BridgeSideInterp.linear(),
+        interpOut: const BridgeSideInterp.linear(),
+      );
+  final outKeys = <BridgeKeyframe>[];
+  final outSpeeds = <double>[];
+  final outCurves = <SpeedCurve>[];
+  void point(BridgeKeyframe key, double speed, SpeedCurve? next) {
+    outKeys.add(key);
+    outSpeeds.add(speed);
+    if (next != null) outCurves.add(next);
+  }
+
+  for (var i = 0; i < keys.length && at(keys[i]) < start - near; i++) {
+    point(keys[i], speeds[i], curves[i]);
+  }
+  final startsOnFirst = start <= first + near;
+  point(startsOnFirst ? keys.first : plain(start), here, curve);
+  final after = [
+    for (var i = 1; i + 1 < keys.length; i++)
+      if (at(keys[i]) > end + near) i,
+  ];
+  // Reaching the end, or with nothing left to come back to.
+  if (end >= last - near) {
+    point(keys.last, percent, null);
+  } else {
+    point(plain(end), percent, after.isEmpty ? SpeedCurve.linear : curves[spanEnd]);
+    for (var i = 0; i < after.length; i++) {
+      final k = after[i];
+      point(keys[k], speeds[k], curves[k]);
+    }
+    point(keys.last, after.isEmpty ? percent : speeds.last, null);
+  }
+  return envelopeToKeys(outKeys, outSpeeds, curves: outCurves);
+}
+
 /// [keys] back to one straight run at 100%, from the first key's moment to the
 /// last key's time.
 List<BridgeKeyframe> resetEnvelope(List<BridgeKeyframe> keys) => keys.length < 2

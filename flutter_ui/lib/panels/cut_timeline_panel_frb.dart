@@ -42,7 +42,11 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show exportFrb, showInsertLayerMenu;
+import '../shell/menu_bar_frb.dart'
+    show exportFrb, newLayerRow, showInsertLayerMenu;
+import 'cut_insert.dart';
+import 'cut_kinds.dart';
+import 'retime_commands.dart' show askToFreezeClips;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../shell/number_dialog_frb.dart' show askNumberFrb;
 import '../shell/stretch_dialog_frb.dart';
@@ -473,8 +477,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final clip = at == null ? null : _tracks[at].clip(first);
       if (clip != null) pick = (layer: _tracks[at!].entry.layer, clip: clip.id);
     }
+    _publishPicked(ui, first);
     if (ui.cutClip.value?.clip == pick?.clip) return;
     ui.cutClip.value = pick;
+    // Effect controls goes with the clip, so an overlap's rows go with it too.
+    ui.cutOverlap.value = null;
     // The clip's layer is the picked layer, so the Viewer and the menus are
     // on the same thing Effect controls is.
     if (pick != null &&
@@ -483,10 +490,35 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
   }
 
+  /// Every picked picture clip, the pressed one first, for the Retime panel.
+  void _publishPicked(LumitUiState ui, String? first) {
+    final picked = [
+      for (final (track, clip) in _pickedPicture())
+        (layer: track.entry.layer, clip: clip.id),
+    ];
+    if (first != null) {
+      final at = picked.indexWhere((p) => p.clip.toString() == first);
+      if (at > 0) picked.insert(0, picked.removeAt(at));
+    }
+    final now = ui.cutClips.value;
+    if (now.length == picked.length &&
+        Iterable<int>.generate(now.length)
+            .every((i) => now[i].clip == picked[i].clip)) {
+      return;
+    }
+    ui.cutClips.value = picked;
+  }
+
   /// Another layer picked anywhere lets the clips go: Effect controls is
   /// then showing that layer, and a clip still lit here would say otherwise.
   void _onLayerPicked() {
     final ui = _ui;
+    final overlap = ui?.cutOverlap.value;
+    if (overlap != null &&
+        ui?.selectedLayer.value?.internallayerId !=
+            overlap.layer.internallayerId) {
+      ui?.cutOverlap.value = null;
+    }
     final pick = ui?.cutClip.value;
     if (!mounted || ui == null || pick == null) return;
     if (ui.selectedLayer.value?.internallayerId == pick.layer.internallayerId) {
@@ -500,6 +532,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   InterfaceSettings get _settings => _ui!.workspace.interface;
   bool get _autoRipple => _settings.cutAutoRipple;
   bool get _autoCrossfade => _settings.cutAutoCrossfade;
+
+  /// What each Transition effect is called, by its match name. Asked once.
+  late final Map<String, String> _transitionNames = {
+    for (final kind in transitionKinds)
+      kind.matchName: engineLabel(kind.label),
+  };
   bool get _quantise => _settings.quantiseSound;
   bool get _speedLines => _settings.cutSpeedLines;
 
@@ -517,6 +555,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         overlap: _autoCrossfade,
         ripple: _autoRipple && !copy,
         nudgeTicks: (sub / max(1e-9, _ui?.model.heldFps ?? 0) * 48000).round(),
+        transition: _settings.cutDefaultTransition,
       );
 
   // -------------------------------------------------------- the track heights
@@ -833,6 +872,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         _matchFrame(ui, comp);
       case 'cut.transition.default':
         _defaultTransition(ui, comp);
+      case 'cut.insert.title':
+        if (comp != null) {
+          insertTitle(
+              context, ui, comp, ui.playheadFrame.value, newLayerRow(ui, comp));
+          _afterWrite();
+        }
       // The zoom keys, as the Timeline answers them: `=` in and `-` out
       // about the playhead, `\` between the whole composition and wherever
       // the zoom was before. They land at once, as the Timeline's do.
@@ -986,6 +1031,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ripple: ripple,
           linked: _linked,
           overlap: _autoCrossfade,
+          transition: _settings.cutDefaultTransition,
         )));
   }
 
@@ -1134,7 +1180,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       }
       if (clip == null || done.contains(clip.id.toString())) continue;
       done.addAll(_withMates(clip.id.toString()));
-      _transition(ui, comp, clip, endEdge: endEdge, frames: _secondFrames(ui));
+      // A kind wants an edit point to be, and a lone edge just fades.
+      final kind = _settings.cutDefaultTransition;
+      if (kind != null &&
+          track.kind == CutTrackKind.picture &&
+          cutClipAcross(track, clip, endEdge: endEdge) != null) {
+        _setKind(comp, track, clip, endEdge, kind, _secondFrames(ui));
+      } else {
+        _transition(ui, comp, clip,
+            endEdge: endEdge, frames: _secondFrames(ui));
+      }
     }
   }
 
@@ -1150,6 +1205,69 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           frames: frames,
           linked: _linked,
         )));
+  }
+
+  /// Make the overlap at one edge of [clip] the kind named, or the dissolve
+  /// with none, making the overlap first where the edit point only meets. A
+  /// kind's rows come up in Effect controls when [show] is set.
+  void _setKind(CompositionReference comp, CutTrack track, BridgeClip clip,
+      bool endEdge, String? kind, int frames, {bool show = false}) {
+    _afterCut(_cut(() => comp.cutSetTransition(
+          clip: clip.id,
+          endEdge: endEdge,
+          frames: frames,
+          kind: kind,
+          linked: _linked,
+        )));
+    if (kind != null && show) {
+      final other = cutClipAcross(track, clip, endEdge: endEdge);
+      _showOverlap(track, endEdge ? other : clip);
+    }
+  }
+
+  /// Bring the rows of the overlap at [incoming]'s start up in Effect controls.
+  void _showOverlap(CutTrack track, BridgeClip? incoming) {
+    final ui = _ui;
+    if (ui == null || incoming == null) return;
+    ui.cutOverlap.value = (layer: track.entry.layer, clip: incoming.id);
+    setPanelVisible(ui.split, Panel.effectControls, true);
+    ui.frontPanel(Panel.effectControls);
+  }
+
+  /// The Transition rows for one edit point: the dissolve, then every kind, the
+  /// one in force ticked.
+  List<Widget> _kindRows(
+    void Function(void) close,
+    String key,
+    CompositionReference comp,
+    CutTrack track,
+    BridgeClip clip,
+    bool endEdge,
+    int frames,
+  ) {
+    final other = cutClipAcross(track, clip, endEdge: endEdge);
+    final overlaps = cutEdgeOverlaps(track, clip, endEdge: endEdge);
+    final incoming = endEdge ? other : clip;
+    final now = overlaps ? incoming?.transition : null;
+    return [
+      _row(close, '$key-dissolve', l10n.cutDissolve,
+          () => _setKind(comp, track, clip, endEdge, null, frames),
+          action: _settings.cutDefaultTransition == null
+              ? 'cut.transition.default'
+              : null,
+          ticked: overlaps && now == null),
+      for (final kind in transitionKinds)
+        _row(
+            close,
+            '$key-${kind.matchName}',
+            engineLabel(kind.label),
+            () => _setKind(comp, track, clip, endEdge, kind.matchName, frames,
+                show: true),
+            action: _settings.cutDefaultTransition == kind.matchName
+                ? 'cut.transition.default'
+                : null,
+            ticked: now == kind.matchName),
+    ];
   }
 
   /// F: what the clip under the playhead is showing, on the track in hand
@@ -1198,6 +1316,29 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     ui.showSourceView();
     ui.openFootageViewAt(hit.footage, hit.sourceTime,
         markIn: clip.sourceIn, markOut: clip.sourceOut);
+  }
+
+  /// The picked clips and their linked sound moved into a new composition, and
+  /// one clip left in their place, picked. The cut stays in front, as the point
+  /// was to tidy it.
+  void _foldPicked(LumitUiState ui, CompositionReference comp) {
+    final CompositionReference? made;
+    try {
+      made = comp.cutClipsToComposition(
+        clips: _selectedIds(),
+        linked: _linked,
+        name: l10n.cutSelectionCompName(comp.getSettings().name),
+      );
+    } catch (_) {
+      return;
+    }
+    if (made == null) {
+      ui.reportCut(BridgeCutResult.locked);
+      return;
+    }
+    setState(() => _selected = {});
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    _afterWrite();
   }
 
   /// The clip's footage made into a composition the clip then plays, and
@@ -2067,6 +2208,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     if (_press != null) return;
     // An envelope took this press.
     if (VolumeBandState.claimed == event.pointer) return;
+    // Pressing a clip puts Effect controls back on it, off an overlap's rows.
+    if (event.buttons != kSecondaryMouseButton) ui.cutOverlap.value = null;
     _headPicked = false;
     final at = event.localPosition;
     final index = cutTrackAt(_tracks, at.dy, _tops);
@@ -3004,6 +3147,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               ripple: drag.tool == CutTool.ripple,
               linked: linked,
               overlap: _autoCrossfade,
+              transition: _settings.cutDefaultTransition,
             ),
           (_, BarGrab.trimOut) => comp.cutTrim(
               clip: pressed.id,
@@ -3012,6 +3156,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               ripple: drag.tool == CutTool.ripple,
               linked: linked,
               overlap: _autoCrossfade,
+              transition: _settings.cutDefaultTransition,
             ),
           // Alt held at the press duplicates: the same move, made by copies.
           (_, BarGrab.move) =>
@@ -3456,6 +3601,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 comp.cutCloseGap(layer: track.entry.layer, atFrame: frame))),
             enabled: isGap),
         const MenuDivider(),
+        // Above the track under the pointer, from the frame under it.
+        ...cutInsertRows(context, ui, comp,
+            close: () => close(null),
+            frame: frame,
+            row: ui.model.layers.indexWhere((l) =>
+                l.layer.internallayerId == track.entry.layer.internallayerId),
+            onDone: _afterWrite),
+        const MenuDivider(),
         _row(close, 'ctl-menu-select-track', l10n.cutSelectTrack,
             () => _selectTrack(track),
             enabled: track.clips.isNotEmpty),
@@ -3624,7 +3777,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ], width: 250),
           if (across || fadesIn || fadesOut)
             _flyout(close, 'ctl-menu-transition', l10n.cutTransitionMenu, [
-              if (across)
+              // A sound track only crossfades. A picture track has every kind,
+              // and the way back to a plain cut once there is an overlap.
+              if (across && track.kind != CutTrackKind.picture)
                 _row(
                     close,
                     'ctl-menu-dissolve',
@@ -3632,6 +3787,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                     () => _transition(ui, comp, clip,
                         endEdge: endEdge, frames: dissolved ? 0 : second),
                     action: 'cut.transition.default'),
+              if (across && track.kind == CutTrackKind.picture) ...[
+                ..._kindRows(close, 'ctl-menu-kind', comp, track, clip, endEdge,
+                    second),
+                if (dissolved)
+                  _row(
+                      close,
+                      'ctl-menu-transition-remove',
+                      l10n.cutRemoveTransition,
+                      () => _transition(ui, comp, clip,
+                          endEdge: endEdge, frames: 0),
+                      ticked: false),
+                if (fadesIn || fadesOut) const MenuDivider(),
+              ],
               if (fadesIn)
                 _row(
                     close,
@@ -3641,7 +3809,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                         : l10n.cutFadeIn,
                     () => _transitionPicked(ui, comp,
                         endEdge: false,
-                        frames: clip.fadeIn.seconds > 0 ? 0 : second)),
+                        frames: clip.fadeIn.seconds > 0 ? 0 : second),
+                    ticked: false),
               if (fadesOut)
                 _row(
                     close,
@@ -3651,8 +3820,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                         : l10n.cutFadeOut,
                     () => _transitionPicked(ui, comp,
                         endEdge: true,
-                        frames: clip.fadeOut.seconds > 0 ? 0 : second)),
+                        frames: clip.fadeOut.seconds > 0 ? 0 : second),
+                    ticked: false),
             ]),
+          // The frame under the playhead held, for a length it asks.
+          _row(close, 'ctl-menu-freeze', l10n.cutFreezeFrame, () {
+            askToFreezeClips(
+                context, [(layer: track.entry.layer, clip: clip)], global);
+          }, enabled: playhead >= start && playhead < end),
           // The picked picture clips' speed: one number for all of them, back
           // to normal, or one clip's line carried onto the rest.
           if (track.kind == CutTrackKind.picture)
@@ -3759,15 +3934,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             _row(close, 'ctl-menu-pan-crop', l10n.cutPanCropMenu,
                 () => _badge(ui, track, clip, CutBadge.panCrop),
                 enabled: one),
-          if (!clip.sourceIsSolid)
+          if (!one)
+            _row(close, 'ctl-menu-fold', l10n.cutNewCompositionFromSelection,
+                () => _foldPicked(ui, comp))
+          else if (!clip.sourceIsSolid)
             _row(
                 close,
                 'ctl-menu-open-comp',
                 clip.sourceIsComp
                     ? l10n.cutOpenComposition
                     : l10n.cutNewCompositionFromClip,
-                () => _openAsComposition(ui, comp, clip),
-                enabled: one),
+                () => _openAsComposition(ui, comp, clip)),
           const MenuDivider(),
           _row(close, 'ctl-menu-cut', l10n.menuCut,
               () => _copyFromMenu(ui, comp, cut: true),
@@ -3914,12 +4091,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   Future<void> _fadeMenu(LumitUiState ui, CompositionReference comp,
       CutTrack track, BridgeClip clip, bool into, Offset global) async {
     final current = (into ? clip.fadeIn : clip.fadeOut).shape;
-    final dissolve = clipFadePartner(track.clips, clip, into: into) != null;
+    final partner = clipFadePartner(track.clips, clip, into: into);
+    final dissolve = partner != null;
+    final kinds = dissolve && track.kind == CutTrackKind.picture;
+    final incoming = into ? clip : partner;
     final picked = await showMenuAt<Object>(
       context: context,
       position: global,
-      width: 180,
+      width: 200,
       rows: (close) => [
+        // What the overlap is, then the curve it takes.
+        if (kinds) ...[
+          ..._kindRows((_) => close(null), 'ctl-fade-kind', comp, track, clip,
+              !into, 0),
+          const MenuDivider(),
+        ],
         for (final preset in clipFadeShapes)
           MenuRow(
             key: ValueKey<String>('ctl-fade-shape-${preset.id}'),
@@ -3928,6 +4114,10 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 ticked: current == preset.shape),
           ),
         const MenuDivider(),
+        if (kinds && incoming?.transition != null)
+          _row((_) => close(null), 'ctl-fade-rows', l10n.effectControls,
+              () => _showOverlap(track, incoming),
+              ticked: false),
         MenuRow(
           key: const ValueKey('ctl-fade-length'),
           onPressed: () => close('length'),
@@ -3937,7 +4127,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           key: const ValueKey('ctl-fade-remove'),
           onPressed: () => close('remove'),
           child: MenuLabel(
-              dissolve
+              kinds
+                  ? l10n.cutRemoveTransition
+                  : dissolve
                   ? l10n.cutRemoveDissolve
                   : into
                       ? l10n.cutRemoveFadeIn
@@ -5648,6 +5840,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                       soundOnPicture: _soundOnPicture,
                                       compGlyph: _compGlyph,
                                       nameOf: _nameOf,
+                                      transitionNames: _transitionNames,
                                       handles: _toolOf(ui) == CutTool.select,
                                       dropOn: _dropOn,
                                       gain: _gainLive,

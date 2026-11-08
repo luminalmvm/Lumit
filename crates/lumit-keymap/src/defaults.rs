@@ -132,6 +132,7 @@ pub fn default_keymap() -> Keymap {
         // switch anyway. One chord, like every other action; anyone who wants
         // a second can bind it.
         row(Global, "Mod+Alt+T", "layer.retime.enable"),
+        row(Global, "Mod+Shift+R", "layer.retime.hold"),
         // Layer ▸ New. After Effects' own chords, so the rows read the way
         // anyone arriving from there expects. Spot and Area lights have no
         // chord there and ship without one here.
@@ -366,6 +367,7 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "'", "cut.extract"),
         row(Cut, "F", "cut.match.frame"),
         row(Cut, "Mod+D", "cut.transition.default"),
+        row(Cut, "Mod+T", "cut.insert.title"),
         row(Cut, "=", "timeline.zoom.in"),
         row(Cut, "-", "timeline.zoom.out"),
         row(Cut, "\\", "timeline.zoom.fit"),

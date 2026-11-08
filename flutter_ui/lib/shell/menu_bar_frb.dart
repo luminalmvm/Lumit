@@ -77,6 +77,7 @@ import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart' show newSolidFrb;
+import '../panels/cut_insert.dart' show cutInsertRows;
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
@@ -2202,6 +2203,14 @@ Future<void> showInsertLayerMenu(BuildContext context, LumitUiState ui,
     position: position,
     width: 230,
     rows: (close) => [
+      if (picture) ...[
+        ...cutInsertRows(context, ui, comp,
+            close: () => close(null),
+            frame: ui.playheadFrame.value,
+            row: newLayerRow(ui, comp),
+            onDone: onDone),
+        const MenuDivider(),
+      ],
       for (final (action, label) in rows)
         MenuRow(
           key: ValueKey<String>('insert-$action'),

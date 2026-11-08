@@ -28,7 +28,7 @@ import 'streams.dart';
 import 'wire_tie.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_picture_size`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `map_start_value`, `migrate_in`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `same_shape`, `seed_extract_channels`, `sent_path`, `shape_ops`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -492,6 +492,10 @@ class BridgeClip {
   /// `cut_set_take` and `cut_delete_take` read. Empty while it has one.
   final List<String> takes;
 
+  /// What the overlap at this clip's start draws as, by the transition's match
+  /// name. `None` for the dissolve.
+  final String? transition;
+
   /// The link this clip shares with the clips that move, trim and cut with
   /// it, a picture clip and the clip that carries its sound. `None` for a
   /// clip on its own.
@@ -551,6 +555,7 @@ class BridgeClip {
     required this.sourceName,
     required this.opacity,
     required this.takes,
+    this.transition,
     this.link,
     required this.audible,
     required this.sourceIn,
@@ -585,6 +590,7 @@ class BridgeClip {
       sourceName.hashCode ^
       opacity.hashCode ^
       takes.hashCode ^
+      transition.hashCode ^
       link.hashCode ^
       audible.hashCode ^
       sourceIn.hashCode ^
@@ -621,6 +627,7 @@ class BridgeClip {
           sourceName == other.sourceName &&
           opacity == other.opacity &&
           takes == other.takes &&
+          transition == other.transition &&
           link == other.link &&
           audible == other.audible &&
           sourceIn == other.sourceIn &&
@@ -3483,22 +3490,23 @@ class LayerReference {
 
   /// **Insert a freeze at the playhead** (docs/04 §7.3,
   /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
-  /// one second, everything after it is pushed that far later, and the map is
-  /// cropped back to the layer's own out point — so the layer's length never
-  /// changes and the beat-sync covenant holds. The tail may newly
-  /// overrun, which is drawn rather than repaired.
+  /// `hold_frames`, everything after it is pushed that far later, and the map
+  /// is cropped back to the layer's own out point, so the layer's length never
+  /// changes and the beat-sync covenant holds. The tail may newly overrun,
+  /// which is drawn rather than repaired.
   ///
-  /// One second is the specified default; the hold is two ordinary keyframes
-  /// afterwards, so it is dragged like anything else.
+  /// The hold is two ordinary keyframes afterwards, so it is dragged like
+  /// anything else.
   ///
-  /// A layer with no map yet gets the identity one first — freezing a frame
+  /// A layer with no map yet gets the identity one first: freezing a frame
   /// is a reasonable first retime to ask for, and refusing it because the
   /// stopwatch had not been touched would be a rule with no purpose.
   ///
   /// Refused on a Sequence layer (its clips carry the maps) and at a moment
   /// on or outside the layer's own ends, where there is nothing to split.
-  void freezeAtPlayhead({required int frame}) => BridgeLib.instance.api
-      .crateApiLayerLayerReferenceFreezeAtPlayhead(that: this, frame: frame);
+  void freezeAtPlayhead({required int frame, required int holdFrames}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceFreezeAtPlayhead(
+          that: this, frame: frame, holdFrames: holdFrames);
 
   /// This layer's blend mode, as an index into [`list_blend_modes`].
   int getBlend() => BridgeLib.instance.api.crateApiLayerLayerReferenceGetBlend(
@@ -3535,6 +3543,13 @@ class LayerReference {
           {required UuidValue clip, required bool onCompClock}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetClipEffects(
           that: this, clip: clip, onCompClock: onCompClock);
+
+  /// The instance behind the overlap at `clip`'s start, as a staged copy on
+  /// the comp's clock like [`Self::get_clip_effects`] with `on_comp_clock`.
+  /// `None` for a dissolve.
+  BridgeEffectInstance? getClipTransition({required UuidValue clip}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceGetClipTransition(that: this, clip: clip);
 
   /// The clips on this Sequence layer, in the order it holds them.
   ///

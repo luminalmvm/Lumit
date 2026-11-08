@@ -48,7 +48,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
   late final LumitUiState _ui =
       Provider.of<LumitUiState>(context, listen: false);
   late final Listenable _changes =
-      Listenable.merge([_ui.model, _ui.selectedLayers]);
+      Listenable.merge([_ui.model, _ui.selectedLayers, _ui.cutClips]);
 
   /// The speed a drag on the well is asking for, shown while it runs and
   /// written once when it ends.
@@ -124,16 +124,37 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
 
   Widget _body(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final targets = retimeTargets(_ui);
-    final on = targets.isNotEmpty;
-    final retimed = targets.any((e) => e.info.retime != null);
+    // A picked clip is the subject where there is one, and its layer then has
+    // no Retime of its own to read.
+    final clips = retimeClips(_ui);
+    final clip = clips.isEmpty ? null : clips.first;
+    final targets = clip != null ? const <BridgeLayerEntry>[] : retimeTargets(_ui);
+    final on = targets.isNotEmpty || clip != null;
+    final retimed =
+        clip?.clip.retimed ?? targets.any((e) => e.info.retime != null);
     final first = _firstOf(targets);
     final fps = _ui.model.fps;
-    final speed =
-        _liveSpeed ?? (first == null ? 100.0 : averageSpeed(first, fps));
-    final length = first == null ? 0 : first.info.outFrame - first.info.inFrame;
+    final speed = _liveSpeed ??
+        (clip != null
+            ? clipAverageSpeed(clip.clip, fps)
+            : first == null
+                ? 100.0
+                : averageSpeed(first, fps));
+    final length = clip != null
+        ? (clip.clip.endFrame - clip.clip.startFrame).toInt()
+        : first == null
+            ? 0
+            : first.info.outFrame - first.info.inFrame;
     final label = t.body.copyWith(color: t.textMuted);
-    final group = selectedEntries(_ui).length;
+    final group = clip != null ? clips.length : selectedEntries(_ui).length;
+    final name = clip?.clip.sourceName ?? first?.info.name ?? '';
+    final tint = clip != null
+        ? clip.clip.label ??
+            _ui.model.byId(clip.layer.internallayerId)?.info.label
+        : first?.info.label;
+    void toSpeed(double percent) => clip != null
+        ? setClipsSpeed(context, clips, percent)
+        : stretchToSpeed(context, targets, percent);
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -162,19 +183,22 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
           onChangeLive: (v) => setState(() => _liveSpeed = v.toDouble()),
           onChangeEnd: (v) {
             setState(() => _liveSpeed = null);
-            stretchToSpeed(context, targets, v.toDouble());
+            toSpeed(v.toDouble());
           },
           onDragCancel: () => setState(() => _liveSpeed = null),
-          onChanged: (v) => stretchToSpeed(context, targets, v.toDouble()),
+          onChanged: (v) => toSpeed(v.toDouble()),
         );
-        final lengthWell = _duration(t, targets, length);
+        final lengthWell = _duration(t, targets, clips, length);
 
         return GestureDetector(
           key: const ValueKey('retime-panel'),
           behavior: HitTestBehavior.opaque,
-          onSecondaryTapDown: on
-              ? (d) => showRetimeMenu(context, _ui, targets, d.globalPosition)
-              : null,
+          onSecondaryTapDown: clip != null
+              ? (d) => showClipRetimeMenu(context, _ui, clips, d.globalPosition)
+              : targets.isNotEmpty
+                  ? (d) =>
+                      showRetimeMenu(context, _ui, targets, d.globalPosition)
+                  : null,
           child: SizedBox.expand(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
@@ -182,12 +206,12 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(children: [
-                    if (first != null) ...[
+                    if (tint != null) ...[
                       Container(
                         width: 6,
                         height: 6,
                         decoration: BoxDecoration(
-                          color: t.labelColour(first.info.label),
+                          color: t.labelColour(tint),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -195,30 +219,32 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                     ],
                     Expanded(
                       child: Text(
-                        first == null
+                        name.isEmpty
                             ? ''
                             : group > 1
-                                ? '${first.info.name}  +${group - 1}'
-                                : first.info.name,
+                                ? '$name  +${group - 1}'
+                                : name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: t.bodyPrimary,
                       ),
                     ),
-                    IgnorePointer(
-                      ignoring: !on,
-                      child: LumitTooltip(
-                        message: retimed
-                            ? l10n.menuDisableRetime
-                            : l10n.menuEnableRetime,
-                        action: 'layer.retime.enable',
-                        child: HouseToggle(
-                          key: const ValueKey('retime-toggle'),
-                          value: retimed,
-                          onChanged: (v) => setRetime(context, targets, v),
+                    // A clip always has its line, so there is nothing to turn on.
+                    if (clip == null)
+                      IgnorePointer(
+                        ignoring: !on,
+                        child: LumitTooltip(
+                          message: retimed
+                              ? l10n.menuDisableRetime
+                              : l10n.menuEnableRetime,
+                          action: 'layer.retime.enable',
+                          child: HouseToggle(
+                            key: const ValueKey('retime-toggle'),
+                            value: retimed,
+                            onChanged: (v) => setRetime(context, targets, v),
+                          ),
                         ),
                       ),
-                    ),
                   ]),
                   const SizedBox(height: 6),
                   _dimmed(
@@ -231,6 +257,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                         _strip(
                             t,
                             first,
+                            clip?.clip,
                             retimed
                                 ? (box.maxHeight - _besideStrip)
                                     .clamp(_stripLeast, _stripMost)
@@ -258,12 +285,14 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                           runSpacing: 2,
                           children: [
                             for (final chip in _speedChips)
-                              _chip(t, targets, speed, chip),
+                              _chip(t, on, toSpeed, speed, chip),
                           ],
                         ),
                         const SizedBox(height: 10),
-                        _commands(targets, speed, retimed),
-                        if (first?.info.kind == BridgeLayerKind.footage) ...[
+                        _commands(t, targets, clips, speed, retimed),
+                        // A clip follows its layer here.
+                        if (clip == null &&
+                            first?.info.kind == BridgeLayerKind.footage) ...[
                           const SizedBox(height: 10),
                           Wrap(
                             crossAxisAlignment: WrapCrossAlignment.center,
@@ -296,11 +325,18 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
   /// the playhead and the moment of the source it's showing beside the playhead
   /// line, so they read as "here". Past the middle they hang on the line's left.
   /// Click or drag to seek. Reads the keys in hand and asks the engine nothing.
-  Widget _strip(LumitTheme t, BridgeLayerEntry? entry, double height) {
-    final keys = entry == null ? const <BridgeKeyframe>[] : retimeKeysOf(entry);
-    final inFrame = entry?.info.inFrame ?? 0;
-    final outFrame = entry?.info.outFrame ?? 1;
+  Widget _strip(
+      LumitTheme t, BridgeLayerEntry? entry, BridgeClip? clip, double height) {
+    final keys = clip != null
+        ? keysOf(clip.retime)
+        : entry == null
+            ? const <BridgeKeyframe>[]
+            : retimeKeysOf(entry);
+    final inFrame = clip?.startFrame.toInt() ?? entry?.info.inFrame ?? 0;
+    final outFrame = clip?.endFrame.toInt() ?? entry?.info.outFrame ?? 1;
     final fps = _ui.model.fps;
+    // A clip's keys are on its own clock, and a layer's on the composition's.
+    final zero = clip == null || fps <= 0 ? 0.0 : inFrame / fps;
     final (fpsNum, fpsDen) =
         entry == null ? _ui.model.fpsExact : _rateOf(entry);
     return LayoutBuilder(
@@ -324,6 +360,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                     key: const ValueKey('retime-strip'),
                     painter: _SpeedStripPainter(
                       keys: keys,
+                      clock: zero,
                       inFrame: inFrame,
                       outFrame: outFrame,
                       fps: fps,
@@ -338,7 +375,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                   ValueListenableBuilder<int>(
                     valueListenable: _ui.playheadFrame,
                     builder: (context, frame, _) {
-                      final at = fps <= 0 ? 0.0 : frame / fps;
+                      final at = (fps <= 0 ? 0.0 : frame / fps) - zero;
                       final inside = frame >= inFrame && frame <= outFrame;
                       final speed = !inside
                           ? null
@@ -415,7 +452,8 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
     );
   }
 
-  Widget _duration(LumitTheme t, List<BridgeLayerEntry> targets, int length) {
+  Widget _duration(LumitTheme t, List<BridgeLayerEntry> targets,
+      List<RetimeClip> clips, int length) {
     final (fpsNum, fpsDen) = _ui.model.fpsExact;
     return TimeReadout(
       key: const ValueKey('retime-duration'),
@@ -429,21 +467,21 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
       minFrame: 1,
       maxFrame: 1000000,
       draggable: true,
-      onCommit: (f) => stretchToLength(context, targets, f),
+      onCommit: (f) => clips.isNotEmpty
+          ? stretchClipsToLength(context, clips, f)
+          : stretchToLength(context, targets, f),
     );
   }
 
-  Widget _chip(
-      LumitTheme t, List<BridgeLayerEntry> targets, double speed, int percent) {
+  Widget _chip(LumitTheme t, bool on, void Function(double) toSpeed,
+      double speed, int percent) {
     final current = (speed.abs() - percent).abs() < 0.01;
     return HouseButton(
       key: ValueKey<String>('retime-chip-$percent'),
       small: true,
       frameless: !current,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      onPressed: targets.isEmpty
-          ? null
-          : () => stretchToSpeed(context, targets, percent.toDouble()),
+      onPressed: on ? () => toSpeed(percent.toDouble()) : null,
       child: Text('$percent',
           style: t.mono.copyWith(
               fontSize: wellTextSize,
@@ -451,39 +489,124 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
     );
   }
 
-  Widget _commands(
-          List<BridgeLayerEntry> targets, double speed, bool retimed) =>
-      Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        children: [
-          ValueListenableBuilder<int>(
-            valueListenable: _ui.playheadFrame,
-            builder: (context, frame, _) => HouseButton(
-              key: const ValueKey('retime-freeze'),
+  /// How long a freeze holds, beside its button: the length last set, for a
+  /// layer or for a clip, each its own.
+  Widget _holdWell(LumitTheme t, bool onClip, bool live) {
+    final settings = _ui.workspace.interface;
+    final (fpsNum, fpsDen) = _ui.model.fpsExact;
+    final fps = _ui.model.fps <= 0 ? 1.0 : _ui.model.fps;
+    final seconds =
+        onClip ? settings.cutFreezeSeconds : settings.retimeHoldSeconds;
+    return SizedBox(
+      width: 100,
+      child: IgnorePointer(
+        ignoring: !live,
+        child: LumitTooltip(
+          message: l10n.duration,
+          child: TimeReadout(
+          key: const ValueKey('retime-hold'),
+          frame: (seconds * fps).round(),
+          format: (f) => timecodeOfRateSigned(f, fpsNum, fpsDen),
+          parse: (text) => framesOfTimecodeSigned(text, fpsNum, fpsDen),
+          widthChars: timecodeChars(fpsNum, fpsDen),
+          style: t.mono.copyWith(fontSize: wellTextSize),
+          well: true,
+          wellFaceHeight: wellHeight,
+          minFrame: 1,
+          maxFrame: 1000000,
+          draggable: true,
+          onCommit: (f) => setState(() {
+            if (onClip) {
+              settings.cutFreezeSeconds = f / fps;
+            } else {
+              settings.retimeHoldSeconds = f / fps;
+            }
+            _ui.workspace.settingsChanged();
+          }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _commands(LumitTheme t, List<BridgeLayerEntry> targets,
+      List<RetimeClip> clips, double speed, bool retimed) {
+    final onClip = clips.isNotEmpty;
+    bool insideClip(int frame) =>
+        clips.any((c) => frame >= c.clip.startFrame && frame < c.clip.endFrame);
+    bool insideLayer(int frame) =>
+        targets.any((e) => frame >= e.info.inFrame && frame < e.info.outFrame);
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        ValueListenableBuilder<int>(
+          valueListenable: _ui.playheadFrame,
+          builder: (context, frame, _) {
+            final canFreeze = onClip
+                ? insideClip(frame)
+                : targets.any((e) => canFreezeAt(e, frame));
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                HouseButton(
+                  key: const ValueKey('retime-freeze'),
+                  small: true,
+                  onPressed: canFreeze
+                      ? () => onClip
+                          ? freezeClips(context, clips)
+                          : freezeAtPlayhead(context, targets)
+                      : null,
+                  child: Text(l10n.retimeFreeze),
+                ),
+                const SizedBox(width: 2),
+                _holdWell(t, onClip, targets.isNotEmpty || onClip),
+              ],
+            );
+          },
+        ),
+        ValueListenableBuilder<int>(
+          valueListenable: _ui.playheadFrame,
+          builder: (context, frame, _) => Builder(
+            builder: (button) => HouseButton(
+              key: const ValueKey('retime-ramp'),
               small: true,
-              onPressed: targets.any((e) => canFreezeAt(e, frame))
-                  ? () => freezeAtPlayhead(context, targets)
+              onPressed: (onClip ? insideClip(frame) : insideLayer(frame))
+                  ? () {
+                      final box = button.findRenderObject() as RenderBox;
+                      askToRamp(context, targets, clips,
+                          box.localToGlobal(Offset(0, box.size.height + 2)));
+                    }
                   : null,
-              child: Text(l10n.retimeFreeze),
+              child: Text(l10n.retimeRamp),
             ),
           ),
-          HouseButton(
-            key: const ValueKey('retime-reverse'),
-            small: true,
-            active: speed < 0,
-            onPressed:
-                targets.isEmpty ? null : () => reverseLayers(context, targets),
-            child: Text(l10n.easingReverse),
-          ),
-          HouseButton(
-            key: const ValueKey('retime-reset'),
-            small: true,
-            onPressed: retimed ? () => resetSpeed(context, targets) : null,
-            child: Text(l10n.clipResetSpeed),
-          ),
-        ],
-      );
+        ),
+        HouseButton(
+          key: const ValueKey('retime-reverse'),
+          small: true,
+          active: speed < 0,
+          onPressed: onClip
+              ? () => reverseClips(context, clips)
+              : targets.isEmpty
+                  ? null
+                  : () => reverseLayers(context, targets),
+          child: Text(l10n.easingReverse),
+        ),
+        HouseButton(
+          key: const ValueKey('retime-reset'),
+          small: true,
+          onPressed: !retimed
+              ? null
+              : onClip
+                  ? () => resetClips(context, clips)
+                  : () => resetSpeed(context, targets),
+          child: Text(l10n.clipResetSpeed),
+        ),
+      ],
+    );
+  }
 
   Widget _interpolation(
       LumitTheme t, List<BridgeLayerEntry> targets, BridgeLayerEntry first) {
@@ -512,6 +635,9 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
 /// is empty and a fast one stands above the rule.
 class _SpeedStripPainter extends CustomPainter {
   final List<BridgeKeyframe> keys;
+
+  /// When the keys' clock reads nought, in seconds on the composition's.
+  final double clock;
   final int inFrame, outFrame;
   final double fps;
   final ValueNotifier<int> playhead;
@@ -519,6 +645,7 @@ class _SpeedStripPainter extends CustomPainter {
 
   _SpeedStripPainter({
     required this.keys,
+    required this.clock,
     required this.inFrame,
     required this.outFrame,
     required this.fps,
@@ -537,7 +664,7 @@ class _SpeedStripPainter extends CustomPainter {
     if (span <= 0 || fps <= 0 || size.width <= 0) return;
     double speedAt(double x) => keys.isEmpty
         ? 100
-        : envelopeSpeedAt(keys, (inFrame + x / size.width * span) / fps);
+        : envelopeSpeedAt(keys, (inFrame + x / size.width * span) / fps - clock);
     const step = 2.0;
     var lo = 0.0, hi = 110.0;
     for (var x = 0.0; x <= size.width; x += step) {
@@ -579,6 +706,7 @@ class _SpeedStripPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SpeedStripPainter old) =>
       old.keys != keys ||
+      old.clock != clock ||
       old.inFrame != inFrame ||
       old.outFrame != outFrame ||
       old.fps != fps ||

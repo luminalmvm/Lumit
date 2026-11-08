@@ -893,6 +893,11 @@ class Workspace extends ChangeNotifier {
   int staggerStep = 1;
   LayerStaggerOrder staggerOrder = LayerStaggerOrder.topDown;
 
+  /// How far each layer overlaps the one before it. Above nought the panel
+  /// lays them end to end rather than a step apart.
+  int staggerOverlap = 0;
+  bool staggerCrossfade = false;
+
   /// The Timeline outline's columns: the group order, each group's width and
   /// the groups switched off, as the Timeline wrote them. Null until a column
   /// is first moved, and the Timeline opens on its defaults.
@@ -1686,9 +1691,12 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
-  void setStagger({int? step, LayerStaggerOrder? order}) {
+  void setStagger(
+      {int? step, LayerStaggerOrder? order, int? overlap, bool? crossfade}) {
     staggerStep = step ?? staggerStep;
     staggerOrder = order ?? staggerOrder;
+    staggerOverlap = overlap ?? staggerOverlap;
+    staggerCrossfade = crossfade ?? staggerCrossfade;
     settingsChanged();
   }
 
@@ -2218,6 +2226,8 @@ class Workspace extends ChangeNotifier {
         'precompose_open_new_comp': precomposeOpenNewComp,
         'stagger_step': staggerStep,
         'stagger_order': staggerOrder.name,
+        'stagger_overlap': staggerOverlap,
+        'stagger_crossfade': staggerCrossfade,
         'timeline_columns': timelineColumns,
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
@@ -2441,6 +2451,8 @@ class Workspace extends ChangeNotifier {
     staggerStep = (j['stagger_step'] as num?)?.toInt() ?? 1;
     staggerOrder = LayerStaggerOrder.values.asNameMap()[j['stagger_order']] ??
         LayerStaggerOrder.topDown;
+    staggerOverlap = (j['stagger_overlap'] as num?)?.toInt() ?? 0;
+    staggerCrossfade = j['stagger_crossfade'] as bool? ?? false;
     // Absent means a file written before the columns were kept: the defaults.
     final columns = j['timeline_columns'];
     timelineColumns = columns is Map<String, dynamic> ? columns : null;

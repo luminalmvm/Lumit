@@ -26,6 +26,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/panels/retime_commands.dart' show holdHere;
 import 'package:lumit_flutter/shell/layer_settings_frb.dart' show newSolidFrb;
 import 'package:lumit_flutter/shell/light_settings_dialog.dart';
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
@@ -854,6 +855,8 @@ class _LumitAppViewState extends State<LumitAppView> {
               ? entry.info.inFrame
               : entry.info.outFrame);
         }
+      case 'layer.retime.hold':
+        holdHere(context, ui);
       case 'layer.retime.enable':
         // Give the selected layer a Retime, or take it away again (docs/04
         // §12). On installs the identity map, so the picture does not move —

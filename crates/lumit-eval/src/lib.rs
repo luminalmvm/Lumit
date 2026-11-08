@@ -39,6 +39,7 @@ mod lights;
 mod material;
 mod model;
 mod moments;
+mod overlap_key;
 pub mod pool;
 mod projection;
 pub mod schedule;
@@ -2476,12 +2477,7 @@ fn feed_source(
                     gain,
                     opacity,
                 } => {
-                    h.update(b"seq-dissolve/");
-                    feed_f64(h, gain);
-                    // The clips' own opacity, drawn as the layer's.
-                    if opacity < 1.0 {
-                        feed_f64(h, opacity);
-                    }
+                    overlap_key::feed_overlap(h, outgoing, incoming, gain, opacity, lt);
                     feed_clip(h, outgoing)?;
                     feed_clip(h, incoming)?;
                 }

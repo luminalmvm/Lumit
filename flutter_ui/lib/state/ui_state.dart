@@ -3207,6 +3207,8 @@ class LumitUiState extends ChangeNotifier {
     workspace.presetApplied.removeListener(_onPresetApplied);
     cutLinked.dispose();
     cutClip.dispose();
+    cutClips.dispose();
+    cutOverlap.dispose();
     presetsChanged.dispose();
     _lifecycle.dispose();
     _clock.dispose();
@@ -3739,6 +3741,16 @@ class LumitUiState extends ChangeNotifier {
   /// Effect controls shows the stack of, and where an effect applied from
   /// Effects & presets lands. Null with no clip picked, or several.
   final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutClip =
+      ValueNotifier(null);
+
+  /// Every picture clip picked in the Cut timeline, the pressed one first: what
+  /// the Retime panel works on.
+  final ValueNotifier<List<({LayerReference layer, UuidValue clip})>> cutClips =
+      ValueNotifier(const []);
+
+  /// The overlap Effect controls is showing the rows of, by its incoming clip.
+  /// Null for any other subject.
+  final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutOverlap =
       ValueNotifier(null);
 
   /// Bumped when a preset file has been written, so the Effects & presets

@@ -3840,7 +3840,12 @@ fn comp_walk(
                     Shown::One { clip, .. } if plays(clip) => Some(shown),
                     Shown::Two {
                         outgoing, incoming, ..
-                    } if plays(outgoing) || plays(incoming) => Some(shown),
+                    } if plays(outgoing)
+                        || plays(incoming)
+                        || incoming.drawn_transition().is_some() =>
+                    {
+                        Some(shown)
+                    }
                     _ => None,
                 }
             }
@@ -3854,12 +3859,9 @@ fn comp_walk(
             // behind the same guard against a comp inside itself.
             //
             // A dissolve with such a clip is mixed on the card, since a comp
-            // has no pixels until it is rendered: the two clips become the
-            // draws of one more Nested, each at its share, the second laid
-            // on the first with `Blend::Plus`. That is the crossfade the
-            // decode worker makes of two footage clips
-            // (`lumit_core::pixels::dissolve_rgba`), and two whole pictures
-            // sum to a whole one.
+            // has no pixels until it is rendered, and so is any transition:
+            // the two clips become the draws of one more Nested
+            // (`crate::overlap`).
             //
             // ponytail: a fade at a lone end is the clip's share of the
             // layer's opacity (`clip_share`), so it comes after the layer's
@@ -3877,10 +3879,30 @@ fn comp_walk(
                 use lumit_core::sequence::{Clip, ClipSource, Shown};
                 // One clip's picture and its natural size: its comp, or the
                 // footage the worker decoded for this layer.
+                let (outgoing_id, wipe) = match comp_clips {
+                    Some(Shown::Two {
+                        outgoing,
+                        incoming,
+                        gain,
+                        ..
+                    }) => (
+                        Some(outgoing.id),
+                        incoming
+                            .drawn_transition()
+                            .map(|e| (e, (outgoing, incoming), gain)),
+                    ),
+                    _ => (None, None),
+                };
                 let mut picture = |clip: &Clip| -> Option<(DrawSource, (f32, f32))> {
                     let nested_id = match clip.source {
                         ClipSource::Footage(_) => {
-                            let lp = pixels_by_layer.get(&layer.id)?;
+                            let lp = *pixels_by_layer.get(&layer.id)?;
+                            // An outgoing clip beside an incoming one with a
+                            // picture of its own.
+                            let lp = Some(clip.id)
+                                .filter(|id| Some(*id) == outgoing_id)
+                                .and_then(|_| crate::overlap::across(lp))
+                                .unwrap_or(lp);
                             return Some((
                                 DrawSource::Pixels {
                                     rgba: Arc::clone(&lp.rgba),
@@ -3972,40 +3994,20 @@ fn comp_walk(
                         clip_share *= share as f32;
                         (source, size)
                     }
-                    // A dissolve: both, each at its share and fitted about
-                    // the centre of the incoming clip's size, which is the
-                    // layer's across the overlap as it is where two footage
-                    // clips are mixed.
-                    (Some((going, away)), Some((coming, here))) => {
-                        let natural = coming.1;
-                        let part = |(source, size): (DrawSource, (f32, f32)), share: f64, blend| {
-                            let mut draw = read_draw(layer, source, size);
-                            draw.position = (natural.0 * 0.5, natural.1 * 0.5);
-                            let fit =
-                                (natural.0 / size.0.max(1.0)).min(natural.1 / size.1.max(1.0));
-                            draw.scale = (fit * 100.0, fit * 100.0);
-                            draw.opacity = (share * 100.0) as f32;
-                            draw.blend = blend;
-                            draw
-                        };
-                        let mixed = DrawSource::Nested {
-                            width: natural.0 as u32,
-                            height: natural.1 as u32,
-                            background: [0.0, 0.0, 0.0, 0.0],
-                            draws: vec![
-                                part(going, away, lumit_gpu::composite::Blend::Normal),
-                                part(coming, here, lumit_gpu::composite::Blend::Plus),
-                            ],
-                            camera: None,
-                            // A mix has no name of its own. Each comp
-                            // inside it keeps the one it was given above.
-                            key: None,
-                            paint: Vec::new(),
-                            paint_time: lt,
-                            flow: None,
-                        };
-                        (mixed, natural)
-                    }
+                    (Some((going, away)), Some((coming, here))) => match wipe {
+                        Some((effect, clips, gain)) => crate::overlap::wiped(
+                            layer,
+                            comp,
+                            going,
+                            coming,
+                            effect,
+                            clips,
+                            gain,
+                            (lt, frame_lt),
+                            context.clone(),
+                        ),
+                        None => crate::overlap::dissolved(layer, going, away, coming, here, lt),
+                    },
                 };
                 // Paint on the layer is stamped into the picture once it is
                 // rendered, as a Precomp layer's is.
@@ -6186,7 +6188,7 @@ impl GraphLower<'_> {
 /// actually have rather than from the layer: the document holds no size for
 /// footage, so `read_layer` can only guess the comp's, and a clip smaller or
 /// larger than the comp would otherwise land off centre.
-fn read_draw(
+pub(crate) fn read_draw(
     layer: &lumit_core::model::Layer,
     source: DrawSource,
     natural: (f32, f32),

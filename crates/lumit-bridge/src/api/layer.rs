@@ -37,6 +37,8 @@ pub(crate) enum InstanceHome {
     /// One clip's own stack on this Sequence layer - the rack on the clip
     /// (docs/impl/audio-timeline.md §4), named by the clip's id.
     Clip(Uuid),
+    /// The Transition effect on the overlap at a clip's start, a list of one.
+    ClipTransition(Uuid),
     /// A placed node graph's Inputs (docs/impl/node-graph-comp.md §5.3): one
     /// instance rather than a list, held in `Layer::graph_inputs`.
     GraphInputs,
@@ -1523,6 +1525,9 @@ pub struct BridgeClip {
     /// rest in the order T steps through them: the take numbers
     /// `cut_set_take` and `cut_delete_take` read. Empty while it has one.
     pub takes: Vec<String>,
+    /// What the overlap at this clip's start draws as, by the transition's match
+    /// name. `None` for the dissolve.
+    pub transition: Option<String>,
     /// The link this clip shares with the clips that move, trim and cut with
     /// it, a picture clip and the clip that carries its sound. `None` for a
     /// clip on its own.
@@ -1670,6 +1675,10 @@ fn bridge_clip(
                 .map(name)
                 .collect(),
         },
+        transition: clip
+            .transition
+            .as_ref()
+            .map(|t| t.effect.match_name.clone()),
         link: clip.link,
         audible: clip.audible,
         source_in: rational_of(clip.source_in),
@@ -4632,6 +4641,10 @@ impl LayerReference {
         if let Some(end) = map_end_value(&map) {
             clips[index].source_out = end;
         }
+        // And from its first, which only a line turned round ever moves.
+        if let Some(start) = map_start_value(&map, clips[index].source_in) {
+            clips[index].source_in = start;
+        }
         clips[index].retime = Some(map);
         self.commit_clips(clips)
     }
@@ -5485,6 +5498,7 @@ impl LayerReference {
                 group: None,
                 opacity: 1.0,
                 takes: Vec::new(),
+                transition: None,
                 extra: serde_json::Map::new(),
             }],
         };
@@ -6957,7 +6971,12 @@ impl LayerReference {
     /// The identity runs over the layer's **own** span, the same two
     /// keys Ctrl+Alt+T installs.
     #[frb(ignore)]
-    fn retime_or_identity(&self, layer: &Layer, from: Rational, to: Rational) -> Property {
+    pub(crate) fn retime_or_identity(
+        &self,
+        layer: &Layer,
+        from: Rational,
+        to: Rational,
+    ) -> Property {
         match &layer.retime {
             // A map that is one constant is not a map (see `set_retime_property`):
             // there is nothing to scale or split, so the identity stands in.
@@ -7088,93 +7107,6 @@ impl LayerReference {
                     }),
                 },
             ],
-        })
-    }
-
-    /// **Insert a freeze at the playhead** (docs/04 §7.3,
-    /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
-    /// one second, everything after it is pushed that far later, and the map is
-    /// cropped back to the layer's own out point — so the layer's length never
-    /// changes and the beat-sync covenant holds. The tail may newly
-    /// overrun, which is drawn rather than repaired.
-    ///
-    /// One second is the specified default; the hold is two ordinary keyframes
-    /// afterwards, so it is dragged like anything else.
-    ///
-    /// A layer with no map yet gets the identity one first — freezing a frame
-    /// is a reasonable first retime to ask for, and refusing it because the
-    /// stopwatch had not been touched would be a rule with no purpose.
-    ///
-    /// Refused on a Sequence layer (its clips carry the maps) and at a moment
-    /// on or outside the layer's own ends, where there is nothing to split.
-    #[frb(sync)]
-    pub fn freeze_at_playhead(&self, frame: i64) -> Result<(), BridgeError> {
-        use lumit_core::anim::SideInterp;
-
-        let layer = self.item()?;
-        if matches!(layer.kind, lumit_core::model::LayerKind::Sequence { .. }) {
-            return Err(BridgeError::NotRetimeable);
-        }
-        let bad = |_| BridgeError::InvalidTime;
-        let rate = self.composition()?.frame_rate;
-        let at = rate.time_of_frame(frame).map_err(bad)?;
-        let local = |t: CompTime| t.0.checked_sub(layer.start_offset.0).map_err(bad);
-        let (in_local, out_local, at_local) =
-            (local(layer.in_point)?, local(layer.out_point)?, local(at)?);
-        if at_local <= in_local || at_local >= out_local {
-            return Err(BridgeError::InvalidTime);
-        }
-        // The hold's length: one second of local time, per §7.3.
-        let hold = Rational::new(1, 1).map_err(bad)?;
-        let resume = at_local.checked_add(hold).map_err(bad)?;
-
-        let mut map = self.retime_or_identity(&layer, in_local, out_local);
-        // Split the curve where the freeze begins without changing it — the
-        // razor's own move — so the moment held is exactly the moment
-        // that was showing.
-        map.insert_key_preserving_shape(at_local);
-        let Animation::Keyframed(keys) = &mut map.animation else {
-            return Err(BridgeError::NotRetimed);
-        };
-        let split = at_local.to_f64();
-        let Some(i) = keys
-            .iter()
-            .position(|k| (k.time.to_f64() - split).abs() < 1e-12)
-        else {
-            return Err(BridgeError::InvalidTime);
-        };
-        // What the curve did after this moment, handed to the key the freeze
-        // ends on: the movement resumes where it left off rather than restarting
-        // as a straight line.
-        let resumes = keys[i].interp_out;
-        let held = keys[i].value;
-        keys[i].interp_out = SideInterp::Hold;
-        for key in keys.iter_mut().skip(i + 1) {
-            key.time = key.time.checked_add(hold).map_err(bad)?;
-        }
-        keys.insert(
-            i + 1,
-            Keyframe {
-                time: resume,
-                value: held,
-                interp_in: SideInterp::Hold,
-                interp_out: resumes,
-            },
-        );
-        // Crop back to the layer's own out point: what the freeze pushed past
-        // the end is gone, and the span straddling the end is split there so
-        // the part that survives is the part that was already drawn.
-        if keys.last().is_some_and(|k| k.time > out_local) {
-            map.insert_key_preserving_shape(out_local);
-            if let Animation::Keyframed(keys) = &mut map.animation {
-                keys.retain(|k| k.time <= out_local);
-            }
-        }
-
-        self.commit(lumit_core::ops::Op::SetRetimeProperty {
-            comp: self.comp_id,
-            layer: self.layer_id,
-            retime: Some(map),
         })
     }
 
@@ -7567,6 +7499,11 @@ impl LayerReference {
         if let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind {
             if let Some(clip) = clips.iter().find(|c| c.effects.iter().any(|e| e.id == id)) {
                 return Ok(InstanceHome::Clip(clip.id));
+            }
+            let overlap =
+                |c: &&lumit_core::sequence::Clip| c.transition.as_ref().is_some_and(|t| t.id == id);
+            if let Some(clip) = clips.iter().find(overlap) {
+                return Ok(InstanceHome::ClipTransition(clip.id));
             }
         }
         let doc = self.document()?;
@@ -8006,7 +7943,7 @@ impl LayerReference {
     /// composition's or its solid's size, and the composition's when that
     /// cannot be told.
     #[frb(ignore)]
-    fn clip_picture_size(&self, clip: Uuid) -> Result<(f64, f64), BridgeError> {
+    pub(crate) fn clip_picture_size(&self, clip: Uuid) -> Result<(f64, f64), BridgeError> {
         use lumit_core::sequence::ClipSource;
         let comp = self.composition()?;
         let own = (f64::from(comp.width), f64::from(comp.height));
@@ -8578,6 +8515,20 @@ pub(crate) fn trimmed(
 
 /// The last source position a map reaches — what the clip asks of its source.
 #[frb(ignore)]
+fn map_start_value(
+    map: &lumit_core::anim::Property,
+    now: lumit_core::time::Rational,
+) -> Option<lumit_core::time::Rational> {
+    let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
+        return None;
+    };
+    let first = keys.first()?.value;
+    if (first - now.to_f64()).abs() < 1e-9 {
+        return None;
+    }
+    lumit_core::time::Rational::from_f64_on_grid(first, lumit_core::time::Rational::FLICK_DEN).ok()
+}
+
 fn map_end_value(map: &lumit_core::anim::Property) -> Option<lumit_core::time::Rational> {
     let lumit_core::anim::Animation::Keyframed(keys) = &map.animation else {
         return None;

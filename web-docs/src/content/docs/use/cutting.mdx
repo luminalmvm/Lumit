@@ -52,9 +52,12 @@ gives the picked clips a colour of their own, and **Track colour** hands it back
 
 A picture clip shows a strip of its frames. A retimed clip's frames follow its speed.
 
-Right-click the empty ground under the tracks for **Insert audio layer**, **Insert video
-layer** and **Insert adjustment layer**. Each adds an empty track above the selected one, or
-at the top. With nothing selected an audio layer goes to the bottom.
+Right-click the empty ground under the tracks for **Insert title** (`Ctrl`+`T`), **Insert
+solid**, **Insert audio layer**, **Insert video layer** and **Insert adjustment layer**. Each
+adds a track above the selected one, or at the top. With nothing selected an audio layer goes
+to the bottom. A title or a solid is five seconds long from the playhead, and a title opens
+for typing with the composition's name in it. A gap on a track has the title and the solid
+too, at the frame under the pointer.
 
 Double-clicking the bar of a Precomp layer opens its composition.
 
@@ -219,7 +222,8 @@ the Audio timeline and Audio layers in the Timeline follow it.
   leaves a gap, and **Ripple delete**, which closes it. **Split** cuts at the playhead and
   is there while the playhead is over the clip. **Select to end** selects the clip and
   every clip after it.
-- Right-click a gap for **Paste**, **Select all** and **Close gap**.
+- Right-click a gap for **Paste**, **Insert title**, **Insert solid**, **Select all** and
+  **Close gap**.
 - `;` lifts the work area: everything inside it is removed and the gap is left. `'` extracts
   it: the gap is closed.
 - `Ctrl`+`C` copies the selected clips, `Ctrl`+`X` cuts them, and `Ctrl`+`V` pastes at the
@@ -238,6 +242,15 @@ that overlap crossfade.
   down to transparent, and a sound clip from or to silence.
 - With **Select**, drag the handle at a clip's top corner to set the length of its fade.
   Dragged back to the corner, the fade is removed.
+- An edit point on a picture track can be a wipe rather than a dissolve. **Transition ▸** on a
+  clip's menu lists **Dissolve**, **Linear wipe**, **Radial wipe**, **Iris wipe**, **Card wipe**,
+  **Venetian blinds** and **Luma fade**. The effect runs over the outgoing clip with the incoming
+  clip beneath it, from nothing to everything across the overlap.
+- Right-click an overlap on a picture track to change what it is. Its rows open in
+  [Effect controls](/panels/effect-controls/), marked **Transition**, less the ones the overlap
+  decides. Bypassed there, it is a dissolve again.
+- **Settings ▸ Timeline ▸ Default transition** picks what `Ctrl`+`D` adds, and what a clip dragged
+  across another under **Auto crossfade** takes.
 - Right-click a fade, a dissolve or a crossfade for its curve: **Linear**, **Fast**,
   **Slow**, **Smooth** or **Sharp**.
 - A dissolve between two clips with no spare media at the cut is **refused**.
@@ -354,6 +367,19 @@ group. A copy of a clip is outside the original's group.
 **New composition from clip** on a clip's menu turns the clip's footage into a composition and
 opens it. The clip plays that composition from then on, showing what it showed. Its linked
 sound clip is left as it was.
+
+With more than one clip picked, the row reads **New composition from selection**. The clips
+move into a new composition as long as their span, on the same tracks with their effects, fades
+and speed, and their linked sound comes too. One clip playing it takes their place. It goes on
+the first of their tracks if nothing there would act on it twice, and on a new track otherwise.
+
+## Freezing a frame
+
+**Freeze frame…** on a clip's menu asks how long and holds the frame at the playhead, two
+seconds until it is changed. The clip is cut there, a clip of the same source goes between the
+halves with its speed line flat at 0, and everything after it moves later. Linked sound is cut
+too, with silence under the hold, unless **Settings ▸ Timeline ▸ Sound plays on through a
+freeze** is on. In the Audio timeline the same row holds a sound clip.
 
 Double-clicking a clip that already plays a composition opens the composition.
 

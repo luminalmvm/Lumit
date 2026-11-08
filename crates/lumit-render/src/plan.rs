@@ -22,6 +22,7 @@
 //! cheaper than one decoded at 4K and thrown away.
 
 use crate::decode::{CompJob, Cut};
+use crate::overlap::under_incoming;
 use crate::source::SourceProbes;
 use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
@@ -731,7 +732,7 @@ pub fn collect_comp_jobs(
                             let Some(mut job) = footage_job(incoming, lt, whole) else {
                                 return under;
                             };
-                            job.cuts.push(Cut::Under(gain, under));
+                            job.cuts.push(under_incoming(incoming, whole, gain, under));
                             Some(job)
                         }
                     }

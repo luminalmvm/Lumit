@@ -103,6 +103,9 @@ class CutTrackPainter extends CustomPainter {
   /// A laid-out name, cached by the panel across every track.
   final TextPainter Function(String name) nameOf;
 
+  /// What each Transition effect is called, by its match name.
+  final Map<String, String> transitionNames;
+
   /// Whether the fade handles are drawn: with the Select tool, which is the
   /// one that drags them.
   final bool handles;
@@ -137,6 +140,7 @@ class CutTrackPainter extends CustomPainter {
     required this.soundOnPicture,
     required this.compGlyph,
     required this.nameOf,
+    required this.transitionNames,
     required this.handles,
     required this.dropOn,
     required this.gain,
@@ -228,6 +232,30 @@ class CutTrackPainter extends CustomPainter {
         final b = axis.xOf(end);
         final out = track.clips[i].fadeOut.shape;
         final into = track.clips[i + 1].fadeIn.shape;
+        // A Transition effect is one edge sweeping across, so it draws as the
+        // one line, the part already gone shaded, and its name where it fits.
+        final kind = track.clips[i + 1].transition;
+        if (kind != null && !track.sound) {
+          final swept = Path()..moveTo(a, foot);
+          const steps = 16;
+          for (var k = 1; k <= steps; k++) {
+            final u = k / steps;
+            final gain = clipFadeGain(into, u);
+            swept.lineTo(a + (b - a) * u, foot - gain * (foot - top));
+          }
+          canvas.drawPath(
+              Path.from(swept)
+                ..lineTo(a, top)
+                ..close(),
+              Paint()..color = colours.cross.withValues(alpha: 0.18));
+          canvas.drawPath(swept, paint);
+          final name = nameOf(transitionNames[kind] ?? kind);
+          if (name.width + 8 < b - a && foot - top > name.height + 4) {
+            name.paint(canvas,
+                Offset(a + (b - a - name.width) / 2, foot - name.height - 2));
+          }
+          continue;
+        }
         final falling = Path()..moveTo(a, top);
         final rising = Path()..moveTo(a, foot);
         const steps = 16;

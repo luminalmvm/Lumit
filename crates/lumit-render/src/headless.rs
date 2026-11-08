@@ -5618,6 +5618,7 @@ mod tests {
             group: None,
             opacity: 1.0,
             takes: Vec::new(),
+            transition: None,
             extra: serde_json::Map::new(),
         };
         push_layer(

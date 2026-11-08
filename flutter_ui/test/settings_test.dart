@@ -68,6 +68,10 @@ void main() {
       cutAutoRipple: true,
       cutAutoCrossfade: true,
       cutSpeedLines: true,
+      cutDefaultTransition: 'iris_wipe',
+      cutFreezeSeconds: 3,
+      retimeHoldSeconds: 4,
+      cutFreezeKeepsSound: true,
       cutVegasDrags: true,
       cutHeadWidth: 240,
       quantiseSound: false,
@@ -112,6 +116,10 @@ void main() {
     expect(back.cutAutoRipple, isTrue);
     expect(back.cutAutoCrossfade, isTrue);
     expect(back.cutSpeedLines, isTrue);
+    expect(back.cutDefaultTransition, 'iris_wipe');
+    expect(back.cutFreezeSeconds, 3);
+    expect(back.retimeHoldSeconds, 4);
+    expect(back.cutFreezeKeepsSound, isTrue);
     expect(back.cutVegasDrags, isTrue);
     expect(back.cutHeadWidth, 240);
     expect(back.quantiseSound, isFalse);
@@ -132,7 +140,7 @@ void main() {
     expect(back.viewerRulerPercent, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 45);
+    expect(all.toJson().keys.length, 49);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

@@ -53,8 +53,9 @@ composites over it.
 - **Clip**: an entry inside a Sequence layer, and only there. Two clips may overlap, never
   three. On a picture layer the overlap is a **dissolve**: the later clip comes in as the
   earlier goes out, through the later clip's fade-in shape, for as long as they overlap. On
-  an audio-only layer it is a crossfade. A fade at an end nothing overlaps runs to
-  transparent, or to silence. A cut between clips is an **edit point**.
+  an audio-only layer it is a crossfade. A picture overlap may instead be a **transition**,
+  one of the Transition effects run over the earlier clip. A fade at an end nothing overlaps
+  runs to transparent, or to silence. A cut between clips is an **edit point**.
 - **Linked clips**: a picture clip and its sound clip, on two Sequence layers, that move,
   trim and cut together while Linked is on.
 - **Ripple**: an edit that moves everything after it by the same amount. **Insert** places

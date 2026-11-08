@@ -50,6 +50,24 @@ List<T> inStaggerOrder<T>(
   }
 }
 
+/// Where each span goes when they are laid end to end with [overlap] frames
+/// shared between neighbours, in the order given, the first starting on the
+/// earliest start among them. A span shorter than the overlap keeps a frame of
+/// its own, so the order is never undone.
+List<int> endToEndStarts(List<(int, int)> spans, int overlap) {
+  if (spans.isEmpty) return const [];
+  var at = spans.map((s) => s.$1).reduce((a, b) => a < b ? a : b);
+  return [
+    for (final (start, end) in spans)
+      () {
+        final here = at;
+        final step = end - start - overlap;
+        at += step < 1 ? 1 : step;
+        return here;
+      }(),
+  ];
+}
+
 /// How far the one at [rank] travels when the one at [held] is dragged
 /// [delta] frames: the first stays put, the one in hand follows the pointer
 /// and the rest are spaced evenly. With the first in hand the last goes the

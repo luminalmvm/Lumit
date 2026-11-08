@@ -349,6 +349,19 @@ class InterfaceSettings {
   /// a line across it, edited where it lies, as Vegas draws velocity.
   bool cutSpeedLines;
 
+  /// What Ctrl+D and a clip dragged across another under Auto crossfade put on
+  /// an overlap, by the transition's match name. Null is the dissolve.
+  String? cutDefaultTransition;
+
+  /// How long Freeze frame holds on a clip, and on a layer, in seconds. The
+  /// last length asked for.
+  double cutFreezeSeconds;
+  double retimeHoldSeconds;
+
+  /// A freeze on a clip leaves its linked sound playing on through the hold,
+  /// rather than cutting it and leaving silence there.
+  bool cutFreezeKeepsSound;
+
   /// Mouse drags in the Cut timeline the way Vegas has them: Ctrl drags a
   /// copy or stretches an edge, Alt slips, Ctrl+Alt slides, and Shift holds
   /// snapping off. Turned on with the Vegas key preset.
@@ -591,6 +604,10 @@ class InterfaceSettings {
     this.cutAutoRipple = false,
     this.cutAutoCrossfade = false,
     this.cutSpeedLines = false,
+    this.cutDefaultTransition,
+    this.cutFreezeSeconds = 2,
+    this.retimeHoldSeconds = 1,
+    this.cutFreezeKeepsSound = false,
     this.cutVegasDrags = false,
     this.cutHeadWidth = 180,
     this.quantiseSound = true,
@@ -642,6 +659,10 @@ class InterfaceSettings {
         'cut_auto_ripple': cutAutoRipple,
         'cut_auto_crossfade': cutAutoCrossfade,
         'cut_speed_lines': cutSpeedLines,
+        'cut_default_transition': cutDefaultTransition,
+        'cut_freeze_seconds': cutFreezeSeconds,
+        'retime_hold_seconds': retimeHoldSeconds,
+        'cut_freeze_keeps_sound': cutFreezeKeepsSound,
         'cut_vegas_drags': cutVegasDrags,
         'cut_head_width': cutHeadWidth,
         'quantise_sound': quantiseSound,
@@ -714,6 +735,10 @@ class InterfaceSettings {
         cutAutoRipple: j['cut_auto_ripple'] as bool? ?? false,
         cutAutoCrossfade: j['cut_auto_crossfade'] as bool? ?? false,
         cutSpeedLines: j['cut_speed_lines'] as bool? ?? false,
+        cutDefaultTransition: j['cut_default_transition'] as String?,
+        cutFreezeSeconds: (j['cut_freeze_seconds'] as num?)?.toDouble() ?? 2,
+        retimeHoldSeconds: (j['retime_hold_seconds'] as num?)?.toDouble() ?? 1,
+        cutFreezeKeepsSound: j['cut_freeze_keeps_sound'] as bool? ?? false,
         cutVegasDrags: j['cut_vegas_drags'] as bool? ?? false,
         cutHeadWidth: (j['cut_head_width'] as num?)?.toDouble() ?? 180,
         quantiseSound: j['quantise_sound'] as bool? ?? true,

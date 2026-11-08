@@ -192,8 +192,9 @@ TextSelection wordAround(String text, int at) {
 /// A text layer the Selection tool's double-click asked to have opened for
 /// typing: the view it was clicked in, the layer, and where on it. The gizmo
 /// sets this and arms the Type tool; that view's Type layer reads it as the
-/// tool arrives, and the gizmo clears it when the frame is done.
-({int? view, LayerReference layer, Offset at})? viewerTypeEditRequest;
+/// tool arrives, and the gizmo clears it when the frame is done. No view is
+/// whichever view takes it, and no place picks the words whole.
+({int? view, LayerReference layer, Offset? at})? viewerTypeEditRequest;
 
 /// The Type tool over the picture.
 class ViewerTypeLayer extends StatefulWidget {
@@ -455,13 +456,19 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _finish();
-        if (asked == null || !widget.active || asked.view != widget.viewId) {
+        if (asked == null ||
+            !widget.active ||
+            (asked.view != null && asked.view != widget.viewId)) {
           return;
         }
         final id = asked.layer.internallayerId;
         for (final box in widget.boxes) {
           if (box.id != id) continue;
           _begin(asked.layer, created: false, box: box, at: asked.at);
+          if (asked.at == null) {
+            _controller.selection = TextSelection(
+                baseOffset: 0, extentOffset: _controller.text.length);
+          }
           break;
         }
       });
@@ -985,6 +992,8 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     final text = _controller.text;
     // Read before the edit is closed, since it is the open edit's document.
     final document = _typedDocument(text);
+    // Opened and left as it was, which is no change to undo.
+    final unchanged = !_created && text == _held?.text;
     _throttle.cancel();
     _clearLive();
     setState(() {
@@ -1009,7 +1018,7 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
         }
         return;
       }
-      if (document != null) _write(layer, document);
+      if (document != null && !unchanged) _write(layer, document);
       widget.onChanged();
     } catch (_) {
       // The layer was deleted while it was being typed into.

@@ -31,9 +31,12 @@ use crate::api::{
 };
 
 mod attributes;
+pub(crate) mod fold;
+pub(crate) mod freeze;
 mod solids;
 mod streams;
 mod takes;
+pub(crate) mod transition;
 
 /// How a Cut edit ended. Anything but `Done` left the document untouched, and
 /// says why in a form the panel can put words to.
@@ -69,7 +72,7 @@ const NUDGE_TICKS: i64 = 48_000;
 /// How a move in the Cut timeline treats what it meets, set by the timeline's
 /// own switches.
 #[frb(non_opaque)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgeCutMove {
     /// Leave what the clips land on in place, so that where a clip crosses
     /// the end of another the two dissolve or crossfade. Without it a move
@@ -80,6 +83,9 @@ pub struct BridgeCutMove {
     /// The part of a frame to add to the move, in samples at 48 kHz. Read
     /// only when every clip that moves is sound.
     pub nudge_ticks: i64,
+    /// What an overlap this move makes on a picture row draws as, by the
+    /// transition's match name, or the dissolve with none. Read with `overlap`.
+    pub transition: Option<String>,
 }
 
 /// How a paste ended, and where the playhead goes after it.
@@ -197,6 +203,9 @@ struct Edit<'a> {
     /// Sound rows this edit emptied by folding their clips into another, which
     /// go with them.
     gone: Vec<Uuid>,
+    /// The kind an overlap this edit makes takes, when it can make one, with
+    /// `None` inside for the dissolve.
+    arriving: Option<Option<String>>,
 }
 
 /// Open an edit on `of`, run it, and turn how it ended into the answer.
@@ -398,6 +407,7 @@ impl<'a> Edit<'a> {
             carried: Vec::new(),
             first: Vec::new(),
             gone: Vec::new(),
+            arriving: None,
         })
     }
 
@@ -622,6 +632,7 @@ impl<'a> Edit<'a> {
     /// Write the edit: one `Batch` of every row that changed, every layer a
     /// ripple carried and every layer made. Nothing changed writes nothing.
     fn commit(mut self) -> Cut {
+        self.settle_transitions()?;
         relink(&mut self.rows);
         let (project, comp) = (self.of.project_id(), self.comp.id);
         let ends = self.rows.iter().flat_map(|row| &row.clips);
@@ -1140,6 +1151,7 @@ impl<'a> Edit<'a> {
         copy: bool,
         how: BridgeCutMove,
     ) -> Cut {
+        self.arriving = how.overlap.then(|| how.transition.clone());
         let mut delta = self.time(by_frames)?;
         let mut named = clips.to_vec();
         named.push(grabbed);
@@ -1256,6 +1268,7 @@ impl<'a> Edit<'a> {
         self.commit()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn trim(
         mut self,
         clip: Uuid,
@@ -1264,7 +1277,9 @@ impl<'a> Edit<'a> {
         ripple: bool,
         linked: bool,
         overlap: bool,
+        transition: Option<String>,
     ) -> Cut {
+        self.arriving = overlap.then_some(transition);
         let (r, c) = self.find(clip)?;
         let was = self.rows[r].clips[c].clone();
         let by_start = self.time(start_frame)?.checked_sub(was.place_start)?;
@@ -1490,9 +1505,15 @@ impl<'a> Edit<'a> {
             };
             let room = (self.room(outgoing, false)?, self.room(incoming, true)?);
             let incoming = incoming.id;
-            let mut next =
-                sequence::dissolve(&row.clips, outgoing.id, incoming, frames, frame, room)
-                    .ok_or(BridgeCutResult::Limit)?;
+            let mut next = sequence::transition::dissolve(
+                &row.clips,
+                outgoing.id,
+                incoming,
+                frames,
+                frame,
+                room,
+            )
+            .ok_or(BridgeCutResult::Limit)?;
             // A picture dissolves in a straight line. A crossfade keeps the
             // shape it has, which holds the level.
             if !row.audio_only && frames > 0 {
@@ -1718,85 +1739,6 @@ impl<'a> Edit<'a> {
         *end_frame = self.frame_up(last)?;
         self.commit()
     }
-
-    /// Point a clip at a composition holding its footage, made here, and
-    /// answer which. A clip that already plays a composition answers that
-    /// one and changes nothing.
-    fn make_composition(mut self, clip: Uuid, made: &mut Option<Uuid>) -> Cut {
-        let (r, c) = self.find(clip)?;
-        let this = self.rows[r].clips[c].clone();
-        let item = match this.source {
-            ClipSource::Comp(id) => {
-                *made = Some(id);
-                return Ok(());
-            }
-            ClipSource::Footage(item) => item,
-            // A colour has nothing inside it to open.
-            ClipSource::Solid(_) => return Err(BridgeCutResult::Nothing.into()),
-        };
-        if self.rows[r].locked {
-            return Err(BridgeCutResult::Locked.into());
-        }
-        let (id, ops) = {
-            let proj = self.of.project()?;
-            let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-            let doc = state.store.snapshot();
-            let Some(ProjectItem::Footage(f)) = doc.item(item) else {
-                return Err(BridgeError::InvalidItem.into());
-            };
-            // The file's whole length and its own size. A still has no
-            // length and a sound file no size, and each takes this
-            // composition's. Never shorter than what the clip plays, which
-            // a still held past the composition's end would be.
-            let (length, width, height) =
-                CompositionReference::footage_span_and_size(&state, f, &self.comp);
-            let length = length.max(self.time(self.frame_up(this.source_out)?)?);
-            let rate = self.comp.frame_rate;
-            let settings = BridgeCompSettings {
-                width: width as u32,
-                height: height as u32,
-                fps_num: rate.num(),
-                fps_den: rate.den(),
-                duration: BridgeRational {
-                    num: length.num(),
-                    den: length.den(),
-                },
-                ..BridgeCompSettings::defaults()
-            };
-            let (id, mut ops) =
-                ProjectReference::new_comp_ops(&doc, f.name.clone(), Some(settings), None)?;
-            for op in &mut ops {
-                let Op::AddItem { item: added, .. } = op else {
-                    continue;
-                };
-                let ProjectItem::Composition(inner) = added.as_mut() else {
-                    continue;
-                };
-                let mut layer = crate::edits::base_layer(
-                    f.name.clone(),
-                    LayerKind::Footage { item },
-                    length,
-                    crate::edits::centred_transform(width, height, inner.width, inner.height),
-                );
-                layer.audio_only = !CompositionReference::has_picture(&state, f);
-                // The composition sounds the streams the clip did.
-                layer.audio_streams = this.audio_streams.clone();
-                inner.layers = vec![layer];
-                // Composition time is source time in there, so the work
-                // area is the stretch the clip plays.
-                let start = this.source_in.max(Rational::ZERO);
-                if start < this.source_out {
-                    inner.work_area = Some((CompTime(start), CompTime(this.source_out)));
-                }
-            }
-            (id, ops)
-        };
-        self.first = ops;
-        self.rows[r].clips[c].source = ClipSource::Comp(id);
-        self.rows[r].clips[c].audio_streams = AudioStreams::default();
-        *made = Some(id);
-        self.commit()
-    }
 }
 
 impl CompositionReference {
@@ -1986,10 +1928,11 @@ impl CompositionReference {
     /// and a trimmed head leaves the clip starting where it did. Without it
     /// nothing else moves, and on a picture layer an edge is refused where it
     /// would cover a neighbour it only met, unless `overlap` (Auto
-    /// crossfade) makes that a dissolve. An edge that overlaps its neighbour
+    /// crossfade) makes that a dissolve, or `transition` if one is named. An edge that overlaps its neighbour
     /// is a dissolve, and is dragged longer or shorter: it stays within the
     /// neighbour's span, and is refused as `Limit` past the end of its own
     /// media. With `linked` the clips linked to it take the same change.
+    #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn cut_trim(
         &self,
@@ -1999,9 +1942,18 @@ impl CompositionReference {
         ripple: bool,
         linked: bool,
         overlap: bool,
+        transition: Option<String>,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| {
-            edit.trim(clip, start_frame, end_frame, ripple, linked, overlap)
+            edit.trim(
+                clip,
+                start_frame,
+                end_frame,
+                ripple,
+                linked,
+                overlap,
+                transition,
+            )
         })
     }
 

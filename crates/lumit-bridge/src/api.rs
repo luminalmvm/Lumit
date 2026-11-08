@@ -13,6 +13,7 @@ pub mod audio;
 pub mod beats;
 pub mod blender;
 pub mod cache;
+pub mod clip_edits;
 pub mod clip_group;
 pub mod colour;
 pub mod comp_graph;

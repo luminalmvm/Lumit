@@ -1003,6 +1003,18 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCutClipToComposition(
               that: this, clip: clip);
 
+  /// **New composition from selection**: move `clips` into a new composition
+  /// called `name`, on the same rows and in the same places, and put one clip
+  /// playing it across the span they took. With `linked` their linked sound
+  /// comes along. One undo step. `None` when a layer they are on is locked.
+  CompositionReference? cutClipsToComposition(
+          {required List<UuidValue> clips,
+          required bool linked,
+          required String name}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutClipsToComposition(
+              that: this, clips: clips, linked: linked, name: name);
+
   /// Close the gap on `layer` that `at_frame` falls in: everything after
   /// it moves earlier by its length, on every unlocked Sequence layer.
   BridgeCutResult cutCloseGap(
@@ -1065,6 +1077,23 @@ class CompositionReference {
               target: target,
               linked: linked,
               how: how);
+
+  /// **Freeze frame** on a clip: hold the frame it shows at `at_frame` for
+  /// `hold_frames`, as a clip of its own between its two halves, with what
+  /// follows moved later on every unlocked Sequence layer. With `linked` the
+  /// clips linked to it are cut and moved too, and silence sits under the
+  /// hold. Without it they stay, and play on through.
+  BridgeCutResult cutFreeze(
+          {required UuidValue clip,
+          required int atFrame,
+          required int holdFrames,
+          required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutFreeze(
+          that: this,
+          clip: clip,
+          atFrame: atFrame,
+          holdFrames: holdFrames,
+          linked: linked);
 
   /// Match frame: the footage item and the moment of it that the clip
   /// under `frame` is showing, read through the clip's Retime.
@@ -1274,6 +1303,25 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutSetTake(
           that: this, clip: clip, take: take);
 
+  /// Make the overlap at this edge of `clip` the kind named by its match
+  /// name, or the dissolve with `None`. An edit point that only meets gets an
+  /// overlap of `frames` first. Asked for the kind it already is, an overlap
+  /// keeps the rows it was given.
+  BridgeCutResult cutSetTransition(
+          {required UuidValue clip,
+          required bool endEdge,
+          required int frames,
+          String? kind,
+          required bool linked}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutSetTransition(
+              that: this,
+              clip: clip,
+              endEdge: endEdge,
+              frames: frames,
+              kind: kind,
+              linked: linked);
+
   /// Slide a clip between its neighbours by `by_frames`: it keeps its
   /// length and its frames, and the clips either side trim and extend to
   /// stay against it. With `linked` its linked clips slide the same way on
@@ -1363,7 +1411,7 @@ class CompositionReference {
   /// and a trimmed head leaves the clip starting where it did. Without it
   /// nothing else moves, and on a picture layer an edge is refused where it
   /// would cover a neighbour it only met, unless `overlap` (Auto
-  /// crossfade) makes that a dissolve. An edge that overlaps its neighbour
+  /// crossfade) makes that a dissolve, or `transition` if one is named. An edge that overlaps its neighbour
   /// is a dissolve, and is dragged longer or shorter: it stays within the
   /// neighbour's span, and is refused as `Limit` past the end of its own
   /// media. With `linked` the clips linked to it take the same change.
@@ -1373,7 +1421,8 @@ class CompositionReference {
           required int endFrame,
           required bool ripple,
           required bool linked,
-          required bool overlap}) =>
+          required bool overlap,
+          String? transition}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutTrim(
           that: this,
           clip: clip,
@@ -1381,7 +1430,8 @@ class CompositionReference {
           endFrame: endFrame,
           ripple: ripple,
           linked: linked,
-          overlap: overlap);
+          overlap: overlap,
+          transition: transition);
 
   /// Detect beats and replace this comp's beat markers.
   ///

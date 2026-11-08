@@ -141,18 +141,22 @@ List<MenuEntry> layerMenuEntries(
         MenuEntry(l10n.menuStretch,
             editing(() => _stretch(context, app, ui, entry, unlocked))),
         MenuEntry(
-            l10n.menuFreezeFrame,
+            l10n.retimeHoldHere,
             editing(() {
               final frame = ui.playheadFrame.value;
+              final held = ui.workspace.interface.retimeHoldSeconds;
+              final hold = (held * ui.model.fps).round();
               asOneUndoStep(app.project, () {
                 for (final e in unlocked) {
                   try {
-                    e.layer.freezeAtPlayhead(frame: frame);
+                    e.layer.freezeAtPlayhead(
+                        frame: frame, holdFrames: hold < 1 ? 1 : hold);
                   } catch (_) {}
                 }
               });
               app.notifyDocumentChanged();
-            })),
+            }),
+            action: 'layer.retime.hold'),
       ]),
     MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
     if (creates.isNotEmpty) MenuEntry.submenu(l10n.menuCreate, creates),
