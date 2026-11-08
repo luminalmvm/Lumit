@@ -255,6 +255,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           row: on.expressionRow);
     }
     final fault = _fault;
+    final unit = graphChannelUnit(on);
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
       child: Text.rich(
@@ -269,7 +270,8 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                     layer: layer,
                     held: on.scalar,
                     row: on.expressionRow,
-                  ).toStringAsFixed(expressionDecimals(on))}',
+                  ).toStringAsFixed(expressionDecimals(on))}'
+                      '${unit == null ? '' : ' $unit'}',
                   style: t.mono.copyWith(color: t.textMuted),
                 ),
         ]),

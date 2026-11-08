@@ -42,6 +42,9 @@ const double fxStopwatchColumn = 18;
 /// What every row reserves before its label.
 const double fxKeyColumnWidth = fxStopwatchColumn;
 
+/// How wide a row's link mark is: a 14px glyph with 4 either side.
+const double fxLinkMarkWidth = 22;
+
 /// The label column on a row with room to spare, wide enough that the longest
 /// names in the catalogue read whole. Longer ones ellipsise rather than pushing
 /// the control column, which is the point of it being fixed.
@@ -52,8 +55,9 @@ const double fxLabelColumnWidth = 142;
 const double fxNameColumnWidth = fxKeyColumnWidth + 4 + fxLabelColumnWidth;
 
 /// The room the control column keeps before the label starts taking the
-/// panel's extra width: a well, its unit and its reset.
-const double fxControlColumnWidth = 112;
+/// panel's extra width: a well, its unit and its reset, or on a keyed row
+/// its key diamond.
+const double fxControlColumnWidth = 116;
 
 /// How wide the label column is on a row [width] wide: what is left once the
 /// control column has its room, between a floor that still reads a short name
@@ -455,10 +459,10 @@ class FxSection extends StatelessWidget {
   /// `Escape` while renaming: close the editor and keep the old name.
   final VoidCallback? onRenameCancelled;
 
-  /// False while the effect is **bypassed**. The heading takes a dashed outline
-  /// (docs/15 §5) and the rows below stop answering the pointer — but nothing
-  /// fades, because the reason to look at a bypassed effect is to read what it
-  /// was set to. Sections that cannot be switched off leave it true.
+  /// False while the effect is **bypassed**. The heading takes a dashed
+  /// outline and the rows below dim with it, still readable and still live,
+  /// so what it was set to can be read and changed. Sections that cannot be
+  /// switched off leave it true.
   final bool enabled;
 
   /// Every key under this heading, for the keyframe strip's summary lane on
@@ -495,8 +499,7 @@ class FxSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // Bypassed: the heading wears a dashed outline instead of the stack
-    // being dimmed (docs/15 §5).
+    // Bypassed: the heading wears a dashed outline and its rows dim.
     final heading = enabled
         ? _draggableHeading(t)
         : DashedOutline(child: _draggableHeading(t));
@@ -529,9 +532,12 @@ class FxSection extends StatelessWidget {
                   decoration: BoxDecoration(
                       border: Border(bottom: BorderSide(color: t.hairline))),
                   padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
-                  child: named == null
-                      ? rows[i]
-                      : named.row('$scope/#$i', rows[i]),
+                  child: Opacity(
+                    opacity: enabled ? 1 : 0.5,
+                    child: named == null
+                        ? rows[i]
+                        : named.row('$scope/#$i', rows[i]),
+                  ),
                 ),
             ],
           ),
@@ -914,6 +920,10 @@ class _FxRenameFieldState extends State<FxRenameField> {
 ///
 /// [compactControl] is how wide a small control is, a checkbox, on a row
 /// whose label may then take what the control column has spare.
+///
+/// [controlNeeds] is how wide the control has to stay for its number to read
+/// whole. The marks past it give way first: the link mark, then the key
+/// steps either side of the diamond, then the diamond.
 Widget fxTwoColumnRow({
   required BuildContext context,
   required Widget name,
@@ -924,6 +934,7 @@ Widget fxTwoColumnRow({
   Widget? rowEnd,
   Widget? trailing,
   double? compactControl,
+  double? controlNeeds,
 }) {
   final height = fxRowHeight(ThemeScope.of(context).theme);
   final strip = FxKeyStripScope.widthOf(context);
@@ -939,9 +950,7 @@ Widget fxTwoColumnRow({
     );
   }
   final keys = keyframeControls;
-  final end = keys is KeyframeControlsFrb && keys.animated
-      ? keys.navigator()
-      : rowEnd;
+  final keyed = keys is KeyframeControlsFrb && keys.animated ? keys : null;
   final row = ConstrainedBox(
     constraints: grows
         ? BoxConstraints(minHeight: height)
@@ -949,8 +958,25 @@ Widget fxTwoColumnRow({
     child: Row(
       children: [
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Row(
+          child: LayoutBuilder(builder: (context, constraints) {
+            final spare = controlNeeds == null
+                ? double.infinity
+                : constraints.maxWidth -
+                    fxKeyColumnWidth -
+                    10 -
+                    fxLabelWidthFor(constraints.maxWidth) -
+                    controlNeeds;
+            final steps = keyed == null ? 0.0 : 3 * fxStopwatchColumn;
+            final mark =
+                spare >= steps + fxLinkMarkWidth ? trailing : null;
+            final end = keyed == null
+                ? rowEnd
+                : spare >= steps
+                    ? keyed.navigator()
+                    : spare >= fxStopwatchColumn
+                        ? keyed.navigator(steps: false)
+                        : null;
+            return Row(
               children: [
                 SizedBox(
                   width: fxKeyColumnWidth,
@@ -974,10 +1000,10 @@ Widget fxTwoColumnRow({
                 if (end != null) end,
                 // The row's last thing, after the key navigator: the link
                 // mark, laid out always and shown on hover.
-                if (trailing != null) trailing,
+                if (mark != null) mark,
               ],
-            ),
-          ),
+            );
+          }),
         ),
         if (strip > 0) SizedBox(width: strip, height: height, child: lane),
       ],

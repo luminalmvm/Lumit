@@ -707,24 +707,42 @@ class _MaskValueRowState extends State<MaskValueRow> {
     _copiedMaskPath = (vertices: vertices, closed: widget.mask.closed);
   }
 
-  /// Give this mask the copied shape: a key at the playhead when its shape is
+  /// Give this mask the copied shape, and every picked mask with it when it is
+  /// one of them, as one undo step: a key at the playhead where a shape is
   /// keyed, as a drag of its points would write, else its one shape.
   void _pastePath() {
     final copied = _copiedMaskPath;
     if (copied == null) return;
+    final app = Provider.of<LumitState>(context, listen: false);
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    try {
-      widget.layer.setMask(
-        mask: maskWith(widget.mask,
-            vertices: copied.vertices, closed: copied.closed),
-        at: widget.mask.pathKeys.isEmpty
-            ? null
-            : widget.comp.timeOfFrame(frame: ui.playheadFrame.value),
-      );
-      widget.onChanged();
-    } catch (_) {
-      // The mask or its layer went away under the open menu.
-    }
+    // Picked by its own row or by its Path row.
+    final paths = ui.selectedProperties.value;
+    final picked = [
+      for (final entry in ui.model.layers)
+        for (final mask in entry.info.masks)
+          if ('${masksPath(entry.layer.internallayerId.toString())}/${mask.id}'
+                  case final own
+              when paths.contains(own) || paths.contains('$own/path'))
+            (layer: entry.layer, mask: mask),
+    ];
+    final targets = picked.any((p) => p.mask.id == widget.mask.id)
+        ? picked
+        : [(layer: widget.layer, mask: widget.mask)];
+    final at = widget.comp.timeOfFrame(frame: ui.playheadFrame.value);
+    asOneUndoStep(app.project, () {
+      for (final (:layer, :mask) in targets) {
+        try {
+          layer.setMask(
+            mask: maskWith(mask,
+                vertices: copied.vertices, closed: copied.closed),
+            at: mask.pathKeys.isEmpty ? null : at,
+          );
+        } catch (_) {
+          // The mask or its layer went away under the open menu.
+        }
+      }
+    });
+    widget.onChanged();
   }
 
   /// This row's key, which per-point feather rows must not share: they are

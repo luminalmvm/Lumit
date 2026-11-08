@@ -546,7 +546,7 @@ void main() {
       final comp = p.uiState.selectedComp!;
 
       for (final item in [
-        'Solid',
+        'Solid…',
         'Text',
         'Camera',
         'Adjustment',
@@ -556,7 +556,7 @@ void main() {
         await choose(tester, 'Layer', item, under: 'New');
         await tester.pump();
         // A solid asks for its settings first.
-        if (item == 'Solid') {
+        if (item == 'Solid…') {
           await tester.pumpAndSettle();
           await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
           await tester.pumpAndSettle();

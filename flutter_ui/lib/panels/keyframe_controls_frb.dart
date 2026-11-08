@@ -399,6 +399,10 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
   /// curve: an Orientation's angles turn as one. Null for no answer.
   final List<double>? Function(BridgeRational time)? valuesAt;
 
+  /// The navigator's steps either side of the diamond. A row short of room
+  /// keeps the diamond alone.
+  final bool steps;
+
   const KeyframeControlsFrb({
     super.key,
     required this.scalars,
@@ -410,11 +414,13 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
     this.navigatorOnly = false,
     this.navigatorApart = false,
     this.valuesAt,
+    this.steps = true,
   });
 
   /// This row's navigator as a widget of its own. [fold] keeps the fold's
   /// button size.
-  KeyframeControlsFrb navigator({bool fold = false}) => KeyframeControlsFrb(
+  KeyframeControlsFrb navigator({bool fold = false, bool steps = true}) =>
+      KeyframeControlsFrb(
         scalars: scalars,
         onWrite: onWrite,
         comp: comp,
@@ -423,6 +429,7 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
         fixedColumns: !fold,
         navigatorOnly: true,
         valuesAt: valuesAt,
+        steps: steps,
       );
 
   @override
@@ -563,6 +570,7 @@ class KeyframeControlsFrb extends StatelessWidget implements RowKeys {
     ];
 
     if (navigatorOnly) {
+      if (!steps) return navigator[1];
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [

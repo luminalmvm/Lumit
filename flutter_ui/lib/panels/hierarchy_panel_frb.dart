@@ -101,12 +101,28 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
       showLayerRowMenu(context, layer.internallayerId, at, view: view);
       return;
     }
-    if (layer == null && view.isEmpty) return;
+    // The ground picks the comp's layers, as the Timeline's does.
+    final ground = [
+      if (layer == null) ...[
+        MenuEntry(
+            l10n.menuSelectAll,
+            ui.model.layers.isEmpty
+                ? null
+                : () => ui.setSelection(
+                    [for (final e in ui.model.layers) e.layer]),
+            action: 'edit.select.all'),
+        MenuEntry(l10n.menuDeselectAll,
+            ui.selectedLayerIds.isEmpty ? null : ui.clearSelection,
+            action: 'edit.deselect.all'),
+      ],
+    ];
     // Read here: a menu is a gesture. A text layer or a camera has no item.
     final source = layer?.getSourceItem();
     showMenuEntriesAt(context, at, [
       if (layer != null && nested != null)
         MenuEntry(l10n.projectOpen, () => ui.openNestedComp(layer, nested)),
+      ...ground,
+      if (ground.isNotEmpty && view.isNotEmpty) MenuEntry.divider(),
       ...view,
       if (layer != null) ...[
         if (view.isNotEmpty) MenuEntry.divider(),

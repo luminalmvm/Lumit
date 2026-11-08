@@ -18,7 +18,7 @@ import '../l10n/strings.dart';
 import '../state/expression_language.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show newExpressionLanguage;
-import 'fx_section.dart' show FxRowHover;
+import 'fx_section.dart' show FxRowHover, fxLinkMarkWidth;
 
 /// What Copy link on a row's menu put down: the row, waiting to be named from
 /// wherever Paste link is pressed.
@@ -118,7 +118,8 @@ class LinkMark extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: (fxLinkMarkWidth - 14) / 2),
             child: glyph.LumitIcon(LumitIcons.link,
                 size: 14,
                 colour: Color.lerp(t.textSecondary, t.textPrimary, lit)!

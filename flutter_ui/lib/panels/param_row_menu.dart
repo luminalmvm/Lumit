@@ -41,6 +41,7 @@ class ParamMenu {
     this.setExpression,
     this.axisExpressions = const [],
     this.removeExpression,
+    this.editExpression,
     this.convertExpression,
     this.graphPath,
     this.host,
@@ -98,6 +99,9 @@ class ParamMenu {
   /// out for one number.
   final List<({String axis, VoidCallback set})> axisExpressions;
   final VoidCallback? removeExpression;
+
+  /// The row's expression, opened in its editor.
+  final VoidCallback? editExpression;
 
   /// The expression baked into a key a frame, across the layer.
   final VoidCallback? convertExpression;
@@ -303,6 +307,11 @@ List<Widget> paramLastRows(
         noteSetExpression();
         set();
       }, action: 'expression.add', tickColumn: tickColumn),
+    if (menu.editExpression case final edit?)
+      _row('param-menu-edit-expression', l10n.expressionEdit, () {
+        close();
+        edit();
+      }, tickColumn: tickColumn),
     if (menu.convertExpression case final convert?)
       _row('param-menu-convert-expression', l10n.expressionConvertToKeyframes,
           () {
@@ -617,6 +626,11 @@ List<Widget> _rows(
           child: MenuLabel(l10n.menuAddExpression, action: 'expression.add'),
         ),
       if (menu.drive case final drive?) ..._driveRows(context, drive, done),
+      if (menu.editExpression case final edit?)
+        _row('param-menu-edit-expression', l10n.expressionEdit, () {
+          done();
+          edit();
+        }),
       if (menu.convertExpression case final convert?)
         _row('param-menu-convert-expression',
             l10n.expressionConvertToKeyframes, () {

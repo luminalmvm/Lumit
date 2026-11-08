@@ -127,6 +127,19 @@ String? unitRiderText(BridgeUnit unit) => switch (unit) {
 TextStyle unitRiderStyle(LumitTheme t) =>
     t.mono.copyWith(fontSize: 10, color: t.textMuted);
 
+/// How much room [withUnitRider] adds beside a control: the gap and the unit.
+double unitRiderWidth(LumitTheme t, BridgeUnit unit) {
+  final text = unitRiderText(unit);
+  if (text == null) return 0;
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: unitRiderStyle(t)),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return effectRiderGap + width.ceilToDouble();
+}
+
 /// `control` with its unit beside it, or `control` alone for a parameter whose
 /// number has no unit.
 Widget withUnitRider(LumitTheme t, BridgeUnit unit, Widget control) {
@@ -449,6 +462,7 @@ class EffectParamRowFrb extends StatelessWidget {
           trailing: _linkMark(scalars),
           // A checkbox and its reset arrow.
           compactControl: param.kind is BridgeParamKind_Bool ? 40 : null,
+          controlNeeds: _needs(t),
           // The keyframe strip's lane: the same channels and write the
           // stopwatch has, so a key moved there is committed as one added here.
           lane: scalars == null || driven != null
@@ -640,6 +654,14 @@ class EffectParamRowFrb extends StatelessWidget {
     final playhead = ui.playheadFrame;
     double read(BridgeScalar s) =>
         sampledScalar(s, timeOfFrame(comp, playhead.value));
+    final owner = currentLayer;
+    // What an expression works out to at the playhead, about its layer.
+    double worked(BridgeScalar_Expression e, LayerReference layer) =>
+        sampleScalarWithContext(
+            scalar: e,
+            time: timeOfFrame(comp, playhead.value),
+            layer: layer,
+            row: BridgeExpressionRow.effect(effect: effectId, param: param.id));
     return ParamMenu(
       // Named as Paste link runs, so a layer or effect renamed since the copy
       // is written under its name now.
@@ -652,7 +674,11 @@ class EffectParamRowFrb extends StatelessWidget {
       canReset: onReset != null ||
           fallback == null ||
           !isDefaultEffectValue(value, fallback, owner: ownerLayerId),
-      copy: numeric && float ? () => copiedAxes([read(scalars.first)]) : null,
+      copy: numeric && float
+          ? () => copiedAxes([read(scalars.first)])
+          : expression != null && owner != null
+              ? () => copiedAxes([worked(expression, owner)])
+              : null,
       paste: !numeric || !float
           ? null
           : (text) {
@@ -688,6 +714,24 @@ class EffectParamRowFrb extends StatelessWidget {
                   scalar: expression,
                   time: timeOfFrame(comp, playhead.value),
                   layer: currentLayer!)))),
+      editExpression: expression == null || owner == null
+          ? null
+          : () {
+              final box = context.findRenderObject();
+              if (box is! RenderBox || !box.attached) return;
+              showExpressionEditor(
+                context: context,
+                over: box.localToGlobal(Offset.zero) & box.size,
+                value: expression,
+                comp: comp,
+                layer: owner,
+                row: BridgeExpressionRow.effect(
+                    effect: effectId, param: param.id),
+                decimals: param.kind is BridgeParamKind_Int ? 0 : 2,
+                onLive: (draft) => _setLive(BridgeEffectValue.float(draft)),
+                onCommit: (next) => _set(BridgeEffectValue.float(next)),
+              );
+            },
       convertExpression: expression == null || currentLayer == null
           ? null
           : () => _convertExpression(ui, expression),
@@ -827,16 +871,32 @@ class EffectParamRowFrb extends StatelessWidget {
     );
   }
 
+  /// How wide a number's field and its unit are, which the marks beside it
+  /// give way to. Null for a control that fits itself to the room.
+  double? _needs(LumitTheme t) => switch ((param.kind, value)) {
+        (
+          BridgeParamKind_Float() || BridgeParamKind_Int(),
+          BridgeEffectValue_Float(field0: final s)
+        )
+            when s is! BridgeScalar_Expression && !asTick =>
+          effectCellWidth + unitRiderWidth(t, param.unit),
+        _ => null,
+      };
+
   /// The row's reset arrow, there only while the value differs from what the
   /// schema declares: pressing it writes that default as one op. A kind with no
   /// default (an Action) draws none, and a material row, whose default is its
-  /// file's, comes up with the pointer.
+  /// file's, comes up with the pointer. A keyed value is never its default, so
+  /// a keyed row leaves the arrow to its menu and the room to its number.
   ///
   /// Always a row, with the control first, so the arrow arriving in the middle
   /// of a drag on the number leaves the number's gesture alone.
   Widget _withReset(LumitTheme t, UuidValue id, Widget control) {
     final fallback = defaultEffectValue(param.kind);
-    final button = fallback == null
+    final keyed = _animatableScalarsOf(value)
+            ?.any((s) => s is BridgeScalar_Keyframed) ??
+        false;
+    final button = fallback == null || keyed
         ? null
         : LumitTooltip(
             message: l10n.tipResetParameter,
@@ -921,7 +981,7 @@ class EffectParamRowFrb extends StatelessWidget {
         case BridgeEffectValue_Float(field0: BridgeScalar_Expression expr)) {
       final owner = currentLayer;
       if (owner == null) return Text('—', style: t.small);
-      return EffectParamRowExpression(
+      final readout = EffectParamRowExpression(
         key: ValueKey<String>('fx-expression-$id-${param.id}-${param.hashCode}'),
         value: expr,
         comp: comp,
@@ -931,6 +991,15 @@ class EffectParamRowFrb extends StatelessWidget {
         decimals: param.kind is BridgeParamKind_Int ? 0 : 2,
         set: _set,
         setLive: _setLive,
+      );
+      // In the panel the number stands where a field's would, on the same
+      // edge as every number above and below it (a well's 7 inside its
+      // edge), with its unit after it.
+      if (!twoColumn || valueColumn != null) return readout;
+      return Container(
+        width: effectCellWidth,
+        padding: const EdgeInsetsDirectional.only(end: 7),
+        child: readout,
       );
     }
 

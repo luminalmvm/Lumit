@@ -52,7 +52,7 @@ import 'light_rows_frb.dart';
 import 'param_row_menu.dart';
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 import '../state/expression_language.dart' show PropertyRef;
-import 'expression_editor.dart' show expressionAsKeys;
+import 'expression_editor.dart' show expressionAsKeys, showExpressionEditor;
 import 'property_link.dart';
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
@@ -549,6 +549,14 @@ class TransformRowsFrb extends StatelessWidget {
     // headings do.
     void options(TransformSection section) {
       seen.add(section);
+      // While filtering, an option row shows only when its own name holds
+      // the text.
+      bool kept(LayerSetting s) =>
+          filter.isEmpty || s.label.toLowerCase().contains(filter);
+      if (filter.isNotEmpty &&
+          !settings.any((s) => s.section == section && kept(s))) {
+        return;
+      }
       final heading = switch (section) {
         TransformSection.transform => null,
         TransformSection.camera => l10n.cameraOptions,
@@ -557,7 +565,7 @@ class TransformRowsFrb extends StatelessWidget {
       };
       if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
       for (final setting in settings) {
-        if (setting.section != section) continue;
+        if (setting.section != section || !kept(setting)) continue;
         out.add(LayerSettingRowFrb(
           layer: layer,
           setting: setting,
@@ -903,6 +911,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           ],
         ),
         trailing: _linkMark(group, transform),
+        controlNeeds:
+            cells.length * transformCellWidth + (cells.length - 1) * 6,
       );
       final height = widget.rowHeight;
       return LinkDrop(
@@ -1433,7 +1443,16 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               read(widget.transform, p) is! BridgeScalar_Static ||
                   (shown(p) - defaults[i]!).abs() > 1e-5,
           ].any((differs) => differs),
-      copy: expression.isEmpty ? () => copiedAxes(props.map(shown)) : null,
+      copy: () => copiedAxes([
+            for (final p in props)
+              expression.contains(p)
+                  ? sampleScalarWithContext(
+                      scalar: read(widget.transform, p),
+                      time: timeOfFrame(widget.comp, playhead.value),
+                      layer: widget.layer,
+                      row: BridgeExpressionRow.transform(p))
+                  : shown(p),
+          ]),
       paste: expression.isNotEmpty
           ? null
           : (text) {
@@ -1458,6 +1477,27 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                   scalar: read(widget.transform, expression.first),
                   time: timeOfFrame(widget.comp, playhead.value),
                   layer: widget.layer)),
+      editExpression: expression.length != 1
+          ? null
+          : () {
+              final prop = expression.first;
+              final box = context.findRenderObject();
+              if (box is! RenderBox || !box.attached) return;
+              showExpressionEditor(
+                context: context,
+                over: box.localToGlobal(Offset.zero) & box.size,
+                value: read(widget.transform, prop) as BridgeScalar_Expression,
+                comp: widget.comp,
+                layer: widget.layer,
+                row: BridgeExpressionRow.transform(prop),
+                decimals: cells.firstWhere((c) => c.prop == prop).decimals,
+                onLive: (draft) => _liveExpression(prop, draft),
+                // Removed in the editor, it leaves the number it read.
+                onCommit: (next) => next is BridgeScalar_Static
+                    ? _commit(prop, next.field0)
+                    : _commitExpression(prop, next),
+              );
+            },
       convertExpression: expression.length != 1
           ? null
           : () {

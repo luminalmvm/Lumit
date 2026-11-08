@@ -702,10 +702,10 @@ class _DragValueFieldState extends State<DragValueField>
                       key: textFieldKey,
                       controller: _controller,
                       focusNode: _focus,
-                      // Mono while focused too — the number must not change
-                      // width between reading it and typing over it (§7.1) —
-                      // the same size as the resting number, so nothing reflows
-                      // on the click.
+                      // Mono while focused too, so the number keeps its width
+                      // between reading it and typing over it (§7.1), and the
+                      // same size as the resting number, so nothing reflows on
+                      // the click.
                       style: _valueStyle(t).copyWith(color: t.textPrimary),
                       // The resting face is right-anchored, so the editor is
                       // too: the digits stay where they were even though the

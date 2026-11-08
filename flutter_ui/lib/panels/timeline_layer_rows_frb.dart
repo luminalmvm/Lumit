@@ -411,8 +411,11 @@ class FoldRow extends StatelessWidget {
 
   /// Masks: a new rectangle the size of the comp, for the pen and the shape
   /// tools to reshape, since the stack has no other way to start one here.
+  /// Then Paste and Delete all, as the Effects heading has.
   void _masksMenu(BuildContext context, Offset at) {
     final app = Provider.of<LumitState>(context, listen: false);
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final masks = ui.model.byId(layer.internallayerId)?.info.masks ?? const [];
     showMenuEntriesAt(context, at, [
       MenuEntry(
           l10n.menuAddMask,
@@ -446,6 +449,29 @@ class FoldRow extends StatelessWidget {
                   } catch (_) {
                     return;
                   }
+                  app.notifyDocumentChanged();
+                  onChanged();
+                }),
+      MenuEntry.divider(),
+      MenuEntry(
+          l10n.menuPaste,
+          ui.clipboard.kind == ClipboardKind.masks && !locked
+              ? () => pasteMasksOnto(app, ui, [layer])
+              : null,
+          action: 'edit.paste'),
+      MenuEntry.divider(),
+      MenuEntry(
+          l10n.deleteAllMasks,
+          masks.isEmpty || locked
+              ? null
+              : () {
+                  asOneUndoStep(app.project, () {
+                    for (final mask in masks) {
+                      try {
+                        layer.deleteMask(id: mask.id);
+                      } catch (_) {}
+                    }
+                  });
                   app.notifyDocumentChanged();
                   onChanged();
                 }),

@@ -284,14 +284,16 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       () => _foldAll(effects, true)),
                   row('collapse', MenuLabel(l10n.fxMenuCollapseAll, ticked: false),
                       () => _foldAll(effects, false)),
-                  if (layer != null)
-                    row(
-                      'filter',
-                      MenuLabel(l10n.filterRows,
-                          action: 'panel.search.focus', ticked: false),
-                      _filter.show,
-                    ),
                 ],
+                // The filter reaches Transform too, so it is there with no
+                // effects on the layer.
+                if (layer != null)
+                  row(
+                    'filter',
+                    MenuLabel(l10n.filterRows,
+                        action: 'panel.search.focus', ticked: false),
+                    _filter.show,
+                  ),
                 row(
                   'strip',
                   MenuLabel(l10n.fxMenuKeyStrip, ticked: ws.fxKeyStrip),
@@ -1459,7 +1461,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           layerName: info.name,
           onAdd: addToLayer,
           onMenu: stackMenu,
-          onFilter: info.effects.isEmpty ? null : _filter.show,
+          onFilter: _filter.show,
           filter: _filter.open
               ? rowFilterWell(context, _filter, key: const ValueKey('fx-filter'))
               : null,
@@ -1505,8 +1507,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                     // Source (a text layer's words, a solid's colour) and Retime
                     // ride with Transform behind the same choice: all three are
                     // the *layer*, and this panel is about the effects on it.
-                    // Settings → Interface brings them back together.
-                    if (ui.workspace.interface.transformInEffectControls) ...[
+                    // Settings → Interface brings them back together. The
+                    // filter reaches Transform's rows either way.
+                    if (ui.workspace.interface.transformInEffectControls ||
+                        _filter.needle.isNotEmpty) ...[
                       // What the layer is made of comes before where it sits: a
                       // text layer's words are the first thing you want when
                       // you select one.
@@ -2395,7 +2399,8 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// What a stack with nothing on it shows: the one thing it can do.
+/// What a stack with nothing on it shows: the one thing it can do, on the
+/// value column's edge, where Add animator stands.
 class _EmptyStack extends StatelessWidget {
   final ValueChanged<String> onAdd;
   const _EmptyStack({required this.onAdd});
@@ -2404,13 +2409,16 @@ class _EmptyStack extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 18),
-      child: Center(
-        child: Builder(
+      padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+      child: fxTwoColumnRow(
+        context: context,
+        name: const SizedBox.shrink(),
+        control: Builder(
           builder: (button) => HouseButton(
             key: const ValueKey('fx-empty-add'),
+            small: true,
             onPressed: () => showAddEffectMenu(button, onAdd),
-            child: Text(l10n.addEffect, style: t.body),
+            child: Text(t.propertyCase(l10n.addEffect)),
           ),
         ),
       ),
@@ -3606,6 +3614,9 @@ class _TransformSection extends StatelessWidget {
     final share = ShareRows.maybeOf(context);
     final named = share != null && share.active ? share : null;
     final owner = layer.internallayerId.toString();
+    // A filter the heading's name holds keeps every row, as an effect's does.
+    final title = engineLabel('Transform');
+    final needle = title.toLowerCase().contains(filter) ? '' : filter;
     final rows = TransformRowsFrb(
       comp: comp,
       layer: layer,
@@ -3621,11 +3632,12 @@ class _TransformSection extends StatelessWidget {
       onSeek: onSeek,
       onChanged: onChanged,
       twoColumn: true,
-      filter: filter,
+      filter: needle,
     ).rows(context);
+    if (rows.isEmpty) return const SizedBox.shrink();
     return FxSection(
-        title: engineLabel('Transform'),
-        open: open,
+        title: title,
+        open: open || needle.isNotEmpty,
         onToggle: onToggle,
         onContextMenu: (at) =>
             showTransformMenu(context, at, layer, onChanged: onChanged),

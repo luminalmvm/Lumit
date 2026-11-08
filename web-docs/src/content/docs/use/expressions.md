@@ -28,9 +28,9 @@ shows its value in red.
 **Tab** and **Shift+Tab** do the same in the Expressions panel, the
 **Animation ▸ Add expression** editor and the shader editor.
 
-The row then shows the expression and its value, and a click on either opens the editor
-again. In the Timeline the expression is written along the property's lane, and a click
-there opens the editor across the lane.
+The row then shows the value it gives, and a click on it, or **Edit expression** on its
+right-click menu, opens the editor again. In the Timeline the expression is written along
+the property's lane, and a click there opens the editor across the lane.
 
 **Remove expression**, in the editor and in the row's right-click menu, goes back to a
 plain value. The property keeps the number it was showing. **Convert to keyframes**, beside

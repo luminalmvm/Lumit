@@ -1492,7 +1492,7 @@ List<MenuSection> lumitMenus(
             // A new layer lands directly above the selected one, and at the
             // top of the stack when nothing is selected ([newLayerFrb]).
             MenuEntry.submenu(l10n.menuNew, [
-              newRow(l10n.menuSolid, 'layer.new.solid'),
+              newRow(l10n.menuSolidEllipsis, 'layer.new.solid'),
               newRow(l10n.menuText, 'layer.new.text'),
               newRow(l10n.menuCamera, 'layer.new.camera'),
               // One row and the settings window: the kind is chosen there,

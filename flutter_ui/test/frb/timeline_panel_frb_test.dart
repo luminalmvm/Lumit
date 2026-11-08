@@ -879,7 +879,7 @@ void main() {
       await mount(tester, p);
 
       for (final kind in [
-        'Solid',
+        'Solid…',
         'Text',
         'Camera',
         'Adjustment',
@@ -892,7 +892,7 @@ void main() {
         await tester.tap(find.text(kind));
         await tester.pumpAndSettle();
         // A solid asks for its settings first.
-        if (kind == 'Solid') {
+        if (kind == 'Solid…') {
           await tester.tap(find.byKey(const ValueKey('layer-settings-confirm')));
           await tester.pumpAndSettle();
         }

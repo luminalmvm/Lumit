@@ -1797,6 +1797,10 @@
   "@deleteMask": {
     "description": "Context-menu item."
   },
+  "deleteAllMasks": "Delete all masks",
+  "@deleteAllMasks": {
+    "description": "The Timeline's Masks heading menu: takes every mask off the layer, as one undo step."
+  },
   "menuAddMask": "Add mask",
   "@menuAddMask": {
     "description": "Masks heading menu row: a new rectangle mask the size of the comp"
@@ -8560,6 +8564,10 @@
   "menuSolid": "Solid",
   "@menuSolid": {
     "description": "Menu item."
+  },
+  "menuSolidEllipsis": "Solid…",
+  "@menuSolidEllipsis": {
+    "description": "Layer > New menu item and the Timeline's New list: opens the solid's settings, then makes the solid."
   },
   "menuSplitLayer": "Split layer",
   "@menuSplitLayer": {

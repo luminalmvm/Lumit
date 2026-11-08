@@ -556,7 +556,7 @@ Future<void> showTimelineMoreMenu(
 
 /// The kinds a new layer can be, each with its keymap action.
 List<(String, String)> _newLayerKinds() => [
-      ('layer.new.solid', l10n.menuSolid),
+      ('layer.new.solid', l10n.menuSolidEllipsis),
       ('layer.new.text', l10n.menuText),
       ('layer.new.camera', l10n.menuCamera),
       ('layer.new.light.point', l10n.menuLight),

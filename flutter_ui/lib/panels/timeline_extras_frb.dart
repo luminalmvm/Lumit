@@ -31,7 +31,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/flowchart_frb.dart' show openFlowchartFrb;
-import '../shell/menu_bar_frb.dart' show trimCompAction;
+import '../shell/menu_bar_frb.dart' show stepToMarkerFrb, trimCompAction;
 import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
@@ -596,6 +596,7 @@ Future<void> showMarkerMenuFrb({
   int regionFrames = 1,
   String keyPrefix = 'marker-menu',
   VoidCallback? onGoTo,
+  ValueChanged<bool>? onStep,
 }) async {
   final isRegion = (marker.durationFrames ?? 0) > 0;
   // A region as long as was asked for, or as long as there is room for.
@@ -614,6 +615,8 @@ Future<void> showMarkerMenuFrb({
           onPressed: () => close('go-to'),
           child: Text(l10n.markerGoTo),
         ),
+      if (onStep != null) ..._markerStepRows(keyPrefix, close),
+      if (onGoTo != null || onStep != null) const MenuDivider(),
       MenuRow(
         key: ValueKey<String>('$keyPrefix-edit'),
         onPressed: () => close('edit'),
@@ -660,6 +663,8 @@ Future<void> showMarkerMenuFrb({
   switch (picked) {
     case 'go-to':
       onGoTo?.call();
+    case 'prev' || 'next':
+      onStep?.call(picked == 'prev');
     case 'edit':
       final edited = await showMarkerSettingsFrb(
           context: context, marker: marker, spans: regionRoom != null);
@@ -2239,8 +2244,15 @@ class _TimelineRulerState extends State<TimelineRuler> {
       // take hold of at any zoom the whole comp fits in.
       regionFrames: max(1, widget.fps.round()),
       onGoTo: () => widget.onSeek(frameAtTime(widget.comp, marker.time)),
+      onStep: _step,
     );
   }
+
+  /// To the comp marker before or after the playhead, as the Composition
+  /// menu goes.
+  void _step(bool back) => stepToMarkerFrb(
+      Provider.of<LumitUiState>(context, listen: false), widget.comp,
+      back: back);
 
   /// The right-click menu on the ruler's own ground: a marker or a work-area
   /// edge at [frame], the one under the pointer. A ruler with nothing to
@@ -2253,6 +2265,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
         addMarker: widget.onMarkersChanged == null ? null : _createMarkerAt,
         setWork: widget.onWorkArea,
         extra: widget.groundRows,
+        onStep: _step,
       );
 
   /// Whether [x], in the ruler's own pixels, lands in either work-area
@@ -3637,9 +3650,29 @@ void addMarkerFrb(
 }) =>
     writeMarkers(comp, markersWithFrb(comp, frame: frame, label: label));
 
+/// Previous marker and Next marker, with the Composition menu's chords.
+List<Widget> _markerStepRows(
+        String keyPrefix, void Function(String?) close,
+        {bool enabled = true}) =>
+    [
+      MenuRow(
+          key: ValueKey<String>('$keyPrefix-prev'),
+          enabled: enabled,
+          onPressed: () => close('prev'),
+          child: MenuLabel(l10n.menuPreviousMarker,
+              action: 'marker.prev', enabled: enabled)),
+      MenuRow(
+          key: ValueKey<String>('$keyPrefix-next'),
+          enabled: enabled,
+          onPressed: () => close('next'),
+          child: MenuLabel(l10n.menuNextMarker,
+              action: 'marker.next', enabled: enabled)),
+    ];
+
 /// The menu on a ruler's ground, with [frame] as its "here": a marker there,
 /// and the work area's ends. Either half stays out where its callback is null.
-/// [extra] is a view's own rows, under them.
+/// [extra] is a view's own rows, under them. [onStep] goes to the marker
+/// before or after the playhead.
 Future<void> showRulerMenu(
   BuildContext context, {
   required CompositionReference comp,
@@ -3648,6 +3681,7 @@ Future<void> showRulerMenu(
   Future<void> Function(int frame)? addMarker,
   ValueChanged<BridgeSpan?>? setWork,
   List<Widget> Function(VoidCallback close)? extra,
+  ValueChanged<bool>? onStep,
 }) async {
   if (setWork == null && addMarker == null) return;
   final picked = await showMenuAt<String>(
@@ -3659,6 +3693,9 @@ Future<void> showRulerMenu(
             key: const ValueKey('tl-ruler-add-marker'),
             onPressed: () => close('marker'),
             child: MenuLabel(l10n.menuAddMarkerHere, action: 'marker.add')),
+      if (onStep != null)
+        ..._markerStepRows('tl-ruler', close,
+            enabled: markersOf(comp).isNotEmpty),
       if (setWork != null) ...[
         if (addMarker != null) const MenuDivider(),
         MenuRow(
@@ -3682,6 +3719,8 @@ Future<void> showRulerMenu(
   switch (picked) {
     case 'marker':
       await addMarker?.call(frame);
+    case 'prev' || 'next':
+      onStep?.call(picked == 'prev');
     case 'work-clear':
       setWork?.call(null);
     case _:
