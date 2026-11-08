@@ -14313,6 +14313,195 @@
   "@viewerMenuAlign": {
     "description": "Entry in the Viewer picture's right-click menu, shown while layers are selected. It opens a submenu of the six ways to line a layer up with the composition: Left, Centre, Right, Top, Middle, Bottom."
   },
+  "viewerMenuGuides": "Guides",
+  "@viewerMenuGuides": {
+    "description": "Entry in the Viewer picture's right-click menu. It opens a submenu to add a guide at the pointer, lock them, clear them and choose what a dragged layer snaps to."
+  },
+  "viewerMenuAddVerticalGuide": "Add vertical guide",
+  "@viewerMenuAddVerticalGuide": {
+    "description": "Viewer right-click menu row: puts a vertical guide line where the pointer is."
+  },
+  "viewerMenuAddHorizontalGuide": "Add horizontal guide",
+  "@viewerMenuAddHorizontalGuide": {
+    "description": "Viewer right-click menu row: puts a horizontal guide line where the pointer is."
+  },
+  "viewerMenuLockGuides": "Lock guides",
+  "@viewerMenuLockGuides": {
+    "description": "Viewer right-click menu row with a tick: while on, guides can't be dragged."
+  },
+  "viewerMenuDeleteGuide": "Delete guide",
+  "@viewerMenuDeleteGuide": {
+    "description": "Right-click menu on one guide line in the Viewer: takes that guide away."
+  },
+  "viewerMenuGuidePosition": "Set position…",
+  "@viewerMenuGuidePosition": {
+    "description": "Right-click menu on one guide line in the Viewer: asks for the exact place of the guide in composition pixels."
+  },
+  "viewerMenuRulerUnits": "Units",
+  "@viewerMenuRulerUnits": {
+    "description": "Right-click menu on the Viewer's rulers: a submenu choosing what the rulers count in, pixels or percent of the frame."
+  },
+  "viewerMenuRulerPixels": "Pixels",
+  "@viewerMenuRulerPixels": {
+    "description": "Choice under Units in the Viewer ruler's right-click menu: the rulers count composition pixels."
+  },
+  "viewerMenuRulerPercent": "Percent",
+  "@viewerMenuRulerPercent": {
+    "description": "Choice under Units in the Viewer ruler's right-click menu: the rulers count percent of the frame."
+  },
+  "viewerMenuSaveFrame": "Save frame as…",
+  "@viewerMenuSaveFrame": {
+    "description": "Viewer right-click menu row: writes the frame at the playhead to a picture file; the ellipsis says a file dialogue follows."
+  },
+  "viewerMenuCopyFrame": "Copy frame",
+  "@viewerMenuCopyFrame": {
+    "description": "Viewer right-click menu row: puts the frame at the playhead on the system clipboard as a picture."
+  },
+  "viewerFrameSaved": "Frame saved",
+  "@viewerFrameSaved": {
+    "description": "Status line, after the Viewer's Save frame as has written the file."
+  },
+  "viewerFrameNotSaved": "The frame could not be saved",
+  "@viewerFrameNotSaved": {
+    "description": "Status line, when the Viewer's Save frame as failed."
+  },
+  "viewerFrameCopied": "Frame copied",
+  "@viewerFrameCopied": {
+    "description": "Status line, after the Viewer's Copy frame has put the picture on the clipboard."
+  },
+  "viewerFrameNotCopied": "The frame could not be copied",
+  "@viewerFrameNotCopied": {
+    "description": "Status line, when the Viewer's Copy frame failed."
+  },
+  "viewerMenuSnapshot": "Snapshot",
+  "@viewerMenuSnapshot": {
+    "description": "Viewer right-click menu row opening a submenu: take a snapshot of the picture, show it, or clear it."
+  },
+  "viewerMenuSnapshotShow": "Show snapshot",
+  "@viewerMenuSnapshotShow": {
+    "description": "Viewer right-click menu row with a tick: while on, the stored snapshot is drawn over the live picture."
+  },
+  "viewerMenuSnapshotClear": "Clear snapshot",
+  "@viewerMenuSnapshotClear": {
+    "description": "Viewer right-click menu row: forgets the stored snapshot."
+  },
+  "viewerMenuZoom": "Zoom",
+  "@viewerMenuZoom": {
+    "description": "Viewer right-click menu row opening a submenu of magnifications: Fit, Zoom in, Zoom out and the fixed percentages."
+  },
+  "viewerMenuShow": "Show",
+  "@viewerMenuShow": {
+    "description": "Viewer right-click menu row opening a submenu of ticks for what is drawn over the picture: grid, safe areas, rulers, layer controls and so on."
+  },
+  "viewerMenuCompSettings": "Composition settings…",
+  "@viewerMenuCompSettings": {
+    "description": "Viewer right-click menu row: opens the composition's settings window."
+  },
+  "viewerMenuWorkAreaStart": "To work area start",
+  "@viewerMenuWorkAreaStart": {
+    "description": "Viewer transport right-click menu row: moves the playhead to the start of the work area."
+  },
+  "viewerMenuWorkAreaEnd": "To work area end",
+  "@viewerMenuWorkAreaEnd": {
+    "description": "Viewer transport right-click menu row: moves the playhead to the end of the work area."
+  },
+  "viewerMenuLoop": "Loop",
+  "@viewerMenuLoop": {
+    "description": "Viewer transport right-click menu row opening a submenu of what playback does at the end of the work area: Loop, Ping-pong, Play once."
+  },
+  "viewerMenuCopyTime": "Copy time",
+  "@viewerMenuCopyTime": {
+    "description": "Right-click menu on the Viewer's clock: copies the time on it as text."
+  },
+  "viewerMenuCopyFrameNumber": "Copy frame number",
+  "@viewerMenuCopyFrameNumber": {
+    "description": "Right-click menu on the Viewer's clock: copies the frame number as text."
+  },
+  "viewerMenuDeletePoints": "{count, plural, =1{Delete point} other{Delete {count} points}}",
+  "@viewerMenuDeletePoints": {
+    "description": "Right-click menu on a path point in the Viewer: deletes it, or all the selected points.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "viewerMenuPointCorner": "Corner point",
+  "@viewerMenuPointCorner": {
+    "description": "Right-click menu on a path point in the Viewer, with a tick: the point has no handles, so the path turns sharply there."
+  },
+  "viewerMenuPointSmooth": "Smooth point",
+  "@viewerMenuPointSmooth": {
+    "description": "Right-click menu on a path point in the Viewer, with a tick: the point has a pair of handles in line, so the path runs smoothly through it."
+  },
+  "viewerMenuFirstPoint": "Set as first point",
+  "@viewerMenuFirstPoint": {
+    "description": "Right-click menu on a path point in the Viewer: makes this point where the closed path starts. It decides how a path morphs and where a stroke begins."
+  },
+  "viewerMenuClosePath": "Close path",
+  "@viewerMenuClosePath": {
+    "description": "Right-click menu on a path in the Viewer, with a tick when the path is closed: joins its last point to its first, or opens it again."
+  },
+  "viewerMenuFinishPath": "Finish path",
+  "@viewerMenuFinishPath": {
+    "description": "Right-click menu while drawing a path with the Pen in the Viewer: ends the path where it is, open."
+  },
+  "viewerMenuRemoveLastPoint": "Remove last point",
+  "@viewerMenuRemoveLastPoint": {
+    "description": "Right-click menu while drawing a path with the Pen in the Viewer: takes back the point placed last."
+  },
+  "viewerMenuDiscardPath": "Discard path",
+  "@viewerMenuDiscardPath": {
+    "description": "Right-click menu while drawing a path with the Pen in the Viewer: throws away the path in progress."
+  },
+  "viewerMenuReversePath": "Reverse path",
+  "@viewerMenuReversePath": {
+    "description": "Right-click menu on a path in the Viewer: runs the path the other way round, keeping its shape."
+  },
+  "viewerMenuAddPoint": "Add point here",
+  "@viewerMenuAddPoint": {
+    "description": "Right-click menu on the line of a path in the Viewer: adds a point at the pointer, keeping the shape."
+  },
+  "viewerMenuSelectAllPoints": "Select all points",
+  "@viewerMenuSelectAllPoints": {
+    "description": "Right-click menu on a path in the Viewer: selects every point of that path."
+  },
+  "viewerMenuDeletePins": "Delete all pins",
+  "@viewerMenuDeletePins": {
+    "description": "Right-click menu of the Puppet tools in the Viewer: takes every pin off the layer."
+  },
+  "viewerMenuResetPoint": "Reset point",
+  "@viewerMenuResetPoint": {
+    "description": "Right-click menu on an effect's point in the Viewer: puts the point back at the effect's default place."
+  },
+  "viewerMenuCentrePoint": "Move to centre",
+  "@viewerMenuCentrePoint": {
+    "description": "Right-click menu on an effect's point in the Viewer: moves the point to the middle of the frame."
+  },
+  "viewerMenuPointReveal": "Reveal in Effect controls",
+  "@viewerMenuPointReveal": {
+    "description": "Right-click menu on an effect's point in the Viewer: fronts the Effect controls panel on that effect."
+  },
+  "viewerMenuClearSelection": "Clear selection",
+  "@viewerMenuClearSelection": {
+    "description": "Right-click menu on the point cloud in the Viewer: picks no points."
+  },
+  "viewerMenuClearMarks": "Clear marks",
+  "@viewerMenuClearMarks": {
+    "description": "Right-click menu on the source view: takes away the In and Out marks."
+  },
+  "viewerMenuCloseSource": "Close source",
+  "@viewerMenuCloseSource": {
+    "description": "Right-click menu on the source view: unloads the footage, which collapses the source view."
+  },
+  "viewerMenuResetDivider": "Reset divider",
+  "@viewerMenuResetDivider": {
+    "description": "Right-click menu on the line between two compared views in the Viewer: puts the line back in the middle."
+  },
+  "viewerMenuGoToKey": "Go to key",
+  "@viewerMenuGoToKey": {
+    "description": "Right-click menu on a key of a motion path in the Viewer: moves the playhead to it."
+  },
   "viewerMenuSelect": "Select",
   "@viewerMenuSelect": {
     "description": "Entry in the Viewer picture's right-click menu. It opens a submenu naming every layer under the pointer, top to bottom, so a layer covered by another can be selected."
@@ -14391,29 +14580,14 @@
       }
     }
   },
-  "viewerReadoutFull": "{comp} · {size} · {zoom}",
-  "@viewerReadoutFull": {
-    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, its pixel size (or the arrowed pair while the preview is made smaller), and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
+  "viewerReadoutNamed": "{comp} · {size}",
+  "@viewerReadoutNamed": {
+    "description": "The right-hand end of the Viewer's one gathered strip: the composition's name and its size in pixels. Keep the separator.",
     "placeholders": {
       "comp": {
         "type": "String"
       },
       "size": {
-        "type": "String"
-      },
-      "zoom": {
-        "type": "String"
-      }
-    }
-  },
-  "viewerReadoutShort": "{size} · {zoom}",
-  "@viewerReadoutShort": {
-    "description": "The Viewer bar's reading, shortest form, used when the bar is too narrow for the composition's name as well: the composition's pixel size and the magnification. Every part is a number, so only the separator is translatable.",
-    "placeholders": {
-      "size": {
-        "type": "String"
-      },
-      "zoom": {
         "type": "String"
       }
     }
@@ -16335,10 +16509,6 @@
   "tipViewerSnapshotShow": "Snapshot (hold)",
   "@tipViewerSnapshotShow": {
     "description": "Tooltip on the Viewer bar's show-snapshot mark, the second of the snapshot pair. The stored picture is shown over the live one for as long as the button is held down, and goes when it is let go. One or two words."
-  },
-  "tipViewerSnapshotNone": "No snapshot",
-  "@tipViewerSnapshotNone": {
-    "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. One or two words."
   },
   "fileTypeExpressions": "Lumit expressions",
   "@fileTypeExpressions": {

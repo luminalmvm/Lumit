@@ -83,6 +83,7 @@ import 'viewer_bar.dart';
 import 'viewer_camera.dart' show altNavigates;
 import 'viewer_compare.dart';
 import 'viewer_deck.dart';
+import 'viewer_menus.dart';
 import 'viewer_rulers.dart' show viewerRulerBand;
 import 'viewer_picture.dart'
     if (dart.library.js_interop) 'viewer_picture_web.dart';
@@ -436,6 +437,9 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// Whether the Show button is being held down this instant.
   bool _showingSnapshot = false;
 
+  /// What the menus opened from this view's bars and picture ask of it.
+  final ViewerMenuHost _menus = ViewerMenuHost();
+
   @override
   void dispose() {
     _returnPicture();
@@ -506,6 +510,17 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     if (_snapshot == null && held) return;
     if (_showingSnapshot == held) return;
     setState(() => _showingSnapshot = held);
+  }
+
+  /// Forget the stored picture, after the frame for [_takeSnapshot]'s reason.
+  void _clearSnapshot() {
+    final old = _snapshot;
+    setState(() {
+      _snapshot = null;
+      _snapshotArea = null;
+      _showingSnapshot = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => old?.dispose());
   }
 
   /// Take the Viewer to [scale] (null = fit) and [pan], smoothly when the shell
@@ -709,10 +724,27 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         _goToZoom(z, Offset.zero, from: _shownScale);
     // A 3D viewport says so where the panel's name goes.
     final viewport = ui.isViewport(widget.view.engineId);
+    _menus
+      ..comp = comp
+      ..viewId = widget.view.engineId
+      ..zoom = _zoom
+      ..shownScale = _shownScale
+      ..onZoom = goToNamedZoom
+      ..channel = _channel
+      ..onChannel = ((c) => setState(() => _channel = c))
+      ..background = ui.model.heldBackground
+      ..compSize = Size(facts.size.width.toDouble(), facts.size.height.toDouble())
+      ..hasSnapshot = _snapshot != null
+      ..snapshotShown = _showingSnapshot
+      ..takeSnapshot = _takeSnapshot
+      ..clearSnapshot = _clearSnapshot
+      ..showSnapshot = _holdSnapshot;
     final header = split
         ? ViewerHeader(
             viewport: viewport,
             viewId: widget.view.engineId,
+            name: settings.name,
+            host: _menus,
             zoom: _zoom,
             shownScale: _shownScale,
             look: ui.viewerLook,
@@ -755,6 +787,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
           hasSnapshot: _snapshot != null,
           onSnapshotTake: _takeSnapshot,
           onSnapshotHold: _holdSnapshot,
+          host: _menus,
           detached: round,
           transport: !deck,
           loop: ui.workspace.performance.loop,
@@ -782,6 +815,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                     onZoom: goToNamedZoom,
                     quality: !deck,
                     viewId: widget.view.engineId,
+                    host: _menus,
                   ),
                 ],
         ),
@@ -799,6 +833,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         // every measurement in this builder is taken against what they leave.
         _band = ui.viewerOverlays.rulers ? viewerRulerBand : 0.0;
         final fitted = _fittedRect(constraints, size);
+        _menus.picture = fitted;
         _reportScale(ui, fitted, size, _fitScale(constraints, size));
         // Through the comp's own camera a viewport is the comp's picture.
         final canvas = viewport && ui.viewPoseOf(widget.view.engineId) != null
@@ -892,7 +927,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
               compSize: Size(size.width.toDouble(), size.height.toDouble()),
               panel: _pictureArea(constraints),
             )),
-            onZoom: goToNamedZoom,
+            menus: _menus,
           ),
         );
       },
@@ -1353,14 +1388,19 @@ class FootageStageFrb extends StatelessWidget {
       onSeek: (frame) => ui.seekFootageView(view, frame),
     );
     final bar = _SourceBar(view: view, facts: facts, detached: round);
+    // The same rows from anywhere on the source view.
+    Widget menu(Widget child) => ViewerRightClick(
+          rows: (close) => viewerSourceRows(ui, view, close),
+          child: child,
+        );
     if (!round) {
-      return Column(
+      return menu(Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [header, Expanded(child: picture), strip, bar],
-      );
+      ));
     }
     final gap = SizedBox(height: t.tokens.tileGap);
-    return ColoredBox(
+    return menu(ColoredBox(
       color: t.room,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1383,7 +1423,7 @@ class FootageStageFrb extends StatelessWidget {
           bar,
         ],
       ),
-    );
+    ));
   }
 
   /// The item at the size that fits the pane, its shape kept.

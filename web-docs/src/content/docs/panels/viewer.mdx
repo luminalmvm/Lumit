@@ -14,34 +14,37 @@ strip below it, and nothing on either of them changes what an export writes.
 
 ## The strip above
 
-The panel's name sits at the left. Three pickers sit at the right.
+The panel's name and the composition's sit at the left. Three pickers sit at the right.
 
 | Picker | Sets |
 | --- | --- |
-| **Magnification** | How big the picture is drawn. Fit, or a fixed step from 25% to 400%. The wheel zooms too, anchored on the pointer. |
+| **Magnification** | How big the picture is drawn. Fit, with its percentage beside it, or a fixed step from 25% to 400%. The wheel zooms too, anchored on the pointer. |
 | **Preview quality** | The **preview resolution** — full, half, third, quarter or auto — and the **playback** behaviour, every frame or adaptive. |
 | **Colour pipeline** | The display transform the picture is shown through. Where the project loads a colour configuration it grows a section per display, each of its views a row. |
 
 ## The strip below
 
-<Shot file="viewer-bar.png" caption="The Viewer's bottom bar: the ways of looking, the snapshot pair, the transport, and the composition's own reading."/>
+<Shot file="viewer-bar.png" caption="The Viewer's bottom bar: the ways of looking, the snapshot, the exposure, the transport, and the composition's size."/>
 
 | Control | Does |
 | --- | --- |
-| **Transparency board** | Draws a chequerboard behind alpha. |
+| **Transparency board** | Draws a chequerboard behind alpha. Off, the mark is filled and the composition's background shows. |
 | **Guides** | One menu for everything drawn over the picture: the grid, title and action safe, layer controls, the region of interest, and the composition background. In a 3D composition it adds **3D ground** and **3D axes**. In a node graph, **Picture bounds** outlines how far the picture reaches past the frame, with its size in pixels. The outline is in the warning colour where it reached as far as a box keeps. **File ▸ Project settings… ▸ Node graph overscan** lets a box keep more, at the cost of memory. |
 | **Channel** | RGB, red, green, blue, or alpha. |
-| **3D view** | What the picture is looked through: the active camera, Front, Back, Left, Right, Top, Bottom, or Custom 1 to 3. With two or four views, each keeps its own, and on a 3D composition new views open on Top, Front and Right. |
-| **Exposure** | Drag the number; click the mark to go back to zero. |
+| **3D view** | With something in depth in the composition. What the picture is looked through: the active camera, Front, Back, Left, Right, Top, Bottom, or Custom 1 to 3. With two or four views, each keeps its own, and on a 3D composition new views open on Top, Front and Right. |
 | **Take snapshot** | Photographs the picture. |
-| **Show snapshot** | Puts the photograph back over the live picture while it is held. |
+| **Show snapshot** | With a snapshot taken. Puts the photograph back over the live picture while it is held. |
+| **Exposure** | The number shows on hover, or while it isn't zero. Drag the number; click the mark to go back to zero. |
 | **Transport** | First frame, previous frame, play or pause, next frame, last frame. |
 | **Clock** | The playhead's time. Click it to type one; a time past either end clamps. |
 | **Loop** | What playback does at the end of the work area: loop, play once, or ping-pong. Click to step through the three. |
-| **Reading** | The composition, its size, and the magnification. While the preview is made smaller than the composition, the size reads as the pair, source → preview, in the warning colour. |
+| **Reading** | The composition's size. While the preview is made smaller than the composition, the size reads as the pair, source → preview, in the warning colour. |
 
 The snapshot photographs **what is on screen**, at the resolution it is drawn at. Holding
 Show puts it back over exactly the part of the picture it came from.
+
+Every control on both strips has a right-click menu. Right-click an empty stretch of the
+bottom strip to arrange the strips.
 
 While a frame takes long enough to notice, a slim bar left of the reading fills as it
 is made, with a word for what the engine is doing. It goes when the frame arrives, and
@@ -96,18 +99,43 @@ the marks.
 
 ### The right-click menu
 
-Right-click the picture.
+Right-click the picture, with any tool.
 
 <Shot file="viewer-menu.png" caption="The picture's right-click menu, with Select listing the layers under the pointer." />
 
 | Row | Does |
 | --- | --- |
+| The layer's name | The layer on top under the pointer, which the click selects. Opens the **Layer** menu and the clipboard rows. |
 | **Select** | Lists every layer under the pointer, top to bottom. Choosing one selects it, which reaches a layer covered by another. |
 | **Align** | Moves each selected layer so an edge or the middle of its box meets the composition's: **Left**, **Centre**, **Right**, **Top**, **Middle**, **Bottom**. |
-| **Fit**, **100%** | Set the magnification. |
-| **Grid**, **Title/action safe**, **Rulers**, **Snap to guides**, **Transparency grid** | The same switches as the bottom bar's. |
+| **Add marker at playhead** | Adds a composition marker. |
+| **Guides** | **Add vertical guide** and **Add horizontal guide** at the pointer, **Snap to guides**, **Snap to grid**, **Lock guides**, **Clear guides**. |
+| **Copy frame**, **Save frame as…** | The frame at the playhead at the composition's full size, on the clipboard or as a PNG. On Linux, **Copy frame** needs `wl-copy` or `xclip`. |
+| **Snapshot** | **Take snapshot**, **Show snapshot**, **Clear snapshot**. |
+| **Zoom**, **Resolution**, **Channel view** | The same choices as the strips'. |
+| **Show** | The marks over the picture, ticked. |
+| **View layout**, **Compare**, **Region of interest** | As in the **View** menu. |
+| **Composition background…**, **Composition settings…** | The composition's own. |
 
-**Select** appears with a layer under the pointer, and **Align** with a layer selected.
+**Select** appears with more than one layer under the pointer, and **Align** with a layer
+selected.
+
+Other things on the picture have their own menus:
+
+| Right-click | Rows |
+| --- | --- |
+| A path point | **Delete point**, **Corner point**, **Smooth point**, **Set as first point**, then the path's rows. A row acts on all the selected points. |
+| A path's line | **Add point here**, **Select all points**, **Close path**, **Reverse path**, **Rename…**, **Delete mask** or **Delete shape**. |
+| The Pen's path in progress | **Close path**, **Finish path**, **Remove last point**, **Discard path**. |
+| A key on a motion path | **Go to key**, **Delete key**. |
+| A 3D handle | **Local axes**, **World axes**, **View axes**, **Transform**. |
+| A puppet pin | **Rename…**, **Delete all pins**, **Delete pin**. |
+| An effect's point | **Move to centre**, **Reset point**, **Reveal in Effect controls**. |
+| A tracked point | **Create null**, **Create solid**, **Create card**, **Select all**, **Clear selection**. |
+| A ruler | Add a guide, **Lock guides**, **Clear guides**, **Units** (pixels or percent), **Rulers**. |
+| A guide | **Set position…**, **Lock guides**, **Clear guides**, **Delete guide**. A locked guide doesn't drag. |
+| The compare divider | **Off**, **Wipe**, **Split screen**, **Reset divider**. |
+| The source view | **In**, **Out**, **Clear marks**, **Insert**, **Overwrite**, **Close source**. |
 
 ### Moving about
 

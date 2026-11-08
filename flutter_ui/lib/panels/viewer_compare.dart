@@ -15,10 +15,15 @@
 // have to be in register or the seam means nothing.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:provider/provider.dart';
 
+import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../state/viewer_views.dart';
 import '../widgets/controls.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_menus.dart';
 
 class ViewerCompare extends StatelessWidget {
   final PaneId pane;
@@ -61,9 +66,11 @@ class ViewerCompare extends StatelessWidget {
               // Both at the whole box's size, so the two pictures are in
               // register and the seam is a seam rather than two shots meeting.
               Positioned.fill(child: right),
-              ClipRect(
-                clipper: _LeftOf(x),
-                child: Positioned.fill(child: left),
+              Positioned.fill(
+                child: ClipRect(
+                  clipper: _LeftOf(x),
+                  child: left,
+                ),
               ),
             ],
             // The line itself, and the grab strip on it. Drawn in the accent,
@@ -81,6 +88,22 @@ class ViewerCompare extends StatelessWidget {
                     if (box.maxWidth <= 0) return;
                     onDivider(
                       ((x + d.delta.dx) / box.maxWidth).clamp(0.0, 1.0),
+                    );
+                  },
+                  // A double click, or the menu, puts it back in the middle.
+                  onDoubleTap: () => onDivider(0.5),
+                  onSecondaryTapUp: (d) {
+                    final ui = context.read<LumitUiState>();
+                    showMenuAt<void>(
+                      context: context,
+                      position: d.globalPosition,
+                      rows: (close) => [
+                        ...viewerCompareRows(ui, () => close(null)),
+                        const MenuDivider(),
+                        viewerRow(l10n.viewerMenuResetDivider,
+                            () => onDivider(0.5), () => close(null),
+                            id: 'viewer-compare-reset'),
+                      ],
                     );
                   },
                   child: Center(

@@ -62,6 +62,7 @@ import 'viewer_gizmo_3d.dart'
         turnOf,
         turnOfAe;
 import 'viewer_layer_map.dart';
+import 'viewer_menus.dart';
 import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
 import 'viewer_prefix_chip.dart';
@@ -146,8 +147,8 @@ class ViewerStage extends StatelessWidget {
   final void Function(Offset at, {required bool out}) onZoomAt;
   final void Function(Rect box, {required bool out}) onZoomBox;
 
-  /// A named magnification, null for fit, for the picture's right-click menu.
-  final ValueChanged<double?>? onZoom;
+  /// What the picture's right-click menu asks of the panel.
+  final ViewerMenuHost menus;
 
   const ViewerStage({
     super.key,
@@ -170,7 +171,7 @@ class ViewerStage extends StatelessWidget {
     required this.onChanged,
     required this.onZoomAt,
     required this.onZoomBox,
-    this.onZoom,
+    required this.menus,
   });
 
   /// The tracked layer whose solved point cloud is drawn, and whether it is
@@ -640,6 +641,11 @@ class ViewerStage extends StatelessWidget {
       // Panning the picture, not the layer: the overlay's own handle takes
       // the gesture first when it is hit, so this only fires on empty space.
       onPanUpdate: picking ? null : (d) => onPan(d.delta),
+      // Whatever tool is in hand, a right click on the picture opens its menu,
+      // unless the tool has taken it first. Not while picking a colour.
+      onSecondaryTapUp: uiState.dropper.value != null
+          ? null
+          : (d) => menus.openPicture?.call(d),
       // **Nothing the stage draws may leave the stage.** Every mark over the
       // picture — the wireframes, the handles, the mask outlines, the tool
       // layers — is a [CustomPaint] filling the stack, and a painter is free
@@ -902,7 +908,7 @@ class ViewerStage extends StatelessWidget {
                         ),
                         onChanged: onChanged,
                         viewId: viewId,
-                        onZoom: onZoom,
+                        menus: menus,
                       ),
                       // The shape tools and the Pen: a drag draws a mask on
                       // the selected layer, and the Pen builds one point by
@@ -922,6 +928,7 @@ class ViewerStage extends StatelessWidget {
                         ),
                         accent: t.accent,
                         onChanged: onChanged,
+                        onPictureMenu: (d) => menus.openPicture?.call(d),
                       ),
                       // The 3D shape tools: a click puts the shape there.
                       ViewerShape3dLayer(
@@ -1013,6 +1020,7 @@ class ViewerStage extends StatelessWidget {
                         comp: comp,
                         boxes: boxes,
                         onChanged: onChanged,
+                        menus: menus,
                       ),
                       // The Anchor point tool: its own pointer, and a drag
                       // that slides the pivot while the picture stays still.
@@ -1124,6 +1132,7 @@ class ViewerStage extends StatelessWidget {
                       accent: t.accent,
                       mark: t.textPrimary,
                       onChanged: onChanged,
+                      onPictureMenu: (d) => menus.openPicture?.call(d),
                     ),
                   );
                 },
@@ -1198,6 +1207,13 @@ class ViewerStage extends StatelessWidget {
                 ),
                 guides: uiState.guides,
                 onGuides: uiState.setGuides,
+                locked: uiState.workspace.interface.viewerGuidesLocked,
+                percent: uiState.workspace.interface.viewerRulerPercent,
+                onRulerMenu: (vertical, details) => showViewerRulerMenu(
+                    context, uiState, menus, vertical, details),
+                onGuideMenu: (index, details) => showViewerGuideMenu(
+                    context, uiState, menus, index, details),
+                labelStyle: t.mono,
                 band: t.surface2,
                 line: t.hairlineStrong,
                 label: t.textMuted,
@@ -1245,12 +1261,14 @@ class ViewerStage extends StatelessWidget {
             // The selection's name, over the stage's own corner. Last
             // in the stack because it is chrome: it names what is selected
             // whatever is being drawn underneath, including a held snapshot.
-            ViewerTag(uiState: uiState),
+            ViewerTag(
+                uiState: uiState, band: overlays.rulers ? viewerRulerBand : 0),
             // And what is being *looked at*, when that is not the finished
             // composition. Its own file, so this is one line: the chip
             // is the Viewer's, but it follows the effect selection rather than
             // anything this panel knows.
-            ViewerPrefixChip(uiState: uiState),
+            ViewerPrefixChip(
+                uiState: uiState, top: overlays.rulers ? viewerRulerBand : 0),
             // Whose composition and playhead this machine is following, on
             // the view that shows the composition in front.
             if (comp.internalid == uiState.selectedComp?.internalid)
@@ -2336,7 +2354,11 @@ const double viewerTagTop = 8;
 /// the colour of the box it names.
 class ViewerTag extends StatelessWidget {
   final LumitUiState uiState;
-  const ViewerTag({super.key, required this.uiState});
+
+  /// How far the rulers come in from the stage's corner.
+  final double band;
+
+  const ViewerTag({super.key, required this.uiState, this.band = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -2356,26 +2378,41 @@ class ViewerTag extends StatelessWidget {
           }
         }
         if (name == null || name.isEmpty) return const SizedBox.shrink();
+        // Several selected: the first, and how many more.
+        final more = picked.length - 1;
         return Positioned(
-          left: viewerTagLeft,
-          top: viewerTagTop,
+          // Clear of the rulers when they're up.
+          left: viewerTagLeft + band,
+          top: viewerTagTop + band,
           child: IgnorePointer(
             child: Container(
               key: const ValueKey('viewer-tag'),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(maxWidth: viewerTagMaxWidth),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              // A plate of its own, so the name reads over any picture.
               decoration: BoxDecoration(
-                border: Border.all(color: t.animated),
+                color: t.surface0.withValues(alpha: viewerChipPlate),
                 borderRadius: BorderRadius.circular(t.tokens.controlRadius),
               ),
-              child: Text(
-                t.kickerCase(name),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.kicker.copyWith(
-                  color: t.animated,
-                  letterSpacing: viewerTagTracking,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(
+                  // Spelled as the layer is: a name isn't a heading.
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.small.copyWith(color: t.animated),
+                  ),
                 ),
-              ),
+                if (more > 0) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '+$more',
+                    style: t.mono.copyWith(
+                        fontSize: barValueTextSize, color: t.textMuted),
+                  ),
+                ],
+              ]),
             ),
           ),
         );
@@ -2384,7 +2421,7 @@ class ViewerTag extends StatelessWidget {
   }
 }
 
-/// The chip's tracking: 0.08em at 9px, the drawing's own — a shade tighter than
-/// the 0.12em a kicker carries, because it names a layer rather than a
-/// container.
-const double viewerTagTracking = 0.72;
+/// How solid a chip's plate is over the picture, and how long the selection's
+/// name may run before it's cut.
+const double viewerChipPlate = 0.85;
+const double viewerTagMaxWidth = 220;

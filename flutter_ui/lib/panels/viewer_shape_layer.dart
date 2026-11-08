@@ -36,7 +36,9 @@ import 'package:uuid/uuid.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'layer_fold_frb.dart' show shapeItemWith, stillColour;
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_gizmo.dart';
+import 'viewer_menus.dart' show viewerRow;
 import 'viewer_tool_cursor.dart';
 import '../widgets/escape_ladder.dart';
 import 'viewer_shapes.dart';
@@ -81,6 +83,9 @@ class ViewerShapeLayer extends StatefulWidget {
 
   final VoidCallback onChanged;
 
+  /// Where a right click goes while no path is in progress.
+  final void Function(TapUpDetails)? onPictureMenu;
+
   const ViewerShapeLayer({
     super.key,
     required this.active,
@@ -93,6 +98,7 @@ class ViewerShapeLayer extends StatefulWidget {
     required this.compSize,
     required this.accent,
     required this.onChanged,
+    this.onPictureMenu,
   });
 
   @override
@@ -185,6 +191,56 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   void _clearDraft() {
     _draft = const PathDraft();
     _carrying = null;
+  }
+
+  /// Whether the path's menu is up: a click on it isn't a click outside the
+  /// Viewer, which would end the path it's about.
+  bool _menuUp = false;
+
+  /// With a path in progress, what to do with it. Otherwise it's the picture's
+  /// click.
+  Future<void> _onSecondaryTapUp(TapUpDetails details) async {
+    if (!_isPen || _draft.isEmpty) {
+      widget.onPictureMenu?.call(details);
+      return;
+    }
+    _menuUp = true;
+    await showMenuAt<void>(
+      context: context,
+      position: details.globalPosition,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          viewerRow(
+              l10n.viewerMenuClosePath,
+              _draft.canClose
+                  ? () {
+                      final path = _draft.vertices;
+                      final carrying = _carrying;
+                      setState(_clearDraft);
+                      _place(path, _target,
+                          closed: true, carrying: carrying);
+                    }
+                  : null,
+              close,
+              id: 'viewer-pen-close'),
+          viewerRow(l10n.viewerMenuFinishPath, _finishOpen, close,
+              id: 'viewer-pen-finish'),
+          viewerRow(
+              l10n.viewerMenuRemoveLastPoint,
+              () => setState(() => _draft.vertices.length == _carrying?.had
+                  ? _clearDraft()
+                  : _draft = _draft.withoutLast()),
+              close,
+              id: 'viewer-pen-back'),
+          const MenuDivider(),
+          viewerRow(l10n.viewerMenuDiscardPath, () => setState(_clearDraft),
+              close,
+              id: 'viewer-pen-discard'),
+        ];
+      },
+    );
+    _menuUp = false;
   }
 
   /// A finished Pen path, onto [box] or into a new shape layer, or over the
@@ -305,7 +361,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
       // A click anywhere outside the Viewer ends a Pen path, open.
       child: TapRegion(
         onTapOutside: (_) {
-          if (_isPen && !_draft.isEmpty) _finishOpen();
+          if (_isPen && !_draft.isEmpty && !_menuUp) _finishOpen();
         },
         // The hardware crosshair leads: the OS precise pointer moves at
         // input rate whatever the application's frame rate is doing, so it is
@@ -324,6 +380,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapUp: _isPen ? _onPenTap : null,
+              onSecondaryTapUp: _onSecondaryTapUp,
               onPanStart: _onPanStart,
               onPanUpdate: _onPanUpdate,
               onPanEnd: (_) => _onPanEnd(),

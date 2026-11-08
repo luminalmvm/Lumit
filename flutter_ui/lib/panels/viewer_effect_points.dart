@@ -21,8 +21,10 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
 
+import '../l10n/strings.dart';
 import '../state/comp_time.dart' show sampledExpression, timeOfFrame;
-import '../widgets/controls.dart' show ThemeScope;
+import '../state/dock.dart' show Panel;
+import '../widgets/controls.dart' show MenuDivider, ThemeScope;
 import 'effect_param_row_frb.dart'
     show
         EffectStackEditor,
@@ -32,8 +34,10 @@ import 'effect_param_row_frb.dart'
 import 'graph_panel.dart' show drivenParamsOf;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show effectPath;
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_anchor.dart' show constrainToAxis;
 import 'viewer_gizmo.dart' show gizmoAnchorSlop;
+import 'viewer_menus.dart' show viewerRow;
 import 'viewer_tool_cursor.dart' show paintAnchorMark;
 
 /// A point's row changed in Effect controls or the Timeline picks its effect,
@@ -185,6 +189,7 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
           onExit: (_) => setState(() => _hover = null),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onSecondaryTapUp: (d) => _menu(m, d.globalPosition),
             onPanDown: (d) => _start(m, d.localPosition),
             onPanUpdate: (d) => _move(d.localPosition),
             onPanEnd: (_) => _end(),
@@ -192,6 +197,67 @@ class _ViewerEffectPointsState extends State<ViewerEffectPoints> {
           ),
         ),
       );
+
+  /// A point's own menu: where it can go, its key at the playhead, and its
+  /// rows. A point worked out by an expression or a wire goes nowhere.
+  void _menu(_Mark m, Offset at) {
+    final fixed = m.driven || _wired(m);
+    final frame = _ui.playheadFrame.value;
+    void place(Offset to) {
+      _editor.writeAll(m.layer, m.effect, {
+        m.x: _value(m.xWas, to.dx, frame),
+        m.y: _value(m.yWas, to.dy, frame),
+      });
+      widget.onChanged();
+    }
+
+    double? def(String id) => switch (cachedListParameters(_fxName(m))
+            .where((p) => p.id == id)
+            .firstOrNull
+            ?.kind) {
+          BridgeParamKind_Float(:final default_) => default_,
+          _ => null,
+        };
+    final defX = def(m.x), defY = def(m.y);
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (closeWith) {
+        void close() => closeWith(null);
+        return [
+          viewerRow(
+              l10n.viewerMenuCentrePoint,
+              fixed
+                  ? null
+                  : () => place(Offset(m.span.width / 2, m.span.height / 2)),
+              close,
+              id: 'viewer-fx-point-centre'),
+          viewerRow(
+              l10n.viewerMenuResetPoint,
+              fixed || defX == null || defY == null
+                  ? null
+                  : () => place(Offset(defX, defY)),
+              close,
+              id: 'viewer-fx-point-reset'),
+          const MenuDivider(),
+          viewerRow(l10n.viewerMenuPointReveal, () {
+            _ui.setEffectSelection(m.layer, [m.effect]);
+            _ui.frontPanel(Panel.effectControls);
+          }, close, id: 'viewer-fx-point-reveal'),
+        ];
+      },
+    );
+  }
+
+  String _fxName(_Mark m) {
+    for (final entry in _ui.model.layers) {
+      if (entry.layer.internallayerId != m.layer.internallayerId) continue;
+      for (final fx in entry.info.effects) {
+        if (fx.id == m.effect) return fx.name;
+      }
+    }
+    return '';
+  }
 
   /// Whether a wire drives either half. The graph is read here, on a hover or
   /// a press, never in a build.

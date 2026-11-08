@@ -26,7 +26,8 @@ import 'package:lumit_flutter/main.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show effectLabelOf;
-import 'viewer_panel_frb.dart' show viewerTagLeft, viewerTagTop;
+import 'viewer_panel_frb.dart'
+    show viewerChipPlate, viewerTagLeft, viewerTagMaxWidth, viewerTagTop;
 
 /// The name of the point the chip would stop at, or `null` when there is no
 /// single one — nothing picked, a whole run picked, or a pick whose effect this
@@ -64,7 +65,11 @@ String? prefixChipName(LumitUiState ui) {
 /// nothing of the Viewer's own layout to disturb.
 class ViewerPrefixChip extends StatelessWidget {
   final LumitUiState uiState;
-  const ViewerPrefixChip({super.key, required this.uiState});
+
+  /// How far the rulers come down from the stage's top.
+  final double top;
+
+  const ViewerPrefixChip({super.key, required this.uiState, this.top = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +97,7 @@ class ViewerPrefixChip extends StatelessWidget {
           // Mirrors the selection tag across the picture: the tag says what is
           // selected, the chip says what is being looked at.
           right: viewerTagLeft,
-          top: viewerTagTop,
+          top: viewerTagTop + top,
           child: LumitTooltip(
             message: l10n.tipViewerAtEffect,
             child: HoverMark(
@@ -106,11 +111,13 @@ class ViewerPrefixChip extends StatelessWidget {
                   onTap: () => uiState.setAtSelectedEffect(!on),
                   child: Container(
                     key: const ValueKey('viewer-at-effect'),
-                    constraints: const BoxConstraints(maxWidth: 220),
+                    constraints:
+                        const BoxConstraints(maxWidth: viewerTagMaxWidth),
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    // The selection tag's plate, so the two read as a pair.
                     decoration: BoxDecoration(
-                      border: Border.all(color: ink),
+                      color: t.surface0.withValues(alpha: viewerChipPlate),
                       borderRadius:
                           BorderRadius.circular(t.tokens.controlRadius),
                     ),

@@ -2005,6 +2005,10 @@ Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
         VoidCallback close) =>
     _MenuList(items: _effectMenu(app, ui, [layer]), close: close);
 
+/// Rows of the menu bar as a flyout, for a right-click menu elsewhere.
+Widget menuEntriesFlyout(List<MenuEntry> items, VoidCallback close) =>
+    _MenuList(items: items, close: close);
+
 /// Every built-in effect, grouped by its heading, each group sorted by name.
 ///
 /// Read once: the catalogue is fixed for the run, and the menu bar rebuilds on

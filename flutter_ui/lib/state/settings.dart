@@ -432,6 +432,13 @@ class InterfaceSettings {
   /// button can never strand an engaged look with nothing to turn it off.
   bool showToneMap;
 
+  /// Whether the Viewer's guides stay where they are: a locked guide can't be
+  /// dragged, and a layer dragged under one still snaps to it.
+  bool viewerGuidesLocked;
+
+  /// Whether the Viewer's rulers count in percent of the frame, not in pixels.
+  bool viewerRulerPercent;
+
   /// Whether an orbit in the Viewer turns the other way across, and up and
   /// down. Off by default.
   bool invertOrbitAcross;
@@ -597,6 +604,8 @@ class InterfaceSettings {
     this.reduceTransparency = false,
     this.waveformsFromBottom = false,
     this.showToneMap = false,
+    this.viewerGuidesLocked = false,
+    this.viewerRulerPercent = false,
     this.invertOrbitAcross = false,
     this.invertOrbitUpDown = false,
     this.easingInPopup = false,
@@ -646,6 +655,8 @@ class InterfaceSettings {
         'reduce_transparency': reduceTransparency,
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
+        'viewer_guides_locked': viewerGuidesLocked,
+        'viewer_ruler_percent': viewerRulerPercent,
         'invert_orbit_across': invertOrbitAcross,
         'invert_orbit_up_down': invertOrbitUpDown,
         'easing_in_popup': easingInPopup,
@@ -739,6 +750,8 @@ class InterfaceSettings {
         // written before this field existed adopts it — a comp that stored an
         // engaged tone map is disengaged with it rather than left stranded.
         showToneMap: j['show_tone_map'] as bool? ?? false,
+        viewerGuidesLocked: j['viewer_guides_locked'] as bool? ?? false,
+        viewerRulerPercent: j['viewer_ruler_percent'] as bool? ?? false,
         invertOrbitAcross: j['invert_orbit_across'] as bool? ?? false,
         invertOrbitUpDown: j['invert_orbit_up_down'] as bool? ?? false,
         // Absent means off: the panel is the default, and the popup
