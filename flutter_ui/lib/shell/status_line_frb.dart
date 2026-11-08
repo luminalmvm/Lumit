@@ -48,9 +48,11 @@ import 'cache_confirm_frb.dart';
 import 'export_queue_frb.dart' show exportTimeLeft;
 import 'live_endpoint_frb.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import 'profile_chip.dart';
 import 'project_history_window.dart';
 import 'review_links_window.dart';
+import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import 'share_dialog_frb.dart';
 import 'update_chip.dart';
 import 'welcome_frb.dart' show projectDisplayName;
@@ -536,10 +538,47 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis),
     );
+    // The project's right-click: the menu bar's two saves, and its file.
+    Widget menu(Widget child) => GestureDetector(
+          onSecondaryTapDown: (d) => showMenuAt<void>(
+            context: context,
+            position: d.globalPosition,
+            rows: (close) => [
+              MenuRow(
+                key: const ValueKey('status-project-save'),
+                onPressed: () {
+                  close(null);
+                  saveProjectFrb(state, _ui);
+                },
+                child: MenuLabel(l10n.menuSave, action: 'file.save'),
+              ),
+              MenuRow(
+                key: const ValueKey('status-project-save-as'),
+                onPressed: () {
+                  close(null);
+                  saveProjectFrb(state, _ui, forcePicker: true);
+                },
+                child: MenuLabel(l10n.menuSaveAs, action: 'file.save.as'),
+              ),
+              if (path != null && !kIsWeb) ...[
+                const MenuDivider(),
+                MenuRow(
+                  key: const ValueKey('status-project-reveal'),
+                  onPressed: () {
+                    close(null);
+                    revealInFolder(path: path!);
+                  },
+                  child: MenuLabel(l10n.projectShowInFolder),
+                ),
+              ],
+            ],
+          ),
+          child: child,
+        );
     if (!dirty && path != null) {
-      return LumitTooltip(message: words, child: name0);
+      return menu(LumitTooltip(message: words, child: name0));
     }
-    return LumitTooltip(
+    return menu(LumitTooltip(
       message: words,
       action: 'file.save',
       child: HouseButton(
@@ -565,7 +604,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   /// The mark of a nightly build: one word in an outlined pill, in the
@@ -1263,12 +1302,46 @@ class _CacheMeterFrbState extends State<CacheMeterFrb> {
     );
   }
 
+  /// The meter's right-click: empty every tier, or open the page that sets
+  /// them. The disk tier asks first, as its own Clear does.
+  void _menu(Offset at) => showMenuAt<void>(
+        context: context,
+        position: at,
+        rows: (close) => [
+          MenuRow(
+            key: const ValueKey('cache-menu-clear-all'),
+            enabled: _tiers.any((tier) => tier.used > 0),
+            onPressed: () async {
+              close(null);
+              for (final tier in _read()) {
+                if (tier.used > 0) await tier.clear();
+              }
+              _tick();
+            },
+            child: MenuLabel(l10n.cacheClearAll,
+                enabled: _tiers.any((tier) => tier.used > 0)),
+          ),
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('cache-menu-settings'),
+            onPressed: () {
+              close(null);
+              showSettingsWindowFrb(context,
+                  initialPage: SettingsPage.previewAndCache);
+            },
+            child: MenuLabel(l10n.cacheSettingsEllipsis),
+          ),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final tiers = _tiers;
     final used = tiers.fold<int>(0, (sum, tier) => sum + tier.used);
-    return LumitTooltip(
+    return GestureDetector(
+      onSecondaryTapDown: (d) => _menu(d.globalPosition),
+      child: LumitTooltip(
       message: [for (final tier in tiers) '${tier.label} ${tier.words}']
           .join(' · '),
       child: HouseButton(
@@ -1298,7 +1371,7 @@ class _CacheMeterFrbState extends State<CacheMeterFrb> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 

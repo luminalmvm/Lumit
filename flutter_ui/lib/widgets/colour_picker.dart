@@ -29,6 +29,7 @@
 
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart' show LumitUiState;
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -352,6 +353,10 @@ class ColourSwatchButton extends StatelessWidget {
   /// [onPicked] for each.
   final ValueChanged<PickedColour>? onPreview;
 
+  /// The colour its menu's Reset goes back to. Null leaves Reset off the
+  /// menu, for a colour with no default of its own.
+  final PickedColour? resetTo;
+
   const ColourSwatchButton({
     super.key,
     required this.colour,
@@ -360,13 +365,89 @@ class ColourSwatchButton extends StatelessWidget {
     this.initial,
     this.max = 1,
     this.onPreview,
+    this.resetTo,
   });
+
+  /// The last colour Copy colour took, exactly, over-range channels and all.
+  static PickedColour? _copied;
+
+  /// The well's right-click: its colour to and from the clipboard, and back
+  /// to its default. Paste takes a colour copied from another well, or a hex
+  /// copied from anywhere.
+  Future<void> _menu(BuildContext context, Offset at) async {
+    final current = initial ?? PickedColour.of(colour);
+    final clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    final hex = clip == null ? null : parseHex(clip);
+    // What Copy colour took, while the clipboard has not moved on since.
+    final copied = _copied;
+    final paste = copied != null && (clip == null || clip == _copiedText)
+        ? copied
+        : hex == null
+            ? null
+            : PickedColour.of(hex);
+    if (!context.mounted) return;
+    final reset = resetTo;
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) {
+        Widget row(String id, String label, VoidCallback? run) => MenuRow(
+              key: ValueKey<String>('swatch-menu-$id'),
+              enabled: run != null,
+              onPressed: () {
+                close(null);
+                run?.call();
+              },
+              child: MenuLabel(label, enabled: run != null),
+            );
+        return FloatSurface(
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                row('copy', l10n.swatchCopyColour, () {
+                  _copied = current;
+                  // The hex goes on the system clipboard as well, so the
+                  // colour can be pasted outside Lumit too.
+                  _copiedText = '#${formatHex(current.clipped)}';
+                  Clipboard.setData(ClipboardData(text: _copiedText!));
+                }),
+                row('paste', l10n.swatchPasteColour,
+                    paste == null ? null : () => onPicked(paste)),
+                row('hex', l10n.swatchCopyHex, () {
+                  Clipboard.setData(
+                      ClipboardData(text: '#${formatHex(current.clipped)}'));
+                }),
+                if (reset != null) ...[
+                  const MenuDivider(),
+                  row(
+                      'reset',
+                      l10n.reset,
+                      reset.r == current.r &&
+                              reset.g == current.g &&
+                              reset.b == current.b
+                          ? null
+                          : () => onPicked(reset)),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// What Copy colour put on the system clipboard, to tell whether it is
+  /// still there.
+  static String? _copiedText;
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (d) => _menu(context, d.globalPosition),
       onTap: () async {
         final box = context.findRenderObject();
         if (box is! RenderBox) return;

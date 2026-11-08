@@ -32,7 +32,7 @@ preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Short
 Choosing **After Effects** under **Editing style** on the first run, with
 **Use the After Effects shortcuts** ticked, loads it.
 
-Whole projects come across too. **File ▸ Import ▸ After Effects project…**, and a
+Whole projects come across too. **File ▸ Import After Effects project…**, and a
 report will appear telling you what was carried across with or without adjustments.
 Common third-party effects become the maker's own OFX plugin when it is installed. See
 [Importing](/use/importing/).

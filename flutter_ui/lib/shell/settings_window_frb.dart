@@ -78,6 +78,7 @@ import '../theme/style_sheet.dart' show styleFileExtension;
 import '../theme/theme.dart';
 import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
@@ -863,7 +864,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             0, _gutterEnds, _gutterInset, _gutterEnds),
         // Built whole, so the thumb is sized from the page's real length rather
         // than a lazy list's guess, and without the app's own second scrollbar.
-        child: ScrollConfiguration(
+        // Faded where it is cut, so a page longer than the window says so.
+        child: EdgeFade(
+          axis: Axis.vertical,
+          child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: SingleChildScrollView(
             key: ValueKey<String>(
@@ -901,6 +905,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ),
             ),
           ),
+        ),
         ),
       ),
       // **6.16: dragging the scrollbar scrolls, it does not carry the window

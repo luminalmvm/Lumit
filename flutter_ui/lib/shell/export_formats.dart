@@ -73,3 +73,8 @@ List<_Format> get _desktopFormats => [
       _Format('wav', l10n.formatWav, 'wav', l10n.formatWavPicker,
           ExportOutputType.audioOnly),
     ];
+
+/// The reading name of the format [key], or the key itself for one this build
+/// does not offer.
+String exportFormatLabel(String key) =>
+    _formats.where((f) => f.key == key).firstOrNull?.label ?? key;

@@ -50,15 +50,18 @@
 // costs nothing (the standing rebuild-path rule).
 
 import 'dart:async';
+import 'dart:io' show Directory, File;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:provider/provider.dart';
 
 import '../icons/lumit_icon.dart' as glyph;
@@ -579,10 +582,15 @@ class _ExportDialogState extends State<_ExportDialog> {
     }
     final queued = widget.queued;
     final spec = queued == null ? null : exportQueueSpec(id: queued);
-    final path =
-        exportQueueList().where((item) => item.id == queued).firstOrNull?.path;
-    if (spec != null && path != null) _reopen(spec, path);
+    final item =
+        exportQueueList().where((item) => item.id == queued).firstOrNull;
+    _failedItem = item?.state is BridgeExportQueueState_Failed;
+    if (spec != null && item != null) _reopen(spec, item.path);
   }
+
+  /// Whether the queued item it opened on had failed. Its settings cannot be
+  /// changed in place, so it is queued again with the new ones.
+  bool _failedItem = false;
 
   /// Open on a queued item's settings. Its footage was settled when it was
   /// queued, so that group goes.
@@ -852,7 +860,8 @@ class _ExportDialogState extends State<_ExportDialog> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(l10n.openAddons),
               ),
-            // Opened from the queue, the one thing to do is keep the changes.
+            // Opened from the queue, the one thing to do is keep the changes,
+            // or for a row that failed, queue it again with them.
             if (widget.queued != null)
               HouseButton(
                 key: const ValueKey('export-save-queued'),
@@ -860,7 +869,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                 autofocus: true,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 onPressed: _canQueue ? _saveQueued : null,
-                child: Text(l10n.save),
+                child: Text(_failedItem ? l10n.exportQueueAgain : l10n.save),
               )
             else ...[
               HouseButton(
@@ -950,14 +959,22 @@ class _ExportDialogState extends State<_ExportDialog> {
               l10n.exportPreset,
               Row(children: [
                 Expanded(
-                  child: SizedBox(
-                    height: dialogControlHeight,
-                    child: BareDropdown<String>(
-                      key: const ValueKey('export-preset'),
-                      value: _preset,
-                      options: ['', ..._presets.map((p) => p.name)],
-                      label: (p) => p.isEmpty ? l10n.custom : p,
-                      onChanged: _applyPreset,
+                  child: GestureDetector(
+                    onSecondaryTapDown: (d) => showMenuAt<void>(
+                      context: context,
+                      position: d.globalPosition,
+                      rows: (close) =>
+                          _presetRows(() => close(null), saveAs: true),
+                    ),
+                    child: SizedBox(
+                      height: dialogControlHeight,
+                      child: BareDropdown<String>(
+                        key: const ValueKey('export-preset'),
+                        value: _preset,
+                        options: ['', ..._presets.map((p) => p.name)],
+                        label: (p) => p.isEmpty ? l10n.custom : p,
+                        onChanged: _applyPreset,
+                      ),
                     ),
                   ),
                 ),
@@ -1023,12 +1040,15 @@ class _ExportDialogState extends State<_ExportDialog> {
               l10n.exportWriteTo,
               Row(children: [
                 Expanded(
-                  child: _well(
-                    t,
-                    _path == null ? l10n.exportNotChosen : _leaf(_path!),
-                    key: const ValueKey('export-path'),
-                    tone: t.textMuted,
-                    tip: _path,
+                  child: GestureDetector(
+                    onSecondaryTapDown: (d) => _pathMenu(d.globalPosition),
+                    child: _well(
+                      t,
+                      _path == null ? l10n.exportNotChosen : _leaf(_path!),
+                      key: const ValueKey('export-path'),
+                      tone: t.textMuted,
+                      tip: _path,
+                    ),
                   ),
                 ),
                 // A page has no folders: the browser asks where as it starts.
@@ -1082,38 +1102,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                 showMenuAt<void>(
                   context: context,
                   position: box.localToGlobal(Offset(0, box.size.height + 2)),
-                  rows: (close) => [
-                    MenuRow(
-                      key: const ValueKey('export-preset-edit'),
-                      onPressed: () {
-                        close(null);
-                        _editPreset();
-                      },
-                      child: Text(l10n.exportPresetEdit),
-                    ),
-                    MenuRow(
-                      key: const ValueKey('export-preset-set-default'),
-                      selected: _preset == _defaultPreset,
-                      onPressed: () {
-                        close(null);
-                        _setAsDefault();
-                      },
-                      child: Text(l10n.exportPresetSetDefault),
-                    ),
-                    const MenuDivider(),
-                    // Greyed for a shipped preset, which is not yours to
-                    // delete.
-                    MenuRow(
-                      key: const ValueKey('export-preset-delete-row'),
-                      enabled: _presets
-                          .any((p) => p.name == _preset && !p.readOnly),
-                      onPressed: () {
-                        close(null);
-                        _deletePreset();
-                      },
-                      child: Text(l10n.delete),
-                    ),
-                  ],
+                  rows: (close) => _presetRows(() => close(null)),
                 );
               },
               child: glyph.LumitIcon(LumitIcons.more,
@@ -1122,6 +1111,92 @@ class _ExportDialogState extends State<_ExportDialog> {
           ),
         ),
       );
+
+  /// What can be done with the preset in force: the three dots' rows, and
+  /// Save as… before them on the preset's own right-click, where the button
+  /// beside it is not in reach.
+  List<Widget> _presetRows(VoidCallback close, {bool saveAs = false}) => [
+        if (saveAs)
+          MenuRow(
+            key: const ValueKey('export-preset-save-as-row'),
+            onPressed: () {
+              close();
+              _nameAPreset('');
+            },
+            child: Text(l10n.exportPresetSaveAs),
+          ),
+        MenuRow(
+          key: const ValueKey('export-preset-edit'),
+          onPressed: () {
+            close();
+            _editPreset();
+          },
+          child: Text(l10n.exportPresetEdit),
+        ),
+        MenuRow(
+          key: const ValueKey('export-preset-set-default'),
+          selected: _preset == _defaultPreset,
+          onPressed: () {
+            close();
+            _setAsDefault();
+          },
+          child: Text(l10n.exportPresetSetDefault),
+        ),
+        const MenuDivider(),
+        // Greyed for a shipped preset, which is not yours to delete.
+        MenuRow(
+          key: const ValueKey('export-preset-delete-row'),
+          enabled: _presets.any((p) => p.name == _preset && !p.readOnly),
+          onPressed: () {
+            close();
+            _deletePreset();
+          },
+          child: Text(l10n.delete),
+        ),
+      ];
+
+  /// The file's right-click: its path to the clipboard, another place, and
+  /// the folder it goes in.
+  void _pathMenu(Offset at) {
+    final path = _path;
+    final folder = path == null || kIsWeb ? null : File(path).parent.path;
+    final folderThere = folder != null && Directory(folder).existsSync();
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('export-path-copy'),
+          enabled: path != null,
+          onPressed: () {
+            close(null);
+            Clipboard.setData(ClipboardData(text: path!));
+          },
+          child: Text(l10n.welcomeCopyPath),
+        ),
+        if (!kIsWeb) ...[
+          MenuRow(
+            key: const ValueKey('export-path-browse'),
+            onPressed: () {
+              close(null);
+              _choose();
+            },
+            child: Text(l10n.exportBrowseEllipsis),
+          ),
+          // The file itself once it is there, else the folder it will be in.
+          MenuRow(
+            key: const ValueKey('export-path-folder'),
+            enabled: folderThere,
+            onPressed: () {
+              close(null);
+              if (!revealInFolder(path: path!)) revealInFolder(path: folder!);
+            },
+            child: Text(l10n.tipOpenFolder),
+          ),
+        ],
+      ],
+    );
+  }
 
   /// A strip button at its content width — §12A.4's 12 either side of an
   /// outlined label, which is the whole of the clipping fix.
@@ -2758,6 +2833,17 @@ class _ExportDialogState extends State<_ExportDialog> {
       );
       if (keep == null || !mounted) return;
       if (keep) path = exportFreePath(path: path, codec: _format.key);
+    }
+    if (_failedItem) {
+      try {
+        widget.comp.queueExport(spec: _spec, path: path, start: false);
+      } catch (error) {
+        setState(() => _refused = '$error');
+        return;
+      }
+      exportQueueRemove(id: id);
+      widget.onClose();
+      return;
     }
     try {
       exportQueueUpdate(id: id, spec: _spec, path: path);

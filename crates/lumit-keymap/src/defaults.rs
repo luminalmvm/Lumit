@@ -115,6 +115,9 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+Alt+S", "file.save.version"),
         row(Global, "Mod+I", "file.import"),
         row(Global, "Mod+Alt+M", "file.export"),
+        // A still of the frame at the playhead, beside the chord that
+        // exports the whole composition.
+        row(Global, "Mod+Alt+Shift+M", "comp.frame.save"),
         row(Global, "Mod+N", "comp.new"),
         row(Global, "Mod+A", "edit.select.all"),
         row(Global, "Mod+Shift+A", "edit.deselect.all"),
@@ -267,6 +270,9 @@ pub fn default_keymap() -> Keymap {
         row(Project, "Mod+Alt+V", "footage.interpretation.apply"),
         row(Effects, "Enter", "effect.rename"),
         row(Effects, "Mod+D", "effect.duplicate"),
+        // The Effect menu's two rows above its categories, from anywhere.
+        row(Global, "Mod+Alt+Shift+E", "effect.apply.last"),
+        row(Global, "Mod+Shift+E", "effect.remove.all"),
         // The Grade panel's Copy grade and Paste grade, from anywhere, so a
         // grade goes across a dozen shots with one key each.
         row(Global, "Alt+Shift+C", "grade.copy"),

@@ -56,6 +56,7 @@ import 'package:lumit_flutter/src/rust/api/model.dart' show BridgeModelDisplay;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
 import 'package:lumit_flutter/state/keymap.dart' show chordText;
 import 'package:lumit_flutter/state/settings.dart'
     show LoopMode, ToolBarPosition;
@@ -858,6 +859,22 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       case 'layer.retime.hold':
         holdHere(context, ui);
+      // The Effect menu's two rows above its categories.
+      case 'effect.apply.last':
+        final layers = ui.selectedLayers.value;
+        final last = EffectDragData.last;
+        if (layers.isEmpty || last == null) {
+          handled = false;
+        } else {
+          addEffectToLayers(state, ui, layers, last);
+        }
+      case 'effect.remove.all':
+        final layers = ui.selectedLayers.value;
+        if (layers.isEmpty) {
+          handled = false;
+        } else {
+          removeAllEffects(state, layers);
+        }
       case 'layer.retime.enable':
         // Give the selected layer a Retime, or take it away again (docs/04
         // §12). On installs the identity map, so the picture does not move —
@@ -1138,6 +1155,13 @@ class _LumitAppViewState extends State<LumitAppView> {
           handled = false;
         } else {
           exportFrb(context);
+        }
+      // Composition ▸ Save frame as….
+      case 'comp.frame.save':
+        if (comp == null) {
+          handled = false;
+        } else {
+          saveCompFrameFrb(context, ui, comp);
         }
       case 'comp.new':
         if (project == null) {

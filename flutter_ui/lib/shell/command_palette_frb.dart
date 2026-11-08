@@ -58,6 +58,9 @@ class PaletteCommand {
   });
 }
 
+/// How many of the recently run lead the list before anything is typed.
+const int paletteRecentShown = 8;
+
 /// What stands between the steps of a path in a label, as in
 /// "Layer › New › Solid".
 const String palettePathSeparator = ' › ';
@@ -240,14 +243,14 @@ class _PaletteState extends State<_Palette> {
 
   /// The list as drawn: the matches under one heading per kind, in the order
   /// the kinds first appear, so the best-ranked kind leads a typed list.
-  /// Before anything is typed the recently run come first, under their own.
+  /// Before anything is typed the last eight run come first, under their own.
   List<Object> _entries(List<PaletteCommand> matches) {
     final out = <Object>[];
     final recent = [
       if (_query.text.trim().isEmpty)
         for (final m in matches)
           if (widget.recent.contains(m.label)) m,
-    ];
+    ].take(paletteRecentShown).toList();
     if (recent.isNotEmpty) {
       out
         ..add(l10n.paletteRecent)

@@ -312,7 +312,9 @@ class _HouseButtonState extends State<HouseButton> {
                         ? (widget.dropdown ? t.body : t.bodyPrimary)
                         : t.bodyPrimary.copyWith(color: label)))
                 : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
-            child: _centred(_capitalised(t, widget.child, widget.primary)),
+            child: widget.dropdown
+                ? _face(widget.child)
+                : _centred(_capitalised(t, widget.child, widget.primary)),
           ),
         ))),
         ),
@@ -352,6 +354,19 @@ Widget _centred(Widget label) => Align(
       widthFactor: 1,
       heightFactor: 1,
       child: label,
+    );
+
+/// A dropdown's closed face. Where a form stretches the button across its
+/// value column, the whole width is handed on, so the label starts on the
+/// column's edge and the caret stands at the far one ([dropdownFace]). A
+/// button that sizes itself centres it like any label.
+Widget _face(Widget face) => LayoutBuilder(
+      builder: (context, box) => box.hasTightWidth
+          ? Align(
+              heightFactor: 1,
+              child: SizedBox(width: box.maxWidth, child: face),
+            )
+          : _centred(face),
     );
 
 /// The primary button's label cased for the shape, when it is a plain word.

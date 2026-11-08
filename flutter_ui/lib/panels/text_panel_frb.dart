@@ -154,6 +154,8 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       _swatch(
                         keyName: 'text-fill',
                         colour: document.fill,
+                        // White, as a new Text layer is set.
+                        resetTo: const PickedColour(1, 1, 1),
                         onPicked: (c) =>
                             commitText(ui, target, (d) => d.copyWith(fill: c)),
                       ),
@@ -176,6 +178,8 @@ class _TextPanelFrbState extends State<TextPanelFrb>
                       _swatch(
                         keyName: 'text-stroke',
                         colour: style.stroke,
+                        resetTo: PickedColour(plainTextStyle.stroke.r,
+                            plainTextStyle.stroke.g, plainTextStyle.stroke.b),
                         onPicked: (c) => commitText(
                             ui, target, restyle((s) => s.copyWith(stroke: c))),
                       ),
@@ -485,10 +489,12 @@ class _TextPanelFrbState extends State<TextPanelFrb>
     required String keyName,
     required BridgeColourRgba colour,
     required ValueChanged<BridgeColourRgba> onPicked,
+    PickedColour? resetTo,
   }) {
     int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
     return ColourSwatchButton(
       key: ValueKey<String>(keyName),
+      resetTo: resetTo,
       colour:
           documentColour(byte(colour.r), byte(colour.g), byte(colour.b), 255),
       onPicked: (picked) => onPicked(BridgeColourRgba(

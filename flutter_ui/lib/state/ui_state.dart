@@ -58,6 +58,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setHardwareDecode,
         setLargestPicture;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/drag_payloads.dart' show EffectDragData;
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
@@ -2361,6 +2362,7 @@ class LumitUiState extends ChangeNotifier {
     } catch (_) {
       return false;
     }
+    EffectDragData.last = name;
     model.refresh();
     final added = model
         .byId(layer.internallayerId)

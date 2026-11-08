@@ -56,8 +56,9 @@ import 'export_dialog_frb.dart';
 import 'export_pick_frb.dart';
 import 'status_line_frb.dart';
 
-/// The frame: wide enough for a name, a path and a status side by side.
-const double exportQueueWidth = 560;
+/// The frame: wide enough for a name, its preset, a path and how it is
+/// getting on side by side.
+const double exportQueueWidth = 800;
 
 /// One item's row, and the tallest the list grows before it scrolls.
 const double exportQueueRow = 28;
@@ -113,6 +114,10 @@ class _ExportQueueState extends State<_ExportQueue> {
   int? _markedId;
   double _markedFrom = 0;
   int? _markedTo;
+
+  /// When the window first saw each item running, and the frame it was on,
+  /// for the time it has left.
+  final Map<int, (DateTime, int)> _seenRunning = {};
 
   @override
   void initState() {
@@ -399,8 +404,22 @@ class _ExportQueueState extends State<_ExportQueue> {
           key: ValueKey<String>('export-queue-item-${item.id}'),
           children: [
             SizedBox(
-              width: 140,
+              width: 150,
               child: FittedText(item.compName, t.body),
+            ),
+            const SizedBox(width: 10),
+            // The preset it was queued on, or its format where it was set
+            // by hand, and the format on hover.
+            SizedBox(
+              width: 120,
+              child: LumitTooltip(
+                message: exportFormatLabel(item.codec),
+                child: FittedText(
+                    item.preset.isEmpty
+                        ? exportFormatLabel(item.codec)
+                        : item.preset,
+                    t.body.copyWith(color: t.textMuted)),
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -411,7 +430,7 @@ class _ExportQueueState extends State<_ExportQueue> {
               ),
             ),
             const SizedBox(width: 10),
-            Expanded(child: _statusFace(t, item)),
+            SizedBox(width: 260, child: _statusFace(t, item)),
             const SizedBox(width: 8),
             // Hidden marks take no clicks either.
             IgnorePointer(
@@ -493,7 +512,8 @@ class _ExportQueueState extends State<_ExportQueue> {
           if (done && !kIsWeb)
             row('open', l10n.tipOpenFolder,
                 () => revealInFolder(path: item.path), run),
-          if (waiting)
+          // A failed row too, where its settings are what has to change.
+          if (waiting || item.state is BridgeExportQueueState_Failed)
             row(
                 'settings',
                 l10n.exportQueueSettingsEllipsis,
@@ -557,9 +577,9 @@ class _ExportQueueState extends State<_ExportQueue> {
   Widget _settingsMark(LumitTheme t, BridgeExportQueueItem item) {
     final comp = _comps[item.comp.toString()];
     const size = Size(dialogCloseGlyph + 8, exportQueueRow);
-    if (item.state is! BridgeExportQueueState_Waiting || comp == null) {
-      return SizedBox.fromSize(size: size);
-    }
+    final open = item.state is BridgeExportQueueState_Waiting ||
+        item.state is BridgeExportQueueState_Failed;
+    if (!open || comp == null) return SizedBox.fromSize(size: size);
     return LumitTooltip(
       message: l10n.exportQueueSettings,
       child: HoverMark(
@@ -584,13 +604,48 @@ class _ExportQueueState extends State<_ExportQueue> {
     );
   }
 
-  /// How one item is getting on. An error is longer than the column, so a
-  /// failed item shows all of it on hover.
+  /// How one item is getting on. A running one is a bar with how far it has
+  /// got and how long it has left, its encoder on hover. An error is longer
+  /// than the column, so a failed item shows all of it on hover.
   Widget _statusFace(LumitTheme t, BridgeExportQueueItem item) {
+    final key = ValueKey<String>('export-queue-status-${item.id}');
+    if (item.state
+        case BridgeExportQueueState_Running(
+          :final frame,
+          :final total,
+          :final encoder
+        ) when total > 0) {
+      final seen = _seenRunning[item.id] ??= (DateTime.now(), frame);
+      final left = exportTimeLeft(
+          done: frame - seen.$2,
+          left: total - frame,
+          taken: DateTime.now().difference(seen.$1));
+      return LumitTooltip(
+        message: encoder,
+        child: Row(
+          key: key,
+          children: [
+            Expanded(child: HouseProgressBar(fraction: frame / total)),
+            const SizedBox(width: 8),
+            Text(l10n.exportQueuePercent((frame * 100 / total).floor()),
+                style: dialogMono(t)),
+            if (left != null) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(left,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.small.copyWith(color: t.textMuted)),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
     final failed = item.state is BridgeExportQueueState_Failed;
     final text = Text(
       _status(item),
-      key: ValueKey<String>('export-queue-status-${item.id}'),
+      key: key,
       style: dialogMono(t).copyWith(color: failed ? t.warning : t.textMuted),
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.right,
@@ -598,18 +653,10 @@ class _ExportQueueState extends State<_ExportQueue> {
     return failed ? LumitTooltip(message: _status(item), child: text) : text;
   }
 
-  /// What one item is doing, in the engine's own words where it has any.
+  /// What one item is doing, in words, where it is not drawn as a bar.
   String _status(BridgeExportQueueItem item) => switch (item.state) {
         BridgeExportQueueState_Waiting() => l10n.exportQueueWaiting,
-        BridgeExportQueueState_Running(:final total, :final encoder)
-            when total == 0 =>
-          l10n.exportPreparing(encoder),
-        BridgeExportQueueState_Running(
-          :final frame,
-          :final total,
-          :final encoder
-        ) =>
-          l10n.exportFrameOf('$frame', '$total', encoder),
+        BridgeExportQueueState_Running() => l10n.exportQueuePreparing,
         BridgeExportQueueState_Done() => l10n.exportQueueDone,
         BridgeExportQueueState_Failed(:final error) => error,
       };

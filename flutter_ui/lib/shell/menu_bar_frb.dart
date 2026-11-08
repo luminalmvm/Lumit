@@ -32,6 +32,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:provider/provider.dart';
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -70,13 +71,18 @@ import '../theme/style_sheet.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
-import '../panels/retime_commands.dart' show reverseRow;
+import '../panels/retime_commands.dart'
+    show canFreezeAt, holdHere, retimeClips, retimeTargets, reverseRow;
+import '../panels/viewer_menus.dart' show ViewerMenuHost, saveViewerFrame;
+import '../state/drag_payloads.dart' show EffectDragData;
+import 'settings_account.dart' show askBefore;
 import '../panels/stagger_panel_frb.dart' show showStaggerPanel;
 import 'ae_report_frb.dart';
 import 'backups_window.dart';
 import 'bring_composition_frb.dart';
 import 'command_palette_frb.dart';
 import 'comp_settings_frb.dart';
+import 'dock_widget.dart' show panelGroups;
 import 'fx_console_context.dart';
 import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
@@ -767,7 +773,14 @@ class LumitMenuBarFrb extends StatelessWidget {
     for (final menu in menus) {
       // The Effect menu is the effect rows further down, which are kept when
       // no layer is selected so they can say why they are greyed.
-      if (menu.title != l10n.menuEffect) walk(menu.title, menu.items());
+      if (menu.title != l10n.menuEffect) {
+        walk(menu.title, menu.items());
+      } else {
+        walk(menu.title, [
+          for (final row in menu.items())
+            if (row.children == null) row,
+        ]);
+      }
     }
 
     // Each kind of thing wears its mark, so a comp is told from an effect
@@ -1082,6 +1095,12 @@ List<MenuSection> lumitMenus(
                     : () => saveProjectFrb(app, ui,
                         forcePicker: true, picker: savePicker),
                 action: 'file.save.as'),
+            // The file as it was last saved, once it has changes since.
+            MenuEntry(
+                l10n.menuRevertToSaved,
+                projectPath == null || !_dirty(project)
+                    ? null
+                    : () => revertToSavedFrb(context, app, projectPath!)),
             // Save, and name the version the save makes. Greyed for a
             // project whose saves are not sent, which has no version to name.
             if (!kIsWeb)
@@ -1141,18 +1160,16 @@ List<MenuSection> lumitMenus(
                           await importDroppedPaths(app, [folder]);
                         }
                       }),
-            // The After Effects route keeps the submenu. The Bridge-bundle entry
-            // is gone (owner, repeatedly): the .aep front door is the import; the
-            // bundle format itself remains supported for anything that already
-            // produced one, just not offered here.
-            MenuEntry.submenu(l10n.menuImport, [
-              // Not gated on a project: an import *replaces* whatever is loaded,
-              // the way opening a `.lum` does, so it is offered with none.
-              MenuEntry(
-                  l10n.menuImportAe,
-                  () => importAeBundleFrb(context, app,
-                      picker: aeProjectPicker ?? pickAeProject)),
-            ]),
+            // The After Effects route, a row of its own now it is the only
+            // one. The Bridge-bundle entry is gone (owner, repeatedly): the
+            // bundle format itself remains supported for anything that
+            // already produced one, just not offered here. Not gated on a
+            // project: an import *replaces* whatever is loaded, the way
+            // opening a `.lum` does, so it is offered with none.
+            MenuEntry(
+                l10n.menuImportAe,
+                () => importAeBundleFrb(context, app,
+                    picker: aeProjectPicker ?? pickAeProject)),
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
@@ -1321,12 +1338,20 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuAddToExportQueue,
                 comp == null ? null : () => exportFrb(context),
                 action: 'export.queue.add'),
-            if (!kIsWeb)
+            if (!kIsWeb) ...[
               MenuEntry(
                   l10n.menuSendForReview,
                   comp == null
                       ? null
                       : () => showReviewLinks(context, send: comp)),
+              // The Viewer's own Save frame as, for the comp in front.
+              MenuEntry(
+                  l10n.viewerMenuSaveFrame,
+                  comp == null
+                      ? null
+                      : () => saveCompFrameFrb(context, ui, comp),
+                  action: 'comp.frame.save'),
+            ],
             MenuEntry.divider(),
             // Comp-level markers, including the beat pass, which makes them
             // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
@@ -1528,6 +1553,10 @@ List<MenuSection> lumitMenus(
                 _retimeable(layer) ? onLayer((l) => app.toggleRetime(l)) : null,
                 action: 'layer.retime.enable'),
             MenuEntry(l10n.easingReverse, reverseRow(context, ui)),
+            // The frame at the playhead held, on the picked clips or else the
+            // selected layers: the chord's own command.
+            MenuEntry(l10n.retimeFreeze, freezeRow(context, ui),
+                action: 'layer.retime.hold'),
             // In and out of the clip-editing surface, for anyone — the Vegas
             // preference decides what an *import* becomes, never what a layer is
             // allowed to be. Offered here and on a layer's right-click. Coming
@@ -1627,6 +1656,14 @@ List<MenuSection> lumitMenus(
                           workspace: ui.workspace,
                         ),
                 action: 'layer.precompose'),
+            // The clips picked in the Cut timeline, folded into a composition
+            // of their own. Only where the comp has clips to pick.
+            if (ui.model.layers.any((e) => e.info.clips.isNotEmpty))
+              MenuEntry(
+                  l10n.cutNewCompositionFromSelection,
+                  ui.cutClips.value.isEmpty
+                      ? null
+                      : () => foldCutClips(app, ui)),
             // The light fold beside the heavy one. Group is live with something
             // selected; Ungroup only while the selection is actually in a group,
             // so the row greys out rather than doing nothing when pressed. Both go
@@ -1966,7 +2003,7 @@ List<MenuSection> lumitMenus(
             // the Window menu. Under one row, so the menu fits a short window,
             // in the groups the workspaces fall into.
             MenuEntry.submenu(l10n.menuPanels, [
-              for (final (i, group) in _panelGroups(ui).indexed) ...[
+              for (final (i, group) in panelGroups(ui.split).indexed) ...[
                 if (i > 0) MenuEntry.divider(),
                 for (final panel in group)
                   MenuEntry.toggle(
@@ -2043,41 +2080,32 @@ List<MenuSection> lumitMenus(
   ];
 }
 
-/// Window ▸ Panels in groups: the Edit five, colour, nodes, sound, the Cut
-/// timeline, type, and the rest. An extension's panel is listed by the
-/// extension; the debug panel once Help has switched it on.
-List<List<Panel>> _panelGroups(LumitUiState ui) {
-  const named = [
-    [
-      Panel.project,
-      Panel.viewer,
-      Panel.timeline,
-      Panel.effectControls,
-      Panel.effectsAndPresets,
-    ],
-    [Panel.scopes, Panel.grade],
-    [Panel.graph, Panel.node],
-    [Panel.mixer, Panel.audio, Panel.audioTimeline],
-    [Panel.cutTimeline],
-    [Panel.text, Panel.paragraph],
-  ];
-  final placed = {for (final group in named) ...group, Panel.extension};
-  if (!panelVisible(ui.split, Panel.debug)) placed.add(Panel.debug);
-  return [
-    ...named,
-    [
-      for (final panel in Panel.values)
-        if (!placed.contains(panel)) panel
-    ],
-  ];
-}
-
 /// The Effect menu: one submenu per effect category, each applying its effect
 /// to every selected layer as one undo step. Disabled outright with nothing
 /// selected, since there is nowhere for an effect to go.
 List<MenuEntry> _effectMenu(
         LumitState app, LumitUiState ui, List<LayerReference> layers) =>
     [
+      // The last effect put on anything, by name, then every effect off the
+      // selection. Both are the chords' own commands.
+      MenuEntry(
+          switch (_lastEffectLabel()) {
+            final label? => l10n.menuApplyEffect(label),
+            null => l10n.menuApplyLastEffect,
+          },
+          layers.isEmpty || EffectDragData.last == null
+              ? null
+              : () => addEffectToLayers(app, ui, layers, EffectDragData.last!),
+          action: 'effect.apply.last'),
+      MenuEntry(
+          l10n.fxMenuRemoveAll,
+          layers.any((l) =>
+                  ui.model.byId(l.internallayerId)?.info.effects.isNotEmpty ??
+                  false)
+              ? () => removeAllEffects(app, layers)
+              : null,
+          action: 'effect.remove.all'),
+      MenuEntry.divider(),
       for (final group in _effectGroups().entries)
         MenuEntry.submenu(engineLabel(group.key), [
           for (final effect in group.value)
@@ -2090,12 +2118,97 @@ List<MenuEntry> _effectMenu(
         ]),
     ];
 
+/// Freeze frame on the selection, greyed when nothing picked has a frame at
+/// the playhead to hold.
+VoidCallback? freezeRow(BuildContext context, LumitUiState ui) {
+  final frame = ui.playheadFrame.value;
+  final can = retimeClips(ui).isNotEmpty ||
+      retimeTargets(ui).any((entry) => canFreezeAt(entry, frame));
+  return can ? () => holdHere(context, ui) : null;
+}
+
+/// The clips picked in the Cut timeline as a composition of their own, which
+/// one clip then plays where they were. Refused on a locked track.
+void foldCutClips(LumitState app, LumitUiState ui) {
+  final comp = ui.selectedComp;
+  if (comp == null || ui.cutClips.value.isEmpty) return;
+  CompositionReference? made;
+  try {
+    made = comp.cutClipsToComposition(
+      clips: [for (final pick in ui.cutClips.value) pick.clip],
+      linked: ui.cutLinked.value,
+      name: l10n.cutSelectionCompName(comp.getSettings().name),
+    );
+  } catch (_) {
+    return;
+  }
+  if (made == null) {
+    ui.reportCut(BridgeCutResult.locked);
+    return;
+  }
+  ui.cutClips.value = const [];
+  app.notifyDocumentChanged();
+}
+
+/// Save the comp's frame at the playhead as a picture, as the Viewer's own
+/// menu does.
+Future<void> saveCompFrameFrb(
+    BuildContext context, LumitUiState ui, CompositionReference comp) {
+  final settings = comp.getSettings();
+  final host = ViewerMenuHost()
+    ..comp = comp
+    ..compSize = Size(settings.width.toDouble(), settings.height.toDouble());
+  return saveViewerFrame(context, ui, host);
+}
+
+/// Throw the changes since the last save away, once asked, by opening the
+/// file again.
+Future<void> revertToSavedFrb(
+    BuildContext context, LumitState app, String path) async {
+  if (!await askBefore(context, l10n.revertQuestion, l10n.revertYes)) return;
+  await app.openProject(path, recover: false, ask: false);
+}
+
+/// Whether [project] has changes nobody has saved. False for one that has
+/// gone.
+bool _dirty(ProjectReference? project) {
+  try {
+    return project?.isDirty() ?? false;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// [name] onto each of [layers], as one undo step.
 void addEffectToLayers(LumitState app, LumitUiState ui,
     Iterable<LayerReference> layers, String name) {
   asOneUndoStep(app.project, () {
     for (final layer in layers) {
       ui.addEffect(layer, name);
+    }
+  });
+  app.notifyDocumentChanged();
+}
+
+/// The name the last effect applied reads by, or null with none yet.
+String? _lastEffectLabel() {
+  final name = EffectDragData.last;
+  if (name == null) return null;
+  for (final group in _effectGroups().values) {
+    for (final effect in group) {
+      if (effect.name == name) return engineLabel(effect.label);
+    }
+  }
+  return null;
+}
+
+/// Every effect off each of [layers], as one undo step.
+void removeAllEffects(LumitState app, Iterable<LayerReference> layers) {
+  asOneUndoStep(app.project, () {
+    for (final layer in layers) {
+      for (final effect in layer.getEffects()) {
+        layer.removeEffect(effect: effect);
+      }
     }
   });
   app.notifyDocumentChanged();

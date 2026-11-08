@@ -140,15 +140,16 @@ Both buttons put the item in the queue, and the queue window opens on top. **Win
 Export queue** reopens it later.
 
 One export runs at a time and the rest wait. Each row says which composition it came
-from, what it is writing, and how it is progressing: *Waiting*, the frame it is on,
-*Done*, or the failure.
+from, its preset or format, the file it writes, and how it is getting on: *Waiting*, a
+bar with how much is done and about how long is left, *Done*, or the failure.
 
 - **Drag a waiting row** to move it up or down. A row that is running, has run, or has
   failed cannot be picked up.
 - **The × on a row** cancels it while it is writing.
 - **Click a finished row** to open the folder its file was written to.
 - **Right-click a row** for **Open folder**, **Settings…**, **Duplicate**, **Queue again**,
-  **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it.
+  **Move to top**, **Move to bottom** and **Remove**, as far as they apply to it. On a
+  failed row, **Settings…** queues it again with the changes.
 
 An item's settings are captured the moment it is queued, so working on the project 
 afterwards does not impact the export.

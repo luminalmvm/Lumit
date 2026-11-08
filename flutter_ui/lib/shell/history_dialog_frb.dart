@@ -25,6 +25,7 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
@@ -166,14 +167,48 @@ class _HistoryDialogState extends State<_HistoryDialog> {
     required bool selected,
     required int applied,
   }) =>
-      MenuRow(
-        key: ValueKey<String>('history-row-$id'),
-        selected: selected,
-        onPressed: () => _jump(applied),
-        child: Text(
-          label,
-          overflow: TextOverflow.ellipsis,
-          style: undone ? t.body.copyWith(color: t.textMuted) : t.body,
+      GestureDetector(
+        onSecondaryTapDown: (d) => _menu(applied, d.globalPosition),
+        child: MenuRow(
+          key: ValueKey<String>('history-row-$id'),
+          selected: selected,
+          onPressed: () => _jump(applied),
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: undone ? t.body.copyWith(color: t.textMuted) : t.body,
+          ),
         ),
       );
+
+  /// A row's right-click: go to it, or a step either way from where the
+  /// document stands.
+  void _menu(int applied, Offset at) {
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        Widget row(String id, String label, int? to, {String? action}) =>
+            MenuRow(
+              key: ValueKey<String>('history-menu-$id'),
+              enabled: to != null,
+              onPressed: () {
+                close(null);
+                if (to != null) _jump(to);
+              },
+              child: MenuLabel(label, action: action, enabled: to != null),
+            );
+        return [
+          row('go', l10n.historyGoToStep,
+              applied == _applied ? null : applied),
+          const MenuDivider(),
+          row('undo', l10n.menuUndo, _applied > 0 ? _applied - 1 : null,
+              action: 'edit.undo'),
+          row('redo', l10n.menuRedo,
+              _applied < _rows.length ? _applied + 1 : null,
+              action: 'edit.redo'),
+        ];
+      },
+    );
+  }
 }

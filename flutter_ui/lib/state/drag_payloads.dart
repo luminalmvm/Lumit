@@ -58,6 +58,10 @@ class SolidDragData {
 /// An effect, or a saved preset, dragged from the Effects & presets panel
 /// onto a layer or a clip.
 class EffectDragData {
+  /// The effect last put on a layer by name, by a drop, a menu or a panel:
+  /// what Effect ▸ Apply last effect puts on next. Not written down.
+  static String? last;
+
   /// The stable match name `addEffect` takes. Empty for a preset.
   final String name;
   final String label;
@@ -84,8 +88,10 @@ class EffectDragData {
         }
       } else if (clip != null) {
         layer.addClipEffect(clip: clip, name: name);
+        last = name;
       } else {
         layer.addEffect(name: name);
+        last = name;
       }
     } catch (_) {}
   }

@@ -30,10 +30,20 @@ Widget dropdownFace(LumitTheme t, String label, {Widget? face}) =>
       // column at its minimum), the caret is the first thing to go — a
       // sliver of the word still says more than striped overflow tape.
       final caretFits = !c.hasBoundedWidth || c.maxWidth >= 20;
+      // Stretched across a form's value column: the word on its left edge,
+      // the caret on the right, as the fields beside it read.
+      final fill = c.hasTightWidth && face == null;
       return Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+        mainAxisAlignment: c.hasTightWidth && !fill
+            ? MainAxisAlignment.center
+            : MainAxisAlignment.start,
         children: [
-          face ?? Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+          face ??
+              Flexible(
+                fit: fill ? FlexFit.tight : FlexFit.loose,
+                child: Text(label, overflow: TextOverflow.ellipsis),
+              ),
           if (caretFits) ...[
             // 6, the gap every `.dd` the mockups compute leaves between its
             // label and its caret.

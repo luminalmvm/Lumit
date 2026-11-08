@@ -58,6 +58,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../state/layer_bounds.dart' show isGeometryOptions, meshKindOf;
+import '../shell/menu_bar_frb.dart' show removeAllEffects;
 import '../shell/menu_layer_frb.dart' show blendModeNames;
 import '../state/file_dialogs.dart';
 import '../l10n/strings.dart';
@@ -320,14 +321,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               ],
               [
                 if (layer != null && effects.isNotEmpty)
-                  row('remove-all', MenuLabel(l10n.fxMenuRemoveAll, ticked: false),
-                      () {
-                    final project = app.project;
-                    asOneUndoStep(project, () {
-                      for (final e in layer.getEffects()) {
-                        layer.removeEffect(effect: e);
-                      }
-                    });
+                  row(
+                      'remove-all',
+                      MenuLabel(l10n.fxMenuRemoveAll,
+                          action: 'effect.remove.all', ticked: false), () {
+                    removeAllEffects(app, [layer]);
                     ui.clearEffectSelection();
                     changed();
                   }),

@@ -86,6 +86,14 @@
       }
     }
   },
+  "cacheClearAll": "Clear all caches",
+  "@cacheClearAll": {
+    "description": "Right-click menu of the cache meter in the bottom strip: empties the RAM, graphics card and disk caches of rendered frames. The disk one asks first."
+  },
+  "cacheSettingsEllipsis": "Preview and cache settings…",
+  "@cacheSettingsEllipsis": {
+    "description": "Right-click menu of the cache meter in the bottom strip: opens Settings on its Preview and cache page."
+  },
   "cacheMegabytes": "{megabytes} MB",
   "@cacheMegabytes": {
     "description": "Status line, the cache meter: how much the frame caches hold, in whole megabytes.",
@@ -558,6 +566,18 @@
   "close": "Close",
   "@close": {
     "description": "Button that shuts a window."
+  },
+  "swatchCopyColour": "Copy colour",
+  "@swatchCopyColour": {
+    "description": "Right-click menu of a colour well: copies its colour exactly, to paste into another well."
+  },
+  "swatchPasteColour": "Paste colour",
+  "@swatchPasteColour": {
+    "description": "Right-click menu of a colour well: sets it to the colour last copied from a well, or to a hex code copied from anywhere. Greyed when the clipboard holds neither."
+  },
+  "swatchCopyHex": "Copy hex",
+  "@swatchCopyHex": {
+    "description": "Right-click menu of a colour well: copies the colour as a hex code such as #3A7BD5, to paste outside Lumit."
   },
   "colourOutsideRange": "Outside 0–1",
   "@colourOutsideRange": {
@@ -1979,33 +1999,9 @@
   "@exportFormat": {
     "description": "Export dialogue: the container and codec to write."
   },
-  "exportFrameOf": "Frame {frame} of {total} ({encoder})",
-  "@exportFrameOf": {
-    "description": "Export dialogue: progress. {encoder} is a codec name and is not translated.",
-    "placeholders": {
-      "frame": {
-        "type": "String"
-      },
-      "total": {
-        "type": "String"
-      },
-      "encoder": {
-        "type": "String"
-      }
-    }
-  },
   "exportNotChosen": "Not chosen",
   "@exportNotChosen": {
     "description": "Export dialogue: shown where the file would be, before one has been picked."
-  },
-  "exportPreparing": "Preparing… ({encoder})",
-  "@exportPreparing": {
-    "description": "Export dialogue: shown before the first frame is written. {encoder} is a codec name and is not translated.",
-    "placeholders": {
-      "encoder": {
-        "type": "String"
-      }
-    }
   },
   "exportPreset": "Preset",
   "@exportPreset": {
@@ -6568,6 +6564,10 @@
   "@keyAddAMarkerAtThePlayhead": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keySaveTheFrameAtThePlayhead": "Save the frame at the playhead",
+  "@keySaveTheFrameAtThePlayhead": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyAddToTheExportQueue": "Add to the export queue",
   "@keyAddToTheExportQueue": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6670,6 +6670,14 @@
   },
   "keyGiveTheLayerARetime": "Give the layer a Retime",
   "@keyGiveTheLayerARetime": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyApplyTheLastEffectAgain": "Apply the last effect again",
+  "@keyApplyTheLastEffectAgain": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyRemoveEveryEffectFromTheSelectedLayers": "Remove every effect from the selected layers",
+  "@keyRemoveEveryEffectFromTheSelectedLayers": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyHoldTheFrameAtThePlayhead": "Hold the frame at the playhead",
@@ -7196,7 +7204,7 @@
   "@keyShowOrHideTheGraphEditor": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
-  "keyShowOrHideTheGrid": "Show or hide the grid",
+  "keyShowOrHideTheGrid": "Show or hide the transparency grid",
   "@keyShowOrHideTheGrid": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
@@ -8204,6 +8212,18 @@
   "menuSaveAnimationPreset": "Save animation preset…",
   "@menuSaveAnimationPreset": {
     "description": "Menu item."
+  },
+  "menuRevertToSaved": "Revert to saved",
+  "@menuRevertToSaved": {
+    "description": "File menu, after Save as…: throws away every change since the project was last saved, after asking. Greyed while there are none."
+  },
+  "revertQuestion": "Go back to the last save?",
+  "@revertQuestion": {
+    "description": "The whole of the window File > Revert to saved opens: the changes since the last save are thrown away and cannot be undone."
+  },
+  "revertYes": "Revert",
+  "@revertYes": {
+    "description": "The button that goes ahead in the File > Revert to saved window."
   },
   "menuSaveAs": "Save as…",
   "@menuSaveAs": {
@@ -13625,9 +13645,9 @@
   "@fxWindow": {
     "description": "Effect controls — how long a stretch of sound the Audio level driver measures."
   },
-  "menuImportAe": "After Effects project…",
+  "menuImportAe": "Import After Effects project…",
   "@menuImportAe": {
-    "description": "Item in the File menu's Import submenu — opens a file chooser for an After Effects .aep project, which Lumit reads directly."
+    "description": "Item in the File menu, under Import folder: opens a file chooser for an After Effects .aep project, which Lumit reads directly and opens as the project."
   },
   "menuImportFootage": "Import footage…",
   "@menuImportFootage": {
@@ -14558,7 +14578,7 @@
   "@settingsScopesUseThemeColour": {
     "description": "Settings window, Appearance: the name of the switch that draws the Scopes panel in the theme's colours rather than the standard broadcast ones."
   },
-  "settingsShape": "Shape",
+  "settingsShape": "Style",
   "@settingsShape": {
     "description": "Settings window, Appearance: the name of the row choosing the interface style, Studio, Desk or Lantern."
   },
@@ -14993,6 +15013,10 @@
   "@exportWhenDone": {
     "description": "Export dialog: row label: what happens once the export has finished."
   },
+  "exportBrowseEllipsis": "Browse…",
+  "@exportBrowseEllipsis": {
+    "description": "Export window, right-click menu of the Write to row: opens the save dialogue to choose where the file goes. The same as the Browse button beside the row, with an ellipsis because it opens a window."
+  },
   "exportOpenFolder": "Open folder",
   "@exportOpenFolder": {
     "description": "Export dialog: tick beside \"When done\": show the finished file in the file manager."
@@ -15188,6 +15212,19 @@
   "exportQueueWaiting": "Waiting",
   "@exportQueueWaiting": {
     "description": "Export queue window: an item’s state before it starts."
+  },
+  "exportQueuePreparing": "Preparing…",
+  "@exportQueuePreparing": {
+    "description": "Export queue window: a row's state once it has started and before its first frame is written."
+  },
+  "exportQueuePercent": "{percent}%",
+  "@exportQueuePercent": {
+    "description": "Export queue window: how far a running row has got, beside its progress bar. {percent} is a whole number.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
   },
   "exportQueueDone": "Done",
   "@exportQueueDone": {
@@ -16878,6 +16915,10 @@
   "@addPanel": {
     "description": "Submenu on a panel tab's right-click menu and on the empty end of a tab strip: lists the panels not on screen, and adds the chosen one to that group."
   },
+  "tipDockMoreTabs": "More tabs",
+  "@tipDockMoreTabs": {
+    "description": "Tooltip on the small down-pointing mark at the end of a panel group's tab strip, shown only when the group is too narrow for all its tabs. A click lists every tab in the group, to bring one to the front. One or two words."
+  },
   "resetSplit": "Reset split",
   "@resetSplit": {
     "description": "Row on a dock seam's right-click menu: gives the two panes either side of it equal room again."
@@ -17505,6 +17546,10 @@
   "menuRowTicked": "Ticked",
   "@menuRowTicked": {
     "description": "Read out by a screen reader for the checkmark on a ticked row of any menu — the Viewer's view and colour menus, the Project panel's proxy and colour-space rows, a layer's right-click menu, the menu bar. Not shown on screen: it names the tick mark itself, so the row reads as its own name followed by this word."
+  },
+  "historyGoToStep": "Go to this step",
+  "@historyGoToStep": {
+    "description": "Right-click menu of a row in the Edit > History window: takes the project to how it stood after that edit, as a click on the row does."
   },
   "historyOrigin": "Before the first step",
   "@historyOrigin": {
@@ -19191,7 +19236,20 @@
   },
   "fxMenuRemoveAll": "Remove all effects",
   "@fxMenuRemoveAll": {
-    "description": "Effect controls panel, right-click on empty ground: take every effect off the stack, as one undo step."
+    "description": "Effect controls panel, right-click on empty ground, and the Effect menu: take every effect off the selected layers' stacks, as one undo step."
+  },
+  "menuApplyLastEffect": "Apply last effect",
+  "@menuApplyLastEffect": {
+    "description": "Effect menu, first row, before any effect has been applied: greyed until one has."
+  },
+  "menuApplyEffect": "Apply {effect}",
+  "@menuApplyEffect": {
+    "description": "Effect menu, first row: puts the last effect applied onto the selected layers again. {effect} is that effect's name, such as Gaussian blur.",
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      }
+    }
   },
   "expressionEdit": "Edit expression",
   "@expressionEdit": {
