@@ -39,6 +39,7 @@ import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'node_menus.dart';
 import 'graph_ties.dart';
 import 'shader_editor.dart' show InstanceHome;
 import 'graph_panel.dart'
@@ -49,6 +50,7 @@ import 'graph_panel.dart'
         graphShaderHeader,
         graphDashPath,
         graphWirePath,
+        graphWireGrab,
         graphDotGrid,
         graphNodeHeaderHeight,
         graphOutNodeWidth,
@@ -687,9 +689,23 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       return;
     }
 
+    final right = event.buttons == kSecondaryMouseButton;
+    // The right button asks a socket rather than pulling on it.
+    if (socket != null && right) {
+      _socketMenu(socket, event.position);
+      return;
+    }
     final box = _boxAt(boxes, at);
-    if (box == null && tieDown(event, at, _wiresOf(boxes))) return;
+    if (box == null && tieDown(event, at, _wiresOf(boxes))) {
+      // A right-click on empty ground opens a menu on release, and a
+      // right-button drag ties the wires it crosses.
+      _menuPress = right;
+      return;
+    }
     if (box != null) {
+      // A right press picks and grabs as the left does, and a release that
+      // never moved opens the box's menu.
+      _menuBox = right ? box.node.id : null;
       setState(() {
         if (!_selection.contains(box.node.id)) {
           _selection
@@ -779,14 +795,119 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       return;
     }
 
-    if (tieUp(at, moved, _wiresOf(boxes))) return;
+    if (tieUp(at, moved, _wiresOf(boxes), menuAt: event.position)) {
+      _menuPress = false;
+      return;
+    }
+    if (_menuPress) {
+      _menuPress = false;
+      if (moved) return;
+      if (_wireAt(boxes, at) case final edge?) {
+        showGraphWireMenu(context, event.position,
+            onDelete: () => _removeEdge(edge));
+      } else {
+        _canvasMenu(at, event.position);
+      }
+      return;
+    }
     if (_drag != null) {
       setState(() => _drag = null);
+      final menuBox = _menuBox;
+      _menuBox = null;
+      if (!moved && menuBox != null) {
+        _boxMenu(menuBox, event.position);
+        return;
+      }
       if (moved && _graph != null) _commit(_graph!.clone());
       return;
     }
     setState(() => _panFrom = null);
   }
+
+  // --- Menus --------------------------------------------------------------
+
+  /// A right-click on empty canvas, waiting for its release.
+  bool _menuPress = false;
+
+  /// The box a right press landed on, whose menu opens if the release never
+  /// moved.
+  int? _menuBox;
+
+  /// The stored wire nearest [at], within a wire's grab distance.
+  Map<String, dynamic>? _wireAt(List<_Box> boxes, Offset at) {
+    final graph = _graph;
+    if (graph == null) return null;
+    final byId = {for (final b in boxes) b.node.id: b};
+    final wires = _wiresOf(boxes);
+    Map<String, dynamic>? best;
+    var nearest = graphWireGrab;
+    for (final e in graph.edges) {
+      final from = byId[e['from']];
+      final to = byId[e['to']];
+      if (from == null || to == null) continue;
+      final wire = (
+        key: tieWireKey('n${e['to']}', '${e['to_port'] ?? 0}'),
+        from: from.socket(e['from_port'] as int? ?? 0, isInput: false),
+        to: to.socket(e['to_port'] as int? ?? 0, isInput: true),
+      );
+      final d = tieWireDistance(wire, at, wires);
+      if (d < nearest) {
+        nearest = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  void _boxMenu(int id, Offset at) {
+    final graph = _graph;
+    if (graph == null) return;
+    final wired = graph.edges.any((e) => e['from'] == id || e['to'] == id);
+    showGraphBoxMenu(
+      context,
+      at,
+      onDisconnectAll: !wired
+          ? null
+          : () {
+              final next = graph.clone();
+              next.edges.removeWhere((e) => e['from'] == id || e['to'] == id);
+              _commit(next);
+            },
+      onDelete: _deleteSelected,
+    );
+  }
+
+  void _socketMenu(_Sock socket, Offset at) {
+    final graph = _graph;
+    if (graph == null) return;
+    final edges = [
+      for (final e in graph.edges)
+        if (socket.isInput
+            ? e['to'] == socket.node && e['to_port'] == socket.port
+            : e['from'] == socket.node && e['from_port'] == socket.port)
+          e,
+    ];
+    showGraphSocketMenu(
+      context,
+      at,
+      onDisconnect: edges.isEmpty
+          ? null
+          : () {
+              final next = graph.clone();
+              next.edges.removeWhere((e) => edges.any((x) => _sameEdge(e, x)));
+              _commit(next);
+            },
+    );
+  }
+
+  void _canvasMenu(Offset at, Offset position) => showGraphCanvasMenu(
+        context,
+        position,
+        onAddNode: () => _openConsole(at, byKey: true),
+        onSelectAll: () => setState(() => _selection
+          ..clear()
+          ..addAll([for (final n in _graph?.nodes ?? const []) n['id'] as int])),
+      );
 
   void _wheel(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;

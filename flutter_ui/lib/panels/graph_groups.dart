@@ -512,15 +512,17 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
           onPressed: () => close(_GroupDo.colour),
           child: Text(l10n.graphGroupColour),
         ),
+        const MenuDivider(),
         MenuRow(
           key: const ValueKey('graph-group-menu-save'),
           onPressed: () => close(_GroupDo.save),
           child: Text(l10n.graphSaveGroup),
         ),
+        const MenuDivider(),
         MenuRow(
           key: const ValueKey('graph-group-menu-ungroup'),
           onPressed: () => close(_GroupDo.ungroup),
-          child: Text(l10n.graphUngroup),
+          child: MenuLabel(l10n.graphUngroup, action: 'layer.ungroup'),
         ),
       ],
     );
@@ -705,11 +707,13 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
               ? l10n.graphNoteExpand
               : l10n.graphNoteCollapse),
         ),
+        const MenuDivider(),
         MenuRow(
           key: const ValueKey('graph-note-menu-colour'),
           onPressed: () => close(_NoteDo.colour),
           child: Text(l10n.graphGroupColour),
         ),
+        const MenuDivider(),
         MenuRow(
           key: const ValueKey('graph-note-menu-delete'),
           onPressed: () => close(_NoteDo.delete),
@@ -899,14 +903,8 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
           ),
         ),
         const SizedBox(width: 6),
-        HouseButton(
-          key: const ValueKey('graph-save-group'),
-          small: true,
-          frameless: true,
-          onPressed: canSaveGroup ? saveGroup : null,
-          child: Text(l10n.graphSaveGroup, style: t.small),
-        ),
-        const SizedBox(width: 6),
+        // Save group… is a row on a box's menu and on a group's bar, where
+        // the pick it saves is.
         LumitTooltip(
           message: l10n.graphSavedGroups,
           child: HouseButton(

@@ -15,7 +15,7 @@
 import 'dart:io';
 
 import 'package:flutter/gestures.dart'
-    show kDoubleTapMinTime;
+    show PointerDeviceKind, kDoubleTapMinTime, kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -756,7 +756,14 @@ void main() {
           tester,
           find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}')),
           held: LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.byKey(const ValueKey('graph-save-group')));
+      // Save group… is on the box's menu, over the whole pick.
+      await tester.tapAt(
+          tester.getCenter(
+              find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}'))),
+          buttons: kSecondaryMouseButton,
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('graph-menu-save-group')));
       await tester.pumpAndSettle();
       await tester.enterText(
           find.byKey(const ValueKey('graph-group-name')), 'Audio rig');

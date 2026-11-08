@@ -639,7 +639,7 @@ void main() {
               find.byKey(const ValueKey<String>('graph-node-source'))),
           tester
               .getCenter(find.byKey(const ValueKey<String>('graph-node-out'))),
-          tester.getCenter(find.byKey(const ValueKey<String>('graph-legend'))),
+          tester.getCenter(find.byKey(const ValueKey<String>('graph-zoom'))),
           const Offset(700, 500),
         ]) {
           await mouse.moveTo(spot);

@@ -43,6 +43,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
@@ -97,6 +99,17 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// this panel redraws on every playhead frame, and a read in that path is
   /// the traffic `bridge_call_budget_test` guards against.
   _Picked? _picked;
+
+  /// The box picked last, kept up when the pick is cleared, as the last
+  /// stack stays up in Effect controls. A new layer starts afresh.
+  BridgeNodeRef? _lastNode;
+  UuidValue? _lastLayer;
+  ({UuidValue id, String label, bool picture})? _lastCompNode;
+
+  /// With no box to draw, the layer's own boxes, each a click from being
+  /// picked, under the layer's name.
+  List<BridgeGraphNode> _index = const [];
+  String _layerName = '';
 
   /// Which of the picked box's parameters a driver is wired to, by parameter
   /// id, with the driver's name and what its wire carries — the same shape
@@ -184,7 +197,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       return;
     }
     final layer = _ui?.selectedLayer.value;
-    final node = _ui?.graphNode.value;
+    if (layer?.internallayerId != _lastLayer) {
+      _lastLayer = layer?.internallayerId;
+      _lastNode = null;
+    }
+    final node = _ui?.graphNode.value ?? _lastNode;
     final (UuidValue? id, bool driver) = switch (node) {
       BridgeNodeRef_Effect(:final field0) => (field0, false),
       BridgeNodeRef_Driver(:final field0) => (field0, true),
@@ -210,11 +227,28 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         // honest answer until the selection catches up.
       }
     }
+    _lastNode = picked == null ? null : node;
+    var index = const <BridgeGraphNode>[];
+    var name = '';
+    if (picked == null && layer != null) {
+      try {
+        name = layer.getInfo().name;
+        index = [
+          for (final n in layer.getGraph().nodes)
+            if (n.node is BridgeNodeRef_Effect || n.node is BridgeNodeRef_Driver)
+              n,
+        ];
+      } catch (_) {
+        // The layer has gone; there is nothing to list.
+      }
+    }
     setState(() {
       _layer = layer;
       _picked = picked;
       _box = null;
       _input = null;
+      _index = index;
+      _layerName = name;
       _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
@@ -224,7 +258,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// where it has one, and, for an Fx box, the staged instance whose rows this
   /// panel draws.
   void _reloadGraphBox(LumitUiState ui, CompositionReference comp) {
-    final picked = ui.compGraphNode.value;
+    final picked = ui.compGraphNode.value ?? _lastCompNode;
     BridgeCompNode? box;
     BridgeGraphInput? input;
     _Picked? row;
@@ -262,6 +296,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       _labelFor = picked?.id;
     }
     if (input == null) _labelFor = null;
+    _lastCompNode = box == null ? null : picked;
     setState(() {
       _layer = null;
       _picked = row;
@@ -659,11 +694,20 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         ],
       );
     }
+    if (picked == null && layer != null && comp != null && _index.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(context, _layerName),
+          Expanded(child: _indexList(context, ui)),
+        ],
+      );
+    }
     if (picked == null || comp == null || (layer == null && !picked.graph)) {
       return PlaceholderPanel(
         icon: LumitIcon.nodes,
         title: l10n.panelNode,
-        hint: l10n.nodeNoSelection,
+        hint: '',
       );
     }
     // The keyframe controls read the playhead — which key is under it, whether
@@ -681,6 +725,54 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           Expanded(child: _rows(ui, picked, layer, playhead)),
         ],
       ),
+    );
+  }
+
+  /// The layer's boxes, one row each, a click from being picked on the
+  /// canvas. A bypassed box reads quiet, as its card does.
+  Widget _indexList(BuildContext context, LumitUiState ui) {
+    final t = ThemeScope.of(context).theme;
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      children: [
+        for (final n in _index)
+          HoverMark(
+            builder: (context, lit) => GestureDetector(
+              key: ValueKey<String>('node-index-${graphNodeKey(n.node)}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => ui.graphNode.value = n.node,
+              child: Container(
+                height: t.density.laneRow,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: t.surface2.withValues(alpha: lit),
+                child: Row(
+                  children: [
+                    // The mark the Timeline gives an effect, and the wire
+                    // mark for a driver, so the two kinds read apart.
+                    SizedBox(
+                      width: 18,
+                      child: n.node is BridgeNodeRef_Driver
+                          ? glyph.LumitIcon(LumitIcons.driven,
+                              size: 12, colour: t.textMuted)
+                          : lumitIcon(LumitIcon.fx,
+                              size: 12, color: t.textMuted),
+                    ),
+                    Expanded(
+                      child: Text(
+                        n.customName ?? engineLabel(n.label),
+                        style: t.body.copyWith(
+                            color: n.enabled ? t.textPrimary : t.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (n.customName != null)
+                      Text(engineLabel(n.label), style: t.kicker),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

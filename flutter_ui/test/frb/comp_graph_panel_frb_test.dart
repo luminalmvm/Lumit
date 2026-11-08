@@ -417,105 +417,28 @@ void main() {
 
     Finder twirl(UuidValue node) =>
         find.byKey(ValueKey<String>('graph-twirl-node:$node'));
-    Finder rowOn(UuidValue node, String param) =>
-        find.byKey(ValueKey<String>('graph-row-node:$node-$param'));
-    Finder fieldOn(UuidValue node, String param) => find.descendant(
-        of: card(node),
-        matching: find.byKey(ValueKey<String>('fx-float-$node-$param')));
-    double radiusOf(CompositionReference graph, UuidValue blur) {
-      final values = graph
-          .getNodeGraphInstances()
-          .firstWhere((i) => i.id() == blur)
-          .getInfo()
-          .values;
-      final value =
-          values.where((v) => v.id == 'radius').map((v) => v.value).single;
-      return stillValue((value as BridgeEffectValue_Float).field0);
-    }
-
-    testWidgets("a row's control edits the parameter in one op, undone in one",
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(blur));
-      await tester.pump();
-
-      final was = p.graph.documentRevision();
-      final field = fieldOn(blur, 'radius');
-      await tester.tap(field);
-      await tester.pump();
-      await tester.enterText(
-          find.descendant(of: field, matching: find.byType(EditableText)),
-          '12');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pump();
-      expect(radiusOf(p.graph, blur), closeTo(12, 0.001));
-      expect(p.graph.documentRevision(), was + 1, reason: 'one op');
-
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(radiusOf(p.graph, blur), closeTo(30, 0.001),
-          reason: 'one undo step');
-
-      // Backspace typed into the well is the well's, not the canvas's Delete.
-      await tester.tap(fieldOn(blur, 'radius'));
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
-      await tester.pump();
-      expect(card(blur), findsOneWidget);
-    });
-
-    testWidgets('a drag on a box control commits once and moves the box nowhere',
-        (tester) async {
-      final p = withGraph();
-      final blur = seedFx(p.graph, 'blur', const Offset(60, 40));
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(blur));
-      await tester.pump();
-
-      final was = p.graph.documentRevision();
-      final drag =
-          await tester.startGesture(tester.getCenter(fieldOn(blur, 'radius')));
-      for (var i = 0; i < 8; i++) {
-        await drag.moveBy(const Offset(6, 0));
-        await tester.pump();
-      }
-      await drag.up();
-      await tester.pump();
-
-      expect(p.graph.documentRevision(), was + 1,
-          reason: 'one drag, one op');
-      expect(radiusOf(p.graph, blur), isNot(closeTo(30, 0.001)));
-      expect(placeOf(p.graph, blur), const Offset(60, 40),
-          reason: 'the value moved, the box did not');
-    });
-
     // --- A box lists what the Effect controls panel lists. The rows are
     // derived by that panel's own rules, so a box and the panel can never
-    // disagree about what an effect is showing.
+    // disagree about what an effect is showing. The rows read; the Node
+    // panel's rows edit.
 
-    /// The Node graph box's one Action. It drew a button that did nothing;
-    /// it is the canvas's own way in (§4.2).
-    testWidgets("a Node graph box's Open graph action goes in", (tester) async {
+    /// The Node graph box's way in, on its menu, where a double-click also
+    /// goes (§4.2).
+    testWidgets("a Node graph box's Open graph row goes in", (tester) async {
       final p = withGraph();
       final inner = p.state.project!.newNodeGraph(name: 'Inner');
       final nested =
           seedFx(p.graph, 'node_graph', const Offset(60, 40), bound: inner);
       p.uiState.model.refresh();
       await mount(tester, p);
-      await tester.tap(twirl(nested));
-      await tester.pump();
 
-      await tester.tap(find.descendant(
-          of: rowOn(nested, 'open'),
-          matching: find.byKey(ValueKey<String>('fx-action-$nested-open'))));
-      await tester.pump();
+      await tester.tapAt(tester.getCenter(card(nested)),
+          buttons: kSecondaryMouseButton, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('graph-menu-enter')));
+      await tester.pumpAndSettle();
       expect(p.uiState.selectedComp?.internalid, inner.internalid,
-          reason: 'the button opens the graph the box applies');
+          reason: 'the row opens the graph the box applies');
     });
 
     /// Type [source] into the shader editor that [edit] opens, and apply it.
@@ -540,24 +463,27 @@ void main() {
         '    return lumit_sample(uv);\n'
         '}\n';
 
-    /// A Custom shader box drew Edit shader and did nothing when it was
-    /// pressed. It opens the editor, and Apply is one op on the graph.
+    /// A picked Custom shader box's Edit shader, on the Node panel's row,
+    /// opens the editor, and Apply is one op on the graph.
     testWidgets("a Custom shader box's Edit shader applies to the graph",
         (tester) async {
       final p = withGraph();
       final box = seedFx(p.graph, 'custom_shader', const Offset(60, 40));
       p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(twirl(box));
+      await mount(
+        tester,
+        p,
+        child: const Row(children: [
+          SizedBox(width: 600, child: GraphPanelFrb()),
+          Expanded(child: NodePanelFrb()),
+        ]),
+      );
+      await tester.tapAt(tester.getCenter(card(box)));
       await tester.pump();
 
       final was = p.graph.documentRevision();
-      await editShader(
-          tester,
-          find.descendant(
-              of: rowOn(box, 'edit'),
-              matching: find.byKey(ValueKey<String>('fx-action-$box-edit'))),
-          shader);
+      await editShader(tester,
+          find.byKey(ValueKey<String>('fx-action-$box-edit')), shader);
       expect(shaderOn(p.graph, box), shader);
       expect(p.graph.documentRevision(), was + 1, reason: 'one op');
     });

@@ -14989,29 +14989,73 @@
       }
     }
   },
-  "graphTypes": "Types",
-  "@graphTypes": {
-    "description": "Graph panel: the heading of the legend strip along the bottom of the canvas, which says what each wire colour carries."
+  "graphPortImage": "Image",
+  "@graphPortImage": {
+    "description": "Graph panel: tooltip on a socket that carries a picture. The socket's colour is the type; the word says which."
   },
-  "graphTypeImage": "image · matte · depth",
-  "@graphTypeImage": {
-    "description": "Graph panel legend: the three kinds of picture a blue wire carries, an image, a matte and a depth (distance from the camera). Lower case, joined by middle dots."
+  "graphPortMatte": "Matte",
+  "@graphPortMatte": {
+    "description": "Graph panel: tooltip on a socket that carries a matte."
   },
-  "graphTypeNumber": "number",
-  "@graphTypeNumber": {
-    "description": "Graph panel legend: what an amber wire carries. Lower case."
+  "graphPortDepth": "Depth",
+  "@graphPortDepth": {
+    "description": "Graph panel: tooltip on a socket that carries a depth picture (distance from the camera)."
   },
-  "graphTypeColour": "colour",
-  "@graphTypeColour": {
-    "description": "Graph panel legend: what a magenta wire carries. Lower case."
+  "graphPortNumber": "Number",
+  "@graphPortNumber": {
+    "description": "Graph panel: tooltip on a socket that carries a number."
   },
-  "graphTypeGeometry": "shape · points",
-  "@graphTypeGeometry": {
-    "description": "Graph panel legend: the two kinds of geometry a teal wire carries, an outline and a stream of points. Lower case, joined by a middle dot."
+  "graphPortColour": "Colour",
+  "@graphPortColour": {
+    "description": "Graph panel: tooltip on a socket that carries a colour."
   },
-  "graphTypeAudio": "audio",
-  "@graphTypeAudio": {
-    "description": "Graph panel legend: what a green wire carries. Lower case."
+  "graphPortShape": "Shape",
+  "@graphPortShape": {
+    "description": "Graph panel: tooltip on a socket that carries an outline."
+  },
+  "graphPortPoints": "Points",
+  "@graphPortPoints": {
+    "description": "Graph panel: tooltip on a socket that carries a stream of points."
+  },
+  "graphPortAudio": "Audio",
+  "@graphPortAudio": {
+    "description": "Graph panel: tooltip on a socket that carries sound."
+  },
+  "graphAddNode": "Add node…",
+  "@graphAddNode": {
+    "description": "Graph panel: right-click row on empty canvas that opens the node search. Ellipsis, since a search follows."
+  },
+  "graphInsertNode": "Insert node…",
+  "@graphInsertNode": {
+    "description": "Graph panel: right-click row on a wire of the picture's chain that opens the search and puts the chosen effect into the chain at that wire. Ellipsis, since a search follows."
+  },
+  "graphAddReroute": "Add reroute",
+  "@graphAddReroute": {
+    "description": "Graph panel: right-click row on a wire that adds a point the wire is routed through, which can then be dragged."
+  },
+  "graphDisconnect": "Disconnect",
+  "@graphDisconnect": {
+    "description": "Graph panel: right-click row on a socket that takes the wire off it."
+  },
+  "graphDisconnectAll": "Disconnect all",
+  "@graphDisconnectAll": {
+    "description": "Graph panel: right-click row on a box that takes every wire off it."
+  },
+  "graphShowSockets": "Show all sockets",
+  "@graphShowSockets": {
+    "description": "Graph panel: right-click row on a socket that opens the box so every parameter has a socket. The twirl on the box's header does the same."
+  },
+  "graphHideSockets": "Hide unused sockets",
+  "@graphHideSockets": {
+    "description": "Graph panel: right-click row on a socket that shuts the box so only wired sockets and the picture's own are drawn. The twirl on the box's header does the same."
+  },
+  "graphOpenComp": "Open composition",
+  "@graphOpenComp": {
+    "description": "Node graph canvas: right-click row on a Read box of a composition that opens that composition, as a double-click does."
+  },
+  "graphRevealEffect": "Reveal in Effect controls",
+  "@graphRevealEffect": {
+    "description": "Graph panel: right-click row on an effect box that fronts the Effect controls panel with that effect picked."
   },
   "graphSaveGroup": "Save group…",
   "@graphSaveGroup": {
