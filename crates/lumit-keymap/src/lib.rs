@@ -151,6 +151,7 @@ impl ActionId {
             "cut.extract" => "Extract the work area",
             "cut.match.frame" => "Match frame",
             "cut.transition.default" => "Add the default transition",
+            "cut.duplicate" => "Duplicate the picked clips",
             "cut.insert.title" => "Insert a title",
             "workarea.set.start" => "Set work-area start to the playhead",
             "workarea.set.end" => "Set work-area end to the playhead",

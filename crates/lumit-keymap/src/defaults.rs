@@ -406,7 +406,10 @@ pub fn default_keymap() -> Keymap {
         row(Cut, ";", "cut.lift"),
         row(Cut, "'", "cut.extract"),
         row(Cut, "F", "cut.match.frame"),
-        row(Cut, "Mod+D", "cut.transition.default"),
+        // Ctrl+D duplicates in every workspace; the default transition sits
+        // one modifier along.
+        row(Cut, "Mod+D", "cut.duplicate"),
+        row(Cut, "Mod+Shift+D", "cut.transition.default"),
         row(Cut, "Mod+T", "cut.insert.title"),
         row(Cut, "=", "timeline.zoom.in"),
         row(Cut, "-", "timeline.zoom.out"),
@@ -621,8 +624,6 @@ pub fn vegas_preset() -> Keymap {
         (Cut, "Mod+Alt+ArrowRight", "edit.point.next"),
         (Cut, "ArrowUp", "timeline.zoom.in"),
         (Cut, "ArrowDown", "timeline.zoom.out"),
-        (Cut, "Mod+Shift+D", "cut.transition.default"),
-        (Cut, "Mod+D", "cut.tool.select"),
         (Cut, "Mod+Shift+U", "cut.linked.toggle"),
         (Cut, "Mod+L", "cut.ripple.toggle"),
         (Cut, "Mod+Shift+X", "cut.crossfade.toggle"),

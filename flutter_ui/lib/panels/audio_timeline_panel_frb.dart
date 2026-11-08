@@ -465,6 +465,11 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       case 'cut.group' when _pickedClips.length > 1:
         _groupClips(join: true);
         return true;
+      case 'cut.duplicate' when comp != null && _pickedClips.isNotEmpty:
+        final picked = _pickedOnTracks();
+        if (picked.isEmpty) return false;
+        _duplicateClips(comp, picked);
+        return true;
       case 'cut.ungroup' when _pickedClips.isNotEmpty:
         _groupClips(join: false);
         return true;
@@ -2861,7 +2866,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             row('paste', l10n.menuPaste, () => _pasteClips(onto: layer), close,
                 action: 'edit.paste', enabled: _clipsHeld),
             row('duplicate', l10n.menuDuplicate,
-                () => _duplicateClips(comp, picked!), close),
+                () => _duplicateClips(comp, picked!), close,
+                action: 'cut.duplicate'),
             row('paste-attributes', l10n.cutPasteAttributes, () {
               _afterCut(_cut(() => comp.cutPasteAttributes(clips: ids)));
             }, close, action: 'cut.paste.attributes', enabled: _clipsHeld),

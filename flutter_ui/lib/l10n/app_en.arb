@@ -7090,7 +7090,11 @@
   "keyAddTheDefaultTransition": "Add the default transition",
   "@keyAddTheDefaultTransition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut. A transition is a dissolve or a crossfade between two clips."
+  },  "keyDuplicateThePickedClips": "Duplicate the picked clips",
+  "@keyDuplicateThePickedClips": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut: a copy of each picked clip right after it."
   },
+
   "keyCutTimeline": "Cut timeline",
   "@keyCutTimeline": {
     "description": "Settings → Keymap: a heading saying where these shortcuts are live. The Cut timeline is the panel for editing clips end to end."

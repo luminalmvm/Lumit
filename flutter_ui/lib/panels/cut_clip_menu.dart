@@ -940,7 +940,8 @@ mixin CutClipMenu<W extends StatefulWidget> on State<W> {
               () => _pasteAtPlayhead(ui, comp),
               action: 'edit.paste', enabled: _clipsHeld),
           _cell(close, 'ctl-menu-duplicate', l10n.menuDuplicate,
-              () => _duplicatePicked(comp)),
+              () => _duplicatePicked(comp),
+              action: 'cut.duplicate'),
           // The copied clip's effects, levels, fades and speed onto the picked
           // clips.
           _cell(

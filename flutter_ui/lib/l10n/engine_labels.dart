@@ -1868,6 +1868,7 @@ Map<String, String> get _built => {
       "Extract the work area": l10n.keyExtractTheWorkArea,
       "Match frame": l10n.keyMatchFrame,
       "Add the default transition": l10n.keyAddTheDefaultTransition,
+      "Duplicate the picked clips": l10n.keyDuplicateThePickedClips,
       "Set work-area start to the playhead":
           l10n.keySetWorkAreaStartToThePlayhead,
       "Set work-area end to the playhead": l10n.keySetWorkAreaEndToThePlayhead,

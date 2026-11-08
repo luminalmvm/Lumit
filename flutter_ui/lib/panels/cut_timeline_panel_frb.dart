@@ -890,6 +890,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         _matchFrame(ui, comp);
       case 'cut.transition.default':
         _defaultTransition(ui, comp);
+      case 'cut.duplicate':
+        if (comp != null && cutPicked.isNotEmpty) _duplicatePicked(comp);
       case 'cut.insert.title':
         if (comp != null) {
           insertTitle(
