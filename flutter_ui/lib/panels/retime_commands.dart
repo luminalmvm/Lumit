@@ -324,10 +324,13 @@ Future<void> askToFreezeClips(
 /// Ramp… on a layer or on clips: ask how, then write it.
 Future<void> askToRamp(BuildContext context, List<BridgeLayerEntry> targets,
     List<RetimeClip> clips, Offset position) {
+  final ui = _uiOf(context);
   return showRampPopover(
     context: context,
     position: position,
-    fps: _uiOf(context).model.fps,
+    fps: ui.model.fps,
+    settings: ui.workspace.interface,
+    saved: ui.workspace.settingsChanged,
     onRamp: (percent, frames, curve) {
       if (!context.mounted) return;
       if (clips.isNotEmpty) {
@@ -430,7 +433,7 @@ void showRetimeMenu(BuildContext context, LumitUiState ui,
           keyName: 'retime-menu-stretch'),
       row(
           close,
-          l10n.retimeHoldHere,
+          l10n.retimeFreeze,
           targets.any((e) => canFreezeAt(e, frame))
               ? () => freezeAtPlayhead(context, targets)
               : null,
@@ -513,7 +516,7 @@ void showClipRetimeMenu(BuildContext context, LumitUiState ui,
     position: position,
     width: 228,
     rows: (close) => [
-      row(close, 'retime-clip-menu-freeze', l10n.retimeHoldHere,
+      row(close, 'retime-clip-menu-freeze', l10n.retimeFreeze,
           inside ? () => freezeClips(context, clips) : null,
           action: 'layer.retime.hold'),
       row(close, 'retime-clip-menu-ramp', l10n.retimeRamp,

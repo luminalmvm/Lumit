@@ -231,9 +231,9 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                     ),
                     // A clip always has its line, so there is nothing to turn on.
                     if (clip == null)
-                      IgnorePointer(
-                        ignoring: !on,
-                        child: LumitTooltip(
+                      _dimmed(
+                        on,
+                        LumitTooltip(
                           message: retimed
                               ? l10n.menuDisableRetime
                               : l10n.menuEnableRetime,
@@ -263,46 +263,50 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                                     .clamp(_stripLeast, _stripMost)
                                     .toDouble()
                                 : _stripLeast),
-                        const SizedBox(height: 10),
-                        if (wide)
-                          Row(children: [
-                            Expanded(
-                                child: labelled(l10n.graphSpeed, speedWell)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                                child: labelled(l10n.duration, lengthWell)),
-                          ])
-                        else ...[
-                          labelled(l10n.graphSpeed, speedWell,
-                              width: _labelWidth),
-                          const SizedBox(height: 4),
-                          labelled(l10n.duration, lengthWell,
-                              width: _labelWidth),
-                        ],
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 2,
-                          runSpacing: 2,
-                          children: [
-                            for (final chip in _speedChips)
-                              _chip(t, on, toSpeed, speed, chip),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        _commands(t, targets, clips, speed, retimed),
-                        // A clip follows its layer here.
-                        if (clip == null &&
-                            first?.info.kind == BridgeLayerKind.footage) ...[
+                        // With nothing to retime the name row and the flat
+                        // strip are the whole panel.
+                        if (on) ...[
                           const SizedBox(height: 10),
+                          if (wide)
+                            Row(children: [
+                              Expanded(
+                                  child: labelled(l10n.graphSpeed, speedWell)),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                  child: labelled(l10n.duration, lengthWell)),
+                            ])
+                          else ...[
+                            labelled(l10n.graphSpeed, speedWell,
+                                width: _labelWidth),
+                            const SizedBox(height: 4),
+                            labelled(l10n.duration, lengthWell,
+                                width: _labelWidth),
+                          ],
+                          const SizedBox(height: 4),
                           Wrap(
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 8,
-                            runSpacing: 3,
+                            spacing: 2,
+                            runSpacing: 2,
                             children: [
-                              Text(l10n.sourceInBetweenFrames, style: label),
-                              _interpolation(t, targets, first!),
+                              for (final chip in _speedChips)
+                                _chip(t, on, toSpeed, speed, chip),
                             ],
                           ),
+                          const SizedBox(height: 10),
+                          _commands(t, targets, clips, speed, retimed),
+                          // A clip follows its layer here.
+                          if (clip == null &&
+                              first?.info.kind == BridgeLayerKind.footage) ...[
+                            const SizedBox(height: 10),
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 3,
+                              children: [
+                                Text(l10n.sourceInBetweenFrames, style: label),
+                                _interpolation(t, targets, first!),
+                              ],
+                            ),
+                          ],
                         ],
                       ],
                     ),
@@ -316,8 +320,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
     );
   }
 
-  /// Greyed and out of reach while no layer can use it: the panel holds still
-  /// rather than swapping for a caption.
+  /// Greyed and out of reach while no layer can use it.
   Widget _dimmed(bool on, Widget child) =>
       on ? child : IgnorePointer(child: Opacity(opacity: 0.4, child: child));
 
@@ -376,7 +379,9 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                     valueListenable: _ui.playheadFrame,
                     builder: (context, frame, _) {
                       final at = (fps <= 0 ? 0.0 : frame / fps) - zero;
-                      final inside = frame >= inFrame && frame <= outFrame;
+                      final inside = (entry != null || clip != null) &&
+                          frame >= inFrame &&
+                          frame <= outFrame;
                       final speed = !inside
                           ? null
                           : keys.isEmpty

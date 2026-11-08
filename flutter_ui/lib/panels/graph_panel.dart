@@ -3884,12 +3884,12 @@ FoldItem graphFrameAllFold(LumitTheme t,
     );
 
 /// The toolbar's controls, folding from the end into one mark rather than
-/// overflowing. Loose in its row, so the name beside it keeps its share.
+/// overflowing. They sit at the row's end, against the zoom, and the name
+/// beside them keeps its share.
 Widget graphToolbarFold(List<FoldItem> items, {required Key markKey}) =>
     Flexible(
       child: Align(
         alignment: Alignment.centerRight,
-        widthFactor: 1,
         child: FoldingRow(
           markKey: markKey,
           markWidth: 22,

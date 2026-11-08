@@ -4,6 +4,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
+import '../state/settings.dart' show InterfaceSettings;
 import '../widgets/controls.dart';
 import 'graph_key_fields.dart';
 import 'graph_maths.dart';
@@ -25,19 +26,16 @@ String speedCurveName(SpeedCurve curve) => switch (curve) {
       SpeedCurve.hold => l10n.speedCurveHold,
     };
 
-/// What the last ramp asked for. For this run of the app only.
-double _rampTo = 20;
-int _rampFrames = 12;
-bool _rampInSeconds = false;
-SpeedCurve _rampCurve = SpeedCurve.linear;
-
-/// Ask how a ramp goes: to which speed, over how long, along which curve.
-/// `Enter` or the button runs it, and [onRamp] hears the speed in per cent, the
-/// length in frames and the curve.
+/// Ask how a ramp goes: to which speed, over how long, along which curve,
+/// starting from what the last ramp asked for in [settings]. `Enter` or the
+/// button runs it, writes the answers back and calls [saved], and [onRamp]
+/// hears the speed in per cent, the length in frames and the curve.
 Future<void> showRampPopover({
   required BuildContext context,
   required Offset position,
   required double fps,
+  required InterfaceSettings settings,
+  required VoidCallback saved,
   required void Function(double percent, int frames, SpeedCurve curve) onRamp,
 }) =>
     showLumitPopup<void>(
@@ -45,8 +43,10 @@ Future<void> showRampPopover({
       position: position,
       builder: (close) => _RampPopover(
         fps: fps,
+        settings: settings,
         onRamp: (percent, frames, curve) {
           close(null);
+          saved();
           onRamp(percent, frames, curve);
         },
       ),
@@ -54,9 +54,11 @@ Future<void> showRampPopover({
 
 class _RampPopover extends StatefulWidget {
   final double fps;
+  final InterfaceSettings settings;
   final void Function(double percent, int frames, SpeedCurve curve) onRamp;
 
-  const _RampPopover({required this.fps, required this.onRamp});
+  const _RampPopover(
+      {required this.fps, required this.settings, required this.onRamp});
 
   @override
   State<_RampPopover> createState() => _RampPopoverState();
@@ -64,6 +66,16 @@ class _RampPopover extends StatefulWidget {
 
 class _RampPopoverState extends State<_RampPopover> {
   final FocusScopeNode _scope = FocusScopeNode(debugLabel: 'ramp');
+  late double _rampTo = widget.settings.retimeRampTo;
+  late int _rampFrames = widget.settings.retimeRampFrames.clamp(1, 100000);
+  late bool _rampInSeconds = widget.settings.retimeRampInSeconds;
+  late SpeedCurve _rampCurve = SpeedCurve.values.firstWhere(
+      (c) => c.name == widget.settings.retimeRampEase,
+      orElse: () => SpeedCurve.linear);
+
+  /// Counts chip presses. The To well opens being typed in, and a typed well
+  /// keeps the text it opened with, so a chip opens it afresh on the new speed.
+  int _chipped = 0;
 
   @override
   void dispose() {
@@ -71,7 +83,14 @@ class _RampPopoverState extends State<_RampPopover> {
     super.dispose();
   }
 
-  void _go() => widget.onRamp(_rampTo, _rampFrames, _rampCurve);
+  void _go() {
+    widget.settings
+      ..retimeRampTo = _rampTo
+      ..retimeRampFrames = _rampFrames
+      ..retimeRampInSeconds = _rampInSeconds
+      ..retimeRampEase = _rampCurve.name;
+    widget.onRamp(_rampTo, _rampFrames, _rampCurve);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +106,7 @@ class _RampPopoverState extends State<_RampPopover> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              keyFieldRow(t, l10n.retimeRampTo, 'ramp-to', _rampTo,
+              keyFieldRow(t, l10n.retimeRampTo, 'ramp-to-$_chipped', _rampTo,
                   min: -10000,
                   max: 10000,
                   decimals: 2,
@@ -111,8 +130,10 @@ class _RampPopoverState extends State<_RampPopover> {
                         frameless: _rampTo != chip,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1),
-                        onPressed: () =>
-                            setState(() => _rampTo = chip.toDouble()),
+                        onPressed: () => setState(() {
+                          _rampTo = chip.toDouble();
+                          _chipped++;
+                        }),
                         child: Text('$chip',
                             style: t.mono.copyWith(
                                 fontSize: wellTextSize,

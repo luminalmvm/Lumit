@@ -56,12 +56,14 @@ import 'comp_graph_panel.dart'
         compItemKindWord,
         compNodeKey,
         pressGraphBox;
+import 'effect_commands.dart' show EffectCommands;
 import 'effect_controls_panel_frb.dart' show curveChannelColour;
 import 'effect_param_row_frb.dart';
 import 'fx_section.dart' show fxEnableMark, fxGroupHeaderRow;
 import 'graph_panel.dart'
     show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
 import 'levels_display_frb.dart' show LevelsDisplayFrb, levelsChannels;
+import 'node_menus.dart' show showGraphBoxMenu;
 import 'placeholder.dart';
 import '../state/dock.dart' show Panel;
 import 'row_filter.dart';
@@ -418,12 +420,46 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   }
 
   /// The picked box's menu, opened by the canvas that owns its rows. Reset
-  /// first, for the reason [_askPick] is.
+  /// first, for the reason [_askPick] is. With no canvas on stage to answer,
+  /// the panel opens the rows it can do itself.
   void _askMenu(String key, Offset at) {
     final ui = _ui;
     if (ui == null) return;
+    final ask = (key: key, at: at);
     ui.graphBoxMenuAsk.value = null;
-    ui.graphBoxMenuAsk.value = (key: key, at: at);
+    ui.graphBoxMenuAsk.value = ask;
+    if (ui.graphBoxMenuAsk.value != ask) return;
+    ui.graphBoxMenuAsk.value = null;
+    final picked = _picked;
+    if (picked == null) return;
+    final comp = ui.selectedComp;
+    // An effect on a layer, as against a driver or a node graph's box.
+    final layer = picked.driver || picked.graph ? null : _layer;
+    final viewHere = !picked.driver &&
+        (picked.graph
+            ? ui.viewerGraphPoint != null
+            : ui.viewerPrefixPoint != null);
+    showGraphBoxMenu(
+      context,
+      at,
+      bypassed: !picked.info.enabled,
+      onBypass: () => _setEnabled(picked, !picked.info.enabled),
+      viewHere: viewHere ? ui.atSelectedEffect.value : null,
+      onViewHere: viewHere
+          ? () => ui.setAtSelectedEffect(!ui.atSelectedEffect.value)
+          : null,
+      onReveal: layer == null
+          ? null
+          : () => ui.revealEffectCard(layer, picked.info.id),
+      onDelete: layer == null || comp == null
+          ? null
+          : () => EffectCommands(
+                info: picked.info,
+                layer: layer,
+                comp: comp,
+                onStackChanged: ui.model.refresh,
+              ).remove(context),
+    );
   }
 
   /// Which of this box's parameters a wire is feeding, by socket id: the same
@@ -1319,13 +1355,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       return _inputForm(comp, box, _input!);
     }
     if (box.kind == BridgeCompNodeKind.read) return _readFace(ui, box);
-    // The Output is the picture the Viewer already shows: it has nothing to
-    // set and says so.
-    return PlaceholderPanel(
-      icon: LumitIcon.nodes,
-      title: l10n.panelNode,
-      hint: l10n.nodeNoRows,
-    );
+    // The Output is the picture the Viewer already shows, with nothing to set.
+    return const SizedBox.shrink();
   }
 
   /// An Input box's five facts, the form the Custom shader's Parameter node

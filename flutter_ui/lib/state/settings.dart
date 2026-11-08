@@ -358,6 +358,13 @@ class InterfaceSettings {
   double cutFreezeSeconds;
   double retimeHoldSeconds;
 
+  /// What the last Ramp… asked for: the speed in per cent, the length in
+  /// frames, whether the length reads in seconds, and the ease by name.
+  double retimeRampTo;
+  int retimeRampFrames;
+  bool retimeRampInSeconds;
+  String retimeRampEase;
+
   /// A freeze on a clip leaves its linked sound playing on through the hold,
   /// rather than cutting it and leaving silence there.
   bool cutFreezeKeepsSound;
@@ -611,6 +618,10 @@ class InterfaceSettings {
     this.cutDefaultTransition,
     this.cutFreezeSeconds = 2,
     this.retimeHoldSeconds = 1,
+    this.retimeRampTo = 20,
+    this.retimeRampFrames = 12,
+    this.retimeRampInSeconds = false,
+    this.retimeRampEase = 'linear',
     this.cutFreezeKeepsSound = false,
     this.cutVegasDrags = false,
     this.cutHeadWidth = 180,
@@ -667,6 +678,10 @@ class InterfaceSettings {
         'cut_default_transition': cutDefaultTransition,
         'cut_freeze_seconds': cutFreezeSeconds,
         'retime_hold_seconds': retimeHoldSeconds,
+        'retime_ramp_to': retimeRampTo,
+        'retime_ramp_frames': retimeRampFrames,
+        'retime_ramp_in_seconds': retimeRampInSeconds,
+        'retime_ramp_ease': retimeRampEase,
         'cut_freeze_keeps_sound': cutFreezeKeepsSound,
         'cut_vegas_drags': cutVegasDrags,
         'cut_head_width': cutHeadWidth,
@@ -744,6 +759,10 @@ class InterfaceSettings {
         cutDefaultTransition: j['cut_default_transition'] as String?,
         cutFreezeSeconds: (j['cut_freeze_seconds'] as num?)?.toDouble() ?? 2,
         retimeHoldSeconds: (j['retime_hold_seconds'] as num?)?.toDouble() ?? 1,
+        retimeRampTo: (j['retime_ramp_to'] as num?)?.toDouble() ?? 20,
+        retimeRampFrames: (j['retime_ramp_frames'] as num?)?.toInt() ?? 12,
+        retimeRampInSeconds: j['retime_ramp_in_seconds'] as bool? ?? false,
+        retimeRampEase: j['retime_ramp_ease'] as String? ?? 'linear',
         cutFreezeKeepsSound: j['cut_freeze_keeps_sound'] as bool? ?? false,
         cutVegasDrags: j['cut_vegas_drags'] as bool? ?? false,
         cutHeadWidth: (j['cut_head_width'] as num?)?.toDouble() ?? 180,

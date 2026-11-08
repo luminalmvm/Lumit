@@ -2284,7 +2284,6 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Row(
           children: [
-            const Spacer(),
             // The controls fold into one mark when the panel is narrow.
             graphToolbarFold(
               markKey: const ValueKey('comp-graph-toolbar-more'),

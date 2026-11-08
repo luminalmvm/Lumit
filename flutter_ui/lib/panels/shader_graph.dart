@@ -46,6 +46,7 @@ import 'graph_panel.dart'
     show
         GraphBoxStack,
         GraphGroundPainter,
+        GraphNameField,
         GraphNodeFrame,
         graphShaderHeader,
         graphDashPath,
@@ -307,6 +308,11 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   Map<int, Offset> _positions = {};
 
   final Set<int> _selection = {};
+
+  /// The Parameter box whose name is an inline editor, or null, and whether
+  /// the press in hand landed in that editor, which leaves it to the editor.
+  int? _renaming;
+  bool _editorPress = false;
 
   Offset _pan = Offset.zero;
   double _zoom = 1;
@@ -660,8 +666,13 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   // --- Pointers -----------------------------------------------------------
 
   void _down(PointerDownEvent event, List<_Box> boxes) {
-    _focus.requestFocus();
     final at = _toCanvas(event.localPosition);
+    _editorPress = boxes.any((b) =>
+        b.node.id == _renaming &&
+        (b.rect.topLeft & Size(b.rect.width, graphNodeHeaderHeight))
+            .contains(at));
+    if (_editorPress) return;
+    _focus.requestFocus();
     _pressAt = event.localPosition;
 
     // Ctrl and a press on a point is a press on the socket its wires leave.
@@ -735,6 +746,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   }
 
   void _move(PointerMoveEvent event, List<_Box> boxes) {
+    if (_editorPress) return;
     final at = _toCanvas(event.localPosition);
     if (_flight case final flight?) {
       setState(() => flight.to = at);
@@ -769,6 +781,10 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   }
 
   void _up(PointerUpEvent event, List<_Box> boxes) {
+    if (_editorPress) {
+      _editorPress = false;
+      return;
+    }
     final at = _toCanvas(event.localPosition);
     final moved = _pressAt == null ||
         (event.localPosition - _pressAt!).distance > 3;
@@ -866,9 +882,14 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     // The Result box alone copies to nothing: a graph has one.
     final resultAlone = _selection.length == 1 &&
         graph.nodes.any((n) => n['id'] == id && n['kind'] == 'result');
+    // A Parameter box's name is its control's, so it is the one box with a
+    // name of its own to change.
+    final param = _selection.length == 1 &&
+        graph.nodes.any((n) => n['id'] == id && n['kind'] == 'param');
     showGraphBoxMenu(
       context,
       at,
+      onRename: param ? () => setState(() => _renaming = id) : null,
       onCopy: resultAlone ? null : _copySelected,
       onPaste: () => _paste(_toCanvas(const Offset(80, 80))),
       canPaste: _copied != null,
@@ -882,6 +903,23 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
             },
       onDelete: _deleteSelected,
     );
+  }
+
+  /// The name a Parameter box's control shows. Empty puts back its id.
+  void _rename(int id, String name) {
+    final graph = _graph;
+    setState(() => _renaming = null);
+    if (graph == null) return;
+    final next = graph.clone();
+    for (final n in next.nodes.where((n) => n['id'] == id)) {
+      final settings = Map<String, dynamic>.of(
+          (n['settings'] as Map?)?.cast<String, dynamic>() ?? const {});
+      name.trim().isEmpty
+          ? settings.remove('label')
+          : settings['label'] = name.trim();
+      n['settings'] = settings;
+    }
+    _commit(next);
   }
 
   /// The boxes copied last, with the wires between them, held for the
@@ -1076,10 +1114,13 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
-          crumb('shader-crumb-comp', widget.entry.compName, widget.onExit),
+          Flexible(
+              child: crumb(
+                  'shader-crumb-comp', widget.entry.compName, widget.onExit)),
           sep,
           if (widget.entry.layerName case final layer?) ...[
-            crumb('shader-crumb-layer', layer, widget.onExit),
+            Flexible(
+                child: crumb('shader-crumb-layer', layer, widget.onExit)),
             sep,
           ],
           Expanded(
@@ -1101,8 +1142,9 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
           }
           // No Tab door: Ctrl+Space is the console's one key,
           // answered through [_consoleClaim].
-          if (event.logicalKey == LogicalKeyboardKey.delete ||
-              event.logicalKey == LogicalKeyboardKey.backspace) {
+          if (_renaming == null &&
+              (event.logicalKey == LogicalKeyboardKey.delete ||
+                  event.logicalKey == LogicalKeyboardKey.backspace)) {
             return tieDelete() || _deleteSelected()
                 ? KeyEventResult.handled
                 : KeyEventResult.ignored;
@@ -1165,6 +1207,17 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
                               box: box,
                               graph: _graph,
                               selected: _selection.contains(box.node.id),
+                              nameEditor: _renaming != box.node.id
+                                  ? null
+                                  : GraphNameField(
+                                      key: ValueKey<String>(
+                                          'shader-rename-${box.node.id}'),
+                                      initial: _labelOf(box.node.id),
+                                      onDone: (name) =>
+                                          _rename(box.node.id, name),
+                                      onCancel: () =>
+                                          setState(() => _renaming = null),
+                                    ),
                             ),
                           ),
                       ],
@@ -1192,6 +1245,15 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
 
   bool _hasResult() =>
       _graph?.nodes.any((n) => n['kind'] == 'result') ?? false;
+
+  String _labelOf(int id) {
+    for (final n in _graph?.nodes ?? const <Map<String, dynamic>>[]) {
+      if (n['id'] == id) {
+        return (n['settings'] as Map?)?['label'] as String? ?? '';
+      }
+    }
+    return '';
+  }
 }
 
 /// One box: the shared frame, the L11 header grammar (the strip an Effect
@@ -1202,10 +1264,14 @@ class _ShaderNodeCard extends StatelessWidget {
   final _Inner? graph;
   final bool selected;
 
+  /// Takes the name's place while the box is being renamed.
+  final Widget? nameEditor;
+
   const _ShaderNodeCard({
     required this.box,
     required this.graph,
     required this.selected,
+    this.nameEditor,
   });
 
   bool _wired(int port, {required bool isInput}) {
@@ -1253,7 +1319,8 @@ class _ShaderNodeCard extends StatelessWidget {
                 color: graphShaderHeader(t),
                 border: Border(bottom: BorderSide(color: t.hairline)),
               ),
-              child: Row(
+              // While it is being renamed the editor takes the whole strip.
+              child: nameEditor ?? Row(
                 children: [
                   Flexible(
                     child: Text(

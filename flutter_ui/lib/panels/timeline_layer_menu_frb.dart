@@ -148,7 +148,7 @@ List<MenuEntry> layerMenuEntries(
         MenuEntry(l10n.menuStretch,
             editing(() => _stretch(context, app, ui, entry, unlocked))),
         MenuEntry(
-            l10n.retimeHoldHere,
+            l10n.retimeFreeze,
             editing(() {
               final frame = ui.playheadFrame.value;
               final held = ui.workspace.interface.retimeHoldSeconds;

@@ -11400,10 +11400,6 @@
   "@retimePickLayer": {
     "description": "Empty state of the graph in the Retiming workspace: no layer is selected, so there is no Retime to draw."
   },
-  "retimeHoldHere": "Hold here",
-  "@retimeHoldHere": {
-    "description": "Retime row and layer menus: holds the frame under the playhead for the length last set, then carries on."
-  },
   "retimeRamp": "Ramp…",
   "@retimeRamp": {
     "description": "Retime panel button and Retime row menu: opens a small box that ramps the speed from the playhead."
@@ -11430,7 +11426,7 @@
   },
   "retimeFreeze": "Freeze frame",
   "@retimeFreeze": {
-    "description": "Retime panel button: holds the frame under the playhead for a moment, then carries on."
+    "description": "Retime panel button and the Retime and layer menus: holds the frame under the playhead for the length last set, then carries on."
   },
   "stretchTitle": "Stretch",
   "@stretchTitle": {
@@ -18582,10 +18578,6 @@
   "rotoPickABox": "Pick a Roto brush box to stroke on",
   "@rotoPickABox": {
     "description": "Status-area line when the Roto brush or Refine edge tool is used in a node graph composition with no Roto brush box picked on the canvas. A node graph has no layers, so the strokes belong to the picked box."
-  },
-  "nodeNoRows": "This box has nothing to set.",
-  "@nodeNoRows": {
-    "description": "The Node panel's empty state when the picked box carries no values at all, which is the Output box of a node graph. One line under the panel's name."
   },
   "projectTypeNodeGraph": "Node graph",
   "@projectTypeNodeGraph": {
