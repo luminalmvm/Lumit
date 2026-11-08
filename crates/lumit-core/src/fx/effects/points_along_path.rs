@@ -70,7 +70,8 @@ pub const ALONG_GROUPS: &[ParamGroup] = &[
         None,
     ),
     group("Point", &["size", "feather", "colour"], None),
-    group("", &["seed"], Some(("placement", &[1]))),
+    // Random placement and Value noise both read it.
+    group("", &["seed"], None),
 ];
 
 const fn grey(param: &'static str) -> EnabledWhen {

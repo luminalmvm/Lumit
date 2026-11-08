@@ -15585,13 +15585,7 @@
           "params": [
             "seed"
           ],
-          "collapsed": false,
-          "visible_when": {
-            "param": "placement",
-            "values": [
-              1
-            ]
-          }
+          "collapsed": false
         }
       ],
       "enabled_when": [
