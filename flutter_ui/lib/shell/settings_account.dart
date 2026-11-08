@@ -1047,17 +1047,13 @@ class _PhonesState extends State<_Phones> {
 }
 
 /// Ask before something that can't be taken back. True for yes. The question
-/// is the title, and anything after its question mark is the line under it.
+/// is the title, and the whole of the window.
 Future<bool> askBefore(
     BuildContext context, String question, String yes) async {
-  final mark = question.indexOf('?');
-  final title = mark < 0 ? question : question.substring(0, mark + 1);
-  final rest = mark < 0 ? '' : question.substring(mark + 1).trim();
   final sure = await showLumitModal<bool>(
     context: context,
     builder: (close) => QuestionWindow(
-      title: title,
-      body: rest.isEmpty ? null : rest,
+      title: question,
       keyPrefix: 'confirm',
       onClose: () => close(false),
       actions: [

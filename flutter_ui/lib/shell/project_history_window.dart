@@ -1756,21 +1756,16 @@ class _HistoryState extends State<_History> {
                 (true, l10n.backupFilterNamed),
               ]) ...[
                 if (named) const SizedBox(width: 2),
-                LumitTooltip(
-                  // What is kept is what the two lists differ by.
-                  message: l10n.backupKeptRule,
-                  maxWidth: 320,
-                  child: SizedBox(
-                    height: dialogControlHeight,
-                    child: HouseButton(
-                      key: ValueKey<String>(
-                          named ? 'history-show-named' : 'history-show-all'),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      frameless: _namedOnly != named,
-                      onPressed: () => _showNamedOnly(named),
-                      child: Text(t.kickerCase(label),
-                          style: _namedOnly == named ? t.kickerOn : t.kicker),
-                    ),
+                SizedBox(
+                  height: dialogControlHeight,
+                  child: HouseButton(
+                    key: ValueKey<String>(
+                        named ? 'history-show-named' : 'history-show-all'),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    frameless: _namedOnly != named,
+                    onPressed: () => _showNamedOnly(named),
+                    child: Text(t.kickerCase(label),
+                        style: _namedOnly == named ? t.kickerOn : t.kicker),
                   ),
                 ),
               ],

@@ -212,13 +212,7 @@ class _ProWindowState extends State<_ProWindow>
           // Thanks are said once, to whoever just got it.
           headline:
               pro && !_hadPro ? l10n.proThanksHeadline : l10n.proHeadline,
-          lead: !pro
-              ? null
-              : account!.preview
-                  ? l10n.proPreviewNote
-                  : _hadPro
-                      ? null
-                      : l10n.proThanksBody,
+          lead: pro && account!.preview ? l10n.proPreviewNote : null,
           pro: pro,
           preview: pro ? account!.preview : (config?.preview ?? false),
         ),

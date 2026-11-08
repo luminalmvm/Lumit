@@ -60,7 +60,7 @@ imported from **Settings ▸ General ▸ After Effects presets**. See
 
 Choosing **Vegas** on the first run opens the **Cut** workspace, makes video arrive as a
 Sequence layer and opens the Retime graph to speed. It also turns on Vegas's clip drags and
-**Auto crossfade**. **Only change default Retime graph** leaves video arriving as footage
+**Auto crossfade**. **Retime graph only** leaves video arriving as footage
 layers. **Use the Vegas shortcuts** is ticked to begin with, and loads the **Vegas** preset
 from [Settings ▸ Shortcuts](/use/settings/).
 

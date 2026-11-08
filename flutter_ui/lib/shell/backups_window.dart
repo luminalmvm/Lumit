@@ -456,23 +456,27 @@ class _CardState extends State<_Card> {
                             child: FittedText(project.name,
                                 t.bodyPrimary.copyWith(fontSize: 12)),
                           ),
-                          Visibility.maintain(
-                            visible: _hover,
-                            child: Builder(
-                              builder: (button) => HouseButton(
-                                key: ValueKey<String>(
-                                    'backups-more-${project.id}'),
-                                frameless: true,
-                                small: true,
-                                padding: EdgeInsets.zero,
-                                onPressed: () {
-                                  final box = button.findRenderObject();
-                                  if (box is! RenderBox) return;
-                                  widget.onMenu(box.localToGlobal(
-                                      Offset(0, box.size.height)));
-                                },
-                                child: glyph.LumitIcon(LumitIcons.more,
-                                    size: 14, colour: t.textSecondary),
+                          // Hidden marks take no clicks either.
+                          IgnorePointer(
+                            ignoring: !_hover,
+                            child: Opacity(
+                              opacity: _hover ? 1 : 0,
+                              child: Builder(
+                                builder: (button) => HouseButton(
+                                  key: ValueKey<String>(
+                                      'backups-more-${project.id}'),
+                                  frameless: true,
+                                  small: true,
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () {
+                                    final box = button.findRenderObject();
+                                    if (box is! RenderBox) return;
+                                    widget.onMenu(box.localToGlobal(
+                                        Offset(0, box.size.height)));
+                                  },
+                                  child: glyph.LumitIcon(LumitIcons.more,
+                                      size: 14, colour: t.textSecondary),
+                                ),
                               ),
                             ),
                           ),

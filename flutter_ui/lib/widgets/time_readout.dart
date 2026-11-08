@@ -209,7 +209,7 @@ class _TimeReadoutState extends State<TimeReadout>
                 Clipboard.setData(
                     ClipboardData(text: widget.format(widget.frame)));
               },
-              child: Text(l10n.menuCopy),
+              child: MenuLabel(l10n.paramMenuCopyValue),
             ),
             MenuRow(
               key: const ValueKey('time-readout-paste'),
@@ -221,7 +221,7 @@ class _TimeReadoutState extends State<TimeReadout>
                 widget.onCommit(
                     frame.clamp(widget.minFrame, widget.maxFrame));
               },
-              child: Text(l10n.menuPaste),
+              child: MenuLabel(l10n.paramMenuPasteValue),
             ),
           ],
         ),

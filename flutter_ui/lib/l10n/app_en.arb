@@ -86,6 +86,27 @@
       }
     }
   },
+  "cacheMegabytes": "{megabytes} MB",
+  "@cacheMegabytes": {
+    "description": "Status line, the cache meter: how much the frame caches hold, in whole megabytes.",
+    "placeholders": {
+      "megabytes": {
+        "type": "String"
+      }
+    }
+  },
+  "cacheUsedOfBudget": "{used} / {budget} MB",
+  "@cacheUsedOfBudget": {
+    "description": "Status line, the cache meter's detail: one tier's megabytes held of the megabytes it may hold.",
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "budget": {
+        "type": "String"
+      }
+    }
+  },
   "cacheKeepThem": "Keep them",
   "@cacheKeepThem": {
     "description": "Button that declines to delete the parked frames."
@@ -542,7 +563,7 @@
   "@close": {
     "description": "Button that shuts a window."
   },
-  "colourOutsideRange": "Outside 0–1: the swatch and hex are clipped",
+  "colourOutsideRange": "Outside 0â€“1",
   "@colourOutsideRange": {
     "description": "Note in the colour picker when a value is brighter or darker than a screen can show."
   },
@@ -1639,7 +1660,7 @@
   "@couldNotUnpackProject": {
     "description": "Bottom-strip notice when writing the packed footage back out as files failed."
   },
-  "packCancelled": "Packing stopped. The project file is as it was",
+  "packCancelled": "Packing stopped",
   "@packCancelled": {
     "description": "Bottom-strip notice after the user pressed Cancel while the project's footage was being written into the project file."
   },
@@ -1668,7 +1689,7 @@
   "@packingProject": {
     "description": "Card shown over the interface while the project's footage is being written into the project file."
   },
-  "unpackCancelled": "Unpacking stopped. The project file still holds its footage",
+  "unpackCancelled": "Unpacking stopped",
   "@unpackCancelled": {
     "description": "Bottom-strip notice after the user pressed Cancel while packed footage was being written back out as files."
   },
@@ -1681,7 +1702,7 @@
       }
     }
   },
-  "unpackedProject": "{count, plural, =0{Unpacked. The footage is read from its own files again} =1{Unpacked 1 file to {folder}} other{Unpacked {count} files to {folder}}}",
+  "unpackedProject": "{count, plural, =0{Unpacked} =1{Unpacked 1 file to {folder}} other{Unpacked {count} files to {folder}}}",
   "@unpackedProject": {
     "description": "Bottom-strip notice after Unpack project file. {count} is how many files were written, {folder} is the folder they were written to. Zero means every original file was still on disk, so nothing needed writing.",
     "placeholders": {
@@ -1809,7 +1830,7 @@
   "@easingNameYours": {
     "description": "Easing editor: the placeholder in the field that appears when a drawn shape is being saved, or one of the user's own is being renamed. The field is narrow — keep it to three or four words."
   },
-  "easingNeedsTheValueLens": "Shapes apply in the value lens.",
+  "easingNeedsTheValueLens": "Value lens only",
   "@easingNeedsTheValueLens": {
     "description": "Easing panel: the tooltip on a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
   },
@@ -1913,11 +1934,11 @@
   "@effectControls": {
     "description": "Name of the panel that edits the effects on a layer."
   },
-  "effectControlsNoComp": "Select a composition, then a layer.",
+  "effectControlsNoComp": "No layer selected",
   "@effectControlsNoComp": {
     "description": "Empty-state line in the Effect controls panel when no composition is open."
   },
-  "effectControlsNoLayer": "Select a layer in the Timeline.",
+  "effectControlsNoLayer": "No layer selected",
   "@effectControlsNoLayer": {
     "description": "Empty-state line in the Effect controls panel when no layer is selected."
   },
@@ -2140,7 +2161,7 @@
   "@firstRunVegas": {
     "description": "First run: what choosing Vegas habits does. Retime and Sequence layer are Lumit product terms."
   },
-  "firstRunVegasRetimeOnly": "Only change default Retime graph",
+  "firstRunVegasRetimeOnly": "Retime graph only",
   "@firstRunVegasRetimeOnly": {
     "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
   },
@@ -2358,7 +2379,7 @@
   "@puppetAmount": {
     "description": "Row label under a puppet pin: how much a starch pin stiffens, or how far in front an overlap pin draws."
   },
-  "puppetNoMesh": "Nothing opaque here to build a mesh from",
+  "puppetNoMesh": "Nothing opaque here",
   "@puppetNoMesh": {
     "description": "Status line when a puppet pin is placed on a layer that has no visible pixels at this frame."
   },
@@ -2390,7 +2411,7 @@
   "@roomNight": {
     "description": "Settings window, Appearance: the dark room for the Lantern shape's cards."
   },
-  "rotoAddTheEffect": "Add a Roto brush to this layer to stroke on it",
+  "rotoAddTheEffect": "No Roto brush on this layer",
   "@rotoAddTheEffect": {
     "description": "Status-area line when the Refine edge tool is used on a layer that carries no Roto brush effect. (The Roto brush tool itself adds the effect with the first stroke.)"
   },
@@ -3991,7 +4012,7 @@
   "@fxConsoleCompositions": {
     "description": "The FX console popover: the inline heading in the result list over the open project’s compositions, matching the category headings over the effects."
   },
-  "fxConsoleHint": "Search effects and compositions",
+  "fxConsoleHint": "Search",
   "@fxConsoleHint": {
     "description": "Placeholder in the FX console’s search field."
   },
@@ -6463,7 +6484,7 @@
       }
     }
   },
-  "templateNotOpened": "The project template would not open, so the new project is empty",
+  "templateNotOpened": "The project template would not open",
   "@templateNotOpened": {
     "description": "Status line notice: the project file chosen as the template in Settings is missing or unreadable, and New made an empty project instead."
   },
@@ -6527,7 +6548,7 @@
   "@graphSpeed": {
     "description": "Graph editor: the view showing how fast a value changes. Lumit says 'speed', never 'velocity'."
   },
-  "graphicsDeviceReset": "The graphics device was reset; the preview is rebuilding",
+  "graphicsDeviceReset": "The graphics device was reset",
   "@graphicsDeviceReset": {
     "description": "Status line notice, shown once when the graphics card has been reset under Lumit (a driver update, a watchdog reset, a laptop switching GPUs) and the engine has already rebuilt its renderer. Nothing is lost and there is nothing for the user to do."
   },
@@ -7582,7 +7603,7 @@
   "@markerDurationFrames": {
     "description": "Marker dialogue: the unit written after the duration box, as in '24 frames'. Lower case."
   },
-  "markerHint": "What this marker says",
+  "markerHint": "Note",
   "@markerHint": {
     "description": "Placeholder in the marker's text field."
   },
@@ -8160,10 +8181,6 @@
   "@menuResolution": {
     "description": "Menu item."
   },
-  "menuRetimeSequence": "Retime (open the layer to ramp its clips)",
-  "@menuRetimeSequence": {
-    "description": "Menu item, greyed out: a Sequence layer is retimed clip by clip rather than whole."
-  },
   "menuReveal": "Reveal",
   "@menuReveal": {
     "description": "Menu item."
@@ -8567,7 +8584,7 @@
   "@anchorKeyedRefused": {
     "description": "Notice when the anchor is dragged on a layer whose Position or Anchor point has keyframes or an expression, which moving it would overwrite."
   },
-  "noCameraToMove": "No camera to move — add a camera layer first",
+  "noCameraToMove": "No camera to move",
   "@noCameraToMove": {
     "description": "Notice when a camera tool is used in a composition with no camera."
   },
@@ -8886,7 +8903,7 @@
   "@precompose": {
     "description": "Title and button: put the selected layers inside a new composition."
   },
-  "precomposeAdjustDuration": "Adjust the duration to the span of the selected layers",
+  "precomposeAdjustDuration": "Trim to the layers' span",
   "@precomposeAdjustDuration": {
     "description": "Pre-compose option: make the new composition exactly as long as what went into it."
   },
@@ -8955,7 +8972,7 @@
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
   },
-  "previewStopped": "The preview has stopped; reopen the project to start it again",
+  "previewStopped": "Preview stopped. Reopen the project.",
   "@previewStopped": {
     "description": "Status line notice, shown once when the engine's render worker has ended and no further frames will arrive — it could not build a renderer, or it failed repeatedly. The rest of the editor still works, so the wording says what to do rather than alarming."
   },
@@ -9479,7 +9496,7 @@
   "@searchTracks": {
     "description": "Placeholder in the Audio timeline panel's search box, which narrows the list to the tracks whose names carry what is typed. The Audio timeline is the one place a row is called a track."
   },
-  "selectACompositionFirst": "Select a composition in the Project panel.",
+  "selectACompositionFirst": "No composition selected",
   "@selectACompositionFirst": {
     "description": "Empty-state line in a panel that needs a composition before it can show anything."
   },
@@ -9523,7 +9540,7 @@
   "@graphRoomMost": {
     "description": "Project settings, Node graph overscan: a node graph box keeps as much past the frame as the largest picture the graphics card can hold."
   },
-  "settingsGraphRoomMemory": "Each box in a node graph can use up to {size} of memory.",
+  "settingsGraphRoomMemory": "Up to {size} per box",
   "@settingsGraphRoomMemory": {
     "description": "Project settings: shown in the warning colour under Node graph overscan when Maximum is picked.",
     "placeholders": {
@@ -11949,15 +11966,15 @@
   "@updateNightlyTitle": {
     "description": "Title of the dialogue asking before updates switch to nightly builds."
   },
-  "updateNotSigned": "This update is not signed, so Lumit will not install it",
+  "updateNotSigned": "This update is not signed",
   "@updateNotSigned": {
     "description": "Why an update was rejected: the release carries no signed manifest, or Lumit could not fetch it. Shown only on builds that carry a release signing key."
   },
-  "updateSignatureMismatch": "This update was not signed by Lumit, so it will not be installed",
+  "updateSignatureMismatch": "This update was not signed by Lumit",
   "@updateSignatureMismatch": {
     "description": "Why an update was rejected: the release manifest's signature is not the one this build's pinned key makes. Calm, not alarming - the ordinary cause is a mirror or a proxy, not an attack."
   },
-  "updateNotInManifest": "This update is not the file Lumit published, so it will not be installed",
+  "updateNotInManifest": "This update is not the file Lumit published",
   "@updateNotInManifest": {
     "description": "Why an update was rejected: the signature held up, but the signed list of files does not name this download, or names it at a different size or checksum."
   },
@@ -12115,7 +12132,7 @@
       }
     }
   },
-  "updateRestartFailed": "Lumit is updated, but could not start itself again",
+  "updateRestartFailed": "Updated. Lumit could not restart",
   "@updateRestartFailed": {
     "description": "Shown when an update worked but the restart did not."
   },
@@ -12155,10 +12172,6 @@
   "updateUnknownVersion": "Could not tell which version of Lumit this is",
   "@updateUnknownVersion": {
     "description": "Why an update check failed."
-  },
-  "updateUnsavedChanges": "This project has unsaved changes.",
-  "@updateUnsavedChanges": {
-    "description": "Added to an update message when restarting would lose work."
   },
   "updateUpToDate": "{installed}",
   "@updateUpToDate": {
@@ -13624,11 +13637,11 @@
   "@menuImportFolder": {
     "description": "Item in the File menu, under Import footage. Opens a folder chooser, then imports the footage in that folder and every folder inside it, keeping the folders as folders in the project."
   },
-  "aeBundleFromAep": "That folder holds an After Effects project file. Import the project itself with File › Import › After Effects project, or export a bundle from inside After Effects: open the project there, run the Lumit Bridge script (lumit-bridge.jsx, File › Scripts › Run script file), and import the folder it writes.",
+  "aeBundleFromAep": "That folder holds a project file. Import it with File â€º Import â€º After Effects project.",
   "@aeBundleFromAep": {
     "description": "Status line notice when the Bridge bundle folder chooser was pointed at a folder holding an .aep instead of a bundle. Names both routes; lumit-bridge.jsx is a file name and stays untranslated."
   },
-  "aeAepUnreadable": "This After Effects project could not be read. A newer After Effects may store something this version of Lumit does not know yet; the Lumit Bridge reads it in full: open the project in After Effects, run the Lumit Bridge script (lumit-bridge.jsx, File › Scripts › Run script file), and import the folder it writes with File › Import › Bridge bundle folder.",
+  "aeAepUnreadable": "This After Effects project could not be read. Export a Bridge bundle from After Effects and import that folder.",
   "@aeAepUnreadable": {
     "description": "Status line notice when the After Effects import could not read the .aep file it was given. Calm, and points at the Bridge route as the way through; lumit-bridge.jsx is a file name and stays untranslated."
   },
@@ -14193,7 +14206,7 @@
       }
     }
   },
-  "trackSolvedPartial": "Analysed {frames} of {total} frames — the shot could not be followed further",
+  "trackSolvedPartial": "Analysed {frames} of {total} frames",
   "@trackSolvedPartial": {
     "description": "Camera track status line when the analysis stopped part-way through the clip: the first {frames} frames carry a solved camera and the rest of the clip does not. Both numbers are frame counts.",
     "placeholders": { "frames": { "type": "int" }, "total": { "type": "int" } }
@@ -14235,12 +14248,12 @@
     "description": "Planar track status line when a whole track is in hand. {frames} is a frame count.",
     "placeholders": { "frames": { "type": "int" } }
   },
-  "planarPartial": "Tracked {frames} of {total} frames — it could not be followed further",
+  "planarPartial": "Tracked {frames} of {total} frames",
   "@planarPartial": {
     "description": "Planar track status line when the track stopped part-way through the clip: the first {frames} frames carry the movement and the rest of the clip does not. Both numbers are frame counts.",
     "placeholders": { "frames": { "type": "int" }, "total": { "type": "int" } }
   },
-  "planarReanchored": "{count, plural, =1{Re-anchored once, so the far end may drift a little} other{Re-anchored {count} times, so the far end may drift a little}}",
+  "planarReanchored": "{count, plural, =1{Re-anchored once} other{Re-anchored {count} times}}",
   "@planarReanchored": {
     "description": "Planar track status line, under the main one, when the measurement had to be re-anchored because the reference frame's features ran out. Each re-anchor adds a little accumulated error towards the end of the shot.",
     "placeholders": { "count": { "type": "int" } }
@@ -14449,7 +14462,7 @@
   "@settingsAudioSystemDefault": {
     "description": "Settings window, Audio: the first entry in the output device list — follow whatever the operating system is set to, rather than pinning one device."
   },
-  "settingsAudioDeviceMissing": "Not connected. Playing through the system default.",
+  "settingsAudioDeviceMissing": "Not connected.",
   "@settingsAudioDeviceMissing": {
     "description": "Settings window, Audio: the line under the output device row when the chosen device is not plugged in. The choice is kept, not discarded."
   },
@@ -15331,7 +15344,7 @@
   "@panelGraph": {
     "description": "The name of the panel drawing a layer's effect stack as boxes joined by wires, with the drivers wired into its parameters. A panel name, so a noun."
   },
-  "graphNoLayer": "Select a layer in the Timeline.",
+  "graphNoLayer": "No layer selected",
   "@graphNoLayer": {
     "description": "Empty-state line in the Graph panel when no layer is selected, so there is no graph to draw."
   },
@@ -15979,7 +15992,7 @@
   "@mixerLimiter": {
     "description": "Tooltip on the Master strip's LIM lamp while it is unlit: the safety limiter that stops the mix exceeding full scale."
   },
-  "mixerLimiterClipped": "The limiter held the mix back. Click to reset.",
+  "mixerLimiterClipped": "Limiter held",
   "@mixerLimiterClipped": {
     "description": "Tooltip on the Master strip's LIM lamp while it is lit: something reached the ceiling since the light was last reset, and clicking the lamp puts the light out (the mix itself is unchanged)."
   },
@@ -16095,10 +16108,6 @@
   "volumeNegInf": "-inf",
   "@volumeNegInf": {
     "description": "What a volume well reads at or below the -100 dB knee, where the sound is exactly off - an abbreviation of negative infinity."
-  },
-  "nodeNoSelection": "Pick a node on the graph.",
-  "@nodeNoSelection": {
-    "description": "Empty-state line in the Node panel, and in Effect controls over a node graph composition, when no box has been picked on a graph canvas, so there are no parameters to list."
   },
   "nodeDrivenCount": "{count} driven",
   "@nodeDrivenCount": {
@@ -17058,9 +17067,9 @@
       }
     }
   },
-  "workspaceNameTaken": "A workspace was already called {wanted}, so this one is {name}.",
+  "workspaceNameTaken": "Saved as {name}.",
   "@workspaceNameTaken": {
-    "description": "Status-line notice when a save, rename or import collided with a workspace of the same name and Lumit picked a free one instead.",
+    "description": "Status-line notice when a save, rename or import collided with a workspace of the same name and Lumit picked a free one instead. The name wanted is a placeholder the English no longer says.",
     "placeholders": {
       "wanted": {
         "type": "String"
@@ -17078,11 +17087,11 @@
   "@workspaceFileUnwritable": {
     "description": "Status-line notice when exporting a workspace failed to write the chosen file."
   },
-  "dropProjectFile": "Projects open from File › Open project.",
+  "dropProjectFile": "That is a project file",
   "@dropProjectFile": {
     "description": "Status-line notice after a .lum project file was dragged onto the Project panel from the file manager. It is not opened silently, because opening one replaces the project on screen."
   },
-  "dropAeProject": "An After Effects project is brought in with File › Import › After Effects project.",
+  "dropAeProject": "That is an After Effects project",
   "@dropAeProject": {
     "description": "Status-line notice after an .aep file or a zipped Lumit Bridge bundle was dragged onto the Project panel from the file manager. It is not imported silently, because the conversion is a long job that ends in a report."
   },
@@ -17893,15 +17902,15 @@
   "@histSetGroupColour": {
     "description": "A row of the Edit > History window: the name of one edit that was made (setting a layer group's label colour). Sent by the engine as English and looked up here."
   },
-  "beatsNoSound": "No beats: nothing in this composition is sounding — a mute or a solo can silence the mix.",
+  "beatsNoSound": "No sound in this composition",
   "@beatsNoSound": {
     "description": "One line in the status bar at the bottom of the window, after beat detection was asked for (the Audio panel's Generate button, the Timeline's more menu, or Composition > Detect beats) and the engine found no audible source to listen to. Calm, not an error: soloing a picture layer, or muting the only layer with sound, silences the whole mix. 'Mute' and 'solo' are the two layer switches of those names."
   },
-  "beatsLayerNoSound": "No beats: the layer chosen as the source has no sound in it.",
+  "beatsLayerNoSound": "The source layer has no sound",
   "@beatsLayerNoSound": {
     "description": "One line in the status bar at the bottom of the window, after beat detection was asked for with a layer picked in the Audio panel's Source dropdown, and that layer turned out to carry no sound at all. Distinct from beatsNoSound because a mute or a solo cannot silence a layer picked by name - saying so would send the reader to the wrong switch. Calm, not an error."
   },
-  "beatsNoneFound": "No beats stood out in this composition's audio.",
+  "beatsNoneFound": "No beats found",
   "@beatsNoneFound": {
     "description": "One line in the status bar at the bottom of the window, after beat detection ran over audio that was there but placed no markers - the sound has no clear rhythm, the sensitivity is too low, or the work area holds none. Calm, not an error."
   },
@@ -17939,7 +17948,7 @@
       }
     }
   },
-  "statusShiftSelect": "Adds to the selection · Keeps a move to one axis and a scale in proportion",
+  "statusShiftSelect": "Add to selection Â· One axis Â· Proportional",
   "@statusShiftSelect": {
     "description": "Right-hand end of the status bar while the Selection tool is armed and the Shift key is held: what the key does to a click and a drag in the Viewer. The key's own name is drawn before it. The parts are separated by a middle dot."
   },
@@ -17955,7 +17964,7 @@
   "@statusAltZoom": {
     "description": "Right-hand end of the status bar while the Zoom tool is armed and the Alt key is held: what a click does then. The key's own name is drawn before it."
   },
-  "statusShiftRotate": "Turns in 45° steps · A click adds to the selection",
+  "statusShiftRotate": "45Â° steps Â· Add to selection",
   "@statusShiftRotate": {
     "description": "Right-hand end of the status bar while the Rotation tool is armed and the Shift key is held: what the key does to a drag and a click in the Viewer. The key's own name is drawn before it. The parts are separated by a middle dot."
   },
@@ -17963,7 +17972,7 @@
   "@statusShiftAnchor": {
     "description": "Right-hand end of the status bar while the Anchor point tool is armed and the Shift key is held: what the key does to a drag in the Viewer. The key's own name is drawn before it."
   },
-  "statusModAnchor": "Snaps to the layer's corners, edge midpoints and centre",
+  "statusModAnchor": "Snaps to corners, edges and centre",
   "@statusModAnchor": {
     "description": "Right-hand end of the status bar while the Anchor point tool is armed and the platform's main modifier key (Ctrl, or the command key on a Mac) is held: what the key does to a drag in the Viewer. The key's own name is drawn before it."
   },
@@ -18015,7 +18024,7 @@
   "@startupFailedBody": {
     "description": "The line under the 'Lumit could not start' heading, above the error text and the path of the diagnostics file."
   },
-  "webNoGraphicsCard": "This browser didn't give Lumit a graphics card. Lumit needs WebGPU.",
+  "webNoGraphicsCard": "This browser has no WebGPU.",
   "@webNoGraphicsCard": {
     "description": "Shown instead of the editor in the browser build when WebGPU gives no graphics card."
   },
@@ -18563,7 +18572,7 @@
   "@graphOpen": {
     "description": "Button in the Node panel for a Read box of a composition in a node graph: fronts that composition."
   },
-  "graphNoComp": "Open a node graph composition.",
+  "graphNoComp": "No node graph",
   "@graphNoComp": {
     "description": "The Node graph panel's empty state when the composition it was drawing has gone. One line under the panel's name."
   },
@@ -18571,9 +18580,13 @@
   "@graphBoxNoFootage": {
     "description": "Status-area line when Analyse or Propagate is pressed on a Remove background, Depth or Roto brush box in a node graph, or the Roto brush is used on one, and no footage is wired into the box's picture socket. These effects read a footage file, and in a node graph the file is the one wired in."
   },
-  "rotoPickABox": "Pick a Roto brush box to stroke on",
+  "rotoPickABox": "No Roto brush box picked",
   "@rotoPickABox": {
     "description": "Status-area line when the Roto brush or Refine edge tool is used in a node graph composition with no Roto brush box picked on the canvas. A node graph has no layers, so the strokes belong to the picked box."
+  },
+  "nodeNoRows": "Nothing to set",
+  "@nodeNoRows": {
+    "description": "The Node panel's empty state when the picked box carries no values at all, which is the Output box of a node graph. One line under the panel's name."
   },
   "projectTypeNodeGraph": "Node graph",
   "@projectTypeNodeGraph": {
@@ -18619,7 +18632,7 @@
       }
     }
   },
-  "settingsAddonsStateFailed": "It is installed and would not load.",
+  "settingsAddonsStateFailed": "Installed. Would not load.",
   "@settingsAddonsStateFailed": {
     "description": "Settings window, Addons: the line under the runtime row when loading failed. The library's own words follow it, untranslated."
   },
@@ -18781,15 +18794,15 @@
   "@flowEngineRife": {
     "description": "A choice of the Flow group's Engine option: the RIFE model pack, installed from the Addons page. A product name, so it is not translated."
   },
-  "flowEngineNotInstalled": "RIFE is not installed, using the built-in engine",
+  "flowEngineNotInstalled": "RIFE is not installed",
   "@flowEngineNotInstalled": {
     "description": "Flow group, the line under the Engine row: the layer asks for the RIFE model and this machine has neither the pack nor the library that runs one. A statement, not a complaint."
   },
-  "flowEngineFailed": "RIFE would not run here, using the built-in engine",
+  "flowEngineFailed": "RIFE would not run here",
   "@flowEngineFailed": {
     "description": "Flow group, the line under the Engine row: the RIFE pack is installed and would not open or would not run."
   },
-  "flowEngineFloatSource": "RIFE cannot read scene-linear footage, using the built-in engine",
+  "flowEngineFloatSource": "RIFE cannot read scene-linear footage",
   "@flowEngineFloatSource": {
     "description": "Flow group, the line under the Engine row: the layer's source is scene-linear float, which the model was not trained on."
   },
@@ -19464,11 +19477,11 @@
   "@firstRunContinue": {
     "description": "First-run screen: the button that keeps the choices made and closes the screen. One word."
   },
-  "shareAway": "The host cannot be reached. Keep working, and your changes are merged when it is back.",
+  "shareAway": "The host cannot be reached.",
   "@shareAway": {
     "description": "Bottom-strip notice in a shared project, shown to a guest when the connection to the host (the person sharing the project) drops. The guest can carry on editing."
   },
-  "shareBack": "The host is back and your changes are merged",
+  "shareBack": "The host is back",
   "@shareBack": {
     "description": "Bottom-strip notice in a shared project, shown to a guest when the connection to the host returns and the edits made meanwhile were merged."
   },
@@ -19481,11 +19494,11 @@
       }
     }
   },
-  "shareEndedClosed": "The host stopped sharing. This copy of the project is now yours alone.",
+  "shareEndedClosed": "The host stopped sharing.",
   "@shareEndedClosed": {
     "description": "Bottom-strip notice shown to a guest in a shared project when the person hosting it stops sharing. The guest keeps the project open as an ordinary unsaved project."
   },
-  "shareVersionMismatch": "The host runs Lumit {version}. Both of you need the same version to share a project.",
+  "shareVersionMismatch": "The host runs Lumit {version}.",
   "@shareVersionMismatch": {
     "description": "Shown when joining a shared project is refused because the two computers run different versions of Lumit. {version} is the host's version number, such as 0.5.0.",
     "placeholders": {
@@ -19521,15 +19534,6 @@
   "shareExtensionTitle": "Let {name} share this project?",
   "@shareExtensionTitle": {
     "description": "Title of the question asked when an extension wants to share the open project by itself. {name} is the extension's own name.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "shareExtensionBody": "{name} sends the invite to whoever it chooses.",
-  "@shareExtensionBody": {
-    "description": "Body of the question asked when an extension wants to share the open project by itself. {name} is the extension's own name.",
     "placeholders": {
       "name": {
         "type": "String"
@@ -19601,7 +19605,7 @@
   "@shareBadInvite": {
     "description": "Line in the Shared project window when the pasted text is not an invite at all."
   },
-  "shareUnreachable": "Nobody answered. Check the invite, and that the host is still sharing.",
+  "shareUnreachable": "Nobody answered.",
   "@shareUnreachable": {
     "description": "Line in the Shared project window when the host's computer could not be reached or did not accept the invite."
   },
@@ -19705,7 +19709,7 @@
   "@shareElsewhere": {
     "description": "Bottom-strip notice shown to a guest who has lost the host and pasted a new invite that leads to some other shared project. Lumit goes on looking."
   },
-  "shareRemoved": "The host removed you from the shared project. This copy is now yours alone.",
+  "shareRemoved": "The host removed you.",
   "@shareRemoved": {
     "description": "Bottom-strip notice shown to a guest the host has taken out of the shared project. The guest keeps the project open as an ordinary unsaved project."
   },
@@ -19974,10 +19978,6 @@
   "@shareShowTitle": {
     "description": "Title of the small question that opens when Show is pressed beside a hidden invite link."
   },
-  "shareShowBody": "Anyone who sees this link can join.",
-  "@shareShowBody": {
-    "description": "Body of the question asked before a hidden invite link is shown."
-  },
   "shareKeepHidden": "Keep hidden",
   "@shareKeepHidden": {
     "description": "Default button of the question asked before a hidden invite link is shown. Closes the question and leaves the link hidden."
@@ -19998,10 +19998,6 @@
   "@shareRelayExample": {
     "description": "Placeholder in the empty Relay field, showing what a relay's address looks like. Keep it as a made-up address."
   },
-  "shareAddressHint": "Adds this computer's VPN address to the link.",
-  "@shareAddressHint": {
-    "description": "Quiet line under the Extra address field, under Advanced, while a project is being shared. What is typed is an IP address or a host name of this computer, not a relay's."
-  },
   "shareOpenChecking": "Checking your connection…",
   "@shareOpenChecking": {
     "description": "Quiet line under the invite link for a second or two after sharing starts, while Lumit asks the home router, and a relay if one is set, to let people in."
@@ -20010,7 +20006,7 @@
   "@shareOpenAnywhere": {
     "description": "Quiet line under the invite link once the home router has agreed to let people outside the network in."
   },
-  "shareOpenRelay": "Anyone with this link can join, through the relay.",
+  "shareOpenRelay": "Anyone with this link can join.",
   "@shareOpenRelay": {
     "description": "Quiet line under the invite link when the home router would not let people in but the relay is ready."
   },
@@ -20018,7 +20014,7 @@
   "@shareOpenLocalOff": {
     "description": "Warning line under the invite link when the person unticked the Internet box before sharing and no relay is set."
   },
-  "shareRelayDown": "The relay isn't responding. Only people on your network can join for now.",
+  "shareRelayDown": "The relay isn't responding.",
   "@shareRelayDown": {
     "description": "Warning line under the invite link when a relay is set but cannot be reached and the home router would not let people in either."
   },
@@ -20038,7 +20034,7 @@
   "@sharePasswordTheirs": {
     "description": "Placeholder in the empty Password field on the Join a project page, shown when the pasted invite link needs a password."
   },
-  "sharePasswordSet": "Guests also need the password.",
+  "sharePasswordSet": "Password needed.",
   "@sharePasswordSet": {
     "description": "Quiet line under the invite link while a project is shared with a password. For a project kept online it is the tooltip of the lock beside Invite to edit, the only one of the two invites the password is asked for."
   },
@@ -20046,7 +20042,7 @@
   "@sharePasswordNeeded": {
     "description": "Line in the Shared project window when a guest tries to join by an invite link that needs a password and typed none."
   },
-  "shareUnreachableOrPassword": "Couldn't join. Check the password, and that the host is still sharing.",
+  "shareUnreachableOrPassword": "Couldn't join.",
   "@shareUnreachableOrPassword": {
     "description": "Line in the Shared project window when joining with a password failed. Lumit is not told which of the two it was."
   },
@@ -20481,7 +20477,7 @@
   "@extensionInstall": {
     "description": "Default button of the extension install question."
   },
-  "extensionInstalled": "{name} installed. Find it under Window ▸ Extensions.",
+  "extensionInstalled": "{name} installed.",
   "@extensionInstalled": {
     "description": "Bottom-strip notice after an extension is installed. Window and Extensions are menu names.",
     "placeholders": {
@@ -20523,11 +20519,11 @@
   "@extensionFailedTitle": {
     "description": "Title shown in an extension's dock panel when its page could not be put up."
   },
-  "extensionFailedHint": "Couldn't load. Close the panel and open it again.",
+  "extensionFailedHint": "Couldn't load.",
   "@extensionFailedHint": {
     "description": "Hint in an extension's dock panel when its page failed to load."
   },
-  "extensionBrokenHint": "A file is missing. Install the extension again.",
+  "extensionBrokenHint": "A file is missing.",
   "@extensionBrokenHint": {
     "description": "Hint in an extension's dock panel when the installed folder has lost its page. extension.json is a file name and is not translated."
   },
@@ -20689,7 +20685,7 @@
   "@profileRemove": {
     "description": "Button in Settings beside a profile that is not the one in use: take it off this machine."
   },
-  "profileRemoveAsk": "Remove {name}? Its settings on this device are deleted. The account stays.",
+  "profileRemoveAsk": "Remove {name}?",
   "@profileRemoveAsk": {
     "description": "Confirmation before a profile is removed. {name} is the profile's name.",
     "placeholders": {
@@ -20892,11 +20888,11 @@
   "@signInErrorCode": {
     "description": "Error on the code page of the sign-in window."
   },
-  "signInErrorSlow": "Too many attempts. Try again in a few minutes.",
+  "signInErrorSlow": "Too many attempts.",
   "@signInErrorSlow": {
     "description": "Error in the sign-in window when the server is limiting attempts."
   },
-  "signInErrorOffline": "Can't connect. Check your internet.",
+  "signInErrorOffline": "Can't connect.",
   "@signInErrorOffline": {
     "description": "Error in the sign-in window and the Lumit Pro window."
   },
@@ -20945,7 +20941,7 @@
   "@signInErrorProvider": {
     "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
   },
-  "signInErrorTimedOut": "Sign-in timed out. Try again.",
+  "signInErrorTimedOut": "Sign-in timed out.",
   "@signInErrorTimedOut": {
     "description": "Error when a Google or Discord sign-in was started and never finished."
   },
@@ -20953,7 +20949,7 @@
   "@signInErrorBrowser": {
     "description": "Error when Lumit could not open the web browser for signing in or for the shop."
   },
-  "signInErrorGeneric": "Something went wrong. Try again.",
+  "signInErrorGeneric": "Something went wrong.",
   "@signInErrorGeneric": {
     "description": "Error in the sign-in window and the Lumit Pro window for anything unexpected."
   },
@@ -21029,10 +21025,6 @@
   "proThanksHeadline": "You now have Lumit Pro",
   "@proThanksHeadline": {
     "description": "Large heading in the Lumit Pro window once the account has Pro."
-  },
-  "proThanksBody": "Thank you.",
-  "@proThanksBody": {
-    "description": "Line under the heading once the account has Pro."
   },
   "proPreviewNote": "Pro is free while we test it.",
   "@proPreviewNote": {
@@ -21198,7 +21190,7 @@
   "@backupDayYesterdayWithin": {
     "description": "Yesterday, in the middle of a sentence: the version from yesterday, 01:11."
   },
-  "backupPutBackUnsent": "The current project could not be backed up, so nothing was put back.",
+  "backupPutBackUnsent": "Nothing was put back.",
   "@backupPutBackUnsent": {
     "description": "Bottom-strip warning. Putting a version back first backs up the project as it stands, and stops when that fails."
   },
@@ -21312,7 +21304,7 @@
       }
     }
   },
-  "backupTooLargeNotice": "{name} is over 95 MB, so it is not backed up.",
+  "backupTooLargeNotice": "{name} is over 95 MB. Not backed up",
   "@backupTooLargeNotice": {
     "description": "Bottom-strip notice, said once for a project whose file is too large to back up. {name} is the project's name.",
     "placeholders": {
@@ -21321,7 +21313,7 @@
       }
     }
   },
-  "backupProEnded": "Your Lumit Pro has ended. Saves are no longer backed up.",
+  "backupProEnded": "Your Lumit Pro has ended.",
   "@backupProEnded": {
     "description": "Bottom-strip notice, said once when Lumit Pro ends while a project that was being backed up is open."
   },
@@ -21353,7 +21345,7 @@
   "@backupDelete": {
     "description": "Open from backup window: row in a project's menu."
   },
-  "backupDeleteAsk": "Delete {name} and its history from backup? The file on this device stays.",
+  "backupDeleteAsk": "Delete {name} from backup?",
   "@backupDeleteAsk": {
     "description": "Question asked before a project is deleted from backup. {name} is the project's name.",
     "placeholders": {
@@ -21378,7 +21370,7 @@
   "@backupErrorGone": {
     "description": "Said when a project or a version was asked for and the server no longer has it."
   },
-  "backupErrorLastVersion": "This is the only version. Delete the project from backup instead.",
+  "backupErrorLastVersion": "This is the only version.",
   "@backupErrorLastVersion": {
     "description": "Said when the only version of a project is deleted from the Project history window."
   },
@@ -21402,7 +21394,7 @@
   "@backupSettingsOn": {
     "description": "Switch on the Account page of Settings."
   },
-  "backupProHeadline": "Backup and history come with Lumit Pro.",
+  "backupProHeadline": "Part of Lumit Pro",
   "@backupProHeadline": {
     "description": "Headline shown in the Project history and Open from backup windows to an account without Lumit Pro, over the one button that opens the Lumit Pro window."
   },
@@ -21427,7 +21419,7 @@
       }
     }
   },
-  "backupVersionUnsent": "Saved, but not backed up. The version has no name yet.",
+  "backupVersionUnsent": "Saved, not backed up.",
   "@backupVersionUnsent": {
     "description": "Bottom-strip warning when Save a version saved the project and the server could not be reached to keep and name the version."
   },
@@ -21458,10 +21450,6 @@
   "backupNoNamed": "No named versions",
   "@backupNoNamed": {
     "description": "Project history window: shown in the list when only named versions are listed and nothing has a name."
-  },
-  "backupKeptRule": "Autosaves thin to one an hour after a day. Unnamed versions thin to one a day after a week, and one a week after three months.",
-  "@backupKeptRule": {
-    "description": "Project history window: tooltip on the line saying what is kept, giving the rule. Every autosave is kept for a day, then the last of each hour. After a week every version without a name, autosave or not, is thinned to the last of each day, and after 90 days to the last of each week."
   },
   "backupNow": "Back up now",
   "@backupNow": {
@@ -21872,7 +21860,7 @@
   "@settingsAccountDelete": {
     "description": "Button on the Account page of Settings."
   },
-  "settingsAccountDeleteAsk": "Delete your Lumit account? Your subscription ends and synced settings are removed. Settings on this device stay.",
+  "settingsAccountDeleteAsk": "Delete your Lumit account? Your subscription ends.",
   "@settingsAccountDeleteAsk": {
     "description": "Confirmation before a Lumit account is deleted."
   },
@@ -21961,7 +21949,7 @@
   "@reviewTitle": {
     "description": "Title strip of the Previews window, and the tooltip of its button on the status line."
   },
-  "reviewProHeadline": "Previews come with Lumit Pro.",
+  "reviewProHeadline": "Part of Lumit Pro",
   "@reviewProHeadline": {
     "description": "Heading in the Previews window for someone without Lumit Pro, over a button that opens the Lumit Pro window."
   },
@@ -22211,19 +22199,19 @@
   "@reviewErrorPro": {
     "description": "Error in the Previews window when the account has no Lumit Pro."
   },
-  "reviewErrorStorage": "Storage full. Delete a link or a version.",
+  "reviewErrorStorage": "Storage full.",
   "@reviewErrorStorage": {
     "description": "Error in the Previews window when the account's files on Lumit's server have reached their limit."
   },
-  "reviewErrorTooLarge": "Too large to send. Try 720p or a shorter span.",
+  "reviewErrorTooLarge": "Too large to send.",
   "@reviewErrorTooLarge": {
     "description": "Error in the Previews window when the exported file is over the server's limit. Span is the export dialog's word for the part of a composition that is written."
   },
-  "reviewErrorVersions": "This link is full. Send a separate link.",
+  "reviewErrorVersions": "This link is full.",
   "@reviewErrorVersions": {
     "description": "Error in the Previews window when a link already has the most versions allowed."
   },
-  "reviewErrorLinks": "No room for another link. Delete one first.",
+  "reviewErrorLinks": "No room for another link.",
   "@reviewErrorLinks": {
     "description": "Error in the Previews window when a new link is refused because the account already has the most previews allowed."
   },
@@ -22231,11 +22219,11 @@
   "@reviewErrorGone": {
     "description": "Error in the Previews window when the server no longer has a link."
   },
-  "reviewErrorLastVersion": "This is the only version. Delete the link instead.",
+  "reviewErrorLastVersion": "This is the only version.",
   "@reviewErrorLastVersion": {
     "description": "Error in the Previews window when the only version of a link is deleted."
   },
-  "reviewErrorExportRefused": "The export could not start. Check that nothing else is exporting.",
+  "reviewErrorExportRefused": "The export could not start.",
   "@reviewErrorExportRefused": {
     "description": "Error in the Previews window when the engine would not begin exporting the composition."
   },
@@ -22667,11 +22655,11 @@
   "@shareOnlineInStep": {
     "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): shown when this computer has every edit and is connected to Lumit's server."
   },
-  "shareOnlineAway": "Reconnecting. Your edits wait here.",
+  "shareOnlineAway": "Reconnecting",
   "@shareOnlineAway": {
     "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online when the connection to Lumit's server is lost or not yet made. The person can carry on editing."
   },
-  "shareOnlineWaiting": "The host's Lumit Pro has ended. Edits wait here until it is back.",
+  "shareOnlineWaiting": "The host's Lumit Pro has ended.",
   "@shareOnlineWaiting": {
     "description": "Bottom-strip notice, and a line in the Shared project window, for a project kept online when Lumit's server has stopped taking edits because the host (the person who shared it) no longer has Lumit Pro. Lumit Pro is a product name: do not translate it."
   },
@@ -22727,7 +22715,7 @@
   "@shareOnlineFailedOpen": {
     "description": "Shared project window, for a project that is kept online (held on Lumit's server so people can edit when nobody else is there): state of a footage file in the Footage list that was fetched from Lumit's server and would not open."
   },
-  "shareOnlineFull": "The host's storage is full. No more footage is sent.",
+  "shareOnlineFull": "The host's storage is full.",
   "@shareOnlineFull": {
     "description": "Bottom-strip notice, and a line in the Shared project window, when Lumit's server refuses footage for a project kept online because the host's Lumit Pro storage is full."
   },
@@ -22747,11 +22735,11 @@
   "@shareOnlineErrorPro": {
     "description": "Error in the Shared project window when Lumit's server refuses to keep a project because the account has no Lumit Pro. Lumit Pro is a product name: do not translate it."
   },
-  "shareOnlineErrorTooMany": "No room for another project online. Stop keeping one online first.",
+  "shareOnlineErrorTooMany": "No room for another project online.",
   "@shareOnlineErrorTooMany": {
     "description": "Error in the Shared project window when the account already keeps the most projects online that it may."
   },
-  "shareOnlineErrorRefused": "Something went wrong. Try again in a moment.",
+  "shareOnlineErrorRefused": "Something went wrong.",
   "@shareOnlineErrorRefused": {
     "description": "Error in the Shared project window when Lumit's server refuses a call about a project kept online for a reason that has no words of its own."
   },
@@ -22794,7 +22782,7 @@
       }
     }
   },
-  "shareOnlineWaitingOwn": "Your Lumit Pro has ended. Edits wait here until it is back.",
+  "shareOnlineWaitingOwn": "Your Lumit Pro has ended.",
   "@shareOnlineWaitingOwn": {
     "description": "Bottom-strip notice and a line in the Shared project window, under the words On hold, shown to the host of a project kept online when Lumit's server has stopped taking edits because their own Lumit Pro has ended. Lumit Pro is a product name: do not translate it."
   },
@@ -22927,7 +22915,7 @@
       }
     }
   },
-  "shareOnlineUse": "People can edit while you are away",
+  "shareOnlineUse": "Edits while you're away",
   "@shareOnlineUse": {
     "description": "Share this project page of the Shared project window: beside the Keep online tick box, what ticking it does. No full stop, like the tick box above it."
   },
@@ -22967,10 +22955,6 @@
   "shareHaveInvite": "Have a new invite?",
   "@shareHaveInvite": {
     "description": "Shared project window, for a guest whose project cannot be reached: pressing it shows the field a new invite link is pasted into."
-  },
-  "shareShowBodyOnline": "Anyone who sees this link can join and edit.",
-  "@shareShowBodyOnline": {
-    "description": "Under the question asked before the invite link of a project kept online is shown. This link holds no address of the person's computer."
   },
   "shareConflictsHeld": "{count} waiting",
   "@shareConflictsHeld": {
@@ -23113,7 +23097,7 @@
       }
     }
   },
-  "shareVersionsUpdate": "Update to Lumit {version} to edit this project. Your edits are kept.",
+  "shareVersionsUpdate": "Update to Lumit {version} to edit this project.",
   "@shareVersionsUpdate": {
     "description": "Bottom-strip notice when a newer Lumit keeps the project than the one running. The project is open on this computer, so it does not say open. A press leads to the update. {version} is a version of Lumit, such as 0.7.0.",
     "placeholders": {
@@ -23161,7 +23145,7 @@
   "@shareForwardMoving": {
     "description": "Bottom-strip button, first line of the Shared project window and the Join button, while a project kept online is being moved forward to the Lumit running."
   },
-  "shareForwardBusy": "Someone is still editing in Lumit {version}. Try again in a moment.",
+  "shareForwardBusy": "Someone is still editing in Lumit {version}.",
   "@shareForwardBusy": {
     "description": "Notice when a project kept online could not be moved forward because people on the older Lumit went on editing all through. {version} is a version of Lumit, such as 0.7.0.",
     "placeholders": {
@@ -23196,10 +23180,6 @@
   "@shareActivitySeen": {
     "description": "Activity list of the Shared project window: small legend over the sittings the person has already looked at, under the ones that are new to them. One word."
   },
-  "shareOnlineAwayLine": "Your edits wait here.",
-  "@shareOnlineAwayLine": {
-    "description": "Shared project window, under the words Looking for the server, for a project kept online with no connection to Lumit's server. It does not say looking again."
-  },
   "shareVersionsUpdateLine": "Update to Lumit {version} to edit it.",
   "@shareVersionsUpdateLine": {
     "description": "Shared project window, under the words Update needed, when a newer Lumit keeps the project than the one running. Beside it is the button that checks for updates. {version} is a version of Lumit, such as 0.7.0.",
@@ -23220,10 +23200,6 @@
   "shareLinkLook": "Invite to look",
   "@shareLinkLook": {
     "description": "Shared project window, for a project kept online: label of the second invite link. Whoever joins by it sees the project and the people and can change nothing."
-  },
-  "shareShowBodyLook": "Anyone who sees this link can see the project.",
-  "@shareShowBodyLook": {
-    "description": "Under the question asked before the invite that can only look is shown. Whoever joins by this link can change nothing."
   },
   "shareLookOnly": "Look only",
   "@shareLookOnly": {
@@ -23255,7 +23231,7 @@
       }
     }
   },
-  "shareLookJoined": "You can look, not edit. Changes made here are undone.",
+  "shareLookJoined": "Looking only.",
   "@shareLookJoined": {
     "description": "Bottom-strip notice on the computer of someone who joined a shared project by the invite to look. Said when they join, and again whenever something they change is put back. Every tool still works on their computer, and whatever is changed is undone at once, so this says why."
   },
@@ -23268,7 +23244,7 @@
       }
     }
   },
-  "shareFullLook": "That project has as many people looking as it can take. Try again later.",
+  "shareFullLook": "No room for another person looking.",
   "@shareFullLook": {
     "description": "Notice on the computer of someone who can only look at a shared project, when they are turned away because no more people who only look are taken, or someone who can edit needed the place."
   },
@@ -23292,7 +23268,7 @@
   "@shareLookOffYes": {
     "description": "The answer that switches off Invite to look in the Shared project window. Beside Cancel."
   },
-  "shareNoteHint": "Leave a note on where you are",
+  "shareNoteHint": "Note",
   "@shareNoteHint": {
     "description": "Shared project window, Activity group, for a project kept online: the hint in the empty field where a note for the others is typed. The note carries the composition open, the time the playhead is at and the layer chosen."
   },
@@ -23329,7 +23305,7 @@
   "@shareOnlineNearlyLarge": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project has grown past what Lumit's server stores. Edits still go in for now. Three words at most."
   },
-  "shareOnlineNearlyLargeSaid": "This project is nearly too large to keep online.",
+  "shareOnlineNearlyLargeSaid": "Nearly too large to keep online.",
   "@shareOnlineNearlyLargeSaid": {
     "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that has grown past what Lumit's server stores. Edits still go in for now and will stop unless the project gets smaller."
   },
@@ -23337,7 +23313,7 @@
   "@shareOnlineTooLarge": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, when the project is too large for Lumit's server and edits have stopped going in. Two words at most."
   },
-  "shareOnlineTooLargeSaid": "This project is too large to keep online. Edits made here are kept on this computer.",
+  "shareOnlineTooLargeSaid": "Too large to keep online.",
   "@shareOnlineTooLargeSaid": {
     "description": "Bottom-strip notice, and the tooltip of the strip's button, for a project kept online that is too large for Lumit's server. Nothing changed on this computer reaches anyone else, and nothing is lost."
   },
@@ -23345,7 +23321,7 @@
   "@shareLinkLockEdit": {
     "description": "Shared project window, for a project kept online with a password while the invite to look is on: a small tag beside the lock on the Invite to edit row. The password is then only needed to change the project, and the link by itself shows it. Lower case, as the tags you, host and no password are."
   },
-  "sharePasswordSetEdit": "People need the password to edit. This link alone shows the project.",
+  "sharePasswordSetEdit": "Password needed to edit.",
   "@sharePasswordSetEdit": {
     "description": "Tooltip on the lock beside the Invite to edit link of a project kept online, while the invite to look is on. In place of the tooltip that says people joining need the password as well as the link."
   },
@@ -23375,15 +23351,11 @@
       }
     }
   },
-  "shareNoteDownBody": "It is removed for everyone.",
-  "@shareNoteDownBody": {
-    "description": "Under the question Take down {name}'s note?. The note is removed from every computer in the project, for good."
-  },
   "shareReplaced": "Invite replaced",
   "@shareReplaced": {
     "description": "Bottom-strip button of a project kept online, and the first line of the Shared project window, in the warning colour, on a computer that was away when the host made a new invite. Its copy is still part of the project and cannot find it until the new invite is pasted. Two words at most."
   },
-  "shareReplacedSaid": "The host replaced the invite. Edits wait here until the new one is pasted.",
+  "shareReplacedSaid": "The host replaced the invite.",
   "@shareReplacedSaid": {
     "description": "Bottom-strip notice, and the tooltip of the strip's button, on a computer that was away from a project kept online when the host made a new invite. A press opens the Shared project window, where the new invite is pasted."
   },
@@ -23391,7 +23363,7 @@
   "@shareJoinClosed": {
     "description": "Join a project page, under the invite link: the link was for a project its host has stopped keeping on Lumit's server."
   },
-  "shareJoinMoved": "That invite was replaced. Ask the host for the new one.",
+  "shareJoinMoved": "That invite was replaced.",
   "@shareJoinMoved": {
     "description": "Join a project page, under the invite link: the host has made a new invite since this one was handed out, so this one opens nothing."
   },
@@ -23399,7 +23371,7 @@
   "@shareJoinRemoved": {
     "description": "Join a project page, under the invite link: this computer was taken out of the project by its host, and the invite it holds opens nothing."
   },
-  "shareJoinLookOff": "The invite to look is off. Ask the host to turn it on.",
+  "shareJoinLookOff": "The invite to look is off.",
   "@shareJoinLookOff": {
     "description": "Join a project page, under the invite link: the link is the one people can look at a project by and not change it, and the host has that invite switched off."
   },

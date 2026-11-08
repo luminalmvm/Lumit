@@ -16,10 +16,14 @@ import '../widgets/controls.dart';
 import 'dialog_frame.dart';
 import 'wordmark.dart';
 
-Future<void> showAboutWindowFrb(BuildContext context) => showLumitModal<void>(
-      context: context,
-      builder: (close) => _AboutWindow(onClose: () => close(null)),
-    );
+Future<void> showAboutWindowFrb(BuildContext context) {
+  // Read once here: the log is a bridge call, and a build is no place for one.
+  final log = bootLog();
+  return showLumitModal<void>(
+    context: context,
+    builder: (close) => _AboutWindow(log: log, onClose: () => close(null)),
+  );
+}
 
 /// This build of Lumit, as the engine reports it on boot. "Unknown" rather than
 /// an empty line when the log is empty, which is what a test harness sees.
@@ -45,13 +49,14 @@ String lumitProductVersion() =>
     'Lumit ${versionFromBootLine(lumitVersion()) ?? '?'}';
 
 class _AboutWindow extends StatelessWidget {
+  /// The boot log, read once by the opener.
+  final List<String> log;
   final VoidCallback onClose;
-  const _AboutWindow({required this.onClose});
+  const _AboutWindow({required this.log, required this.onClose});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final log = bootLog();
     return DialogFrame(
       width: 420,
       children: [
@@ -68,7 +73,7 @@ class _AboutWindow extends StatelessWidget {
                 children: [
                   LumitWordmark(height: 22, ground: t.surface1),
                   const SizedBox(width: 8),
-                  Text(versionFromBootLine(lumitVersion()) ?? '',
+                  Text(versionFromBootLine(log.firstOrNull ?? '') ?? '',
                       style: dialogMono(t)),
                 ],
               ),

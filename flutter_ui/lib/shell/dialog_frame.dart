@@ -426,6 +426,9 @@ Widget dialogSection(LumitTheme t, String title, List<Widget> rows) => Column(
       ],
     );
 
+/// [child] under a hover fill when [on], and bare when a press would do nothing.
+Widget _hoverIf(bool on, Widget child) => on ? HoverFill(child: child) : child;
+
 /// A part of a long dialogue that folds away. Shut, it says what it holds in
 /// [reading], so everything can be checked without opening anything. The twirl
 /// hangs in the margin, which leaves the name on the edge the rows use.
@@ -447,8 +450,11 @@ Widget dialogFold(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(height: 1, color: t.hairline),
-        HoverFill(
-          child: GestureDetector(
+        // A fold held open does not light under the pointer: nothing would
+        // happen on the click.
+        _hoverIf(
+          onToggle != null,
+          GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onToggle,
             child: SizedBox(

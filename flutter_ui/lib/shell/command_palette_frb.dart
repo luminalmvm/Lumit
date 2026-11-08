@@ -5,10 +5,11 @@
 // nothing about the document and cannot drift out of step with what the menus
 // actually do.
 //
-// Matching is subsequence, not substring: "nc" finds "New composition", which is
-// what makes a palette faster than a menu. Ranking prefers matches that start
-// earlier and are more tightly packed, so the thing you half-remembered is at
-// the top rather than buried under a coincidence.
+// A letter or two match as a subsequence: "nc" finds "New composition", which
+// is what makes a palette faster than a menu. From three letters the needle
+// has to sit in the name whole or start its words. Ranking prefers matches
+// that start earlier and are more tightly packed, so the thing you
+// half-remembered is at the top rather than buried under a coincidence.
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -17,14 +18,15 @@ import '../icons/icons.dart' show iconSize;
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/escape_ladder.dart';
 
 /// One thing the palette can run.
 class PaletteCommand {
   final String label;
 
-  /// The group it belongs to, shown as the row's category badge (docs/07
-  /// §12: an effect must never be mistaken for a command).
+  /// The group it belongs to, the heading its row sits under (docs/07 §12:
+  /// an effect must never be mistaken for a command).
   final String category;
 
   /// The keyboard shortcut, taught in the result row where one exists. The
@@ -40,8 +42,8 @@ class PaletteCommand {
   final String? disabled;
 
   /// The mark before the name, drawn by the caller, for what has one: a
-  /// comp, a layer of its kind, an effect. Every row keeps the slot, so the
-  /// names stand on one edge whether or not a row has a mark.
+  /// comp, a layer of its kind, an effect. A command has none, and its group
+  /// has no slot for one.
   final Widget? icon;
   final VoidCallback run;
 
@@ -85,19 +87,33 @@ Future<void> showCommandPaletteFrb({
       ),
     );
 
-/// How well `needle` matches `haystack` as a subsequence, or null for no match.
+/// How well `needle` matches `haystack`, or null for no match.
 ///
 /// Lower is better. The score is the span the match occupies plus where it
 /// starts, so "comp" scores better against "Composition settings" than against
-/// "New composition" — earlier and tighter wins.
+/// "New composition": earlier and tighter wins. One or two letters match as
+/// a subsequence; three or more have to sit in the name whole, or each start
+/// a word, since a loose subsequence had "fit" finding Photo filter.
 int? paletteScore(String needle, String haystack) {
   if (needle.isEmpty) return 0;
   final lower = haystack.toLowerCase();
+  final want = needle.toLowerCase();
+  final strict = want.length >= 3;
+  if (strict) {
+    final whole = lower.indexOf(want);
+    if (whole >= 0) return (want.length - 1) + whole;
+  }
   var at = 0;
   var first = -1;
   var last = 0;
-  for (final rune in needle.toLowerCase().runes) {
-    final found = lower.indexOf(String.fromCharCode(rune), at);
+  for (final rune in want.runes) {
+    final char = String.fromCharCode(rune);
+    var found = lower.indexOf(char, at);
+    if (strict) {
+      while (found > 0 && _wordChar.hasMatch(lower[found - 1])) {
+        found = lower.indexOf(char, found + 1);
+      }
+    }
     if (found < 0) return null;
     if (first < 0) first = found;
     last = found;
@@ -105,6 +121,8 @@ int? paletteScore(String needle, String haystack) {
   }
   return (last - first) + first;
 }
+
+final RegExp _wordChar = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
 class _Palette extends StatefulWidget {
   final List<PaletteCommand> commands;
@@ -220,30 +238,30 @@ class _PaletteState extends State<_Palette> {
     _run(matches[_highlighted.clamp(0, matches.length - 1)]);
   }
 
-  /// The list as drawn: the matches, and before anything is typed the
-  /// headings that group them, the recently run first and then each kind
-  /// under its own name. A typed query is one ranked list, where the badge
-  /// at the row's end says the kind.
+  /// The list as drawn: the matches under one heading per kind, in the order
+  /// the kinds first appear, so the best-ranked kind leads a typed list.
+  /// Before anything is typed the recently run come first, under their own.
   List<Object> _entries(List<PaletteCommand> matches) {
-    if (_query.text.trim().isNotEmpty) return matches;
     final out = <Object>[];
     final recent = [
-      for (final m in matches)
-        if (widget.recent.contains(m.label)) m,
+      if (_query.text.trim().isEmpty)
+        for (final m in matches)
+          if (widget.recent.contains(m.label)) m,
     ];
     if (recent.isNotEmpty) {
       out
         ..add(l10n.paletteRecent)
         ..addAll(recent);
     }
-    String? last;
+    final byKind = <String, List<PaletteCommand>>{};
     for (final m in matches) {
       if (recent.contains(m)) continue;
-      if (m.category != last) {
-        last = m.category;
-        out.add(last);
-      }
-      out.add(m);
+      (byKind[m.category] ??= []).add(m);
+    }
+    for (final MapEntry(key: kind, value: rows) in byKind.entries) {
+      out
+        ..add(kind)
+        ..addAll(rows);
     }
     return out;
   }
@@ -251,10 +269,10 @@ class _PaletteState extends State<_Palette> {
   /// Move the highlight to match [to] and scroll its row into view. Every
   /// row, heading or match, is the height of the list's prototype, so the
   /// whole list divided by the entry count is one row.
-  void _highlight(int to, List<PaletteCommand> matches) {
+  void _highlight(
+      int to, List<Object> entries, List<PaletteCommand> matches) {
     setState(() => _highlighted = to);
     if (!_scroll.hasClients || matches.isEmpty) return;
-    final entries = _entries(matches);
     final at = entries.indexOf(matches[to]);
     final position = _scroll.position;
     final row = (position.maxScrollExtent + position.viewportDimension) /
@@ -274,19 +292,20 @@ class _PaletteState extends State<_Palette> {
         child: Text(t.kickerCase(name), style: t.kicker),
       );
 
-  /// One result row: the mark, the name, the tick, the chord and the badge,
-  /// at the height every menu row has. Under a heading the badge would say
-  /// the heading again, so it goes.
+  /// One result row: the mark, the name, the tick and the chord, at the
+  /// height every menu row has. The heading says the kind. A kind's rows all
+  /// have a mark or none do, so the names of a group stand on one edge.
   Widget _row(LumitTheme t, PaletteCommand command, {bool selected = false}) {
     final off = command.disabled != null;
-    final badged = _query.text.trim().isNotEmpty;
     return MenuRow(
       selected: selected,
       onPressed: () => _run(command),
       child: Row(
         children: [
-          SizedBox(width: iconSize, child: command.icon),
-          const SizedBox(width: 8),
+          if (command.icon case final icon?) ...[
+            SizedBox(width: iconSize, child: icon),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Text(
               command.label,
@@ -300,14 +319,9 @@ class _PaletteState extends State<_Palette> {
             menuTick(true, colour: t.textMuted),
             const SizedBox(width: 8),
           ],
-          if (command.disabled ?? command.shortcut case final note?) ...[
+          if (command.disabled ?? command.shortcut case final note?)
             Text(note,
                 style: off ? t.small.copyWith(color: t.textDisabled) : t.mono),
-            const SizedBox(width: 8),
-          ],
-          if (badged)
-            Text(command.category,
-                style: t.small.copyWith(color: t.textMuted)),
         ],
       ),
     );
@@ -316,8 +330,9 @@ class _PaletteState extends State<_Palette> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final matches = _matches;
-    final entries = _entries(matches);
+    final entries = _entries(_matches);
+    // In the order drawn, which is what the arrow keys walk.
+    final matches = [for (final e in entries) if (e is PaletteCommand) e];
 
     return Focus(
       onKeyEvent: (node, event) {
@@ -326,6 +341,7 @@ class _PaletteState extends State<_Palette> {
           case LogicalKeyboardKey.arrowDown:
             _highlight(
                 matches.isEmpty ? 0 : (_highlighted + 1) % matches.length,
+                entries,
                 matches);
             return KeyEventResult.handled;
           case LogicalKeyboardKey.arrowUp:
@@ -333,6 +349,7 @@ class _PaletteState extends State<_Palette> {
                 matches.isEmpty
                     ? 0
                     : (_highlighted - 1 + matches.length) % matches.length,
+                entries,
                 matches);
             return KeyEventResult.handled;
           case LogicalKeyboardKey.enter:
@@ -366,21 +383,26 @@ class _PaletteState extends State<_Palette> {
             else
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 300),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  controller: _scroll,
-                  padding: EdgeInsets.zero,
-                  prototypeItem: _row(t, matches.first),
-                  itemCount: entries.length,
-                  itemBuilder: (context, i) => switch (entries[i]) {
-                    final String name => _heading(t, name),
-                    final PaletteCommand command => KeyedSubtree(
-                        key: ValueKey<String>('palette-item-${command.label}'),
-                        child: _row(t, command,
-                            selected: matches.indexOf(command) == _highlighted),
-                      ),
-                    _ => const SizedBox.shrink(),
-                  },
+                child: EdgeFade(
+                  axis: Axis.vertical,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    controller: _scroll,
+                    padding: EdgeInsets.zero,
+                    prototypeItem: _row(t, matches.first),
+                    itemCount: entries.length,
+                    itemBuilder: (context, i) => switch (entries[i]) {
+                      final String name => _heading(t, name),
+                      final PaletteCommand command => KeyedSubtree(
+                          key: ValueKey<String>(
+                              'palette-item-${command.label}'),
+                          child: _row(t, command,
+                              selected:
+                                  matches.indexOf(command) == _highlighted),
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
                 ),
               ),
           ],

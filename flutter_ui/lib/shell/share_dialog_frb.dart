@@ -184,7 +184,7 @@ String shareOnlineErrorText(String code) => switch (code) {
   return share.online != null
       ? (
           words: l10n.shareOnlineLooking,
-          line: l10n.shareOnlineAwayLine,
+          line: l10n.shareOnlineAway,
           said: l10n.shareOnlineAway,
           wrong: true,
         )
@@ -245,7 +245,6 @@ Future<String?> shareForExtension(
           future: ready,
           builder: (context, wait) => _Question(
             title: l10n.shareExtensionTitle(extension),
-            body: l10n.shareExtensionBody(extension),
             no: l10n.shareExtensionNo,
             yes: l10n.shareExtensionYes,
             keyPrefix: 'share-extension-ask',
@@ -1961,14 +1960,11 @@ class _ShareDialogState extends State<_ShareDialog> {
         _advancedFold(t),
         if (_advanced) ...[
           const SizedBox(height: 4),
-          LumitTooltip(
-            message: l10n.shareAddressHint,
-            child: dialogRow(
-              t,
-              l10n.shareAddress,
-              _field(t, 'share-address', _address),
-              labelColumn: _labelColumn,
-            ),
+          dialogRow(
+            t,
+            l10n.shareAddress,
+            _field(t, 'share-address', _address),
+            labelColumn: _labelColumn,
           ),
           ..._footageRows(t),
         ],
@@ -2673,7 +2669,6 @@ class _ShareDialogState extends State<_ShareDialog> {
         id: 'share-note-down-ask',
         builder: (close) => _Question(
           title: l10n.shareNoteDownTitle(note.name),
-          body: l10n.shareNoteDownBody,
           no: l10n.cancel,
           yes: l10n.shareNoteTakeDown,
           keyPrefix: 'share-note-down-ask',
@@ -2744,15 +2739,19 @@ class _ShareDialogState extends State<_ShareDialog> {
                   at: note.at,
                   waiting: note.waiting,
                   // Its writer may take it down, and the host anyone's.
+                  // Hidden, it takes no clicks either.
                   action: mayTakeDown
-                      ? Visibility.maintain(
-                          visible: lit > 0,
-                          child: _glyphButton(
-                              t,
-                              'share-note-down-${note.id}',
-                              LumitIcons.close,
-                              l10n.shareNoteTakeDown,
-                              () => unawaited(_takeDown(note))),
+                      ? IgnorePointer(
+                          ignoring: lit <= 0,
+                          child: Opacity(
+                            opacity: lit > 0 ? 1 : 0,
+                            child: _glyphButton(
+                                t,
+                                'share-note-down-${note.id}',
+                                LumitIcons.close,
+                                l10n.shareNoteTakeDown,
+                                () => unawaited(_takeDown(note))),
+                          ),
                         )
                       : null),
               Padding(
@@ -3754,11 +3753,6 @@ class _ShowLinkQuestion extends StatelessWidget {
   @override
   Widget build(BuildContext context) => QuestionWindow(
         title: l10n.shareShowTitle,
-        body: look
-            ? l10n.shareShowBodyLook
-            : online
-                ? l10n.shareShowBodyOnline
-                : l10n.shareShowBody,
         keyPrefix: 'share-show-ask',
         onClose: () => onChoose(false),
         actions: [

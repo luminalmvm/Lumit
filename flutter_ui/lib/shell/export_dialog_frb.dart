@@ -1544,7 +1544,8 @@ class _ExportDialogState extends State<_ExportDialog> {
                       ? _well(
                           t,
                           _bitrateBps > 0
-                              ? '${(_bitrateBps / 1e6).round()} Mb/s'
+                              ? l10n.exportReadingVideoRate(
+                                  '${(_bitrateBps / 1e6).round()}')
                               : '—',
                           key: const ValueKey('export-bitrate'),
                           tone: t.textDisabled,
@@ -1554,7 +1555,10 @@ class _ExportDialogState extends State<_ExportDialog> {
                           value: _bitrate,
                           min: 0,
                           max: 400,
-                          suffix: _bitrate == 0 ? null : ' Mb/s',
+                          // The unit alone: the reading with no number in it.
+                          suffix: _bitrate == 0
+                              ? null
+                              : l10n.exportReadingVideoRate(''),
                           fill: t.surface0,
                           onChanged: (v) => _edit(() {
                             _bitrate = v.toInt();
@@ -1893,7 +1897,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                   key: const ValueKey('export-audio-rate'),
                   value: _audioRate,
                   options: _audioRates,
-                  label: (r) => '${r ~/ 1000} kb/s',
+                  label: (r) => l10n.exportReadingAudioRate('${r ~/ 1000}'),
                   onChanged: _caps.audioBitRate && _audio
                       ? (r) => _edit(() => _audioRate = r)
                       : null,

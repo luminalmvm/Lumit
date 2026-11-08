@@ -166,7 +166,9 @@ String chordLabel(String chord) {
       .replaceAll('ArrowUp', '↑')
       .replaceAll('ArrowDown', '↓')
       .replaceAll('PageUp', 'Page Up')
-      .replaceAll('PageDown', 'Page Down');
+      .replaceAll('PageDown', 'Page Down')
+      // The mark alone is a speck at a menu's size.
+      .replaceAll('`', 'Backtick');
 }
 
 /// How far a wheel event moved, on whichever axis carries it. Some platforms

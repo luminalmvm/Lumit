@@ -847,7 +847,11 @@ void main() {
       await tester.pump();
       expect(a.getEffects().single.name(), 'blur');
       expect(b.getEffects().single.name(), 'blur',
-          reason: 'every selected layer, not the primary alone');
+          reason: 'every selected layer, as the Layer rows act');
+      // One step takes both away.
+      undoFrb(p.state);
+      expect(a.getEffects(), isEmpty);
+      expect(b.getEffects(), isEmpty);
     });
 
   }, skip: !engineAvailable);

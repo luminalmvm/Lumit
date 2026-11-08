@@ -41,6 +41,9 @@ Widget menuTick(bool on, {Color? colour}) => SizedBox(
 /// surface's corner less this, so the two curves run parallel.
 const double menuInset = 6;
 
+/// The most room a row's chord may take, so the name keeps the rest.
+const double menuChordWidth = 150;
+
 /// The line between two groups of rows in a menu.
 class MenuDivider extends StatelessWidget {
   const MenuDivider({super.key});
@@ -90,9 +93,15 @@ class MenuLabel extends StatelessWidget {
         if (chord != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),
-            child: Text(chord,
-                textDirection: TextDirection.ltr,
-                style: t.small.copyWith(color: t.textMuted)),
+            // Capped, so a long chord can never push the row past its menu.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: menuChordWidth),
+              child: Text(chord,
+                  textDirection: TextDirection.ltr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.small.copyWith(color: t.textMuted)),
+            ),
           ),
       ],
     );

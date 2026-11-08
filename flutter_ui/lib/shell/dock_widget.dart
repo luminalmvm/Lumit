@@ -395,11 +395,11 @@ class _DockWidgetState extends State<DockWidget> {
     );
   }
 
-  /// The title line a pane standing alone wears. Studio draws none, and
-  /// neither does a panel that draws a header of its own.
+  /// The title line a pane standing alone wears, in every shape: it names the
+  /// pane, lifts it, and takes the right-click for its menu. A panel that
+  /// draws a header of its own has no second one.
   Widget? _bareTitle(LumitTheme t, PaneId pane) {
     final panel = pane.panel;
-    if (t.shape == ThemeShape.studio) return null;
     // These four draw a header line of their own.
     if (panel == Panel.viewer ||
         panel == Panel.timeline ||

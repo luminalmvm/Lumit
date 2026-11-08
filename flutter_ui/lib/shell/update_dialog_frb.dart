@@ -389,13 +389,9 @@ class _RestartToFinish extends StatelessWidget {
         title:
             quits ? l10n.updateRestartToFinish : l10n.updateDownloaded(version),
         // Inside the sandbox the files are not ours to replace, so the bundle
-        // is handed over and Flatpak does the rest. Anywhere else the one thing
-        // to know is that there is work to lose.
-        body: !quits
-            ? l10n.updateReadyFlatpak(version)
-            : dirty
-                ? l10n.updateUnsavedChanges
-                : null,
+        // is handed over and Flatpak does the rest. Anywhere else the save
+        // button says what there is to lose.
+        body: quits ? null : l10n.updateReadyFlatpak(version),
         keyPrefix: 'update-restart',
         onClose: () => onChoose(_RestartAnswer.later),
         actions: [

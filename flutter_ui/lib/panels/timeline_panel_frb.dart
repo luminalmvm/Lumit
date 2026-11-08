@@ -1867,6 +1867,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     });
   }
 
+  /// Layer ▸ Reveal ▸ Expand all or Collapse all: the ground menu's rows.
+  void _onFoldAllRequested() {
+    if (!mounted) return;
+    final fold = _foldRows();
+    ((_ui?.foldAllExpand ?? true) ? fold.expand : fold.collapse)?.call();
+  }
+
   /// Tell the Viewer which part of a 3D model the last picked row is on, for
   /// its handles.
   void _publishPickedPart() {
@@ -1941,7 +1948,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       'reveal.effects' =>
         entry.info.effects.isEmpty ? const [] : [effectsPath(id)],
       'reveal.masks' => entry.info.masks.isEmpty ? const [] : [masksPath(id)],
-      'reveal.volume' => [audioPath(id)],
+      'reveal.volume' || 'reveal.audio' => [audioPath(id)],
       _ when action.startsWith('reveal.part/') => switch (entry.info.modelRows) {
           final rows? =>
             modelPartReveal(id, rows, action.substring('reveal.part/'.length)),
@@ -2253,6 +2260,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // Animation ▸ Reveal …: the menu says which reveal, the panel runs
     // it over the selection, exactly as `U` does.
     _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
+    _ui!.foldAllRequest.addListener(_onFoldAllRequested);
     _ui!.selectPropertyRequest.addListener(_onSelectPropertyRequested);
     // Merged **once**, not per build: a fresh `Listenable` every rebuild makes
     // every cache bar under it unsubscribe and resubscribe, which during a zoom
@@ -3626,6 +3634,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.renderTimings.removeListener(_onTimingsChanged);
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
     _ui?.revealFilterRequest.removeListener(_onRevealFilterRequested);
+    _ui?.foldAllRequest.removeListener(_onFoldAllRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
     if (_ui?.deleteClaim == _claimDelete) _ui!.deleteClaim = _priorDeleteClaim;
     if (_ui?.copyClaim == _claimCopy) _ui!.copyClaim = _priorCopyClaim;

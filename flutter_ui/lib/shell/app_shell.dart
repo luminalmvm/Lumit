@@ -1298,11 +1298,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (layers.isEmpty) {
           handled = false;
         } else {
-          for (final layer in layers) {
-            layer.delete();
-          }
-          ui.clearSelection();
-          state.notifyDocumentChanged();
+          deleteLayersFrb(state, ui, layers);
         }
       // The Animation menu's keyframe rows, pressed from the keyboard. Each
       // is the row itself, so a key and its menu row cannot come to differ,

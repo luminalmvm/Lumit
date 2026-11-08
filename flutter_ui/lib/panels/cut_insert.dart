@@ -98,6 +98,18 @@ void insertTitle(BuildContext context, LumitUiState ui,
   });
 }
 
+/// The Solid dialogue, then the same placement as a title.
+void insertSolid(BuildContext context, CompositionReference comp, int frame,
+        int? row,
+        {required VoidCallback onDone}) =>
+    newSolidFrb(
+      context: context,
+      comp: comp,
+      row: row,
+      place: (layer) => _place(comp, layer, frame),
+      onDone: onDone,
+    );
+
 /// The Insert title and Insert solid rows, for the ground and gap menus.
 List<Widget> cutInsertRows(
   BuildContext context,
@@ -122,14 +134,7 @@ List<Widget> cutInsertRows(
         key: const ValueKey('insert-solid'),
         onPressed: () {
           close();
-          // The Solid dialogue, then the same placement as a title.
-          newSolidFrb(
-            context: context,
-            comp: comp,
-            row: row,
-            place: (layer) => _place(comp, layer, frame),
-            onDone: onDone,
-          );
+          insertSolid(context, comp, frame, row, onDone: onDone);
         },
         child: MenuLabel(l10n.insertSolid),
       ),

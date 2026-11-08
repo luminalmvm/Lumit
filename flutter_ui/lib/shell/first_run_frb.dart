@@ -540,23 +540,26 @@ class _Choice extends StatelessWidget {
               ],
             ),
           ),
-          for (final (i, option) in options.indexed) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                HouseCheckbox(
-                  key: ValueKey<String>('$id-option-$i'),
-                  value: option.on,
-                  onChanged: option.set,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(option.label,
-                      style: t.small.copyWith(color: t.textPrimary)),
-                ),
-              ],
-            ),
-          ],
+          // Only the chosen card's: a tick on a card not chosen read as a
+          // choice already made.
+          if (chosen)
+            for (final (i, option) in options.indexed) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  HouseCheckbox(
+                    key: ValueKey<String>('$id-option-$i'),
+                    value: option.on,
+                    onChanged: option.set,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(option.label,
+                        style: t.small.copyWith(color: t.textPrimary)),
+                  ),
+                ],
+              ),
+            ],
         ],
       ),
     );

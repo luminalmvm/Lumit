@@ -342,6 +342,8 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // No heading over nothing.
+          if (paths.isNotEmpty)
           SizedBox(
             key: const ValueKey('welcome-recent-header'),
             height: welcomeRecentHeaderHeight,

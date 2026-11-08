@@ -75,7 +75,7 @@ The **Editing style** cards set how footage arrives and how the Retime graph rea
 | Card | Sets |
 | --- | --- |
 | **After Effects** | Footage arrives as a layer, and the Retime graph shows the time value of the source. **Use the After Effects shortcuts** loads that keymap. |
-| **Vegas** | Video arrives as a Sequence layer, and the Retime graph shows speed as a percentage. **Only change default Retime graph** leaves video arriving as a layer. **Use the Vegas shortcuts** loads that keymap. |
+| **Vegas** | Video arrives as a Sequence layer, and the Retime graph shows speed as a percentage. **Retime graph only** leaves video arriving as a layer. **Use the Vegas shortcuts** loads that keymap. |
 | **Premiere Pro or Resolve** | Footage arrives on Sequence layers, in the Cut workspace. |
 
 Below the cards are **Style**, **Colour scheme**, **Toolbar position** and **Motion**, and

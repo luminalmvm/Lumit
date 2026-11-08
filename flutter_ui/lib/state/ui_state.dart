@@ -880,6 +880,18 @@ class LumitUiState extends ChangeNotifier {
     revealFilterRequest.value++;
   }
 
+  /// Layer ▸ Reveal ▸ Expand all and Collapse all: the Timeline runs its own
+  /// rows over the selection. The same counter shape as the reveal above.
+  final ValueNotifier<int> foldAllRequest = ValueNotifier(0);
+
+  /// Whether the last [requestFoldAll] opens or shuts.
+  bool foldAllExpand = true;
+
+  void requestFoldAll({required bool expand}) {
+    foldAllExpand = expand;
+    foldAllRequest.value++;
+  }
+
   /// **Which property rows the Timeline has picked**, as their paths, published
   /// so the Viewer can answer the same question.
   ///

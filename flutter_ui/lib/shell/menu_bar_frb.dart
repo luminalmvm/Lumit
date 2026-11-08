@@ -44,7 +44,10 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
+import '../panels/grade_clipboard.dart'
+    show canCopyGrade, canPasteGrade, copyGrade, pasteGrade;
 import '../panels/layer_source_menu.dart';
+import '../panels/normalise_commands.dart' show normaliseLayers;
 import '../panels/layer_fold_frb.dart' show RevealFilter, asOneUndoStep;
 import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
@@ -79,7 +82,7 @@ import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart' show newSolidFrb;
-import '../panels/cut_insert.dart' show cutInsertRows;
+import '../panels/cut_insert.dart' show cutInsertRows, insertSolid, insertTitle;
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
@@ -792,20 +795,17 @@ class LumitMenuBarFrb extends StatelessWidget {
         run: () => ui.setSelection([entry.layer]),
       ));
     }
-    // Every effect: Enter applies it to the primary layer, as the Effect menu
-    // does. With no layer selected the rows stay, greyed, and say what they
-    // are waiting for.
-    final layer = ui.selectedLayer.value;
+    // Every effect: Enter applies it to the selected layers, as the Effect
+    // menu does. With no layer selected the rows stay, greyed, and say what
+    // they are waiting for.
+    final layers = ui.selectedLayers.value;
     for (final effect in listEffects()) {
       commands.add(PaletteCommand(
         label: engineLabel(effect.label),
         category: l10n.menuEffect,
         icon: mark(LumitIcon.fx),
-        disabled: layer == null ? l10n.paletteNeedsLayer : null,
-        run: () {
-          if (layer != null) ui.addEffect(layer, effect.name);
-          app.notifyDocumentChanged();
-        },
+        disabled: layers.isEmpty ? l10n.paletteNeedsLayer : null,
+        run: () => addEffectToLayers(app, ui, layers, effect.name),
       ));
     }
     // Every panel: Enter shows it if it was closed, fronts it in its group
@@ -877,7 +877,7 @@ class LumitMenuBarFrb extends StatelessWidget {
     final comp = ui.selectedComp;
 
     void applyEffect(String name) {
-      // The primary layer only, as the Effect menu does.
+      // The primary layer only: the ring is aimed at one layer.
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
       ui.addEffect(layer, name);
@@ -1233,14 +1233,16 @@ List<MenuSection> lumitMenus(
                 l10n.delete,
                 layers.isEmpty
                     ? null
-                    : () {
-                        for (final l in layers) {
-                          l.delete();
-                        }
-                        ui.clearSelection();
-                        app.notifyDocumentChanged();
-                      },
+                    : () => deleteLayersFrb(app, ui, layers),
                 action: 'edit.delete.selection'),
+            MenuEntry.divider(),
+            // The Grade panel's clipboard, so its chords are taught here too.
+            MenuEntry(l10n.gradeCopy,
+                canCopyGrade(ui) ? () => copyGrade(ui) : null,
+                action: 'grade.copy'),
+            MenuEntry(l10n.gradePaste,
+                canPasteGrade(ui) ? () => pasteGrade(app, ui) : null,
+                action: 'grade.paste'),
             MenuEntry.divider(),
             MenuEntry(
                 l10n.menuDuplicate,
@@ -1405,10 +1407,26 @@ List<MenuSection> lumitMenus(
               MenuEntry(l10n.menuSequence,
                   onComp((c) => c.addSequenceLayer(row: row(c))),
                   action: 'layer.new.sequence'),
-              MenuEntry(
-                  l10n.menuAudio,
+              MenuEntry(l10n.menuAudio,
                   onComp((c) => insertEmptyLayer(ui, c, 'layer.new.audio')),
                   action: 'layer.new.audio'),
+              MenuEntry.divider(),
+              // The Cut ground's two, so the title's chord is taught outside
+              // the Cut timeline: five seconds from the playhead.
+              MenuEntry(
+                  l10n.insertTitle,
+                  comp == null
+                      ? null
+                      : () => insertTitle(
+                          context, ui, comp, ui.playheadFrame.value, row(comp)),
+                  action: 'cut.insert.title'),
+              MenuEntry(
+                  l10n.insertSolid,
+                  comp == null
+                      ? null
+                      : () => insertSolid(
+                          context, comp, ui.playheadFrame.value, row(comp),
+                          onDone: app.notifyDocumentChanged)),
             ]),
             // What the layer *is*, as opposed to what it is doing: its name, and a
             // Solid's own size and colour (the shared dialogue pattern).
@@ -1476,6 +1494,26 @@ List<MenuSection> lumitMenus(
                     app.postNotice(l10n.audioStreamsNothingToMerge);
                   }
                 }),
+              ),
+              MenuEntry.divider(),
+              // Every selected layer to the level Settings asks for, as the
+              // Audio timeline's row does. One that makes no sound is left as
+              // it is.
+              MenuEntry(
+                l10n.audioNormalise,
+                comp == null || layers.isEmpty
+                    ? null
+                    : () => normaliseLayers(
+                          app,
+                          comp,
+                          ui.playheadFrame.value,
+                          ui.workspace.normaliseTargetDb,
+                          [
+                            for (final e in selectedEntries(ui))
+                              if (e.info.kind != BridgeLayerKind.bus) e,
+                          ],
+                          then: app.notifyDocumentChanged,
+                        ),
               ),
             ]),
             // The selected layer's Retime. In the menu as well as on the keyboard
@@ -1783,9 +1821,12 @@ List<MenuSection> lumitMenus(
                       ),
                   ]),
             ]),
+            // Escape is the Viewer's own lowest rung, not a chord to teach.
             MenuEntry(l10n.menuSwitchToLast3dView,
                 comp == null ? null : ui.switchToLastView,
-                action: 'viewer.3d.last'),
+                action: ui.keymap.rawChordFor('viewer.3d.last') == 'Escape'
+                    ? null
+                    : 'viewer.3d.last'),
             MenuEntry(l10n.menuBackToActiveCamera,
                 comp == null ? null : ui.backToActiveCamera,
                 action: 'viewer.3d.camera'),
@@ -1909,32 +1950,32 @@ List<MenuSection> lumitMenus(
               ...userWorkspaceRows(context, app, ui),
               MenuEntry.divider(),
               MenuEntry(l10n.menuResetWorkspace, ui.resetLayout),
+              // A chord for the arrangement on screen: the engine's nine
+              // `workspace.switch.N` actions count *slots* on the strip, so
+              // what is bound is the position rather than the name, which is
+              // what the dialogue says, and what makes the key reach the same
+              // place next launch.
+              MenuEntry(l10n.menuAssignWorkspaceShortcut,
+                  assignWorkspaceShortcutAction(context, app, ui)),
             ]),
-            // A chord for the arrangement on screen: the engine's nine
-            // `workspace.switch.N` actions count *slots* on the strip, so what is
-            // bound is the position rather than the name — which is what the
-            // dialogue says, and what makes the key reach the same place next
-            // launch.
-            MenuEntry(l10n.menuAssignWorkspaceShortcut,
-                assignWorkspaceShortcutAction(context, app, ui)),
             MenuEntry.divider(),
             // Every panel, ticked when it is in the arrangement. Toggling one adds
             // or drops its pane and persists the layout, so a panel you closed stays
             // closed across a restart — and the menu stays open while you do it,
             // because turning three panels on is three ticks, not three trips to
-            // the Window menu. Under one row, so the menu fits a short window.
+            // the Window menu. Under one row, so the menu fits a short window,
+            // in the groups the workspaces fall into.
             MenuEntry.submenu(l10n.menuPanels, [
-              for (final panel in Panel.values)
-                // An extension's panel is listed by the extension, below. The
-                // debug panel is listed once Help has switched it on.
-                if (panel != Panel.extension &&
-                    (panel != Panel.debug || panelVisible(ui.split, panel)))
+              for (final (i, group) in _panelGroups(ui).indexed) ...[
+                if (i > 0) MenuEntry.divider(),
+                for (final panel in group)
                   MenuEntry.toggle(
                     panel.title,
                     () => togglePanel(ui, panel),
                     action: panelToggleAction(panel),
                     checked: () => panelVisible(ui.split, panel),
                   ),
+              ],
             ]),
             if (!kIsWeb)
               MenuEntry.submenu(l10n.menuExtensions, [
@@ -2002,9 +2043,38 @@ List<MenuSection> lumitMenus(
   ];
 }
 
+/// Window ▸ Panels in groups: the Edit five, colour, nodes, sound, the Cut
+/// timeline, type, and the rest. An extension's panel is listed by the
+/// extension; the debug panel once Help has switched it on.
+List<List<Panel>> _panelGroups(LumitUiState ui) {
+  const named = [
+    [
+      Panel.project,
+      Panel.viewer,
+      Panel.timeline,
+      Panel.effectControls,
+      Panel.effectsAndPresets,
+    ],
+    [Panel.scopes, Panel.grade],
+    [Panel.graph, Panel.node],
+    [Panel.mixer, Panel.audio, Panel.audioTimeline],
+    [Panel.cutTimeline],
+    [Panel.text, Panel.paragraph],
+  ];
+  final placed = {for (final group in named) ...group, Panel.extension};
+  if (!panelVisible(ui.split, Panel.debug)) placed.add(Panel.debug);
+  return [
+    ...named,
+    [
+      for (final panel in Panel.values)
+        if (!placed.contains(panel)) panel
+    ],
+  ];
+}
+
 /// The Effect menu: one submenu per effect category, each applying its effect
-/// to the primary layer. Disabled outright with nothing selected, since there
-/// is nowhere for an effect to go.
+/// to every selected layer as one undo step. Disabled outright with nothing
+/// selected, since there is nowhere for an effect to go.
 List<MenuEntry> _effectMenu(
         LumitState app, LumitUiState ui, List<LayerReference> layers) =>
     [
@@ -2015,17 +2085,21 @@ List<MenuEntry> _effectMenu(
               engineLabel(effect.label),
               layers.isEmpty
                   ? null
-                  : () {
-                      asOneUndoStep(app.project, () {
-                        for (final layer in layers) {
-                          ui.addEffect(layer, effect.name);
-                        }
-                      });
-                      app.notifyDocumentChanged();
-                    },
+                  : () => addEffectToLayers(app, ui, layers, effect.name),
             ),
         ]),
     ];
+
+/// [name] onto each of [layers], as one undo step.
+void addEffectToLayers(LumitState app, LumitUiState ui,
+    Iterable<LayerReference> layers, String name) {
+  asOneUndoStep(app.project, () {
+    for (final layer in layers) {
+      ui.addEffect(layer, name);
+    }
+  });
+  app.notifyDocumentChanged();
+}
 
 /// The Effect menu as a flyout, for a layer's own right-click menu.
 Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
@@ -2262,8 +2336,9 @@ bool _retimeable(LayerReference? layer) {
 String _retimeLabel(LayerReference? layer) {
   if (layer == null) return l10n.menuEnableRetime;
   try {
+    // Greyed on a Sequence layer, under the row's usual name.
     if (layer.getKind() == BridgeLayerKind.sequence) {
-      return l10n.menuRetimeSequence;
+      return l10n.menuEnableRetime;
     }
     return layer.getRetimeProperty() == null
         ? l10n.menuEnableRetime
@@ -2405,6 +2480,19 @@ void redoFrb(LumitState app) {
     // A project that has just gone: the plain words, greyed.
     return (undo: null, redo: null);
   }
+}
+
+/// Delete every layer in [layers] as one undo step, for the Edit menu and the
+/// Delete key alike.
+void deleteLayersFrb(
+    LumitState app, LumitUiState ui, Iterable<LayerReference> layers) {
+  asOneUndoStep(app.project, () {
+    for (final layer in layers) {
+      layer.delete();
+    }
+  });
+  ui.clearSelection();
+  app.notifyDocumentChanged();
 }
 
 /// Duplicate every layer in [layers]. One function for the Edit menu, the
@@ -3301,75 +3389,67 @@ class _MenuListState extends State<_MenuList> {
     // A tick column only where something in this menu is a toggle, so an
     // ordinary menu is not indented for a mark it never shows.
     final ticks = items.any((i) => i.checked != null);
-    // A long menu on a short window would otherwise run off the bottom, where
-    // the last items cannot be clicked at all — so it scrolls once it no longer
-    // fits. `- 40` leaves the menu bar itself and a margin.
-    final maxHeight =
-        (MediaQuery.of(context).size.height - 40).clamp(80.0, 1e6);
+    // No cap of its own: a list taller than the window scrolls and fades in
+    // the popup that holds it (popups.dart), menu and flyout alike.
     return FloatSurface(
       width: widget.width,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final item in items)
-                if (item.isDivider)
-                  const MenuDivider()
-                else if (item.children case final children?)
-                  SubmenuRow(
-                    key: ValueKey<String>('menu-sub-${item.label}'),
-                    closeParent: close,
-                    submenu: (dismiss) =>
-                        _MenuList(items: children, close: dismiss),
-                    child: _label(t, item, ticks: ticks, shortcut: null),
-                  )
-                else if (item.live case final listenable?)
-                  // Stays open and redraws in place: the point of a live row is
-                  // to watch what pressing it did.
-                  ListenableBuilder(
-                    listenable: listenable,
-                    builder: (context, _) {
-                      final row = item.current;
-                      return MenuRow(
-                        enabled: row.onPressed != null,
-                        onPressed: row.onPressed ?? () {},
-                        child: _label(t, row, ticks: ticks, shortcut: null),
-                      );
-                    },
-                  )
-                else
-                  MenuRow(
-                    key: item.label == null
-                        ? null
-                        : ValueKey<String>('menu-row-${item.label}'),
-                    enabled: item.onPressed != null,
-                    onPressed: item.onPressed == null
-                        ? close
-                        : item.keepsMenuOpen
-                            // A toggle stays put and redraws its own tick.
-                            ? () {
-                                item.onPressed!();
-                                if (mounted) setState(() {});
-                              }
-                            : () {
-                                close();
-                                item.onPressed!();
-                              },
-                    child: _label(
-                      t,
-                      item,
-                      ticks: ticks,
-                      shortcut: item.action == null
-                          ? null
-                          : keymap.chordFor(item.action!),
-                    ),
-                  ),
-            ],
-          ),
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final item in items)
+            if (item.isDivider)
+              const MenuDivider()
+            else if (item.children case final children?)
+              SubmenuRow(
+                key: ValueKey<String>('menu-sub-${item.label}'),
+                closeParent: close,
+                submenu: (dismiss) =>
+                    _MenuList(items: children, close: dismiss),
+                child: _label(t, item, ticks: ticks, shortcut: null),
+              )
+            else if (item.live case final listenable?)
+              // Stays open and redraws in place: the point of a live row is
+              // to watch what pressing it did.
+              ListenableBuilder(
+                listenable: listenable,
+                builder: (context, _) {
+                  final row = item.current;
+                  return MenuRow(
+                    enabled: row.onPressed != null,
+                    onPressed: row.onPressed ?? () {},
+                    child: _label(t, row, ticks: ticks, shortcut: null),
+                  );
+                },
+              )
+            else
+              MenuRow(
+                key: item.label == null
+                    ? null
+                    : ValueKey<String>('menu-row-${item.label}'),
+                enabled: item.onPressed != null,
+                onPressed: item.onPressed == null
+                    ? close
+                    : item.keepsMenuOpen
+                        // A toggle stays put and redraws its own tick.
+                        ? () {
+                            item.onPressed!();
+                            if (mounted) setState(() {});
+                          }
+                        : () {
+                            close();
+                            item.onPressed!();
+                          },
+                child: _label(
+                  t,
+                  item,
+                  ticks: ticks,
+                  shortcut: item.action == null
+                      ? null
+                      : keymap.chordFor(item.action!),
+                ),
+              ),
+        ],
       ),
     );
   }
@@ -3405,9 +3485,14 @@ class _MenuListState extends State<_MenuList> {
         if (shortcut != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(start: 16),
-            child: Text(shortcut,
-                textDirection: TextDirection.ltr,
-                style: t.small.copyWith(color: t.textMuted)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: menuChordWidth),
+              child: Text(shortcut,
+                  textDirection: TextDirection.ltr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.small.copyWith(color: t.textMuted)),
+            ),
           ),
       ],
     );

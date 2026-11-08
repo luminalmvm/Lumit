@@ -974,9 +974,11 @@ MenuEntry blendStepRow(LumitState app, LumitUiState ui, {required int by}) {
 }
 
 /// Layer ▸ Reveal ▸: the single-property reveals the Timeline's letter keys
-/// run, each over every selected layer. Greyed with nothing selected.
+/// run, each over every selected layer. Greyed with nothing selected. At the
+/// foot, the Timeline ground's Expand all and Collapse all.
 List<MenuEntry> revealRows(LumitUiState ui) {
   final ids = ui.selectedLayerIds;
+  final comp = ui.selectedComp;
   return [
     for (final (label, action) in [
       (l10n.transformPosition, 'reveal.position'),
@@ -986,7 +988,7 @@ List<MenuEntry> revealRows(LumitUiState ui) {
       (l10n.transformAnchorPoint, 'reveal.anchor'),
       (l10n.workspaceEffects, 'reveal.effects'),
       (l10n.foldMasks, 'reveal.masks'),
-      (l10n.menuAudio, 'reveal.volume'),
+      (l10n.menuAudio, 'reveal.audio'),
     ])
       MenuEntry(
         label,
@@ -999,6 +1001,15 @@ List<MenuEntry> revealRows(LumitUiState ui) {
               },
         action: action,
       ),
+    MenuEntry.divider(),
+    MenuEntry(
+        l10n.expandAll,
+        comp == null ? null : () => ui.requestFoldAll(expand: true),
+        action: 'timeline.expand.all'),
+    MenuEntry(
+        l10n.collapseAll,
+        comp == null ? null : () => ui.requestFoldAll(expand: false),
+        action: 'timeline.collapse.all'),
   ];
 }
 

@@ -53,7 +53,7 @@ import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'menu_bar_frb.dart'
-    show MenuEntry, showMenuEntries, userWorkspaceRows, workspaceEntryRows;
+    show MenuEntry, showMenuEntries, workspaceEntryRows;
 import 'settings_window_frb.dart' show SettingsPage, showSettingsWindowFrb;
 import 'window_frame.dart';
 
@@ -158,7 +158,7 @@ class LumitToolBarFrb extends StatelessWidget {
     // Named, so a style can dress the toolbar's buttons apart from others.
     return StylePart(name: 'toolbar', child: GestureDetector(
       onSecondaryTapUp: (d) =>
-          showMenuEntries(context, d.globalPosition, _barRows(context, ui)),
+          showMenuEntries(context, d.globalPosition, _barRows(ui)),
       child: Container(
       height: toolBarHeightFor(t.shape),
       decoration: BoxDecoration(
@@ -295,9 +295,9 @@ class LumitTopLineToolsFrb extends StatelessWidget {
 }
 
 /// The bar's own menu, on its empty stretch and on the rail: where the tools
-/// stand, which Settings also has, and a way in for a workspace file. Option
-/// rows, so the positions can be compared without reopening it.
-List<MenuEntry> _barRows(BuildContext context, LumitUiState ui) {
+/// stand, which Settings also has. Option rows, so the positions can be
+/// compared without reopening it.
+List<MenuEntry> _barRows(LumitUiState ui) {
   final settings = ui.workspace.interface;
   return [
     MenuEntry.submenu(l10n.settingsToolBarPosition, [
@@ -315,10 +315,6 @@ List<MenuEntry> _barRows(BuildContext context, LumitUiState ui) {
           checked: () => settings.toolBarPosition == position,
         ),
     ]),
-    MenuEntry.divider(),
-    // Import, the last of the workspace rows: it belongs to no name on the
-    // strip, so it sits on the strip's ground.
-    userWorkspaceRows(context, context.read<LumitState>(), ui).last,
   ];
 }
 
@@ -406,7 +402,7 @@ class LumitToolRailFrb extends StatelessWidget {
     final pills = t.tokens.roomed;
     return GestureDetector(
       onSecondaryTapUp: (d) =>
-          showMenuEntries(context, d.globalPosition, _barRows(context, ui)),
+          showMenuEntries(context, d.globalPosition, _barRows(ui)),
       child: Container(
       width: toolRailWidth,
       decoration: BoxDecoration(

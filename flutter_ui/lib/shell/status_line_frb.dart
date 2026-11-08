@@ -1291,7 +1291,7 @@ class _CacheMeterFrbState extends State<CacheMeterFrb> {
             // Nothing held is nothing to read.
             if (used > 0) ...[
               const SizedBox(width: 3),
-              Text('${_mibText(used)} MB',
+              Text(l10n.cacheMegabytes(_mibText(used)),
                   textDirection: TextDirection.ltr,
                   style: t.small.copyWith(color: t.textMuted)),
             ],
@@ -1316,7 +1316,7 @@ class _Tier {
   double get fraction => budget <= 0 ? 0.0 : (used / budget).clamp(0.0, 1.0);
 
   /// Used of budget, in megabytes.
-  String get words => '${_mibText(used)} / ${_mibText(budget)} MB';
+  String get words => l10n.cacheUsedOfBudget(_mibText(used), _mibText(budget));
 }
 
 /// The tiers in full, over the strip: a bar each with its numbers, and a
@@ -1330,6 +1330,10 @@ class _CacheDetail extends StatefulWidget {
 }
 
 class _CacheDetailState extends State<_CacheDetail> {
+  /// Read as the detail opens and again after a clear, never per build:
+  /// each read takes the engine's lock.
+  late List<_Tier> _tiers = widget.tiers();
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -1340,7 +1344,7 @@ class _CacheDetailState extends State<_CacheDetail> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final tier in widget.tiers())
+          for (final tier in _tiers)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               child: Row(
@@ -1370,7 +1374,9 @@ class _CacheDetailState extends State<_CacheDetail> {
                         ? null
                         : () async {
                             await tier.clear();
-                            if (mounted) setState(() {});
+                            if (mounted) {
+                              setState(() => _tiers = widget.tiers());
+                            }
                           },
                     child: Text(l10n.clear, style: t.small),
                   ),
