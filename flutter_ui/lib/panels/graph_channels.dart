@@ -416,7 +416,7 @@ List<GraphChannel> graphChannels({
               : materials
                   ? entry.info.materials ?? const <BridgeEffectInstanceInfo>[]
               : driver
-                  ? [for (final d in entry.layer.getGraphDrivers()) d.getInfo()]
+                  ? entry.info.drivers
               : styles
                   ? entry.info.styles
                   : entry.info.effects) {
