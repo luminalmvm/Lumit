@@ -8382,17 +8382,9 @@
   "@noEffectsMatch": {
     "description": "Shown in the Effects & presets panel when the search finds nothing."
   },
-  "noEffectsOnClipYet": "No effects on this clip yet",
-  "@noEffectsOnClipYet": {
-    "description": "Empty-state line in the Effect controls panel while one clip of a Sequence layer is picked in the Cut timeline."
-  },
   "effectControlsClip": "Clip",
   "@effectControlsClip": {
     "description": "A small mark beside the name in the Effect controls panel's header: the effects shown belong to one clip, not to the whole track. One word, drawn in capitals."
-  },
-  "noEffectsYet": "No effects on this layer yet",
-  "@noEffectsYet": {
-    "description": "Empty-state line in the Effect controls panel."
   },
   "noMarkersYet": "No markers yet",
   "@noMarkersYet": {
@@ -9026,10 +9018,6 @@
   "tipOpenFolder": "Open folder",
   "@tipOpenFolder": {
     "description": "Hover text on a finished export's path in the bottom strip and on a finished row in the export queue: a click opens the folder the file was written to, in the desktop's own file manager. The same words as the export dialog's Open folder tick. Two words at most."
-  },
-  "removeEffect": "Remove effect",
-  "@removeEffect": {
-    "description": "Context-menu item: delete an effect from the layer."
   },
   "removeExpression": "Remove expression",
   "@removeExpression": {
@@ -10323,10 +10311,6 @@
   "tipResetCurve": "Reset curve",
   "@tipResetCurve": {
     "description": "Tooltip on the reset action above the Curves effect's curve editor. It restores only the channel showing, not the whole effect. One or two words."
-  },
-  "tipCurveGraphSize": "Graph size",
-  "@tipCurveGraphSize": {
-    "description": "Tooltip on the graph-size button above the Curves effect's curve editor, in the Effect controls panel. Pressing it steps the plot through small, medium and large. One or two words."
   },
   "curveGraphSizeSmall": "Small",
   "@curveGraphSizeSmall": {
@@ -18425,6 +18409,90 @@
   "@viewerPictureCut": {
     "description": "Viewer, bottom right in the warning colour: some of this frame was cut, or made smaller, because it was bigger than the Largest picture setting allows. Clicking it opens that setting."
   },
+  "colourPickerWas": "Was",
+  "@colourPickerWas": {
+    "description": "Colour picker: tooltip on the half of the chip showing the colour the picker opened on. Clicking it goes back to that colour."
+  },
+  "colourPickerNow": "Now",
+  "@colourPickerNow": {
+    "description": "Colour picker: tooltip on the half of the chip showing the colour as it stands."
+  },
+  "fxMenuEnabled": "Enabled",
+  "@fxMenuEnabled": {
+    "description": "Effect heading's right-click menu: ticked while the effect is on. Clicking switches it on or off."
+  },
+  "fxMenuMove": "Move",
+  "@fxMenuMove": {
+    "description": "Effect heading's right-click menu: the submenu that moves the effect up, down, to the top or to the bottom of the stack."
+  },
+  "fxMenuManual": "Manual page",
+  "@fxMenuManual": {
+    "description": "Effect heading's right-click menu: opens this effect's page in the online manual."
+  },
+  "fxMenuExpand": "Expand",
+  "@fxMenuExpand": {
+    "description": "Effect controls panel, right-click on a fold's heading: twirl it open."
+  },
+  "fxMenuCollapse": "Collapse",
+  "@fxMenuCollapse": {
+    "description": "Effect controls panel, right-click on a fold's heading: twirl it shut."
+  },
+  "fxMenuExpandAll": "Expand all",
+  "@fxMenuExpandAll": {
+    "description": "Effect controls panel, right-click menus: twirl every effect on the stack open."
+  },
+  "fxMenuCollapseAll": "Collapse all",
+  "@fxMenuCollapseAll": {
+    "description": "Effect controls panel, right-click menus: twirl every effect on the stack shut."
+  },
+  "fxMenuSelectAll": "Select all effects",
+  "@fxMenuSelectAll": {
+    "description": "Effect controls panel, right-click on empty ground: pick every effect on the stack."
+  },
+  "fxMenuKeyStrip": "Keyframe strip",
+  "@fxMenuKeyStrip": {
+    "description": "Effect controls panel, right-click on empty ground: ticked while the keyframe strip beside the rows is shown."
+  },
+  "fxMenuRemoveAll": "Remove all effects",
+  "@fxMenuRemoveAll": {
+    "description": "Effect controls panel, right-click on empty ground: take every effect off the stack, as one undo step."
+  },
+  "expressionEdit": "Edit expression",
+  "@expressionEdit": {
+    "description": "Right-click menu on a row driven by an expression: open its editor."
+  },
+  "paramMenuCopyValue": "Copy value",
+  "@paramMenuCopyValue": {
+    "description": "Right-click menu on a property row's name or stopwatch: put the value shown at the playhead on the clipboard."
+  },
+  "paramMenuPasteValue": "Paste value",
+  "@paramMenuPasteValue": {
+    "description": "Right-click menu on a property row's name or stopwatch: set the value from a number on the clipboard."
+  },
+  "paramMenuRevealInGraph": "Reveal in graph",
+  "@paramMenuRevealInGraph": {
+    "description": "Right-click menu on a property row: pick the property in the Timeline and show its curve in the graph."
+  },
+  "curveAddPoint": "Add point",
+  "@curveAddPoint": {
+    "description": "Right-click on a curve's plot or a gradient's ramp: put a new point where the pointer is."
+  },
+  "curveDeletePoint": "Delete point",
+  "@curveDeletePoint": {
+    "description": "Right-click on a point on a curve's plot: take the point away."
+  },
+  "gradientAddStop": "Add stop",
+  "@gradientAddStop": {
+    "description": "Right-click on a gradient's ramp: put a new colour stop where the pointer is."
+  },
+  "gradientReverse": "Reverse",
+  "@gradientReverse": {
+    "description": "Right-click on a gradient's ramp: run the whole ramp the other way."
+  },
+  "gradientSpaceEvenly": "Space evenly",
+  "@gradientSpaceEvenly": {
+    "description": "Right-click on a gradient's ramp: put the stops between the two ends the same distance apart."
+  },
   "fxFoldCompositing": "Compositing",
   "@fxFoldCompositing": {
     "description": "Effect controls panel: heading of the fold at the foot of every effect that holds its Mix and Matte rows. One word, drawn in capitals by the panel."
@@ -23409,45 +23477,17 @@
   "@easingLiveApply": {
     "description": "Easing panel: tooltip on the toggle that applies the shape to the selected keyframes each time a handle is let go or a number is typed."
   },
+  "easingApplyIn": "Apply in only",
+  "@easingApplyIn": {
+    "description": "Easing panel, right-click on a shape: ease only the way into the selected keys. Shift-click on the shape does the same."
+  },
+  "easingApplyOut": "Apply out only",
+  "@easingApplyOut": {
+    "description": "Easing panel, right-click on a shape: ease only the way out of the selected keys. Ctrl-click on the shape does the same."
+  },
   "easingCopyCss": "Copy as cubic-bezier",
   "@easingCopyCss": {
     "description": "Easing panel: right-click menu row on the curve box that copies its four numbers in the CSS cubic-bezier() form. Keep 'cubic-bezier' as it is."
-  },
-  "easingFamilySine": "Sine",
-  "@easingFamilySine": {
-    "description": "Easing panel library: row label for the sine family of easing shapes."
-  },
-  "easingFamilyQuad": "Quad",
-  "@easingFamilyQuad": {
-    "description": "Easing panel library: row label for the quadratic family of easing shapes."
-  },
-  "easingFamilyCubic": "Cubic",
-  "@easingFamilyCubic": {
-    "description": "Easing panel library: row label for the cubic family of easing shapes."
-  },
-  "easingFamilyQuart": "Quart",
-  "@easingFamilyQuart": {
-    "description": "Easing panel library: row label for the quartic family of easing shapes."
-  },
-  "easingFamilyExpo": "Expo",
-  "@easingFamilyExpo": {
-    "description": "Easing panel library: row label for the exponential family of easing shapes."
-  },
-  "easingFamilyBack": "Back",
-  "@easingFamilyBack": {
-    "description": "Easing panel library: row label for the family of easing shapes that overshoot."
-  },
-  "easingColumnIn": "In",
-  "@easingColumnIn": {
-    "description": "Easing panel library: column heading over each family's slow start shape (the web's easeIn). Very short, it sits over a narrow column."
-  },
-  "easingColumnOut": "Out",
-  "@easingColumnOut": {
-    "description": "Easing panel library: column heading over each family's slow finish shape (the web's easeOut). Very short, it sits over a narrow column."
-  },
-  "easingColumnInOut": "In out",
-  "@easingColumnInOut": {
-    "description": "Easing panel library: column heading over each family's shape that is slow at both ends (the web's easeInOut). Very short, it sits over a narrow column."
   },
   "easingYours": "Yours",
   "@easingYours": {

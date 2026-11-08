@@ -45,7 +45,7 @@ import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
-import 'fx_section.dart';
+import 'fx_section.dart' show FxQuiet, fxStopwatchColumn;
 import 'graph_maths.dart' show keyframeAmong, rowKeysOf;
 
 /// The zone value [editPickedKeys] sets: the picked keys' indices, and
@@ -367,15 +367,16 @@ class KeyframeControlsFrb extends StatelessWidget {
   final String rowKey;
 
   /// Lay the controls out on the Effect controls panel's **fixed columns**:
-  /// the stopwatch in a column of [fxStopwatchColumn], the navigator
-  /// in a slot of [fxKeyNavColumn] that keeps its width whether or not there is
-  /// anything in it. That is what stops a label moving sideways the moment its
-  /// stopwatch is switched on.
+  /// the stopwatch alone in a column of [fxStopwatchColumn], with the row asking
+  /// for its navigator separately ([navigator]), so that switching the stopwatch
+  /// on moves nothing.
   ///
   /// The Timeline's fold-out passes false, the default: its lanes answer to the
-  /// render-switch column group and have no room to reserve a navigator on
-  /// every row.
+  /// render-switch column group, and it draws the two side by side.
   final bool fixedColumns;
+
+  /// Draw only the navigator, for the far end of a fixed-column row.
+  final bool navigatorOnly;
 
   /// What the row shows at a time, when that is not each axis read off its own
   /// curve: an Orientation's angles turn as one. Null for no answer.
@@ -389,8 +390,33 @@ class KeyframeControlsFrb extends StatelessWidget {
     required this.onSeek,
     required this.rowKey,
     this.fixedColumns = false,
+    this.navigatorOnly = false,
     this.valuesAt,
   });
+
+  /// This row's navigator as a widget of its own.
+  KeyframeControlsFrb navigator() => KeyframeControlsFrb(
+        scalars: scalars,
+        onWrite: onWrite,
+        comp: comp,
+        onSeek: onSeek,
+        rowKey: rowKey,
+        fixedColumns: true,
+        navigatorOnly: true,
+        valuesAt: valuesAt,
+      );
+
+  /// Whether the row is keyed at all.
+  bool get animated => _animated;
+
+  /// Whether a key sits on [frame].
+  bool hasKeyAt(int frame) => _keyAt(frame) != null;
+
+  /// Add a key at [frame], or take away the one there.
+  void toggleKeyAt(int frame) => _toggleKeyHere(frame);
+
+  /// Start animating, or stop and keep the value read at [frame].
+  void toggleAnimatedAt(int frame) => _toggleAnimated(frame);
 
   List<BridgeKeyframe> _keysOf(BridgeScalar scalar) => switch (scalar) {
         BridgeScalar_Keyframed(:final field0) => field0,
@@ -508,20 +534,24 @@ class KeyframeControlsFrb extends StatelessWidget {
       );
     }
 
-    // The two reserved columns. The navigator's slot keeps its width while the
-    // property is static, so switching the stopwatch on adds three buttons
-    // without moving the label a pixel.
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(width: fxStopwatchColumn, child: stopwatch),
-        SizedBox(
-          width: fxKeyNavColumn,
-          child: _animated
-              ? Row(mainAxisSize: MainAxisSize.min, children: navigator)
-              : const SizedBox.shrink(),
-        ),
-      ],
+    if (navigatorOnly) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The steps either side come up with the pointer, and the diamond
+          // stays to say whether the playhead is on a key.
+          FxQuiet(child: navigator[0]),
+          navigator[1],
+          FxQuiet(child: navigator[2]),
+        ],
+      );
+    }
+
+    // A stopwatch nothing has been keyed with rests quiet, and comes up with
+    // the pointer. A lit one is a statement about the row, and stays.
+    return SizedBox(
+      width: fxStopwatchColumn,
+      child: _animated ? stopwatch : FxQuiet(rest: 0.3, child: stopwatch),
     );
   }
 

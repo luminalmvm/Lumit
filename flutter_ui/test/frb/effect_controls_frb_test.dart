@@ -16,6 +16,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/fx_section.dart' show FxQuiet;
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show
         effectLabelOf,
@@ -88,7 +89,7 @@ void main() {
       final p = withLayer();
       await mount(tester, p);
 
-      expect(find.textContaining('No effects'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fx-empty-add')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('fx-add')));
       await tester.pumpAndSettle();
@@ -258,13 +259,18 @@ void main() {
       expect(find.byType(DashedOutline), findsOneWidget,
           reason: 'the bypassed heading wears the outline; the live one does '
               'not');
+      // The stopwatch's own quiet is the row's rest, not the bypass.
       expect(
-        find.descendant(
-          of: find.byType(EffectParamRowFrb),
-          matching: find.byWidgetPredicate((w) => w is Opacity && w.opacity < 1,
-              description: 'a dimmed row'),
-        ),
-        findsNothing,
+        find
+            .descendant(
+              of: find.byType(EffectParamRowFrb),
+              matching: find.byWidgetPredicate(
+                  (w) => w is Opacity && w.opacity < 1,
+                  description: 'a dimmed row'),
+            )
+            .evaluate()
+            .where((e) => e.findAncestorWidgetOfExactType<FxQuiet>() == null),
+        isEmpty,
         reason: 'the 40% dim is gone — the outline carries the state',
       );
 
@@ -277,6 +283,9 @@ void main() {
         tester.getCenter(heading(effectLabelOf(second.name()))),
         buttons: kSecondaryButton,
       );
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-menu-move-${second.id()}')));
       await tester.pumpAndSettle();
       await tester
           .tap(find.byKey(ValueKey<String>('fx-menu-up-${second.id()}')));
@@ -663,8 +672,9 @@ void main() {
       await mount(tester, p, transform: false);
 
       final id = p.layer.getEffects().single.id();
-      // The Mix and Matte rows sit under the Compositing fold, shut by default.
-      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
+      // The Mix and Matte rows sit under the Compositing fold, shut by default,
+      // and the heading's button opens it.
+      await tester.tap(find.byKey(ValueKey<String>('fx-show-compositing-$id')));
       await tester.pumpAndSettle();
       final picker = find.byKey(ValueKey<String>('fx-layer-$id-matte'));
       final invert = find.byKey(ValueKey<String>('fx-bool-$id-matte_invert'));
@@ -723,7 +733,7 @@ void main() {
 
       final id = p.layer.getEffects().single.id();
       // Both rows sit under the Compositing fold, shut by default.
-      await tester.tap(find.byKey(ValueKey<String>('fx-compositing-$id')));
+      await tester.tap(find.byKey(ValueKey<String>('fx-show-compositing-$id')));
       await tester.pumpAndSettle();
       final channel =
           find.byKey(ValueKey<String>('fx-choice-$id-matte_channel'));
@@ -1385,6 +1395,9 @@ void main() {
         tester.getCenter(heading(effectLabelOf(stack[2].name()))),
         buttons: kSecondaryButton,
       );
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-menu-move-${stack[2].id()}')));
       await tester.pumpAndSettle();
       await tester
           .tap(find.byKey(ValueKey<String>('fx-menu-top-${stack[2].id()}')));

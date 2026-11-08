@@ -158,6 +158,23 @@ class ValueEditScope extends InheritedWidget {
   bool updateShouldNotify(ValueEditScope old) => false;
 }
 
+/// Rows the property around a value well adds to the well's right-click menu:
+/// [before] after Copy and Paste, and [after] past the well's own Set expression.
+class ValueMenuScope extends InheritedWidget {
+  final List<Widget> Function(BuildContext context, VoidCallback close) before;
+  final List<Widget> Function(BuildContext context, VoidCallback close) after;
+
+  const ValueMenuScope({
+    super.key,
+    required this.before,
+    required this.after,
+    required super.child,
+  });
+
+  @override
+  bool updateShouldNotify(ValueMenuScope old) => false;
+}
+
 /// The **value well** (docs/15-DESIGN.md §2.1/§3.1): drag horizontally
 /// to adjust, click to type, right-click for Reset / Copy / Paste.
 ///
@@ -533,67 +550,90 @@ class _DragValueFieldState extends State<DragValueField>
       ? v.round().toString()
       : v.toDouble().toStringAsFixed(widget.decimals);
 
-  /// The egui drag-value right-click menu: Reset (when a default is known),
-  /// Copy and Paste, over the system clipboard with the field's own clamp.
+  /// Whether the number stands at the default its row declares.
+  bool get _atDefault {
+    final fallback = widget.resetTo;
+    return fallback != null && (widget.value - fallback).abs() < 1e-5;
+  }
+
+  /// The value's right-click menu: Reset where a default is known, Copy and
+  /// Paste over the system clipboard with the field's own clamp, and whatever
+  /// the property around it adds ([ValueMenuScope]).
   void _contextMenu(BuildContext context, Offset globalPos) {
+    final scope = context.getInheritedWidgetOfExactType<ValueMenuScope>();
     showLumitPopup<void>(
       context: context,
       position: globalPos,
-      builder: (close) => FloatSurface(
-        child: IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.resetTo != null)
+      builder: (close) {
+        void done() => close(null);
+        final before = scope?.before(context, done) ?? const <Widget>[];
+        final after = scope?.after(context, done) ?? const <Widget>[];
+        return FloatSurface(
+          child: IntrinsicWidth(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.resetTo != null) ...[
+                  MenuRow(
+                    enabled: !_atDefault,
+                    onPressed: () {
+                      done();
+                      _edit(
+                          true,
+                          () => widget.onChanged(
+                              widget.resetTo!.clamp(widget.min, widget.max)));
+                    },
+                    child: MenuLabel(l10n.reset, enabled: !_atDefault),
+                  ),
+                  const MenuDivider(),
+                ],
                 MenuRow(
                   onPressed: () {
-                    close(null);
-                    _edit(
-                        true,
-                        () => widget.onChanged(
-                            widget.resetTo!.clamp(widget.min, widget.max)));
+                    done();
+                    Clipboard.setData(ClipboardData(text: _plain(widget.value)));
                   },
-                  child: Text(l10n.reset),
+                  child: MenuLabel(l10n.menuCopy),
                 ),
-              MenuRow(
-                onPressed: () {
-                  close(null);
-                  Clipboard.setData(ClipboardData(text: _plain(widget.value)));
-                },
-                child: Text(l10n.menuCopy),
-              ),
-              MenuRow(
-                onPressed: () async {
-                  close(null);
-                  final data = await Clipboard.getData(Clipboard.kTextPlain);
-                  final raw =
-                      data?.text?.replaceAll(widget.suffix ?? '', '').trim();
-                  final parsed = raw == null ? null : parseNumberField(raw);
-                  if (parsed != null && mounted) {
-                    _edit(
-                        true,
-                        () => widget
-                            .onChanged(parsed.clamp(widget.min, widget.max)));
-                  }
-                },
-                child: Text(l10n.menuPaste),
-              ),
-              // Only where the property can actually hold one, so the menu on
-              // a field that cannot never offers it.
-              if (widget.setExpression != null)
                 MenuRow(
-                  onPressed: () {
-                    close(null);
-                    noteSetExpression();
-                    widget.setExpression?.call();
+                  onPressed: () async {
+                    done();
+                    final data = await Clipboard.getData(Clipboard.kTextPlain);
+                    final raw =
+                        data?.text?.replaceAll(widget.suffix ?? '', '').trim();
+                    final parsed = raw == null ? null : parseNumberField(raw);
+                    if (parsed != null && mounted) {
+                      _edit(
+                          true,
+                          () => widget
+                              .onChanged(parsed.clamp(widget.min, widget.max)));
+                    }
                   },
-                  child: Text(l10n.setExpression),
+                  child: MenuLabel(l10n.menuPaste),
                 ),
-            ],
+                if (before.isNotEmpty ||
+                    after.isNotEmpty ||
+                    widget.setExpression != null)
+                  const MenuDivider(),
+                ...before,
+                // Only where the property can actually hold one, so the menu on
+                // a field that cannot never offers it.
+                if (widget.setExpression != null)
+                  MenuRow(
+                    onPressed: () {
+                      done();
+                      noteSetExpression();
+                      widget.setExpression?.call();
+                    },
+                    child: MenuLabel(l10n.setExpression,
+                        action: 'expression.add'),
+                  ),
+                ...after,
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -846,9 +886,10 @@ class _DragValueFieldState extends State<DragValueField>
                       : widget.keyed
                           ? t.animated
                           // A bare number has no well to say "editable", so it
-                          // rests where the drawing puts it — a bar's own
-                          // secondary reading rather than the well's primary.
-                          : widget.bare
+                          // rests where the drawing puts it, a bar's own
+                          // secondary reading. A number at its default does too,
+                          // so one that has been changed stands out down a list.
+                          : widget.bare || _atDefault
                               ? (_hover || _focused
                                   ? t.textPrimary
                                   : t.textSecondary)

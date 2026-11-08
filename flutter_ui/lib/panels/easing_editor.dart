@@ -72,15 +72,6 @@ const _basics = ['easy', 'slowStart', 'slowFinish', 'heavy', 'snap'];
 /// The families, one row each, with their in, out and in out shapes across.
 const _families = ['sine', 'quad', 'cubic', 'quart', 'expo', 'back'];
 
-String _familyName(String id) => switch (id) {
-      'sine' => l10n.easingFamilySine,
-      'quad' => l10n.easingFamilyQuad,
-      'cubic' => l10n.easingFamilyCubic,
-      'quart' => l10n.easingFamilyQuart,
-      'expo' => l10n.easingFamilyExpo,
-      _ => l10n.easingFamilyBack,
-    };
-
 EasingCurve _presetCurve(String id) =>
     easingPresets.firstWhere((p) => p.id == id).curve;
 
@@ -314,12 +305,14 @@ class _EasingEditorState extends State<EasingEditor>
   }
 
   /// The four numbers as CSS writes them, which is what most tools paste.
-  String get _css => 'cubic-bezier(${[
-        _curve.x1,
-        _curve.y1,
-        _curve.x2,
-        _curve.y2
+  String _cssOf(EasingCurve c) => 'cubic-bezier(${[
+        c.x1,
+        c.y1,
+        c.x2,
+        c.y2
       ].map((v) => v.toStringAsFixed(2)).join(', ')})';
+
+  String get _css => _cssOf(_curve);
 
   /// Any four numbers on the clipboard, in CSS or bare.
   Future<void> _paste() async {
@@ -451,18 +444,53 @@ class _EasingEditorState extends State<EasingEditor>
       HouseContextMenu(
         itemBuilder: (close) => [
           MenuRow(
+            enabled: apply != null,
+            onPressed: () {
+              close();
+              apply?.call(_curve, EaseSides.both);
+            },
+            child: MenuLabel(l10n.apply, enabled: apply != null),
+          ),
+          const MenuDivider(),
+          MenuRow(
             onPressed: () {
               close();
               Clipboard.setData(ClipboardData(text: _css));
             },
-            child: Text(l10n.easingCopyCss, style: t.small),
+            child: MenuLabel(l10n.easingCopyCss),
           ),
           MenuRow(
             onPressed: () {
               close();
               _paste();
             },
-            child: Text(l10n.menuPaste, style: t.small),
+            child: MenuLabel(l10n.menuPaste),
+          ),
+          const MenuDivider(),
+          MenuRow(
+            onPressed: () {
+              close();
+              _show(_curve.reversed);
+              _applyIfLive();
+            },
+            child: MenuLabel(l10n.easingReverse),
+          ),
+          MenuRow(
+            onPressed: () {
+              close();
+              _startNaming('');
+            },
+            child: MenuLabel(l10n.easingSaveEllipsis),
+          ),
+          MenuRow(
+            enabled: _curve != easingPresets.first.curve,
+            onPressed: () {
+              close();
+              _show(easingPresets.first.curve);
+              _applyIfLive();
+            },
+            child: MenuLabel(l10n.reset,
+                enabled: _curve != easingPresets.first.curve),
           ),
         ],
         child: MouseRegion(
@@ -677,44 +705,42 @@ class _EasingEditorState extends State<EasingEditor>
       );
 
   /// Each handle's point in the box, to read off or type: x is how far it
-  /// reaches along the time, y how high it lifts.
+  /// reaches along the time, y how high it lifts. The two pairs stand apart,
+  /// and they read in the order the handles do along the curve.
   Widget _numbers(LumitTheme t) {
-    Widget field(String key, double value, double min, double max,
+    Widget field(String key, String tip, double value, double min, double max,
             EasingCurve Function(double v) next) =>
         Expanded(
-          child: DragValueField(
-            key: ValueKey(key),
-            value: value,
-            min: min,
-            max: max,
-            decimals: 2,
-            speed: 0.01,
-            onChanged: (v) {
-              _show(next(v.toDouble()));
-              _applyIfLive();
-            },
+          child: LumitTooltip(
+            message: tip,
+            child: DragValueField(
+              key: ValueKey(key),
+              value: value,
+              min: min,
+              max: max,
+              decimals: 2,
+              speed: 0.01,
+              onChanged: (v) {
+                _show(next(v.toDouble()));
+                _applyIfLive();
+              },
+            ),
           ),
-        );
-    Widget label(String text) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Text(t.kickerCase(text), style: t.kicker),
         );
     final c = _curve;
     const reach = easingHandleReach;
     return Row(
       children: [
-        label(l10n.graphEaseOut),
-        field('easing-x1', c.x1, minTangentReach, 1,
+        field('easing-x1', l10n.graphEaseOut, c.x1, minTangentReach, 1,
             (v) => EasingCurve(v, c.y1, c.x2, c.y2)),
         const SizedBox(width: 2),
-        field('easing-y1', c.y1, -reach, 1 + reach,
+        field('easing-y1', l10n.graphEaseOut, c.y1, -reach, 1 + reach,
             (v) => EasingCurve(c.x1, v, c.x2, c.y2)),
-        const SizedBox(width: _gap),
-        label(l10n.graphEaseIn),
-        field('easing-x2', c.x2, 0, 1 - minTangentReach,
+        const SizedBox(width: _gap + 4),
+        field('easing-x2', l10n.graphEaseIn, c.x2, 0, 1 - minTangentReach,
             (v) => EasingCurve(c.x1, c.y1, v, c.y2)),
         const SizedBox(width: 2),
-        field('easing-y2', c.y2, -reach, 1 + reach,
+        field('easing-y2', l10n.graphEaseIn, c.y2, -reach, 1 + reach,
             (v) => EasingCurve(c.x1, c.y1, c.x2, v)),
       ],
     );
@@ -763,19 +789,11 @@ class _EasingEditorState extends State<EasingEditor>
   }
 
   /// The house shapes along the top, then each family as a row with its in,
-  /// out and in out shapes across.
+  /// out and in out shapes across. The curves say which is which, the columns
+  /// keep to one order, and a tile's name is in its tooltip.
   Widget _builtIn(LumitTheme t, double width) {
-    const labelWidth = 44.0;
-    final cell = (width - labelWidth - 2 * 3) / 3;
-    final thumb = (cell * 0.42).clamp(22.0, 40.0).toDouble();
-    final basic = (width - 4 * 3) / 5;
-    Widget head(String text) => Expanded(
-          child: Text(text,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: t.caption.copyWith(color: t.textMuted)),
-        );
+    final cell = (width - 2 * 3) / 3;
+    final thumb = (cell * 0.34).clamp(22.0, 38.0).toDouble();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -786,37 +804,19 @@ class _EasingEditorState extends State<EasingEditor>
               Expanded(
                 child: _tile(t, 'easing-preset-$id', easingPresetName(id),
                     _presetCurve(id),
-                    height: thumb, caption: basic >= 60),
+                    height: thumb),
               ),
             ],
           ],
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            const SizedBox(width: labelWidth + 3),
-            head(l10n.easingColumnIn),
-            const SizedBox(width: 3),
-            head(l10n.easingColumnOut),
-            const SizedBox(width: 3),
-            head(l10n.easingColumnInOut),
-          ],
-        ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 12),
         for (final family in _families)
           Padding(
             padding: const EdgeInsets.only(bottom: 3),
             child: Row(
               children: [
-                SizedBox(
-                  width: labelWidth,
-                  child: Text(_familyName(family),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: t.small.copyWith(color: t.textSecondary)),
-                ),
                 for (final variant in const ['In', 'Out', 'InOut']) ...[
-                  const SizedBox(width: 3),
+                  if (variant != 'In') const SizedBox(width: 3),
                   Expanded(
                     child: _tile(
                         t,
@@ -833,10 +833,11 @@ class _EasingEditorState extends State<EasingEditor>
     );
   }
 
-  /// The person's own shapes, named, with Rename and Delete on a right-click.
+  /// The person's own shapes, named: a name is all that tells two of them
+  /// apart, as nothing else here is drawn by anyone else.
   Widget _saved(LumitTheme t, double width, List<SavedEasing> saved) {
     final cell = (width - 2 * 3) / 3;
-    final thumb = (cell * 0.42).clamp(22.0, 40.0).toDouble();
+    final thumb = (cell * 0.34).clamp(22.0, 38.0).toDouble();
     return Wrap(
       spacing: 3,
       runSpacing: 3,
@@ -844,33 +845,75 @@ class _EasingEditorState extends State<EasingEditor>
         for (final s in saved)
           SizedBox(
             width: cell,
-            child: HouseContextMenu(
-              itemBuilder: (close) => [
-                MenuRow(
-                  onPressed: () {
-                    close();
-                    _startNaming(s.name);
-                  },
-                  child: Text(l10n.rename, style: t.small),
-                ),
-                MenuRow(
-                  onPressed: () {
-                    close();
-                    setState(() => CustomEasings.delete(s.name));
-                  },
-                  child: Text(l10n.delete, style: t.small),
-                ),
-              ],
-              child: _tile(t, 'easing-saved-${s.name}', s.name, s.curve,
-                  height: thumb, caption: true),
-            ),
+            child: _tile(t, 'easing-saved-${s.name}', s.name, s.curve,
+                height: thumb, caption: true, saved: s.name),
           ),
       ],
     );
   }
 
+  /// A tile's menu: what a click does and its two one-sided forms, then the
+  /// shape as a shape, then what can be done to one of the person's own.
+  List<Widget> _tileRows(
+      String name, EasingCurve curve, String? saved, VoidCallback close) {
+    final apply = widget.onApply;
+    Widget applyRow(String key, String label, EaseSides sides) => MenuRow(
+          key: ValueKey<String>('easing-menu-$key'),
+          enabled: apply != null,
+          onPressed: () {
+            close();
+            _show(curve);
+            apply?.call(curve, sides);
+          },
+          child: MenuLabel(label, enabled: apply != null),
+        );
+    return [
+      applyRow('apply', l10n.apply, EaseSides.both),
+      applyRow('apply-in', l10n.easingApplyIn, EaseSides.into),
+      applyRow('apply-out', l10n.easingApplyOut, EaseSides.outOf),
+      const MenuDivider(),
+      MenuRow(
+        key: const ValueKey('easing-menu-css'),
+        onPressed: () {
+          close();
+          Clipboard.setData(ClipboardData(text: _cssOf(curve)));
+        },
+        child: MenuLabel(l10n.easingCopyCss),
+      ),
+      if (saved == null)
+        MenuRow(
+          key: const ValueKey('easing-menu-save'),
+          onPressed: () {
+            close();
+            _show(curve);
+            _startNaming('');
+          },
+          child: MenuLabel(l10n.easingSaveEllipsis),
+        )
+      else ...[
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('easing-menu-rename'),
+          onPressed: () {
+            close();
+            _startNaming(saved);
+          },
+          child: MenuLabel(l10n.rename),
+        ),
+        MenuRow(
+          key: const ValueKey('easing-menu-delete'),
+          onPressed: () {
+            close();
+            setState(() => CustomEasings.delete(saved));
+          },
+          child: MenuLabel(l10n.delete),
+        ),
+      ],
+    ];
+  }
+
   Widget _tile(LumitTheme t, String key, String name, EasingCurve curve,
-      {required double height, bool caption = false}) {
+      {required double height, bool caption = false, String? saved}) {
     final current = _curve == curve;
     final tile = HouseButton(
       key: ValueKey(key),
@@ -915,6 +958,9 @@ class _EasingEditorState extends State<EasingEditor>
         ],
       ),
     );
-    return caption ? tile : LumitTooltip(message: name, child: tile);
+    return HouseContextMenu(
+      itemBuilder: (close) => _tileRows(name, curve, saved, close),
+      child: caption ? tile : LumitTooltip(message: name, child: tile),
+    );
   }
 }

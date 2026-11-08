@@ -894,6 +894,15 @@ class LumitUiState extends ChangeNotifier {
 
   void requestSelectProperty(String path) => selectPropertyRequest.value = path;
 
+  /// Whether the next [selectPropertyRequest] also puts the graph up.
+  bool selectPropertyShowsGraph = false;
+
+  /// Pick the property row at [path] in the Timeline and show its curve.
+  void requestRevealInGraph(String path) {
+    selectPropertyShowsGraph = true;
+    selectPropertyRequest.value = path;
+  }
+
   /// The id of the shape item `Enter` has asked to rename, for its row to
   /// open its own editor and clear.
   final ValueNotifier<String?> renameItemRequest = ValueNotifier(null);

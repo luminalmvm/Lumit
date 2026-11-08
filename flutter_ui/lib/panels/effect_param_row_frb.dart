@@ -56,6 +56,8 @@ import 'fx_section.dart';
 import 'graph_editor_frb.dart';
 import 'graph_panel.dart' show portColour;
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show effectPath;
+import 'param_row_menu.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 
 /// Where a **logarithmic** slider's thumb sits, and what it is worth there.
@@ -269,6 +271,10 @@ class EffectParamRowFrb extends StatelessWidget {
   /// ran on past it under the columns to its right.
   final bool sliderTrack;
 
+  /// This row's path in the Timeline's selection, where it is not on the
+  /// layer's own stack: a style, a material, a clip's or a group's effect.
+  final String? rowPath;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -297,6 +303,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.driven,
     this.nameGroup,
     this.sliderTrack = true,
+    this.rowPath,
   });
 
   @override
@@ -332,8 +339,9 @@ class EffectParamRowFrb extends StatelessWidget {
     // blend between, so those rows carry no stopwatch at all. **A driven row
     // has none either**: the wire decides its value, so there is no key
     // to add and no neighbour to step to, and the mark takes the column.
+    final fixed = twoColumn && valueColumn == null;
     final keyframes = driven != null
-        ? _drivenMark(t, id)
+        ? _drivenMark(t, id, alone: fixed)
         : scalars == null
             ? null
             : KeyframeControlsFrb(
@@ -345,7 +353,7 @@ class EffectParamRowFrb extends StatelessWidget {
                 rowKey: '$id-${param.id}',
                 // The panel's fixed columns; the Timeline's fold-out takes
                 // the other branch and keeps its narrow gutter.
-                fixedColumns: twoColumn && valueColumn == null,
+                fixedColumns: fixed,
                 onWrite: (next) => _set(next.length == 4
                     ? BridgeEffectValue.colour(BridgeColour(
                         r: next[0], g: next[1], b: next[2], a: next[3]))
@@ -393,10 +401,11 @@ class EffectParamRowFrb extends StatelessWidget {
     // Blend dropdown, never `100` then Blend then `%`. The reset arrow comes
     // last, after everything the row writes.
     // An Angle prints its own degrees, and with no dial its rider would repeat them.
+    final menu = _menu(context, keyframes is KeyframeControlsFrb ? keyframes : null);
     final drawn = _control(context, t, id, value, frame);
     final noRider = param.kind is BridgeParamKind_Angle && !sliderTrack;
     final control = _greyed(_withReset(t, id, _withRiders(t, id,
-        noRider ? drawn : withUnitRider(t, param.unit, drawn))));
+        noRider ? drawn : withUnitRider(t, param.unit, withParamValueMenu(menu, drawn)))));
 
     // **An Action is a button, and a button says its own name**. Drawn
     // in the value column with the name column left empty, rather than as a
@@ -423,6 +432,8 @@ class EffectParamRowFrb extends StatelessWidget {
         keyframeControls: keyframeSlot,
         control: control,
         grows: riders.isNotEmpty,
+        rowEnd: driven == null ? null : _drivenWord(t, id),
+        onContextMenu: (at) => showParamMenu(context, at, menu),
         // The keyframe strip's lane: the same channels and write the
         // stopwatch has, so a key moved there is committed as one added here.
         lane: scalars == null || driven != null
@@ -442,11 +453,24 @@ class EffectParamRowFrb extends StatelessWidget {
       padding: rowPadding,
       child: Row(
         children: [
-          if (keyframeSlot != null) keyframeSlot,
-          const SizedBox(width: 4),
-          // The button keeps the value column, so it lines up with the controls
-          // above and below it, and the name column stays empty.
-          Expanded(child: action ? const SizedBox.shrink() : label),
+          // A right-click on the stopwatch or the name is the row's menu.
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onSecondaryTapUp: action
+                  ? null
+                  : (d) => showParamMenu(context, d.globalPosition, menu),
+              child: Row(
+                children: [
+                  if (keyframeSlot != null) keyframeSlot,
+                  const SizedBox(width: 4),
+                  // The button keeps the value column, so it lines up with the
+                  // controls above and below it, and the name column stays empty.
+                  Expanded(child: action ? const SizedBox.shrink() : label),
+                ],
+              ),
+            ),
+          ),
           if (valueColumn case final col?) ...[
             SizedBox(
               width: col.width,
@@ -497,7 +521,10 @@ class EffectParamRowFrb extends StatelessWidget {
   /// The name is a tooltip rather than a well because the column is 72 pixels
   /// wide and a box's name is whatever the user called it; the mark itself has
   /// to fit on a Timeline lane as well as in a panel.
-  Widget _drivenMark(LumitTheme t, UuidValue id) {
+  ///
+  /// [alone] is the panel's fixed columns, where the column holds the ring and
+  /// the word stands at the far end of the row ([_drivenWord]).
+  Widget _drivenMark(LumitTheme t, UuidValue id, {bool alone = false}) {
     final it = driven!;
     // The wire is honest about its type until it is dry: a source with no
     // stream behind it draws in the warning family, because what this row is
@@ -509,7 +536,7 @@ class EffectParamRowFrb extends StatelessWidget {
       // running under the label — and so the mark is safe in the Timeline's
       // gutter, which hands its children unbounded width.
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: fxKeyColumnWidth),
+        constraints: const BoxConstraints(maxWidth: 72),
         child: Row(
           key: ValueKey<String>('fx-driven-$id-${param.id}'),
           mainAxisSize: MainAxisSize.min,
@@ -522,25 +549,89 @@ class EffectParamRowFrb extends StatelessWidget {
                 border: Border.all(color: colour),
               ),
             ),
-            const SizedBox(width: 4),
-            // The word is the state. A wire whose source has no stream is not
-            // *driven* by anything — it is following a documented no-op — so
-            // the row says which of the two it is in the slot the word already
-            // had, rather than growing a second mark there is no room for.
-            Flexible(
-              child: Text(
-                it.noStream ? l10n.graphNoStream : l10n.graphDriven,
-                key: it.noStream
-                    ? ValueKey<String>('fx-no-stream-$id-${param.id}')
-                    : null,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.kicker.copyWith(letterSpacing: 0.54, color: colour),
-              ),
-            ),
+            if (!alone) ...[
+              const SizedBox(width: 4),
+              Flexible(child: _drivenWord(t, id)),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  /// The word is the state. A wire whose source has no stream is not *driven*
+  /// by anything, it is following a documented no-op, so the row says which of
+  /// the two it is.
+  Widget _drivenWord(LumitTheme t, UuidValue id) {
+    final it = driven!;
+    return Text(
+      it.noStream ? l10n.graphNoStream : l10n.graphDriven,
+      key: it.noStream
+          ? ValueKey<String>('fx-no-stream-$id-${param.id}')
+          : null,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: t.kicker.copyWith(
+          letterSpacing: 0.54,
+          color: it.noStream ? t.warning : portColour(t, it.type)),
+    );
+  }
+
+  /// What this row's right-click menu offers.
+  ParamMenu _menu(BuildContext context, KeyframeControlsFrb? keys) {
+    final fallback = defaultEffectValue(param.kind);
+    final scalars = _animatableScalarsOf(value);
+    final expression = switch (value) {
+      BridgeEffectValue_Float(field0: final BridgeScalar_Expression e) => e,
+      _ => null,
+    };
+    final numeric = scalars != null && expression == null && driven == null;
+    final float = param.kind is! BridgeParamKind_Colour;
+    final playhead =
+        Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    double read(BridgeScalar s) =>
+        sampledScalar(s, timeOfFrame(comp, playhead.value));
+    return ParamMenu(
+      keys: numeric ? keys : null,
+      reset: driven != null || fallback == null
+          ? null
+          : onReset ?? () => _set(fallback),
+      canReset: onReset != null ||
+          fallback == null ||
+          !isDefaultEffectValue(value, fallback, owner: ownerLayerId),
+      copy: numeric ? () => scalars.take(float ? 1 : 3).map(read).join(', ') : null,
+      paste: !numeric
+          ? null
+          : (text) {
+              final n = numbersIn(text);
+              if (n.length < (float ? 1 : 3)) return;
+              final frame = playhead.value;
+              if (float) {
+                _set(BridgeEffectValue.float(
+                    scalarWithValueAt(scalars.first, n[0], comp, frame)));
+                return;
+              }
+              _set(BridgeEffectValue.colour(BridgeColour(
+                r: scalarWithValueAt(scalars[0], n[0], comp, frame),
+                g: scalarWithValueAt(scalars[1], n[1], comp, frame),
+                b: scalarWithValueAt(scalars[2], n[2], comp, frame),
+                a: scalars[3],
+              )));
+            },
+      setExpression: numeric && float && currentLayer != null
+          ? () => _set(BridgeEffectValue.float(BridgeScalar.expression(
+              read(scalars.first).toString(), newExpressionLanguage(context))))
+          : null,
+      removeExpression: expression == null
+          ? null
+          : () => _set(BridgeEffectValue.float(
+              BridgeScalar.static_(sampleScalarWithContext(
+                  scalar: expression,
+                  time: timeOfFrame(comp, playhead.value),
+                  layer: currentLayer!)))),
+      graphPath: scalars == null
+          ? null
+          : rowPath ?? '${effectPath('$ownerLayerId', '$effectId')}/${param.id}',
     );
   }
 
@@ -582,30 +673,42 @@ class EffectParamRowFrb extends StatelessWidget {
     return null;
   }
 
-  /// The row's reset arrow, muted, drawn whatever the value is: pressing it
-  /// writes the parameter's declared default as one op, the cheapest undo a
-  /// row can offer. A kind with no default (an Action) draws none.
+  /// The row's reset arrow, there only while the value differs from what the
+  /// schema declares: pressing it writes that default as one op. A kind with no
+  /// default (an Action) draws none, and a material row, whose default is its
+  /// file's, comes up with the pointer.
+  ///
+  /// Always a row, with the control first, so the arrow arriving in the middle
+  /// of a drag on the number leaves the number's gesture alone.
   Widget _withReset(LumitTheme t, UuidValue id, Widget control) {
     final fallback = defaultEffectValue(param.kind);
-    if (fallback == null) return control;
+    final button = fallback == null
+        ? null
+        : LumitTooltip(
+            message: l10n.tipResetParameter,
+            child: HouseButton(
+              key: ValueKey<String>('fx-reset-$id-${param.id}'),
+              frameless: true,
+              small: true,
+              padding: const EdgeInsets.all(1),
+              onPressed: onReset ?? () => _set(fallback),
+              // A step under the row's other glyphs: the arrow rides beside a
+              // 10px unit rider and is an undo, not a control.
+              child: LumitIcon(LumitIcons.reset, size: 12, colour: t.textMuted),
+            ),
+          );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(child: control),
-        const SizedBox(width: 2),
-        LumitTooltip(
-          message: l10n.tipResetParameter,
-          child: HouseButton(
-            key: ValueKey<String>('fx-reset-$id-${param.id}'),
-            frameless: true,
-            small: true,
-            padding: const EdgeInsets.all(1),
-            onPressed: onReset ?? () => _set(fallback),
-            // A step under the row's other glyphs: the arrow rides beside a
-            // 10px unit rider and is an undo, not a control.
-            child: LumitIcon(LumitIcons.reset, size: 12, colour: t.textMuted),
-          ),
-        ),
+        if (button != null && onReset != null) ...[
+          const SizedBox(width: 2),
+          FxQuiet(child: button),
+        ] else if (button != null &&
+            !isDefaultEffectValue(value, fallback!, owner: ownerLayerId)) ...[
+          const SizedBox(width: 2),
+          button,
+        ],
       ],
     );
   }
@@ -2282,12 +2385,43 @@ class EffectPointRowFrb extends StatelessWidget {
       ],
     );
 
+    final playhead =
+        Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    double read(BridgeScalar s) =>
+        sampledScalar(s, timeOfFrame(comp, playhead.value));
+    final fallbacks = (
+      defaultEffectValue(xParam.kind),
+      defaultEffectValue(yParam.kind),
+    );
+    final menu = ParamMenu(
+      keys: keyframes is KeyframeControlsFrb ? keyframes : null,
+      reset: fallbacks.$1 == null || fallbacks.$2 == null
+          ? null
+          : () => writeBoth(fallbacks.$1!, fallbacks.$2!),
+      canReset: fallbacks.$1 == null ||
+          fallbacks.$2 == null ||
+          !isDefaultEffectValue(xValue, fallbacks.$1!) ||
+          !isDefaultEffectValue(yValue, fallbacks.$2!),
+      copy: sx == null || sy == null ? null : () => '${read(sx)}, ${read(sy)}',
+      paste: sx == null || sy == null
+          ? null
+          : (text) {
+              final n = numbersIn(text);
+              if (n.length < 2) return;
+              final at = playhead.value;
+              writeBoth(
+                BridgeEffectValue.float(scalarWithValueAt(sx, n[0], comp, at)),
+                BridgeEffectValue.float(scalarWithValueAt(sy, n[1], comp, at)),
+              );
+            },
+    );
     if (twoColumn) {
       return fxTwoColumnRow(
         context: context,
         name: label,
         keyframeControls: keyframes == null ? null : greyed(keyframes),
         control: greyed(control),
+        onContextMenu: (at) => showParamMenu(context, at, menu),
         lane: sx == null || sy == null
             ? null
             : FxKeyLane(
@@ -2801,6 +2935,44 @@ BridgeEffectValue? defaultEffectValue(BridgeParamKind kind) => switch (kind) {
       // fields.
       BridgeParamKind_Curve() => curveValue(curveIdentity),
     };
+
+/// Whether [value] is what [fallback] declares, to the precision a number field
+/// shows. A keyed or expression value never is.
+///
+/// A seed always is: each new instance draws its own, so there is no one number
+/// to be away from. A layer row may start on [owner], the layer the effect
+/// landed on, which is how the engine points a `self_default` row.
+bool isDefaultEffectValue(BridgeEffectValue? value, BridgeEffectValue fallback,
+    {UuidValue? owner}) {
+  switch (value) {
+    case BridgeEffectValue_Seed():
+      return true;
+    case BridgeEffectValue_File(:final field0):
+      return field0.paths.isEmpty;
+    case BridgeEffectValue_Layer(:final field0):
+      return field0 == null || field0 == owner;
+    default:
+  }
+  if ((value, fallback)
+      case (
+        BridgeEffectValue_Float(field0: BridgeScalar_Static(:final field0)),
+        BridgeEffectValue_Float(
+          field0: BridgeScalar_Static(field0: final declared)
+        )
+      )) {
+    return (field0 - declared).abs() < 1e-5;
+  }
+  if ((value, fallback)
+      case (
+        BridgeEffectValue_Colour(field0: final a),
+        BridgeEffectValue_Colour(field0: final b)
+      )) {
+    bool same(BridgeScalar x, BridgeScalar y) => isDefaultEffectValue(
+        BridgeEffectValue.float(x), BridgeEffectValue.float(y));
+    return same(a.r, b.r) && same(a.g, b.g) && same(a.b, b.b) && same(a.a, b.a);
+  }
+  return value == fallback;
+}
 
 /// A curve value's points as plain `[x, y]` pairs, straightened only as far as
 /// the editor needs: the diagonal stands in for anything with fewer than two
@@ -3567,21 +3739,30 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
         return [
           MenuRow(
             onPressed: () {
+              close();
+              _edit();
+            },
+            child: MenuLabel(l10n.expressionEdit,
+                ticked: false),
+          ),
+          MenuRow(
+            onPressed: () {
               widget.set(BridgeEffectValue.float(BridgeScalar_Static(_value)));
               close();
             },
-            child: Text(l10n.removeExpression),
+            child: MenuLabel(l10n.removeExpression, ticked: false),
           ),
+          const MenuDivider(),
           // A row has no room for a dropdown, so the language is two
-          // lines of its menu with the current one marked.
+          // lines of its menu with the current one ticked.
           for (final language in expressionLanguages)
             MenuRow(
-              selected: language == _language,
               onPressed: () {
                 _setLanguage(language);
                 close();
               },
-              child: Text(expressionLanguageLabel(language)),
+              child: MenuLabel(expressionLanguageLabel(language),
+                  ticked: language == _language),
             ),
         ];
       },

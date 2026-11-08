@@ -161,7 +161,11 @@ class TimingsCell extends StatelessWidget {
   final String? layerId;
   final String? effectId;
 
-  const TimingsCell({super.key, this.layerId, this.effectId});
+  /// Say nothing rather than a dash when the last frame has no figure for it.
+  final bool blankWhenNone;
+
+  const TimingsCell(
+      {super.key, this.layerId, this.effectId, this.blankWhenNone = false});
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +186,7 @@ class TimingsCell extends StatelessWidget {
         // (in the Timeline) no column: an indicator nobody has asked for should
         // take no space and say nothing, which is also what makes the Effect
         // controls heading read as it did before this existed.
-        if (!on) return const SizedBox.shrink();
+        if (!on || (blankWhenNone && ms == null)) return const SizedBox.shrink();
         final cell = Align(
           alignment: Alignment.centerRight,
           child: Padding(

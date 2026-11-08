@@ -1,20 +1,15 @@
 // The shape of one section in the Effect controls panel: a heading that twirls,
 // and property rows under it laid out in two columns.
 //
-// **In plain terms.** The panel used to draw each effect as a separate bordered
-// box, which made the stack read as a pile of unrelated cards. It is really one
-// list — the same list the Timeline twirls open under a layer — so it is drawn
-// as one now: a heading bar per section, a hairline under every row, names down
-// the left and their controls down the right. The columns are not divided by
-// anything visible; they line up because every row starts them at the same x:
-// the stopwatch, then a keyframe-navigation slot that is reserved even
-// when the property is not animated, then the label, then the control.
+// **In plain terms.** One list, the same list the Timeline twirls open under a
+// layer: a heading bar per section, a hairline under every row, names down the
+// left and their controls down the right. The columns are not divided by
+// anything visible. They line up because every row starts them at the same x:
+// the stopwatch, then the label, then the control.
 //
-// **The heading row.** Left column: the section's own enable switch where it
-// has one, the twirl, the name as a kicker. Right column, aligned with the
-// values below it: the section's actions — Reset for an effect, and what the
-// effect cost in the last measured frame. Hard against the right edge: the
-// close mark, kept apart from the actions because removing is not an adjustment.
+// **The heading row.** The section's own enable switch where it has one, the
+// twirl and the name, then whatever it has to say at the far end. What acts on
+// the section comes up there under the pointer, and the rest is in its menu.
 //
 // **Round mode keeps its bubble**. Sharp draws the section edge to edge
 // with hairlines, which is the After Effects reading; round wraps the same rows
@@ -33,51 +28,110 @@ import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/dashed_outline.dart';
 import 'fx_key_strip.dart';
-import 'keyframe_controls_frb.dart' show editPickedKeys;
+import 'keyframe_controls_frb.dart' show KeyframeControlsFrb, editPickedKeys;
 
-/// **The fixed column edges** (docs/15 §12A.3). Every row in the panel
-/// lays out on the same four x positions: the stopwatch, then a keyframe-
-/// navigation slot that stays empty until the property is animated, then the
-/// label, then the control. The label therefore never moves when a stopwatch is
-/// switched on — which is exactly what it used to do, because the navigator
-/// appeared *inside* the label's own space and shoved it right.
+/// **The fixed column edges** (docs/15 §12A.3). Every row in the panel starts
+/// on the same three x positions: the stopwatch, then the label, then the
+/// control. A keyed row's navigator stands at the far end of the row, past the
+/// control, so switching a stopwatch on moves nothing.
 ///
-/// The widths come from what the controls need rather than from a mockup's
-/// pixels: a glyph is 16px on its 16-unit grid (§5) and a [HouseButton] insets
-/// its child by the 1px edge it always reserves, so one icon button measures
-/// 18 — the stopwatch column, and 54 for the three the navigator holds.
+/// A glyph is 16px on its 16-unit grid (§5) and a [HouseButton] insets its child
+/// by the 1px edge it always reserves, so one icon button measures 18.
 const double fxStopwatchColumn = 18;
 
-/// The reserved keyframe-navigation slot: previous key, add-or-remove key, next
-/// key — three 16px glyphs in their 18px buttons, drawn only while the property
-/// is animated and holding their ground when it is not.
-const double fxKeyNavColumn = 54;
+/// What every row reserves before its label.
+const double fxKeyColumnWidth = fxStopwatchColumn;
 
-/// The stopwatch and navigation columns together — what every row reserves
-/// before its label, animated or not.
-const double fxKeyColumnWidth = fxStopwatchColumn + fxKeyNavColumn;
+/// The label column on a row with room to spare, wide enough that the longest
+/// names in the catalogue read whole. Longer ones ellipsise rather than pushing
+/// the control column, which is the point of it being fixed.
+const double fxLabelColumnWidth = 142;
 
-/// How wide the label column is. Long parameter names ellipsise rather than
-/// pushing the control column, which is the point of it being fixed.
-const double fxLabelColumnWidth = 88;
-
-/// How wide the whole name side is — the keyframe columns, the gap, and the
-/// label — so the controls stack into one column down the panel.
+/// How wide the whole name side is, so the controls stack into one column down
+/// the panel.
 const double fxNameColumnWidth = fxKeyColumnWidth + 4 + fxLabelColumnWidth;
 
 /// The room the control column keeps before the label starts taking the
-/// panel's extra width: what a 480 px panel gave it before the name column
-/// could grow, which every row's riders fit on one line.
-const double fxControlColumnWidth = 300;
+/// panel's extra width.
+const double fxControlColumnWidth = 172;
 
-/// How wide the label column is on a row [width] wide. The fixed
-/// [fxLabelColumnWidth] until the control column has its room, then the rest
-/// of the row, so a long name shows once the panel is dragged wide enough.
+/// How wide the label column is on a row [width] wide: what is left once the
+/// control column has its room, between a floor that still reads a short name
+/// and a ceiling that keeps a value within reach of its name in a wide panel.
 double fxLabelWidthFor(double width) {
   if (!width.isFinite) return fxLabelColumnWidth;
-  final spare =
-      width - fxKeyColumnWidth - 4 - fxLabelColumnWidth - fxControlColumnWidth;
-  return fxLabelColumnWidth + (spare > 0 ? spare : 0);
+  return (width - fxKeyColumnWidth - 10 - fxControlColumnWidth)
+      .clamp(88.0, 200.0);
+}
+
+/// Says whether the pointer is over the row around it, for the marks that stay
+/// quiet until then. A listenable, so a row lighting up repaints those marks and
+/// nothing else on it.
+class FxRowHover extends InheritedWidget {
+  final ValueListenable<bool> over;
+  const FxRowHover({super.key, required this.over, required super.child});
+
+  @override
+  bool updateShouldNotify(FxRowHover old) => old.over != over;
+}
+
+/// The pointer's place on one row, handed down through [FxRowHover].
+class FxRowHoverRegion extends StatefulWidget {
+  final Widget child;
+  const FxRowHoverRegion({super.key, required this.child});
+
+  @override
+  State<FxRowHoverRegion> createState() => _FxRowHoverRegionState();
+}
+
+class _FxRowHoverRegionState extends State<FxRowHoverRegion> {
+  final ValueNotifier<bool> _over = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _over.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        onEnter: (_) => _over.value = true,
+        onExit: (_) => _over.value = false,
+        child: FxRowHover(over: _over, child: widget.child),
+      );
+}
+
+/// A mark that rests at [rest] and comes up at once when the pointer is on its
+/// row, or the keyboard is on the mark. It stays in place and answers the
+/// pointer at rest, so nothing moves as it comes and goes.
+class FxQuiet extends StatefulWidget {
+  final Widget child;
+  final double rest;
+  const FxQuiet({super.key, required this.child, this.rest = 0});
+
+  @override
+  State<FxQuiet> createState() => _FxQuietState();
+}
+
+class _FxQuietState extends State<FxQuiet> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final over = context.dependOnInheritedWidgetOfExactType<FxRowHover>()?.over;
+    if (over == null) return widget.child;
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (on) => setState(() => _focused = on),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: over,
+        child: widget.child,
+        builder: (context, lit, child) =>
+            Opacity(opacity: lit || _focused ? 1 : widget.rest, child: child),
+      ),
+    );
+  }
 }
 
 /// The width the **Timeline's** fold-out leaves for a stopwatch on a row that
@@ -302,11 +356,17 @@ class FxSection extends StatelessWidget {
   final bool open;
   final VoidCallback onToggle;
 
-  /// Actions in the value column, aligned with the controls below — Reset.
+  /// What stands in the value column at all times, aligned with the controls
+  /// below: a solved camera's link badge, a plug-in's own page.
   final List<Widget> actions;
 
-  /// Hard right — the close mark.
-  final Widget? trailing;
+  /// Hard right, in the place [hoverActions] come up: what the section has to
+  /// say while the pointer is elsewhere, an effect's cost in the last frame.
+  final Widget? status;
+
+  /// What acts on the section, hard right, up while the pointer is on the
+  /// heading: Reset, the close mark. Each is in the heading's menu as well.
+  final List<Widget> hoverActions;
 
   /// A right-click on the heading, with the pointer's global position — where
   /// the actions that are not worth a permanent button live (an effect's
@@ -399,7 +459,8 @@ class FxSection extends StatelessWidget {
     required this.rows,
     this.leading,
     this.actions = const [],
-    this.trailing,
+    this.status,
+    this.hoverActions = const [],
     this.onContextMenu,
     this.onSelect,
     this.pick,
@@ -545,69 +606,82 @@ class FxSection extends StatelessWidget {
   Widget _heading(LumitTheme t) {
     // Built once, above the fill and passed through it: recolouring a heading
     // that has just been picked must not rebuild what is inside it.
-    final content = Row(
+    final names = Row(
       children: [
-        SizedBox(
-          width: fxNameColumnWidth,
-          child: Row(
-            children: [
-              // Enable switch, twirl, name — the order the redesign's heading
-              // reads in: what the effect *is doing* before what the heading
-              // does to the list under it. The switch sits centred in the
-              // stopwatch column so the two glyphs share an axis down the
-              // panel.
-              if (leading case final widget?) ...[
-                SizedBox(
-                  width: fxStopwatchColumn,
-                  child: Center(child: widget),
-                ),
-                const SizedBox(width: 4),
-              ],
-              GestureDetector(
-                key: twirlKey,
-                behavior: HitTestBehavior.opaque,
-                onTap: onToggle,
-                child: HoverMark(
-                  builder: (context, lit) => Padding(
-                    // Room to aim at, now that it is the only way in.
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: TwirlTurn(
-                      open: open,
-                      child: lumitIcon(
-                        open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                        size: iconSize,
-                        color: open
-                            ? t.textPrimary
-                            : Color.lerp(t.textMuted, t.textPrimary, lit)!,
-                      ),
-                    ),
-                  ),
+        // Enable switch, twirl, name: what the effect *is doing* before what
+        // the heading does to the list under it. The switch sits centred in
+        // the stopwatch column so the two glyphs share an axis down the panel.
+        if (leading case final widget?) ...[
+          SizedBox(
+            width: fxStopwatchColumn,
+            child: Center(child: widget),
+          ),
+          const SizedBox(width: 4),
+        ],
+        GestureDetector(
+          key: twirlKey,
+          behavior: HitTestBehavior.opaque,
+          onTap: onToggle,
+          child: HoverMark(
+            builder: (context, lit) => Padding(
+              // Room to aim at, now that it is the only way in.
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: TwirlTurn(
+                open: open,
+                child: lumitIcon(
+                  open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                  size: iconSize,
+                  color: open
+                      ? t.textPrimary
+                      : Color.lerp(t.textMuted, t.textPrimary, lit)!,
                 ),
               ),
-              const SizedBox(width: 2),
-              Expanded(
-                // **The section's name is a kicker** (§7.1): every container
-                // label is, and a properties section header is one. The
-                // capitals are the style rather than the string, so a renamed
-                // effect keeps whatever the owner typed.
-                child: renaming && onRenamed != null
-                    ? _RenameField(
-                        initial: title,
-                        onDone: onRenamed!,
-                        onCancel: onRenameCancelled ?? () {},
-                      )
-                    : Text(t.kickerCase(title),
-                        // Bypassed, the name drops to muted with the fill.
-                        style: enabled ? t.kickerOn : t.kicker,
-                        overflow: TextOverflow.ellipsis),
-              ),
-            ],
+            ),
           ),
         ),
+        const SizedBox(width: 2),
         Expanded(
-          child: Row(children: actions),
+          // **The section's name is a kicker** (§7.1): every container label
+          // is, and a properties section header is one. The capitals are the
+          // style rather than the string, so a renamed effect keeps what was
+          // typed.
+          child: renaming && onRenamed != null
+              ? _RenameField(
+                  initial: title,
+                  onDone: onRenamed!,
+                  onCancel: onRenameCancelled ?? () {},
+                )
+              : Text(t.kickerCase(title),
+                  // Bypassed, the name drops to muted with the fill.
+                  style: enabled ? t.kickerOn : t.kicker,
+                  overflow: TextOverflow.ellipsis),
         ),
-        if (trailing case final widget?) widget,
+      ],
+    );
+    final content = Row(
+      children: [
+        if (actions.isEmpty)
+          Expanded(child: names)
+        else ...[
+          SizedBox(width: fxNameColumnWidth, child: names),
+          Expanded(child: Row(children: actions)),
+        ],
+        // The status and the actions share one place, and swap at once: the
+        // name keeps its room, and nothing beside them moves.
+        if (status != null || hoverActions.isNotEmpty)
+          Stack(
+            alignment: AlignmentDirectional.centerEnd,
+            children: [
+              if (hoverActions.isNotEmpty)
+                FxQuiet(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: hoverActions,
+                  ),
+                ),
+              if (status case final widget?) _FxRestOnly(child: widget),
+            ],
+          ),
         // The keyframe strip's column, kept on the heading too so the close
         // mark stands clear of it. Shut, it carries the section's keys.
         Builder(
@@ -637,13 +711,15 @@ class FxSection extends StatelessWidget {
           : (details) => onContextMenu!(details.globalPosition),
       // The heading lifts a step under the pointer: it is the thing to press
       // to pick the effect, and looked like a title.
-      child: HoverMark(
-        builder: (context, hover) => picked == null
-            ? _headingBox(t, false, content, hover)
-            : _FxPickedFill(
-                pick: picked,
-                box: (lit) => _headingBox(t, lit, content, hover),
-              ),
+      child: FxRowHoverRegion(
+        child: HoverMark(
+          builder: (context, hover) => picked == null
+              ? _headingBox(t, false, content, hover)
+              : _FxPickedFill(
+                  pick: picked,
+                  box: (lit) => _headingBox(t, lit, content, hover),
+                ),
+        ),
       ),
     );
   }
@@ -666,6 +742,25 @@ class FxSection extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
         child: content,
       );
+}
+
+/// A reading that gives its place to the actions under the pointer.
+class _FxRestOnly extends StatelessWidget {
+  final Widget child;
+  const _FxRestOnly({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final over = context.dependOnInheritedWidgetOfExactType<FxRowHover>()?.over;
+    final reading = IgnorePointer(child: child);
+    if (over == null) return reading;
+    return ValueListenableBuilder<bool>(
+      valueListenable: over,
+      child: reading,
+      builder: (context, lit, child) =>
+          Opacity(opacity: lit ? 0 : 1, child: child),
+    );
+  }
 }
 
 /// The heading's fill, and the only thing a pick redraws.
@@ -767,13 +862,13 @@ class _RenameFieldState extends State<_RenameField> {
       );
 }
 
-/// One property row on the panel's fixed columns: the keyframe slot,
-/// the [name], and the [control], each starting at the same x on every row.
+/// One property row on the panel's fixed columns: the stopwatch, the [name],
+/// and the [control], each starting at the same x on every row.
 ///
 /// [keyframeControls] sits in a slot of [fxKeyColumnWidth] whose space is
 /// reserved even when there are none, so a row that cannot animate lines up
-/// with one that can — and a row whose stopwatch has just been switched on does
-/// not shuffle its own label sideways.
+/// with one that can. A keyed row's navigator takes the far end of the row, past
+/// the control, so nothing on it moves when its stopwatch is switched on.
 ///
 /// [name] is a widget rather than a string because a name is not only text: it
 /// is the row's handle for the graph editor (docs/07 §4.3) — tappable, tinted to
@@ -788,6 +883,8 @@ class _RenameFieldState extends State<_RenameField> {
 /// column every row reserves at its right edge while the strip is shown. A
 /// row with nothing to key leaves the column empty, so the rows above and
 /// below still line up on it.
+///
+/// [rowEnd] stands where a navigator would, on a row with none.
 Widget fxTwoColumnRow({
   required BuildContext context,
   required Widget name,
@@ -795,6 +892,8 @@ Widget fxTwoColumnRow({
   required Widget control,
   bool grows = false,
   Widget? lane,
+  Widget? rowEnd,
+  void Function(Offset at)? onContextMenu,
 }) {
   final height = fxRowHeight(ThemeScope.of(context).theme);
   final strip = FxKeyStripScope.widthOf(context);
@@ -809,6 +908,10 @@ Widget fxTwoColumnRow({
       child: control,
     );
   }
+  final keys = keyframeControls;
+  final end = keys is KeyframeControlsFrb && keys.animated
+      ? keys.navigator()
+      : rowEnd;
   final row = ConstrainedBox(
     constraints: grows
         ? BoxConstraints(minHeight: height)
@@ -839,6 +942,7 @@ Widget fxTwoColumnRow({
                         child: control),
                   ),
                 ),
+                if (end != null) end,
               ],
             ),
           ),
@@ -847,11 +951,22 @@ Widget fxTwoColumnRow({
       ],
     ),
   );
-  if (under == null) return row;
+  // The whole row answers a right-click, and a control with a menu of its own
+  // keeps it: the deeper one takes the press.
+  final hovered = FxRowHoverRegion(
+    child: onContextMenu == null
+        ? row
+        : GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onSecondaryTapUp: (d) => onContextMenu(d.globalPosition),
+            child: row,
+          ),
+  );
+  if (under == null) return hovered;
   return Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [row, under],
+    children: [hovered, under],
   );
 }
 
@@ -880,12 +995,15 @@ Widget fxGroupHeaderRow(
   required VoidCallback onToggle,
   String? summary,
   Key? key,
+  void Function(Offset at)? onContextMenu,
 }) {
   final t = ThemeScope.of(context).theme;
   return GestureDetector(
     key: key,
     behavior: HitTestBehavior.opaque,
     onTap: onToggle,
+    onSecondaryTapUp:
+        onContextMenu == null ? null : (d) => onContextMenu(d.globalPosition),
     child: HoverMark(builder: (context, lit) {
       // Shut, the name and the twirl light towards how they read open.
       final ink = open
@@ -932,6 +1050,8 @@ Widget fxGroupHeaderRow(
                 SizedBox(
                     width: fxLabelWidthFor(constraints.maxWidth),
                     child: name),
+                // On the same edge as the controls in the rows around it.
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     summary,

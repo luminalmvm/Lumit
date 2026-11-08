@@ -643,12 +643,11 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
           ),
         ),
         const SizedBox(height: 8),
-        // Preview: was / now, then the hex field.
+        // What it was beside what it is now, then the hex field. Clicking the
+        // old half goes back to it.
         Row(
           children: [
-            _previewSwatch(t, widget.initial, 'was'),
-            const SizedBox(width: 4),
-            _previewSwatch(t, _colour, 'now'),
+            _beforeAndAfter(t),
             const Spacer(),
             _hexField(t),
           ],
@@ -755,23 +754,39 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
     );
   }
 
-  Widget _previewSwatch(LumitTheme t, PickedColour colour, String label) =>
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 18,
-            decoration: BoxDecoration(
-              color: colour.clipped,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: t.hairlineStrong),
+  Widget _beforeAndAfter(LumitTheme t) => Container(
+        key: const Key('colour-picker-before-after'),
+        height: 18,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          border: Border.all(color: t.hairlineStrong),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LumitTooltip(
+              message: l10n.colourPickerWas,
+              child: GestureDetector(
+                key: const Key('colour-picker-was'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _setColour(widget.initial, settled: true),
+                child: SizedBox(
+                  width: 28,
+                  child: ColoredBox(color: widget.initial.clipped),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(label, style: t.small),
-        ],
+            LumitTooltip(
+              message: l10n.colourPickerNow,
+              child: SizedBox(
+                width: 28,
+                child: ColoredBox(color: _colour.clipped),
+              ),
+            ),
+          ],
+        ),
       );
 
   Widget _hexField(LumitTheme t) => Row(

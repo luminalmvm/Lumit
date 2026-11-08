@@ -1459,6 +1459,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final path = _ui?.selectPropertyRequest.value;
     if (path == null) return;
     _ui!.selectPropertyRequest.value = null;
+    if (_ui!.selectPropertyShowsGraph) {
+      _ui!.selectPropertyShowsGraph = false;
+      if (!_graph) _setMode(TimelineMode.graph);
+    }
     if (_selectedProperties.length == 1 && _selectedProperties.first == path) {
       return;
     }

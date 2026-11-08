@@ -41,8 +41,9 @@ import 'graph_editor_frb.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show transformGroupPath;
 import 'light_rows_frb.dart';
-import 'timeline_extras_frb.dart' show showMenuAt;
+import 'param_row_menu.dart';
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
 /// up down the card, which is what makes a stack of numbers readable.
@@ -816,14 +817,12 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     // axis menu — on the name rather than the whole row, for the reason
     // the left click is on the name: grabbing a value box must never be a
     // gesture about the property's shape.
+    final menu = _menu(group, keyframes);
     Widget name(double lit) => GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onLabelTap,
-      onSecondaryTapUp: group.pair != null
-          ? (details) => _axisMenu(context, details.globalPosition, group)
-          : _turnsIn3d(group)
-              ? (details) => _orderMenu(context, details.globalPosition)
-              : null,
+      onSecondaryTapUp: (details) =>
+          showParamMenu(context, details.globalPosition, menu),
       child: Row(
         children: [
           ...flatGroupPrefix(t, widget.nameGroup),
@@ -868,6 +867,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         context: context,
         name: label,
         keyframeControls: keyframes,
+        onContextMenu: (at) => showParamMenu(context, at, menu),
         lane: FxKeyLane(
           rowKey: keyframes.rowKey,
           scalars: keyframes.scalars,
@@ -880,7 +880,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               if (i > 0) const SizedBox(width: 6),
               // Flexible so an expression's field gives way in a narrow
               // panel; a fixed-width value box ignores the loose constraint.
-              Flexible(child: _cell(transform, cells[i], frame, group: group)),
+              Flexible(
+                  child: withParamValueMenu(
+                      menu, _cell(transform, cells[i], frame, group: group),
+                      withReset: true)),
             ],
           ],
         ),
@@ -904,8 +907,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                   for (var i = 0; i < cells.length; i++) ...[
                     if (i > 0) const SizedBox(width: 4),
                     Expanded(
-                        child: _cell(transform, cells[i], frame,
-                            fixed: false, group: group)),
+                        child: withParamValueMenu(
+                            menu,
+                            _cell(transform, cells[i], frame,
+                                fixed: false, group: group),
+                            withReset: true)),
                   ],
                 ],
               ),
@@ -917,7 +923,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           ] else
             for (final axis in cells) ...[
               const SizedBox(width: 6),
-              Flexible(child: _cell(transform, axis, frame, group: group)),
+              Flexible(
+                  child: withParamValueMenu(
+                      menu, _cell(transform, axis, frame, group: group),
+                      withReset: true)),
             ],
         ],
       ),
@@ -1287,48 +1296,129 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// on purpose rather than one you fall out of.
   ///
   /// Every entry commits one op or one batch, so each is one undo step.
-  void _axisMenu(BuildContext context, Offset at, TransformGroup group) {
+  List<Widget> _ownRows(TransformGroup group, VoidCallback close) {
     final pair = group.pair;
-    if (pair == null) return;
+    if (pair == null) return _orderRows(close);
     final separated = group.mode == BridgeAxisMode.separated;
-    void set(void Function(BridgeAxisMode?) close, BridgeAxisMode mode) {
-      close(null);
+    void set(BridgeAxisMode mode) {
+      close();
       widget.layer.setAxisMode(pair: pair, mode: mode);
       widget.onChanged();
     }
 
-    showMenuAt<BridgeAxisMode>(
-      context: context,
-      position: at,
-      rows: (close) => [
-        if (pair == BridgeTransformPair.scale && !separated)
-          MenuRow(
-            key: ValueKey<String>('${widget.keyPrefix}-axis-link'),
-            onPressed: () => set(
-                close,
-                group.mode == BridgeAxisMode.linked
-                    ? BridgeAxisMode.combined
-                    : BridgeAxisMode.linked),
-            child: Text(group.mode == BridgeAxisMode.linked
-                ? l10n.transformUnlinkAxes
-                : l10n.transformLinkAxes),
-          ),
+    return [
+      if (pair == BridgeTransformPair.scale && !separated)
         MenuRow(
-          key: ValueKey<String>('${widget.keyPrefix}-axis-separate'),
-          onPressed: () => set(
-              close,
-              separated
-                  ? (pair == BridgeTransformPair.scale
-                      ? BridgeAxisMode.linked
-                      : BridgeAxisMode.combined)
-                  : BridgeAxisMode.separated),
-          child: Text(separated
-              ? l10n.transformCombineAxes
-              : l10n.transformSeparateAxes),
+          key: ValueKey<String>('${widget.keyPrefix}-axis-link'),
+          onPressed: () => set(group.mode == BridgeAxisMode.linked
+              ? BridgeAxisMode.combined
+              : BridgeAxisMode.linked),
+          child: MenuLabel(group.mode == BridgeAxisMode.linked
+              ? l10n.transformUnlinkAxes
+              : l10n.transformLinkAxes),
         ),
-      ],
+      MenuRow(
+        key: ValueKey<String>('${widget.keyPrefix}-axis-separate'),
+        onPressed: () => set(separated
+            ? (pair == BridgeTransformPair.scale
+                ? BridgeAxisMode.linked
+                : BridgeAxisMode.combined)
+            : BridgeAxisMode.separated),
+        child: MenuLabel(separated
+            ? l10n.transformCombineAxes
+            : l10n.transformSeparateAxes),
+      ),
+    ];
+  }
+
+  /// What this row's right-click menu offers.
+  ParamMenu _menu(TransformGroup group, KeyframeControlsFrb keys) {
+    final props = [for (final axis in group.axes) axis.prop];
+    final defaults = [for (final p in props) _defaultOf(p)];
+    final canDefault = defaults.every((d) => d != null);
+    final playhead = _ui.playheadFrame;
+    double shown(BridgeTransformProp p) => sampledScalar(
+        read(widget.transform, p), timeOfFrame(widget.comp, playhead.value));
+    final expression = [
+      for (final p in props)
+        if (read(widget.transform, p) is BridgeScalar_Expression) p,
+    ];
+    void writeAll(List<double> values) {
+      widget.layer.setTransforms(
+        props: props,
+        values: [
+          for (final (i, p) in props.indexed)
+            scalarWithValueAt(read(widget.transform, p), values[i],
+                widget.comp, playhead.value),
+        ],
+      );
+      widget.onChanged();
+    }
+
+    return ParamMenu(
+      own: group.pair != null || _turnsIn3d(group)
+          ? (close) => _ownRows(group, close)
+          : null,
+      keys: expression.isEmpty ? keys : null,
+      reset: canDefault
+          ? () {
+              widget.layer.setTransforms(props: props, values: [
+                for (final d in defaults) BridgeScalar.static_(d!),
+              ]);
+              widget.onChanged();
+            }
+          : null,
+      canReset: !canDefault ||
+          [
+            for (final (i, p) in props.indexed)
+              read(widget.transform, p) is! BridgeScalar_Static ||
+                  (shown(p) - defaults[i]!).abs() > 1e-5,
+          ].any((differs) => differs),
+      copy: expression.isEmpty ? () => props.map(shown).join(', ') : null,
+      paste: expression.isNotEmpty
+          ? null
+          : (text) {
+              final n = numbersIn(text);
+              if (n.length >= props.length) writeAll(n);
+            },
+      setExpression: props.length == 1 && expression.isEmpty && !group.colour
+          ? () => _commitExpression(
+              props.first,
+              BridgeScalar.expression(shown(props.first).toString(),
+                  newExpressionLanguage(context)))
+          : null,
+      removeExpression: expression.length != 1
+          ? null
+          : () => _commit(
+              expression.first,
+              sampleScalarWithContext(
+                  scalar: read(widget.transform, expression.first),
+                  time: timeOfFrame(widget.comp, playhead.value),
+                  layer: widget.layer)),
+      graphPath: expression.isEmpty
+          ? transformGroupPath(
+              widget.layer.internallayerId.toString(), group)
+          : null,
     );
   }
+
+  /// What [prop] goes back to, where there is one value for every layer: the
+  /// rest depend on the layer's source.
+  double? _defaultOf(BridgeTransformProp prop) => switch (prop) {
+        BridgeTransformProp.scaleX ||
+        BridgeTransformProp.scaleY ||
+        BridgeTransformProp.opacity =>
+          100,
+        BridgeTransformProp.rotation ||
+        BridgeTransformProp.rotationX ||
+        BridgeTransformProp.rotationY ||
+        BridgeTransformProp.positionZ ||
+        BridgeTransformProp.orientationX ||
+        BridgeTransformProp.orientationY ||
+        BridgeTransformProp.orientationZ =>
+          0,
+        _ => null,
+      };
 
   /// Whether [group] is one of X, Y and Z Rotation on a layer that turns in
   /// 3D, which has a rotation order to choose.
@@ -1340,34 +1430,26 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         BridgeTransformProp.rotationY,
       }.contains(group.axes.first.prop);
 
-  /// The rotation rows' menu: After Effects' rotation order, ticked while the
-  /// layer turns in it. A change keeps the pose and is one undo step.
-  void _orderMenu(BuildContext context, Offset at) {
+  /// The rotation rows' own row: the rotation order, ticked while the layer
+  /// turns in it. A change keeps the pose and is one undo step.
+  List<Widget> _orderRows(VoidCallback close) {
     final on = widget.transform.depth?.afterEffectsOrder ?? false;
-    showMenuAt<void>(
-      context: context,
-      position: at,
-      rows: (close) => [
-        MenuRow(
-          key: ValueKey<String>('${widget.keyPrefix}-rotation-order'),
-          onPressed: () {
-            close(null);
-            try {
-              widget.layer.setAfterEffectsOrder(on_: !on);
-            } catch (_) {
-              // An expression drives a rotation, so there is no pose to keep.
-              return;
-            }
-            widget.onChanged();
-          },
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            menuTick(on),
-            const SizedBox(width: 6),
-            Text(l10n.transformAfterEffectsOrder),
-          ]),
-        ),
-      ],
-    );
+    return [
+      MenuRow(
+        key: ValueKey<String>('${widget.keyPrefix}-rotation-order'),
+        onPressed: () {
+          close();
+          try {
+            widget.layer.setAfterEffectsOrder(on_: !on);
+          } catch (_) {
+            // An expression drives a rotation, so there is no pose to keep.
+            return;
+          }
+          widget.onChanged();
+        },
+        child: MenuLabel(l10n.transformAfterEffectsOrder, ticked: on),
+      ),
+    ];
   }
 
   void _commitExpression(BridgeTransformProp prop, BridgeScalar value) {

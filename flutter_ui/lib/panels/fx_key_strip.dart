@@ -504,20 +504,21 @@ class _FxKeyStripHostState extends State<FxKeyStripHost>
       width: 170,
       rows: (close) => [
         // The Timeline key menu's three eases, on the same keys.
-        for (final (name, label) in [
-          ('linear', l10n.easeLinear),
-          ('ease', l10n.easeEasy),
-          ('hold', l10n.easeHold),
+        for (final (name, label, action) in [
+          ('linear', l10n.easeLinear, null),
+          ('ease', l10n.easeEasy, 'graph.ease'),
+          ('hold', l10n.easeHold, 'keyframe.hold.toggle'),
         ])
           MenuRow(
             key: ValueKey('fx-key-menu-$name'),
             onPressed: () => close(name),
-            child: Text(label),
+            child: MenuLabel(label, action: action),
           ),
+        const MenuDivider(),
         MenuRow(
           key: const ValueKey('fx-key-menu-delete'),
           onPressed: () => close('delete'),
-          child: Text(l10n.deleteKey),
+          child: MenuLabel(l10n.deleteKey, action: 'edit.delete.selection'),
         ),
       ],
     );

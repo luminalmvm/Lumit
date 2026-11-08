@@ -884,7 +884,7 @@ class _SubmenuRowState extends State<SubmenuRow> {
 class HouseContextMenu extends StatelessWidget {
   const HouseContextMenu({this.child, this.itemBuilder, super.key});
   final Widget? child;
-  final List<MenuRow> Function(void Function() close)? itemBuilder;
+  final List<Widget> Function(void Function() close)? itemBuilder;
 
   @override
   Widget build(BuildContext context) {
