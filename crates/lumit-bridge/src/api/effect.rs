@@ -971,7 +971,7 @@ fn driven_value(
     let comp = doc.comp(layer.comp_id)?;
     let owner = comp.layers.iter().find(|l| l.id == layer.layer_id)?;
     owner.graph.wire_into(&InputRef::Param {
-        node: node.clone(),
+        node,
         port: param.clone(),
     })?;
     let t = Rational::new(time.num, time.den).unwrap_or(Rational::ZERO);

@@ -11,7 +11,6 @@ import 'package:lumit_flutter/panels/graph_edits.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
 
