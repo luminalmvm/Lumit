@@ -492,7 +492,7 @@ String columnGroupLabel(TimelineGroup group) => switch (group) {
       TimelineGroup.switches => l10n.columnSwitches,
       TimelineGroup.identity => l10n.columnLayer,
       TimelineGroup.render => l10n.columnModes,
-      TimelineGroup.compose => l10n.columnCompose,
+      TimelineGroup.compose => l10n.columnMatteBlend,
       TimelineGroup.parent => l10n.columnParent,
       TimelineGroup.timings => l10n.tipRenderTime,
     };

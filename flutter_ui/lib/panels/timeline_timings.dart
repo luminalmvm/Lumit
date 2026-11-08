@@ -151,17 +151,13 @@ class RenderTimingsToggle extends StatelessWidget {
 ///
 /// Nothing at all while the clock in the bottom strip is off: the Timeline drops
 /// the whole column then, and an effect's heading goes back to the shape it had
-/// before this existed. A dash *while measuring* means the last measured frame
+/// before this existed. Blank *while measuring* means the last measured frame
 /// had no such row — it was hidden, outside its span, or inside a Precomp.
 class TimingsCell extends StatelessWidget {
   final String? layerId;
   final String? effectId;
 
-  /// Say nothing rather than a dash when the last frame has no figure for it.
-  final bool blankWhenNone;
-
-  const TimingsCell(
-      {super.key, this.layerId, this.effectId, this.blankWhenNone = false});
+  const TimingsCell({super.key, this.layerId, this.effectId});
 
   @override
   Widget build(BuildContext context) {

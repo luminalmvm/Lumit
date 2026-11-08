@@ -22,9 +22,10 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show MenuEntry;
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart';
-import 'timeline_layer_menu_frb.dart' show revealInProject;
+import 'timeline_layer_menu_frb.dart' show revealInProject, showMenuEntriesAt;
 import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
 /// How far the tree will walk before it stops, whatever the document says.
@@ -75,69 +76,44 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
   }
 
   /// The menu on a row, or with no [layer] on the ground under the rows. A
-  /// layer of the comp in front has the one layer menu it has everywhere, and
-  /// a Precomp row or a layer inside one has what can be done from here.
+  /// layer of the comp in front has the one layer menu it has everywhere, with
+  /// this panel's own rows in it, and a layer inside a Precomp has what can be
+  /// done from here.
   void _menu(BuildContext context, Offset at, LumitUiState ui,
       LayerReference? layer, CompositionReference? nested) {
+    final id = layer?.internallayerId.toString();
+    final view = [
+      if (nested != null)
+        MenuEntry(
+            _open.contains(id) ? l10n.collapse : l10n.expand,
+            () => setState(() {
+                  if (!_open.remove(id)) _open.add(id!);
+                })),
+      if (_openable.isNotEmpty) ...[
+        MenuEntry(l10n.expandAll, () => setState(() => _open.addAll(_openable))),
+        MenuEntry(l10n.collapseAll,
+            _open.isEmpty ? null : () => setState(_open.clear)),
+      ],
+    ];
     if (layer != null &&
-        nested == null &&
         ui.model.layers
             .any((e) => e.layer.internallayerId == layer.internallayerId)) {
-      showLayerRowMenu(context, layer.internallayerId, at);
+      showLayerRowMenu(context, layer.internallayerId, at, view: view);
       return;
     }
-    final id = layer?.internallayerId.toString();
+    if (layer == null && view.isEmpty) return;
     // Read here: a menu is a gesture. A text layer or a camera has no item.
     final source = layer?.getSourceItem();
-    showMenuAt<void>(
-      context: context,
-      position: at,
-      rows: (close) {
-        void run(void Function() act) {
-          close(null);
-          act();
-        }
-
-        return [
-          if (nested != null) ...[
-            MenuRow(
-              key: const ValueKey('hierarchy-open-comp'),
-              onPressed: () => run(() => ui.openNestedComp(layer!, nested)),
-              child: Text(l10n.projectOpen),
-            ),
-            MenuRow(
-              key: const ValueKey('hierarchy-toggle'),
-              onPressed: () => run(() => setState(() {
-                    if (!_open.remove(id)) _open.add(id!);
-                  })),
-              child: Text(_open.contains(id) ? l10n.collapse : l10n.expand),
-            ),
-          ],
-          if (layer != null)
-            MenuRow(
-              key: const ValueKey('hierarchy-reveal'),
-              enabled: source != null,
-              onPressed: () => run(() => revealInProject(ui, source!)),
-              child:
-                  MenuLabel(l10n.revealInProject, enabled: source != null),
-            ),
-          if (layer != null && _openable.isNotEmpty) const MenuDivider(),
-          if (_openable.isNotEmpty) ...[
-            MenuRow(
-              key: const ValueKey('hierarchy-expand-all'),
-              onPressed: () => run(() => setState(() => _open.addAll(_openable))),
-              child: Text(l10n.expandAll),
-            ),
-            MenuRow(
-              key: const ValueKey('hierarchy-collapse-all'),
-              enabled: _open.isNotEmpty,
-              onPressed: () => run(() => setState(_open.clear)),
-              child: MenuLabel(l10n.collapseAll, enabled: _open.isNotEmpty),
-            ),
-          ],
-        ];
-      },
-    );
+    showMenuEntriesAt(context, at, [
+      if (layer != null && nested != null)
+        MenuEntry(l10n.projectOpen, () => ui.openNestedComp(layer, nested)),
+      ...view,
+      if (layer != null) ...[
+        if (view.isNotEmpty) MenuEntry.divider(),
+        MenuEntry(l10n.menuRevealInProject,
+            source == null ? null : () => revealInProject(ui, source)),
+      ],
+    ]);
   }
 
   void _walkEntries(

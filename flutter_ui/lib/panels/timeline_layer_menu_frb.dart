@@ -60,12 +60,14 @@ Future<void> showMenuEntriesAt(
 /// The layer menu at [position], for [layer]. A layer outside the selection is
 /// selected first, so the menu is about the row that was clicked and every
 /// row then acts on the whole selection. [onRename] starts the inline rename
-/// where the caller has one; without it the row stays out.
+/// where the caller has one; without it the row stays out. [view] is what the
+/// panel the layer is shown in does with its own rows.
 Future<void> showLayerMenuFrb(
   BuildContext context, {
   required LayerReference layer,
   required Offset position,
   VoidCallback? onRename,
+  List<MenuEntry> view = const [],
 }) {
   final app = context.read<LumitState>();
   final ui = context.read<LumitUiState>();
@@ -79,7 +81,7 @@ Future<void> showLayerMenuFrb(
   return showMenuEntriesAt(
     context,
     position,
-    layerMenuEntries(context, app, ui, entry, onRename: onRename),
+    layerMenuEntries(context, app, ui, entry, onRename: onRename, view: view),
   );
 }
 
@@ -94,6 +96,7 @@ List<MenuEntry> layerMenuEntries(
   LumitUiState ui,
   BridgeLayerEntry entry, {
   VoidCallback? onRename,
+  List<MenuEntry> view = const [],
 }) {
   final comp = ui.selectedComp!;
   final layer = entry.layer;
@@ -125,6 +128,7 @@ List<MenuEntry> layerMenuEntries(
         () => layerSettingsOf(context, app, ui, layer),
         action: 'layer.settings'),
     MenuEntry.divider(),
+    if (view.isNotEmpty) ...[...view, MenuEntry.divider()],
     MenuEntry.submenu(
         l10n.menuEffect, effectMenuEntries(app, ui, [layer])),
     if (_sounds(kind))

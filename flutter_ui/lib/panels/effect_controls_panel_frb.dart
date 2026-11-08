@@ -2887,7 +2887,7 @@ class _EffectSection extends StatelessWidget {
       // its row in the Timeline shows, from the same measurement (docs/13
       // §7.1). Blank unless the Timeline's render-time column is measuring,
       // so this panel neither turns the cost on nor shows a stale figure.
-      status: inputs ? null : TimingsCell(effectId: '$id', blankWhenNone: true),
+      status: inputs ? null : TimingsCell(effectId: '$id'),
       hoverActions: [
         if (material || !_commands.atDefault)
           _headingButton(

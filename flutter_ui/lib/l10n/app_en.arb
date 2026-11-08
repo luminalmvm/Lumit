@@ -7564,7 +7564,7 @@
   },
   "presetFileNotPreset": "That isn't a Lumit preset file.",
   "@presetFileNotPreset": {
-    "description": "Status-line notice when the file chosen for Load preset in Effect controls is not an effect preset."
+    "description": "Status-line notice when the file chosen for Load preset in Effect controls, or a saved material preset picked from a material's menu, is not a preset Lumit can read."
   },
   "marker": "Marker",
   "@marker": {
@@ -9483,10 +9483,6 @@
   "@selectACompositionFirst": {
     "description": "Empty-state line in a panel that needs a composition before it can show anything."
   },
-  "revealInProject": "Reveal in Project panel",
-  "@revealInProject": {
-    "description": "Menu on a layer: show what the layer is made from, picked in the Project panel."
-  },
   "selectALayer": "Select a layer",
   "@selectALayer": {
     "description": "Empty-state line in a panel that needs a layer selected."
@@ -10741,7 +10737,7 @@
   },
   "tipToggleColumns": "{column} column",
   "@tipToggleColumns": {
-    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own name: Modes, Compose, Parent, or Render time.",
+    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own name: Modes, Matte and blend, Parent, or Render time.",
     "placeholders": {
       "column": {
         "type": "String"
@@ -16913,8 +16909,8 @@
   "@tipViewerMoreControls": {
     "description": "Hover text on the overflow mark at the left of the Viewer's bottom bar. It appears only when the Viewer is docked too narrow for the bar to hold the transparency grid, guides, channel, exposure and snapshot controls, and opens all of them in a small floating strip."
   },
-  "columnCompose": "Matte and blend",
-  "@columnCompose": {
+  "columnMatteBlend": "Matte and blend",
+  "@columnMatteBlend": {
     "description": "Timeline column-cluster name, seen in the columns menu and on the floating tag while the MATTE / BLEND pair of column headings is dragged to a new place in the outline. Not a heading itself: the two headings above the cells keep their own words."
   },
   "settingsChromeLabels": "Chrome labels",

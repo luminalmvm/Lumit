@@ -213,7 +213,7 @@ class EffectCommands {
   }
 
   /// Set this material to the one saved in the preset at [path].
-  Future<void> _applySaved(String path, int at) async {
+  Future<void> _applySaved(LumitState app, String path, int at) async {
     try {
       final text = await readEffectPreset(path: path);
       for (final instance in instances()) {
@@ -223,6 +223,7 @@ class EffectCommands {
       }
     } catch (_) {
       // A file that has gone or isn't a material; nothing changes.
+      app.postNotice(l10n.presetFileNotPreset, error: true);
       return;
     }
     onStackChanged();
@@ -520,7 +521,10 @@ class EffectCommands {
                               onPressed: () {
                                 dismiss();
                                 _applySaved(
-                                    preset.path, ui.playheadFrame.value);
+                                    Provider.of<LumitState>(context,
+                                        listen: false),
+                                    preset.path,
+                                    ui.playheadFrame.value);
                               },
                               child: Text(preset.name),
                             ),

@@ -662,10 +662,18 @@ class FxSection extends StatelessWidget {
       children: [
         if (actions.isEmpty)
           Expanded(child: names)
-        else ...[
-          SizedBox(width: fxNameColumnWidth, child: names),
-          Expanded(child: Row(children: actions)),
-        ],
+        else
+          // The actions start where the rows' controls do, at every width.
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) => Row(children: [
+                SizedBox(
+                    width: fxKeyColumnWidth + 4 + fxLabelWidthFor(box.maxWidth),
+                    child: names),
+                Expanded(child: Row(children: actions)),
+              ]),
+            ),
+          ),
         // The status and the actions share one place, and swap at once: the
         // name keeps its room, and nothing beside them moves.
         if (status != null || hoverActions.isNotEmpty)

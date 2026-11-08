@@ -34,7 +34,8 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show toggleKeysAtPlayhead;
 import '../shell/menu_bar_frb.dart' show MenuEntry;
-import '../shell/menu_layer_frb.dart' show onSelection, transformRows;
+import '../shell/menu_layer_frb.dart'
+    show freshTransform, onSelection, transformRows;
 import '../state/comp_time.dart';
 import '../state/preview_throttle.dart';
 import '../state/timeline_columns.dart';
@@ -1353,6 +1354,16 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     final props = [for (final axis in group.axes) axis.prop];
     final defaults = [for (final p in props) _defaultOf(p)];
     final canDefault = defaults.every((d) => d != null);
+    // Position and the Anchor go back where the Layer menu's Reset puts them,
+    // worked out on the press. A camera or a light was placed, so has none.
+    final placed = canDefault
+        ? null
+        : _ui.model.heldLayers
+            .where((e) =>
+                e.layer.internallayerId == widget.layer.internallayerId &&
+                e.info.kind != BridgeLayerKind.camera &&
+                e.info.kind != BridgeLayerKind.light)
+            .firstOrNull;
     final playhead = _ui.playheadFrame;
     double shown(BridgeTransformProp p) => sampledScalar(
         read(widget.transform, p), timeOfFrame(widget.comp, playhead.value));
@@ -1390,7 +1401,16 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               ]);
               widget.onChanged();
             }
-          : null,
+          : placed == null
+              ? null
+              : () {
+                  final fresh = freshTransform(_ui, placed);
+                  if (!props.every(fresh.containsKey)) return;
+                  widget.layer.setTransforms(props: props, values: [
+                    for (final p in props) BridgeScalar.static_(fresh[p]!),
+                  ]);
+                  widget.onChanged();
+                },
       canReset: !canDefault ||
           [
             for (final (i, p) in props.indexed)

@@ -18,6 +18,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show MenuEntry;
 import '../state/expression_language.dart' show PropertyRef;
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
@@ -186,17 +187,20 @@ final Map<UuidValue, _OutlineRowState> _rowsOnScreen = {};
 /// The layer menu for [layer] at [position], from anywhere a layer is shown:
 /// its bar, the Hierarchy, the picture. The row's own menu when the row is on
 /// screen, so Rename is on it, and the same menu without Rename when not.
+/// [view] is the calling panel's own rows.
 Future<void> showLayerRowMenu(
-    BuildContext context, UuidValue layer, Offset position) {
+    BuildContext context, UuidValue layer, Offset position,
+    {List<MenuEntry> view = const []}) {
   final row = _rowsOnScreen[layer];
-  if (row != null) return row._showRowMenu(row.context, position);
+  if (row != null) return row._showRowMenu(row.context, position, view: view);
   final entry = Provider.of<LumitUiState>(context, listen: false)
       .model
       .layers
       .where((e) => e.layer.internallayerId == layer)
       .firstOrNull;
   if (entry == null) return Future.value();
-  return showLayerMenuFrb(context, layer: entry.layer, position: position);
+  return showLayerMenuFrb(context,
+      layer: entry.layer, position: position, view: view);
 }
 
 /// What Rename runs for [layer], or null while its row isn't on screen to type
@@ -1264,11 +1268,13 @@ class _OutlineRowState extends State<OutlineRow> {
 
   /// The layer menu, shared with every other place a layer is shown. This
   /// row adds the one thing only it can: the inline rename.
-  Future<void> _showRowMenu(BuildContext context, Offset position) =>
+  Future<void> _showRowMenu(BuildContext context, Offset position,
+          {List<MenuEntry> view = const []}) =>
       showLayerMenuFrb(
         context,
         layer: layer,
         position: position,
+        view: view,
         onRename: () {
           widget.renameRequest.value = layer.internallayerId;
           _maybeRename();

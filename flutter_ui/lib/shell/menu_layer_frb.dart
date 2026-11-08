@@ -375,6 +375,54 @@ double _transformDefault(BridgeTransformProp prop) => switch (prop) {
       _ => 0,
     };
 
+/// What Reset writes to [entry], property by property. Shared with each
+/// transform row's own Reset.
+Map<BridgeTransformProp, double> freshTransform(
+    LumitUiState ui, BridgeLayerEntry entry) {
+  final comp = ui.selectedComp;
+  // A new layer sits in the middle of the comp and pivots about its own
+  // middle. A camera or a light was placed, so it stays where it is.
+  final placed = comp != null &&
+      entry.info.kind != BridgeLayerKind.camera &&
+      entry.info.kind != BridgeLayerKind.light;
+  final settings = placed ? comp.getSettings() : null;
+  final middle = placed
+      ? ui.layerBounds
+          .boundsOf(entry,
+              compSize: comp.getSize(),
+              revision: ui.model.heldRevision,
+              t: ui.playheadFrame.value / ui.model.heldFps)
+          .center(Offset.zero)
+      : Offset.zero;
+  return {
+    // The layer's **own** rows, not every property there is: a camera
+    // channel written to a solid is refused outright and would take the
+    // whole reset with it (docs/impl/camera.md §10). Asked with the 3D and
+    // two-node rows in, so a property the layer holds but is not showing
+    // this minute still goes back to its default.
+    for (final group in transformGroups(
+      threeD: true,
+      modes: entry.info.axisModes,
+      kind: entry.info.kind,
+      twoNode: true,
+    ))
+      // The camera and light options are left alone: a lens is seeded
+      // from the composition it was made in, so there is no still
+      // number here that means "untouched" - and a zoom of nought is a
+      // camera that sees nothing.
+      if (group.section == TransformSection.transform)
+        for (final axis in group.axes)
+          if (settings != null || !_placement.contains(axis.prop))
+            axis.prop: switch (axis.prop) {
+              BridgeTransformProp.positionX => settings!.width / 2,
+              BridgeTransformProp.positionY => settings!.height / 2,
+              BridgeTransformProp.anchorX => middle.dx,
+              BridgeTransformProp.anchorY => middle.dy,
+              final prop => _transformDefault(prop),
+            },
+  };
+}
+
 /// Layer ▸ Transform: the four computed writes, and the axis modes.
 ///
 /// **Reset** puts every property back to the value a fresh layer has, animation
@@ -398,50 +446,8 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui,
     entry.layer.setTransform(prop: prop, value: scaledScalar(scalar, -1));
   }
 
-  /// What Reset writes to [entry], property by property.
-  Map<BridgeTransformProp, double> fresh(BridgeLayerEntry entry) {
-    // A new layer sits in the middle of the comp and pivots about its own
-    // middle. A camera or a light was placed, so it stays where it is.
-    final placed = comp != null &&
-        entry.info.kind != BridgeLayerKind.camera &&
-        entry.info.kind != BridgeLayerKind.light;
-    final settings = placed ? comp.getSettings() : null;
-    final middle = placed
-        ? ui.layerBounds
-            .boundsOf(entry,
-                compSize: comp.getSize(),
-                revision: ui.model.heldRevision,
-                t: frame / ui.model.heldFps)
-            .center(Offset.zero)
-        : Offset.zero;
-    return {
-      // The layer's **own** rows, not every property there is: a camera
-      // channel written to a solid is refused outright and would take the
-      // whole reset with it (docs/impl/camera.md §10). Asked with the 3D and
-      // two-node rows in, so a property the layer holds but is not showing
-      // this minute still goes back to its default.
-      for (final group in transformGroups(
-        threeD: true,
-        modes: entry.info.axisModes,
-        kind: entry.info.kind,
-        twoNode: true,
-      ))
-        // The camera and light options are left alone: a lens is seeded
-        // from the composition it was made in, so there is no still
-        // number here that means "untouched" - and a zoom of nought is a
-        // camera that sees nothing.
-        if (group.section == TransformSection.transform)
-          for (final axis in group.axes)
-            if (settings != null || !_placement.contains(axis.prop))
-              axis.prop: switch (axis.prop) {
-                BridgeTransformProp.positionX => settings!.width / 2,
-                BridgeTransformProp.positionY => settings!.height / 2,
-                BridgeTransformProp.anchorX => middle.dx,
-                BridgeTransformProp.anchorY => middle.dy,
-                final prop => _transformDefault(prop),
-              },
-    };
-  }
+  Map<BridgeTransformProp, double> fresh(BridgeLayerEntry entry) =>
+      freshTransform(ui, entry);
 
   return [
     MenuEntry(

@@ -455,8 +455,18 @@ Widget projectScrollStrip(LumitTheme t, ScrollController hScroll) => SizedBox(
       ),
     );
 
-/// What `13 items` needs on the bottom bar.
-const double _footerCountRoom = 48;
+/// How wide [text] draws in [style], so the count goes whole or not at all.
+double _footerTextWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
 
 /// The bottom bar: the new-item controls at the left, the count at the right.
 /// Marks with tooltips, never words: the marks are the same at every width.
@@ -574,7 +584,9 @@ Widget projectFooter(
         Expanded(
             // Too narrow for a short count, it goes rather than being cut.
             child: LayoutBuilder(
-                builder: (context, box) => box.maxWidth < _footerCountRoom
+                builder: (context, box) => box.maxWidth <
+                        _footerTextWidth(
+                            context, l10n.projectItemCount(items), count)
                     ? const SizedBox.shrink()
                     : Row(mainAxisAlignment: MainAxisAlignment.end, children: [
         if (missing > 0)
