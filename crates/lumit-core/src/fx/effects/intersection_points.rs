@@ -28,7 +28,7 @@ pub const INTERSECTION_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
 }];
 
 /// An edge: its two ends, the piece it is on, its place there, and how many
-/// edges that piece has.
+/// edges that piece has if it is closed, 0 if it is open.
 type Edge = ([f32; 2], [f32; 2], usize, usize, usize);
 
 /// Where the edges `a0`–`a1` and `b0`–`b1` cross, as how far along the first
@@ -54,9 +54,13 @@ pub fn crossings(path: &MaskPolyline) -> Vec<([f32; 2], f32)> {
     // neighbours, which only touch, are not counted.
     let mut edges: Vec<Edge> = Vec::new();
     for (k, piece) in pieces(path).into_iter().enumerate() {
+        // An open piece's ends do not meet, so its first and last edges can
+        // cross.
+        let closed = piece.len() > 2 && piece.first() == piece.last();
+        let n = if closed { piece.len() - 1 } else { 0 };
         for i in 0..piece.len().saturating_sub(1) {
             if piece[i] != piece[i + 1] {
-                edges.push((piece[i], piece[i + 1], k, i, piece.len() - 1));
+                edges.push((piece[i], piece[i + 1], k, i, n));
             }
         }
     }
