@@ -30,6 +30,8 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/flowchart_frb.dart' show openFlowchartFrb;
+import '../shell/menu_bar_frb.dart' show trimCompAction;
 import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
@@ -278,6 +280,14 @@ class CompTabsFrb extends StatelessWidget {
     );
   }
 
+  /// Close the tab at [i]. The nearest remaining neighbour fronts: the one to
+  /// the left, or the next one when the first tab closes.
+  void _closeTab(List<(CompositionReference, String)> comps, int i) =>
+      uiState.closeComp(
+        comps[i].$1.internalid,
+        fallback: comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
+      );
+
   /// One draggable tab per open comp, in strip order.
   List<Widget> _tabs(
     BuildContext context,
@@ -311,16 +321,11 @@ class CompTabsFrb extends StatelessWidget {
                   comp: comps[i].$1,
                   position: position,
                   onChanged: uiState.model.refresh,
+                  onClose: () => _closeTab(comps, i),
                 ),
                 closeKey:
                     ValueKey<String>('tl-tab-close-${comps[i].$1.internalid}'),
-                onClose: () => uiState.closeComp(
-                  comps[i].$1.internalid,
-                  // The nearest remaining neighbour fronts: the one to the
-                  // left, or the next one when the first tab closes.
-                  fallback:
-                      comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
-                ),
+                onClose: () => _closeTab(comps, i),
               ),
             ),
           ),
@@ -585,7 +590,8 @@ Future<void> showMarkerMenuFrb({
           child: Text(
               isRegion ? l10n.markerRemoveRegion : l10n.markerMakeRegion),
         ),
-      if (dressable)
+      if (dressable) ...[
+        const MenuDivider(),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: MarkerColourChips(
@@ -594,6 +600,8 @@ Future<void> showMarkerMenuFrb({
             onPicked: (colour) => close('colour:${colour ?? ''}'),
           ),
         ),
+      ],
+      const MenuDivider(),
       MenuRow(
         key: ValueKey<String>('$keyPrefix-delete'),
         onPressed: () => close('delete'),
@@ -714,21 +722,55 @@ Future<void> showCompTabMenuFrb({
   required CompositionReference comp,
   required Offset position,
   required VoidCallback onChanged,
+  VoidCallback? onClose,
 }) async {
-  final open = await showMenuAt<bool>(
+  final app = Provider.of<LumitState>(context, listen: false);
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final trim = trimCompAction(app, comp);
+  final picked = await showMenuAt<String>(
     context: context,
     position: position,
-    width: 210,
+    width: 230,
     rows: (close) => [
       MenuRow(
         key: const ValueKey('tl-tab-menu-settings'),
-        onPressed: () => close(true),
-        child: Text(l10n.compositionSettingsEllipsis),
+        onPressed: () => close('settings'),
+        child: MenuLabel(l10n.compositionSettingsEllipsis,
+            action: 'comp.settings'),
       ),
+      MenuRow(
+        key: const ValueKey('tl-tab-menu-trim'),
+        enabled: trim != null,
+        onPressed: () => close('trim'),
+        child: MenuLabel(l10n.menuTrimCompToWorkArea,
+            action: 'comp.trim.workarea', enabled: trim != null),
+      ),
+      MenuRow(
+        key: const ValueKey('tl-tab-menu-flowchart'),
+        onPressed: () => close('flowchart'),
+        child: MenuLabel(l10n.menuFlowchart, action: 'comp.flowchart'),
+      ),
+      if (onClose != null) ...[
+        const MenuDivider(),
+        MenuRow(
+          key: const ValueKey('tl-tab-menu-close'),
+          onPressed: () => close('close'),
+          child: Text(l10n.close),
+        ),
+      ],
     ],
   );
-  if (open != true || !context.mounted) return;
-  if (await showCompSettingsFrb(context: context, comp: comp)) onChanged();
+  if (picked == null || !context.mounted) return;
+  switch (picked) {
+    case 'settings':
+      if (await showCompSettingsFrb(context: context, comp: comp)) onChanged();
+    case 'trim':
+      trim?.call();
+    case 'flowchart':
+      openFlowchartFrb(context, ui);
+    case 'close':
+      onClose?.call();
+  }
 }
 
 class _CompTab extends StatefulWidget {
@@ -963,39 +1005,10 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
 ///
 /// [trailing] is room at the cell's end that is not the picker's face: the
 /// matte cell's two toggles.
-Widget restingPicker(LumitTheme t,
-        {required bool resting,
-        required String label,
-        required Widget picker,
-        double trailing = 0}) =>
-    Stack(
-      children: [
-        Opacity(opacity: resting ? 0 : 1, child: picker),
-        if (resting)
-          Positioned.fill(
-            right: trailing,
-            child: IgnorePointer(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: dropdownTextInset),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(label,
-                            style: t.small, overflow: TextOverflow.ellipsis),
-                      ),
-                      // The caret and its gap, left empty.
-                      const SizedBox(width: 13),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+Widget restingPicker({required bool resting, required Widget picker}) =>
+    // Still laid out and still clickable, so the cell keeps its width and a
+    // click on the empty cell opens the picker.
+    Opacity(opacity: resting ? 0 : 1, child: picker);
 
 /// The parent picker: every *other* layer in the comp, plus None.
 ///
@@ -1063,10 +1076,8 @@ class ParentPickerFrb extends StatelessWidget {
         },
       ),
     );
-    return restingPicker(ThemeScope.of(context).theme,
-        resting: resting && info.parent == null,
-        label: l10n.none,
-        picker: picker);
+    return restingPicker(
+        resting: resting && info.parent == null, picker: picker);
   }
 }
 
@@ -1189,11 +1200,7 @@ class MattePickerFrb extends StatelessWidget {
         ],
       ),
     );
-    return restingPicker(t,
-        resting: resting && matte == null,
-        label: l10n.noMatte,
-        picker: cell,
-        trailing: width - faceWidth);
+    return restingPicker(resting: resting && matte == null, picker: cell);
   }
 
   Widget _toggle(
@@ -2199,6 +2206,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
               onPressed: () => close('marker'),
               child: Text(l10n.menuAddMarkerHere)),
         if (setWork != null) ...[
+          if (widget.onMarkersChanged != null) const MenuDivider(),
           MenuRow(
               key: const ValueKey('tl-ruler-work-in'),
               onPressed: () => close('work-in'),

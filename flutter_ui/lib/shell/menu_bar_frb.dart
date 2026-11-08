@@ -2009,6 +2009,18 @@ Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
 Widget menuEntriesFlyout(List<MenuEntry> items, VoidCallback close) =>
     _MenuList(items: items, close: close);
 
+/// The Effect menu's rows, for a menu that nests them under its own heading.
+List<MenuEntry> effectMenuEntries(
+        LumitState app, LumitUiState ui, List<LayerReference> layers) =>
+    _effectMenu(app, ui, layers);
+
+/// A list of entries drawn as a menu surface, with the bar's own dividers,
+/// ticks, chords and flyouts, for a right-click menu built from the same rows
+/// the menu bar uses.
+Widget menuEntryList(List<MenuEntry> items, VoidCallback close,
+        {double width = 300}) =>
+    _MenuList(items: items, close: close, width: width);
+
 /// Every built-in effect, grouped by its heading, each group sorted by name.
 ///
 /// Read once: the catalogue is fixed for the run, and the menu bar rebuilds on
@@ -3213,7 +3225,9 @@ class _OpenMenuState extends State<_OpenMenu> {
 class _MenuList extends StatefulWidget {
   final List<MenuEntry> items;
   final VoidCallback close;
-  const _MenuList({required this.items, required this.close});
+  final double width;
+  const _MenuList(
+      {required this.items, required this.close, this.width = 300});
 
   @override
   State<_MenuList> createState() => _MenuListState();
@@ -3237,7 +3251,7 @@ class _MenuListState extends State<_MenuList> {
     final maxHeight =
         (MediaQuery.of(context).size.height - 40).clamp(80.0, 1e6);
     return FloatSurface(
-      width: 300,
+      width: widget.width,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: SingleChildScrollView(

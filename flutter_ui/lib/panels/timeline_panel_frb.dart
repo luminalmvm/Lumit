@@ -51,7 +51,8 @@ import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart' as glyph_set;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show exportFrb;
+import '../shell/menu_bar_frb.dart'
+    show copySelectionFrb, exportFrb, pasteSelectionFrb;
 import '../shell/model_settings_dialog.dart'
     show modelLightNames, showDroppedModelSettingsFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
@@ -77,6 +78,7 @@ import 'timeline_toolbar_frb.dart';
 import 'timeline_outline_frb.dart';
 import 'timeline_lane_area_frb.dart';
 import 'timeline_key_lane_frb.dart';
+import 'keyframe_controls_frb.dart' show showGraphRequest;
 import 'timeline_lane_bottom_bar_frb.dart';
 
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -1023,20 +1025,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           MenuRow(
             key: ValueKey<String>('tl-column-menu-${group.name}'),
             onPressed: () => close(group.name),
-            child: Row(children: [
-              menuTick(!_hiddenGroups.contains(group)),
-              Expanded(child: Text(columnGroupLabel(group))),
-            ]),
+            child: MenuLabel(columnGroupLabel(group),
+                ticked: !_hiddenGroups.contains(group)),
           ),
-        if (timings != null)
+        if (timings != null) ...[
+          const MenuDivider(),
           MenuRow(
             key: const ValueKey('tl-column-menu-timings'),
             onPressed: () => close(TimelineGroup.timings.name),
-            child: Row(children: [
-              menuTick(timings.measuring),
-              Expanded(child: Text(l10n.tipRenderTime)),
-            ]),
+            child: MenuLabel(l10n.tipRenderTime, ticked: timings.measuring),
           ),
+        ],
       ],
     );
     if (picked == null || !mounted) return;
@@ -1456,6 +1455,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The Viewer asking for a row to be picked — a mask path it has just
   /// dragged, whose keyframe moved and whose row should therefore be the one
   /// showing.
+  void _onShowGraphRequested() {
+    if (mounted) _setMode(TimelineMode.graph);
+  }
+
   void _onSelectPropertyRequested() {
     if (!mounted) return;
     final path = _ui?.selectPropertyRequest.value;
@@ -1689,22 +1692,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// time: [razorTargets] says what a cut at that frame can land on (strictly
   /// inside the layer), [razorCut] makes it, and a cut the engine refuses is
   /// silence.
-  bool _splitSelectionAtPlayhead(LumitUiState ui) {
-    final frame = ui.playheadFrame.value;
-    final selected = ui.selectedLayerIds;
-    final targets = [
-      for (final entry in razorTargets(ui.model.layers, frame,
-          clicked: null, allLayers: true))
-        if (selected.contains(entry.layer.internallayerId)) entry,
-    ];
-    if (targets.isEmpty) return false;
-    final made = razorCut(targets, frame);
-    if (made.cut) {
-      if (made.halves.isNotEmpty) ui.setSelection(made.halves);
-      ui.model.refresh();
-    }
-    return true;
-  }
 
   /// `[` and `]`: move the selected layers so that end lands on the playhead;
   /// with `Alt`, trim that end to it instead (docs/07 §4.4).
@@ -2212,6 +2199,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // it over the selection, exactly as `U` does.
     _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
     _ui!.selectPropertyRequest.addListener(_onSelectPropertyRequested);
+    // A property row's menu asked for the graph: the row is already picked.
+    showGraphRequest.addListener(_onShowGraphRequested);
     // Merged **once**, not per build: a fresh `Listenable` every rebuild makes
     // every cache bar under it unsubscribe and resubscribe, which during a zoom
     // flight is sixty times a second for nothing.
@@ -2670,69 +2659,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// selection, which is what makes it the block's menu as well as one key's.
   void _laneKeyMenu(String id, Offset position) {
     if (!_laneKeySelection.contains(id)) _onLaneKeysSelected({id});
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = Provider.of<LumitUiState>(context, listen: false);
     showMenuAt<void>(
       context: context,
       position: position,
-      width: 170,
-      rows: (close) => [
-        MenuRow(
-          key: const ValueKey('tl-key-menu-linear'),
-          onPressed: () {
-            close(null);
-            _applyInterp(const BridgeSideInterp.linear());
-          },
-          child: Text(l10n.easeLinear),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-ease'),
-          onPressed: () {
-            close(null);
-            _applyInterp(easyEase);
-          },
-          child: Text(l10n.easeEasy),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-hold'),
-          onPressed: () {
-            close(null);
-            _applyInterp(const BridgeSideInterp.hold());
-          },
-          child: Text(l10n.easeHold),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-shape'),
-          onPressed: () {
-            close(null);
-            _openEasePopover(position);
-          },
-          child: Text(l10n.keyMenuEase),
-        ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-copy-ease'),
-          onPressed: () {
-            close(null);
-            _copyEase();
-          },
-          child: Text(l10n.keyMenuCopyEase),
-        ),
-        if (easeClipboard.isNotEmpty)
-          MenuRow(
-            key: const ValueKey('tl-key-menu-paste-ease'),
-            onPressed: () {
-              close(null);
-              _pasteEase();
-            },
-            child: Text(l10n.keyMenuPasteEase),
-          ),
-        MenuRow(
-          key: const ValueKey('tl-key-menu-delete'),
-          onPressed: () {
-            close(null);
-            _deleteSelectedKeys();
-          },
-          child: Text(l10n.deleteKey),
-        ),
-      ],
+      width: 190,
+      rows: (close) => keyMenuRows(
+        close: () => close(null),
+        keyPrefix: 'tl-key-menu',
+        onInterp: _applyInterp,
+        onEase: () => _openEasePopover(position),
+        // The panel's own claims: the keys picked here, through the same two
+        // commands the Edit menu runs.
+        onCopy: () => copySelectionFrb(ui),
+        onPaste: () => pasteSelectionFrb(
+            app, ui, ui.selectedComp, ui.selectedLayer.value),
+        onCopyEase: _copyEase,
+        onPasteEase: _pasteEase,
+        onDelete: _deleteSelectedKeys,
+      ),
     );
   }
 
@@ -3135,7 +3081,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       return true;
     }
     if (action == 'layer.split') {
-      return _splitSelectionAtPlayhead(ui);
+      return splitSelectionAtPlayhead(ui);
     }
     if (action == 'layer.move.in' ||
         action == 'layer.move.out' ||
@@ -3614,6 +3560,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
     _ui?.revealFilterRequest.removeListener(_onRevealFilterRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
+    showGraphRequest.removeListener(_onShowGraphRequested);
     if (_ui?.deleteClaim == _claimDelete) _ui!.deleteClaim = _priorDeleteClaim;
     if (_ui?.copyClaim == _claimCopy) _ui!.copyClaim = _priorCopyClaim;
     if (_ui?.pasteClaim == _claimPaste) _ui!.pasteClaim = _priorPasteClaim;

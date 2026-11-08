@@ -83,6 +83,9 @@ void main() {
       wireStyle: WireStyle.angled,
       room: LanternRoom.night,
       labelCase: LabelCase.lower,
+      peakHoldSeconds: 10,
+      viewerGuidesLocked: true,
+      viewerRulerPercent: true,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -124,9 +127,12 @@ void main() {
     expect(back.wireStyle, WireStyle.angled);
     expect(back.room, LanternRoom.night);
     expect(back.labelCase, LabelCase.lower);
+    expect(back.peakHoldSeconds, 10);
+    expect(back.viewerGuidesLocked, isTrue);
+    expect(back.viewerRulerPercent, isTrue);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 42);
+    expect(all.toJson().keys.length, 45);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

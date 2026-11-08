@@ -31,7 +31,7 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -42,11 +42,13 @@ import '../icons/icons.dart' show iconSize;
 import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_animation_frb.dart' show addExpressionRow;
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart' show FxQuiet, fxStopwatchColumn;
 import 'graph_maths.dart' show keyframeAmong, rowKeysOf;
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// The zone value [editPickedKeys] sets: the picked keys' indices, and
 /// whether the number was typed.
@@ -337,6 +339,10 @@ class PlayheadKeyedField extends StatelessWidget {
       );
 }
 
+/// A property row's menu asked for the graph. The Timeline listens and puts
+/// its graph up over the row that was picked.
+final ValueNotifier<int> showGraphRequest = ValueNotifier(0);
+
 /// The stopwatch a property row draws under [t]: the square-bodied one in
 /// Desk, where everything is square, and the round one in Studio and Lantern.
 String stopwatchGlyph(LumitTheme t) => t.shape == ThemeShape.desk
@@ -382,6 +388,15 @@ class KeyframeControlsFrb extends StatelessWidget {
   /// curve: an Orientation's angles turn as one. Null for no answer.
   final List<double>? Function(BridgeRational time)? valuesAt;
 
+  /// Picks the row's property, as a click on its name does. The stopwatch's
+  /// menu runs the commands that act on the picked property through it, so
+  /// Add expression and Show in graph land on this row. Without it the menu
+  /// keeps to the keys.
+  final VoidCallback? onSelectRow;
+
+  /// Puts the row back to its default, where the row has one.
+  final VoidCallback? onReset;
+
   const KeyframeControlsFrb({
     super.key,
     required this.scalars,
@@ -392,6 +407,8 @@ class KeyframeControlsFrb extends StatelessWidget {
     this.fixedColumns = false,
     this.navigatorOnly = false,
     this.valuesAt,
+    this.onSelectRow,
+    this.onReset,
   });
 
   /// This row's navigator as a widget of its own.
@@ -480,16 +497,20 @@ class KeyframeControlsFrb extends StatelessWidget {
     final previous = _neighbour(frame, before: true);
     final next = _neighbour(frame, before: false);
 
-    final stopwatch = LumitTooltip(
-      message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
-      child: _button(
-        keyName: 'kf-stopwatch-$rowKey',
-        // The one place the stopwatch has colour of its own: `animated` says
-        // the property is keyed (§3.1's closed job list), never the accent,
-        // which the redesign spends on the filled action and the playhead.
-        child: LumitIcon(stopwatchGlyph(t),
-            size: iconSize, colour: _animated ? t.animated : t.textMuted),
-        onPressed: () => _toggleAnimated(playhead.value),
+    final stopwatch = GestureDetector(
+      behavior: HitTestBehavior.deferToChild,
+      onSecondaryTapUp: (d) => _menu(context, d.globalPosition, playhead),
+      child: LumitTooltip(
+        message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
+        child: _button(
+          keyName: 'kf-stopwatch-$rowKey',
+          // The one place the stopwatch has colour of its own: `animated` says
+          // the property is keyed (§3.1's closed job list), never the accent,
+          // which the redesign spends on the filled action and the playhead.
+          child: LumitIcon(stopwatchGlyph(t),
+              size: iconSize, colour: _animated ? t.animated : t.textMuted),
+          onPressed: () => _toggleAnimated(playhead.value),
+        ),
       ),
     );
 
@@ -552,6 +573,52 @@ class KeyframeControlsFrb extends StatelessWidget {
     return SizedBox(
       width: fxStopwatchColumn,
       child: _animated ? stopwatch : FxQuiet(rest: 0.3, child: stopwatch),
+    );
+  }
+
+  /// The property's menu, on the stopwatch: the key at the playhead, the
+  /// row's default, and the two commands that act on the picked property.
+  void _menu(BuildContext context, Offset at, ValueListenable<int> playhead) {
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final select = onSelectRow;
+    final onKey = _keyAt(playhead.value) != null;
+    Widget row(String name, String label, VoidCallback? run,
+            {String? action}) =>
+        MenuRow(
+          key: ValueKey<String>('kf-menu-$name-$rowKey'),
+          enabled: run != null,
+          onPressed: () {
+            closeLumitPopups();
+            run?.call();
+          },
+          child: MenuLabel(label, action: action, enabled: run != null),
+        );
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 190,
+      rows: (close) => [
+        row(
+            'key',
+            onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
+            () => _toggleKeyHere(playhead.value),
+            action: 'keyframe.toggle'),
+        row('animate', _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
+            () => _toggleAnimated(playhead.value)),
+        if (onReset != null) row('reset', l10n.reset, onReset),
+        if (select != null) ...[
+          const MenuDivider(),
+          row('expression', l10n.menuAddExpression, () {
+            select();
+            addExpressionRow(context, app, ui).press();
+          }, action: 'expression.add'),
+          row('graph', l10n.menuShowInGraph, () {
+            select();
+            showGraphRequest.value++;
+          }, action: 'graph.toggle'),
+        ],
+      ],
     );
   }
 

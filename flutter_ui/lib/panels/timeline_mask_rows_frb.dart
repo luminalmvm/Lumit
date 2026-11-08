@@ -14,12 +14,15 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show MenuEntry;
+import '../shell/menu_layer_frb.dart' show maskRows;
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'timeline_extras_frb.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
+import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 
 /// [m] with one or two fields changed. The engine takes the whole mask, so
 /// every edit and every preview here is "the mask, with this changed".
@@ -304,54 +307,42 @@ class _MaskRowState extends State<MaskRow> with _InlineRename<MaskRow> {
     );
   }
 
+  /// The mask's menu: its name, then the Layer menu's own Mask rows (its
+  /// mode, its inversion, its feather and opacity), on this mask, which the
+  /// menu picks first so the rows know which one.
   void _menu(BuildContext context, Offset at) {
-    showMenuAt<void>(
-      context: context,
-      position: at,
-      width: 160,
-      rows: (close) => [
-        MenuRow(
-          key: ValueKey<String>('tl-mask-rename-menu-${widget.mask.id}'),
-          onPressed: () {
-            close(null);
-            startRename();
-          },
-          // The same bare "Rename" the Project panel's row menu offers.
-          child: Text(l10n.rename),
-        ),
-        // **Where a varying feather is switched on**. Turning it on
-        // gives every point the width the mask already had, so the picture
-        // does not move until a point is actually dragged; turning it off
-        // drops the points and the one width stands again.
-        MenuRow(
-          key: ValueKey<String>('tl-mask-vary-feather-${widget.mask.id}'),
-          onPressed: () {
-            close(null);
-            final on = widget.mask.vertexFeather.isNotEmpty;
-            _write(
-              vertexFeather: on
-                  ? const []
-                  : List<BridgeScalar>.filled(
-                      widget.mask.vertices.length, widget.mask.feather),
-            );
-          },
-          child: Text(widget.mask.vertexFeather.isEmpty
+    widget.onLabelTap?.call();
+    final app = Provider.of<LumitState>(context, listen: false);
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    showMenuEntriesAt(context, at, [
+      MenuEntry(l10n.rename, startRename, action: 'layer.rename'),
+      MenuEntry.divider(),
+      ...maskRows(context, app, ui),
+      MenuEntry.divider(),
+      // Where a varying feather is switched on. Turning it on gives every
+      // point the width the mask already had, so the picture does not move
+      // until a point is dragged; off drops the points and the one width
+      // stands again.
+      MenuEntry(
+          widget.mask.vertexFeather.isEmpty
               ? l10n.maskFeatherPerPoint
-              : l10n.maskFeatherOneWidth),
-        ),
-        MenuRow(
-          key: ValueKey<String>('tl-mask-delete-${widget.mask.id}'),
-          onPressed: () {
-            close(null);
-            try {
-              widget.layer.deleteMask(id: widget.mask.id);
-              widget.onChanged();
-            } catch (_) {}
-          },
-          child: Text(l10n.deleteMask),
-        ),
-      ],
-    );
+              : l10n.maskFeatherOneWidth, () {
+        final on = widget.mask.vertexFeather.isNotEmpty;
+        _write(
+          vertexFeather: on
+              ? const []
+              : List<BridgeScalar>.filled(
+                  widget.mask.vertices.length, widget.mask.feather),
+        );
+      }),
+      MenuEntry.divider(),
+      MenuEntry(l10n.deleteMask, () {
+        try {
+          widget.layer.deleteMask(id: widget.mask.id);
+          widget.onChanged();
+        } catch (_) {}
+      }, action: 'edit.delete.selection'),
+    ]);
   }
 }
 
@@ -823,7 +814,10 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
             },
             child: Text(l10n.rename),
           ),
+        if (widget.onRename != null && widget.menuRows != null)
+          const MenuDivider(),
         ...?widget.menuRows?.call(() => close(null)),
+        const MenuDivider(),
         MenuRow(
           key: ValueKey<String>('${widget.keyPrefix}-delete-${widget.id}'),
           onPressed: () {

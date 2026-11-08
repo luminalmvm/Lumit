@@ -24,6 +24,7 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../widgets/controls.dart';
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 import 'timeline_extras_frb.dart';
 
 /// How far the tree will walk before it stops, whatever the document says.
@@ -73,13 +74,18 @@ class _HierarchyPanelFrbState extends State<HierarchyPanelFrb> {
     );
   }
 
-  /// The menu on a row, or with no [layer] on the ground under the rows.
-  ///
-  /// The row's menu is the seam for the Timeline's own layer menu: when that is
-  /// exported from `timeline_outline_row_frb.dart`, its rows belong under the
-  /// ones here, so a layer has the one menu wherever it is shown.
+  /// The menu on a row, or with no [layer] on the ground under the rows. A
+  /// layer of the comp in front has the one layer menu it has everywhere, and
+  /// a Precomp row or a layer inside one has what can be done from here.
   void _menu(BuildContext context, Offset at, LumitUiState ui,
       LayerReference? layer, CompositionReference? nested) {
+    if (layer != null &&
+        nested == null &&
+        ui.model.layers
+            .any((e) => e.layer.internallayerId == layer.internallayerId)) {
+      showLayerRowMenu(context, layer.internallayerId, at);
+      return;
+    }
     final id = layer?.internallayerId.toString();
     // Read here: a menu is a gesture. A text layer or a camera has no item.
     final source = layer?.getSourceItem();

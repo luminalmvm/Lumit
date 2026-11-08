@@ -22,6 +22,8 @@ import 'timeline_metrics_frb.dart';
 import 'timeline_bar_frb.dart';
 import 'timeline_outline_frb.dart';
 import 'timeline_key_block_frb.dart';
+import 'graph_clipboard.dart' show easeClipboard;
+import 'graph_maths.dart' show easyEase;
 
 /// One keyed property's lane: its keyframes as diamonds, each draggable in
 /// time.
@@ -829,4 +831,58 @@ class RowDividerPainter extends CustomPainter {
   /// gestures on the rows below it.
   @override
   bool? hitTest(Offset position) => false;
+}
+
+/// The rows a key's right-click menu shares across every surface that draws
+/// keys: the lanes, the key block, the effect strip, the graph and the audio
+/// lanes. The interpolations first, then the shaping rows a surface offers,
+/// then the clipboard, with Delete last. A surface hands in the callbacks it
+/// has; a row with none is left out. Paste ease stays, greyed, while nothing
+/// has been copied.
+List<Widget> keyMenuRows({
+  required VoidCallback close,
+  required ValueChanged<BridgeSideInterp> onInterp,
+  VoidCallback? onEase,
+  VoidCallback? onSpeed,
+  VoidCallback? onJoinHandles,
+  required VoidCallback onCopyEase,
+  required VoidCallback onPasteEase,
+  VoidCallback? onCopy,
+  VoidCallback? onPaste,
+  required VoidCallback onDelete,
+  String keyPrefix = 'key-menu',
+}) {
+  Widget row(String name, String label, VoidCallback? run, {String? action}) =>
+      MenuRow(
+        key: ValueKey<String>('$keyPrefix-$name'),
+        enabled: run != null,
+        onPressed: () {
+          close();
+          run?.call();
+        },
+        child: MenuLabel(label, action: action, enabled: run != null),
+      );
+  final shaping = onEase != null || onSpeed != null || onJoinHandles != null;
+  return [
+    row('linear', l10n.easeLinear,
+        () => onInterp(const BridgeSideInterp.linear())),
+    row('ease', l10n.easeEasy, () => onInterp(easyEase), action: 'graph.ease'),
+    row('hold', l10n.easeHold, () => onInterp(const BridgeSideInterp.hold()),
+        action: 'keyframe.hold.toggle'),
+    if (shaping) const MenuDivider(),
+    if (onEase != null) row('shape', l10n.keyMenuEase, onEase),
+    if (onSpeed != null)
+      row('speed', l10n.menuKeyframeSpeed, onSpeed, action: 'keyframe.speed'),
+    if (onJoinHandles != null)
+      row('join', l10n.keyMenuJoinHandles, onJoinHandles),
+    const MenuDivider(),
+    if (onCopy != null) row('copy', l10n.menuCopy, onCopy, action: 'edit.copy'),
+    if (onPaste != null)
+      row('paste', l10n.menuPaste, onPaste, action: 'edit.paste'),
+    row('copy-ease', l10n.keyMenuCopyEase, onCopyEase),
+    row('paste-ease', l10n.keyMenuPasteEase,
+        easeClipboard.isEmpty ? null : onPasteEase),
+    const MenuDivider(),
+    row('delete', l10n.deleteKey, onDelete),
+  ];
 }

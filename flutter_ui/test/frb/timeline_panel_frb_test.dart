@@ -539,8 +539,11 @@ void main() {
             tester.getCenter(find.byKey(ValueKey<String>('tl-mask-name-$id'))),
             buttons: kSecondaryButton);
         await tester.pumpAndSettle();
-        await tester
-            .tap(find.byKey(ValueKey<String>('tl-mask-vary-feather-$id')));
+        // The row's menu is the Layer menu's own Mask rows: the feather
+        // switch is named by what it will do.
+        await tester.tap(find.byWidgetPredicate((w) =>
+            w is Text &&
+            (w.data == 'Feather per point' || w.data == 'One feather width')));
         await tester.pumpAndSettle();
       }
 
@@ -915,11 +918,14 @@ void main() {
           find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
       await tester.pump();
 
-      // A heading has no menu of its own, and it is not ground either.
+      // A heading has a menu of its own, which is not the ground's.
       await tester.tapAt(tester.getCenter(find.text('Transform')),
           buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('tl-add-layer')), findsNothing);
+      expect(find.text('Reset'), findsOneWidget);
+      closeLumitPopups();
+      await tester.pumpAndSettle();
 
       final ground =
           tester.getRect(find.byKey(const ValueKey('tl-outline-ground')));
@@ -1002,7 +1008,16 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      expect(find.text('Send backward'), findsNothing);
+      // The order rows are the Layer menu's own Arrange flyout, and a row
+      // that cannot move is greyed rather than gone.
+      await tester.tap(find.text('Arrange'));
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<MenuRow>(
+                  find.byKey(const ValueKey<String>('menu-row-Send backward')))
+              .enabled,
+          isFalse);
       await tester.tap(find.text('Bring forward'));
       await tester.pumpAndSettle();
       expect(p.comp.getLayers().first.internallayerId, bottom.internallayerId);
@@ -1013,7 +1028,10 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Delete'));
+      // The test window is shorter than any screen, so the menu scrolls.
+      await tester
+          .ensureVisible(find.byKey(const ValueKey<String>('menu-row-Delete')));
+      await tester.tap(find.byKey(const ValueKey<String>('menu-row-Delete')));
       await tester.pumpAndSettle();
       expect(p.comp.getLayers(), hasLength(1));
     });
@@ -2085,7 +2103,10 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('tl-row-stretch')));
+      // Stretch sits under the row menu's Retime flyout.
+      await tester.tap(find.text('Retime'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stretch…'));
       await tester.pumpAndSettle();
 
       // The two wells are one number seen twice: asking for half speed puts
@@ -2127,7 +2148,7 @@ void main() {
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('tl-row-precompose')));
+      await tester.tap(find.text('Pre-compose…'));
       await tester.pumpAndSettle();
 
       await tester.enterText(
@@ -3068,7 +3089,9 @@ void main() {
       await mount(tester, p);
 
       await openRowMenu(tester, clicked);
-      await tester.tap(find.text('Delete'));
+      await tester
+          .ensureVisible(find.byKey(const ValueKey<String>('menu-row-Delete')));
+      await tester.tap(find.byKey(const ValueKey<String>('menu-row-Delete')));
       await tester.pumpAndSettle();
 
       final left = [

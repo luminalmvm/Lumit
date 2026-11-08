@@ -90,25 +90,35 @@ composition still contains that layer.
 
 ## The row menu
 
-Right-click a layer's row in the Timeline outline, or its bar, for the row menu. Its commands
-act on every selected layer and skip locked ones.
+Right-click a layer's row in the Timeline outline, or its bar, for the row menu. A layer
+outside the selection is selected first. Its commands act on every selected layer and grey
+out on locked ones. Each row shows its shortcut where it has one.
 
 | Item | Does |
 | --- | --- |
-| **Duplicate** | Duplicates the layers. |
-| **Accepts lights** | Whether Light layers shade the layer. |
-| **Bring forward**, **Send backward** | Moves the layers one place up or down the stack. |
+| **Rename**, **Layer settings…** | Renames the layer in place; opens its settings. |
+| **Effect ▸** | The Effect menu, onto the layer. |
+| **Audio ▸** | **Detach audio** moves the layer's sound onto an Audio layer directly below it and mutes the layer. **Keep pitch** holds the pitch of retimed sound. On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, **Split audio streams** and **Merge audio streams**. |
+| **Retime ▸** | **Enable Retime** or **Disable Retime**, **Stretch…** and **Freeze frame at playhead**. See [Retime](/use/retime/). Not on Sequence layers. |
+| **Markers ▸** | **Add at playhead** and **Delete all markers**. |
+| **Create ▸** | Shapes or points from a text layer, shapes from a vector file, one layer per shape. On the layers that have something to make. |
 | **Convert to sequence layer**, **Convert to footage layer** | Turns a Footage layer into a [Sequence layer](/use/sequence-layers/), and back. A Sequence layer of several clips refuses. |
-| **Detach audio** | Moves the layer's sound onto an Audio layer directly below it, and mutes the layer. Not on Audio layers. |
-| **Audio streams ▸**, **Split audio streams**, **Merge audio streams** | On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, each stream onto a layer of its own, and back onto one. |
-| **Enable Retime** or **Disable Retime**, **Stretch…**, **Freeze frame at playhead** | See [Retime](/use/retime/). Not on Sequence layers. |
+| **Copy sequence shape**, **Paste sequence shape** | On Sequence layers. See [Sequence layers](/use/sequence-layers/). |
+| **Cut**, **Copy**, **Paste**, **Duplicate**, **Split layer** | The Edit menu's commands. |
+| **Trim to work area** | Pulls the layers' ends in to the work area. |
+| **Arrange ▸** | **Bring to front**, **Bring forward**, **Send backward** and **Send to back**. |
+| **Parent ▸**, **Blending mode ▸**, **Matte ▸** | The layer's parent, blend mode and matte, ticked at the one in force. |
+| **Label colour…** | The label colour picker. |
+| **Hidden**, **Lock** | The visibility and lock switches. |
+| **Switches ▸** | **Solo**, **Shy**, **Guide**, **3D layer**, **Accepts lights** and **Flow**. |
+| **Select similar ▸** | Selects every layer of the same kind, or with the same label colour. |
+| **Group layers** or **Ungroup** | Folds the selected layers under a group header, or takes them out of their group. |
 | **Pre-compose…** | See [Compositions](/use/compositions/#nest-one-composition-in-another). |
 | **Stagger layers…** | See [Stagger](#stagger). With several layers selected. |
-| **Copy sequence shape**, **Paste sequence shape** | On Sequence layers. See [Sequence layers](/use/sequence-layers/). |
+| **Reveal in Project panel** | Selects the layer's footage or composition in the Project panel. |
 | **Delete** | Deletes the layers. |
-| **Delete all markers** | Removes the layers' markers. Only on a layer with markers. |
 
-On a locked layer the menu leaves out the commands that edit it.
+The same menu opens on a layer's bar.
 
 ## Label colours
 

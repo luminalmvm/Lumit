@@ -209,6 +209,7 @@ List<Widget> shapeMoveRows(VoidCallback close, UuidValue id,
         void Function(List<BridgeShapeEntry> Function(List<BridgeShapeEntry>))
             write) =>
     [
+      const MenuDivider(),
       for (final (by, label) in [(-1, l10n.moveUp), (1, l10n.moveDown)])
         MenuRow(
           key: ValueKey<String>('tl-shape-move-${by < 0 ? 'up' : 'down'}-$id'),

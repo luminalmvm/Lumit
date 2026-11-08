@@ -12,28 +12,21 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
-import 'package:lumit_flutter/src/rust/api/streams.dart'
-    show BridgeAudioStreams;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
-import '../shell/menu_bar_frb.dart' show duplicateLayersFrb, effectFlyout;
-import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
-import '../shell/stretch_dialog_frb.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/layer_picker.dart';
 import '../widgets/name_direction.dart';
-import 'audio_streams_menu_frb.dart';
 import 'layer_fold_frb.dart' show hasFlow;
 import 'light_rows_frb.dart' show feedsEnvironment;
 import 'timeline_extras_frb.dart';
-import 'sequence_view_frb.dart';
-import 'stagger_panel_frb.dart' show showStaggerPanel;
+import 'timeline_layer_menu_frb.dart';
 import 'timeline_timings.dart';
 import 'timeline_metrics_frb.dart';
 import 'timeline_outline_frb.dart';
@@ -184,14 +177,24 @@ class OutlineRow extends StatefulWidget {
   State<OutlineRow> createState() => _OutlineRowState();
 }
 
-/// The rows on screen, by layer, so a layer's bar can open its row's menu.
+/// The rows on screen, by layer, so a layer's bar can open its row's menu and
+/// a rename asked for from elsewhere can find the row to edit.
 final Map<UuidValue, _OutlineRowState> _rowsOnScreen = {};
 
-/// The menu a right-click on [layer]'s row opens, at [position]. Nothing
-/// when that row is not on screen.
-void showLayerRowMenu(UuidValue layer, Offset position) {
+/// The layer menu for [layer] at [position], from anywhere a layer is shown:
+/// its bar, the Hierarchy, the picture. The row's own menu when the row is on
+/// screen, so Rename is on it, and the same menu without Rename when not.
+Future<void> showLayerRowMenu(
+    BuildContext context, UuidValue layer, Offset position) {
   final row = _rowsOnScreen[layer];
-  if (row != null) row._showRowMenu(row.context, position);
+  if (row != null) return row._showRowMenu(row.context, position);
+  final entry = Provider.of<LumitUiState>(context, listen: false)
+      .model
+      .layers
+      .where((e) => e.layer.internallayerId == layer)
+      .firstOrNull;
+  if (entry == null) return Future.value();
+  return showLayerMenuFrb(context, layer: entry.layer, position: position);
 }
 
 class _OutlineRowState extends State<OutlineRow> {
@@ -743,11 +746,16 @@ class _OutlineRowState extends State<OutlineRow> {
     final switches = info.switches;
     const blank = SizedBox(width: switchCellWidth);
     Widget cell(ModeCell which) => switch (which) {
-          ModeCell.fx => _switch(context, id, 'fx', LumitIcon.fx, switches.fx,
-              BridgeLayerSwitch.fx,
-              tip: switches.fx
-                  ? l10n.switchEffectsOn
-                  : l10n.switchEffectsBypassed),
+          // Only on a row that has effects to bypass: on every other row the
+          // switch would do nothing, and a column of lit fx marks said
+          // nothing about which layers carry any.
+          ModeCell.fx => info.effects.isEmpty
+              ? blank
+              : _switch(context, id, 'fx', LumitIcon.fx, switches.fx,
+                  BridgeLayerSwitch.fx,
+                  tip: switches.fx
+                      ? l10n.switchEffectsOn
+                      : l10n.switchEffectsBypassed),
           ModeCell.motionBlur => _switch(
               context,
               id,
@@ -755,14 +763,15 @@ class _OutlineRowState extends State<OutlineRow> {
               LumitIcon.motionBlur,
               switches.motionBlur,
               BridgeLayerSwitch.motionBlur,
-              tip: l10n.switchMotionBlur),
+              tip: l10n.switchMotionBlur,
+              recedes: true),
           // Blank on a camera and a light: both are three-dimensional by being
           // what they are, so a switch there would be one you cannot turn off
           // (docs/impl/camera.md §1).
           ModeCell.threeD => hasThreeDSwitch(info.kind)
               ? _switch(context, id, '3d', LumitIcon.cube3d, switches.threeD,
                   BridgeLayerSwitch.threeD,
-                  tip: l10n.switchThreeD)
+                  tip: l10n.switchThreeD, recedes: true)
               : blank,
           // The adjustment cell, where accepts lights used to stand. An
           // ordinary switch cell like the ones beside it: it writes
@@ -781,7 +790,8 @@ class _OutlineRowState extends State<OutlineRow> {
                   switches.adjustment, BridgeLayerSwitch.adjustment,
                   tip: switches.adjustment
                       ? l10n.tipAdjustmentOn
-                      : l10n.tipAdjustmentOff)
+                      : l10n.tipAdjustmentOff,
+                  recedes: true)
               : blank,
           // The Flow cell: shaped exactly like a switch but writing the
           // layer's interpolation policy rather than a `BridgeLayerSwitch`,
@@ -790,6 +800,7 @@ class _OutlineRowState extends State<OutlineRow> {
           ModeCell.flow => hasFlow(info.kind)
               ? _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
                   tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff,
+                  recedes: true,
                   onSet: (to) {
                   // A locked layer refuses, and quietly.
                   try {
@@ -801,7 +812,7 @@ class _OutlineRowState extends State<OutlineRow> {
           ModeCell.collapse => info.kind == BridgeLayerKind.precomp
               ? _switch(context, id, 'collapse', LumitIcon.collapse,
                   switches.collapse, BridgeLayerSwitch.collapse,
-                  tip: l10n.tipCollapseTransformations)
+                  tip: l10n.tipCollapseTransformations, recedes: true)
               : blank,
         };
     final shown = modeCellsFor(width);
@@ -1039,6 +1050,7 @@ class _OutlineRowState extends State<OutlineRow> {
     String? tip,
     ValueChanged<bool>? onSet,
     bool dim = false,
+    bool recedes = false,
   }) {
     final t = ThemeScope.of(context).theme;
     final project = Provider.of<LumitState>(context, listen: false).project;
@@ -1096,13 +1108,18 @@ class _OutlineRowState extends State<OutlineRow> {
     // and their struck glyph at rest too. A hidden or silenced layer has to
     // be obvious.
     final loud = name == 'visible' || name == 'audible';
+    // A mode at its default draws nothing until the pointer is on the row, so
+    // the one row that differs is the one that shows. The cell keeps its
+    // place and its click.
     final ink = dim
         ? t.textDisabled
         : on
             ? t.textPrimary
             : loud || !_resting
                 ? t.textMuted
-                : t.textDisabled;
+                : recedes
+                    ? t.textDisabled.withValues(alpha: 0)
+                    : t.textDisabled;
     // The one switch the pointer is on comes up a step further than its
     // row, so which of the twelve a click would take is plain.
     Widget face(double lit) {
@@ -1224,480 +1241,19 @@ class _OutlineRowState extends State<OutlineRow> {
         },
       ),
     );
-    return restingPicker(t,
-        resting: _resting && value == 0,
-        label: modes.isEmpty ? '' : engineLabel(modes[0]),
-        picker: picker);
+    return restingPicker(resting: _resting && value == 0, picker: picker);
   }
 
-  Future<void> _showRowMenu(BuildContext context, Offset position) async {
-    // A locked layer keeps Duplicate — copying is not editing — but its own
-    // order and existence are held still until it is unlocked.
-    final locked = widget.entry.info.switches.locked;
-    final lit = widget.entry.info.switches.acceptsLights;
-    // The audio streams of the layer's file, for the rows that choose among
-    // them. Asked here, on the press, and only of a row that sounds: the
-    // engine reads the probe made of the file when it was imported.
-    BridgeAudioStreams? streams;
-    if (widget.hasAudio && !locked) {
-      try {
-        streams = widget.entry.layer.audioStreams();
-      } catch (_) {}
-    }
-    final several = streams?.several ?? false;
-    // Create ▸, the Layer menu's own submenu, with the rows this layer has
-    // something to make of.
-    final kind = widget.entry.info.kind;
-    final typed = kind == BridgeLayerKind.text;
-    var vector = false;
-    if (kind == BridgeLayerKind.footage && !locked) {
-      try {
-        vector = widget.entry.layer.isVectorLayer();
-      } catch (_) {}
-    }
-    final creates = [
-      if (typed) ('shapes-from-text', l10n.menuCreateShapesFromText),
-      if (vector) ('shapes-from-vector', l10n.menuCreateShapesFromVector),
-      if (typed || vector || kind == BridgeLayerKind.shape)
-        ('split-shapes', l10n.menuSplitIntoShapeLayers),
-      if (typed) ('points-from-text', l10n.menuCreatePointsFromText),
-    ];
-    String? created;
-    final chosen = await showMenuAt<String>(
-      context: context,
-      position: position,
-      width: 190,
-      rows: (close) => [
-        MenuRow(
-            onPressed: () => close('duplicate'),
-            child: Text(l10n.menuDuplicate)),
-        // **Accepts lights is a setting, and this is where it is set.**
-        // It had a cell in the Modes column and left it on the owner's ruling:
-        // a fifth mark in a row of switches, on something that does nothing at
-        // all in a comp with no Light layers. A ticked menu entry says the same
-        // thing in words, on the rows that want it, and costs the outline
-        // nothing. Not gated on the lock, exactly as the switch cells are not.
-        MenuRow(
-          key: const ValueKey('tl-row-accepts-lights'),
-          onPressed: () => close('accepts-lights'),
-          child: Row(
-            children: [
-              menuTick(lit),
-              Expanded(child: Text(l10n.switchAcceptsLights)),
-            ],
-          ),
-        ),
-        if (!locked) ...[
-          // The Effect menu itself, onto the layer that was clicked.
-          SubmenuRow(
-            key: const ValueKey('tl-row-effect'),
-            closeParent: () => close(null),
-            submenu: (dismiss) => effectFlyout(context.read<LumitState>(),
-                context.read<LumitUiState>(), widget.entry.layer, dismiss),
-            child: Text(l10n.menuEffect),
-          ),
-          if (index > 0)
-            MenuRow(
-                onPressed: () => close('up'), child: Text(l10n.bringForward)),
-          if (index < count - 1)
-            MenuRow(
-                onPressed: () => close('down'), child: Text(l10n.sendBackward)),
-          // In and out of the clip-editing surface, for anyone. The Vegas
-          // preference decides what an *import* becomes, never
-          // what a layer is allowed to be — and coming back out is
-          // offered wherever going in is, so a user who tries it can
-          // change their mind.
-          if (widget.entry.info.kind == BridgeLayerKind.footage)
-            MenuRow(
-                key: const ValueKey('tl-row-to-sequence'),
-                onPressed: () => close('to-sequence'),
-                child: Text(l10n.menuConvertToSequenceLayer)),
-          if (widget.entry.info.kind == BridgeLayerKind.sequence)
-            MenuRow(
-                key: const ValueKey('tl-row-from-sequence'),
-                onPressed: () => close('from-sequence'),
-                child: Text(l10n.menuConvertToFootageLayer)),
-          // **Detach audio**: the layer's sound onto a row of its own,
-          // directly below, with this row muted. Not offered on a row that is
-          // already nothing but sound — there is nothing to separate it from —
-          // and a row that turns out to make no sound says so in the status
-          // line rather than being greyed here, because finding out costs a
-          // probe of the media and a menu cannot wait for one.
-          if (widget.entry.info.kind != BridgeLayerKind.audio)
-            MenuRow(
-                key: const ValueKey('tl-row-detach-audio'),
-                onPressed: () => close('detach-audio'),
-                child: Text(l10n.menuDetachAudio)),
-          // **A file with several audio streams**: which of them this row
-          // plays, each onto a row of its own, and back onto one. Only on a
-          // row whose file has more than one, where they mean something.
-          if (streams != null && streams.streams.length > 1)
-            audioStreamsSubmenu(
-              key: const ValueKey('tl-row-audio-streams'),
-              closeParent: () => close(null),
-              streams: streams,
-              onChoose: (places) {
-                setPickedAudioStreams(
-                  context.read<LumitState>().project,
-                  [
-                    for (final target in _menuTargets())
-                      if (!target.info.switches.locked)
-                        (
-                          streams: () => target.layer.audioStreams(),
-                          set: (List<int> places) =>
-                              target.layer.setAudioStreams(streams: places),
-                        ),
-                  ],
-                  places,
-                );
-                widget.onChanged();
-              },
-            ),
-          // Whether sound played faster or slower keeps its pitch.
-          if (widget.hasAudio)
-            MenuRow(
-              key: const ValueKey('tl-row-keep-pitch'),
-              onPressed: () => close('keep-pitch'),
-              child: Row(
-                children: [
-                  menuTick(!widget.entry.info.pitchFollowsSpeed),
-                  Expanded(child: Text(l10n.menuKeepPitch)),
-                ],
-              ),
-            ),
-          if (several) ...[
-            MenuRow(
-                key: const ValueKey('tl-row-split-streams'),
-                onPressed: () => close('split-streams'),
-                child: Text(l10n.menuSplitAudioStreams)),
-            MenuRow(
-                key: const ValueKey('tl-row-merge-streams'),
-                onPressed: () => close('merge-streams'),
-                child: Text(l10n.menuMergeAudioStreams)),
-          ],
-          // **Retime's own commands** (docs/04 §12.1), on the layers that have
-          // a Retime to command. A Sequence layer's maps belong to its clips
-          // and are commanded from the clips' own menu in the sequence
-          // view, so offering them on the row would be offering something the
-          // engine is right to refuse.
-          if (widget.entry.info.kind != BridgeLayerKind.sequence) ...[
-            MenuRow(
-                key: const ValueKey('tl-row-retime'),
-                onPressed: () => close('retime'),
-                child: Text(widget.entry.info.retime == null
-                    ? l10n.menuEnableRetime
-                    : l10n.menuDisableRetime)),
-            MenuRow(
-                key: const ValueKey('tl-row-stretch'),
-                onPressed: () => close('stretch'),
-                child: Text(l10n.menuStretch)),
-            MenuRow(
-                key: const ValueKey('tl-row-freeze'),
-                onPressed: () => close('freeze'),
-                child: Text(l10n.menuFreezeFrame)),
-          ],
-          if (creates.isNotEmpty)
-            SubmenuRow(
-              key: const ValueKey('tl-row-create'),
-              closeParent: () => close(null),
-              submenu: (dismiss) => FloatSurface(
-                width: 190,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final (id, label) in creates)
-                      MenuRow(
-                        key: ValueKey('tl-row-$id'),
-                        onPressed: () {
-                          created = id;
-                          dismiss();
-                        },
-                        child: Text(label),
-                      ),
-                  ],
-                ),
-              ),
-              child: Text(l10n.menuCreate),
-            ),
-          // The Layer menu's own Pre-compose…, where the hand already is. It
-          // opens the same dialogue, so the two questions get asked here too.
-          MenuRow(
-              key: const ValueKey('tl-row-precompose'),
-              onPressed: () => close('precompose'),
-              child: Text(l10n.menuPreCompose)),
-          if (_menuTargets().length > 1)
-            MenuRow(
-                key: const ValueKey('tl-row-stagger'),
-                onPressed: () => close('stagger'),
-                child: Text(l10n.menuStaggerLayers)),
-        ],
-        // The shape — the cuts, the gaps and the ramps, with no media in
-        // it — from the layer itself, so carrying a cut onto a depth pass
-        // never needs either row opened first. Offered on a locked
-        // layer too: copying is not editing.
-        if (widget.entry.info.kind == BridgeLayerKind.sequence) ...[
-          MenuRow(
-              key: const ValueKey('tl-row-copy-shape'),
-              onPressed: () => close('copy-shape'),
-              child: Text(l10n.copySequenceShape)),
-          if (!locked && sequenceShapeClipboard != null)
-            MenuRow(
-                key: const ValueKey('tl-row-paste-shape'),
-                onPressed: () => close('paste-shape'),
-                child: Text(l10n.pasteSequenceShape)),
-        ],
-        if (!locked) ...[
-          MenuRow(onPressed: () => close('delete'), child: Text(l10n.delete)),
-        ],
-        // Only when there is something to clear. A layer carries markers
-        // when a composition was dropped in with some; most layers
-        // have none and should not be offered a command that does nothing.
-        if (!locked && widget.entry.info.markers.isNotEmpty)
-          MenuRow(
-              key: const ValueKey('tl-row-clear-markers'),
-              onPressed: () => close('clear-markers'),
-              child: Text(l10n.deleteAllMarkers)),
-      ],
-    );
-    // Every command below this line runs on the whole picked set, and
-    // every one of them keeps its own `try`/`catch` so that one layer's
-    // refusal - a lock, a kind that cannot do it, a row of several clips -
-    // leaves the rest of the batch standing.
-    final targets = _menuTargets();
-    final picked = chosen ?? created;
-    switch (picked) {
-      case 'duplicate':
-        // Offered on a locked layer too: copying is not editing.
-        duplicateLayersFrb([for (final target in targets) target.layer]);
-      case 'up' || 'down':
-        final delta = picked == 'up' ? -1 : 1;
-        final ids = {
-          for (final target in targets) target.layer.internallayerId,
-        };
-        final moving = [
-          for (var i = 0; i < widget.layers.length; i++)
-            if (ids.contains(widget.layers[i].layer.internallayerId) &&
-                !widget.layers[i].info.switches.locked)
-              i,
-        ];
-        // Forward from the top, backward from the bottom: a layer moving one
-        // place swaps with its neighbour and leaves every index past it alone,
-        // so taken in this order the original indices stay true for the whole
-        // batch and a block of layers keeps its shape.
-        for (final i in delta < 0 ? moving : moving.reversed) {
-          final to = i + delta;
-          if (to < 0 || to >= widget.layers.length) continue;
-          try {
-            widget.layers[i].layer
-                .reorder(newIndex: _stackIndex(to));
-          } catch (_) {}
-        }
-      case 'delete':
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.delete();
-          } catch (_) {}
-        }
-      case 'clear-markers':
-        for (final target in targets) {
-          // Only where there is something to clear: an empty write is still an
-          // undo step.
-          if (target.info.switches.locked || target.info.markers.isEmpty) {
-            continue;
-          }
-          try {
-            target.layer.setMarkers(markers: const []);
-          } catch (_) {}
-        }
-      case 'accepts-lights':
-        // This row's new state, for all of them, so a mixed set comes out even
-        // — one batched call, one undo step, like the switch cells.
-        try {
-          widget.comp.setSwitchOnLayers(
-            clicked: layer.internallayerId,
-            layers: [
-              for (final target in targets) target.layer.internallayerId
-            ],
-            switch_: BridgeLayerSwitch.acceptsLights,
-            on_: !lit,
-          );
-        } catch (_) {}
-      case 'to-sequence':
-        for (final target in targets) {
-          if (target.info.kind != BridgeLayerKind.footage) continue;
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.convertToSequenced();
-          } catch (_) {}
-        }
-      case 'from-sequence':
-        // A row of several clips refuses: which one the layer would become is
-        // the user's decision, not the command's, and the engine says so.
-        for (final target in targets) {
-          if (target.info.kind != BridgeLayerKind.sequence) continue;
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.convertFromSequenced();
-          } catch (_) {}
-        }
-      case 'detach-audio':
-        // A layer that makes no sound refuses, and one line says so for the
-        // whole batch: four silent solids should not post four notices.
-        var refused = false;
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          if (target.info.kind == BridgeLayerKind.audio) continue;
-          try {
-            await target.layer.detachAudio();
-          } catch (_) {
-            refused = true;
-          }
-        }
-        if (refused && mounted) {
-          Provider.of<LumitState>(this.context, listen: false)
-              .postNotice(l10n.detachAudioNoSound);
-        }
-      case 'split-streams' || 'merge-streams':
-        // One line for the whole batch where nothing changed, as Detach
-        // audio says one.
-        final split = picked == 'split-streams';
-        var changed = false;
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          try {
-            changed |= split
-                ? target.layer.splitAudioStreams()
-                : target.layer.mergeAudioStreams();
-          } catch (_) {}
-        }
-        if (!changed && mounted) {
-          Provider.of<LumitState>(this.context, listen: false).postNotice(split
-              ? l10n.audioStreamsNothingToSplit
-              : l10n.audioStreamsNothingToMerge);
-        }
-      case 'retime':
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.toggleRetimeProperty();
-          } catch (_) {}
-        }
-      case 'stretch':
-        // The dialogue reads the length this row has now; every other picked
-        // layer is stretched by the same *speed*, which is the number the
-        // question was asked in — matching their durations instead would make
-        // one command mean two different things.
-        final settings = widget.comp.getSettings();
-        final info = widget.entry.info;
-        if (!mounted) return;
-        final percent = await showStretchDialogFrb(
-          // The row's own context, not the one the menu was opened from: the
-          // menu has already been awaited, so `mounted` is the guard that
-          // applies.
-          context: this.context,
-          durationFrames: info.outFrame - info.inFrame,
-          fps: settings.fpsNum / settings.fpsDen,
-        );
-        if (percent == null || !mounted) return;
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.stretch(speedPercent: percent);
-          } catch (_) {}
-        }
-      case 'keep-pitch':
-        final follows = !widget.entry.info.pitchFollowsSpeed;
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.setPitchFollowsSpeed(follows: follows);
-          } catch (_) {}
-        }
-      case 'freeze':
-        if (!mounted) return;
-        final frame = Provider.of<LumitUiState>(this.context, listen: false)
-            .playheadFrame
-            .value;
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.freezeAtPlayhead(frame: frame);
-          } catch (_) {}
-        }
-      case 'precompose':
-        if (!mounted) return;
-        final ui = Provider.of<LumitUiState>(this.context, listen: false);
-        await showPrecomposeDialogFrb(
-          context: this.context,
-          comp: widget.comp,
-          // A locked layer stays where it is, like in the rest of this menu.
-          selectedLayers: [
-            for (final target in targets)
-              if (!target.info.switches.locked) target.layer,
-          ],
-          ui: ui,
-          workspace: ui.workspace,
-        );
-        // The dialogue refreshes the document itself, and by now this row may
-        // be inside the new comp.
-        return;
-      case 'shapes-from-text' || 'shapes-from-vector' || 'split-shapes':
-        if (!mounted) return;
-        final frame = Provider.of<LumitUiState>(this.context, listen: false)
-            .playheadFrame
-            .value;
-        final kinds = switch (picked) {
-          'shapes-from-text' => {BridgeLayerKind.text},
-          'shapes-from-vector' => {BridgeLayerKind.footage},
-          _ => {
-              BridgeLayerKind.text,
-              BridgeLayerKind.footage,
-              BridgeLayerKind.shape
-            },
-        };
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          if (!kinds.contains(target.info.kind)) continue;
-          try {
-            await target.layer.createShapes(
-                frame: frame, apart: picked == 'split-shapes');
-          } catch (_) {}
-        }
-      case 'points-from-text':
-        for (final target in targets) {
-          if (target.info.switches.locked) continue;
-          if (target.info.kind != BridgeLayerKind.text) continue;
-          try {
-            target.layer.createPointsFromText();
-          } catch (_) {}
-        }
-      case 'stagger':
-        if (!mounted) return;
-        showStaggerPanel(
-            Provider.of<LumitUiState>(this.context, listen: false));
-        return;
-      case 'copy-shape':
-        // Singular by nature: a clipboard holds one shape, and copying four
-        // would mean choosing which one survives.
-        try {
-          sequenceShapeClipboard = layer.copySequenceShape();
-        } catch (_) {}
-        return; // nothing changed in the document
-      case 'paste-shape':
-        final shape = sequenceShapeClipboard;
-        if (shape == null) return;
-        for (final target in targets) {
-          if (target.info.kind != BridgeLayerKind.sequence) continue;
-          if (target.info.switches.locked) continue;
-          try {
-            target.layer.pasteSequenceShape(text: shape);
-          } catch (_) {}
-        }
-      case _:
-        return;
-    }
-    widget.onChanged();
-  }
+  /// The layer menu, shared with every other place a layer is shown. This
+  /// row adds the one thing only it can: the inline rename.
+  Future<void> _showRowMenu(BuildContext context, Offset position) =>
+      showLayerMenuFrb(
+        context,
+        layer: layer,
+        position: position,
+        onRename: () {
+          widget.renameRequest.value = layer.internallayerId;
+          _maybeRename();
+        },
+      );
 }

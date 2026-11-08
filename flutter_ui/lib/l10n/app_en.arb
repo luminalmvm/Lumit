@@ -557,6 +557,14 @@
   "@copyEffect": {
     "description": "Context-menu item on an effect heading: put the effect on the clipboard."
   },
+  "pasteEffect": "Paste effect",
+  "@pasteEffect": {
+    "description": "Effects heading menu row: paste the copied effects onto this layer"
+  },
+  "effectEnabled": "Enabled",
+  "@effectEnabled": {
+    "description": "Effect heading menu row, ticked while the effect is on"
+  },
   "copySequenceShape": "Copy sequence shape",
   "@copySequenceShape": {
     "description": "Context-menu item: copy the speed curve of a Sequence layer."
@@ -1663,6 +1671,14 @@
   "deleteMask": "Delete mask",
   "@deleteMask": {
     "description": "Context-menu item."
+  },
+  "menuAddMask": "Add mask",
+  "@menuAddMask": {
+    "description": "Masks heading menu row: a new rectangle mask the size of the comp"
+  },
+  "maskDefaultName": "Mask",
+  "@maskDefaultName": {
+    "description": "The name a mask made from the Masks heading menu gets"
   },
   "deleteShape": "Delete shape",
   "@deleteShape": {
@@ -7579,6 +7595,10 @@
   "@menuAddExpression": {
     "description": "Menu item."
   },
+  "menuShowInGraph": "Show in graph",
+  "@menuShowInGraph": {
+    "description": "Property menu row: open the graph view on this property"
+  },
   "menuAddMarkerAtPlayhead": "Add marker at playhead",
   "@menuAddMarkerAtPlayhead": {
     "description": "Menu item."
@@ -8061,6 +8081,10 @@
   "@menuReveal": {
     "description": "Menu item."
   },
+  "menuRevealInProject": "Reveal in Project panel",
+  "@menuRevealInProject": {
+    "description": "Layer menu row: select the layer's footage or comp in the Project panel"
+  },
   "menuRevealAllModifiedProperties": "Reveal all modified properties",
   "@menuRevealAllModifiedProperties": {
     "description": "Menu item."
@@ -8088,6 +8112,18 @@
   "menuSelectAll": "Select all",
   "@menuSelectAll": {
     "description": "Menu item."
+  },
+  "menuSelectSimilar": "Select similar",
+  "@menuSelectSimilar": {
+    "description": "Layer menu submenu: select the layers like this one"
+  },
+  "menuSelectSameKind": "Same kind",
+  "@menuSelectSameKind": {
+    "description": "Select similar row: every layer of this layer's kind"
+  },
+  "menuSelectSameLabel": "Same label colour",
+  "@menuSelectSameLabel": {
+    "description": "Select similar row: every layer with this layer's label colour"
   },
   "menuSeparateAxesOf": "Separate {property} axes",
   "@menuSeparateAxesOf": {
@@ -8319,6 +8355,10 @@
   "menuTrimCompToWorkArea": "Trim comp to work area",
   "@menuTrimCompToWorkArea": {
     "description": "The Composition menu row that makes the composition as long as its work area, and the name of that edit in the Edit > History window."
+  },
+  "menuTrimToWorkArea": "Trim to work area",
+  "@menuTrimToWorkArea": {
+    "description": "Layer menu row: pull the selected layers' ends in to the work area"
   },
   "menuUndo": "Undo",
   "@menuUndo": {
@@ -10265,6 +10305,10 @@
   "tipLabelColour": "Label colour",
   "@tipLabelColour": {
     "description": "Tooltip on a layer's colour swatch in the Timeline, on the glyph heading that column, and on the small hue square at the right of each Project panel row — all open the colour picker. One or two words."
+  },
+  "menuLabelColour": "Label colour…",
+  "@menuLabelColour": {
+    "description": "Layer menu row: opens the label colour picker"
   },
   "tipLabelInherit": "Inherit",
   "@tipLabelInherit": {
@@ -12290,9 +12334,9 @@
   "@cutUseEffects": {
     "description": "Cut timeline, clip menu: turn a clip's bypassed effects back on. The other side of Bypass effects."
   },
-  "cutSelectTrack": "Select track",
+  "cutSelectTrack": "Select layer",
   "@cutSelectTrack": {
-    "description": "Cut timeline, track and clip menus: pick every clip on this track."
+    "description": "Cut timeline, layer head and clip menus: pick every clip on this layer."
   },
   "cutResetHeight": "Reset height",
   "@cutResetHeight": {

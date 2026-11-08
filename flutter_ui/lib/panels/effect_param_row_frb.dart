@@ -351,6 +351,8 @@ class EffectParamRowFrb extends StatelessWidget {
                 comp: comp,
                 onSeek: onSeek,
                 rowKey: '$id-${param.id}',
+                onSelectRow: onLabelTap,
+                onReset: onReset,
                 // The panel's fixed columns; the Timeline's fold-out takes
                 // the other branch and keeps its narrow gutter.
                 fixedColumns: fixed,

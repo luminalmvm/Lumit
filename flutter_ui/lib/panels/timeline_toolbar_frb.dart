@@ -23,6 +23,7 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../shell/layer_settings_frb.dart' show newSolidFrb;
+import '../shell/menu_bar_frb.dart' show pasteSelectionFrb;
 import '../shell/light_settings_dialog.dart';
 import '../widgets/time_readout.dart';
 import 'graph_channels.dart';
@@ -207,9 +208,18 @@ class Toolbar extends StatelessWidget {
           // tabs. The 8 is the rhythm the compose boxes keep from one another
           // in the rows below, so the panel breathes the same everywhere.
           const SizedBox(width: outlineGap),
+          // A search box, not a bar: it keeps to a field's width and leaves
+          // the rest of the row empty, so it reads as the box it is.
           Expanded(
-              child: timelineChromeControl(
-                  t, LayerSearchFrb(onChanged: onSearch, width: 1e9))),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: timelineChromeControl(
+                    t, LayerSearchFrb(onChanged: onSearch, width: 1e9)),
+              ),
+            ),
+          ),
           const SizedBox(width: outlineGap),
           // The two modes, at the far right of the row (§12A.1).
           // Kicker segments rather than icons: "Layers" and "Graph" are the
@@ -366,28 +376,50 @@ Future<void> showTimelineMoreMenu(
   VoidCallback? onToggleRazor,
   required VoidCallback onChanged,
 }) async {
-  final t = ThemeScope.of(context).theme;
   final box = context.findRenderObject();
   if (box is! RenderBox) return;
   final playheadNow = playhead.value;
+  final app = context.read<LumitState>();
+  final ui = context.read<LumitUiState>();
   final picked = await showMenuAt<String>(
     context: context,
     // Anchored on the button. Opening from a *bottom* bar, the popup's own
     // layout pulls it back up on screen rather than running off below —
     // which is why the anchor no longer guesses at an offset.
     position: position ?? box.localToGlobal(Offset.zero),
-    width: 190,
+    width: 200,
     rows: (close) => [
+      SubmenuRow(
+        key: const ValueKey('tl-add-layer'),
+        closeParent: () => close(null),
+        submenu: (dismiss) => FloatSurface(
+          // Room for the longest chord beside the longest word.
+          width: 240,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (action, label, add) in _newLayerKinds(
+                  context, comp, onChanged))
+                MenuRow(
+                  key: ValueKey<String>('tl-new-$action'),
+                  onPressed: () {
+                    dismiss();
+                    add();
+                    onChanged();
+                  },
+                  child: MenuLabel(label, action: action),
+                ),
+            ],
+          ),
+        ),
+        child: Text(l10n.newLayer),
+      ),
       MenuRow(
-          key: const ValueKey('tl-add-layer'),
-          onPressed: () => close('new-layer'),
-          child: Text(l10n.newLayer)),
-      if (onToggleRazor != null)
-        MenuRow(
-            key: const ValueKey('tl-razor'),
-            onPressed: () => close('razor'),
-            child: Text(razor ? l10n.disarmRazor : l10n.armRazor,
-                style: razor ? t.body.copyWith(color: t.accent) : null)),
+          key: const ValueKey('tl-paste'),
+          onPressed: () => close('paste'),
+          child: MenuLabel(l10n.menuPaste, action: 'edit.paste')),
+      const MenuDivider(),
       MenuRow(
           key: const ValueKey('tl-work-in'),
           onPressed: () => close('work-in'),
@@ -400,6 +432,7 @@ Future<void> showTimelineMoreMenu(
           key: const ValueKey('tl-clear-work-area'),
           onPressed: () => close('work-clear'),
           child: Text(l10n.workAreaClear)),
+      const MenuDivider(),
       MenuRow(
           key: const ValueKey('tl-markers'),
           onPressed: () => close('markers'),
@@ -408,12 +441,20 @@ Future<void> showTimelineMoreMenu(
           key: const ValueKey('tl-detect-beats'),
           onPressed: () => close('beats'),
           child: Text(l10n.menuDetectBeats)),
+      if (onToggleRazor != null) ...[
+        const MenuDivider(),
+        MenuRow(
+            key: const ValueKey('tl-razor'),
+            onPressed: () => close('razor'),
+            child: MenuLabel(razor ? l10n.disarmRazor : l10n.armRazor,
+                action: 'tool.razor')),
+      ],
     ],
   );
   if (!context.mounted) return;
   switch (picked) {
-    case 'new-layer':
-      await _showLayerMenu(context, comp, onChanged, position);
+    case 'paste':
+      pasteSelectionFrb(app, ui, comp, ui.selectedLayer.value);
     case 'razor':
       onToggleRazor?.call();
     case 'work-in' || 'work-out':
@@ -453,43 +494,27 @@ Future<void> showTimelineMoreMenu(
   }
 }
 
-Future<void> _showLayerMenu(
-  BuildContext context,
-  CompositionReference comp,
-  VoidCallback onChanged, [
-  Offset? position,
-]) async {
-  final box = context.findRenderObject();
-  if (box is! RenderBox) return;
-  final picked = await showMenuAt<VoidCallback>(
-    context: context,
-    position: position ?? box.localToGlobal(Offset(0, box.size.height + 2)),
-    width: 190,
-    rows: (close) => [
-      // The row carries what it does, not a word to switch on: the label is
-      // translated and would no longer match an English case.
-      for (final (label, add) in <(String, VoidCallback)>[
-        (
-          l10n.menuSolid,
-          () => newSolidFrb(context: context, comp: comp, onDone: onChanged)
-        ),
-        (l10n.menuText, comp.addTextLayer),
-        (l10n.menuCamera, comp.addCameraLayer),
-        (
-          l10n.menuLight,
-          () => newLightFrb(context: context, comp: comp, onDone: onChanged)
-        ),
-        (l10n.menuAdjustment, comp.addAdjustmentLayer),
-        (l10n.menuNull, comp.addNullLayer),
-        (l10n.menuSequence, comp.addSequenceLayer),
-      ])
-        MenuRow(onPressed: () => close(add), child: Text(label)),
-    ],
-  );
-  if (picked == null) return;
-  picked();
-  onChanged();
-}
+/// The kinds a new layer can be, each with its keymap action and how to add
+/// it. A Solid and a Light ask their questions first.
+List<(String, String, VoidCallback)> _newLayerKinds(
+        BuildContext context, CompositionReference comp, VoidCallback onChanged) =>
+    [
+      (
+        'layer.new.solid',
+        l10n.menuSolid,
+        () => newSolidFrb(context: context, comp: comp, onDone: onChanged)
+      ),
+      ('layer.new.text', l10n.menuText, comp.addTextLayer),
+      ('layer.new.camera', l10n.menuCamera, comp.addCameraLayer),
+      (
+        'layer.new.light.point',
+        l10n.menuLight,
+        () => newLightFrb(context: context, comp: comp, onDone: onChanged)
+      ),
+      ('layer.new.adjustment', l10n.menuAdjustment, comp.addAdjustmentLayer),
+      ('layer.new.null', l10n.menuNull, comp.addNullLayer),
+      ('layer.new.sequence', l10n.menuSequence, comp.addSequenceLayer),
+    ];
 
 /// **The key commands, at the outline's foot** — the interpolation words and
 /// what goes with them, standing under the list they act on.

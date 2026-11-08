@@ -166,6 +166,7 @@ class _RetimeRowState extends State<RetimeRow> {
               comp: widget.comp,
               onSeek: widget.onSeek,
               rowKey: 'tl-retime',
+              onSelectRow: widget.onLabelTap,
               onWrite: (next) {
                 widget.layer.setRetimeProperty(value: next.single);
                 widget.onChanged();

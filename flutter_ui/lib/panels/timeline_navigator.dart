@@ -33,8 +33,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/theme.dart';
-import '../widgets/controls.dart' show ThemeScope;
-import 'timeline_extras_frb.dart' show TimelineAxis;
+import '../l10n/strings.dart';
+import '../widgets/controls.dart';
+import 'timeline_extras_frb.dart' show TimelineAxis, showMenuAt;
 
 /// The visible span, in frames, that a scroll position implies.
 ///
@@ -387,6 +388,7 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
           // caught at the same moment; a tap recogniser beside the drag would
           // have to be told which of the two won, and would cancel the drag's
           // press when it lost.
+          onSecondaryTapUp: (d) => _menu(context, d.globalPosition),
           onHorizontalDragDown: (d) => _press(d.localPosition.dx, axis),
           onHorizontalDragUpdate: (d) {
             final grab = _grab;
@@ -434,6 +436,44 @@ class _TimelineNavigatorState extends State<TimelineNavigator> {
   void _end() {
     if (_grab != null) setState(() => _grab = null);
     widget.onWindowEnd?.call();
+  }
+
+  /// The three zooms, as the keys have them, about the window's centre.
+  void _menu(BuildContext context, Offset at) {
+    final frames = widget.frames.toDouble();
+    void show(double start, double span) {
+      final length = span.clamp(1.0, frames);
+      widget.onWindow(start.clamp(0.0, frames - length), length, pan: false);
+      widget.onWindowEnd?.call();
+    }
+
+    Widget row(String name, String label, VoidCallback run, String action) =>
+        MenuRow(
+          key: ValueKey<String>('tl-navigator-$name'),
+          onPressed: () {
+            closeLumitPopups();
+            run();
+          },
+          child: MenuLabel(label, action: action),
+        );
+    showMenuAt<void>(
+      context: context,
+      position: at,
+      width: 170,
+      rows: (close) {
+        final window = _window;
+        final span = window.end - window.start;
+        return [
+          row('fit', l10n.keyZoomToFit, () => show(0, frames),
+              'timeline.zoom.fit'),
+          const MenuDivider(),
+          row('in', l10n.keyZoomIn,
+              () => show(window.start + span / 4, span / 2), 'timeline.zoom.in'),
+          row('out', l10n.keyZoomOut,
+              () => show(window.start - span / 2, span * 2), 'timeline.zoom.out'),
+        ];
+      },
+    );
   }
 }
 

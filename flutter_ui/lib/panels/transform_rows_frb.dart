@@ -787,6 +787,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',
+      onSelectRow: widget.onLabelTap,
       // The Effect controls panel's fixed columns; the Timeline's
       // fold-out draws the same rows against its own column group and keeps
       // the loose layout.
