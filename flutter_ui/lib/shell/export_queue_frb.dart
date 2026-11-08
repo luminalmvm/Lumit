@@ -119,6 +119,10 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// for the time it has left.
   final Map<int, (DateTime, int)> _seenRunning = {};
 
+  /// Whether the queue will start the next item by itself: false before
+  /// Start, and after Stop after this one.
+  bool _goesOn = false;
+
   @override
   void initState() {
     super.initState();
@@ -141,6 +145,11 @@ class _ExportQueueState extends State<_ExportQueue> {
       };
     } catch (_) {
       // No project to ask, as in a widget test.
+    }
+    try {
+      _goesOn = exportQueueGoesOn();
+    } catch (_) {
+      // No engine to ask, as in a widget test.
     }
     setState(() {
       _items = (widget.list ?? exportQueueList)();
@@ -178,7 +187,11 @@ class _ExportQueueState extends State<_ExportQueue> {
           onClose: widget.onClose,
           keyPrefix: 'export-queue',
         ),
-        Padding(
+        // The list's ground is the queue's own right-click; a row's is its own.
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
+          child: Padding(
           padding: exportBodyPaddingForQueue,
           child: _items.isEmpty
               ? SizedBox(
@@ -217,8 +230,12 @@ class _ExportQueueState extends State<_ExportQueue> {
                     ],
                   ),
                 ),
-        ),
-        dialogFooter(
+        )),
+        // The footer's count is the queue's too.
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapUp: (up) => _queueMenu(up.globalPosition),
+          child: dialogFooter(
           t,
           summary: _items.isEmpty
               ? ''
@@ -241,11 +258,12 @@ class _ExportQueueState extends State<_ExportQueue> {
               key: const ValueKey('export-queue-start'),
               primary: true,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              onPressed: waiting == 0 ? null : _start,
+              // Nothing to do while the queue is already working through.
+              onPressed: waiting == 0 || _goesOn ? null : _start,
               child: Text(l10n.exportQueueStart),
             ),
           ],
-        ),
+        )),
       ],
     );
   }
@@ -496,7 +514,9 @@ class _ExportQueueState extends State<_ExportQueue> {
           onPressed: () {
             if (press != null) run(press);
           },
-          child: Text(label),
+          // In line with Stop after this one's tick, where it shows.
+          child: MenuLabel(label,
+              enabled: press != null, ticked: running ? false : null),
         );
     unawaited(showMenuAt<void>(
       context: context,
@@ -509,6 +529,7 @@ class _ExportQueueState extends State<_ExportQueue> {
         }
 
         return [
+          if (running) _stopAfterRow(() => close(null)),
           if (done && !kIsWeb)
             row('open', l10n.tipOpenFolder,
                 () => revealInFolder(path: item.path), run),
@@ -549,6 +570,66 @@ class _ExportQueueState extends State<_ExportQueue> {
                   ? exportQueueCancel(id: item.id)
                   : exportQueueRemove(id: item.id),
               run),
+        ];
+      },
+    ));
+  }
+
+  /// Stop after this one, ticked while the queue will hold once the running
+  /// export lands. Unticked, it runs on.
+  Widget _stopAfterRow(VoidCallback close) => MenuRow(
+        key: const ValueKey('export-queue-menu-stop-after'),
+        onPressed: () {
+          close();
+          _goesOn ? exportQueueStopAfter() : exportQueueStart();
+          _refresh();
+        },
+        child: MenuLabel(l10n.exportQueueStopAfter, ticked: !_goesOn),
+      );
+
+  /// The queue's own menu: run it, hold it after the export in flight, add
+  /// to it, and clear away what has landed.
+  void _queueMenu(Offset at) {
+    final running =
+        _items.any((item) => item.state is BridgeExportQueueState_Running);
+    final waiting =
+        _items.any((item) => item.state is BridgeExportQueueState_Waiting);
+    final done = [
+      for (final item in _items)
+        if (item.state is BridgeExportQueueState_Done) item.id,
+    ];
+    unawaited(showMenuAt<void>(
+      context: context,
+      position: at,
+      rows: (close) {
+        Widget row(String id, String label, VoidCallback? press) => MenuRow(
+              key: ValueKey<String>('export-queue-menu-$id'),
+              enabled: press != null,
+              onPressed: () {
+                close(null);
+                press?.call();
+              },
+              child: MenuLabel(label,
+                  enabled: press != null, ticked: running ? false : null),
+            );
+        return [
+          row('start', l10n.exportQueueStart,
+              waiting && !_goesOn ? _start : null),
+          if (running) _stopAfterRow(() => close(null)),
+          const MenuDivider(),
+          row('add', l10n.exportQueueAddComps,
+              () => showExportPickFrb(context: context)),
+          row(
+              'clear',
+              l10n.exportQueueRemoveFinished,
+              done.isEmpty
+                  ? null
+                  : () {
+                      for (final id in done) {
+                        exportQueueRemove(id: id);
+                      }
+                      _refresh();
+                    }),
         ];
       },
     ));

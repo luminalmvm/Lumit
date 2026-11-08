@@ -29,6 +29,7 @@ import '../panels/timeline_extras_frb.dart' show showMenuAt;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'settings_account.dart' show askBefore;
 
 /// The window's width and the height of its list.
 ///
@@ -117,7 +118,11 @@ class _HistoryDialogState extends State<_HistoryDialog> {
           keyPrefix: 'history',
         ),
         Expanded(
-          child: ListView.builder(
+          // The ground under the rows takes the menu without a step to go to.
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onSecondaryTapUp: (up) => _menu(null, up.globalPosition),
+            child: ListView.builder(
             controller: _scroll,
             itemExtent: _rowExtent,
             // One more than the steps: the row above them all is the state
@@ -140,7 +145,7 @@ class _HistoryDialogState extends State<_HistoryDialog> {
                     undone: _rows[index - 1].undone,
                     selected: _applied == index,
                     applied: index),
-          ),
+          )),
         ),
         dialogFooter(
           t,
@@ -181,9 +186,9 @@ class _HistoryDialogState extends State<_HistoryDialog> {
         ),
       );
 
-  /// A row's right-click: go to it, or a step either way from where the
-  /// document stands.
-  void _menu(int applied, Offset at) {
+  /// A row's right-click: go to it, a step either way from where the
+  /// document stands, or clear the list.
+  void _menu(int? applied, Offset at) {
     showMenuAt<void>(
       context: context,
       position: at,
@@ -199,16 +204,39 @@ class _HistoryDialogState extends State<_HistoryDialog> {
               child: MenuLabel(label, action: action, enabled: to != null),
             );
         return [
-          row('go', l10n.historyGoToStep,
-              applied == _applied ? null : applied),
-          const MenuDivider(),
+          if (applied != null) ...[
+            row('go', l10n.historyGoToStep,
+                applied == _applied ? null : applied),
+            const MenuDivider(),
+          ],
           row('undo', l10n.menuUndo, _applied > 0 ? _applied - 1 : null,
               action: 'edit.undo'),
           row('redo', l10n.menuRedo,
               _applied < _rows.length ? _applied + 1 : null,
               action: 'edit.redo'),
+          const MenuDivider(),
+          MenuRow(
+            key: const ValueKey('history-menu-clear'),
+            enabled: _rows.isNotEmpty,
+            onPressed: () {
+              close(null);
+              _clear();
+            },
+            child: MenuLabel(l10n.historyClearEllipsis,
+                enabled: _rows.isNotEmpty),
+          ),
         ];
       },
     );
+  }
+
+  /// Drop every step, once asked: the project stays as it is, and the list
+  /// starts again from here.
+  Future<void> _clear() async {
+    if (!await askBefore(context, l10n.historyClearAsk, l10n.clear)) return;
+    if (!mounted) return;
+    widget.app.settleHistory();
+    widget.app.project?.clearHistory();
+    setState(_read);
   }
 }

@@ -722,6 +722,19 @@ pub fn export_queue_start() {
     crate::export::queue_start();
 }
 
+/// Stop after this one: the running export finishes and nothing after it
+/// starts. [`export_queue_start`] lets the queue run again.
+#[frb(sync)]
+pub fn export_queue_stop_after() {
+    crate::export::queue_stop_after();
+}
+
+/// Whether the queue will start the next waiting item by itself.
+#[frb(sync)]
+pub fn export_queue_goes_on() -> bool {
+    crate::export::queue_goes_on()
+}
+
 /// Cancel one item. A running export stops at its next frame and leaves no
 /// half-file; an item still waiting simply leaves the list.
 #[frb(sync)]

@@ -440,6 +440,13 @@ class ProjectReference {
         that: this,
       );
 
+  /// Drop every undo and redo step and leave the document as it is. Under
+  /// the project's lock, as undo and redo are.
+  void clearHistory() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceClearHistory(
+        that: this,
+      );
+
   void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
         that: this,
       );

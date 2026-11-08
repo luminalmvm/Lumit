@@ -15351,6 +15351,14 @@
   "@exportQueueRemove": {
     "description": "Export queue window: tooltip on the mark that takes a finished item off the list."
   },
+  "exportQueueStopAfter": "Stop after this one",
+  "@exportQueueStopAfter": {
+    "description": "Export queue window: a menu toggle on the running item and on the queue. Ticked, the running export finishes and nothing after it starts."
+  },
+  "exportQueueRemoveFinished": "Remove finished",
+  "@exportQueueRemoveFinished": {
+    "description": "Export queue window: the queue's menu row that takes every finished item off the list."
+  },
   "exportQueueSummary": "{waiting} waiting · {done} done",
   "@exportQueueSummary": {
     "description": "Export queue window: the footer line counting the items.",
@@ -17731,6 +17739,14 @@
   "historyOrigin": "Before the first step",
   "@historyOrigin": {
     "description": "The first row of the Edit > History window, above every edit: the state the list begins at, before anything on it was done."
+  },
+  "historyClearEllipsis": "Clear history…",
+  "@historyClearEllipsis": {
+    "description": "Edit > History window: the menu row that drops every undo and redo step, leaving the project as it is. Asks first."
+  },
+  "historyClearAsk": "Clear the undo history?",
+  "@historyClearAsk": {
+    "description": "Edit > History window: the question Clear history asks before it drops every step. Answered with Clear or Cancel."
   },
   "histAddItem": "Add item",
   "@histAddItem": {

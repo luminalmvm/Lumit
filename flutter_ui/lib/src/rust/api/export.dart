@@ -113,6 +113,15 @@ List<BridgeExportQueueItem> exportQueueList() =>
 void exportQueueStart() =>
     BridgeLib.instance.api.crateApiExportExportQueueStart();
 
+/// Stop after this one: the running export finishes and nothing after it
+/// starts. [`export_queue_start`] lets the queue run again.
+void exportQueueStopAfter() =>
+    BridgeLib.instance.api.crateApiExportExportQueueStopAfter();
+
+/// Whether the queue will start the next waiting item by itself.
+bool exportQueueGoesOn() =>
+    BridgeLib.instance.api.crateApiExportExportQueueGoesOn();
+
 /// Cancel one item. A running export stops at its next frame and leaves no
 /// half-file; an item still waiting simply leaves the list.
 void exportQueueCancel({required int id}) =>

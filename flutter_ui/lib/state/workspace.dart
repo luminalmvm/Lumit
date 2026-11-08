@@ -1312,6 +1312,11 @@ class Workspace extends ChangeNotifier {
     recompose();
   }
 
+  /// A workspace as a new install has it, never loaded and never drawn, so
+  /// its fields are the shipped defaults. Building the theme would reset the
+  /// look the app is showing, so this one doesn't.
+  Workspace.shipped();
+
   /// Rebuild the theme from the current appearance fields — the single funnel
   /// every Appearance control uses (`Shell::recompose`).
   /// A theme shown but not saved — the customise window's live preview. It

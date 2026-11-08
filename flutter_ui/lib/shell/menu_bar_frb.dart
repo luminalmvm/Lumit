@@ -2234,7 +2234,10 @@ void removeAllEffects(LumitState app, Iterable<LayerReference> layers) {
 /// The Effect menu as a flyout, for a layer's own right-click menu.
 Widget effectFlyout(LumitState app, LumitUiState ui, LayerReference layer,
         VoidCallback close) =>
-    _MenuList(items: _effectMenu(app, ui, [layer]), close: close);
+    _MenuList(
+        items: _effectMenu(app, ui, [layer]),
+        close: close,
+        path: l10n.menuEffect);
 
 /// Rows of the menu bar as a flyout, for a right-click menu elsewhere.
 Widget menuEntriesFlyout(List<MenuEntry> items, VoidCallback close) =>
@@ -3466,7 +3469,8 @@ class _MenuButtonState extends State<_MenuButton> {
         if (_openHeading == title) _closeHeading = () => close(null);
         return _OpenMenu(
           title: title,
-          child: _MenuList(items: rows, close: () => close(null)),
+          child: _MenuList(
+              items: rows, close: () => close(null), path: title),
         );
       },
     ).then((_) {
@@ -3509,8 +3513,13 @@ class _MenuList extends StatefulWidget {
   final List<MenuEntry> items;
   final VoidCallback close;
   final double width;
+
+  /// The menus this list is in, as the palette writes a row's place, so a
+  /// row run from here counts towards the palette's recents. Null for rows
+  /// borrowed by a right-click elsewhere, which the palette doesn't place.
+  final String? path;
   const _MenuList(
-      {required this.items, required this.close, this.width = 300});
+      {required this.items, required this.close, this.path, this.width = 300});
 
   @override
   State<_MenuList> createState() => _MenuListState();
@@ -3543,8 +3552,8 @@ class _MenuListState extends State<_MenuList> {
               SubmenuRow(
                 key: ValueKey<String>('menu-sub-${item.label}'),
                 closeParent: close,
-                submenu: (dismiss) =>
-                    _MenuList(items: children, close: dismiss),
+                submenu: (dismiss) => _MenuList(
+                    items: children, close: dismiss, path: _within(item)),
                 child: _label(t, item, ticks: ticks, shortcut: null),
               )
             else if (item.live case final listenable?)
@@ -3556,7 +3565,12 @@ class _MenuListState extends State<_MenuList> {
                   final row = item.current;
                   return MenuRow(
                     enabled: row.onPressed != null,
-                    onPressed: row.onPressed ?? () {},
+                    onPressed: row.onPressed == null
+                        ? () {}
+                        : () {
+                            _noteRun(row);
+                            row.onPressed!();
+                          },
                     child: _label(t, row, ticks: ticks, shortcut: null),
                   );
                 },
@@ -3572,10 +3586,12 @@ class _MenuListState extends State<_MenuList> {
                     : item.keepsMenuOpen
                         // A toggle stays put and redraws its own tick.
                         ? () {
+                            _noteRun(item);
                             item.onPressed!();
                             if (mounted) setState(() {});
                           }
                         : () {
+                            _noteRun(item);
                             close();
                             item.onPressed!();
                           },
@@ -3592,6 +3608,25 @@ class _MenuListState extends State<_MenuList> {
       ),
     );
   }
+
+  /// [item] is run: the palette leads with it next time it opens empty, by
+  /// the label the palette gives it.
+  void _noteRun(MenuEntry item) {
+    final path = widget.path;
+    if (path == null) return;
+    context.read<LumitUiState>().workspace.noteCommandRun(
+        path.isEmpty ? item.text : '$path$palettePathSeparator${item.text}');
+  }
+
+  /// Where the rows of [submenu] stand. The palette lists an effect by its
+  /// name rather than its place in the Effect menu, so the rows below that
+  /// menu are noted by their name alone.
+  String? _within(MenuEntry submenu) => switch (widget.path) {
+        null => null,
+        '' => '',
+        final path when path == l10n.menuEffect => '',
+        final path => '$path$palettePathSeparator${submenu.text}',
+      };
 
   /// One row's contents: the tick column where the menu has toggles, the name,
   /// and the chord it answers to on the right. A row for Lumit Pro, to an
