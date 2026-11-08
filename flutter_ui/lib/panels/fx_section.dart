@@ -52,8 +52,8 @@ const double fxLabelColumnWidth = 142;
 const double fxNameColumnWidth = fxKeyColumnWidth + 4 + fxLabelColumnWidth;
 
 /// The room the control column keeps before the label starts taking the
-/// panel's extra width.
-const double fxControlColumnWidth = 172;
+/// panel's extra width: a well, its unit and its reset.
+const double fxControlColumnWidth = 112;
 
 /// How wide the label column is on a row [width] wide: what is left once the
 /// control column has its room, between a floor that still reads a short name
@@ -646,7 +646,7 @@ class FxSection extends StatelessWidget {
           // style rather than the string, so a renamed effect keeps what was
           // typed.
           child: renaming && onRenamed != null
-              ? _RenameField(
+              ? FxRenameField(
                   initial: title,
                   onDone: onRenamed!,
                   onCancel: onRenameCancelled ?? () {},
@@ -825,18 +825,21 @@ class _FxPickedFillState extends State<_FxPickedFill> {
 /// selected — a name is retyped far more often than amended — commits on
 /// Enter or on clicking away, like every inline rename, and throws the
 /// edit away on Escape.
-class _RenameField extends StatefulWidget {
+class FxRenameField extends StatefulWidget {
   final String initial;
   final ValueChanged<String> onDone;
   final VoidCallback onCancel;
-  const _RenameField(
-      {required this.initial, required this.onDone, required this.onCancel});
+  const FxRenameField(
+      {super.key,
+      required this.initial,
+      required this.onDone,
+      required this.onCancel});
 
   @override
-  State<_RenameField> createState() => _RenameFieldState();
+  State<FxRenameField> createState() => _FxRenameFieldState();
 }
 
-class _RenameFieldState extends State<_RenameField> {
+class _FxRenameFieldState extends State<FxRenameField> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initial,
   )..selection = TextSelection(
@@ -893,7 +896,6 @@ Widget fxTwoColumnRow({
   bool grows = false,
   Widget? lane,
   Widget? rowEnd,
-  void Function(Offset at)? onContextMenu,
 }) {
   final height = fxRowHeight(ThemeScope.of(context).theme);
   final strip = FxKeyStripScope.widthOf(context);
@@ -951,17 +953,7 @@ Widget fxTwoColumnRow({
       ],
     ),
   );
-  // The whole row answers a right-click, and a control with a menu of its own
-  // keeps it: the deeper one takes the press.
-  final hovered = FxRowHoverRegion(
-    child: onContextMenu == null
-        ? row
-        : GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onSecondaryTapUp: (d) => onContextMenu(d.globalPosition),
-            child: row,
-          ),
-  );
+  final hovered = FxRowHoverRegion(child: row);
   if (under == null) return hovered;
   return Column(
     mainAxisSize: MainAxisSize.min,

@@ -25,6 +25,7 @@ import '../l10n/strings.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_mask_rows_frb.dart' show ItemOpacityRow;
 
@@ -207,29 +208,38 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
-      children: [
-        KeyframeControlsFrb(
-          scalars: [_scalar],
-          onWrite: (s) => _write(s.first),
-          comp: widget.comp,
-          onSeek: widget.onSeek,
-          rowKey: _rowKey,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(t.propertyCase(puppetValueLabel(widget.value)),
-              style: t.body, overflow: TextOverflow.ellipsis),
-        ),
-        SizedBox(
-          width: widget.valueColumn.width,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(width: 72, child: _field()),
+    final keys = KeyframeControlsFrb(
+      scalars: [_scalar],
+      onWrite: (s) => _write(s.first),
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: switch (widget.value) {
+            PuppetValue.rotation => const [0],
+            PuppetValue.scale => const [100],
+            _ => null,
+          }),
+      child: Row(
+        children: [
+          keys,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(t.propertyCase(puppetValueLabel(widget.value)),
+                style: t.body, overflow: TextOverflow.ellipsis),
           ),
-        ),
-        SizedBox(width: widget.valueColumn.rightInset),
-      ],
+          SizedBox(
+            width: widget.valueColumn.width,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: 72, child: _field()),
+            ),
+          ),
+          SizedBox(width: widget.valueColumn.rightInset),
+        ],
+      ),
     );
   }
 

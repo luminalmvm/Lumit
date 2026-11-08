@@ -78,7 +78,6 @@ import 'timeline_toolbar_frb.dart';
 import 'timeline_outline_frb.dart';
 import 'timeline_lane_area_frb.dart';
 import 'timeline_key_lane_frb.dart';
-import 'keyframe_controls_frb.dart' show showGraphRequest;
 import 'timeline_lane_bottom_bar_frb.dart';
 
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -673,6 +672,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         for (final row in rowsTwirledWith(path, _twirlSelection(path))) {
           _setOpen(row, opening);
           if (!opening) _dropSelectionUnder(row);
+        }
+      });
+
+  /// These headings open or shut together, as an effect's menu asks.
+  void _foldPaths(List<String> paths, bool open) => setState(() {
+        for (final path in paths) {
+          _setOpen(path, open);
+          if (!open) _dropSelectionUnder(path);
         }
       });
 
@@ -1455,10 +1462,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// The Viewer asking for a row to be picked — a mask path it has just
   /// dragged, whose keyframe moved and whose row should therefore be the one
   /// showing.
-  void _onShowGraphRequested() {
-    if (mounted) _setMode(TimelineMode.graph);
-  }
-
   void _onSelectPropertyRequested() {
     if (!mounted) return;
     final path = _ui?.selectPropertyRequest.value;
@@ -2199,8 +2202,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // it over the selection, exactly as `U` does.
     _ui!.revealFilterRequest.addListener(_onRevealFilterRequested);
     _ui!.selectPropertyRequest.addListener(_onSelectPropertyRequested);
-    // A property row's menu asked for the graph: the row is already picked.
-    showGraphRequest.addListener(_onShowGraphRequested);
     // Merged **once**, not per build: a fresh `Listenable` every rebuild makes
     // every cache bar under it unsubscribe and resubscribe, which during a zoom
     // flight is sixty times a second for nothing.
@@ -3565,7 +3566,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
     _ui?.revealFilterRequest.removeListener(_onRevealFilterRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
-    showGraphRequest.removeListener(_onShowGraphRequested);
     if (_ui?.deleteClaim == _claimDelete) _ui!.deleteClaim = _priorDeleteClaim;
     if (_ui?.copyClaim == _claimCopy) _ui!.copyClaim = _priorCopyClaim;
     if (_ui?.pasteClaim == _claimPaste) _ui!.pasteClaim = _priorPasteClaim;
@@ -4818,6 +4818,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             onEditProperty: _selectOnEdit,
                                             keysPickedOn: _keysPickedOn,
                                             onToggle: _toggle,
+                                            onFoldPaths: _foldPaths,
                                             playheadFrame:
                                                 ui.playheadFrame.value,
                                             onSeek: ui.scrubTo,

@@ -21,6 +21,7 @@ import '../widgets/controls.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'timeline_extras_frb.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 
@@ -469,7 +470,14 @@ class _MaskValueRowState extends State<MaskValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
+    final keys = KeyframeControlsFrb(
+      scalars: [_scalar],
+      onWrite: (s) => _write(s.first),
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+    );
+    final row = Row(
       children: [
         if (_isPath)
           PathKeyframesFrb(
@@ -484,13 +492,7 @@ class _MaskValueRowState extends State<MaskValueRow> {
             onChanged: widget.onChanged,
           )
         else
-          KeyframeControlsFrb(
-            scalars: [_scalar],
-            onWrite: (s) => _write(s.first),
-            comp: widget.comp,
-            onSeek: widget.onSeek,
-            rowKey: _rowKey,
-          ),
+          keys,
         const SizedBox(width: 4),
         Expanded(
           child: HoverMark(
@@ -523,6 +525,12 @@ class _MaskValueRowState extends State<MaskValueRow> {
         ),
         SizedBox(width: widget.valueColumn.rightInset),
       ],
+    );
+    if (_isPath) return row;
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: [widget.value == MaskValue.opacity ? 100 : 0]),
+      child: row,
     );
   }
 

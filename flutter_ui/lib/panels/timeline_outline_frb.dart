@@ -925,6 +925,7 @@ class Outline extends StatelessWidget {
   /// Open or close a Sequence layer's view.
   final void Function(BridgeLayerEntry entry)? onOpenSequence;
   final ValueChanged<String> onToggle;
+  final void Function(List<String> paths, bool open)? onFoldPaths;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final ValueChanged<LayerReference> onSelect;
@@ -967,6 +968,7 @@ class Outline extends StatelessWidget {
     required this.keysPickedOn,
     this.onOpenSequence,
     required this.onToggle,
+    this.onFoldPaths,
     required this.playheadFrame,
     required this.onSeek,
     required this.onSelect,
@@ -1067,6 +1069,7 @@ class Outline extends StatelessWidget {
                     playheadFrame: playheadFrame,
                     onSeek: onSeek,
                     onToggle: onToggle,
+                    onFoldPaths: onFoldPaths,
                     onChanged: onChanged,
                     locked: false,
                   ),
@@ -1143,6 +1146,7 @@ class Outline extends StatelessWidget {
                       playheadFrame: playheadFrame,
                       onSeek: onSeek,
                       onToggle: onToggle,
+                      onFoldPaths: onFoldPaths,
                       onChanged: onChanged,
                       locked: rows[i].entry.info.switches.locked,
                     ),

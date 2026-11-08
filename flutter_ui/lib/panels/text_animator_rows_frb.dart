@@ -27,6 +27,7 @@ import '../widgets/controls.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart' show animatorsPath;
 
 /// Matches the Effect controls panel's own cell width, so the values line up
@@ -349,40 +350,45 @@ class TextAnimatorRowsFrb extends StatelessWidget {
               scalars[i],
         ]);
 
-    return fxTwoColumnRow(
-      context: context,
-      keyframeControls: KeyframeControlsFrb(
-        scalars: scalars,
-        onWrite: write,
-        comp: comp,
-        onSeek: onSeek,
-        rowKey: keyName,
-        // These rows only ever draw in the Effect controls panel, on its fixed
-        // columns.
-        fixedColumns: true,
-      ),
-      lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
-      name: Text(t.propertyCase(label),
-          style: t.body, overflow: TextOverflow.ellipsis),
-      control: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < scalars.length; i++) ...[
-            if (i > 0) const SizedBox(width: 6),
-            SizedBox(
-              width: _cellWidth,
-              child: DragValueField(
-                key: ValueKey<String>('$keyName-$i'),
-                value: shown(scalars[i]),
-                min: min,
-                max: max,
-                resetTo: resetTo,
-                decimals: 1,
-                onChanged: (v) => commit(i, v),
+    final keys = KeyframeControlsFrb(
+      scalars: scalars,
+      onWrite: write,
+      comp: comp,
+      onSeek: onSeek,
+      rowKey: keyName,
+      // These rows only ever draw in the Effect controls panel, on its fixed
+      // columns.
+      fixedColumns: true,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: List.filled(scalars.length, resetTo)),
+      child: fxTwoColumnRow(
+        context: context,
+        keyframeControls: keys,
+        lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
+        name: Text(t.propertyCase(label),
+            style: t.body, overflow: TextOverflow.ellipsis),
+        control: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < scalars.length; i++) ...[
+              if (i > 0) const SizedBox(width: 6),
+              SizedBox(
+                width: _cellWidth,
+                child: DragValueField(
+                  key: ValueKey<String>('$keyName-$i'),
+                  value: shown(scalars[i]),
+                  min: min,
+                  max: max,
+                  resetTo: resetTo,
+                  decimals: 1,
+                  onChanged: (v) => commit(i, v),
+                ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

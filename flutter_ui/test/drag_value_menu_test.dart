@@ -39,8 +39,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Reset'), findsOneWidget);
-    expect(find.text('Copy'), findsOneWidget);
-    expect(find.text('Paste'), findsOneWidget);
+    expect(find.text('Copy value'), findsOneWidget);
+    expect(find.text('Paste value'), findsOneWidget);
 
     await tester.tap(find.text('Reset'));
     await tester.pumpAndSettle();
@@ -69,7 +69,7 @@ void main() {
 
     await tester.tap(find.text('20'), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Paste'));
+    await tester.tap(find.text('Paste value'));
     await tester.pumpAndSettle();
 
     expect(changed, 100, reason: 'pasted 250 clamps to max 100');

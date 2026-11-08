@@ -20,6 +20,7 @@ import 'graph_editor_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'graph_maths.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'retime_commands.dart';
 
 /// The layer's Retime: which moment of the source, in seconds, the
@@ -159,19 +160,19 @@ class _RetimeRowState extends State<RetimeRow> {
               BridgeScalar_Static(:final field0) => field0,
               _ => sampledScalar(scalar, timeOfFrame(widget.comp, frame)),
             };
-        return Row(
+        final keys = KeyframeControlsFrb(
+          scalars: [scalar],
+          comp: widget.comp,
+          onSeek: widget.onSeek,
+          rowKey: 'tl-retime',
+          onWrite: (next) {
+            widget.layer.setRetimeProperty(value: next.single);
+            widget.onChanged();
+          },
+        );
+        final row = Row(
           children: [
-            KeyframeControlsFrb(
-              scalars: [scalar],
-              comp: widget.comp,
-              onSeek: widget.onSeek,
-              rowKey: 'tl-retime',
-              onSelectRow: widget.onLabelTap,
-              onWrite: (next) {
-                widget.layer.setRetimeProperty(value: next.single);
-                widget.onChanged();
-              },
-            ),
+            keys,
             const SizedBox(width: 4),
             Expanded(
               child: HoverMark(
@@ -179,8 +180,6 @@ class _RetimeRowState extends State<RetimeRow> {
                   key: const ValueKey('tl-retime-name'),
                   behavior: HitTestBehavior.opaque,
                   onTap: widget.onLabelTap,
-                  onSecondaryTapDown: (d) => showRetimeMenuFor(
-                      context, widget.layer, d.globalPosition),
                   child: Row(
                     children: [
                       Flexible(
@@ -278,6 +277,14 @@ class _RetimeRowState extends State<RetimeRow> {
             ),
             SizedBox(width: widget.valueColumn.rightInset),
           ],
+        );
+        // Retime's own commands first, then what any property row has.
+        return ParamRowMenu(
+          menu: scalarRowMenu(context, keys,
+              host: (context, at, rows) => showRetimeMenuFor(
+                  context, widget.layer, at,
+                  more: rows)),
+          child: row,
         );
       },
     );

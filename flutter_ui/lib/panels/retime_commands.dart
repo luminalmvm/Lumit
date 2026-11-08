@@ -161,9 +161,10 @@ String interpLabel(BridgeRetimeInterp interp) => switch (interp) {
 bool canFreezeAt(BridgeLayerEntry entry, int frame) =>
     frame > entry.info.inFrame && frame < entry.info.outFrame;
 
-/// The menu for [targets]' Retime, at [position].
+/// The menu for [targets]' Retime, at [position], with [more] after its own rows.
 void showRetimeMenu(BuildContext context, LumitUiState ui,
-    List<BridgeLayerEntry> targets, Offset position) {
+    List<BridgeLayerEntry> targets, Offset position,
+    {List<Widget> Function(VoidCallback close)? more}) {
   if (targets.isEmpty) return;
   final retimed = targets.first.info.retime != null;
   Widget row(void Function(Object?) close, String label, VoidCallback? run,
@@ -229,6 +230,10 @@ void showRetimeMenu(BuildContext context, LumitUiState ui,
       row(close, retimed ? l10n.menuDisableRetime : l10n.menuEnableRetime,
           () => setRetime(context, targets, !retimed),
           action: 'layer.retime.enable', keyName: 'retime-menu-toggle'),
+      if (more != null) ...[
+        const MenuDivider(),
+        ...more(() => close(null)),
+      ],
     ],
   );
 }
@@ -236,7 +241,8 @@ void showRetimeMenu(BuildContext context, LumitUiState ui,
 /// The menu for the row's own [layer]: the selection when the layer is in it,
 /// else the layer alone.
 void showRetimeMenuFor(
-    BuildContext context, LayerReference layer, Offset position) {
+    BuildContext context, LayerReference layer, Offset position,
+    {List<Widget> Function(VoidCallback close)? more}) {
   final ui = Provider.of<LumitUiState>(context, listen: false);
   final id = layer.internallayerId;
   final picked = retimeTargets(ui);
@@ -246,5 +252,5 @@ void showRetimeMenuFor(
           for (final entry in ui.model.layers)
             if (entry.layer.internallayerId == id && canRetime(entry)) entry,
         ];
-  showRetimeMenu(context, ui, targets, position);
+  showRetimeMenu(context, ui, targets, position, more: more);
 }

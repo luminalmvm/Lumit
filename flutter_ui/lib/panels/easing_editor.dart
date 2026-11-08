@@ -213,10 +213,29 @@ class _EasingEditorState extends State<EasingEditor>
 
   _Geometry _geom = _Geometry.fit(_popupWidth, 200);
 
+  /// The name of the tile under the pointer, shown beside Apply.
+  final ValueNotifier<String?> _hoveredTile = ValueNotifier(null);
+
+  /// The name of the shape in the box, when it is one of the library's.
+  String? get _curveName {
+    for (final id in [
+      ..._basics,
+      for (final family in _families)
+        for (final variant in const ['In', 'Out', 'InOut']) '$family$variant',
+    ]) {
+      if (_presetCurve(id) == _curve) return easingPresetName(id);
+    }
+    for (final saved in CustomEasings.all) {
+      if (saved.curve == _curve) return saved.name;
+    }
+    return null;
+  }
+
   @override
   void dispose() {
     _play.dispose();
     _nameField.dispose();
+    _hoveredTile.dispose();
     super.dispose();
   }
 
@@ -601,7 +620,23 @@ class _EasingEditorState extends State<EasingEditor>
               onPressed: () => _showMore(t, button),
             ),
           ),
-          const Spacer(),
+          // The name of the tile under the pointer, else of the shape in the box.
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: _gap),
+              child: ValueListenableBuilder<String?>(
+                valueListenable: _hoveredTile,
+                builder: (context, hovered, _) => Text(
+                  hovered ?? _curveName ?? '',
+                  key: const ValueKey('easing-name-label'),
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.small.copyWith(color: t.textMuted),
+                ),
+              ),
+            ),
+          ),
           if (widget.onClose != null) ...[
             HouseButton(
               small: true,
@@ -790,7 +825,7 @@ class _EasingEditorState extends State<EasingEditor>
 
   /// The house shapes along the top, then each family as a row with its in,
   /// out and in out shapes across. The curves say which is which, the columns
-  /// keep to one order, and a tile's name is in its tooltip.
+  /// keep to one order, and a tile's name comes up beside Apply.
   Widget _builtIn(LumitTheme t, double width) {
     final cell = (width - 2 * 3) / 3;
     final thumb = (cell * 0.34).clamp(22.0, 38.0).toDouble();
@@ -960,7 +995,13 @@ class _EasingEditorState extends State<EasingEditor>
     );
     return HouseContextMenu(
       itemBuilder: (close) => _tileRows(name, curve, saved, close),
-      child: caption ? tile : LumitTooltip(message: name, child: tile),
+      child: MouseRegion(
+        onEnter: (_) => _hoveredTile.value = name,
+        onExit: (_) {
+          if (_hoveredTile.value == name) _hoveredTile.value = null;
+        },
+        child: tile,
+      ),
     );
   }
 }

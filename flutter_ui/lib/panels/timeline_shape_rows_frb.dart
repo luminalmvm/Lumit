@@ -25,6 +25,7 @@ import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'gradient_stops_popover.dart';
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart';
 import 'shape_entries.dart';
 import 'timeline_mask_rows_frb.dart';
@@ -751,29 +752,34 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
-      children: [
-        KeyframeControlsFrb(
-          scalars: [_scalar],
-          onWrite: (s) => _write(s.first),
-          comp: widget.comp,
-          onSeek: widget.onSeek,
-          rowKey: _rowKey,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(t.propertyCase(strokeValueLabel(widget.value)),
-              style: t.body, overflow: TextOverflow.ellipsis),
-        ),
-        SizedBox(
-          width: widget.valueColumn.width,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(width: 72, child: _field()),
+    final keys = KeyframeControlsFrb(
+      scalars: [_scalar],
+      onWrite: (s) => _write(s.first),
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: [widget.value == StrokeValue.end ? 100 : 0]),
+      child: Row(
+        children: [
+          keys,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(t.propertyCase(strokeValueLabel(widget.value)),
+                style: t.body, overflow: TextOverflow.ellipsis),
           ),
-        ),
-        SizedBox(width: widget.valueColumn.rightInset),
-      ],
+          SizedBox(
+            width: widget.valueColumn.width,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: 72, child: _field()),
+            ),
+          ),
+          SizedBox(width: widget.valueColumn.rightInset),
+        ],
+      ),
     );
   }
 
@@ -879,29 +885,34 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
-      children: [
-        KeyframeControlsFrb(
-          scalars: [_scalar],
-          onWrite: (s) => _write(s.first),
-          comp: widget.comp,
-          onSeek: widget.onSeek,
-          rowKey: _rowKey,
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
-              style: t.body, overflow: TextOverflow.ellipsis),
-        ),
-        SizedBox(
-          width: widget.valueColumn.width,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(width: 72, child: _field()),
+    final keys = KeyframeControlsFrb(
+      scalars: [_scalar],
+      onWrite: (s) => _write(s.first),
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+    );
+    return ParamRowMenu(
+      menu: scalarRowMenu(context, keys,
+          defaults: [textAnimatorDefault(widget.value)]),
+      child: Row(
+        children: [
+          keys,
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
+                style: t.body, overflow: TextOverflow.ellipsis),
           ),
-        ),
-        SizedBox(width: widget.valueColumn.rightInset),
-      ],
+          SizedBox(
+            width: widget.valueColumn.width,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: 72, child: _field()),
+            ),
+          ),
+          SizedBox(width: widget.valueColumn.rightInset),
+        ],
+      ),
     );
   }
 
@@ -1198,7 +1209,14 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return Row(
+    final keys = KeyframeControlsFrb(
+      scalars: _scalars,
+      onWrite: _writeAll,
+      comp: widget.comp,
+      onSeek: widget.onSeek,
+      rowKey: _rowKey,
+    );
+    final row = Row(
       children: [
         if (_isPath)
           PathKeyframesFrb(
@@ -1213,13 +1231,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
             onChanged: widget.onChanged,
           )
         else
-          KeyframeControlsFrb(
-            scalars: _scalars,
-            onWrite: _writeAll,
-            comp: widget.comp,
-            onSeek: widget.onSeek,
-            rowKey: _rowKey,
-          ),
+          keys,
         const SizedBox(width: 4),
         Expanded(
           child: Text(
@@ -1243,6 +1255,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         SizedBox(width: widget.valueColumn.rightInset),
       ],
     );
+    return _isPath
+        ? row
+        : ParamRowMenu(menu: scalarRowMenu(context, keys), child: row);
   }
 
   Widget _field() {

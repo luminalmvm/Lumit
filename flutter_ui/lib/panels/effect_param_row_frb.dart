@@ -93,6 +93,10 @@ double logSliderTravel(double value, double min, double max) {
 /// How wide one value cell is.
 const double effectCellWidth = 78;
 
+/// How many characters a choice's option can hold and still read whole in the
+/// ordinary dropdown.
+const int _longChoice = 18;
+
 /// The gap between a value well and whatever rides beside it — the mockup's
 /// own 6 (§12A.3).
 const double effectRiderGap = 6;
@@ -351,8 +355,6 @@ class EffectParamRowFrb extends StatelessWidget {
                 comp: comp,
                 onSeek: onSeek,
                 rowKey: '$id-${param.id}',
-                onSelectRow: onLabelTap,
-                onReset: onReset,
                 // The panel's fixed columns; the Timeline's fold-out takes
                 // the other branch and keeps its narrow gutter.
                 fixedColumns: fixed,
@@ -407,7 +409,7 @@ class EffectParamRowFrb extends StatelessWidget {
     final drawn = _control(context, t, id, value, frame);
     final noRider = param.kind is BridgeParamKind_Angle && !sliderTrack;
     final control = _greyed(_withReset(t, id, _withRiders(t, id,
-        noRider ? drawn : withUnitRider(t, param.unit, withParamValueMenu(menu, drawn)))));
+        noRider ? drawn : withUnitRider(t, param.unit, drawn))));
 
     // **An Action is a button, and a button says its own name**. Drawn
     // in the value column with the name column left empty, rather than as a
@@ -428,51 +430,40 @@ class EffectParamRowFrb extends StatelessWidget {
       // same fixed height ([fxRowHeight]), and padding on top of that would
       // eat into the room the controls sit in. A row with riders may grow, so
       // they have a second line to drop onto when the panel is narrow.
-      return fxTwoColumnRow(
-        context: context,
-        name: label,
-        keyframeControls: keyframeSlot,
-        control: control,
-        grows: riders.isNotEmpty,
-        rowEnd: driven == null ? null : _drivenWord(t, id),
-        onContextMenu: (at) => showParamMenu(context, at, menu),
-        // The keyframe strip's lane: the same channels and write the
-        // stopwatch has, so a key moved there is committed as one added here.
-        lane: scalars == null || driven != null
-            ? null
-            : FxKeyLane(
-                rowKey: '$id-${param.id}',
-                scalars: scalars,
-                onWrite: (next) => _set(next.length == 4
-                    ? BridgeEffectValue.colour(BridgeColour(
-                        r: next[0], g: next[1], b: next[2], a: next[3]))
-                    : BridgeEffectValue.float(next.single)),
-              ),
+      return ParamRowMenu(
+        menu: menu,
+        child: fxTwoColumnRow(
+          context: context,
+          name: label,
+          keyframeControls: keyframeSlot,
+          control: control,
+          grows: riders.isNotEmpty,
+          rowEnd: driven == null ? null : _drivenWord(t, id),
+          // The keyframe strip's lane: the same channels and write the
+          // stopwatch has, so a key moved there is committed as one added here.
+          lane: scalars == null || driven != null
+              ? null
+              : FxKeyLane(
+                  rowKey: '$id-${param.id}',
+                  scalars: scalars,
+                  onWrite: (next) => _set(next.length == 4
+                      ? BridgeEffectValue.colour(BridgeColour(
+                          r: next[0], g: next[1], b: next[2], a: next[3]))
+                      : BridgeEffectValue.float(next.single)),
+                ),
+        ),
       );
     }
 
-    return Padding(
+    final row = Padding(
       padding: rowPadding,
       child: Row(
         children: [
-          // A right-click on the stopwatch or the name is the row's menu.
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onSecondaryTapUp: action
-                  ? null
-                  : (d) => showParamMenu(context, d.globalPosition, menu),
-              child: Row(
-                children: [
-                  if (keyframeSlot != null) keyframeSlot,
-                  const SizedBox(width: 4),
-                  // The button keeps the value column, so it lines up with the
-                  // controls above and below it, and the name column stays empty.
-                  Expanded(child: action ? const SizedBox.shrink() : label),
-                ],
-              ),
-            ),
-          ),
+          if (keyframeSlot != null) keyframeSlot,
+          const SizedBox(width: 4),
+          // The button keeps the value column, so it lines up with the
+          // controls above and below it, and the name column stays empty.
+          Expanded(child: action ? const SizedBox.shrink() : label),
           if (valueColumn case final col?) ...[
             SizedBox(
               width: col.width,
@@ -489,6 +480,7 @@ class EffectParamRowFrb extends StatelessWidget {
         ],
       ),
     );
+    return action ? row : ParamRowMenu(menu: menu, child: row);
   }
 
   /// The scalar behind this row when the kind is one that can animate, else
@@ -601,12 +593,14 @@ class EffectParamRowFrb extends StatelessWidget {
       canReset: onReset != null ||
           fallback == null ||
           !isDefaultEffectValue(value, fallback, owner: ownerLayerId),
-      copy: numeric ? () => scalars.take(float ? 1 : 3).map(read).join(', ') : null,
+      copy: numeric
+          ? () => copiedAxes(scalars.take(float ? 1 : 3).map(read))
+          : null,
       paste: !numeric
           ? null
           : (text) {
-              final n = numbersIn(text);
-              if (n.length < (float ? 1 : 3)) return;
+              final n = pastedAxes(text, float ? 1 : 3);
+              if (n == null) return;
               final frame = playhead.value;
               if (float) {
                 _set(BridgeEffectValue.float(
@@ -633,7 +627,9 @@ class EffectParamRowFrb extends StatelessWidget {
                   layer: currentLayer!)))),
       graphPath: scalars == null
           ? null
-          : rowPath ?? '${effectPath('$ownerLayerId', '$effectId')}/${param.id}',
+          : rowPath ??
+              ParamRowPath.of(context) ??
+              '${effectPath('$ownerLayerId', '$effectId')}/${param.id}',
     );
   }
 
@@ -927,37 +923,45 @@ class EffectParamRowFrb extends StatelessWidget {
       case BridgeParamKind_Choice(:final options):
         if (value case BridgeEffectValue_Choice(:final field0)) {
           final index = field0 < options.length ? field0.toInt() : 0;
-          return SizedBox(
-            width: effectCellWidth + 40,
-            // A long list gets the searchable, lazily-built picker: a
-            // plain dropdown builds every row eagerly, and at 1299 options
-            // (the lens library) that took the app down in layout.
-            // No shipped list is that long since the lists were curated, but
-            // the guard stays for the next one.
-            child: options.length >= searchableOptionThreshold
-                ? BareSearchDropdown(
-                    key: ValueKey<String>('fx-choice-$id-${param.id}'),
-                    value: index,
-                    options: options,
-                    // "Maker · Model" labels group by their maker.
-                    group: (label) {
-                      final i = label.indexOf(' · ');
-                      return i > 0 ? label.substring(0, i) : null;
-                    },
-                    hint:
-                        l10n.searchFor(engineLabel(param.label).toLowerCase()),
-                    onChanged: (i) => _setChoice(i, index, frame),
-                  )
-                : BareDropdown<int>(
-                    key: ValueKey<String>('fx-choice-$id-${param.id}'),
-                    value: index,
-                    options: [for (var i = 0; i < options.length; i++) i],
-                    // A plugin can leave a list it relists empty, and the
-                    // value still asks for its label.
-                    label: (i) =>
-                        i < options.length ? engineLabel(options[i]) : '',
-                    onChanged: (i) => _setChoice(i, index, frame),
-                  ),
+          // A long list gets the searchable, lazily-built picker: a
+          // plain dropdown builds every row eagerly, and at 1299 options
+          // (the lens library) that took the app down in layout.
+          // No shipped list is that long since the lists were curated, but
+          // the guard stays for the next one.
+          final picker = options.length >= searchableOptionThreshold
+              ? BareSearchDropdown(
+                  key: ValueKey<String>('fx-choice-$id-${param.id}'),
+                  value: index,
+                  options: options,
+                  // "Maker · Model" labels group by their maker.
+                  group: (label) {
+                    final i = label.indexOf(' · ');
+                    return i > 0 ? label.substring(0, i) : null;
+                  },
+                  hint: l10n.searchFor(engineLabel(param.label).toLowerCase()),
+                  onChanged: (i) => _setChoice(i, index, frame),
+                )
+              : BareDropdown<int>(
+                  key: ValueKey<String>('fx-choice-$id-${param.id}'),
+                  value: index,
+                  options: [for (var i = 0; i < options.length; i++) i],
+                  // A plugin can leave a list it relists empty, and the
+                  // value still asks for its label.
+                  label: (i) =>
+                      i < options.length ? engineLabel(options[i]) : '',
+                  onChanged: (i) => _setChoice(i, index, frame),
+                );
+          // Long names, a lens's maker and model, take the column to read whole.
+          if (!options.any((o) => o.length > _longChoice)) {
+            return SizedBox(width: effectCellWidth + 40, child: picker);
+          }
+          return LayoutBuilder(
+            builder: (context, box) => SizedBox(
+              width: box.maxWidth.isFinite
+                  ? math.min(box.maxWidth, effectCellWidth * 4)
+                  : effectCellWidth + 40,
+              child: picker,
+            ),
           );
         }
         return Text('—', style: t.small);
@@ -2062,8 +2066,13 @@ class EffectPointRowFrb extends StatelessWidget {
   /// layer, a node graph's box, since an expression is worked out about one.
   final bool canSetExpression;
 
+  /// The layer the effect is on, for the row's way to the graph. Null on a node
+  /// graph's box, which has none.
+  final UuidValue? ownerLayerId;
+
   const EffectPointRowFrb({
     super.key,
+    this.ownerLayerId,
     required this.effectId,
     required this.xParam,
     required this.yParam,
@@ -2395,6 +2404,14 @@ class EffectPointRowFrb extends StatelessWidget {
       defaultEffectValue(xParam.kind),
       defaultEffectValue(yParam.kind),
     );
+    // Seeded with the number showing, so turning one on does not move the
+    // picture until it is edited. The half then has a row to itself.
+    VoidCallback setHalf(BridgeParamInfo param, BridgeScalar scalar) =>
+        () => onWrite(
+            id,
+            param.id,
+            BridgeEffectValue.float(BridgeScalar.expression(
+                read(scalar).toString(), newExpressionLanguage(context))));
     final menu = ParamMenu(
       keys: keyframes is KeyframeControlsFrb ? keyframes : null,
       reset: fallbacks.$1 == null || fallbacks.$2 == null
@@ -2404,51 +2421,68 @@ class EffectPointRowFrb extends StatelessWidget {
           fallbacks.$2 == null ||
           !isDefaultEffectValue(xValue, fallbacks.$1!) ||
           !isDefaultEffectValue(yValue, fallbacks.$2!),
-      copy: sx == null || sy == null ? null : () => '${read(sx)}, ${read(sy)}',
+      copy: sx == null || sy == null
+          ? null
+          : () => copiedAxes([read(sx), read(sy)]),
       paste: sx == null || sy == null
           ? null
           : (text) {
-              final n = numbersIn(text);
-              if (n.length < 2) return;
+              final n = pastedAxes(text, 2);
+              if (n == null) return;
               final at = playhead.value;
               writeBoth(
                 BridgeEffectValue.float(scalarWithValueAt(sx, n[0], comp, at)),
                 BridgeEffectValue.float(scalarWithValueAt(sy, n[1], comp, at)),
               );
             },
+      axisExpressions: !canSetExpression || sx == null || sy == null
+          ? const []
+          : [
+              (axis: axisName(0), set: setHalf(xParam, sx)),
+              (axis: axisName(1), set: setHalf(yParam, sy)),
+            ],
+      graphPath: ownerLayerId == null
+          ? null
+          : ParamRowPath.of(context) ??
+              '${effectPath('$ownerLayerId', '$id')}/${xParam.id}',
     );
     if (twoColumn) {
-      return fxTwoColumnRow(
-        context: context,
-        name: label,
-        keyframeControls: keyframes == null ? null : greyed(keyframes),
-        control: greyed(control),
-        onContextMenu: (at) => showParamMenu(context, at, menu),
-        lane: sx == null || sy == null
-            ? null
-            : FxKeyLane(
-                rowKey: '$id-${xParam.id}-pair',
-                scalars: [sx, sy],
-                onWrite: (next) {
-                  if (next.length == 2) {
-                    writeBoth(BridgeEffectValue.float(next[0]),
-                        BridgeEffectValue.float(next[1]));
-                  }
-                },
-              ),
+      return ParamRowMenu(
+        menu: menu,
+        child: fxTwoColumnRow(
+          context: context,
+          name: label,
+          keyframeControls: keyframes == null ? null : greyed(keyframes),
+          control: greyed(control),
+          lane: sx == null || sy == null
+              ? null
+              : FxKeyLane(
+                  rowKey: '$id-${xParam.id}-pair',
+                  scalars: [sx, sy],
+                  onWrite: (next) {
+                    if (next.length == 2) {
+                      writeBoth(BridgeEffectValue.float(next[0]),
+                          BridgeEffectValue.float(next[1]));
+                    }
+                  },
+                ),
+        ),
       );
     }
     // No padding of its own: the Timeline's fold-out row is 22 and a
     // 20px value well fills all but its hairline, so two pixels either side
     // pushed the wells out of the row.
-    return Row(
-      children: [
-        if (keyframes != null) greyed(keyframes),
-        const SizedBox(width: 4),
-        Expanded(child: label),
-        const SizedBox(width: 10),
-        greyed(control),
-      ],
+    return ParamRowMenu(
+      menu: menu,
+      child: Row(
+        children: [
+          if (keyframes != null) greyed(keyframes),
+          const SizedBox(width: 4),
+          Expanded(child: label),
+          const SizedBox(width: 10),
+          greyed(control),
+        ],
+      ),
     );
   }
 }

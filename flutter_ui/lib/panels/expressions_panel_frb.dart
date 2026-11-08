@@ -348,7 +348,11 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
         title: l10n.rename, suggested: name, confirm: l10n.rename);
     if (to == null || to == name || !mounted) return;
     final saved = ui.workspace.savedExpressions;
-    if (saved.containsKey(to)) return;
+    if (saved.containsKey(to)) {
+      Provider.of<LumitState>(context, listen: false)
+          .postNotice(l10n.expressionNameTaken, error: true);
+      return;
+    }
     ui.workspace.saveExpression(
         to, saved[name] ?? '', ui.workspace.savedExpressionLanguage(name));
     ui.workspace.deleteExpression(name);

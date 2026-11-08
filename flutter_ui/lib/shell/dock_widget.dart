@@ -55,7 +55,7 @@ double panelMinWidth(Panel panel) => switch (panel) {
       // The outline's own columns, before a single lane of time.
       Panel.timeline => 220,
       // A parameter row: its name, its wells and its keyframe marks.
-      Panel.effectControls => 300,
+      Panel.effectControls => 240,
       // The toolbar's fixed controls measure 551 px in the tests' font,
       // which is wider than the shipped one: the group, note and saved
       // groups buttons, save group, the two toggles, the snap magnet and

@@ -557,12 +557,12 @@ void main() {
       expect(find.byKey(ValueKey<String>('fx-card-$top')), findsOneWidget,
           reason: 'the card under it is still on screen');
       // Invert's only rows are Mix and Matte, which sit under the Compositing
-      // fold, so the button that opens it is what the card has to show for
+      // fold, so the heading's close mark is what the card has to show for
       // itself.
       expect(
         find.descendant(
           of: find.byKey(ValueKey<String>('fx-card-$top')),
-          matching: find.byKey(ValueKey<String>('fx-show-compositing-$top')),
+          matching: find.byKey(ValueKey<String>('fx-remove-$top')),
         ),
         findsOneWidget,
         reason: 'the card that was kept stopped drawing its heading',

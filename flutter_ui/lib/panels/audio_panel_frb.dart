@@ -39,6 +39,7 @@ import 'audio_routes_frb.dart';
 import 'clip_fade_popover.dart' show FadeCurveGlyph;
 import 'graph_maths.dart' show rationalSeconds;
 import 'keyframe_controls_frb.dart';
+import 'param_row_menu.dart';
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'mixer_panel_frb.dart' show PanPot, meterRows;
 import 'placeholder.dart';
@@ -918,13 +919,35 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 edgeSeconds: info.outFrame.toInt() / fps,
                 rising: false,
                 slack: slack);
+        final volumeKeys = KeyframeControlsFrb(
+          scalars: [volume],
+          comp: widget.comp,
+          onSeek: ui.scrubTo,
+          rowKey: 'audio-volume',
+          onWrite: (next) {
+            layer.setVolumeDb(value: next.single);
+            widget.onChanged();
+          },
+        );
+        final panKeys = KeyframeControlsFrb(
+          scalars: [pan],
+          comp: widget.comp,
+          onSeek: ui.scrubTo,
+          rowKey: 'audio-pan',
+          onWrite: (next) {
+            layer.setPan(value: next.single);
+            widget.onChanged();
+          },
+        );
         return Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (widget.canSound) ...[
-              Wrap(
+              ParamRowMenu(
+                  menu: scalarRowMenu(context, volumeKeys, defaults: const [0]),
+                  child: Wrap(
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
@@ -948,19 +971,12 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                KeyframeControlsFrb(
-                  scalars: [volume],
-                  comp: widget.comp,
-                  onSeek: ui.scrubTo,
-                  rowKey: 'audio-volume',
-                  onWrite: (next) {
-                    layer.setVolumeDb(value: next.single);
-                    widget.onChanged();
-                  },
-                ),
-              ]),
+                volumeKeys,
+              ])),
               const SizedBox(height: 6),
-              Wrap(
+              ParamRowMenu(
+                  menu: scalarRowMenu(context, panKeys, defaults: const [0]),
+                  child: Wrap(
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
@@ -983,16 +999,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 ),
                 const SizedBox(width: 6),
                 // The stopwatch first, so it stands under Volume's.
-                KeyframeControlsFrb(
-                  scalars: [pan],
-                  comp: widget.comp,
-                  onSeek: ui.scrubTo,
-                  rowKey: 'audio-pan',
-                  onWrite: (next) {
-                    layer.setPan(value: next.single);
-                    widget.onChanged();
-                  },
-                ),
+                panKeys,
                 const SizedBox(width: 6),
                 // The board's own dial beside the value well — the Mixer
                 // strip's pot, turning the same way.
@@ -1003,7 +1010,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   onCommit: (v) => _commitPan(pan, v, frame),
                   onCancel: () => setState(() => _dragPan = null),
                 ),
-              ]),
+              ])),
               const SizedBox(height: 6),
               _fadeRow(
                 t,

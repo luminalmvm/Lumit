@@ -36,7 +36,7 @@ import '../panels/layer_fold_frb.dart';
 import '../panels/shape_entries.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
-    show TransformSection, hasThreeDSwitch, transformGroups;
+    show TransformSection, hasThreeDSwitch, read, transformGroups;
 import '../panels/viewer_layer_map.dart' show panBehindPosition;
 import 'camera_settings_dialog.dart';
 import 'model_settings_dialog.dart';
@@ -352,6 +352,15 @@ List<MenuEntry> expandAllCopiesRows(LumitState app, LumitUiState ui) {
 // Transform
 // ---------------------------------------------------------------------------
 
+/// The properties that say where a layer is.
+const _placement = {
+  BridgeTransformProp.anchorX,
+  BridgeTransformProp.anchorY,
+  BridgeTransformProp.positionX,
+  BridgeTransformProp.positionY,
+  BridgeTransformProp.positionZ,
+};
+
 /// What a transform property reads on a fresh layer
 /// (`lumit_core::model::TransformGroup::default`): nothing anywhere, except
 /// the two that mean "unchanged" at a hundred.
@@ -385,37 +394,69 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
     entry.layer.setTransform(prop: prop, value: scaledScalar(scalar, -1));
   }
 
+  /// What Reset writes to [entry], property by property.
+  Map<BridgeTransformProp, double> fresh(BridgeLayerEntry entry) {
+    // A new layer sits in the middle of the comp and pivots about its own
+    // middle. A camera or a light was placed, so it stays where it is.
+    final placed = comp != null &&
+        entry.info.kind != BridgeLayerKind.camera &&
+        entry.info.kind != BridgeLayerKind.light;
+    final settings = placed ? comp.getSettings() : null;
+    final middle = placed
+        ? ui.layerBounds
+            .boundsOf(entry,
+                compSize: comp.getSize(),
+                revision: ui.model.heldRevision,
+                t: frame / ui.model.heldFps)
+            .center(Offset.zero)
+        : Offset.zero;
+    return {
+      // The layer's **own** rows, not every property there is: a camera
+      // channel written to a solid is refused outright and would take the
+      // whole reset with it (docs/impl/camera.md §10). Asked with the 3D and
+      // two-node rows in, so a property the layer holds but is not showing
+      // this minute still goes back to its default.
+      for (final group in transformGroups(
+        threeD: true,
+        modes: entry.info.axisModes,
+        kind: entry.info.kind,
+        twoNode: true,
+      ))
+        // The camera and light options are left alone: a lens is seeded
+        // from the composition it was made in, so there is no still
+        // number here that means "untouched" - and a zoom of nought is a
+        // camera that sees nothing.
+        if (group.section == TransformSection.transform)
+          for (final axis in group.axes)
+            if (settings != null || !_placement.contains(axis.prop))
+              axis.prop: switch (axis.prop) {
+                BridgeTransformProp.positionX => settings!.width / 2,
+                BridgeTransformProp.positionY => settings!.height / 2,
+                BridgeTransformProp.anchorX => middle.dx,
+                BridgeTransformProp.anchorY => middle.dy,
+                final prop => _transformDefault(prop),
+              },
+    };
+  }
+
   return [
     MenuEntry(
       l10n.reset,
       onSelection(app, ui, (entry) {
-        // The layer's **own** rows, not every property there is: a camera
-        // channel written to a solid is refused outright and would take the
-        // whole reset with it (docs/impl/camera.md §10). Asked with the 3D and
-        // two-node rows in, so a property the layer holds but is not showing
-        // this minute still goes back to its default.
-        final props = [
-          for (final group in transformGroups(
-            threeD: true,
-            modes: entry.info.axisModes,
-            kind: entry.info.kind,
-            twoNode: true,
-          ))
-            // The camera and light options are left alone: a lens is seeded
-            // from the composition it was made in, so there is no still
-            // number here that means "untouched" - and a zoom of nought is a
-            // camera that sees nothing.
-            if (group.section == TransformSection.transform)
-              for (final axis in group.axes) axis.prop,
-        ];
+        final values = fresh(entry);
         entry.layer.setTransforms(
-          props: props,
+          props: values.keys.toList(),
           values: [
-            for (final prop in props)
-              BridgeScalar.static_(_transformDefault(prop)),
+            for (final value in values.values) BridgeScalar.static_(value),
           ],
         );
-      }),
+      },
+          // Greyed while there is nothing to put back.
+          when: (entry) => fresh(entry).entries.any((e) {
+                final held = read(entry.info.transform, e.key);
+                return held is! BridgeScalar_Static ||
+                    (held.field0 - e.value).abs() > 1e-3;
+              })),
     ),
     MenuEntry(l10n.menuFlipHorizontally,
         onSelection(app, ui, (entry) => flip(entry, true))),

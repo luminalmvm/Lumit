@@ -31,6 +31,9 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../shell/menu_animation_frb.dart' show toggleKeysAtPlayhead;
+import '../shell/menu_bar_frb.dart' show MenuEntry;
+import '../shell/menu_layer_frb.dart' show onSelection, transformRows;
 import '../state/comp_time.dart';
 import '../state/preview_throttle.dart';
 import '../state/timeline_columns.dart';
@@ -44,6 +47,7 @@ import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart' show transformGroupPath;
 import 'light_rows_frb.dart';
 import 'param_row_menu.dart';
+import 'timeline_layer_menu_frb.dart' show showMenuEntriesAt;
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
 /// up down the card, which is what makes a stack of numbers readable.
@@ -787,7 +791,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       comp: widget.comp,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',
-      onSelectRow: widget.onLabelTap,
       // The Effect controls panel's fixed columns; the Timeline's
       // fold-out draws the same rows against its own column group and keeps
       // the loose layout.
@@ -814,16 +817,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     );
 
     // The name is the row's handle for the graph editor, so it is built once
-    // and drawn by whichever layout the row takes. Right-clicking it opens the
-    // axis menu — on the name rather than the whole row, for the reason
-    // the left click is on the name: grabbing a value box must never be a
-    // gesture about the property's shape.
-    final menu = _menu(group, keyframes);
+    // and drawn by whichever layout the row takes.
+    final menu = _menu(group, keyframes, cells);
     Widget name(double lit) => GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onLabelTap,
-      onSecondaryTapUp: (details) =>
-          showParamMenu(context, details.globalPosition, menu),
       child: Row(
         children: [
           ...flatGroupPrefix(t, widget.nameGroup),
@@ -868,7 +866,6 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         context: context,
         name: label,
         keyframeControls: keyframes,
-        onContextMenu: (at) => showParamMenu(context, at, menu),
         lane: FxKeyLane(
           rowKey: keyframes.rowKey,
           scalars: keyframes.scalars,
@@ -881,16 +878,16 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               if (i > 0) const SizedBox(width: 6),
               // Flexible so an expression's field gives way in a narrow
               // panel; a fixed-width value box ignores the loose constraint.
-              Flexible(
-                  child: withParamValueMenu(
-                      menu, _cell(transform, cells[i], frame, group: group),
-                      withReset: true)),
+              Flexible(child: _cell(transform, cells[i], frame, group: group)),
             ],
           ],
         ),
       );
       final height = widget.rowHeight;
-      return height == null ? row : SizedBox(height: height, child: row);
+      return ParamRowMenu(
+        menu: menu,
+        child: height == null ? row : SizedBox(height: height, child: row),
+      );
     }
 
     final row = Padding(
@@ -908,11 +905,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
                   for (var i = 0; i < cells.length; i++) ...[
                     if (i > 0) const SizedBox(width: 4),
                     Expanded(
-                        child: withParamValueMenu(
-                            menu,
-                            _cell(transform, cells[i], frame,
-                                fixed: false, group: group),
-                            withReset: true)),
+                        child: _cell(transform, cells[i], frame,
+                            fixed: false, group: group)),
                   ],
                 ],
               ),
@@ -924,16 +918,16 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           ] else
             for (final axis in cells) ...[
               const SizedBox(width: 6),
-              Flexible(
-                  child: withParamValueMenu(
-                      menu, _cell(transform, axis, frame, group: group),
-                      withReset: true)),
+              Flexible(child: _cell(transform, axis, frame, group: group)),
             ],
         ],
       ),
     );
     final height = widget.rowHeight;
-    return height == null ? row : SizedBox(height: height, child: row);
+    return ParamRowMenu(
+      menu: menu,
+      child: height == null ? row : SizedBox(height: height, child: row),
+    );
   }
 
   /// How much room the row's value boxes take in the Timeline's fold-out.
@@ -1333,7 +1327,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 
   /// What this row's right-click menu offers.
-  ParamMenu _menu(TransformGroup group, KeyframeControlsFrb keys) {
+  ParamMenu _menu(
+      TransformGroup group, KeyframeControlsFrb keys, List<TransformAxis> cells) {
     final props = [for (final axis in group.axes) axis.prop];
     final defaults = [for (final p in props) _defaultOf(p)];
     final canDefault = defaults.every((d) => d != null);
@@ -1356,6 +1351,12 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       widget.onChanged();
     }
 
+    // Seeded with the number showing, so turning one on moves nothing.
+    void seed(BridgeTransformProp p) => _commitExpression(
+        p,
+        BridgeScalar.expression(
+            shown(p).toString(), newExpressionLanguage(context)));
+
     return ParamMenu(
       own: group.pair != null || _turnsIn3d(group)
           ? (close) => _ownRows(group, close)
@@ -1375,19 +1376,23 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               read(widget.transform, p) is! BridgeScalar_Static ||
                   (shown(p) - defaults[i]!).abs() > 1e-5,
           ].any((differs) => differs),
-      copy: expression.isEmpty ? () => props.map(shown).join(', ') : null,
+      copy: expression.isEmpty ? () => copiedAxes(props.map(shown)) : null,
       paste: expression.isNotEmpty
           ? null
           : (text) {
-              final n = numbersIn(text);
-              if (n.length >= props.length) writeAll(n);
+              final n = pastedAxes(text, props.length);
+              if (n != null) writeAll(n);
             },
-      setExpression: props.length == 1 && expression.isEmpty && !group.colour
-          ? () => _commitExpression(
-              props.first,
-              BridgeScalar.expression(shown(props.first).toString(),
-                  newExpressionLanguage(context)))
+      setExpression: cells.length == 1 && expression.isEmpty && !group.colour
+          ? () => seed(props.first)
           : null,
+      axisExpressions: cells.length < 2 || group.colour
+          ? const []
+          : [
+              for (final (i, axis) in cells.indexed)
+                if (!expression.contains(axis.prop))
+                  (axis: axisName(i), set: () => seed(axis.prop)),
+            ],
       removeExpression: expression.length != 1
           ? null
           : () => _commit(
@@ -1462,6 +1467,80 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     setState(() => _staged = null);
     widget.onChanged();
   }
+}
+
+/// What Copy on a Transform heading put down, curves and all.
+Map<BridgeTransformProp, BridgeScalar>? _copiedTransform;
+
+/// The Transform heading's menu, in Effect controls and in the Timeline: a
+/// keyframe on every transform property at the playhead, the Layer menu's own
+/// Transform rows, and the whole transform as one thing to copy to other
+/// layers. A heading outside the selection is about its own layer.
+void showTransformMenu(BuildContext context, Offset at, LayerReference layer,
+    {required VoidCallback onChanged}) {
+  final app = Provider.of<LumitState>(context, listen: false);
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  if (!ui.selectedLayerIds.contains(layer.internallayerId)) {
+    ui.setSelection([layer]);
+  }
+  final entry = ui.model.byId(layer.internallayerId);
+  if (entry == null) return;
+  final id = layer.internallayerId.toString();
+  List<TransformGroup> groupsOf(BridgeLayerEntry e) => [
+        for (final group in transformGroups(
+          threeD: e.info.switches.threeD,
+          modes: e.info.axisModes,
+          kind: e.info.kind,
+          twoNode: e.info.camera?.twoNode ?? false,
+          light: e.info.light,
+          material: e.info.material,
+        ))
+          if (group.section == TransformSection.transform) group,
+      ];
+  final groups = groupsOf(entry);
+  final locked = entry.info.switches.locked;
+  final channels = graphChannels(
+    layers: ui.model.layers,
+    selected: [for (final group in groups) transformGroupPath(id, group)],
+  );
+  final copied = _copiedTransform;
+  showMenuEntriesAt(context, at, [
+    MenuEntry(
+        l10n.tipAddKeyframe,
+        channels.isEmpty || locked
+            ? null
+            : () {
+                if (toggleKeysAtPlayhead(app, ui, channels)) onChanged();
+              },
+        action: 'keyframe.toggle'),
+    MenuEntry.divider(),
+    ...transformRows(app, ui),
+    MenuEntry.divider(),
+    MenuEntry(l10n.menuCopy, () {
+      _copiedTransform = {
+        for (final group in groups)
+          for (final axis in group.axes)
+            axis.prop: read(entry.info.transform, axis.prop),
+      };
+    }),
+    MenuEntry(
+        l10n.menuPaste,
+        copied == null
+            ? null
+            : onSelection(app, ui, (target) {
+                // The rows this layer has: a 2D layer takes no z.
+                final props = [
+                  for (final group in groupsOf(target))
+                    for (final axis in group.axes)
+                      if (copied.containsKey(axis.prop)) axis.prop,
+                ];
+                target.layer.setTransforms(
+                  props: props,
+                  values: [for (final p in props) copied[p]!],
+                );
+                onChanged();
+              })),
+  ]);
 }
 
 /// What a camera or light channel reads on a transform that carries none -

@@ -158,18 +158,12 @@ class ValueEditScope extends InheritedWidget {
   bool updateShouldNotify(ValueEditScope old) => false;
 }
 
-/// Rows the property around a value well adds to the well's right-click menu:
-/// [before] after Copy and Paste, and [after] past the well's own Set expression.
+/// The menu of the property around a value well, which a right press on the well
+/// opens in place of the well's own.
 class ValueMenuScope extends InheritedWidget {
-  final List<Widget> Function(BuildContext context, VoidCallback close) before;
-  final List<Widget> Function(BuildContext context, VoidCallback close) after;
+  final void Function(BuildContext context, Offset at) open;
 
-  const ValueMenuScope({
-    super.key,
-    required this.before,
-    required this.after,
-    required super.child,
-  });
+  const ValueMenuScope({super.key, required this.open, required super.child});
 
   @override
   bool updateShouldNotify(ValueMenuScope old) => false;
@@ -556,18 +550,20 @@ class _DragValueFieldState extends State<DragValueField>
     return fallback != null && (widget.value - fallback).abs() < 1e-5;
   }
 
-  /// The value's right-click menu: Reset where a default is known, Copy and
-  /// Paste over the system clipboard with the field's own clamp, and whatever
-  /// the property around it adds ([ValueMenuScope]).
+  /// The value's right-click menu: the property's own where it has one
+  /// ([ValueMenuScope]), else Reset where a default is known, and Copy and Paste
+  /// over the system clipboard with the field's own clamp.
   void _contextMenu(BuildContext context, Offset globalPos) {
     final scope = context.getInheritedWidgetOfExactType<ValueMenuScope>();
+    if (scope != null) {
+      scope.open(context, globalPos);
+      return;
+    }
     showLumitPopup<void>(
       context: context,
       position: globalPos,
       builder: (close) {
         void done() => close(null);
-        final before = scope?.before(context, done) ?? const <Widget>[];
-        final after = scope?.after(context, done) ?? const <Widget>[];
         return FloatSurface(
           child: IntrinsicWidth(
             child: Column(
@@ -593,7 +589,7 @@ class _DragValueFieldState extends State<DragValueField>
                     done();
                     Clipboard.setData(ClipboardData(text: _plain(widget.value)));
                   },
-                  child: MenuLabel(l10n.menuCopy),
+                  child: MenuLabel(l10n.paramMenuCopyValue),
                 ),
                 MenuRow(
                   onPressed: () async {
@@ -609,16 +605,12 @@ class _DragValueFieldState extends State<DragValueField>
                               .onChanged(parsed.clamp(widget.min, widget.max)));
                     }
                   },
-                  child: MenuLabel(l10n.menuPaste),
+                  child: MenuLabel(l10n.paramMenuPasteValue),
                 ),
-                if (before.isNotEmpty ||
-                    after.isNotEmpty ||
-                    widget.setExpression != null)
-                  const MenuDivider(),
-                ...before,
                 // Only where the property can actually hold one, so the menu on
                 // a field that cannot never offers it.
-                if (widget.setExpression != null)
+                if (widget.setExpression != null) ...[
+                  const MenuDivider(),
                   MenuRow(
                     onPressed: () {
                       done();
@@ -628,7 +620,7 @@ class _DragValueFieldState extends State<DragValueField>
                     child: MenuLabel(l10n.setExpression,
                         action: 'expression.add'),
                   ),
-                ...after,
+                ],
               ],
             ),
           ),

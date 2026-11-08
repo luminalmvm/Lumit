@@ -553,17 +553,9 @@
   "@compositionSettingsEllipsis": {
     "description": "Context-menu item; the ellipsis means a dialogue opens."
   },
-  "copyEffect": "Copy effect",
-  "@copyEffect": {
-    "description": "Context-menu item on an effect heading: put the effect on the clipboard."
-  },
   "pasteEffect": "Paste effect",
   "@pasteEffect": {
     "description": "Effects heading menu row: paste the copied effects onto this layer"
-  },
-  "effectEnabled": "Enabled",
-  "@effectEnabled": {
-    "description": "Effect heading menu row, ticked while the effect is on"
   },
   "copySequenceShape": "Copy sequence shape",
   "@copySequenceShape": {
@@ -7477,6 +7469,10 @@
   "@loadPresetEllipsis": {
     "description": "Button that applies an effect stack from a file."
   },
+  "presetFileNotPreset": "That isn't a Lumit preset file.",
+  "@presetFileNotPreset": {
+    "description": "Status-line notice when the file chosen for Load preset in Effect controls is not an effect preset."
+  },
   "marker": "Marker",
   "@marker": {
     "description": "Title of the dialogue that edits one marker."
@@ -7594,10 +7590,6 @@
   "menuAddExpression": "Add expression",
   "@menuAddExpression": {
     "description": "Menu item."
-  },
-  "menuShowInGraph": "Show in graph",
-  "@menuShowInGraph": {
-    "description": "Property menu row: open the graph view on this property"
   },
   "menuAddMarkerAtPlayhead": "Add marker at playhead",
   "@menuAddMarkerAtPlayhead": {
@@ -16636,6 +16628,10 @@
   "@expressionsFileNotExpressions": {
     "description": "Status-line notice when the file chosen for Import in the Expressions panel is not a file of saved expressions."
   },
+  "expressionNameTaken": "That name is taken.",
+  "@expressionNameTaken": {
+    "description": "Status-line notice when a saved expression is renamed to a name another one already has."
+  },
   "fileTypeWorkspace": "Lumit workspace",
   "@fileTypeWorkspace": {
     "description": "A file type in the system's file dialogues: a .lumworkspace panel arrangement, the workspace's counterpart of the shared theme file."
@@ -23804,7 +23800,7 @@
   "@fxTeleLensWidth": {
     "description": "Grid parameter label in the Effect Controls panel, for its Lines type: a longer or shorter lens, changing the perspective, as Sapphire's S_Grid names it."
   },
-  "easingRead": "Read from keys",
+  "easingRead": "Read from keyframes",
   "@easingRead": {
     "description": "Easing panel: tooltip on the eyedropper button that loads the shape of the two selected keyframes into the editor."
   },
