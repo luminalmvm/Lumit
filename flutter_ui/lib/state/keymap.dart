@@ -157,7 +157,7 @@ String chordLabel(String chord) {
   if (chord.isEmpty) return '';
   final mac = defaultTargetPlatform == TargetPlatform.macOS;
   return chord
-      .replaceAll('*', 'Num *')
+      .replaceAll('*', 'Numpad *')
       .replaceAll('Mod+', mac ? '⌘' : 'Ctrl+')
       .replaceAll('Alt+', mac ? '⌥' : 'Alt+')
       .replaceAll('Shift+', mac ? '⇧' : 'Shift+')

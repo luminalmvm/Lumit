@@ -6667,6 +6667,10 @@
   "@keyFitTheCurvesToThePane": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyFitEveryCurveToThePane": "Fit every curve to the pane",
+  "@keyFitEveryCurveToThePane": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. The Graph editor's Frame all, as against the picked keys."
+  },
   "keyFrameThePickedBoxes": "Frame the picked boxes",
   "@keyFrameThePickedBoxes": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -10725,24 +10729,6 @@
   "@tipPickOnViewer": {
     "description": "Tooltip on the eyedropper that reads a position off the picture. One or two words."
   },
-  "tipPlaybackAdaptive": "Adaptive ({transport})",
-  "@tipPlaybackAdaptive": {
-    "description": "Tooltip on the playback-mode button, naming the mode. {transport} is a technical route name such as 'shared texture' and is not translated.",
-    "placeholders": {
-      "transport": {
-        "type": "String"
-      }
-    }
-  },
-  "tipPlaybackEveryFrame": "Every-frame ({transport})",
-  "@tipPlaybackEveryFrame": {
-    "description": "Tooltip on the playback-mode button, naming the mode. {transport} is a technical route name and is not translated.",
-    "placeholders": {
-      "transport": {
-        "type": "String"
-      }
-    }
-  },
   "tipPlayheadTime": "Playhead time",
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. One or two words."
@@ -11960,18 +11946,6 @@
   "transformUnlinkAxes": "Unlink axes",
   "@transformUnlinkAxes": {
     "description": "Entry in the menu opened by right-clicking the Scale row's name: a value box per axis, each edited on its own."
-  },
-  "transportDmaBuf": "DMA-BUF, no copy",
-  "@transportDmaBuf": {
-    "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build. DMA-BUF is a Linux technology name — leave it as it is."
-  },
-  "transportReadBack": "read-back (pixels copied)",
-  "@transportReadBack": {
-    "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build — copied through main memory, the slow route. Lower case on purpose."
-  },
-  "transportSharedTexture": "shared texture, no copy",
-  "@transportSharedTexture": {
-    "description": "Part of the playback-mode tooltip: how frames reach the Viewer in this build — handed over on the graphics card. Lower case on purpose."
   },
   "typeVerticalNotBuilt": "Vertical type is not built yet",
   "@typeVerticalNotBuilt": {

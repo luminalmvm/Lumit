@@ -125,6 +125,13 @@ export 'viewer_strips.dart';
 /// closed. Set by the panel while it is mounted; see `_lendPicture`.
 GlobalKey? viewerPictureKey;
 
+/// The views holding a snapshot, by engine id, so a menu with no panel in
+/// hand knows whether Compare ▸ Snapshot can do anything.
+final Set<int> _snapshotViews = {};
+
+/// Whether the view [viewId] holds a snapshot.
+bool viewerHasSnapshot(int viewId) => _snapshotViews.contains(viewId);
+
 /// Photograph the composition on screen as a small PNG, for the welcome
 /// screen's recent rows.
 ///
@@ -229,7 +236,7 @@ class _ViewerPanelLayoutState extends State<ViewerPanelFrb>
           return _surface(ui, shown.isEmpty ? views.first : shown.first,
               alone: true);
         }
-        if (compare != CompareMode.none) {
+        if (compare.pairsViews) {
           // A wipe is one picture under one bar, so neither side wears the
           // active edge.
           final wipe = compare == CompareMode.wipe;
@@ -501,6 +508,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     _changes?.cancel();
     _zoomMotion.dispose();
     _snapshot?.dispose();
+    _snapshotViews.remove(widget.view.engineId);
     super.dispose();
   }
 
@@ -543,6 +551,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       return;
     }
     final old = _snapshot;
+    _snapshotViews.add(widget.view.engineId);
     setState(() {
       _snapshot = shot;
       _snapshotArea = Rect.fromLTRB(
@@ -569,6 +578,12 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// Forget the stored picture, after the frame for [_takeSnapshot]'s reason.
   void _clearSnapshot() {
     final old = _snapshot;
+    _snapshotViews.remove(widget.view.engineId);
+    // A compare against it has nothing left to compare with.
+    final ui = _uiOrNull;
+    if (ui != null && ui.views.compareOf(widget.pane) == CompareMode.snapshot) {
+      ui.views.setCompare(widget.pane, CompareMode.none);
+    }
     setState(() {
       _snapshot = null;
       _snapshotArea = null;
@@ -947,8 +962,14 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             grid: ui.viewerGrid,
             overlays: ui.viewerOverlays,
             pictureKey: _pictureKey,
-            snapshot: _showingSnapshot ? _snapshot : null,
+            snapshot: _showingSnapshot || _comparingSnapshot(ui)
+                ? _snapshot
+                : null,
             snapshotArea: _snapshotArea,
+            // Held, the snapshot covers all of it again.
+            snapshotUpTo: _comparingSnapshot(ui) && !_showingSnapshot
+                ? ui.views.dividerOf(widget.pane)
+                : null,
             wireframes: ui.viewerLayerControls,
             channel: _channel,
             compSize: size,
@@ -1048,7 +1069,11 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
       above.setAll(0, above.map(hidden));
       below.setAll(0, below.map(hidden));
     }
-    final picture = wipe == null ? stage : _wiped(wipe, stage, settings.name);
+    final picture = wipe != null
+        ? _wiped(wipe, stage, settings.name)
+        : _comparingSnapshot(ui)
+            ? _snapshotWiped(ui, stage)
+            : stage;
 
     // Keyed either way: the picture with its strips, which is only here while
     // a composition is shown.
@@ -1126,6 +1151,38 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
               bottom: 0,
               width: ViewerCompare.grab,
               child: wipe.seam,
+            ),
+          ],
+        );
+      });
+
+  /// Whether this view is wiped against its own snapshot.
+  bool _comparingSnapshot(LumitUiState ui) =>
+      _snapshot != null &&
+      ui.views.compareOf(widget.pane) == CompareMode.snapshot;
+
+  /// The picture wiped against its snapshot: the snapshot up to the line,
+  /// which the stage cuts, then the line, and the snapshot's side named.
+  Widget _snapshotWiped(LumitUiState ui, Widget stage) =>
+      LayoutBuilder(builder: (context, box) {
+        final t = ThemeScope.of(context).theme;
+        final x = box.maxWidth * ui.views.dividerOf(widget.pane);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            stage,
+            Positioned(
+              right: box.maxWidth - x + _wipeTagGap,
+              bottom: _wipeTagGap,
+              child: ViewLookTag(look: l10n.viewerMenuSnapshot),
+            ),
+            Positioned(
+              left: x - ViewerCompare.grab / 2,
+              top: 0,
+              bottom: 0,
+              width: ViewerCompare.grab,
+              child: viewerCompareSeam(context, t, box.maxWidth, x,
+                  (at) => ui.views.setDivider(widget.pane, at)),
             ),
           ],
         );

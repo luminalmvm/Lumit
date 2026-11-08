@@ -1973,6 +1973,7 @@ Map<String, String> get _built => {
       "Easy ease in": l10n.keyEasyEaseIn,
       "Easy ease out": l10n.keyEasyEaseOut,
       "Fit the curves to the pane": l10n.keyFitTheCurvesToThePane,
+      "Fit every curve to the pane": l10n.keyFitEveryCurveToThePane,
       "Frame the picked boxes": l10n.keyFrameThePickedBoxes,
       "Frame every box": l10n.keyFrameEveryBox,
       "Fit the picture to the panel": l10n.keyFitThePictureToThePanel,

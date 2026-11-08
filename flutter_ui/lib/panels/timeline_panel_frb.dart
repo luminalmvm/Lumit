@@ -3240,6 +3240,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       _fitGraph();
       return true;
     }
+    if (action == 'graph.frame.all') {
+      _fitGraph(everything: true);
+      return true;
+    }
     return false;
   }
 
@@ -5488,15 +5492,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 // graph's top right corner — under the Layers / Graph switch
                 // and beside the value gutter, over the view and not the
                 // scrolling canvas.
-                Positioned(
+                // Under about 560 px of plot the pill would cover the keys,
+                // so it folds to one word.
+                Positioned.fill(
                   top: t.density.ruler + 4,
                   right: graphGutterWidth + 6,
-                  child: GraphLensSwitch(
-                    lens: _graphLens,
-                    onLens: (lens) => setState(() {
-                      _graphLens = lens;
-                      _publishEasingClaim();
-                    }),
+                  child: LayoutBuilder(
+                    builder: (context, box) => Align(
+                      alignment: Alignment.topRight,
+                      child: GraphLensSwitch(
+                        compact: box.maxWidth < 560,
+                        lens: _graphLens,
+                        onLens: (lens) => setState(() {
+                          _graphLens = lens;
+                          _publishEasingClaim();
+                        }),
+                      ),
+                    ),
                   ),
                 ),
                 ],

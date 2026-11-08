@@ -35,7 +35,12 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart' show ThemeScope;
 import 'node_menus.dart' show showGraphTieMenu;
 import 'graph_panel.dart'
-    show graphWireDistance, graphWirePath, graphWireStub, graphWireWidth;
+    show
+        graphDashPath,
+        graphWireDistance,
+        graphWirePath,
+        graphWireStub,
+        graphWireWidth;
 
 /// How far apart the wires in a tie run, in canvas units.
 const double graphTieGap = 4;
@@ -332,7 +337,8 @@ class TieView {
 }
 
 /// Draw [wires], each with its colour and weight, through their ties, then
-/// the ties over them and any stroke being drawn.
+/// the ties over them and any stroke being drawn. The wires named in
+/// [dashed] are drawn in long dashes, which is how a refused wire reads.
 void paintTiedWires(
   Canvas canvas,
   List<(TieWire, Color, double)> wires,
@@ -341,6 +347,7 @@ void paintTiedWires(
   required double zoom,
   required WireStyle style,
   required LumitTheme theme,
+  Set<String> dashed = const {},
 }) {
   final plain = [for (final (w, _, _) in wires) w];
   final level = style == WireStyle.angled;
@@ -364,7 +371,7 @@ void paintTiedWires(
         : tiedWirePath(a, b, onScreen(to), zoom: zoom, wires: style);
     final lit = view.crossed.contains(w.key);
     canvas.drawPath(
-        path,
+        dashed.contains(w.key) ? graphDashPath(path, dash: 6 * zoom) : path,
         Paint()
           ..color = lit ? theme.animated : colour
           ..style = PaintingStyle.stroke

@@ -11,7 +11,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:provider/provider.dart';
 
@@ -397,19 +396,6 @@ const double _headerFolds = 360;
 /// there is no free space left to hold them apart.
 const double _headerGatheredGap = 24;
 
-/// Which route frames take from the engine to the Viewer, in words — the
-/// quality picker's tooltip, where the two playback behaviours are chosen.
-///
-/// The bridge is asked once and kept — it reports what this build compiled to,
-/// and it was asked for in a `build()` that runs for each frame of playback.
-/// The wording is a getter over that answer, so it follows the language.
-final BridgeViewerTransport _transport = viewerTransport();
-String get _transportName => switch (_transport) {
-      BridgeViewerTransport.sharedTexture => l10n.transportSharedTexture,
-      BridgeViewerTransport.dmaBuf => l10n.transportDmaBuf,
-      BridgeViewerTransport.readBack => l10n.transportReadBack,
-    };
-
 /// The three pickers the drawing puts at the header's right-hand end, 6 apart.
 ///
 /// A list rather than a widget because the strip they sit in is not always the
@@ -575,13 +561,7 @@ class _QualityDropdown extends StatelessWidget {
     final ui = Provider.of<LumitUiState>(context);
     final adaptive = ui.workspace.performance.playback == PlaybackMode.adaptive;
     return LumitTooltip(
-      // Which route frames take to get here rides in the tooltip: a build
-      // without a zero-copy path copies every pixel down and uploads it
-      // again, which is the difference between playback feeling immediate and
-      // feeling heavy, so it is worth being able to read off the screen.
-      message: adaptive
-          ? l10n.tipPlaybackAdaptive(_transportName)
-          : l10n.tipPlaybackEveryFrame(_transportName),
+      message: adaptive ? l10n.playbackAdaptive : l10n.playbackEveryFrame,
       child: Builder(
         builder: (context) => dropdownButton(
           t: t,

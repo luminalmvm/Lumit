@@ -919,14 +919,12 @@ void main() {
       await tester.pumpAndSettle();
       final drivers = layer.getGraphDrivers();
       expect(drivers, hasLength(1));
-      final canvas =
-          tester.getTopLeft(find.byKey(const ValueKey('graph-canvas')));
+      // The canvas opens framed, so the box is checked on screen.
       final from =
           tester.getTopLeft(find.byKey(const ValueKey<String>('drag-driver')));
-      final place = layer.getGraph().wiring.layout.firstWhere(
-          (l) => l.node == BridgeNodeRef.driver(drivers.single.id()));
-      expect(Offset(place.x, place.y),
-          from + const Offset(300, 350) - canvas,
+      final box = tester.getTopLeft(find.byKey(
+          ValueKey<String>('graph-node-driver:${drivers.single.id()}')));
+      expect((box - (from + const Offset(300, 350))).distance, lessThan(1),
           reason: 'the driver sits where it was let go');
       expect(comp.documentRevision(), was + 2, reason: 'one op');
     });

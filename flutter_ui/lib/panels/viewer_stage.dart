@@ -130,6 +130,11 @@ class ViewerStage extends StatelessWidget {
   /// where it is the part that was on screen. Null when nothing is stored.
   final Rect? snapshotArea;
 
+  /// In a compare against the snapshot, how far across the stage the snapshot
+  /// reaches, as a fraction; the live picture shows after it. Null draws the
+  /// whole snapshot.
+  final double? snapshotUpTo;
+
   /// Whether the layer controls are drawn (the bar's wireframe switch).
   final bool wireframes;
   final ViewerChannel channel;
@@ -164,6 +169,7 @@ class ViewerStage extends StatelessWidget {
     required this.pictureKey,
     required this.snapshot,
     required this.snapshotArea,
+    this.snapshotUpTo,
     required this.wireframes,
     required this.channel,
     required this.compSize,
@@ -1255,13 +1261,22 @@ class ViewerStage extends StatelessWidget {
             // to the picture's rectangle as it is *now*, so a zoom taken since
             // the snapshot compares like with like.
             if (snapshot case final shot?)
-              Positioned.fromRect(
-                rect: _snapshotRect(),
-                child: IgnorePointer(
-                  child: RawImage(
-                    key: const ValueKey('viewer-snapshot-overlay'),
-                    image: shot,
-                    fit: BoxFit.fill,
+              Positioned.fill(
+                child: ClipRect(
+                  clipper: _UpTo(snapshotUpTo ?? 1),
+                  child: Stack(
+                    children: [
+                      Positioned.fromRect(
+                        rect: _snapshotRect(),
+                        child: IgnorePointer(
+                          child: RawImage(
+                            key: const ValueKey('viewer-snapshot-overlay'),
+                            image: shot,
+                            fit: BoxFit.fill,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1646,6 +1661,19 @@ BridgeLayerEntry? layerAtCompPoint(
     ));
   }
   return entries[layerAtPoint(boxes, at)?.id];
+}
+
+/// Everything left of [fraction] of the way across.
+class _UpTo extends CustomClipper<Rect> {
+  final double fraction;
+  const _UpTo(this.fraction);
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(0, 0, size.width * fraction.clamp(0.0, 1.0), size.height);
+
+  @override
+  bool shouldReclip(_UpTo old) => old.fraction != fraction;
 }
 
 /// The badge that appears only once a probe has actually found a file gone.

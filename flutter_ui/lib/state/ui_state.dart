@@ -1579,6 +1579,46 @@ class LumitUiState extends ChangeNotifier {
     requestFrame();
   }
 
+  /// The compositions a compare's second side can show: every one but the
+  /// first side's.
+  List<(CompositionReference, String)> get compareChoices {
+    final pane = currentViewerPane;
+    final ids = pane == null ? null : views.paneViews[pane];
+    final first = ids == null || ids.isEmpty ? null : views.byId(ids.first);
+    return [
+      for (final c in _app.comps())
+        if (c.$1.internalid.toString() != first?.compId) c,
+    ];
+  }
+
+  /// The composition a two-view compare's second side shows, or null.
+  String? get compareSideB {
+    final pane = currentViewerPane;
+    if (pane == null || !views.compareOf(pane).pairsViews) return null;
+    final ids = views.paneViews[pane];
+    return ids == null || ids.length < 2 ? null : views.byId(ids[1])?.compId;
+  }
+
+  /// Put [comp] on the compare's second side, wiping against it unless a
+  /// split is up. Locked, so opening another composition leaves it there.
+  void compareWith(CompositionReference comp) {
+    final pane = currentViewerPane;
+    if (pane == null) return;
+    if (!views.compareOf(pane).pairsViews) {
+      views.setCompare(pane, CompareMode.wipe);
+    }
+    final side = views.forPane(pane).elementAtOrNull(1);
+    if (side == null) return;
+    side
+      ..mode = ViewMode.composition
+      ..compId = comp.internalid.toString()
+      ..itemId = null
+      ..locked = true;
+    views.touch();
+    saveLayout();
+    requestFrame();
+  }
+
   /// The compare's two sides the other way round.
   void swapCompare() {
     final pane = currentViewerPane;

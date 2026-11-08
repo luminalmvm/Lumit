@@ -1013,7 +1013,7 @@ class _TitleLine extends StatelessWidget {
       height: t.density.headerStrip,
       decoration: dress(BoxDecoration(color: roomed ? t.surface1 : t.surface2),
           partStyle(context, t, 'header', inside: panel)),
-      padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 0),
+      padding: EdgeInsets.symmetric(horizontal: roomed ? 12 : 10),
       child: Row(
         children: [
           if (dot) ...[

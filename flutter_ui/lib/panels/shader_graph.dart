@@ -51,7 +51,9 @@ import 'graph_panel.dart'
         GraphGroundPainter,
         GraphNameField,
         GraphNodeFrame,
+        graphClearSpot,
         graphShaderHeader,
+        graphFrame,
         graphFrameAllFold,
         graphToolFold,
         graphToolbarFold,
@@ -65,6 +67,13 @@ import 'graph_panel.dart'
         graphSocketSize,
         graphToolbarHeight,
         graphWireWidth;
+
+const _menuKeyLead = 'shader-menu-';
+
+/// What the Node panel puts on [LumitUiState.graphBoxMenuAsk] for a shader
+/// box's menu, or for the shader's ground with [id] null. The outer canvases
+/// know no such key and leave it for this one.
+String shaderMenuKey(int? id) => '$_menuKeyLead${id ?? 'ground'}';
 
 /// The engine's word for a box, in the user's language. The kinds cross the
 /// bridge as ids, never as English — these words are the frontend's.
@@ -375,9 +384,11 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     if (identical(ui, _ui)) return;
     _ui?.model.removeListener(_reload);
     _ui?.shaderGraphNode.removeListener(_onPickAsked);
+    _ui?.graphBoxMenuAsk.removeListener(_onMenuAsked);
     _ui = ui;
     ui.model.addListener(_reload);
     ui.shaderGraphNode.addListener(_onPickAsked);
+    ui.graphBoxMenuAsk.addListener(_onMenuAsked);
     // While the inner graph is the panel's face, Ctrl+Space adds a shader
     // box — the owner's "can't add options in the custom shader view".
     // Chained over the outer canvas's own claim, which stands down while a
@@ -388,6 +399,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     if (held != null) {
       _pan = held.pan;
       _zoom = held.zoom;
+      _viewMoved = true;
     }
     _reload();
   }
@@ -397,6 +409,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     _rememberView();
     _ui?.model.removeListener(_reload);
     _ui?.shaderGraphNode.removeListener(_onPickAsked);
+    _ui?.graphBoxMenuAsk.removeListener(_onMenuAsked);
     if (_ui?.consoleClaim == _consoleClaim) {
       _ui!.consoleClaim = _priorConsoleClaim;
     }
@@ -425,6 +438,31 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       _selection.clear();
       if (id != null) _selection.add(id);
     });
+  }
+
+  /// The Node panel asking for a box's menu ([shaderMenuKey]), or the
+  /// ground's: the box becomes the pick, and the canvas opens its own rows.
+  void _onMenuAsked() {
+    final ask = _ui?.graphBoxMenuAsk.value;
+    if (!mounted || ask == null || !ask.key.startsWith(_menuKeyLead)) return;
+    _ui!.graphBoxMenuAsk.value = null;
+    final boxes = _boxes();
+    final id = int.tryParse(ask.key.substring(_menuKeyLead.length));
+    if (id == null) {
+      _canvasMenu(
+          graphClearSpot(
+              _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
+              [for (final b in boxes) b.rect]),
+          ask.at);
+      return;
+    }
+    if (!boxes.any((b) => b.node.id == id)) return;
+    if (!_selection.contains(id)) {
+      setState(() => _selection
+        ..clear()
+        ..add(id));
+    }
+    _boxMenu(id, ask.at);
   }
 
   /// The claim this view had to displace to take Ctrl+Space.
@@ -482,11 +520,18 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   }
 
   /// The view you left is the view you return to (§4.2), held in the session
-  /// and never in the document.
+  /// and never in the document. Only a view somebody moved: one left as it
+  /// opened frames itself again next time.
   void _rememberView() {
+    if (!_viewMoved) return;
     _ui?.shaderGraphViews[widget.entry.effect.toString()] =
         (pan: _pan, zoom: _zoom);
   }
+
+  /// The panel size the view was last framed for. Until the user pans or
+  /// zooms, a new size frames the boxes again, as the outer canvases do.
+  Size? _framedFor;
+  bool _viewMoved = false;
 
   /// This shader's staged handle in a fresh copy of the stack, or null when
   /// the effect has gone from under the view.
@@ -726,20 +771,29 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
   @override
   double get tieZoom => _zoom;
 
+  /// The input a type fault names, by box and port index, or null.
+  ({int node, int port})? _refusedInput(List<_Box> boxes) {
+    final fault = _view?.error;
+    final node = fault?.node;
+    if (node == null || fault?.fault != BridgeShaderFault.typeMismatch) {
+      return null;
+    }
+    final port = boxes
+            .where((b) => b.node.id == node)
+            .firstOrNull
+            ?.node
+            .inputs
+            .indexWhere((p) => p.id == fault!.port) ??
+        -1;
+    return port < 0 ? null : (node: node, port: port);
+  }
+
   /// Every wire, as the ties name it and in its type's colour, the one a
-  /// type fault names in the error colour.
+  /// type fault names in the error colour, heavier, and dashed by the
+  /// painter, so it reads apart from a colour wire in any scheme.
   List<(TieWire, Color, double)> _tieWires(List<_Box> boxes, LumitTheme t) {
     final byId = {for (final b in boxes) b.node.id: b};
-    final fault = _view?.error;
-    final refused = fault?.fault != BridgeShaderFault.typeMismatch
-        ? null
-        : (
-            node: fault!.node,
-            port: byId[fault.node]
-                ?.node
-                .inputs
-                .indexWhere((p) => p.id == fault.port),
-          );
+    final refused = _refusedInput(boxes);
     return [
       for (final e in _graph?.edges ?? const <Map<String, dynamic>>[])
         if ((byId[e['from']], byId[e['to']], e['from_port'] as int? ?? 0)
@@ -751,15 +805,18 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
               from: from.socket(port, isInput: false),
               to: to.socket(e['to_port'] as int? ?? 0, isInput: true),
             ),
-            refused != null &&
-                    e['to'] == refused.node &&
-                    (e['to_port'] ?? 0) == refused.port
+            _isRefused(e, refused)
                 ? t.error
                 : shaderPortColour(t, from.node.outputs[port].ty),
-            1.0,
+            _isRefused(e, refused) ? 1.6 : 1.0,
           ),
     ];
   }
+
+  bool _isRefused(Map<String, dynamic> edge, ({int node, int port})? refused) =>
+      refused != null &&
+      edge['to'] == refused.node &&
+      (edge['to_port'] ?? 0) == refused.port;
 
   @override
   List<TieWire> tieWiresNow() => _wiresOf(_boxes());
@@ -910,6 +967,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       return;
     }
     if (_panFrom case final from?) {
+      _viewMoved = true;
       setState(() {
         _pan = from + event.localPosition;
         _rememberView();
@@ -1143,8 +1201,12 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     _paste((first?.rect.topLeft ?? Offset.zero) + const Offset(20, 20), picked);
   }
 
-  /// Fit every box on screen, with a little air round the edges.
-  void _frameAll() => _frame(_boxes());
+  /// Fit every box on screen, with a little air round the edges. Asked for
+  /// by hand, so the panel's own resizes leave the view be after it.
+  void _frameAll() {
+    _viewMoved = true;
+    _frame(_boxes());
+  }
 
   /// Fit the picked boxes, or every box when none is picked.
   void _frameSelected() {
@@ -1152,25 +1214,18 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
       for (final b in _boxes())
         if (_selection.contains(b.node.id)) b
     ];
+    _viewMoved = true;
     _frame(picked.isEmpty ? _boxes() : picked);
   }
 
-  void _frame(List<_Box> boxes) {
-    if (boxes.isEmpty || _viewport.isEmpty) return;
-    var bounds = boxes.first.rect;
-    for (final box in boxes) {
-      bounds = bounds.expandToInclude(box.rect);
-    }
-    bounds = bounds.inflate(20);
-    final zoom = math
-        .min(_viewport.width / bounds.width, _viewport.height / bounds.height)
-        .clamp(0.2, 2.0);
+  void _frame(List<_Box> boxes, {double maxZoom = 2}) {
+    final view =
+        graphFrame(_viewport, [for (final b in boxes) b.rect], maxZoom: maxZoom);
+    if (view == null) return;
     setState(() {
-      _zoom = zoom;
-      _pan = Offset(
-        (_viewport.width - bounds.width * zoom) / 2 - bounds.left * zoom,
-        (_viewport.height - bounds.height * zoom) / 2 - bounds.top * zoom,
-      );
+      _zoom = view.zoom;
+      _pan = view.pan;
+      _rememberView();
     });
   }
 
@@ -1219,6 +1274,7 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
     final next = (was * (event.scrollDelta.dy > 0 ? 0.9 : 1.1)).clamp(0.2, 2.0);
     if (next == was) return;
     final anchor = (event.localPosition - _pan) / was;
+    _viewMoved = true;
     setState(() {
       _zoom = next;
       _pan = event.localPosition - anchor * next;
@@ -1241,6 +1297,14 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
         Expanded(
           child: LayoutBuilder(builder: (context, box) {
             _viewport = box.biggest;
+            // The boxes open in the middle of the panel, never larger than
+            // they are. After the frame, as a view change is.
+            if (boxes.isNotEmpty && !_viewMoved && _framedFor != _viewport) {
+              _framedFor = _viewport;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && !_viewMoved) _frame(_boxes(), maxZoom: 1);
+              });
+            }
             return _canvas(t, boxes);
           }),
         ),
@@ -1404,6 +1468,10 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
                   child: CustomPaint(
                     painter: _WirePainter(
                       wires: _tieWires(boxes, t),
+                      dashed: {
+                        if (_refusedInput(boxes) case final r?)
+                          tieWireKey('n${r.node}', '${r.port}'),
+                      },
                       ties: tieView(),
                       flight: _flight,
                       pan: _pan,
@@ -1430,6 +1498,10 @@ class _ShaderGraphPanelState extends State<ShaderGraphPanel>
                               box: box,
                               graph: _graph,
                               selected: _selection.contains(box.node.id),
+                              refusedPort: switch (_refusedInput(boxes)) {
+                                final r? when r.node == box.node.id => r.port,
+                                _ => null,
+                              },
                               nameEditor: _renaming != box.node.id
                                   ? null
                                   : GraphNameField(
@@ -1491,6 +1563,9 @@ class _ShaderNodeCard extends StatelessWidget {
   final _Inner? graph;
   final bool selected;
 
+  /// The input a type fault names, ringed in the error colour.
+  final int? refusedPort;
+
   /// Takes the name's place while the box is being renamed.
   final Widget? nameEditor;
 
@@ -1498,6 +1573,7 @@ class _ShaderNodeCard extends StatelessWidget {
     required this.box,
     required this.graph,
     required this.selected,
+    this.refusedPort,
     this.nameEditor,
   });
 
@@ -1644,6 +1720,10 @@ class _ShaderNodeCard extends StatelessWidget {
         color: _wired(i, isInput: isInput) ? colour : t.surface1,
         shape: BoxShape.circle,
         border: Border.all(color: colour),
+        // A ring, not a glow: drawn hard round the refused input.
+        boxShadow: isInput && i == refusedPort
+            ? [BoxShadow(color: t.error, spreadRadius: 2.5)]
+            : null,
       ),
     );
   }
@@ -1652,6 +1732,9 @@ class _ShaderNodeCard extends StatelessWidget {
 /// Every wire, coloured by its source port's type, and the dashed one in hand.
 class _WirePainter extends CustomPainter {
   final List<(TieWire, Color, double)> wires;
+
+  /// The refused wire, by its tie key, drawn dashed.
+  final Set<String> dashed;
   final TieView ties;
   final _Flight? flight;
   final Offset pan;
@@ -1661,6 +1744,7 @@ class _WirePainter extends CustomPainter {
 
   const _WirePainter({
     required this.wires,
+    required this.dashed,
     required this.ties,
     required this.flight,
     required this.pan,
@@ -1674,7 +1758,7 @@ class _WirePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     paintTiedWires(canvas, wires, ties,
-        pan: pan, zoom: zoom, style: style, theme: theme);
+        pan: pan, zoom: zoom, style: style, theme: theme, dashed: dashed);
     if (flight case final f?) {
       final (a, b) =
           f.from.isInput ? (f.to, f.from.at) : (ties.via ?? f.from.at, f.to);

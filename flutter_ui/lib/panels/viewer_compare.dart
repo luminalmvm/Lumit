@@ -160,42 +160,46 @@ class ViewerCompare extends StatelessWidget {
     );
   }
 
-  /// The line itself, and the grab strip on it. Drawn in the accent, which
-  /// §3.2 allows for a tool laid over the image.
   Widget _seam(
           BuildContext context, LumitTheme t, BoxConstraints box, double x) =>
-      MouseRegion(
-                cursor: SystemMouseCursors.resizeLeftRight,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragUpdate: (d) {
-                    if (box.maxWidth <= 0) return;
-                    onDivider(
-                      ((x + d.delta.dx) / box.maxWidth).clamp(0.0, 1.0),
-                    );
-                  },
-                  // A double click, or the menu, puts it back in the middle.
-                  onDoubleTap: () => onDivider(0.5),
-                  onSecondaryTapUp: (d) {
-                    final ui = context.read<LumitUiState>();
-                    showMenuAt<void>(
-                      context: context,
-                      position: d.globalPosition,
-                      rows: (close) => [
-                        ...viewerCompareRows(ui, () => close(null)),
-                        viewerRow(l10n.viewerMenuResetDivider,
-                            () => onDivider(0.5), () => close(null),
-                            id: 'viewer-compare-reset'),
-                      ],
-                    );
-                  },
-                  child: Center(
-                    child: Container(width: 1, color: t.accent),
-                  ),
-                ),
-              );
+      viewerCompareSeam(context, t, box.maxWidth, x, onDivider);
 
   /// How wide the invisible grab strip on the divider is. Wider than the line
   /// it draws, because a one-pixel target is a target nobody hits.
   static const double grab = 11;
 }
+
+/// A compare's line, at [x] across a box [width] wide, and the grab strip on
+/// it. Drawn in the accent, which §3.2 allows for a tool laid over the image.
+/// The wipe against a snapshot wears the same one.
+Widget viewerCompareSeam(BuildContext context, LumitTheme t, double width,
+        double x, ValueChanged<double> onDivider) =>
+    MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      child: GestureDetector(
+        key: const ValueKey('viewer-compare-seam'),
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (d) {
+          if (width <= 0) return;
+          onDivider(((x + d.delta.dx) / width).clamp(0.0, 1.0));
+        },
+        // A double click, or the menu, puts it back in the middle.
+        onDoubleTap: () => onDivider(0.5),
+        onSecondaryTapUp: (d) {
+          final ui = context.read<LumitUiState>();
+          showMenuAt<void>(
+            context: context,
+            position: d.globalPosition,
+            rows: (close) => [
+              ...viewerCompareRows(ui, () => close(null)),
+              viewerRow(l10n.viewerMenuResetDivider, () => onDivider(0.5),
+                  () => close(null),
+                  id: 'viewer-compare-reset'),
+            ],
+          );
+        },
+        child: Center(
+          child: Container(width: 1, color: t.accent),
+        ),
+      ),
+    );

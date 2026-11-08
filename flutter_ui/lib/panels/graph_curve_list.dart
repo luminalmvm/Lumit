@@ -61,7 +61,7 @@ class GraphCurveList extends StatelessWidget {
       constraints: BoxConstraints(maxWidth: _listWidth, maxHeight: maxHeight),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: t.surface1.withValues(alpha: 0.82),
+          color: t.surface0,
           borderRadius: BorderRadius.circular(t.tokens.controlRadius),
         ),
         child: SingleChildScrollView(

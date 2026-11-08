@@ -283,6 +283,7 @@ impl ActionId {
             "graph.ease.in" => "Easy ease in",
             "graph.ease.out" => "Easy ease out",
             "graph.fit" => "Fit the curves to the pane",
+            "graph.frame.all" => "Fit every curve to the pane",
             // Node graph.
             "nodes.frame.selected" => "Frame the picked boxes",
             "nodes.frame.all" => "Frame every box",

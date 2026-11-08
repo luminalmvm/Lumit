@@ -49,6 +49,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import 'comp_graph_panel.dart'
     show
         compInputKindWord,
@@ -59,7 +60,8 @@ import 'comp_graph_panel.dart'
 import 'effect_commands.dart' show EffectCommands;
 import 'effect_controls_panel_frb.dart' show curveChannelColour;
 import 'effect_param_row_frb.dart';
-import 'fx_section.dart' show fxEnableMark, fxGroupHeaderRow;
+import 'fx_section.dart'
+    show fxEnableMark, fxGroupHeaderRow, fxTwoColumnRow;
 import 'graph_panel.dart'
     show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
 import 'levels_display_frb.dart' show LevelsDisplayFrb, levelsChannels;
@@ -128,6 +130,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   String _layerName = '';
   List<BridgeCompNode> _compIndex = const [];
   String _compName = '';
+
+  /// While a list row's menu is up the list stays, though the right-click
+  /// has made that row's box the pick on the canvas.
+  bool _holdIndex = false;
 
   /// Which of the picked box's parameters a driver is wired to, by parameter
   /// id, with the driver's name and what its wire carries — the same shape
@@ -222,6 +228,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   @override
   void dispose() {
     _unbind();
+    lumitPopupUp.removeListener(_menuGone);
     _filter.dispose();
     // A held tick would fire into a panel that is gone.
     _driverPreview.cancel();
@@ -279,7 +286,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         name = layer.getInfo().name;
         // Every box, the Source and the Layer out with the rest, so a layer
         // with no effects still lists what its graph has.
-        if (picked == null) index = layer.getGraph().nodes;
+        if (picked == null || _holdIndex) index = layer.getGraph().nodes;
       } catch (_) {
         // The layer has gone; there is nothing to list.
       }
@@ -343,7 +350,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     var name = '';
     try {
       name = comp.getSettings().name;
-      if (box == null) index = comp.getNodeGraph().nodes;
+      if (box == null || _holdIndex) index = comp.getNodeGraph().nodes;
     } catch (_) {
       // The comp has gone; there is nothing to list.
     }
@@ -417,6 +424,24 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       // The box changed under us; re-reading is the recovery.
     }
     _ui?.model.refresh();
+  }
+
+  /// A list row's menu: [_askMenu], with the list kept on screen until the
+  /// menu goes, rather than the row's own rows swapped in under it.
+  void _askRowMenu(String key, Offset at) {
+    setState(() => _holdIndex = true);
+    _askMenu(key, at);
+    if (lumitPopupUp.value) {
+      lumitPopupUp.addListener(_menuGone);
+    } else {
+      setState(() => _holdIndex = false);
+    }
+  }
+
+  void _menuGone() {
+    if (lumitPopupUp.value) return;
+    lumitPopupUp.removeListener(_menuGone);
+    if (mounted) setState(() => _holdIndex = false);
   }
 
   /// The picked box's menu, opened by the canvas that owns its rows. Reset
@@ -840,16 +865,16 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     if (ui.shaderGraphEntry.value case final entry?) {
       return ShaderNodeView(
         entry: entry,
-        header: (name, {crumb, onCrumb}) =>
-            _header(context, name, crumb: crumb, onCrumb: onCrumb),
+        header: (name, {crumb, onCrumb, onMenu}) => _header(context, name,
+            crumb: crumb, onCrumb: onCrumb, onMenu: onMenu),
       );
     }
-    final picked = _picked;
+    final picked = _holdIndex ? null : _picked;
     final layer = _layer;
     final comp = ui.selectedComp;
     // A node graph's Read, Input and Output boxes carry no parameters, so they
     // draw their own small face rather than a row list.
-    if (comp != null && picked == null && _box != null) {
+    if (comp != null && picked == null && _box != null && !_holdIndex) {
       final box = _box!;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -885,7 +910,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         ],
       );
     }
-    if (picked == null && _box == null && comp != null && ui.model.isNodeGraph) {
+    if (picked == null &&
+        (_box == null || _holdIndex) &&
+        comp != null &&
+        ui.model.isNodeGraph) {
       // The graph's boxes, or nothing at all for a graph with none.
       if (_compIndex.isEmpty) return const SizedBox.shrink();
       return Column(
@@ -947,7 +975,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// Input boxes among the Fx ones.
   Widget _compIndexList(BuildContext context, LumitUiState ui) {
     final t = ThemeScope.of(context).theme;
-    return ListView(
+    return EdgeFade(axis: Axis.vertical, child: ListView(
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
         for (final n in _compIndex)
@@ -967,7 +995,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
                 _askPick(n.id);
               },
               onSecondaryTapUp: (d) =>
-                  _askMenu(compNodeKey(n.id), d.globalPosition),
+                  _askRowMenu(compNodeKey(n.id), d.globalPosition),
               child: Container(
                 height: t.density.laneRow,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -998,14 +1026,14 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             ),
           ),
       ],
-    );
+    ));
   }
 
   /// The layer's boxes, one row each, a click from being picked on the
   /// canvas. A bypassed box reads quiet, as its card does.
   Widget _indexList(BuildContext context, LumitUiState ui) {
     final t = ThemeScope.of(context).theme;
-    return ListView(
+    return EdgeFade(axis: Axis.vertical, child: ListView(
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
         for (final n in _index)
@@ -1015,7 +1043,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               behavior: HitTestBehavior.opaque,
               onTap: () => ui.graphNode.value = n.node,
               onSecondaryTapUp: (d) =>
-                  _askMenu(graphNodeKey(n.node), d.globalPosition),
+                  _askRowMenu(graphNodeKey(n.node), d.globalPosition),
               // An effect's rows are a card in Effect controls as well, and
               // a double-click goes there.
               onDoubleTap: switch (n.node) {
@@ -1060,7 +1088,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             ),
           ),
       ],
-    );
+    ));
   }
 
   /// What a box with no parameters is called: the item's name for a Read, the
@@ -1408,9 +1436,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // A **wire-only** input draws no row at all, and needs no code to say so:
     // it is a signature port, never a schema parameter, so it is not in the
     // list this walks. Its socket on the box is the whole of its surface.
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      children: rows,
+    return EdgeFade(
+      axis: Axis.vertical,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        children: rows,
+      ),
     );
   }
 
@@ -1543,16 +1574,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// columns every other row in this panel is laid out in.
   Widget _formRow(String name, Widget control) {
     final t = ThemeScope.of(context).theme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-              width: 84,
-              child: Text(name, style: t.small.copyWith(color: t.textMuted))),
-          control,
-        ],
-      ),
+    return fxTwoColumnRow(
+      context: context,
+      name: Text(name, style: t.body, overflow: TextOverflow.ellipsis),
+      control: control,
     );
   }
 
@@ -1562,7 +1587,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// back. The float row's own split.
   Widget _number(String key, double value, ValueChanged<double> onChanged) =>
       SizedBox(
-        width: 72,
+        width: effectCellWidth,
         child: DragValueField(
           key: ValueKey<String>(key),
           value: _numberDrag?.key == key ? _numberDrag!.value : value,

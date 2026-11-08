@@ -470,11 +470,35 @@ extension _GraphMenus on GraphEditorFrbState {
       for (final c in _channels)
         for (var i = 0; i < c.keys.length; i++) '${c.id}#$i',
     };
+    // On the speed graph, the Retime row's own two first.
+    final frame = ui.playheadFrame.value;
+    final retimed = widget.lens == GraphLens.speed
+        ? retimeTargets(ui)
+        : const <BridgeLayerEntry>[];
     showMenuAt<Object>(
       context: context,
       position: global,
       width: _menuWidth,
       rows: (close) => [
+        if (retimed.isNotEmpty) ...[
+          _tickRow(
+              close,
+              l10n.retimeFreeze,
+              retimed.any((e) => canFreezeAt(e, frame))
+                  ? () => freezeAtPlayhead(context, retimed)
+                  : null,
+              action: 'layer.retime.hold',
+              keyName: 'graph-plot-freeze'),
+          _tickRow(
+              close,
+              l10n.retimeRamp,
+              retimed.any(
+                      (e) => frame >= e.info.inFrame && frame < e.info.outFrame)
+                  ? () => askToRamp(context, retimed, const [], global)
+                  : null,
+              keyName: 'graph-plot-ramp'),
+          const MenuDivider(),
+        ],
         _tickRow(
             close,
             l10n.graphAddKeyAtPlayhead,
@@ -502,11 +526,12 @@ extension _GraphMenus on GraphEditorFrbState {
                     widget.onSelectionChanged();
                   }),
         const MenuDivider(),
-        _tickRow(close, l10n.graphFrameAll, widget.onFrameAll,
-            keyName: 'graph-plot-frame-all'),
+        // The node canvases' order and keys: F the picked, Shift+F the lot.
         _tickRow(close, l10n.graphFrameSelected,
             widget.selectedKeys.isEmpty ? null : widget.onFrame,
             action: 'graph.fit'),
+        _tickRow(close, l10n.graphFrameAll, widget.onFrameAll,
+            keyName: 'graph-plot-frame-all', action: 'graph.frame.all'),
         _tickRow(close, l10n.graphAutoFit, widget.onToggleAutoFit,
             ticked: widget.autoFit),
         const MenuDivider(),

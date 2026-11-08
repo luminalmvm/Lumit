@@ -533,14 +533,6 @@ bool graphOnStage(BuildContext context) {
   );
 }
 
-/// Whether every box sits inside [viewport] with the view at rest (no pan,
-/// zoom 1), which is when a graph can open without being framed. A box in
-/// the fade at a cut edge is not in view.
-bool graphFitsAtRest(Size viewport, GraphLayout layout) {
-  final seen = (Offset.zero & viewport).deflate(GraphCutFade.reach);
-  return layout.boxes.every((b) => seen.intersect(b.rect) == b.rect);
-}
-
 /// The rectangle a group's wash covers, in canvas units: its members' own
 /// bounds, plus air all round and a band above for its name.
 ///
@@ -1379,7 +1371,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (!mounted) return;
     final layer = _ui?.selectedLayer.value;
     // Another layer's graph opens as a graph first opens: at rest or framed.
-    if (layer?.internallayerId != _layer?.internallayerId) _frameNext = true;
+    if (layer?.internallayerId != _layer?.internallayerId) {
+      _frameNext = true;
+      _viewMoved = false;
+    }
     BridgeLayerGraph? graph;
     var notes = const <BridgeGraphNote>[];
     var ties = const <BridgeWireTie>[];
@@ -2126,6 +2121,18 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           : () => _toggleExposed(key),
       enterLabel: enter,
       onEnter: enter == null ? null : () => _enterBox(node),
+      // An effect after this box in the chain, as the wire out of it offers.
+      onAddNode: driver || picked.length > 1
+          ? null
+          : () => _openSearch(
+              _boxesNow()
+                      .where((b) => b.key == key)
+                      .firstOrNull
+                      ?.rect
+                      .centerRight ??
+                  Offset.zero,
+              chain: true,
+              before: _chainAfter(node.node)),
       onCopy: effects.isEmpty ? null : () => _copyPicked(ui),
       onPaste: () => _pasteEffects(ui),
       canPaste: ui.clipboard.kind == ClipboardKind.effects,
@@ -2161,6 +2168,23 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       onColour: (colour) => _restyle(key, colour: colour),
       onDelete: derived ? null : _deleteSelected,
     );
+  }
+
+  /// The effect a box added after [node] goes in front of: the next one in the
+  /// stack, or null for the chain's end.
+  UuidValue? _chainAfter(BridgeNodeRef node) {
+    if (node is BridgeNodeRef_Out) return null;
+    List<UuidValue> ids;
+    try {
+      ids = [for (final e in _layer?.getEffects() ?? const []) e.id()];
+    } catch (_) {
+      return null;
+    }
+    final at = switch (node) {
+      BridgeNodeRef_Effect(:final field0) => ids.indexOf(field0),
+      _ => -1,
+    };
+    return at + 1 < ids.length ? ids[at + 1] : null;
   }
 
   /// Each box's colour and fold, read with the graph.
@@ -3140,6 +3164,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       return;
     }
     if (_panFrom case final from?) {
+      _viewMoved = true;
       setState(() => _pan = from + event.localPosition);
     }
   }
@@ -3283,18 +3308,21 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     setState(() => _panFrom = null);
   }
 
-  /// Fit every box on screen, with a little air round the edges.
-  void _frameAll(Size viewport, GraphLayout layout, {double maxZoom = 2}) =>
-      _frame(graphFrame(viewport, [for (final b in layout.boxes) b.rect],
-          maxZoom: maxZoom));
+  /// Fit every box on screen, with a little air round the edges. Asked for
+  /// by hand, so the panel's own resizes leave the view be after it.
+  void _frameAll(Size viewport, GraphLayout layout) {
+    _viewMoved = true;
+    _frame(graphFrame(viewport, [for (final b in layout.boxes) b.rect]));
+  }
 
   /// The picked boxes, or every box when none is picked.
-  void _frameSelected(Size viewport, GraphLayout layout) => _frame(graphFrame(
-      viewport,
-      [
-        for (final b in layout.boxes)
-          if (_selection.isEmpty || _selection.containsKey(b.key)) b.rect
-      ]));
+  void _frameSelected(Size viewport, GraphLayout layout) {
+    _viewMoved = true;
+    _frame(graphFrame(viewport, [
+      for (final b in layout.boxes)
+        if (_selection.isEmpty || _selection.containsKey(b.key)) b.rect
+    ]));
+  }
 
   void _frame(({Offset pan, double zoom})? view) {
     if (view == null) return;
@@ -3311,6 +3339,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (next == was) return;
     // Zoom about the pointer, so what is under it stays under it.
     final anchor = (event.localPosition - _pan) / was;
+    _viewMoved = true;
     setState(() {
       _zoom = next;
       _pan = event.localPosition - anchor * next;
@@ -3466,6 +3495,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// The next layout sets the view: on the first, and when the layer changes.
   bool _frameNext = true;
 
+  /// The panel size the view was last set for. Until the user pans or zooms,
+  /// a new size frames the boxes again, as the node graph composition does.
+  Size? _framedFor;
+  bool _viewMoved = false;
+
   Widget _canvas(LumitTheme t, GraphLayout layout, Size size) {
     _viewport = size;
     final cut = GraphCutFade.cuts(
@@ -3473,6 +3507,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (_frameKey case final key? when layout.byKey.containsKey(key)) {
       _frameKey = null;
       _frameNext = false;
+      _viewMoved = true;
       final box = layout.byKey[key]!.rect;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -3487,19 +3522,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         });
       });
     }
-    if (_frameNext && layout.boxes.isNotEmpty) {
+    if (layout.boxes.isNotEmpty &&
+        (_frameNext || (!_viewMoved && _framedFor != size))) {
       _frameNext = false;
-      // A graph that fits at rest opens at rest; one that spills past the
-      // panel's edge opens framed. After the frame, as a view change is.
+      _framedFor = size;
+      // The boxes open in the middle of the panel, never larger than they
+      // are. After the frame, as a view change is.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (!graphFitsAtRest(size, layout)) {
-          _frameAll(size, layout, maxZoom: 1);
-        } else if (_pan != Offset.zero || _zoom != 1) {
-          setState(() {
-            _pan = Offset.zero;
-            _zoom = 1;
-          });
+        if (mounted) {
+          _frame(graphFrame(size, [for (final b in layout.boxes) b.rect],
+              maxZoom: 1));
         }
       });
     }
@@ -3871,13 +3903,13 @@ class _RenderBoxStack extends RenderStack {
 /// A path as 3-on, 3-off dashes — the drawing's own stroke-dasharray. Public
 /// for the reason [GraphNodeFrame] is: the inner shader graph draws its wire
 /// in hand with the same stroke.
-Path graphDashPath(Path path) {
+Path graphDashPath(Path path, {double dash = 3}) {
   final out = Path();
   for (final metric in path.computeMetrics()) {
     var at = 0.0;
     var on = true;
     while (at < metric.length) {
-      final to = math.min(at + 3, metric.length);
+      final to = math.min(at + dash, metric.length);
       if (on) out.addPath(metric.extractPath(at, to), Offset.zero);
       at = to;
       on = !on;

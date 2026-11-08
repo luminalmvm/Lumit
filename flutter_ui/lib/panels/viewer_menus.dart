@@ -35,7 +35,8 @@ import 'timeline_extras_frb.dart' show addMarkerFrb, showMenuAt, workAreaFrames;
 import 'timeline_layer_menu_frb.dart' show layerMenuEntries, revealInProject;
 import 'timeline_outline_row_frb.dart' show layerRowRename;
 import 'viewer_bar.dart' show durationFramesOf;
-import 'viewer_panel_frb.dart' show showViewerBackgroundPicker;
+import 'viewer_panel_frb.dart'
+    show showViewerBackgroundPicker, viewerHasSnapshot;
 import 'viewer_rulers.dart' show viewerGuideComp, viewerRulerBand;
 import 'viewer_strips.dart' show playbackSlows, viewerZoomSteps;
 
@@ -219,23 +220,49 @@ List<Widget> viewerLayoutRows(LumitUiState ui, VoidCallback close) => [
           ticked: ui.currentViewerLayout == ViewLayout.four),
     ];
 
-List<Widget> viewerCompareRows(LumitUiState ui, VoidCallback close) => [
-      viewerRow(l10n.menuCompareOff, () => ui.setCompareMode(CompareMode.none),
+/// How a compare puts things together, then what the second side is: the
+/// view's own snapshot, or another composition.
+List<Widget> viewerCompareRows(LumitUiState ui, VoidCallback close) {
+  final comps = ui.compareChoices;
+  final sideB = ui.compareSideB;
+  return [
+    viewerRow(l10n.menuCompareOff, () => ui.setCompareMode(CompareMode.none),
+        close,
+        ticked: ui.currentCompare == CompareMode.none),
+    viewerRow(l10n.menuCompareWipe, () => ui.setCompareMode(CompareMode.wipe),
+        close,
+        action: 'viewer.compare',
+        ticked: ui.currentCompare == CompareMode.wipe),
+    viewerRow(
+        l10n.menuCompareSplit, () => ui.setCompareMode(CompareMode.split), close,
+        ticked: ui.currentCompare == CompareMode.split),
+    const MenuDivider(),
+    viewerRow(
+        l10n.viewerMenuSnapshot,
+        viewerHasSnapshot(ui.activeViewId)
+            ? () => ui.setCompareMode(CompareMode.snapshot)
+            : null,
+        close,
+        id: 'viewer-compare-snapshot',
+        ticked: ui.currentCompare == CompareMode.snapshot),
+    if (comps.isNotEmpty)
+      viewerSub(
+          l10n.menuComposition,
           close,
-          ticked: ui.currentCompare == CompareMode.none),
-      viewerRow(l10n.menuCompareWipe, () => ui.setCompareMode(CompareMode.wipe),
-          close,
-          action: 'viewer.compare',
-          ticked: ui.currentCompare == CompareMode.wipe),
-      viewerRow(
-          l10n.menuCompareSplit, () => ui.setCompareMode(CompareMode.split), close,
-          ticked: ui.currentCompare == CompareMode.split),
-      if (ui.currentCompare != CompareMode.none) ...[
-        const MenuDivider(),
-        viewerRow(l10n.viewerMenuSwapSides, ui.swapCompare, close,
-            id: 'viewer-compare-swap'),
-      ],
-    ];
+          (dismiss) => [
+                for (final (comp, name) in comps)
+                  viewerRow(name, () => ui.compareWith(comp), dismiss,
+                      id: 'viewer-compare-comp-${comp.internalid}',
+                      ticked: '${comp.internalid}' == sideB),
+              ],
+          id: 'viewer-compare-comp'),
+    if (ui.currentCompare.pairsViews) ...[
+      const MenuDivider(),
+      viewerRow(l10n.viewerMenuSwapSides, ui.swapCompare, close,
+          id: 'viewer-compare-swap'),
+    ],
+  ];
+}
 
 /// What playback does at the end of the work area, ticked.
 List<Widget> viewerLoopRows(LumitUiState ui, VoidCallback close) => [
@@ -824,14 +851,17 @@ void showViewerPictureMenu({
 
 List<Widget> _noRows(VoidCallback close) => const [];
 
-/// The Layer menu's New rows, the same entries the bar draws.
-List<MenuEntry> _newLayerRows(BuildContext context, LumitState app) =>
-    lumitMenus(context, app)
-        .where((s) => s.title == l10n.menuLayer)
-        .expand((s) => s.items())
-        .firstOrNull
-        ?.children ??
-    const [];
+/// The Layer menu's New rows, the same entries the bar draws, without the
+/// two after its divider: they place a timed clip at the playhead, and the
+/// picture already has Text and Solid.
+List<MenuEntry> _newLayerRows(BuildContext context, LumitState app) => [
+      ...?lumitMenus(context, app)
+          .where((s) => s.title == l10n.menuLayer)
+          .expand((s) => s.items())
+          .firstOrNull
+          ?.children
+          ?.takeWhile((e) => !e.isDivider),
+    ];
 
 /// What a layer's row in a picture menu opens: the layer menu a row in the
 /// Timeline has, for the layer [id], acting on the selection as it does there.

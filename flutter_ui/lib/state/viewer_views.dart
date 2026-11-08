@@ -72,6 +72,13 @@ enum CompareMode {
 
   /// The two pictures side by side inside one pane, each squeezed to its half.
   split,
+
+  /// One view's picture wiped against its own snapshot, the snapshot on the
+  /// left. No second view: the snapshot is the other side.
+  snapshot;
+
+  /// Whether this compare puts two views together.
+  bool get pairsViews => this == wipe || this == split;
 }
 
 /// One picture surface.
@@ -493,12 +500,12 @@ class ViewerViews extends ChangeNotifier {
     if (compareOf(pane) == mode) return;
     // A compare needs two pictures to put together, and ending it puts back
     // the layout it split.
-    if (mode != CompareMode.none && layoutOf(pane).views < 2) {
+    if (mode.pairsViews && layoutOf(pane).views < 2) {
       _beforeCompare[pane] =
           (layout: layoutOf(pane), keep: paneViews[pane]?.firstOrNull);
       paneLayouts[pane] = ViewLayout.twoAcross;
       forPane(pane);
-    } else if (mode == CompareMode.none) {
+    } else if (!mode.pairsViews) {
       if (_beforeCompare.remove(pane) case final before?) {
         final ids = paneViews[pane];
         if (before.keep case final keep? when ids != null && ids.remove(keep)) {
@@ -632,8 +639,10 @@ class ViewerViews extends ChangeNotifier {
           for (final e in paneLayouts.entries) _paneKey(e.key): e.value.name,
         },
         'compare': {
+          // A snapshot is not kept across a restart, so neither is a
+          // compare against one.
           for (final e in paneCompare.entries)
-            if (e.value != CompareMode.none) _paneKey(e.key): e.value.name,
+            if (e.value.pairsViews) _paneKey(e.key): e.value.name,
         },
         'dividers': {
           for (final e in paneDivider.entries) _paneKey(e.key): e.value,

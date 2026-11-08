@@ -286,6 +286,7 @@ pub fn default_keymap() -> Keymap {
         row(Graph, "Shift+F9", "graph.ease.in"),
         row(Graph, "Mod+Shift+F9", "graph.ease.out"),
         row(Graph, "F", "graph.fit"),
+        row(Graph, "Shift+F", "graph.frame.all"),
         // --- Node graph ---
         // F frames what is picked and Shift+F everything, as in a 3D viewport.
         row(Nodes, "F", "nodes.frame.selected"),

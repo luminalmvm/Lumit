@@ -59,7 +59,8 @@ import '../panels/timeline_mask_rows_frb.dart'
     show copyPickedMasks, deletePickedMasks, duplicatePickedMasks,
         pasteMasksOnto, pickedMasks;
 import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
-import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
+import '../panels/viewer_panel_frb.dart'
+    show captureViewerPicturePng, viewerHasSnapshot;
 import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
 import '../state/viewer_views.dart';
@@ -1952,6 +1953,21 @@ List<MenuSection> lumitMenus(
                 () => ui.setCompareMode(CompareMode.split),
                 checked: () => ui.currentCompare == CompareMode.split,
               ),
+              // What the second side is: the snapshot, or another comp.
+              MenuEntry.divider(),
+              MenuEntry.option(
+                l10n.viewerMenuSnapshot,
+                viewerHasSnapshot(ui.activeViewId)
+                    ? () => ui.setCompareMode(CompareMode.snapshot)
+                    : null,
+                checked: () => ui.currentCompare == CompareMode.snapshot,
+              ),
+              if (ui.compareChoices case final comps when comps.isNotEmpty)
+                MenuEntry.submenu(l10n.menuComposition, [
+                  for (final (comp, name) in comps)
+                    MenuEntry.option(name, () => ui.compareWith(comp),
+                        checked: () => '${comp.internalid}' == ui.compareSideB),
+                ]),
             ]),
             // The way of looking, shared or each view's own.
             MenuEntry.toggle(

@@ -18,6 +18,7 @@ import '../shell/menu_layer_frb.dart' show selectedEntries;
 import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/edge_fade.dart';
 import '../widgets/time_readout.dart';
 import 'graph_maths.dart';
 import 'retime_commands.dart';
@@ -213,7 +214,9 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                       showRetimeMenu(context, _ui, targets, d.globalPosition)
                   : null,
           child: SizedBox.expand(
-            child: SingleChildScrollView(
+            child: EdgeFade(
+              axis: Axis.vertical,
+              child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -321,6 +324,7 @@ class _RetimePanelFrbState extends State<RetimePanelFrb> {
                   ],
                 ],
               ),
+            ),
             ),
           ),
         );
@@ -727,12 +731,14 @@ class _SpeedStripPainter extends CustomPainter {
     required this.tick,
   }) : super(repaint: playhead);
 
-  void _mark(Canvas canvas, String words, double y) {
+  /// A mark at the strip's right end, clear of the readout at its left.
+  void _mark(Canvas canvas, Size size, String words, double y) {
     final text = TextPainter(
       text: TextSpan(text: words, style: tick),
       textDirection: TextDirection.ltr,
     )..layout();
-    text.paint(canvas, Offset(3, y - text.height - 1));
+    text.paint(
+        canvas, Offset(size.width - text.width - 3, y - text.height - 1));
     text.dispose();
   }
 
@@ -769,8 +775,8 @@ class _SpeedStripPainter extends CustomPainter {
     canvas.drawLine(
         Offset(0, rule), Offset(size.width, rule), Paint()..color = normal);
     // The marks the Sequence envelope has, on the rule and on nought.
-    _mark(canvas, '100${l10n.unitSymbolPercent}', rule);
-    _mark(canvas, '0', zero);
+    _mark(canvas, size, '100${l10n.unitSymbolPercent}', rule);
+    _mark(canvas, size, '0${l10n.unitSymbolPercent}', zero);
     canvas.drawPath(
         curve,
         Paint()

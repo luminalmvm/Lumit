@@ -743,10 +743,8 @@ class _FxConsoleState extends State<_FxConsole> {
             widget.onClose();
             entry.run();
           },
-          // The Effects & presets row's menu, where the row is one.
-          onSecondaryTapUp: entry.onFavourite == null && entry.manual == null
-              ? null
-              : (d) => _entryMenu(entry, d.globalPosition),
+          // The Effects & presets row's menu, with what this row has of it.
+          onSecondaryTapUp: (d) => _entryMenu(entry, d.globalPosition),
           child: Container(
             height: _rowHeight,
             padding: const EdgeInsets.symmetric(horizontal: 10),

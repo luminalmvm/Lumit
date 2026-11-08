@@ -101,15 +101,16 @@ void main() {
     Future<void> mountGraph(WidgetTester tester, dynamic p,
         {bool selectOpacity = true}) async {
       // The outline alone is ~740 px of columns; the default 800×600 test
-      // surface would push the graph pane off screen.
-      tester.view.physicalSize = const Size(1280, 600);
+      // surface would push the graph pane off screen, and a plot under
+      // 560 px folds the graph switch to one word.
+      tester.view.physicalSize = const Size(1440, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(hostPanel(
         child: const TimelinePanelFrb(),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
-        size: const Size(1280, 600),
+        size: const Size(1440, 600),
       ));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tl-graph')));

@@ -56,6 +56,8 @@ import 'graph_painters.dart';
 import 'effect_param_row_frb.dart' show defaultEffectValue;
 import 'graph_curve_list.dart';
 import 'key_ease_fields.dart';
+import 'retime_commands.dart'
+    show askToRamp, canFreezeAt, freezeAtPlayhead, retimeTargets;
 import '../shell/keyframe_dialogs_frb.dart' show showKeyframeSpeedFrb;
 
 // The pane was one file; it is now six. Everything the pane's callers and its
