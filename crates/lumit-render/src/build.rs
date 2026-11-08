@@ -294,10 +294,12 @@ fn is_backdrop(e: &lumit_core::model::EffectInstance) -> bool {
             .is_some_and(|d| d.backdrop())
 }
 
-/// The longest side a shape layer's art is rasterised to, px: a shape scaled
-/// past it is drawn at this size and stretched, rather than asking the card
-/// for a texture it cannot hold.
-const SHAPE_RASTER_MAX: f64 = 8192.0;
+/// The most pixels a shape layer's art is rasterised to: a shape scaled past
+/// it is drawn at this size and stretched, so a comp-sized shape at 400% is
+/// 64 MB of raster rather than 130.
+// ponytail: the whole art is drawn, seen or not. Draw only the part in frame
+// if a scaled-up shape is still too slow.
+const SHAPE_RASTER_PIXELS: f64 = 4096.0 * 4096.0;
 
 /// How many comp pixels one of the layer's own pixels covers at most, read
 /// off its world placement: the longest of the two axes' lengths, whichever
@@ -2203,7 +2205,9 @@ fn comp_walk(
                     // they keep their size.
                     let shown =
                         shape_raster_scale(world_placement(comp, layer, t_comp, context.clone()));
-                    let most = (SHAPE_RASTER_MAX / natural_w.max(natural_h)).max(1.0);
+                    let most = (SHAPE_RASTER_PIXELS / (natural_w * natural_h))
+                        .sqrt()
+                        .max(1.0);
                     let k = f64::from(shown).clamp(1.0, most);
                     let w = (natural_w * k).round().max(1.0) as u32;
                     let h = (natural_h * k).round().max(1.0) as u32;
